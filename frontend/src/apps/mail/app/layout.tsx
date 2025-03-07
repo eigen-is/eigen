@@ -7,7 +7,7 @@ import { AppSidebar } from "@/components/mail/app-sidebar";
 const inter = Inter({ subsets: ["latin"] });
 
 export const metadata: Metadata = {
-  title: "Mail App",
+  title: "EigenMail",
   description: "A mail application built with Next.js and shadcn UI",
 };
 
