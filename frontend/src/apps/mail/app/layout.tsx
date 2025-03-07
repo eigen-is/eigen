@@ -3,6 +3,7 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { Topbar } from "@/components/layout/topbar";
 import { AppSidebar } from "@/components/mail/app-sidebar";
+import ClientProvider from "./client-provider";
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -19,15 +20,17 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={inter.className}>
-        <div className="flex flex-col h-screen">
-          <Topbar />
-          <div className="flex flex-1 overflow-hidden">
-            <AppSidebar />
-            <main className="flex-1 overflow-auto">
-              {children}
-            </main>
+        <ClientProvider>
+          <div className="flex flex-col h-screen">
+            <Topbar />
+            <div className="flex flex-1 overflow-hidden">
+              <AppSidebar />
+              <main className="flex-1 overflow-auto">
+                {children}
+              </main>
+            </div>
           </div>
-        </div>
+        </ClientProvider>
       </body>
     </html>
   );
