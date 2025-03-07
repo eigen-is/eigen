@@ -5,6 +5,10 @@ const nextConfig: NextConfig = {
   basePath: '/mail',
   assetPrefix: '/mail',
   trailingSlash: true,
+  /* export */
+  output: 'export',
+  distDir: 'build',
+  
 };
 
 export default nextConfig;

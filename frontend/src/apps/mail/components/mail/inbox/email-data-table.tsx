@@ -54,11 +54,13 @@ const fuzzyFilter: FilterFn<any> = (row, columnId, value, addMeta) => {
 interface EmailDataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[]
   data: TData[]
+  onRowClick?: (row: any) => void
 }
 
 export function EmailDataTable<TData, TValue>({
   columns,
   data,
+  onRowClick,
 }: EmailDataTableProps<TData, TValue>) {
   const [sorting, setSorting] = useState<SortingState>([])
   const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
@@ -66,6 +68,14 @@ export function EmailDataTable<TData, TValue>({
   const [rowSelection, setRowSelection] = useState({})
   const [globalFilter, setGlobalFilter] = useState("")
   const router = useRouter()
+
+  const handleRowClick = (row: any) => {
+    if (onRowClick) {
+      onRowClick(row);
+    } else {
+      router.push(`/inbox/${(row as Email).id}`);
+    }
+  };
 
   const table = useReactTable({
     data,
@@ -158,7 +168,7 @@ export function EmailDataTable<TData, TValue>({
                     "cursor-pointer",
                     !(row.original as Email).read && "bg-blue-50 font-medium"
                   )}
-                  onClick={() => router.push(`/inbox/${(row.original as Email).id}`)}
+                  onClick={() => handleRowClick(row.original)}
                 >
                   {row.getVisibleCells().map((cell) => (
                     <TableCell key={cell.id}>

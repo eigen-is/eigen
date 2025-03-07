@@ -13,10 +13,10 @@ import {
   Users, 
   Plus 
 } from "lucide-react"
-import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
+import { useClientRouter } from "@/app/client-provider"
 
 // Menu items for the sidebar
 const sidebarItems = [
@@ -84,6 +84,7 @@ const labels = [
 
 export function AppSidebar() {
   const pathname = usePathname()
+  const { navigate, currentRoute } = useClientRouter()
   
   return (
     <div className="w-64 border-r h-full flex flex-col bg-background">
@@ -98,22 +99,22 @@ export function AppSidebar() {
         <div className="px-3 py-2">
           <nav className="space-y-1">
             {sidebarItems.map((item) => {
-              const isActive = pathname === item.href
+              const isActive = currentRoute === item.href
               
               return (
-                <Link
+                <div
                   key={item.href}
-                  href={item.href}
                   className={cn(
-                    "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium",
+                    "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium cursor-pointer",
                     isActive 
                       ? "bg-primary/10 text-primary" 
                       : "text-muted-foreground hover:bg-muted hover:text-foreground"
                   )}
+                  onClick={() => navigate(item.href)}
                 >
                   <item.icon className="h-4 w-4" />
                   <span>{item.title}</span>
-                </Link>
+                </div>
               )
             })}
           </nav>
@@ -123,22 +124,22 @@ export function AppSidebar() {
           <h3 className="text-xs font-semibold text-muted-foreground mb-2 px-3">Labels</h3>
           <div className="space-y-1">
             {labels.map((label) => (
-              <Link
+              <div
                 key={label.name}
-                href={`/label/${label.name.toLowerCase()}`}
-                className="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+                className="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground cursor-pointer"
+                onClick={() => navigate(`/label/${label.name.toLowerCase()}`)}
               >
                 <span className={cn("h-2 w-2 rounded-full", label.color)} />
                 <span>{label.name}</span>
-              </Link>
+              </div>
             ))}
-            <Link
-              href="/labels"
-              className="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground"
+            <div
+              className="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground cursor-pointer"
+              onClick={() => navigate('/labels')}
             >
               <Tag className="h-4 w-4" />
               <span>Manage Labels</span>
-            </Link>
+            </div>
           </div>
         </div>
       </div>
