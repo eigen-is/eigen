@@ -1,4 +1,4 @@
-import { Email } from "@/components/mail/email-list";
+import { Email } from "@/types";
 
 export const mockEmails: Email[] = [
   {
@@ -104,6 +104,6 @@ export const mockEmails: Email[] = [
   }
 ];
 
-export const getEmailById = (id: string): Email | undefined => {
+export async function getEmailById(id: string): Promise<Email | undefined> {
   return mockEmails.find(email => email.id === id);
 };

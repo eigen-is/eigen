@@ -25,7 +25,7 @@ import {
 } from "@/components/ui/table"
 import { useState } from "react"
 import { useRouter } from "next/navigation"
-import { Email } from "../email-list"
+import { Email } from "@/types"
 import { cn } from "@/lib/utils"
 import { Input } from "@/components/ui/input"
 import { Button } from "@/components/ui/button"

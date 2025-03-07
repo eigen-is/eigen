@@ -1,11 +1,12 @@
 "use client"
 
-import { ColumnDef } from "@tanstack/react-table"
+import { ColumnDef, FilterFnOption } from "@tanstack/react-table"
 import { Star, Paperclip, ArrowUpDown } from "lucide-react"
-import { Email } from "../email-list"
+import { Email } from "@/types"
 import { Checkbox } from "@/components/ui/checkbox"
 import { cn } from "@/lib/utils"
 import { Button } from "@/components/ui/button"
+import { Badge } from "@/components/ui/badge"
 
 export const emailColumns: ColumnDef<Email>[] = [
   {
@@ -82,7 +83,7 @@ export const emailColumns: ColumnDef<Email>[] = [
         </div>
       )
     },
-    filterFn: "fuzzy",
+    filterFn: "fuzzy" as FilterFnOption<Email>,
   },
   {
     accessorKey: "subject",
@@ -109,30 +110,27 @@ export const emailColumns: ColumnDef<Email>[] = [
         </div>
       )
     },
-    filterFn: "fuzzy",
+    filterFn: "fuzzy" as FilterFnOption<Email>,
   },
   {
     accessorKey: "labels",
     header: "Labels",
     cell: ({ row }) => {
-      const email = row.original
+      const labels = row.getValue("labels") as string[]
+      if (!labels?.length) return null
       return (
-        <div className="flex gap-1 justify-end">
-          {email.labels && email.labels.length > 0 && (
-            email.labels.map((label) => (
-              <span 
-                key={label} 
-                className="px-2 py-0.5 text-xs rounded-full bg-muted text-muted-foreground whitespace-nowrap"
-              >
-                {label}
-              </span>
-            ))
-          )}
+        <div className="flex gap-1">
+          {labels.map((label) => (
+            <Badge key={label} variant="outline">
+              {label}
+            </Badge>
+          ))}
         </div>
       )
     },
     filterFn: (row, id, value) => {
-      return value.includes(row.getValue(id));
+      const labels = row.getValue(id) as string[]
+      return labels?.some((label) => label.includes(value))
     },
   },
   {
