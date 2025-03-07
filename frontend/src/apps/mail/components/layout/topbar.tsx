@@ -8,12 +8,13 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { AppLogo } from "./app-logo";
 
 export function Topbar() {
   return (
     <header className="border-b">
       <div className="flex h-16 items-center px-4">
-        <div className="font-bold text-xl">Mail App</div>
+        <AppLogo appName="Mail" />
         <div className="ml-auto flex items-center space-x-4">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
