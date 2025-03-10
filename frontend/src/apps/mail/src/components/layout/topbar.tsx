@@ -1,4 +1,3 @@
-import {Avatar, AvatarFallback, AvatarImage} from "@/components/ui/avatar";
 import {Button} from "@/components/ui/button";
 import {
     DropdownMenu,
@@ -8,21 +7,19 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import {UserIcon} from "lucide-react";
 import {AppLogo} from "./app-logo";
 
 export function Topbar() {
     return (
-        <header className="border-b">
-            <div className="flex h-16 items-center px-4">
+        <header className="bg-red-600">
+            <div className="flex h-12 items-center px-4">
                 <AppLogo appName="Mail"/>
                 <div className="ml-auto flex items-center space-x-4">
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" className="relative h-8 w-8 rounded-full">
-                                <Avatar className="h-8 w-8">
-                                    <AvatarImage src="/mail/avatars/user.png" alt="User"/>
-                                    <AvatarFallback>U</AvatarFallback>
-                                </Avatar>
+                            <Button variant="ghost" className="relative h-8 w-8 rounded-full text-white hover:bg-red-700 hover:bg-opacity-20 p-0">
+                                <UserIcon className="h-5 w-5" />
                             </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent className="w-56" align="end" forceMount>

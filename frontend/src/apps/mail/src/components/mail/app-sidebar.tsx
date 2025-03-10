@@ -125,24 +125,6 @@ export function AppSidebar() {
                     </div>
                 </div>
             </div>
-
-            <div className="border-t p-4">
-                <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                        <div
-                            className="h-8 w-8 rounded-full bg-primary/10 flex items-center justify-center text-primary">
-                            U
-                        </div>
-                        <div>
-                            <p className="text-xs font-medium">User Name</p>
-                            <p className="text-xs text-muted-foreground">user@example.com</p>
-                        </div>
-                    </div>
-                    <Button variant="ghost" size="icon">
-                        <Settings className="h-4 w-4"/>
-                    </Button>
-                </div>
-            </div>
         </div>
     )
 }
