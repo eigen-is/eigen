@@ -1,0 +1,12 @@
+{
+  "name": "eigen",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "start": "bun --filter '*' dev"
+  },
+  "dependencies": {
+  },
+  "devDependencies": {
+  }
+}
