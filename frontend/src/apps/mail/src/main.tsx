@@ -6,6 +6,7 @@ import {routeTree} from './routeTree.gen';
 const router = createRouter({
   routeTree,
   defaultPreload: 'intent',
+  basepath: '/mail',
 })
 
 // Register things for typesafety

@@ -32,6 +32,25 @@ function AvatarImage({
   )
 }
 
+function AvatarIcon({
+  className,
+  children,
+  ...props
+}: React.HTMLAttributes<HTMLDivElement>) {
+  return (
+    <div
+      data-slot="avatar-icon"
+      className={cn(
+        "flex size-full items-center justify-center",
+        className
+      )}
+      {...props}
+    >
+      {children}
+    </div>
+  )
+}
+
 function AvatarFallback({
   className,
   ...props
@@ -48,4 +67,4 @@ function AvatarFallback({
   )
 }
 
-export { Avatar, AvatarImage, AvatarFallback }
+export { Avatar, AvatarImage, AvatarIcon, AvatarFallback }
