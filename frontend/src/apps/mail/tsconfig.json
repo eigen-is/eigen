@@ -28,16 +28,16 @@
        "./*"
      ],
       "@/components/*": [
-        "/components/*"
+        "./components/*"
       ],
       "@/lib/*": [
-        "/lib/*"
+        "./lib/*"
       ],
       "@/utils/*": [
-        "/utils/*"
+        "./utils/*"
       ],
       "@/types/*": [
-        "/types/*"
+        "./types/*"
       ]
     },
     "allowSyntheticDefaultImports": true
