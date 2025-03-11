@@ -15,7 +15,7 @@ import { Route as LoginImport } from './routes/login'
 import { Route as AboutImport } from './routes/about'
 import { Route as AuthImport } from './routes/_auth'
 import { Route as IndexImport } from './routes/index'
-import { Route as AuthInboxImport } from './routes/_auth.inbox'
+import { Route as AuthInboxIndexImport } from './routes/_auth.inbox.index'
 import { Route as AuthInboxMailIdImport } from './routes/_auth.inbox.$mailId'
 
 // Create/Update Routes
@@ -43,16 +43,16 @@ const IndexRoute = IndexImport.update({
   getParentRoute: () => rootRoute,
 } as any)
 
-const AuthInboxRoute = AuthInboxImport.update({
-  id: '/inbox',
-  path: '/inbox',
+const AuthInboxIndexRoute = AuthInboxIndexImport.update({
+  id: '/inbox/',
+  path: '/inbox/',
   getParentRoute: () => AuthRoute,
 } as any)
 
 const AuthInboxMailIdRoute = AuthInboxMailIdImport.update({
-  id: '/$mailId',
-  path: '/$mailId',
-  getParentRoute: () => AuthInboxRoute,
+  id: '/inbox/$mailId',
+  path: '/inbox/$mailId',
+  getParentRoute: () => AuthRoute,
 } as any)
 
 // Populate the FileRoutesByPath interface
@@ -87,43 +87,33 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginImport
       parentRoute: typeof rootRoute
     }
-    '/_auth/inbox': {
-      id: '/_auth/inbox'
-      path: '/inbox'
-      fullPath: '/inbox'
-      preLoaderRoute: typeof AuthInboxImport
-      parentRoute: typeof AuthImport
-    }
     '/_auth/inbox/$mailId': {
       id: '/_auth/inbox/$mailId'
-      path: '/$mailId'
+      path: '/inbox/$mailId'
       fullPath: '/inbox/$mailId'
       preLoaderRoute: typeof AuthInboxMailIdImport
-      parentRoute: typeof AuthInboxImport
+      parentRoute: typeof AuthImport
+    }
+    '/_auth/inbox/': {
+      id: '/_auth/inbox/'
+      path: '/inbox'
+      fullPath: '/inbox'
+      preLoaderRoute: typeof AuthInboxIndexImport
+      parentRoute: typeof AuthImport
     }
   }
 }
 
 // Create and export the route tree
 
-interface AuthInboxRouteChildren {
-  AuthInboxMailIdRoute: typeof AuthInboxMailIdRoute
-}
-
-const AuthInboxRouteChildren: AuthInboxRouteChildren = {
-  AuthInboxMailIdRoute: AuthInboxMailIdRoute,
-}
-
-const AuthInboxRouteWithChildren = AuthInboxRoute._addFileChildren(
-  AuthInboxRouteChildren,
-)
-
 interface AuthRouteChildren {
-  AuthInboxRoute: typeof AuthInboxRouteWithChildren
+  AuthInboxMailIdRoute: typeof AuthInboxMailIdRoute
+  AuthInboxIndexRoute: typeof AuthInboxIndexRoute
 }
 
 const AuthRouteChildren: AuthRouteChildren = {
-  AuthInboxRoute: AuthInboxRouteWithChildren,
+  AuthInboxMailIdRoute: AuthInboxMailIdRoute,
+  AuthInboxIndexRoute: AuthInboxIndexRoute,
 }
 
 const AuthRouteWithChildren = AuthRoute._addFileChildren(AuthRouteChildren)
@@ -133,8 +123,8 @@ export interface FileRoutesByFullPath {
   '': typeof AuthRouteWithChildren
   '/about': typeof AboutRoute
   '/login': typeof LoginRoute
-  '/inbox': typeof AuthInboxRouteWithChildren
   '/inbox/$mailId': typeof AuthInboxMailIdRoute
+  '/inbox': typeof AuthInboxIndexRoute
 }
 
 export interface FileRoutesByTo {
@@ -142,8 +132,8 @@ export interface FileRoutesByTo {
   '': typeof AuthRouteWithChildren
   '/about': typeof AboutRoute
   '/login': typeof LoginRoute
-  '/inbox': typeof AuthInboxRouteWithChildren
   '/inbox/$mailId': typeof AuthInboxMailIdRoute
+  '/inbox': typeof AuthInboxIndexRoute
 }
 
 export interface FileRoutesById {
@@ -152,23 +142,23 @@ export interface FileRoutesById {
   '/_auth': typeof AuthRouteWithChildren
   '/about': typeof AboutRoute
   '/login': typeof LoginRoute
-  '/_auth/inbox': typeof AuthInboxRouteWithChildren
   '/_auth/inbox/$mailId': typeof AuthInboxMailIdRoute
+  '/_auth/inbox/': typeof AuthInboxIndexRoute
 }
 
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '' | '/about' | '/login' | '/inbox' | '/inbox/$mailId'
+  fullPaths: '/' | '' | '/about' | '/login' | '/inbox/$mailId' | '/inbox'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '' | '/about' | '/login' | '/inbox' | '/inbox/$mailId'
+  to: '/' | '' | '/about' | '/login' | '/inbox/$mailId' | '/inbox'
   id:
     | '__root__'
     | '/'
     | '/_auth'
     | '/about'
     | '/login'
-    | '/_auth/inbox'
     | '/_auth/inbox/$mailId'
+    | '/_auth/inbox/'
   fileRoutesById: FileRoutesById
 }
 
@@ -208,7 +198,8 @@ export const routeTree = rootRoute
     "/_auth": {
       "filePath": "_auth.tsx",
       "children": [
-        "/_auth/inbox"
+        "/_auth/inbox/$mailId",
+        "/_auth/inbox/"
       ]
     },
     "/about": {
@@ -217,16 +208,13 @@ export const routeTree = rootRoute
     "/login": {
       "filePath": "login.tsx"
     },
-    "/_auth/inbox": {
-      "filePath": "_auth.inbox.tsx",
-      "parent": "/_auth",
-      "children": [
-        "/_auth/inbox/$mailId"
-      ]
-    },
     "/_auth/inbox/$mailId": {
       "filePath": "_auth.inbox.$mailId.tsx",
-      "parent": "/_auth/inbox"
+      "parent": "/_auth"
+    },
+    "/_auth/inbox/": {
+      "filePath": "_auth.inbox.index.tsx",
+      "parent": "/_auth"
     }
   }
 }
