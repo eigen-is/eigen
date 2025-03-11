@@ -12,6 +12,7 @@ export const mailboxes = sqliteTable('mailboxes', {
 export const messages = sqliteTable('messages', {
     id: int().primaryKey({autoIncrement: true}),
     mailbox_id: int().references(() => mailboxes.id),
+    read: int().notNull().default(0),
     subject: text(),
     sender: text(),
     recipients: text(),

@@ -16,8 +16,8 @@ import {mailboxes} from "./schema";
  * for better type safety and query building.
  */
 
-type Mailbox = typeof mailboxes.$inferSelect;
-type MessageRecord = typeof schema.messages.$inferSelect;
+export type Mailbox = typeof mailboxes.$inferSelect;
+export type MailMessage = typeof schema.messages.$inferSelect;
 
 async function imap_db(user: User) {
     const file = await fsGetFileName(user, 'mailbox.db');
@@ -47,6 +47,7 @@ export async function imap_init(user: User) {
     CREATE TABLE IF NOT EXISTS messages (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         mailbox_id INTEGER NOT NULL,
+        read INTEGER NOT NULL DEFAULT 0,
         subject TEXT,
         sender TEXT,
         recipients TEXT,
@@ -90,16 +91,44 @@ export async function imap_mailboxes_list(user: User, referenceName = "", mailbo
         
         if (mailboxPattern === "*") {
             // Get all mailboxes
-            mailboxes = await db.select().from(schema.mailboxes);
+            // mailboxes = await db.select().from(schema.mailboxes);
+
+            const mailboxes = await db.select({
+                id: schema.mailboxes.id,
+                name: schema.mailboxes.name,
+                subscribed: schema.mailboxes.subscribed,
+                attributes: schema.mailboxes.attributes,
+                messageCount: sql`COUNT(${schema.messages.id})`.as('message_count'),
+                unreadCount: sql`SUM(CASE WHEN ${schema.messages.read} = 0 THEN 1 ELSE 0 END)`.as('unread_count'),
+        })
+        .from(schema.mailboxes)
+                .leftJoin(schema.messages, eq(schema.mailboxes.id, schema.messages.mailbox_id))
+                .groupBy(schema.mailboxes.id);
+
+            return {success: true, mailboxes};
         } else {
             // Use pattern matching
             const pattern = mailboxPattern.replace("*", "%");
-            mailboxes = await db.select()
-                .from(schema.mailboxes)
-                .where(like(schema.mailboxes.name, pattern));
-        }
+            // const mailboxes = await db.select()
+            //     .from(schema.mailboxes)
+            //     .where(like(schema.mailboxes.name, pattern));
 
-        return {success: true, mailboxes};
+
+            const mailboxes = await db.select({
+                id: schema.mailboxes.id,
+                name: schema.mailboxes.name,
+                subscribed: schema.mailboxes.subscribed,
+                attributes: schema.mailboxes.attributes,
+                messageCount: sql`COUNT(${schema.messages.id})`.as('message_count'),
+                unreadCount: sql`SUM(CASE WHEN ${schema.messages.read} = 0 THEN 1 ELSE 0 END)`.as('unread_count'),
+            })
+                .from(schema.mailboxes)
+                .where(like(schema.mailboxes.name, pattern))
+                .leftJoin(schema.messages, eq(schema.mailboxes.id, schema.messages.mailbox_id))
+                .groupBy(schema.mailboxes.id);
+
+            return {success: true, mailboxes};
+        }
     } catch (error) {
         return {success: false, error: String(error)};
     }
@@ -320,7 +349,7 @@ export async function imap_messages_fetch(
 
         // 2) If messageId is provided, limit the query to that message
         //    Otherwise, retrieve all messages in that mailbox
-        let messages: MessageRecord[];
+        let messages: MailMessage[];
         
         if (messageId) {
             messages = await db.select()

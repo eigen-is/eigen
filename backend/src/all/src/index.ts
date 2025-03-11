@@ -4,6 +4,8 @@ import {plugin} from "./module";
 import cors from "@elysiajs/cors";
 import {auth} from "./lib/auth/auth";
 import {imap_init, imap_mailboxes_create, imap_mailboxes_list, imap_messages_append} from "./lib/mail/imap";
+import {betterAuth} from "./routes/auth";
+import {mailRouter} from "./routes/mail";
 
 const app = new Elysia()
     .use(swagger())
@@ -15,23 +17,7 @@ const app = new Elysia()
         credentials: true,
         allowedHeaders: ["Content-Type", "Authorization"],
     }))
-    .mount(auth.handler)
-    .macro({
-        auth: {
-            async resolve({ error, request: { headers } }) {
-                const session = await auth.api.getSession({
-                    headers,
-                });
-
-                if (!session) return error(401);
-
-                return {
-                    user: session.user,
-                    session: session.session,
-                };
-            },
-        },
-    })
+    .use(betterAuth)
     .get("/user", async ({ user }) => {
         await imap_init(user);
         await imap_mailboxes_create(user, 'INBOX/test');
@@ -42,6 +28,7 @@ const app = new Elysia()
     }, {
         auth: true,
     })
+    .use(mailRouter)
     .listen(8000);
 
 export type app = typeof app;
