@@ -2,7 +2,7 @@ import {betterAuth} from "better-auth";
 import { BunWorkerDialect } from "kysely-bun-worker";
 
 export const dialect = new BunWorkerDialect({
-    url: "./users.db",
+    url: "./data/users.db",
 });
 
 export const auth = betterAuth({

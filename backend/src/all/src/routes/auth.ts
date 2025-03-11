@@ -1,5 +1,5 @@
 import {Context} from "elysia";
-import {auth} from "../utils/auth/auth";
+import {auth} from "../lib/auth/auth";
 
 export const betterAuthView = (context: Context) => {
     const BETTER_AUTH_ACCEPT_METHODS = ["POST", "GET"]

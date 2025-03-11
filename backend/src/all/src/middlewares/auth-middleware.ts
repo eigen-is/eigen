@@ -1,5 +1,5 @@
 import { Session, User } from "better-auth/types";
-import { auth } from "../../utils/auth/auth";
+import { auth } from "../lib/auth/auth";
 import { Context } from "elysia";
 
 export const userMiddleware = async (c: Context) => {
