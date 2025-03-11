@@ -7,6 +7,9 @@ import viteTsConfigPaths from 'vite-tsconfig-paths'
 // https://vitejs.dev/config/
 export default defineConfig({
     base: '/mail/',
+    server: {
+        port: 3001,
+    },
     plugins: [
         TanStackRouterVite({
             target: 'react',
@@ -17,5 +20,5 @@ export default defineConfig({
         viteTsConfigPaths({
             projects: ['./tsconfig.json'],
         }),
-    ]
+    ],
 });
