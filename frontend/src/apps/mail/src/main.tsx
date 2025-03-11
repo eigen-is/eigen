@@ -1,6 +1,6 @@
 import ReactDOM from 'react-dom/client';
-import { createRouter, RouterProvider } from '@tanstack/react-router';
-import { routeTree } from './routeTree.gen';
+import {createRouter, RouterProvider} from '@tanstack/react-router';
+import {routeTree} from './routeTree.gen';
 import "./lib/auth/auth-client";
 import {AuthProvider, useAuth} from "@/lib/auth/auth-context.tsx";
 

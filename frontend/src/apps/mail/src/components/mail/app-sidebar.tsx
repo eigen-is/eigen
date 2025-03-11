@@ -1,4 +1,4 @@
-import {AlertCircle, Archive, File, Inbox, Plus, Send, Settings, Star, Tag, Trash2} from "lucide-react";
+import {AlertCircle, Archive, File, Inbox, Plus, Send, Star, Tag, Trash2} from "lucide-react";
 import {cn} from "@/lib/utils";
 import {Button} from "@/components/ui/button";
 import {Link} from '@tanstack/react-router'
