@@ -1,8 +1,7 @@
-import { Elysia } from "elysia";
+import {Elysia} from "elysia";
 import swagger from "@elysiajs/swagger";
 import {plugin} from "./module";
 import cors from "@elysiajs/cors";
-import {auth} from "./lib/auth/auth";
 import {imap_init, imap_mailboxes_create, imap_mailboxes_list, imap_messages_append} from "./lib/mail/imap";
 import {betterAuth} from "./routes/auth";
 import {mailRouter} from "./routes/mail";

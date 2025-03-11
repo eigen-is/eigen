@@ -1,5 +1,5 @@
 import {betterAuth} from "better-auth";
-import { BunWorkerDialect } from "kysely-bun-worker";
+import {BunWorkerDialect} from "kysely-bun-worker";
 
 export const dialect = new BunWorkerDialect({
     url: "./data/users.db",

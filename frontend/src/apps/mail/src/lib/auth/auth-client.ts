@@ -1,7 +1,13 @@
-import { createAuthClient } from "better-auth/client";
+import {createAuthClient} from "better-auth/client";
 
 export const authClient = createAuthClient({
-    baseURL: "http://localhost:8000" // the base url of your auth server
+    baseURL: "http://localhost:8000", // the base url of your auth server
+    session: {
+        cookieCache: {
+            enabled: true,
+            maxAge: 5 * 60 // Cache duration in seconds
+        }
+    }
 });
 
 

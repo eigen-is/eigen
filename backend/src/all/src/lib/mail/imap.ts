@@ -1,13 +1,13 @@
 // Refactored IMAP implementation using Drizzle ORM
-import { drizzle } from 'drizzle-orm/bun-sqlite';
-import {eq, like, and, sql, InferModel} from 'drizzle-orm';
+import {drizzle} from 'drizzle-orm/bun-sqlite';
+import {and, eq, like, sql} from 'drizzle-orm';
 import Database from "bun:sqlite";
-import { User } from "better-auth/types";
-import { fsGetFileName } from "../fs/fs";
+import {User} from "better-auth/types";
+import {fsGetFileName} from "../fs/fs";
 
 // Import schema definitions
 import * as schema from './schema';
-import {mailboxes} from "./schema";
+import {mailboxes} from './schema';
 
 /**
  * Minimal Drizzle-based IMAP-like mailbox handling in TypeScript.
