@@ -1,8 +1,9 @@
 import { createAuthClient } from "better-auth/client";
 
-const authClient = createAuthClient({
+export const authClient = createAuthClient({
     baseURL: "http://localhost:8000" // the base url of your auth server
 });
+
 
 type ErrorTypes = Partial<
     Record<

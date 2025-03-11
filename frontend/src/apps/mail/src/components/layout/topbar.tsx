@@ -9,8 +9,25 @@ import {
 } from "@/components/ui/dropdown-menu";
 import {UserIcon} from "lucide-react";
 import {AppLogo} from "./app-logo";
+import {useAuth} from "@/lib/auth/auth-context.tsx";
+import {useRouter} from "@tanstack/react-router";
+import {Route} from "@/routes/__root.tsx";
 
 export function Topbar() {
+    const router = useRouter()
+    const navigate = Route.useNavigate()
+    const auth = useAuth()
+
+    const handleLogout = () => {
+        if (window.confirm('Are you sure you want to logout?')) {
+            auth.logout().then(() => {
+                router.invalidate().finally(() => {
+                    navigate({ to: '/' })
+                })
+            })
+        }
+    }
+
     return (
         <header className="bg-red-600">
             <div className="flex h-12 items-center px-4">
@@ -39,7 +56,7 @@ export function Topbar() {
                                 Settings
                             </DropdownMenuItem>
                             <DropdownMenuSeparator/>
-                            <DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => handleLogout()}>
                                 Log out
                             </DropdownMenuItem>
                         </DropdownMenuContent>

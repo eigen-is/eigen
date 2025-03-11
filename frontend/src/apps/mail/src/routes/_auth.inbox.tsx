@@ -1,9 +1,9 @@
-import {createFileRoute, useNavigate} from '@tanstack/react-router'
+import {createFileRoute, useNavigate} from "@tanstack/react-router";
 import {EmailDataTable} from "@/components/mail/inbox/email-data-table.tsx";
 import {emailColumns} from "@/components/mail/inbox/email-columns.tsx";
 import {mockEmails} from "@/lib/mock-data.ts";
 
-export const Route = createFileRoute('/inbox/')({
+export const Route = createFileRoute('/_auth/inbox')({
   component: RouteComponent,
 })
 
