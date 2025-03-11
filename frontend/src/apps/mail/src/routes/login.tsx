@@ -1,24 +1,27 @@
-import { createFileRoute, redirect } from '@tanstack/react-router';
+import {createFileRoute, redirect, useRouter} from '@tanstack/react-router';
 import { useState } from 'react';
 import { useAuth } from '@/lib/auth/auth-context';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
+import { z } from 'zod'
+
+const fallback = '/inbox';
 
 export const Route = createFileRoute('/login')({
   component: LoginPage,
-  beforeLoad: async ({ context }) => {
-    // Type assertion to inform TypeScript about the auth property
-    const typedContext = context as { auth: { isAuthenticated: boolean } };
-    
-    // If user is already authenticated, redirect to home
-    if (typedContext.auth.isAuthenticated) {
-      throw redirect({ to: '/' });
+  validateSearch: z.object({
+    redirect: z.string().optional().catch(''),
+  }),
+  beforeLoad: async ({ context, search }) => {
+    if (context.auth.isAuthenticated) {
+      throw redirect({ to: search.redirect || fallback })
     }
   },
 });
 
 function LoginPage() {
   const { login } = useAuth();
+  const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -43,6 +46,7 @@ function LoginPage() {
       setError('An unexpected error occurred');
     } finally {
       setIsLoading(false);
+      await router.invalidate();
     }
   };
 
