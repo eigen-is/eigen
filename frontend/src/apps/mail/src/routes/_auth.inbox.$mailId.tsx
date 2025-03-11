@@ -1,8 +1,8 @@
-import {createFileRoute} from '@tanstack/react-router'
+import {createFileRoute} from "@tanstack/react-router";
 import {getEmailById} from "@/lib/mock-data.ts";
 import {EmailDetail} from "@/components/mail/email-detail.tsx";
 
-export const Route = createFileRoute('/inbox/$mailId')({
+export const Route = createFileRoute('/_auth/inbox/$mailId')({
     loader: async ({params}) => {
         return {email: getEmailById(params.mailId)}
     },
