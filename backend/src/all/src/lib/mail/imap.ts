@@ -246,12 +246,7 @@ export async function imap_messages_append(
         }
 
         // 2) Insert into messages table
-        const insertQuery = db.query(`
-      INSERT INTO messages 
-      (mailbox_id, subject, sender, recipients, date_sent, date_received, raw_message)
-      VALUES 
-      ($mailboxId, $subject, $sender, $recipients, $dateSent, datetime('now'), $rawMessage)
-    `);
+        const insertQuery = db.query(`INSERT INTO messages (mailbox_id, subject, sender, recipients, date_sent, date_received, raw_message)VALUES ($mailboxId, $subject, $sender, $recipients, $dateSent, datetime('now'), $rawMessage)`);
         insertQuery.get({
             $mailboxId: mailbox.id,
             $subject: subject,
@@ -269,10 +264,7 @@ export async function imap_messages_append(
         // 4) Insert flags if provided
         if (flags && flags.length > 0) {
             for (const flag of flags) {
-                const fq = db.query(`
-          INSERT INTO message_flags (message_id, flag)
-          VALUES ($messageId, $flag)
-        `);
+                const fq = db.query(`INSERT INTO message_flags (message_id, flag) VALUES ($messageId, $flag)`);
                 fq.get({ $messageId: lastId, $flag: flag });
             }
         }
@@ -280,10 +272,7 @@ export async function imap_messages_append(
         // 5) Insert attachments if provided
         if (attachments && attachments.length > 0) {
             for (const att of attachments) {
-                const aq = db.query(`
-          INSERT INTO attachments (message_id, filename, content_type, data)
-          VALUES ($messageId, $filename, $contentType, $data)
-        `);
+                const aq = db.query(`INSERT INTO attachments (message_id, filename, content_type, data) VALUES ($messageId, $filename, $contentType, $data)`);
                 aq.get({
                     $messageId: lastId,
                     $filename: att.filename,
@@ -324,15 +313,9 @@ export async function imap_messages_fetch(
         //    Otherwise, retrieve all messages in that mailbox
         let messagesQuery;
         if (messageId) {
-            messagesQuery = db.query(`
-        SELECT * FROM messages
-        WHERE mailbox_id = $mailboxId AND id = $messageId
-      `);
+            messagesQuery = db.query(`SELECT * FROM messages WHERE mailbox_id = $mailboxId AND id = $messageId`);
         } else {
-            messagesQuery = db.query(`
-        SELECT * FROM messages
-        WHERE mailbox_id = $mailboxId
-      `);
+            messagesQuery = db.query(`SELECT * FROM messages WHERE mailbox_id = $mailboxId`);
         }
 
         const messages = messagesQuery.all({
@@ -385,9 +368,7 @@ export async function imap_messages_store(
             return { success: false, error: `Mailbox '${mailboxName}' not found.` };
         }
 
-        const msgQuery = db.query(`
-      SELECT id FROM messages WHERE mailbox_id = $mailboxId AND id = $messageId
-    `);
+        const msgQuery = db.query(`SELECT id FROM messages WHERE mailbox_id = $mailboxId AND id = $messageId`);
         const msgRow = msgQuery.get({ $mailboxId: mailbox.id, $messageId: messageId });
         if (!msgRow) {
             return { success: false, error: `Message with id=${messageId} not found in '${mailboxName}'.` };
@@ -397,24 +378,15 @@ export async function imap_messages_store(
         for (const flag of flags) {
             if (mode === '+') {
                 // Add flag (if not exists)
-                const checkFlagQ = db.query(`
-          SELECT 1 FROM message_flags 
-          WHERE message_id = $msgId AND flag = $flag
-        `);
+                const checkFlagQ = db.query(`SELECT 1 FROM message_flags WHERE message_id = $msgId AND flag = $flag`);
                 const exists = checkFlagQ.get({ $msgId: messageId, $flag: flag });
                 if (!exists) {
-                    const insertFlagQ = db.query(`
-            INSERT INTO message_flags (message_id, flag)
-            VALUES ($msgId, $flag)
-          `);
+                    const insertFlagQ = db.query(`INSERT INTO message_flags (message_id, flag) VALUES ($msgId, $flag)`);
                     insertFlagQ.get({ $msgId: messageId, $flag: flag });
                 }
             } else if (mode === '-') {
                 // Remove flag
-                const removeFlagQ = db.query(`
-          DELETE FROM message_flags
-          WHERE message_id = $msgId AND flag = $flag
-        `);
+                const removeFlagQ = db.query(`DELETE FROM message_flags WHERE message_id = $msgId AND flag = $flag`);
                 removeFlagQ.get({ $msgId: messageId, $flag: flag });
             }
         }
