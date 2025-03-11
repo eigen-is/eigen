@@ -40,4 +40,5 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
-frontend/src/apps/mail/dist/assets/_mailId-CMGNbZCw.js
+
+.idea
