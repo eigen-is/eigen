@@ -10,13 +10,13 @@
 
 // Import Routes
 
-import { Route as rootRoute } from './routes/__root'
-import { Route as LoginImport } from './routes/login'
-import { Route as AboutImport } from './routes/about'
-import { Route as AuthImport } from './routes/_auth'
-import { Route as IndexImport } from './routes/index'
-import { Route as AuthInboxIndexImport } from './routes/_auth.inbox.index'
-import { Route as AuthInboxMailIdImport } from './routes/_auth.inbox.$mailId'
+import {Route as rootRoute} from './routes/__root'
+import {Route as LoginImport} from './routes/login'
+import {Route as AboutImport} from './routes/about'
+import {Route as AuthImport} from './routes/_auth'
+import {Route as IndexImport} from './routes/index'
+import {Route as AuthInboxIndexImport} from './routes/_auth.inbox.index'
+import {Route as AuthInboxMailIdImport} from './routes/_auth.inbox.$mailId'
 
 // Create/Update Routes
 

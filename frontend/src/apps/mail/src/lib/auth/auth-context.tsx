@@ -1,5 +1,5 @@
-import React, { createContext, useEffect, useState, ReactNode } from 'react';
-import { authClient } from './auth-client';
+import React, {createContext, ReactNode, useEffect, useState} from 'react';
+import {authClient} from './auth-client';
 
 export type AuthContextType = {
   isAuthenticated: boolean;
