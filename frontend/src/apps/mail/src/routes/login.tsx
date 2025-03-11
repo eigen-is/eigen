@@ -4,6 +4,7 @@ import { useAuth } from '@/lib/auth/auth-context';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { z } from 'zod'
+import { AppLogo } from '@/components/layout/app-logo';
 
 const fallback = '/inbox';
 
@@ -51,10 +52,10 @@ function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center">
+    <div className="flex h-[calc(100vh-64px)] items-center justify-center">
       <div className="w-full max-w-md p-8 space-y-8 bg-white rounded-lg shadow-md">
         <div className="text-center">
-          <h1 className="text-2xl font-bold">Login to Your Account</h1>
+          <h1 className="text-2xl font-bold text-red-600">eigen<span className="font-normal">|mail&gt;</span></h1>
           <p className="mt-2 text-gray-600">Enter your credentials to access your account</p>
         </div>
         
