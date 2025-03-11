@@ -24,21 +24,24 @@
 
     "baseUrl": "./src/",
     "paths": {
-      "@/*": [
-        "./*"
-      ],
+     "@/*": [
+       "./*"
+     ],
       "@/components/*": [
-        "./components/*"
+        "/components/*"
       ],
       "@/lib/*": [
-        "./lib/*"
+        "/lib/*"
       ],
       "@/utils/*": [
-        "./utils/*"
+        "/utils/*"
+      ],
+      "@/types/*": [
+        "/types/*"
       ]
     },
     "allowSyntheticDefaultImports": true
   },
-  "include": ["src"],
+  "include": ["src" ],
   "files": []
 }
