@@ -26,11 +26,6 @@ const sidebarItems = [
         href: "/drafts",
     },
     {
-        title: "Important",
-        icon: AlertCircle,
-        href: "/important",
-    },
-    {
         title: "Archive",
         icon: Archive,
         href: "/archive",
