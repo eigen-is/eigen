@@ -1,0 +1,20 @@
+{
+  "name": "all",
+  "version": "1.0.50",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "bun run --watch src/index.ts"
+  },
+  "dependencies": {
+    "@elysiajs/cors": "^1.2.0",
+    "@elysiajs/swagger": "^1.2.2",
+    "better-auth": "^1.2.3",
+    "elysia": "latest",
+    "kysely": "^0.27.6",
+    "kysely-bun-worker": "^1.1.0"
+  },
+  "devDependencies": {
+    "bun-types": "latest"
+  },
+  "module": "src/index.js"
+}
