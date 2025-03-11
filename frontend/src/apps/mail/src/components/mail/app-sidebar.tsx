@@ -92,7 +92,7 @@ export function AppSidebar() {
                                     inactiveProps={{
                                         className: 'text-muted-foreground hover:bg-muted hover:text-foreground',
                                     }}
-                                    activeOptions={{exact: true}}
+                                    activeOptions={{exact: false}}
                                 >
                                     <item.icon className="h-4 w-4"/>
                                     <span>{item.title}</span>

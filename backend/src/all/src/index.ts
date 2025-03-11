@@ -3,7 +3,7 @@ import swagger from "@elysiajs/swagger";
 import {plugin} from "./module";
 import cors from "@elysiajs/cors";
 import {auth} from "./lib/auth/auth";
-import {imap_init, imap_mailboxes_create, imap_messages_append} from "./lib/mail/imap";
+import {imap_init, imap_mailboxes_create, imap_mailboxes_list, imap_messages_append} from "./lib/mail/imap";
 
 const app = new Elysia()
     .use(swagger())
@@ -34,8 +34,10 @@ const app = new Elysia()
     })
     .get("/user", async ({ user }) => {
         await imap_init(user);
-        await imap_mailboxes_create(user, 'INBOX');
-        await imap_messages_append(user, 'INBOX', 'test', 'test@eigen.eu', 'test', 'test');
+        await imap_mailboxes_create(user, 'INBOX/test');
+        await imap_messages_append(user, 'INBOX/test', 'test', 'test@eigen.eu', 'test', 'test');
+
+        console.log(await imap_mailboxes_list(user));
         return user;
     }, {
         auth: true,
