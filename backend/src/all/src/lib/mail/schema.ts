@@ -14,8 +14,10 @@ export const messages = sqliteTable('messages', {
     mailbox_id: int().references(() => mailboxes.id),
     read: int().notNull().default(0),
     subject: text(),
-    sender: text(),
-    recipients: text(),
+    from: text(),
+    to: text(),
+    cc: text(),
+    bcc: text(),
     date_sent: text(),
     date_received: text(),
     raw_message: text()

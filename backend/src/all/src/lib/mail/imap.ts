@@ -9,13 +9,6 @@ import {fsGetDatabase} from "../fs/fs";
 import * as schema from './schema';
 import {mailboxes} from './schema';
 
-/**
- * Minimal Drizzle-based IMAP-like mailbox handling in TypeScript.
- *
- * This implementation uses Drizzle ORM instead of raw SQL queries
- * for better type safety and query building.
- */
-
 export type Mailbox = typeof mailboxes.$inferSelect;
 export type MailMessage = typeof schema.messages.$inferSelect;
 
@@ -27,8 +20,12 @@ class imap {
         this.user = user;
     }
 
-    public async init() {
+    public async login() {
         this.db = drizzle(await fsGetDatabase(this.user, 'mailbox.db'), {schema});
+    }
+
+    public async logout() {
+        return true;
     }
 
     public async create_tables() {
@@ -49,8 +46,10 @@ class imap {
         mailbox_id INTEGER NOT NULL,
         read INTEGER NOT NULL DEFAULT 0,
         subject TEXT,
-        sender TEXT,
-        recipients TEXT,
+        from TEXT,
+        to TEXT,
+        cc TEXT,
+        bcc TEXT,
         date_sent TEXT,
         date_received TEXT,
         raw_message TEXT,
@@ -132,12 +131,12 @@ class imap {
     }
 
 // -- 3) Create a mailbox (IMAP 'CREATE') ----------------------------------
-    public async mailboxes_create(name: string) {
+    public async mailboxes_create(name: string, attributes: string[] = []) {
         try {
             this.db.insert(schema.mailboxes).values({
                 name,
                 subscribed: 0,
-                attributes: ''
+                attributes: attributes.join(' ')
             }).run();
 
             return {success: true, message: `Mailbox '${name}' created.`};
@@ -167,7 +166,9 @@ class imap {
                 return {success: false, error: `Mailbox '${oldName}' not found.`};
             } else {
                 this.db.update(schema.mailboxes)
-                    .set({name: newName})
+                    .set({
+                        name: newName
+                    })
                     .where(eq(schema.mailboxes.id, oldMailbox.id))
                     .run();
             }
@@ -247,8 +248,10 @@ class imap {
     public async messages_append(
         mailboxName: string,
         subject: string,
-        sender: string,
-        recipients: string,
+        from: string,
+        to: string,
+        cc: string,
+        bcc: string,
         rawMessage: string,
         dateSent?: string,
         attachments?: {
@@ -270,8 +273,10 @@ class imap {
                 .values({
                     mailbox_id: mailbox.id,
                     subject,
-                    sender,
-                    recipients,
+                    from,
+                    to,
+                    cc,
+                    bcc,
                     date_sent: dateSent || null,
                     date_received: new Date().toISOString(),
                     raw_message: rawMessage
@@ -318,7 +323,7 @@ class imap {
      *  Retrieves messages from a mailbox. Optionally filter by message ID or a simple condition.
      *  For a real IMAP-like system, you'd parse sequence sets, fetch flags, etc.
      */
-    public async imap_messages_fetch(
+    public async messages_fetch(
         mailboxName: string,
         messageId?: number
     ) {
@@ -496,6 +501,31 @@ class imap {
         }
     }
 
+    public async messages_move(
+        sourceMailboxName: string,
+        destinationMailboxName: string,
+        messageId: number
+    ) {
+        // 1) Check source/destination mailboxes
+        const sourceMailbox = await this.mailbox_exists(sourceMailboxName);
+        const destinationMailbox = await this.mailbox_exists(destinationMailboxName);
+        if (!sourceMailbox) {
+            return {success: false, error: `Source mailbox '${sourceMailboxName}' not found.`};
+        }
+        if (!destinationMailbox) {
+            return {success: false, error: `Destination mailbox '${destinationMailboxName}' not found.`};
+        }
+
+        // update message mailbox_id
+        this.db.update(schema.messages)
+            .set({mailbox_id: destinationMailbox.id})
+            .where(eq(schema.messages.id, messageId))
+            .run();
+
+        return {success: true, message: `Message ${messageId} moved from '${sourceMailboxName}' to '${destinationMailboxName}'.`};
+    }
+
+
 // ------------------ Copy a message (IMAP 'COPY') ------------------ //
 
     /**
@@ -539,8 +569,10 @@ class imap {
                 .values({
                     mailbox_id: destinationMailbox.id,
                     subject: message.subject,
-                    sender: message.sender,
-                    recipients: message.recipients,
+                    to: message.to,
+                    from: message.from,
+                    cc: message.cc,
+                    bcc: message.bcc,
                     date_sent: message.date_sent,
                     date_received: message.date_received,
                     raw_message: message.raw_message

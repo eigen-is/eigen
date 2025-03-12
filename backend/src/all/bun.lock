@@ -9,7 +9,7 @@
         "better-auth": "^1.2.3",
         "drizzle-kit": "^0.30.5",
         "drizzle-orm": "^0.40.0",
-        "elysia": "latest",
+        "elysia": "^1.2.25",
         "kysely": "^0.27.6",
         "kysely-bun-worker": "^1.1.0",
       },
