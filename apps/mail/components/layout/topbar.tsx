@@ -1,6 +1,6 @@
 
 import {UserIcon} from "lucide-react";
-import {useRouter} from "@tanstack/react-router";
+import {Outlet, useRouter} from "@tanstack/react-router";
 import {Route} from "@/routes/__root.tsx";
 import {
     DropdownMenu,
