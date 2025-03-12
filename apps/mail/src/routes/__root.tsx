@@ -1,7 +1,7 @@
 import {createRootRouteWithContext, Outlet} from '@tanstack/react-router'
 import {TanStackRouterDevtools} from '@tanstack/react-router-devtools'
-import {Topbar} from "../../components/layout/topbar.tsx";
 import {AuthContextType} from "@workspace/lib/auth/auth-context.tsx";
+import {Topbar} from "@workspace/ui/components/layout/topbar";
 
 interface MyRouterContext {
     auth: AuthContextType
