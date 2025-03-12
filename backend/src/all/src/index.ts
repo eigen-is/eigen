@@ -2,7 +2,7 @@ import {Elysia} from "elysia";
 import swagger from "@elysiajs/swagger";
 import {plugin} from "./module";
 import cors from "@elysiajs/cors";
-import {imap_init, imap_mailboxes_create, imap_mailboxes_list, imap_messages_append} from "./lib/mail/imap";
+import imap from "./lib/mail/imap";
 import {betterAuth} from "./routes/auth";
 import {mailRouter} from "./routes/mail";
 
@@ -17,12 +17,11 @@ const app = new Elysia()
         allowedHeaders: ["Content-Type", "Authorization"],
     }))
     .use(betterAuth)
-    .get("/user", async ({ user }) => {
-        await imap_init(user);
-        await imap_mailboxes_create(user, 'INBOX/test');
-        await imap_messages_append(user, 'INBOX/test', 'test', 'test@eigen.eu', 'test', 'test');
-
-        console.log(await imap_mailboxes_list(user));
+    .get("/user", async ({user}) => {
+        const mail = new imap(user);
+        await mail.init();
+        await mail.mailboxes_create('INBOX/test');
+        await mail.messages_append('INBOX/test', 'test', 'test@eigen.eu', 'test', 'test');
         return user;
     }, {
         auth: true,
