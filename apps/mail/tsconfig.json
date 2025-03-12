@@ -4,8 +4,12 @@
     "jsx": "react-jsx",
     "baseUrl": "./src/",
     "paths": {
-      "@/*": ["./*"],
-      "@workspace/ui/*": ["../../packages/ui/src/*"]
+      "@/*": [
+        "./*"
+      ],
+      "@workspace/ui/*": [
+        "../../packages/ui/src/*"
+      ]
     }
   },
   "include": [
@@ -13,5 +17,7 @@
     "**/*.tsx",
     "src"
   ],
-  "exclude": ["node_modules"]
+  "exclude": [
+    "node_modules"
+  ]
 }
