@@ -5,8 +5,7 @@ import {Input} from "../ui/input.tsx";
 import {Button} from "../ui/button.tsx";
 
 
-export
-function LoginPage() {
+export function LoginPage() {
     const {login} = useAuth();
     const router = useRouter();
     const [email, setEmail] = useState('');

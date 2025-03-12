@@ -1,11 +1,12 @@
-
 import {UserIcon} from "lucide-react";
-import {Outlet, useRouter} from "@tanstack/react-router";
+import {useRouter} from "@tanstack/react-router";
 import {Route} from "@/routes/__root.tsx";
 import {
     DropdownMenu,
-    DropdownMenuContent, DropdownMenuItem,
-    DropdownMenuLabel, DropdownMenuSeparator,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
     DropdownMenuTrigger
 } from "@workspace/ui/components/ui/dropdown-menu";
 import {Button} from "@workspace/ui/components/ui/button";
