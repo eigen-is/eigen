@@ -522,7 +522,10 @@ class imap {
             .where(eq(schema.messages.id, messageId))
             .run();
 
-        return {success: true, message: `Message ${messageId} moved from '${sourceMailboxName}' to '${destinationMailboxName}'.`};
+        return {
+            success: true,
+            message: `Message ${messageId} moved from '${sourceMailboxName}' to '${destinationMailboxName}'.`
+        };
     }
 
 
