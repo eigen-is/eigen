@@ -1,12 +1,11 @@
 {
   "name": "eigen",
-  "version": "0.0.0",
   "private": true,
   "scripts": {
     "serve": "bun --filter '*' dev"
   },
-  "dependencies": {
-  },
-  "devDependencies": {
-  }
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ]
 }
