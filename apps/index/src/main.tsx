@@ -8,7 +8,7 @@ import {AuthProvider, useAuth} from "@workspace/lib/auth/auth-context.tsx";
 const router = createRouter({
     routeTree,
     defaultPreload: 'intent',
-    basepath: '/mail',
+    basepath: '/',
     scrollRestoration: true,
     context: {
         auth: undefined!, // This will be set after we wrap the app in an AuthProvider
