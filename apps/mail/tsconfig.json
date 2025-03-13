@@ -1,5 +1,5 @@
 {
-  "extends": "@workspace/typescript-config/base.json",
+  "extends": "@workspace/config/base.json",
   "compilerOptions": {
     "jsx": "react-jsx",
     "baseUrl": "./src/",
