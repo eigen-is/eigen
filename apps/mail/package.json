@@ -7,24 +7,26 @@
     "typecheck": "tsc --noEmit",
     "dev": "bunx --bun vite",
     "build": "bunx --bun vite build",
-    "serve": "vite preview",
+    "serve": "bunx --bun vite preview --port 3001",
     "start": "vite"
   },
   "dependencies": {
-    "@workspace/ui": "workspace:*",
-    "@workspace/lib": "workspace:*",
     "@tanstack/match-sorter-utils": "^8.19.4",
     "@tanstack/react-router": "latest",
     "@tanstack/react-router-devtools": "latest",
     "@tanstack/react-table": "^8.21.2",
+    "@workspace/lib": "workspace:*",
+    "@workspace/ui": "workspace:*",
     "lucide-react": "^0.477.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "shadcn-ui": "^0.9.5",
     "tailwind-merge": "^3.0.2",
-    "tailwindcss-animate": "^1.0.7"
+    "tailwindcss-animate": "^1.0.7",
+    "terser": "^5.39.0"
   },
   "devDependencies": {
+    "@workspace/config": "workspace:*",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",

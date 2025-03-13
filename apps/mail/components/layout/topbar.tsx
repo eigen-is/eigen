@@ -62,8 +62,6 @@ function UserDropdown() {
 }
 
 export function Topbar() {
-
-
     return (
         <header className="bg-red-600">
             <div className="flex h-12 items-center px-4">

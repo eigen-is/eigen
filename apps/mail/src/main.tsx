@@ -3,8 +3,6 @@ import {createRouter, RouterProvider} from '@tanstack/react-router';
 import {routeTree} from './routeTree.gen';
 import '@workspace/ui/globals.css';
 import {AuthProvider, useAuth} from "@workspace/lib/auth/auth-context.tsx";
-import {authClient} from "@workspace/lib/auth/auth-client.ts";
-import {api} from "@workspace/lib/api.ts";
 
 // Set up a Router instance
 const router = createRouter({
@@ -52,11 +50,11 @@ if (!rootElement.innerHTML) {
     root.render(<App/>);
 }
 
-const session = await authClient.getSession();
-
-if (session) {
-    api.index.get().then(console.log);
-    api.mail.mailboxes.get().then(console.log);
-    // @ts-ignore
-    api.mail.mailbox['[Eigen]/Spam'].get();
-}
+// const session = await authClient.getSession();
+//
+// if (session) {
+//     api.index.get().then(console.log);
+//     api.mail.mailboxes.get().then(console.log);
+//     // @ts-ignore
+//     api.mail.mailbox['[Eigen]/Spam'].get();
+// }

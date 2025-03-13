@@ -15,7 +15,7 @@ const app = new Elysia()
     .use(betterAuth)
     .get("/", () => "Hello, Elysia!")
     .use(mailRouter)
-    .listen(8000);
+    .listen(process.env.API_PORT as string);
 
 export type app = typeof app;
 

@@ -16,6 +16,7 @@
     "kysely-bun-worker": "^1.1.0"
   },
   "devDependencies": {
+    "@workspace/config": "workspace:*",
     "bun-types": "latest"
   },
   "module": "src/index.js"
