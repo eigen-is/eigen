@@ -3,6 +3,8 @@ import swagger from "@elysiajs/swagger";
 import cors from "@elysiajs/cors";
 import {betterAuth} from "./routes/auth";
 import {mailRouter} from "./routes/mail";
+import {getEnv} from "@workspace/config/src";
+
 
 const app = new Elysia()
     .use(swagger())
@@ -15,7 +17,7 @@ const app = new Elysia()
     .use(betterAuth)
     .get("/", () => "Hello, Elysia!")
     .use(mailRouter)
-    .listen(process.env.API_PORT as string);
+    .listen(8000);
 
 export type app = typeof app;
 
