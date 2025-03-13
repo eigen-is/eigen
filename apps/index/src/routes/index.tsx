@@ -55,7 +55,7 @@ function HomeComponent() {
             <p className="text-lg text-center mb-8 max-w-md">
                 Your personal workspace in the cloud.
                 <br />
-                Simple, secure, and always available.
+                Simple and secure. You control your own data.
             </p>
             <div className="flex gap-4">
                 <Button className="px-8 py-2 font-medium">
