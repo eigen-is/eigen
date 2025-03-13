@@ -6,9 +6,9 @@ import viteTsConfigPaths from 'vite-tsconfig-paths'
 
 // https://vitejs.dev/config/
 export default defineConfig({
-    base: '/mail/',
+    base: '/',
     server: {
-        port: 3001,
+        port: 3000,
     },
     plugins: [
         TanStackRouterVite({
