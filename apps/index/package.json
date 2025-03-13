@@ -1,5 +1,5 @@
 {
-  "name": "@apps/mail",
+  "name": "@apps/index",
   "version": "0.0.1",
   "type": "module",
   "private": true,
@@ -7,14 +7,12 @@
     "typecheck": "tsc --noEmit",
     "dev": "bunx --bun vite",
     "build": "bunx --bun vite build",
-    "serve": "bunx --bun vite preview --port 3001",
+    "serve": "bunx --bun vite preview --port 3000",
     "start": "vite"
   },
   "dependencies": {
-    "@tanstack/match-sorter-utils": "^8.19.4",
     "@tanstack/react-router": "latest",
     "@tanstack/react-router-devtools": "latest",
-    "@tanstack/react-table": "^8.21.2",
     "@workspace/lib": "workspace:*",
     "@workspace/ui": "workspace:*",
     "lucide-react": "^0.477.0",
