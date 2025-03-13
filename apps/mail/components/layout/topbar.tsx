@@ -61,11 +61,11 @@ function UserDropdown() {
         : null;
 }
 
-export function Topbar() {
+export function Topbar({appName}: { appName: string }) {
     return (
         <header className="bg-red-600">
             <div className="flex h-12 items-center px-4">
-                <AppLogo appName="Mail"/>
+                <AppLogo appName={appName.toLowerCase()}/>
                 <div className="ml-auto flex items-center space-x-4">
                     <UserDropdown/>
                 </div>
