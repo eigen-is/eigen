@@ -3,6 +3,7 @@ import {createRouter, RouterProvider} from '@tanstack/react-router';
 import {routeTree} from './routeTree.gen';
 import '@workspace/ui/globals.css';
 import {AuthProvider, useAuth} from "@workspace/lib/auth/auth-context.tsx";
+import {authClient} from "@workspace/lib/auth/auth-client.ts";
 
 // Set up a Router instance
 const router = createRouter({
@@ -58,3 +59,13 @@ if (!rootElement.innerHTML) {
 //     // @ts-ignore
 //     api.mail.mailbox['[Eigen]/Spam'].get();
 // }
+authClient.signUp.email({
+    email: 'reinder@eigen.is',
+    password: 'password',
+    name: 'Reinder'
+})
+authClient.signUp.email({
+    email: 'mark@eigen.is',
+    password: 'password',
+    name: 'Mark'
+})

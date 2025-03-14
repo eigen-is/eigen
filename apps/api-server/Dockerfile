@@ -1,5 +1,5 @@
 # Build stage
-FROM oven/bun:alpine as builder
+FROM oven/bun:alpine AS builder
 
 # Set the working directory
 WORKDIR /app

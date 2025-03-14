@@ -1,7 +1,7 @@
 import {betterAuth} from "better-auth";
 import {drizzle} from 'drizzle-orm/bun-sqlite';
 import {drizzleAdapter} from "better-auth/adapters/drizzle";
-import * as schema from './drizzle/schema';
+import  { account, session, user, verification } from '../../../auth-schema.ts';
 
 export const trustedOrigins = [
     "http://localhost:3000",
@@ -13,10 +13,14 @@ export const trustedOrigins = [
     "https://eigen.is"];
 
 export const auth = betterAuth({
-    database: drizzleAdapter({
-        db: drizzle('./data/users.db', {schema}),
-    }, {
+    database: drizzleAdapter( drizzle('./data/users3.db'), {
         provider: "sqlite", // or "pg" or "mysql"
+        schema: {
+            user,
+            session,
+            verification,
+            account,
+        },
     }),
     emailAndPassword: {
         enabled: true
