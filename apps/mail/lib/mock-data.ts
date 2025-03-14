@@ -1,4 +1,4 @@
-import {Email} from "@/types";
+import { Email } from "@workspace/lib/types/mail";
 
 export const mockEmails: Email[] = [
     {

@@ -16,8 +16,7 @@ import {ChevronDown} from "lucide-react";
 import {useNavigate} from "@tanstack/react-router";
 import {useState} from "react";
 import {Input} from "@workspace/ui/components/ui/input";
-// @ts-ignore
-import {Email} from "@workspace/ui/src/types";
+import { Email } from "@workspace/lib/types/mail";
 import {
     DropdownMenu,
     DropdownMenuCheckboxItem,

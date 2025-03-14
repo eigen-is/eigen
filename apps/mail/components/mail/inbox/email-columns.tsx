@@ -1,7 +1,6 @@
 import {ColumnDef, FilterFnOption} from "@tanstack/react-table"
 import {ArrowUpDown, Paperclip, Star} from "lucide-react"
-// @ts-ignore
-import {Email} from "@workspace/ui/src/types";
+import { Email } from "@workspace/lib/types/mail";
 import {Checkbox} from "@workspace/ui/components/ui/checkbox";
 import {Button} from "@workspace/ui/components/ui/button";
 import {cn} from "@workspace/ui/lib/utils";
