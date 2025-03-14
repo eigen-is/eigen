@@ -54,37 +54,39 @@ function HomeComponent() {
                 <span className={app.className}>|{app.name.toLowerCase()}&gt;</span>
             </div>
             <div className="text-lg text-center mb-8 max-w-md">
-                <div className={`transition-all duration-500 linear overflow-hidden ${
-                    showMore ? 'max-h-0 opacity-0' : 'max-h-[100px] opacity-100'
-                }`}>
+                <div className={`transition-all duration-500 linear overflow-hidden`}>
                     <p className="mb-4">
                         Your personal workspace in the cloud.
                         <br />
                         Simple and secure. You control your own data.
                     </p>
                 </div>
-                <button 
-                    onClick={() => setShowMore(!showMore)}
-                    className="text-blue-600 hover:text-blue-800 underline text-sm mb-4"
-                >
-                    {showMore ? 'Show less' : 'Learn more'}
-                </button>
                 <div
                     className={`transition-all duration-500 linear overflow-hidden ${
                         showMore ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0'
                     }`}
                 >
                     <p className="mb-4 text-center">
-                        eigen is your minimal, secure workspace in the cloud. It includes mail, calendar, docs, and drive — everything you need, nothing you don't.
+                        It includes mail, calendar, docs, drive and more — everything you need, nothing you don't.
                     </p>
-                    <div className="text-center">
-                        <p className="mb-2 text-sm">Store your data where you want:</p>
-                        <ul className="list-disc pl-6 text-sm text-left inline-block">
-                            <li>Host with eigen.is — simple and secure by default</li>
-                            <li>Connect your preferred cloud storage</li>
-                            <li>Self-host on your own infrastructure</li>
-                        </ul>
+                    <div className="flex justify-center w-full">
+                        <div className="text-left">
+                            <p className="mb-2">Store your data where you want:</p>
+                            <ul className="list-disc pl-6 text-sm">
+                                <li>Host with eigen.is — simple and secure by default</li>
+                                <li>Connect your preferred cloud storage</li>
+                                <li>Self-host on your own infrastructure</li>
+                            </ul>
+                        </div>
                     </div>
+                </div>
+                <div className="flex justify-center">
+                    <button
+                        onClick={() => setShowMore(!showMore)}
+                        className="text-blue-600 hover:text-blue-800 underline text-sm mt-4"
+                    >
+                        {showMore ? 'Show less' : 'Learn more'}
+                    </button>
                 </div>
             </div>
             <div className="flex gap-4">
