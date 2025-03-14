@@ -1,7 +1,7 @@
 import {Archive, ArrowLeft, Clock, Forward, MoreHorizontal, Reply, Star, Tag, Trash} from "lucide-react";
 
 import {Link} from "@tanstack/react-router";
-import {Email} from "@workspace/ui/src/types";
+import { Email } from "@workspace/lib/types/mail";
 import {cn} from "@workspace/ui/lib/utils";
 import {Button} from "@workspace/ui/components/ui/button";
 
