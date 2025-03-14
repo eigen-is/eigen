@@ -80,14 +80,6 @@ function HomeComponent() {
                         </div>
                     </div>
                 </div>
-                <div className="flex justify-center">
-                    <button
-                        onClick={() => setShowMore(!showMore)}
-                        className="text-blue-600 hover:text-blue-800 underline text-sm mt-4"
-                    >
-                        {showMore ? 'Show less' : 'Learn more'}
-                    </button>
-                </div>
             </div>
             <div className="flex gap-4">
                 <Button className="px-8 py-2 font-medium">
@@ -96,6 +88,14 @@ function HomeComponent() {
                 <Button variant="outline" className="px-6 py-2">
                     Join Waitlist
                 </Button>
+            </div>
+            <div className="flex justify-center">
+                <button
+                    onClick={() => setShowMore(!showMore)}
+                    className="text-blue-600 hover:text-blue-800 underline text-sm mt-4"
+                >
+                    {showMore ? 'Show less' : 'Learn more'}
+                </button>
             </div>
         </div>
     );
