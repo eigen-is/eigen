@@ -3,19 +3,26 @@ import swagger from "@elysiajs/swagger";
 import cors from "@elysiajs/cors";
 import {betterAuth} from "./routes/auth";
 import {mailRouter} from "./routes/mail";
-import {getEnv} from "@workspace/config/src";
 
+export const trustedOrigins = [
+    "http://localhost:3000",
+    "http://localhost:3001",
+    "http://localhost:3002",
+    "http://localhost:3003",
+    "http://localhost:3004",
+    "http://localhost:3005",
+    "https://eigen.is"];
 
 const app = new Elysia()
     .use(swagger())
     .use(cors({
-        origin: "http://localhost:3001",
+        origin: trustedOrigins,
         methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
         credentials: true,
         allowedHeaders: ["Content-Type", "Authorization"],
     }))
     .use(betterAuth)
-    .get("/", () => "Hello, Elysia!")
+    .get("/", () => "eigen|api>")
     .use(mailRouter)
     .listen(8000);
 

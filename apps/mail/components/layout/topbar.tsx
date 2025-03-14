@@ -32,7 +32,7 @@ function UserDropdown() {
         <DropdownMenu>
             <DropdownMenuTrigger asChild>
                 <Button variant="ghost"
-                        className="relative h-8 w-8 rounded-full text-white hover:bg-red-700 hover:bg-opacity-20 p-0">
+                        className="relative h-8 w-8 rounded-full text-red-800 bg-white hover:bg-red-800 hover:text-black p-0">
                     <UserIcon className="h-5 w-5"/>
                 </Button>
             </DropdownMenuTrigger>

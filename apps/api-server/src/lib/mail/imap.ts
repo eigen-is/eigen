@@ -3,7 +3,7 @@ import {BunSQLiteDatabase, drizzle} from 'drizzle-orm/bun-sqlite';
 import {and, eq, like, sql} from 'drizzle-orm';
 import Database from "bun:sqlite";
 import {User} from "better-auth/types";
-import {fsGetDatabase} from "../fs/fs";
+import {fsGetFileName} from "../fs/fs";
 
 // Import schema definitions
 import * as schema from './schema';
@@ -21,7 +21,9 @@ class imap {
     }
 
     public async login() {
-        this.db = drizzle(await fsGetDatabase(this.user, 'mailbox.db'), {schema});
+        const t= await fsGetFileName(this.user, 'mailbox.db');
+        this.db = drizzle(t, {schema});
+//        this.db = drizzle(await fsGetDatabase(this.user, 'mailbox.db'), {schema});
     }
 
     public async logout() {
