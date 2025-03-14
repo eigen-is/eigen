@@ -12,7 +12,7 @@ interface MyRouterContext {
 export const Route = createRootRouteWithContext<MyRouterContext>()({
     component: () => (
         <>
-            <div className="flex flex-col h-screen">
+            <div className="flex flex-col h-dvh">
                 <Topbar appName={appName}/>
                 <Outlet/>
             </div>
