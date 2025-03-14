@@ -36,6 +36,7 @@ function HomeComponent() {
     ];
     
     const [appIndex, setAppIndex] = React.useState(0);
+    const [showMore, setShowMore] = React.useState(false);
     const app = apps[appIndex];
     
     React.useEffect(() => {
@@ -52,11 +53,40 @@ function HomeComponent() {
                 <span className={`font-bold ${app.className}`}>eigen</span>
                 <span className={app.className}>|{app.name.toLowerCase()}&gt;</span>
             </div>
-            <p className="text-lg text-center mb-8 max-w-md">
-                Your personal workspace in the cloud.
-                <br />
-                Simple and secure. You control your own data.
-            </p>
+            <div className="text-lg text-center mb-8 max-w-md">
+                <div className={`transition-all duration-500 linear overflow-hidden ${
+                    showMore ? 'max-h-0 opacity-0' : 'max-h-[100px] opacity-100'
+                }`}>
+                    <p className="mb-4">
+                        Your personal workspace in the cloud.
+                        <br />
+                        Simple and secure. You control your own data.
+                    </p>
+                </div>
+                <button 
+                    onClick={() => setShowMore(!showMore)}
+                    className="text-blue-600 hover:text-blue-800 underline text-sm mb-4"
+                >
+                    {showMore ? 'Show less' : 'Learn more'}
+                </button>
+                <div
+                    className={`transition-all duration-500 linear overflow-hidden ${
+                        showMore ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0'
+                    }`}
+                >
+                    <p className="mb-4 text-center">
+                        eigen is your minimal, secure workspace in the cloud. It includes mail, calendar, docs, and drive — everything you need, nothing you don't.
+                    </p>
+                    <div className="text-center">
+                        <p className="mb-2 text-sm">Store your data where you want:</p>
+                        <ul className="list-disc pl-6 text-sm text-left inline-block">
+                            <li>Host with eigen.is — simple and secure by default</li>
+                            <li>Connect your preferred cloud storage</li>
+                            <li>Self-host on your own infrastructure</li>
+                        </ul>
+                    </div>
+                </div>
+            </div>
             <div className="flex gap-4">
                 <Button className="px-8 py-2 font-medium">
                     Login
