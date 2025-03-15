@@ -146,4 +146,9 @@
     body {
         @apply bg-background text-foreground;
     }
+
+    :root {
+        --app-mail-color: var(--color-red-600);
+        --app-contacts-color: var(--color-green-600);
+    }
 }
