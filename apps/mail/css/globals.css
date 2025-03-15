@@ -1,0 +1,7 @@
+.bg-app {
+    background-color: var(--app-mail-color);
+}
+
+.text-app {
+    color: var(--app-mail-color);
+}
