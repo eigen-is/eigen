@@ -1,0 +1,7 @@
+.bg-app {
+    background-color: var(--app-contacts-color);
+}
+
+.text-app {
+    color: var(--app-contacts-color);
+}

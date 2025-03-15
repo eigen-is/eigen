@@ -11,7 +11,7 @@ import './../css/globals.css';
 const router = createRouter({
     routeTree,
     defaultPreload: 'intent',
-    basepath: '/mail',
+    basepath: '/contacts',
     scrollRestoration: true,
     context: {
         auth: undefined!, // This will be set after we wrap the app in an AuthProvider
