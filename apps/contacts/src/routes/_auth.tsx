@@ -4,12 +4,12 @@ import {ContactsSidebar} from "../../components/contacts/contacts-sidebar.tsx";
 export const Route = createFileRoute('/_auth')({
     beforeLoad: ({context, location}) => {
         if (!context.auth.isAuthenticated) {
-            throw redirect({
-                to: '/login',
-                search: {
-                    redirect: location.href,
-                },
-            })
+            // throw redirect({
+            //     to: '/login',
+            //     search: {
+            //         redirect: location.href,
+            //     },
+            // })
         }
     },
     component: AuthLayout,
