@@ -11,7 +11,7 @@ export const Route = createFileRoute('/login')({
     }),
     beforeLoad: async ({context, search}) => {
         if (context.auth.isAuthenticated) {
-            throw redirect({to: search.redirect || fallback})
+            // throw redirect({to: search.redirect || fallback})
         }
     },
 });
