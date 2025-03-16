@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { PlusIcon, Pencil } from 'lucide-react';
 import { Link } from '@tanstack/react-router';
 import { Button } from "@workspace/ui/components/button";
@@ -17,6 +17,28 @@ export function LabelManager({
   const [isEditMode, setIsEditMode] = useState(false);
   const [selectedLabel, setSelectedLabel] = useState<Label | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const labelManagerRef = useRef<HTMLDivElement>(null);
+  
+  // Handle clicks outside of the label manager to exit edit mode
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      // Skip if we're not in edit mode or if the dialog is open
+      if (!isEditMode || dialogOpen) return;
+      
+      // Check if the click was outside the label manager
+      if (labelManagerRef.current && !labelManagerRef.current.contains(event.target as Node)) {
+        setIsEditMode(false);
+      }
+    };
+
+    // Add event listener
+    document.addEventListener('mousedown', handleClickOutside);
+    
+    // Clean up
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isEditMode, dialogOpen]);
 
   const handleAddLabel = () => {
     setSelectedLabel(null);
@@ -54,7 +76,7 @@ export function LabelManager({
   };
 
   return (
-    <div className={cn("px-6 py-2", className)}>
+    <div className={cn("px-6 py-2", className)} ref={labelManagerRef}>
       <div className="flex items-center justify-between mb-2">
         <h3 className="text-xs font-semibold text-muted-foreground px-3">Labels</h3>
         <div className="flex items-center gap-1">
@@ -68,12 +90,12 @@ export function LabelManager({
             <span className="sr-only">Add new label</span>
           </Button>
           <Button
-            variant="ghost"
+            variant={isEditMode ? "secondary" : "ghost"}
             size="sm"
-            className={cn("h-7 w-7 p-0", isEditMode && "bg-muted")}
+            className={cn("h-7 w-7 p-0", isEditMode && "border border-primary")}
             onClick={() => setIsEditMode(!isEditMode)}
           >
-            <Pencil className="h-3.5 w-3.5" />
+            <Pencil className={cn("h-3.5 w-3.5", isEditMode && "text-primary")} />
             <span className="sr-only">Toggle edit mode</span>
           </Button>
         </div>
