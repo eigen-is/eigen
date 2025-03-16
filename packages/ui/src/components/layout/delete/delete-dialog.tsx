@@ -31,8 +31,8 @@ export function DeleteDialog({
 }: DeleteDialogProps) {
   // Format description with item name if provided
   const formattedDescription = itemName 
-    ? `${description} ${itemName}? This action cannot be undone.`
-    : `${description}? This action cannot be undone.`;
+    ? `${description} ${itemName}? <br /> This action cannot be undone.`
+    : `${description}? <br /> This action cannot be undone.`;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

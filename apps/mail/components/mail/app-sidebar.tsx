@@ -1,4 +1,4 @@
-import {AlertCircle, Archive, File, Inbox, Plus, Send, Star} from "lucide-react";
+import {AlertCircle, Archive, File, Inbox, MailPlus, Send, Star} from "lucide-react";
 
 import {Link} from '@tanstack/react-router';
 import {Button} from "@workspace/ui/components/button";
@@ -99,7 +99,7 @@ export function AppSidebar() {
         <div className="w-64 border-r h-full flex flex-col bg-background">
             <div className="p-4">
                 <Button className="w-full justify-start gap-2" size="lg">
-                    <Plus className="h-4 w-4"/>
+                    <MailPlus className="h-4 w-4"/>
                     Compose
                 </Button>
             </div>
