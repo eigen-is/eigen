@@ -1,7 +1,7 @@
 import {AlertCircle, Archive, File, Inbox, Plus, Send, Star, Tag, Trash2} from "lucide-react";
 
-import {Link} from '@tanstack/react-router'
-import {Button} from "@workspace/ui/components/ui/button";
+import {Link} from '@tanstack/react-router';
+import {Button} from "@workspace/ui/components/button";
 import {cn} from "@workspace/ui/lib/utils";
 
 // Menu items for the sidebar

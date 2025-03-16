@@ -15,17 +15,18 @@ import {rankItem} from "@tanstack/match-sorter-utils";
 import {ChevronDown} from "lucide-react";
 import {useNavigate} from "@tanstack/react-router";
 import {useState} from "react";
-import {Input} from "@workspace/ui/components/ui/input";
 import { Email } from "@workspace/lib/types/mail";
 import {
     DropdownMenu,
     DropdownMenuCheckboxItem,
     DropdownMenuContent,
     DropdownMenuTrigger
-} from "@workspace/ui/components/ui/dropdown-menu";
-import {Button} from "@workspace/ui/components/ui/button";
-import {Table, TableBody, TableCell, TableHead, TableHeader, TableRow} from "@workspace/ui/components/ui/table";
+} from "@workspace/ui/components/dropdown-menu";
+import {Button} from "@workspace/ui/components/button";
+import {Table, TableBody, TableCell, TableHead, TableHeader, TableRow} from "@workspace/ui/components/table";
 import {cn} from "@workspace/ui/lib/utils";
+import {Input} from "@workspace/ui/components/input";
+
 
 // Define a fuzzy filter function
 const fuzzyFilter: FilterFn<any> = (row, columnId, value, addMeta) => {

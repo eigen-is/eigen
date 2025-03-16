@@ -8,8 +8,8 @@ import {
     DropdownMenuLabel,
     DropdownMenuSeparator,
     DropdownMenuTrigger
-} from "@workspace/ui/components/ui/dropdown-menu";
-import {Button} from "@workspace/ui/components/ui/button";
+} from "@workspace/ui/components/dropdown-menu";
+import {Button} from "@workspace/ui/components/button";
 import {AppLogo} from "@workspace/ui/components/layout/app-logo";
 import {useAuth} from "@workspace/lib/auth/auth-context.tsx";
 
