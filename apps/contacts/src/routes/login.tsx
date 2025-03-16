@@ -5,7 +5,7 @@ import {LoginPage} from "@workspace/ui/components/layout/loginpage";
 const fallback = '/all';
 
 export const Route = createFileRoute('/login')({
-    component: LoginPage,
+    component: () => <LoginPage appName="contacts" />,
     validateSearch: z.object({
         redirect: z.string().optional().catch(''),
     }),
