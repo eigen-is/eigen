@@ -1,9 +1,8 @@
-import { PlusIcon, Pencil, UserPlus, Tag } from 'lucide-react';
+import { PlusIcon, Pencil, UserPlus, Trash2 } from 'lucide-react';
 import { Link } from '@tanstack/react-router';
 import { Button } from "@workspace/ui/components/button";
 import { cn } from "@workspace/ui/lib/utils";
 import { useState } from 'react';
-import { mockLabels, Label } from '../../src/data/mockData';
 import {
   Dialog,
   DialogContent,
@@ -13,6 +12,7 @@ import {
   DialogTitle,
   DialogTrigger,
 } from "@workspace/ui/components/dialog";
+import { mockLabels, Label } from '../../src/data/mockData';
 import {
   Form,
   FormControl,
@@ -43,6 +43,7 @@ export function ContactsSidebar() {
   const [isEditMode, setIsEditMode] = useState(false);
   const [selectedLabel, setSelectedLabel] = useState<Label | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   const form = useForm<LabelFormValues>({
     resolver: zodResolver(labelFormSchema),
@@ -89,6 +90,14 @@ export function ContactsSidebar() {
       color: "#3b82f6",
     });
     setDialogOpen(true);
+  };
+
+  const handleDeleteLabel = () => {
+    if (selectedLabel) {
+      setLabels(labels.filter(l => l.id !== selectedLabel.id));
+      setDeleteDialogOpen(false);
+      setDialogOpen(false);
+    }
   };
 
   return (
@@ -148,15 +157,26 @@ export function ContactsSidebar() {
         <div className="px-6 py-2">
           <div className="flex justify-between items-center mb-2">
             <h3 className="text-xs font-semibold text-muted-foreground px-3">Labels</h3>
-            <Button
-              variant="ghost"
-              size="sm"
-              className="h-7 w-7 p-0"
-              onClick={() => setIsEditMode(!isEditMode)}
-            >
-              <Pencil className="h-3.5 w-3.5" />
-              <span className="sr-only">Toggle edit mode</span>
-            </Button>
+            <div className="flex space-x-1">
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 w-7 p-0"
+                onClick={handleAddLabel}
+              >
+                <PlusIcon className="h-3.5 w-3.5" />
+                <span className="sr-only">Add new label</span>
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
+                className="h-7 w-7 p-0"
+                onClick={() => setIsEditMode(!isEditMode)}
+              >
+                <Pencil className="h-3.5 w-3.5" />
+                <span className="sr-only">Toggle edit mode</span>
+              </Button>
+            </div>
           </div>
           
           <div className="space-y-1">
@@ -186,25 +206,9 @@ export function ContactsSidebar() {
               </div>
             ))}
             
-            {isEditMode && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="flex w-full items-center justify-start px-3 py-2 text-sm"
-                onClick={handleAddLabel}
-              >
-                <PlusIcon className="mr-2 h-4 w-4" />
-                Add new label
-              </Button>
-            )}
+            {/* De "Add new label" knop in edit-modus is verwijderd omdat we nu een permanente + knop hebben */}
             
-            <Link
-              className="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground cursor-pointer"
-              to='/contacts/labels'
-            >
-              <Tag className="h-4 w-4" />
-              <span>Manage Labels</span>
-            </Link>
+            {/* "Manage Labels" link is removed as per user request */}
           </div>
         </div>
       </div>
@@ -253,11 +257,50 @@ export function ContactsSidebar() {
                   </FormItem>
                 )}
               />
-              <DialogFooter>
+              <DialogFooter className="flex justify-between sm:justify-between">
+                {selectedLabel && (
+                  <Button 
+                    type="button" 
+                    variant="outline"
+                    className="text-destructive hover:text-destructive hover:bg-destructive/10"
+                    onClick={() => {
+                      setDeleteDialogOpen(true);
+                    }}
+                  >
+                    <Trash2 className="mr-2 h-4 w-4" />
+                    Delete
+                  </Button>
+                )}
                 <Button type="submit">{selectedLabel ? 'Save changes' : 'Create label'}</Button>
               </DialogFooter>
             </form>
           </Form>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete confirmation dialog */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent className="sm:max-w-[425px]">
+          <DialogHeader>
+            <DialogTitle>Delete Label</DialogTitle>
+            <DialogDescription>
+              Are you sure you want to delete this label? This action cannot be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="flex justify-between sm:justify-between">
+            <Button
+              variant="outline"
+              onClick={() => setDeleteDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={handleDeleteLabel}
+            >
+              Delete
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>
