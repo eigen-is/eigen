@@ -2,7 +2,7 @@ import {createFileRoute, redirect} from '@tanstack/react-router';
 import {z} from 'zod'
 import {LoginPage} from "@workspace/ui/components/layout/loginpage";
 
-const fallback = '/inbox';
+const fallback = '/contacts';
 
 export const Route = createFileRoute('/login')({
     component: LoginPage,

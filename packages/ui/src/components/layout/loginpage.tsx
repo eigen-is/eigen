@@ -1,8 +1,8 @@
 import {useAuth} from "@workspace/lib/auth/auth-context.tsx";
 import {useRouter} from "@tanstack/react-router";
 import {useState} from "react";
-import {Input} from "../ui/input.tsx";
-import {Button} from "../ui/button.tsx";
+import {Input} from "../input.tsx";
+import {Button} from "../button.tsx";
 
 
 export function LoginPage() {

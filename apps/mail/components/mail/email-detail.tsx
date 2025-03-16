@@ -3,7 +3,7 @@ import {Archive, ArrowLeft, Clock, Forward, MoreHorizontal, Reply, Star, Tag, Tr
 import {Link} from "@tanstack/react-router";
 import { Email } from "@workspace/lib/types/mail";
 import {cn} from "@workspace/ui/lib/utils";
-import {Button} from "@workspace/ui/components/ui/button";
+import {Button} from "@workspace/ui/components/button";
 
 interface EmailDetailProps extends React.HTMLAttributes<HTMLDivElement> {
     email: Email;

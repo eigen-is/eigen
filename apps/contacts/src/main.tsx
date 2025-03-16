@@ -2,7 +2,6 @@ import ReactDOM from 'react-dom/client';
 import {createRouter, RouterProvider} from '@tanstack/react-router';
 import {routeTree} from './routeTree.gen';
 import {AuthProvider, useAuth} from "@workspace/lib/auth/auth-context.tsx";
-import {authClient} from "@workspace/lib/auth/auth-client.ts";
 
 import '@workspace/ui/globals.css';
 import './../css/globals.css';
@@ -52,22 +51,3 @@ if (!rootElement.innerHTML) {
     const root = ReactDOM.createRoot(rootElement);
     root.render(<App/>);
 }
-
-// const session = await authClient.getSession();
-//
-// if (session) {
-//     api.index.get().then(console.log);
-//     api.mail.mailboxes.get().then(console.log);
-//     // @ts-ignore
-//     api.mail.mailbox['[Eigen]/Spam'].get();
-// }
-authClient.signUp.email({
-    email: 'reinder@eigen.is',
-    password: 'password',
-    name: 'Reinder'
-})
-authClient.signUp.email({
-    email: 'mark@eigen.is',
-    password: 'password',
-    name: 'Mark'
-})
