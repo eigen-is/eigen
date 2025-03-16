@@ -118,24 +118,22 @@ export function LabelDialog({
                 )}
               />
 
-              <DialogFooter className="flex justify-between sm:justify-between">
+              <DialogFooter className="flex justify-end">
                 {isEditMode && (
                   <Button
                     type="button"
                     variant="outline"
                     onClick={handleDeleteClick}
-                    className="bg-destructive/10 text-destructive hover:bg-destructive/20 hover:text-destructive"
+                    className="mr-auto bg-destructive/10 text-destructive hover:bg-destructive/20 hover:text-destructive"
                   >
                     <Trash2 className="h-4 w-4 mr-2" />
                     Delete
                   </Button>
                 )}
-                <div className="flex gap-2 sm:gap-0">
-                  <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
-                    Cancel
-                  </Button>
-                  <Button type="submit">Save</Button>
-                </div>
+                <Button type="button" variant="outline" onClick={() => onOpenChange(false)} className="mr-2">
+                  Cancel
+                </Button>
+                <Button type="submit">Save</Button>
               </DialogFooter>
             </form>
           </Form>
