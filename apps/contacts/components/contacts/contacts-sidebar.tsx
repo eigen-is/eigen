@@ -33,18 +33,16 @@ export function ContactsSidebar() {
 
   return (
     <div className="w-64 border-r h-full flex flex-col bg-background">
-      <div className="p-4">
-        <Link to="/contacts">
-          <Button className="w-full justify-start gap-2" size="lg">
-            <UserPlus className="h-4 w-4" />
+        <div className="p-4">
+            <Button className="w-full justify-start gap-2" size="lg">
+                <UserPlus className="h-4 w-4"/>
             Create contact
           </Button>
-        </Link>
       </div>
 
+
       <div className="overflow-auto flex-1">
-        <div className="px-6 py-2">
-          <h3 className="text-xs font-semibold text-muted-foreground mb-2 px-3">Menu</h3>
+        <div className="px-3 py-2">
           <nav className="space-y-1">
             <Link
               to="/all"
