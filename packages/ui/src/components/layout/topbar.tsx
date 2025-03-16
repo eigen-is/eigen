@@ -1,6 +1,5 @@
 import {UserIcon} from "lucide-react";
 import {useRouter} from "@tanstack/react-router";
-import {Route} from "@/routes/__root.tsx";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -8,20 +7,31 @@ import {
     DropdownMenuLabel,
     DropdownMenuSeparator,
     DropdownMenuTrigger
-} from "@workspace/ui/components/dropdown-menu";
-import {Button} from "@workspace/ui/components/button";
-import {AppLogo} from "@workspace/ui/components/layout/app-logo";
+} from "../dropdown-menu";
+import {Button} from "../button";
+import {AppLogo} from "./app-logo";
 import {useAuth} from "@workspace/lib/auth/auth-context.tsx";
 
-function UserDropdown() {
+// Meer generieke definitie voor de Route parameter
+type NavigateFunction = (...args: any[]) => any;
+
+interface TopbarProps {
+    appName: string;
+    rootRoute: {
+        useNavigate: () => NavigateFunction;
+    };
+}
+
+function UserDropdown({ rootRoute }: { rootRoute: TopbarProps['rootRoute'] }) {
     const router = useRouter();
-    const navigate = Route.useNavigate();
+    const navigate = rootRoute.useNavigate();
     const auth = useAuth();
 
     const handleLogout = () => {
         if (window.confirm('Are you sure you want to logout?')) {
             auth.logout().then(() => {
                 router.invalidate().finally(() => {
+                    // Gebruik navigate op de manier waarop TanStack Router het verwacht
                     navigate({to: '/'});
                 })
             })
@@ -61,13 +71,13 @@ function UserDropdown() {
         : null;
 }
 
-export function Topbar({appName}: { appName: string }) {
+export function Topbar({ appName, rootRoute }: TopbarProps) {
     return (
         <header className="bg-app">
             <div className="flex h-12 items-center px-4">
                 <AppLogo appName={appName.toLowerCase()}/>
                 <div className="ml-auto flex items-center space-x-4">
-                    <UserDropdown/>
+                    <UserDropdown rootRoute={rootRoute} />
                 </div>
             </div>
         </header>
