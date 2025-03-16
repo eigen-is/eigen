@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from '@tanstack/react-router';
-import { ChevronDown, ChevronUp, ArrowUpDown, Search } from 'lucide-react';
+import { ArrowUpDown, Search } from 'lucide-react';
 import { mockContacts, groupContactsByLetter, type Contact } from '../../src/data/mockData';
 import { Button } from "@workspace/ui/components/button";
 import { Input } from "@workspace/ui/components/input";
@@ -14,22 +14,12 @@ import {
 export function ContactsList() {
   const [sortBy, setSortBy] = useState<'firstName' | 'lastName'>('firstName');
   const [searchQuery, setSearchQuery] = useState('');
-  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
-
-  // Group and sort contacts
+  
+  // Group contacts by first letter
   const groupedContacts = groupContactsByLetter(sortBy);
   
-  // Initialize all sections as expanded
-  useState(() => {
-    const initialExpandedState: Record<string, boolean> = {};
-    groupedContacts.forEach(([letter]) => {
-      initialExpandedState[letter] = true;
-    });
-    setExpandedSections(initialExpandedState);
-  });
-
-  // Filter contacts based on search query
-  const filteredGroups = searchQuery.trim() === '' 
+  // Filter grouped contacts based on search query
+  const filteredGroups = searchQuery.length === 0
     ? groupedContacts
     : groupedContacts.map(([letter, contacts]) => {
         const filteredContacts = contacts.filter(contact => 
@@ -39,23 +29,6 @@ export function ContactsList() {
         );
         return [letter, filteredContacts] as [string, Contact[]];
       }).filter(([_, contacts]) => contacts.length > 0);
-
-  // Toggle section expansion
-  const toggleSection = (letter: string) => {
-    setExpandedSections(prev => ({
-      ...prev,
-      [letter]: !prev[letter]
-    }));
-  };
-
-  // Toggle all sections
-  const toggleAllSections = (expand: boolean) => {
-    const newState: Record<string, boolean> = {};
-    groupedContacts.forEach(([letter]) => {
-      newState[letter] = expand;
-    });
-    setExpandedSections(newState);
-  };
 
   return (
     <div className="w-full h-full flex flex-col">
@@ -87,22 +60,6 @@ export function ContactsList() {
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
-          <Button 
-            variant="ghost" 
-            size="sm" 
-            onClick={() => toggleAllSections(true)}
-            title="Expand all"
-          >
-            <ChevronDown className="h-4 w-4" />
-          </Button>
-          <Button 
-            variant="ghost" 
-            size="sm" 
-            onClick={() => toggleAllSections(false)}
-            title="Collapse all"
-          >
-            <ChevronUp className="h-4 w-4" />
-          </Button>
         </div>
       </div>
 
@@ -116,58 +73,48 @@ export function ContactsList() {
             {filteredGroups.map(([letter, contacts]) => (
               <div key={letter} className="border-b last:border-b-0">
                 <div 
-                  className="flex items-center justify-between px-6 py-2 bg-muted/50 cursor-pointer"
-                  onClick={() => toggleSection(letter)}
+                  className="flex items-center px-6 py-2 bg-muted/50"
                 >
                   <h2 className="text-sm font-semibold">{letter}</h2>
-                  <Button variant="ghost" size="sm" className="h-6 w-6 p-0">
-                    {expandedSections[letter] ? (
-                      <ChevronUp className="h-4 w-4" />
-                    ) : (
-                      <ChevronDown className="h-4 w-4" />
-                    )}
-                  </Button>
                 </div>
-                {expandedSections[letter] && (
-                  <div>
-                    {contacts.map((contact) => (
-                      <Link
-                        key={contact.id}
-                        to={`/all/$contactId`}
-                        params={{ contactId: contact.id }}
-                        className="flex items-center gap-3 px-6 py-3 hover:bg-muted transition-colors"
-                        activeProps={{
-                          className: "bg-primary/10",
-                        }}
-                      >
-                        <div className="h-8 w-8 rounded-full overflow-hidden bg-muted">
-                          {contact.avatar ? (
-                            <img 
-                              src={contact.avatar} 
-                              alt={`${contact.firstName} ${contact.lastName}`}
-                              className="h-full w-full object-cover"
-                            />
-                          ) : (
-                            <div className="h-full w-full flex items-center justify-center bg-primary/10 text-primary font-medium">
-                              {contact.firstName.charAt(0)}
-                              {contact.lastName.charAt(0)}
-                            </div>
-                          )}
-                        </div>
-                        <div className="flex flex-col">
-                          <span className="font-medium">
-                            {sortBy === 'firstName' 
-                              ? `${contact.firstName} ${contact.lastName}` 
-                              : `${contact.lastName}, ${contact.firstName}`}
-                          </span>
-                          {contact.email && contact.email.length > 0 && (
-                            <span className="text-sm text-muted-foreground">{contact.email[0]}</span>
-                          )}
-                        </div>
-                      </Link>
-                    ))}
-                  </div>
-                )}
+                <div>
+                  {contacts.map((contact) => (
+                    <Link
+                      key={contact.id}
+                      to={`/all/$contactId`}
+                      params={{ contactId: contact.id }}
+                      className="flex items-center gap-3 px-6 py-3 hover:bg-muted transition-colors"
+                      activeProps={{
+                        className: "bg-primary/10",
+                      }}
+                    >
+                      <div className="h-8 w-8 rounded-full overflow-hidden bg-muted">
+                        {contact.avatar ? (
+                          <img 
+                            src={contact.avatar} 
+                            alt={`${contact.firstName} ${contact.lastName}`}
+                            className="h-full w-full object-cover"
+                          />
+                        ) : (
+                          <div className="h-full w-full flex items-center justify-center bg-primary/10 text-primary font-medium">
+                            {contact.firstName.charAt(0)}
+                            {contact.lastName.charAt(0)}
+                          </div>
+                        )}
+                      </div>
+                      <div className="flex flex-col">
+                        <span className="font-medium">
+                          {sortBy === 'firstName' 
+                            ? `${contact.firstName} ${contact.lastName}` 
+                            : `${contact.lastName}, ${contact.firstName}`}
+                        </span>
+                        {contact.email && contact.email.length > 0 && (
+                          <span className="text-sm text-muted-foreground">{contact.email[0]}</span>
+                        )}
+                      </div>
+                    </Link>
+                  ))}
+                </div>
               </div>
             ))}
           </div>
