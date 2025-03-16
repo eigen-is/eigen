@@ -11,16 +11,9 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from "@workspace/ui/components/dropdown-menu";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@workspace/ui/components/dialog";
 import { Badge } from "@workspace/ui/components/badge";
 import { Link } from '@tanstack/react-router';
+import { DeleteDialog } from '@workspace/ui/components/delete-dialog';
 
 interface ContactDetailProps {
   contact: Contact;
@@ -248,24 +241,14 @@ export function ContactDetail({ contact, onDelete }: ContactDetailProps) {
       </div>
 
       {/* Delete Confirmation Dialog */}
-      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>Delete Contact</DialogTitle>
-            <DialogDescription>
-              Are you sure you want to delete {contact.firstName} {contact.lastName}? This action cannot be undone.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>
-              Cancel
-            </Button>
-            <Button variant="destructive" onClick={handleDelete}>
-              Delete
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      <DeleteDialog
+        open={deleteDialogOpen}
+        onOpenChange={setDeleteDialogOpen}
+        title="Delete Contact"
+        description="Are you sure you want to delete"
+        itemName={`${contact.firstName} ${contact.lastName}`}
+        onDelete={handleDelete}
+      />
     </div>
   );
 }

@@ -25,6 +25,7 @@ import {
 import { Input } from "@workspace/ui/components/input";
 import { Button } from "@workspace/ui/components/button";
 import { Label } from './types';
+import { DeleteDialog } from "@workspace/ui/components/delete-dialog";
 
 // Form schema for label management
 const labelFormSchema = z.object({
@@ -37,45 +38,6 @@ const labelFormSchema = z.object({
 });
 
 type LabelFormValues = z.infer<typeof labelFormSchema>;
-
-interface DeleteConfirmationDialogProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  onConfirmDelete: () => void;
-}
-
-export function DeleteConfirmationDialog({
-  open,
-  onOpenChange,
-  onConfirmDelete,
-}: DeleteConfirmationDialogProps) {
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[425px]">
-        <DialogHeader>
-          <DialogTitle>Delete Label</DialogTitle>
-          <DialogDescription>
-            Are you sure you want to delete this label? This action cannot be undone.
-          </DialogDescription>
-        </DialogHeader>
-        <DialogFooter className="flex justify-between sm:justify-between">
-          <Button
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-          >
-            Cancel
-          </Button>
-          <Button
-            variant="destructive"
-            onClick={onConfirmDelete}
-          >
-            Delete
-          </Button>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
-  );
-}
 
 interface LabelDialogProps {
   open: boolean;
@@ -92,30 +54,42 @@ export function LabelDialog({
   onSubmit,
   onDelete,
 }: LabelDialogProps) {
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
+  const isEditMode = !!selectedLabel;
 
+  // Initialize the form with default values or the selected label data
   const form = useForm<LabelFormValues>({
     resolver: zodResolver(labelFormSchema),
-    defaultValues: {
-      name: selectedLabel?.name || "",
-      color: selectedLabel?.color || "#3b82f6", // Default blue color
-    },
+    defaultValues: selectedLabel
+      ? { name: selectedLabel.name, color: selectedLabel.color }
+      : { name: "", color: "#3b82f6" }, // Default blue color
   });
+
+  // Handle form submission
+  const handleSubmit = (data: LabelFormValues) => {
+    onSubmit(data);
+    form.reset();
+  };
+
+  const handleDeleteClick = () => {
+    setShowDeleteConfirmation(true);
+  };
 
   return (
     <>
-      <Dialog open={open} onOpenChange={onOpenChange}>
+      <Dialog open={open && !showDeleteConfirmation} onOpenChange={onOpenChange}>
         <DialogContent className="sm:max-w-[425px]">
           <DialogHeader>
-            <DialogTitle>{selectedLabel ? 'Edit Label' : 'Create Label'}</DialogTitle>
+            <DialogTitle>{isEditMode ? "Edit Label" : "Add Label"}</DialogTitle>
             <DialogDescription>
-              {selectedLabel 
-                ? 'Update the name and color of your label.' 
-                : 'Create a new label to organize your items.'}
+              {isEditMode
+                ? "Make changes to your label here."
+                : "Add a new label to your collection."}
             </DialogDescription>
           </DialogHeader>
+
           <Form {...form}>
-            <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+            <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
               <FormField
                 control={form.control}
                 name="name"
@@ -129,48 +103,56 @@ export function LabelDialog({
                   </FormItem>
                 )}
               />
+
               <FormField
                 control={form.control}
                 name="color"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>Color</FormLabel>
-                    <div className="flex items-center gap-2">
-                      <div 
-                        className="h-6 w-6 rounded-full border" 
-                        style={{ backgroundColor: field.value }}
-                      />
-                      <FormControl>
-                        <Input type="color" {...field} />
-                      </FormControl>
-                    </div>
+                    <FormControl>
+                      <Input type="color" {...field} />
+                    </FormControl>
                     <FormMessage />
                   </FormItem>
                 )}
               />
+
               <DialogFooter className="flex justify-between sm:justify-between">
-                {selectedLabel && (
-                  <Button 
-                    type="button" 
+                {isEditMode && (
+                  <Button
+                    type="button"
                     variant="outline"
-                    className="text-destructive hover:text-destructive hover:bg-destructive/10"
-                    onClick={() => setDeleteDialogOpen(true)}
+                    onClick={handleDeleteClick}
+                    className="bg-destructive/10 text-destructive hover:bg-destructive/20 hover:text-destructive"
                   >
-                    <Trash2 className="mr-2 h-4 w-4" />
+                    <Trash2 className="h-4 w-4 mr-2" />
                     Delete
                   </Button>
                 )}
-                <Button type="submit">{selectedLabel ? 'Save changes' : 'Create label'}</Button>
+                <div className="flex gap-2 sm:gap-0">
+                  <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
+                    Cancel
+                  </Button>
+                  <Button type="submit">Save</Button>
+                </div>
               </DialogFooter>
             </form>
           </Form>
         </DialogContent>
       </Dialog>
-      
-      <DeleteConfirmationDialog
-        open={deleteDialogOpen}
-        onOpenChange={setDeleteDialogOpen}
-        onConfirmDelete={onDelete}
+
+      <DeleteDialog
+        open={showDeleteConfirmation}
+        onOpenChange={setShowDeleteConfirmation}
+        title="Delete Label"
+        description="Are you sure you want to delete this label"
+        itemName={selectedLabel?.name}
+        onDelete={() => {
+          onDelete();
+          setShowDeleteConfirmation(false);
+          onOpenChange(false);
+        }}
       />
     </>
   );
