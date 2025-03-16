@@ -9,24 +9,18 @@ import {
     getSortedRowModel,
     SortingState,
     useReactTable,
-    VisibilityState,
 } from "@tanstack/react-table";
 import {rankItem} from "@tanstack/match-sorter-utils";
-import {ChevronDown} from "lucide-react";
+import {Search} from "lucide-react";
 import {useNavigate} from "@tanstack/react-router";
 import {useState} from "react";
 import { Email } from "@workspace/lib/types/mail";
 import {
-    DropdownMenu,
-    DropdownMenuCheckboxItem,
-    DropdownMenuContent,
-    DropdownMenuTrigger
-} from "@workspace/ui/components/dropdown-menu";
-import {Button} from "@workspace/ui/components/button";
-import {Table, TableBody, TableCell, TableHead, TableHeader, TableRow} from "@workspace/ui/components/table";
+    Table, TableBody, TableCell, TableHead, TableHeader, TableRow
+} from "@workspace/ui/components/table";
 import {cn} from "@workspace/ui/lib/utils";
 import {Input} from "@workspace/ui/components/input";
-import {Search} from "lucide-react";
+import {Button} from "@workspace/ui/components/button";
 
 // Define a fuzzy filter function
 const fuzzyFilter: FilterFn<any> = (row, columnId, value, addMeta) => {
@@ -42,23 +36,22 @@ const fuzzyFilter: FilterFn<any> = (row, columnId, value, addMeta) => {
     return itemRank.passed
 }
 
-interface EmailDataTableProps<TData, TValue> {
-    columns: ColumnDef<TData, TValue>[]
+interface DataTableProps<TData> {
+    columns: ColumnDef<TData, unknown>[]
     data: TData[]
     onRowClick?: (row: any) => void
 }
 
-export function EmailDataTable<TData, TValue>({
-                                                  columns,
-                                                  data,
-                                                  onRowClick,
-                                              }: EmailDataTableProps<TData, TValue>) {
+export function EmailDataTable({
+                                  columns,
+                                  data,
+                                  onRowClick
+                              }: DataTableProps<Email>) {
+
     const [sorting, setSorting] = useState<SortingState>([])
     const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
-    const [columnVisibility, setColumnVisibility] = useState<VisibilityState>({})
-    const [rowSelection, setRowSelection] = useState({})
     const [globalFilter, setGlobalFilter] = useState("")
-
+    
     const navigate = useNavigate();
 
     const handleRowClick = async (row: any) => {
@@ -66,7 +59,6 @@ export function EmailDataTable<TData, TValue>({
             onRowClick(row);
         } else {
             await navigate({to: '/inbox/' + (row as Email).id});
-            // router.push(`/inbox/${(row as Email).id}`);
         }
     };
 
@@ -76,21 +68,16 @@ export function EmailDataTable<TData, TValue>({
         filterFns: {
             fuzzy: fuzzyFilter,
         },
+        onSortingChange: setSorting,
+        onColumnFiltersChange: setColumnFilters,
         getCoreRowModel: getCoreRowModel(),
         getPaginationRowModel: getPaginationRowModel(),
-        onSortingChange: setSorting,
         getSortedRowModel: getSortedRowModel(),
-        onColumnFiltersChange: setColumnFilters,
         getFilteredRowModel: getFilteredRowModel(),
-        onColumnVisibilityChange: setColumnVisibility,
-        onRowSelectionChange: setRowSelection,
-        onGlobalFilterChange: setGlobalFilter,
         globalFilterFn: fuzzyFilter,
         state: {
             sorting,
             columnFilters,
-            columnVisibility,
-            rowSelection,
             globalFilter,
         },
     })
@@ -107,32 +94,6 @@ export function EmailDataTable<TData, TValue>({
                     className="pl-8 w-full"
                     />
                 </div>
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button variant="outline" className="ml-auto">
-                            Columns <ChevronDown className="ml-2 h-4 w-4"/>
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                        {table
-                            .getAllColumns()
-                            .filter((column) => column.getCanHide())
-                            .map((column) => {
-                                return (
-                                    <DropdownMenuCheckboxItem
-                                        key={column.id}
-                                        className="capitalize"
-                                        checked={column.getIsVisible()}
-                                        onCheckedChange={(value) =>
-                                            column.toggleVisibility(!!value)
-                                        }
-                                    >
-                                        {column.id}
-                                    </DropdownMenuCheckboxItem>
-                                )
-                            })}
-                    </DropdownMenuContent>
-                </DropdownMenu>
             </div>
             <div>
                 <Table className="w-full table-fixed">
