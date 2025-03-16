@@ -1,9 +1,9 @@
 import { useState } from 'react';
 import { Link } from '@tanstack/react-router';
-import { ChevronDown, ChevronUp, Search, ArrowUpDown } from 'lucide-react';
+import { ChevronDown, ChevronUp, ArrowUpDown, Search } from 'lucide-react';
 import { mockContacts, groupContactsByLetter, type Contact } from '../../src/data/mockData';
-import { Input } from "@workspace/ui/components/input";
 import { Button } from "@workspace/ui/components/button";
+import { Input } from "@workspace/ui/components/input";
 import {
   DropdownMenu,
   DropdownMenuContent,

@@ -47,9 +47,6 @@
     "./postcss.config": "./postcss.config.mjs",
     "./lib/*": "./src/lib/*.ts",
     "./components/*": "./src/components/*.tsx",
-    "./components/layout/*": "./src/components/layout/*.tsx",
-    "./components/layout/labels": "./src/components/layout/labels/index.ts",
-    "./components/layout/delete": "./src/components/layout/delete/index.ts",
     "./hooks/*": "./src/hooks/*.ts"
   }
 }
