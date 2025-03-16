@@ -6,7 +6,7 @@ export const Route = createFileRoute('/')({
 
 function HomeComponent() {
     const navigate = Route.useNavigate();
-    navigate({to: '/contacts'});
+    navigate({to: '/inbox'});
 
     return null;
 }

@@ -2,7 +2,7 @@ import { createFileRoute, redirect } from '@tanstack/react-router';
 import { ContactsList } from '../../components/contacts/contacts-list';
 import { getLabelById } from '../data/mockData';
 
-export const Route = createFileRoute('/_auth/contacts/label/$labelId')({
+export const Route = createFileRoute('/_auth/label/$labelId')({
   component: ContactsLabelRoute,
   validateParams: ({ params }) => {
     const labelId = params.labelId;
@@ -10,7 +10,7 @@ export const Route = createFileRoute('/_auth/contacts/label/$labelId')({
     
     if (!label) {
       throw redirect({
-        to: '/contacts',
+        to: '/all',
       });
     }
     

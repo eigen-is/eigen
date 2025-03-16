@@ -14,10 +14,10 @@ import { Route as rootRoute } from './routes/__root'
 import { Route as LoginImport } from './routes/login'
 import { Route as AuthImport } from './routes/_auth'
 import { Route as IndexImport } from './routes/index'
-import { Route as AuthContactsIndexImport } from './routes/_auth.contacts.index'
-import { Route as AuthContactsContactIdImport } from './routes/_auth.contacts.$contactId'
-import { Route as AuthContactsLabelLabelIdImport } from './routes/_auth.contacts.label.$labelId'
-import { Route as AuthContactsEditContactIdImport } from './routes/_auth.contacts.edit.$contactId'
+import { Route as AuthAllIndexImport } from './routes/_auth.all.index'
+import { Route as AuthLabelLabelIdImport } from './routes/_auth.label.$labelId'
+import { Route as AuthAllContactIdImport } from './routes/_auth.all.$contactId'
+import { Route as AuthAllEditContactIdImport } from './routes/_auth.all.edit.$contactId'
 
 // Create/Update Routes
 
@@ -38,27 +38,27 @@ const IndexRoute = IndexImport.update({
   getParentRoute: () => rootRoute,
 } as any)
 
-const AuthContactsIndexRoute = AuthContactsIndexImport.update({
-  id: '/contacts/',
-  path: '/contacts/',
+const AuthAllIndexRoute = AuthAllIndexImport.update({
+  id: '/all/',
+  path: '/all/',
   getParentRoute: () => AuthRoute,
 } as any)
 
-const AuthContactsContactIdRoute = AuthContactsContactIdImport.update({
-  id: '/contacts/$contactId',
-  path: '/contacts/$contactId',
+const AuthLabelLabelIdRoute = AuthLabelLabelIdImport.update({
+  id: '/label/$labelId',
+  path: '/label/$labelId',
   getParentRoute: () => AuthRoute,
 } as any)
 
-const AuthContactsLabelLabelIdRoute = AuthContactsLabelLabelIdImport.update({
-  id: '/contacts/label/$labelId',
-  path: '/contacts/label/$labelId',
+const AuthAllContactIdRoute = AuthAllContactIdImport.update({
+  id: '/all/$contactId',
+  path: '/all/$contactId',
   getParentRoute: () => AuthRoute,
 } as any)
 
-const AuthContactsEditContactIdRoute = AuthContactsEditContactIdImport.update({
-  id: '/contacts/edit/$contactId',
-  path: '/contacts/edit/$contactId',
+const AuthAllEditContactIdRoute = AuthAllEditContactIdImport.update({
+  id: '/all/edit/$contactId',
+  path: '/all/edit/$contactId',
   getParentRoute: () => AuthRoute,
 } as any)
 
@@ -87,32 +87,32 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginImport
       parentRoute: typeof rootRoute
     }
-    '/_auth/contacts/$contactId': {
-      id: '/_auth/contacts/$contactId'
-      path: '/contacts/$contactId'
-      fullPath: '/contacts/$contactId'
-      preLoaderRoute: typeof AuthContactsContactIdImport
+    '/_auth/all/$contactId': {
+      id: '/_auth/all/$contactId'
+      path: '/all/$contactId'
+      fullPath: '/all/$contactId'
+      preLoaderRoute: typeof AuthAllContactIdImport
       parentRoute: typeof AuthImport
     }
-    '/_auth/contacts/': {
-      id: '/_auth/contacts/'
-      path: '/contacts'
-      fullPath: '/contacts'
-      preLoaderRoute: typeof AuthContactsIndexImport
+    '/_auth/label/$labelId': {
+      id: '/_auth/label/$labelId'
+      path: '/label/$labelId'
+      fullPath: '/label/$labelId'
+      preLoaderRoute: typeof AuthLabelLabelIdImport
       parentRoute: typeof AuthImport
     }
-    '/_auth/contacts/edit/$contactId': {
-      id: '/_auth/contacts/edit/$contactId'
-      path: '/contacts/edit/$contactId'
-      fullPath: '/contacts/edit/$contactId'
-      preLoaderRoute: typeof AuthContactsEditContactIdImport
+    '/_auth/all/': {
+      id: '/_auth/all/'
+      path: '/all'
+      fullPath: '/all'
+      preLoaderRoute: typeof AuthAllIndexImport
       parentRoute: typeof AuthImport
     }
-    '/_auth/contacts/label/$labelId': {
-      id: '/_auth/contacts/label/$labelId'
-      path: '/contacts/label/$labelId'
-      fullPath: '/contacts/label/$labelId'
-      preLoaderRoute: typeof AuthContactsLabelLabelIdImport
+    '/_auth/all/edit/$contactId': {
+      id: '/_auth/all/edit/$contactId'
+      path: '/all/edit/$contactId'
+      fullPath: '/all/edit/$contactId'
+      preLoaderRoute: typeof AuthAllEditContactIdImport
       parentRoute: typeof AuthImport
     }
   }
@@ -121,17 +121,17 @@ declare module '@tanstack/react-router' {
 // Create and export the route tree
 
 interface AuthRouteChildren {
-  AuthContactsContactIdRoute: typeof AuthContactsContactIdRoute
-  AuthContactsIndexRoute: typeof AuthContactsIndexRoute
-  AuthContactsEditContactIdRoute: typeof AuthContactsEditContactIdRoute
-  AuthContactsLabelLabelIdRoute: typeof AuthContactsLabelLabelIdRoute
+  AuthAllContactIdRoute: typeof AuthAllContactIdRoute
+  AuthLabelLabelIdRoute: typeof AuthLabelLabelIdRoute
+  AuthAllIndexRoute: typeof AuthAllIndexRoute
+  AuthAllEditContactIdRoute: typeof AuthAllEditContactIdRoute
 }
 
 const AuthRouteChildren: AuthRouteChildren = {
-  AuthContactsContactIdRoute: AuthContactsContactIdRoute,
-  AuthContactsIndexRoute: AuthContactsIndexRoute,
-  AuthContactsEditContactIdRoute: AuthContactsEditContactIdRoute,
-  AuthContactsLabelLabelIdRoute: AuthContactsLabelLabelIdRoute,
+  AuthAllContactIdRoute: AuthAllContactIdRoute,
+  AuthLabelLabelIdRoute: AuthLabelLabelIdRoute,
+  AuthAllIndexRoute: AuthAllIndexRoute,
+  AuthAllEditContactIdRoute: AuthAllEditContactIdRoute,
 }
 
 const AuthRouteWithChildren = AuthRoute._addFileChildren(AuthRouteChildren)
@@ -140,20 +140,20 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '': typeof AuthRouteWithChildren
   '/login': typeof LoginRoute
-  '/contacts/$contactId': typeof AuthContactsContactIdRoute
-  '/contacts': typeof AuthContactsIndexRoute
-  '/contacts/edit/$contactId': typeof AuthContactsEditContactIdRoute
-  '/contacts/label/$labelId': typeof AuthContactsLabelLabelIdRoute
+  '/all/$contactId': typeof AuthAllContactIdRoute
+  '/label/$labelId': typeof AuthLabelLabelIdRoute
+  '/all': typeof AuthAllIndexRoute
+  '/all/edit/$contactId': typeof AuthAllEditContactIdRoute
 }
 
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '': typeof AuthRouteWithChildren
   '/login': typeof LoginRoute
-  '/contacts/$contactId': typeof AuthContactsContactIdRoute
-  '/contacts': typeof AuthContactsIndexRoute
-  '/contacts/edit/$contactId': typeof AuthContactsEditContactIdRoute
-  '/contacts/label/$labelId': typeof AuthContactsLabelLabelIdRoute
+  '/all/$contactId': typeof AuthAllContactIdRoute
+  '/label/$labelId': typeof AuthLabelLabelIdRoute
+  '/all': typeof AuthAllIndexRoute
+  '/all/edit/$contactId': typeof AuthAllEditContactIdRoute
 }
 
 export interface FileRoutesById {
@@ -161,10 +161,10 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_auth': typeof AuthRouteWithChildren
   '/login': typeof LoginRoute
-  '/_auth/contacts/$contactId': typeof AuthContactsContactIdRoute
-  '/_auth/contacts/': typeof AuthContactsIndexRoute
-  '/_auth/contacts/edit/$contactId': typeof AuthContactsEditContactIdRoute
-  '/_auth/contacts/label/$labelId': typeof AuthContactsLabelLabelIdRoute
+  '/_auth/all/$contactId': typeof AuthAllContactIdRoute
+  '/_auth/label/$labelId': typeof AuthLabelLabelIdRoute
+  '/_auth/all/': typeof AuthAllIndexRoute
+  '/_auth/all/edit/$contactId': typeof AuthAllEditContactIdRoute
 }
 
 export interface FileRouteTypes {
@@ -173,28 +173,28 @@ export interface FileRouteTypes {
     | '/'
     | ''
     | '/login'
-    | '/contacts/$contactId'
-    | '/contacts'
-    | '/contacts/edit/$contactId'
-    | '/contacts/label/$labelId'
+    | '/all/$contactId'
+    | '/label/$labelId'
+    | '/all'
+    | '/all/edit/$contactId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | ''
     | '/login'
-    | '/contacts/$contactId'
-    | '/contacts'
-    | '/contacts/edit/$contactId'
-    | '/contacts/label/$labelId'
+    | '/all/$contactId'
+    | '/label/$labelId'
+    | '/all'
+    | '/all/edit/$contactId'
   id:
     | '__root__'
     | '/'
     | '/_auth'
     | '/login'
-    | '/_auth/contacts/$contactId'
-    | '/_auth/contacts/'
-    | '/_auth/contacts/edit/$contactId'
-    | '/_auth/contacts/label/$labelId'
+    | '/_auth/all/$contactId'
+    | '/_auth/label/$labelId'
+    | '/_auth/all/'
+    | '/_auth/all/edit/$contactId'
   fileRoutesById: FileRoutesById
 }
 
@@ -231,29 +231,29 @@ export const routeTree = rootRoute
     "/_auth": {
       "filePath": "_auth.tsx",
       "children": [
-        "/_auth/contacts/$contactId",
-        "/_auth/contacts/",
-        "/_auth/contacts/edit/$contactId",
-        "/_auth/contacts/label/$labelId"
+        "/_auth/all/$contactId",
+        "/_auth/label/$labelId",
+        "/_auth/all/",
+        "/_auth/all/edit/$contactId"
       ]
     },
     "/login": {
       "filePath": "login.tsx"
     },
-    "/_auth/contacts/$contactId": {
-      "filePath": "_auth.contacts.$contactId.tsx",
+    "/_auth/all/$contactId": {
+      "filePath": "_auth.all.$contactId.tsx",
       "parent": "/_auth"
     },
-    "/_auth/contacts/": {
-      "filePath": "_auth.contacts.index.tsx",
+    "/_auth/label/$labelId": {
+      "filePath": "_auth.label.$labelId.tsx",
       "parent": "/_auth"
     },
-    "/_auth/contacts/edit/$contactId": {
-      "filePath": "_auth.contacts.edit.$contactId.tsx",
+    "/_auth/all/": {
+      "filePath": "_auth.all.index.tsx",
       "parent": "/_auth"
     },
-    "/_auth/contacts/label/$labelId": {
-      "filePath": "_auth.contacts.label.$labelId.tsx",
+    "/_auth/all/edit/$contactId": {
+      "filePath": "_auth.all.edit.$contactId.tsx",
       "parent": "/_auth"
     }
   }
