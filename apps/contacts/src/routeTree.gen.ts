@@ -10,155 +10,209 @@
 
 // Import Routes
 
-import {Route as rootRoute} from './routes/__root'
-import {Route as LoginImport} from './routes/login'
-import {Route as AuthImport} from './routes/_auth'
-import {Route as IndexImport} from './routes/index'
-import {Route as AuthInboxIndexImport} from './routes/_auth.inbox.index'
-import {Route as AuthInboxMailIdImport} from './routes/_auth.inbox.$mailId'
+import { Route as rootRoute } from './routes/__root'
+import { Route as LoginImport } from './routes/login'
+import { Route as AuthImport } from './routes/_auth'
+import { Route as IndexImport } from './routes/index'
+import { Route as AuthContactsIndexImport } from './routes/_auth.contacts.index'
+import { Route as AuthContactsContactIdImport } from './routes/_auth.contacts.$contactId'
+import { Route as AuthContactsLabelLabelIdImport } from './routes/_auth.contacts.label.$labelId'
+import { Route as AuthContactsEditContactIdImport } from './routes/_auth.contacts.edit.$contactId'
 
 // Create/Update Routes
 
 const LoginRoute = LoginImport.update({
-    id: '/login',
-    path: '/login',
-    getParentRoute: () => rootRoute,
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRoute,
 } as any)
 
 const AuthRoute = AuthImport.update({
-    id: '/_auth',
-    getParentRoute: () => rootRoute,
+  id: '/_auth',
+  getParentRoute: () => rootRoute,
 } as any)
 
 const IndexRoute = IndexImport.update({
-    id: '/',
-    path: '/',
-    getParentRoute: () => rootRoute,
+  id: '/',
+  path: '/',
+  getParentRoute: () => rootRoute,
 } as any)
 
-const AuthInboxIndexRoute = AuthInboxIndexImport.update({
-    id: '/inbox/',
-    path: '/inbox/',
-    getParentRoute: () => AuthRoute,
+const AuthContactsIndexRoute = AuthContactsIndexImport.update({
+  id: '/contacts/',
+  path: '/contacts/',
+  getParentRoute: () => AuthRoute,
 } as any)
 
-const AuthInboxMailIdRoute = AuthInboxMailIdImport.update({
-    id: '/inbox/$mailId',
-    path: '/inbox/$mailId',
-    getParentRoute: () => AuthRoute,
+const AuthContactsContactIdRoute = AuthContactsContactIdImport.update({
+  id: '/contacts/$contactId',
+  path: '/contacts/$contactId',
+  getParentRoute: () => AuthRoute,
+} as any)
+
+const AuthContactsLabelLabelIdRoute = AuthContactsLabelLabelIdImport.update({
+  id: '/contacts/label/$labelId',
+  path: '/contacts/label/$labelId',
+  getParentRoute: () => AuthRoute,
+} as any)
+
+const AuthContactsEditContactIdRoute = AuthContactsEditContactIdImport.update({
+  id: '/contacts/edit/$contactId',
+  path: '/contacts/edit/$contactId',
+  getParentRoute: () => AuthRoute,
 } as any)
 
 // Populate the FileRoutesByPath interface
 
 declare module '@tanstack/react-router' {
-    interface FileRoutesByPath {
-        '/': {
-            id: '/'
-            path: '/'
-            fullPath: '/'
-            preLoaderRoute: typeof IndexImport
-            parentRoute: typeof rootRoute
-        }
-        '/_auth': {
-            id: '/_auth'
-            path: ''
-            fullPath: ''
-            preLoaderRoute: typeof AuthImport
-            parentRoute: typeof rootRoute
-        }
-        '/login': {
-            id: '/login'
-            path: '/login'
-            fullPath: '/login'
-            preLoaderRoute: typeof LoginImport
-            parentRoute: typeof rootRoute
-        }
-        '/_auth/inbox/$mailId': {
-            id: '/_auth/inbox/$mailId'
-            path: '/inbox/$mailId'
-            fullPath: '/inbox/$mailId'
-            preLoaderRoute: typeof AuthInboxMailIdImport
-            parentRoute: typeof AuthImport
-        }
-        '/_auth/inbox/': {
-            id: '/_auth/inbox/'
-            path: '/inbox'
-            fullPath: '/inbox'
-            preLoaderRoute: typeof AuthInboxIndexImport
-            parentRoute: typeof AuthImport
-        }
+  interface FileRoutesByPath {
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexImport
+      parentRoute: typeof rootRoute
     }
+    '/_auth': {
+      id: '/_auth'
+      path: ''
+      fullPath: ''
+      preLoaderRoute: typeof AuthImport
+      parentRoute: typeof rootRoute
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginImport
+      parentRoute: typeof rootRoute
+    }
+    '/_auth/contacts/$contactId': {
+      id: '/_auth/contacts/$contactId'
+      path: '/contacts/$contactId'
+      fullPath: '/contacts/$contactId'
+      preLoaderRoute: typeof AuthContactsContactIdImport
+      parentRoute: typeof AuthImport
+    }
+    '/_auth/contacts/': {
+      id: '/_auth/contacts/'
+      path: '/contacts'
+      fullPath: '/contacts'
+      preLoaderRoute: typeof AuthContactsIndexImport
+      parentRoute: typeof AuthImport
+    }
+    '/_auth/contacts/edit/$contactId': {
+      id: '/_auth/contacts/edit/$contactId'
+      path: '/contacts/edit/$contactId'
+      fullPath: '/contacts/edit/$contactId'
+      preLoaderRoute: typeof AuthContactsEditContactIdImport
+      parentRoute: typeof AuthImport
+    }
+    '/_auth/contacts/label/$labelId': {
+      id: '/_auth/contacts/label/$labelId'
+      path: '/contacts/label/$labelId'
+      fullPath: '/contacts/label/$labelId'
+      preLoaderRoute: typeof AuthContactsLabelLabelIdImport
+      parentRoute: typeof AuthImport
+    }
+  }
 }
 
 // Create and export the route tree
 
 interface AuthRouteChildren {
-    AuthInboxMailIdRoute: typeof AuthInboxMailIdRoute
-    AuthInboxIndexRoute: typeof AuthInboxIndexRoute
+  AuthContactsContactIdRoute: typeof AuthContactsContactIdRoute
+  AuthContactsIndexRoute: typeof AuthContactsIndexRoute
+  AuthContactsEditContactIdRoute: typeof AuthContactsEditContactIdRoute
+  AuthContactsLabelLabelIdRoute: typeof AuthContactsLabelLabelIdRoute
 }
 
 const AuthRouteChildren: AuthRouteChildren = {
-    AuthInboxMailIdRoute: AuthInboxMailIdRoute,
-    AuthInboxIndexRoute: AuthInboxIndexRoute,
+  AuthContactsContactIdRoute: AuthContactsContactIdRoute,
+  AuthContactsIndexRoute: AuthContactsIndexRoute,
+  AuthContactsEditContactIdRoute: AuthContactsEditContactIdRoute,
+  AuthContactsLabelLabelIdRoute: AuthContactsLabelLabelIdRoute,
 }
 
 const AuthRouteWithChildren = AuthRoute._addFileChildren(AuthRouteChildren)
 
 export interface FileRoutesByFullPath {
-    '/': typeof IndexRoute
-    '': typeof AuthRouteWithChildren
-    '/login': typeof LoginRoute
-    '/inbox/$mailId': typeof AuthInboxMailIdRoute
-    '/inbox': typeof AuthInboxIndexRoute
+  '/': typeof IndexRoute
+  '': typeof AuthRouteWithChildren
+  '/login': typeof LoginRoute
+  '/contacts/$contactId': typeof AuthContactsContactIdRoute
+  '/contacts': typeof AuthContactsIndexRoute
+  '/contacts/edit/$contactId': typeof AuthContactsEditContactIdRoute
+  '/contacts/label/$labelId': typeof AuthContactsLabelLabelIdRoute
 }
 
 export interface FileRoutesByTo {
-    '/': typeof IndexRoute
-    '': typeof AuthRouteWithChildren
-    '/login': typeof LoginRoute
-    '/inbox/$mailId': typeof AuthInboxMailIdRoute
-    '/inbox': typeof AuthInboxIndexRoute
+  '/': typeof IndexRoute
+  '': typeof AuthRouteWithChildren
+  '/login': typeof LoginRoute
+  '/contacts/$contactId': typeof AuthContactsContactIdRoute
+  '/contacts': typeof AuthContactsIndexRoute
+  '/contacts/edit/$contactId': typeof AuthContactsEditContactIdRoute
+  '/contacts/label/$labelId': typeof AuthContactsLabelLabelIdRoute
 }
 
 export interface FileRoutesById {
-    __root__: typeof rootRoute
-    '/': typeof IndexRoute
-    '/_auth': typeof AuthRouteWithChildren
-    '/login': typeof LoginRoute
-    '/_auth/inbox/$mailId': typeof AuthInboxMailIdRoute
-    '/_auth/inbox/': typeof AuthInboxIndexRoute
+  __root__: typeof rootRoute
+  '/': typeof IndexRoute
+  '/_auth': typeof AuthRouteWithChildren
+  '/login': typeof LoginRoute
+  '/_auth/contacts/$contactId': typeof AuthContactsContactIdRoute
+  '/_auth/contacts/': typeof AuthContactsIndexRoute
+  '/_auth/contacts/edit/$contactId': typeof AuthContactsEditContactIdRoute
+  '/_auth/contacts/label/$labelId': typeof AuthContactsLabelLabelIdRoute
 }
 
 export interface FileRouteTypes {
-    fileRoutesByFullPath: FileRoutesByFullPath
-    fullPaths: '/' | '' | '/login' | '/inbox/$mailId' | '/inbox'
-    fileRoutesByTo: FileRoutesByTo
-    to: '/' | '' | '/login' | '/inbox/$mailId' | '/inbox'
-    id:
-        | '__root__'
-        | '/'
-        | '/_auth'
-        | '/login'
-        | '/_auth/inbox/$mailId'
-        | '/_auth/inbox/'
-    fileRoutesById: FileRoutesById
+  fileRoutesByFullPath: FileRoutesByFullPath
+  fullPaths:
+    | '/'
+    | ''
+    | '/login'
+    | '/contacts/$contactId'
+    | '/contacts'
+    | '/contacts/edit/$contactId'
+    | '/contacts/label/$labelId'
+  fileRoutesByTo: FileRoutesByTo
+  to:
+    | '/'
+    | ''
+    | '/login'
+    | '/contacts/$contactId'
+    | '/contacts'
+    | '/contacts/edit/$contactId'
+    | '/contacts/label/$labelId'
+  id:
+    | '__root__'
+    | '/'
+    | '/_auth'
+    | '/login'
+    | '/_auth/contacts/$contactId'
+    | '/_auth/contacts/'
+    | '/_auth/contacts/edit/$contactId'
+    | '/_auth/contacts/label/$labelId'
+  fileRoutesById: FileRoutesById
 }
 
 export interface RootRouteChildren {
-    IndexRoute: typeof IndexRoute
-    AuthRoute: typeof AuthRouteWithChildren
-    LoginRoute: typeof LoginRoute
+  IndexRoute: typeof IndexRoute
+  AuthRoute: typeof AuthRouteWithChildren
+  LoginRoute: typeof LoginRoute
 }
 
 const rootRouteChildren: RootRouteChildren = {
-    IndexRoute: IndexRoute,
-    AuthRoute: AuthRouteWithChildren,
-    LoginRoute: LoginRoute,
+  IndexRoute: IndexRoute,
+  AuthRoute: AuthRouteWithChildren,
+  LoginRoute: LoginRoute,
 }
 
 export const routeTree = rootRoute
-    ._addFileChildren(rootRouteChildren)
-    ._addFileTypes<FileRouteTypes>()
+  ._addFileChildren(rootRouteChildren)
+  ._addFileTypes<FileRouteTypes>()
 
 /* ROUTE_MANIFEST_START
 {
@@ -177,19 +231,29 @@ export const routeTree = rootRoute
     "/_auth": {
       "filePath": "_auth.tsx",
       "children": [
-        "/_auth/inbox/$mailId",
-        "/_auth/inbox/"
+        "/_auth/contacts/$contactId",
+        "/_auth/contacts/",
+        "/_auth/contacts/edit/$contactId",
+        "/_auth/contacts/label/$labelId"
       ]
     },
     "/login": {
       "filePath": "login.tsx"
     },
-    "/_auth/inbox/$mailId": {
-      "filePath": "_auth.inbox.$mailId.tsx",
+    "/_auth/contacts/$contactId": {
+      "filePath": "_auth.contacts.$contactId.tsx",
       "parent": "/_auth"
     },
-    "/_auth/inbox/": {
-      "filePath": "_auth.inbox.index.tsx",
+    "/_auth/contacts/": {
+      "filePath": "_auth.contacts.index.tsx",
+      "parent": "/_auth"
+    },
+    "/_auth/contacts/edit/$contactId": {
+      "filePath": "_auth.contacts.edit.$contactId.tsx",
+      "parent": "/_auth"
+    },
+    "/_auth/contacts/label/$labelId": {
+      "filePath": "_auth.contacts.label.$labelId.tsx",
       "parent": "/_auth"
     }
   }

@@ -1,10 +1,10 @@
 import {ColumnDef, FilterFnOption} from "@tanstack/react-table"
 import {ArrowUpDown, Paperclip, Star} from "lucide-react"
 import { Email } from "@workspace/lib/types/mail";
-import {Checkbox} from "@workspace/ui/components/ui/checkbox";
-import {Button} from "@workspace/ui/components/ui/button";
 import {cn} from "@workspace/ui/lib/utils";
-import {Badge} from "@workspace/ui/components/ui/badge";
+import {Checkbox} from "@workspace/ui/components/checkbox";
+import {Button} from "@workspace/ui/components/button";
+import {Badge} from "@workspace/ui/components/badge";
 
 
 export const emailColumns: ColumnDef<Email>[] = [

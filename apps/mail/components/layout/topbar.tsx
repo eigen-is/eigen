@@ -8,10 +8,10 @@ import {
     DropdownMenuLabel,
     DropdownMenuSeparator,
     DropdownMenuTrigger
-} from "@workspace/ui/components/ui/dropdown-menu";
-import {Button} from "@workspace/ui/components/ui/button";
-import {AppLogo} from "@workspace/ui/components/layout/app-logo";
+} from "@workspace/ui/components/dropdown-menu";
+import {Button} from "@workspace/ui/components/button";
 import {useAuth} from "@workspace/lib/auth/auth-context.tsx";
+import { AppLogo } from "@workspace/ui/components/layout/app-logo";
 
 function UserDropdown() {
     const router = useRouter();
