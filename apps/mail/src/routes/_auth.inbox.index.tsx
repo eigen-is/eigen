@@ -15,7 +15,7 @@ function RouteComponent() {
         await navigate({to: `/inbox/${emailId}`});
     };
 
-    return <div className="h-full p-4">
+    return <div className="h-full">
         <EmailDataTable
             columns={emailColumns}
             data={mockEmails}
