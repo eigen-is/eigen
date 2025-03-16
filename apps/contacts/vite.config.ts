@@ -13,7 +13,7 @@ export default defineConfig({
     plugins: [
         TanStackRouterVite({
             target: 'react',
-            autoCodeSplitting: false,
+            autoCodeSplitting: true,
         }),
         react(),
         tailwindcss(),
