@@ -5,7 +5,7 @@ import {Input} from "../input.tsx";
 import {Button} from "../button.tsx";
 
 
-export function LoginPage() {
+export function LoginPage({ appName = 'mail' }: { appName?: string }) {
     const {login} = useAuth();
     const router = useRouter();
     const [email, setEmail] = useState('');
@@ -40,7 +40,7 @@ export function LoginPage() {
         <div className="flex h-[calc(100vh-64px)] items-center justify-center">
             <div className="w-full max-w-md p-8 space-y-8 bg-white rounded-lg shadow-md">
                 <div className="text-center">
-                    <h1 className="text-2xl font-bold text-app">eigen<span className="font-normal">|mail&gt;</span>
+                    <h1 className="text-2xl font-bold text-app">eigen<span className="font-normal">|{appName}&gt;</span>
                     </h1>
                     <p className="mt-2 text-gray-600">Enter your credentials to access your account</p>
                 </div>
