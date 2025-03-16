@@ -1,8 +1,10 @@
-import {AlertCircle, Archive, File, Inbox, Plus, Send, Star, Tag, Trash2} from "lucide-react";
+import {AlertCircle, Archive, File, Inbox, Plus, Send, Star} from "lucide-react";
 
 import {Link} from '@tanstack/react-router';
 import {Button} from "@workspace/ui/components/button";
-import {cn} from "@workspace/ui/lib/utils";
+import { useState } from "react";
+import { Label, LabelManager } from "../../../../packages/ui/src/components/layout/labels";
+
 
 // Menu items for the sidebar
 const sidebarItems = [
@@ -38,32 +40,61 @@ const sidebarItems = [
     },
     {
         title: "Trash",
-        icon: Trash2,
+        icon: AlertCircle,
         href: "/trash",
     },
 ]
 
-// Labels for the sidebar
-const labels = [
+// Labels for the sidebar with added id property
+const initialLabels: Label[] = [
     {
+        id: "1",
         name: "Personal",
-        color: "bg-blue-500",
+        color: "#3b82f6",  // blue
     },
     {
+        id: "2",
         name: "Work",
-        color: "bg-green-500",
+        color: "#22c55e",  // green
     },
     {
+        id: "3",
         name: "Finance",
-        color: "bg-yellow-500",
+        color: "#eab308",  // yellow
     },
     {
+        id: "4",
         name: "Social",
-        color: "bg-purple-500",
+        color: "#a855f7",  // purple
     },
 ]
 
 export function AppSidebar() {
+    const [labels, setLabels] = useState<Label[]>(initialLabels);
+
+    // Handle label operations
+    const handleAddLabel = (labelData: Omit<Label, 'id'>) => {
+        const newLabel: Label = {
+            id: (labels.length + 1).toString(),
+            name: labelData.name,
+            color: labelData.color,
+        };
+        setLabels([...labels, newLabel]);
+    };
+
+    const handleEditLabel = (updatedLabel: Label) => {
+        setLabels(labels.map(label => 
+            label.id === updatedLabel.id ? updatedLabel : label
+        ));
+    };
+
+    const handleDeleteLabel = (labelId: string) => {
+        setLabels(labels.filter(label => label.id !== labelId));
+    };
+
+    // Generate path for a label in the mail app
+    const getLabelPath = (label: Label) => `/label/${label.name.toLowerCase()}`;
+
     return (
         <div className="w-64 border-r h-full flex flex-col bg-background">
             <div className="p-4">
@@ -79,6 +110,7 @@ export function AppSidebar() {
                         {sidebarItems.map((item) => {
                             return (
                                 <Link
+                                    key={item.href}
                                     to={item.href}
                                     className='flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium cursor-pointer'
 
@@ -98,28 +130,14 @@ export function AppSidebar() {
                     </nav>
                 </div>
 
-                <div className="px-6 py-2">
-                    <h3 className="text-xs font-semibold text-muted-foreground mb-2 px-3">Labels</h3>
-                    <div className="space-y-1">
-                        {labels.map((label) => (
-                            <Link
-                                key={label.name}
-                                className="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground cursor-pointer"
-                                to={`/label/${label.name.toLowerCase()}`}
-                            >
-                                <span className={cn("h-2 w-2 rounded-full", label.color)}/>
-                                <span>{label.name}</span>
-                            </Link>
-                        ))}
-                        <Link
-                            className="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground cursor-pointer"
-                            to='/labels'
-                        >
-                            <Tag className="h-4 w-4"/>
-                            <span>Manage Labels</span>
-                        </Link>
-                    </div>
-                </div>
+                {/* Use the shared LabelManager component */}
+                <LabelManager
+                    labels={labels}
+                    onAddLabel={handleAddLabel}
+                    onEditLabel={handleEditLabel}
+                    onDeleteLabel={handleDeleteLabel}
+                    getLabelPath={getLabelPath}
+                />
             </div>
         </div>
     )
