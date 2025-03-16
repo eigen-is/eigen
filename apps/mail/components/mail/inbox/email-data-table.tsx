@@ -96,15 +96,15 @@ export function EmailDataTable<TData, TValue>({
     })
 
     return (
-        <div className="w-full">
-            <div className="flex items-center py-4">
-                <div className="relative w-full max-w-sm">
-                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
-                    <Input
-                        placeholder="Search emails..."
-                        value={globalFilter}
-                        onChange={(e) => setGlobalFilter(e.target.value)}
-                        className="pl-8 w-full"
+        <div className="w-full h-full flex flex-col overflow-hidden">
+          <div className="flex items-center justify-between p-4 border-b">
+            <div className="relative w-full max-w-sm">
+                <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+                <Input
+                    placeholder="Search emails..."
+                    value={globalFilter}
+                    onChange={(e) => setGlobalFilter(e.target.value)}
+                    className="pl-8 w-full"
                     />
                 </div>
                 <DropdownMenu>
@@ -134,14 +134,24 @@ export function EmailDataTable<TData, TValue>({
                     </DropdownMenuContent>
                 </DropdownMenu>
             </div>
-            <div className="rounded-md border">
-                <Table>
+            <div>
+                <Table className="w-full table-fixed">
                     <TableHeader>
                         {table.getHeaderGroups().map((headerGroup) => (
                             <TableRow key={headerGroup.id}>
                                 {headerGroup.headers.map((header) => {
                                     return (
-                                        <TableHead key={header.id}>
+                                        <TableHead 
+                                            key={header.id} 
+                                            className={cn(
+                                                header.id === 'select' ? 'w-[44px] pl-6' : '',
+                                                header.id === 'starred' ? 'w-[32px]' : '',
+                                                header.id === 'from' ? 'w-[180px]' : '',
+                                                header.id === 'date' ? 'w-[100px] pr-6' : '',
+                                                header.id === 'labels' ? 'w-[120px]' : '',
+                                                header.id === 'subject' ? 'w-auto' : ''
+                                            )}
+                                        >
                                             {header.isPlaceholder
                                                 ? null
                                                 : flexRender(
@@ -167,7 +177,12 @@ export function EmailDataTable<TData, TValue>({
                                     onClick={() => handleRowClick(row.original)}
                                 >
                                     {row.getVisibleCells().map((cell) => (
-                                        <TableCell key={cell.id}>
+                                        <TableCell key={cell.id} className={cn(
+                                            cell.column.id === 'select' ? 'pl-6' : '',
+                                            cell.column.id === 'starred' ? 'w-[30px]' : '',
+                                            cell.column.id === 'date' ? 'pr-6' : '',
+                                            cell.column.id === 'subject' ? 'truncate max-w-0' : ''
+                                        )}>
                                             {flexRender(cell.column.columnDef.cell, cell.getContext())}
                                         </TableCell>
                                     ))}
@@ -183,7 +198,7 @@ export function EmailDataTable<TData, TValue>({
                     </TableBody>
                 </Table>
             </div>
-            <div className="flex items-center justify-between space-x-2 py-4">
+            <div className="flex items-center justify-between px-6 py-3 border-t">
                 <div className="text-sm text-muted-foreground">
                     {table.getFilteredSelectedRowModel().rows.length} of{" "}
                     {table.getFilteredRowModel().rows.length} email(s) selected.

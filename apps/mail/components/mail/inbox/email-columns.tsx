@@ -101,10 +101,11 @@ export const emailColumns: ColumnDef<Email>[] = [
         cell: ({row}) => {
             const email = row.original
             return (
-                <div className="flex items-center justify-between gap-2 min-w-0">
-          <span className="truncate">
-            {email.subject} - <span className="text-muted-foreground">{email.preview}</span>
-          </span>
+                <div className="flex items-center gap-2 overflow-hidden">
+                    <div className="truncate">
+                        {email.subject}
+                        <span className="text-muted-foreground"> - {email.preview}</span>
+                    </div>
                     {email.hasAttachment && <Paperclip size={14} className="text-muted-foreground shrink-0"/>}
                 </div>
             )
