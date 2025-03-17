@@ -66,7 +66,7 @@ const contactFormSchema = z.object({
 
 type ContactFormValues = z.infer<typeof contactFormSchema>;
 
-export const Route = createFileRoute('/_auth/all/edit/$contactId')({
+export const Route = createFileRoute('/_auth/c/$filterId/edit/$contactId')({
   component: EditContactRoute,
   validateParams: ({ params }) => {
     const contactId = params.contactId;

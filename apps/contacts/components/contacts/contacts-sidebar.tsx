@@ -45,7 +45,7 @@ export function ContactsSidebar() {
         <div className="px-3 py-2">
           <nav className="space-y-1">
             <Link
-              to="/all"
+              to="/c/all"
               className='flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium cursor-pointer'
               activeProps={{
                 className: 'bg-primary/10 text-primary',
@@ -58,7 +58,7 @@ export function ContactsSidebar() {
               <span>All contacts</span>
             </Link>
             <Link
-              to="/contacts/frequent"
+              to="/c/frequent"
               className='flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium cursor-pointer'
               activeProps={{
                 className: 'bg-primary/10 text-primary',
@@ -70,7 +70,7 @@ export function ContactsSidebar() {
               <span>Frequent</span>
             </Link>
             <Link
-              to="/contacts/recent"
+              to="/c/recent"
               className='flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium cursor-pointer'
               activeProps={{
                 className: 'bg-primary/10 text-primary',
