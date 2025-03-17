@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { 
-  Mail, Phone, Building, MapPin, Calendar, Edit, Trash, Plus, MoreHorizontal 
+  Mail, Phone, Building, MapPin, Calendar, Edit, Trash, Plus, MoreVertical, ArrowLeft
 } from 'lucide-react';
 import { Contact, mockLabels } from '../../src/data/mockData';
 import { Button } from "@workspace/ui/components/button";
@@ -18,9 +18,12 @@ import { DeleteDialog } from '@workspace/ui/components/delete-dialog';
 interface ContactDetailProps {
   contact: Contact;
   onDelete: (id: string) => void;
+  onBack?: () => void;
+  filterType?: string;
+  filterId?: string;
 }
 
-export function ContactDetail({ contact, onDelete }: ContactDetailProps) {
+export function ContactDetail({ contact, onDelete, onBack, filterType, filterId }: ContactDetailProps) {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
   const handleDelete = () => {
@@ -59,28 +62,51 @@ export function ContactDetail({ contact, onDelete }: ContactDetailProps) {
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
-      <div className="flex justify-between items-center p-4 border-b">
-        <h1 className="text-2xl font-semibold">Contact Details</h1>
-        <div className="flex items-center gap-2">
-          <Link to={`/c/all/edit/$contactId`} params={{ contactId: contact.id }}>
-            <Button variant="outline" size="sm" className="gap-1">
-              <Edit className="h-4 w-4" />
-              Edit
+      <div className="flex items-center justify-between h-12 px-4 border-b">
+        <div className="flex items-center">
+          {onBack && (
+            <Button variant="ghost" size="icon" onClick={onBack} className="mr-2 h-8 w-8">
+              <ArrowLeft className="h-4 w-4" />
+              <span className="sr-only">Back</span>
             </Button>
-          </Link>
-          <Button 
-            variant="outline" 
-            size="sm" 
-            className="gap-1 text-destructive"
-            onClick={() => setDeleteDialogOpen(true)}
-          >
-            <Trash className="h-4 w-4" />
-            Delete
-          </Button>
+          )}
+          <h1 className="font-medium">Contact Details</h1>
+        </div>
+        <div className="flex items-center">
+          <div className="flex items-center gap-1 mr-2">
+            <Link 
+              to="/c/edit/$filterType/$filterId"
+              params={{ 
+                filterType: filterType || 'filter',
+                filterId: filterId || 'all'
+              }}
+              search={{ 
+                contactId: contact.id
+              }}
+            >
+              <Button variant="ghost" size="icon" className="h-8 w-8">
+                <Edit className="h-4 w-4" />
+                <span className="sr-only">Edit</span>
+              </Button>
+            </Link>
+            <Button 
+              variant="ghost" 
+              size="icon" 
+              className="h-8 w-8 text-destructive"
+              onClick={() => setDeleteDialogOpen(true)}
+            >
+              <Trash className="h-4 w-4" />
+              <span className="sr-only">Delete</span>
+            </Button>
+          </div>
+          
+          <div className="h-6 w-[1px] bg-border mx-1"></div>
+          
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                <MoreHorizontal className="h-4 w-4" />
+              <Button variant="ghost" size="icon" className="h-8 w-8">
+                <MoreVertical className="h-4 w-4" />
+                <span className="sr-only">More</span>
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">

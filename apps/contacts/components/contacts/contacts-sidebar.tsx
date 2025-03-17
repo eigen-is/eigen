@@ -1,4 +1,4 @@
-import { UserPlus } from 'lucide-react';
+import { UserPlus, Users, Star, Clock } from 'lucide-react';
 import { Link } from '@tanstack/react-router';
 import { Button } from "@workspace/ui/components/button";
 import { useState } from 'react';
@@ -29,7 +29,7 @@ export function ContactsSidebar() {
   };
 
   // Generate path for a label
-  const getLabelPath = (label: Label) => `/contacts/label/${label.id.toLowerCase()}`;
+  const getLabelPath = (label: Label) => `/c/label/${label.id.toLowerCase()}`;
 
   return (
     <div className="w-64 border-r h-full flex flex-col bg-background">
@@ -45,7 +45,8 @@ export function ContactsSidebar() {
         <div className="px-3 py-2">
           <nav className="space-y-1">
             <Link
-              to="/c/all"
+              to="/c/$filterType/$filterId"
+              params={{ filterType: 'filter', filterId: 'all' }}
               className='flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium cursor-pointer'
               activeProps={{
                 className: 'bg-primary/10 text-primary',
@@ -55,10 +56,12 @@ export function ContactsSidebar() {
               }}
               activeOptions={{ exact: false }}
             >
+              <Users className="h-4 w-4" />
               <span>All contacts</span>
             </Link>
             <Link
-              to="/c/frequent"
+              to="/c/$filterType/$filterId"
+              params={{ filterType: 'filter', filterId: 'frequent' }}
               className='flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium cursor-pointer'
               activeProps={{
                 className: 'bg-primary/10 text-primary',
@@ -67,10 +70,12 @@ export function ContactsSidebar() {
                 className: 'text-muted-foreground hover:bg-muted hover:text-foreground',
               }}
             >
+              <Star className="h-4 w-4" />
               <span>Frequent</span>
             </Link>
             <Link
-              to="/c/recent"
+              to="/c/$filterType/$filterId"
+              params={{ filterType: 'filter', filterId: 'recent' }}
               className='flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium cursor-pointer'
               activeProps={{
                 className: 'bg-primary/10 text-primary',
@@ -79,10 +84,14 @@ export function ContactsSidebar() {
                 className: 'text-muted-foreground hover:bg-muted hover:text-foreground',
               }}
             >
+              <Clock className="h-4 w-4" />
               <span>Recent</span>
             </Link>
           </nav>
         </div>
+
+        {/* Horizontal separator */}
+        <div className="mx-3 my-2 border-t border-border"></div>
 
         {/* Use the shared LabelManager component */}
         <LabelManager
@@ -91,6 +100,7 @@ export function ContactsSidebar() {
           onEditLabel={handleEditLabel}
           onDeleteLabel={handleDeleteLabel}
           getLabelPath={getLabelPath}
+          className="px-3 custom-label-manager"
         />
       </div>
     </div>
