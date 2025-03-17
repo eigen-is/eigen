@@ -62,7 +62,7 @@ export function ContactDetail({ contact, onDelete }: ContactDetailProps) {
       <div className="flex justify-between items-center p-4 border-b">
         <h1 className="text-2xl font-semibold">Contact Details</h1>
         <div className="flex items-center gap-2">
-          <Link to={`/all/edit/$contactId`} params={{ contactId: contact.id }}>
+          <Link to={`/c/all/edit/$contactId`} params={{ contactId: contact.id }}>
             <Button variant="outline" size="sm" className="gap-1">
               <Edit className="h-4 w-4" />
               Edit

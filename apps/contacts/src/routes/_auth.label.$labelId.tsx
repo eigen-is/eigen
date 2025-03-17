@@ -10,7 +10,7 @@ export const Route = createFileRoute('/_auth/label/$labelId')({
     
     if (!label) {
       throw redirect({
-        to: '/all',
+        to: '/c/all',
       });
     }
     

@@ -81,7 +81,7 @@ export function ContactsList() {
                   {contacts.map((contact) => (
                     <Link
                       key={contact.id}
-                      to={`/all/$contactId`}
+                      to={`/c/all/$contactId`}
                       params={{ contactId: contact.id }}
                       className="flex items-center gap-3 px-6 py-3 hover:bg-muted transition-colors"
                       activeProps={{
