@@ -130,6 +130,9 @@ export function AppSidebar() {
                     </nav>
                 </div>
 
+                {/* Horizontal separator */}
+                <div className="mx-3 my-2 border-t border-border"></div>
+
                 {/* Use the shared LabelManager component */}
                 <LabelManager
                     labels={labels}
@@ -137,6 +140,7 @@ export function AppSidebar() {
                     onEditLabel={handleEditLabel}
                     onDeleteLabel={handleDeleteLabel}
                     getLabelPath={getLabelPath}
+                    className="px-3"
                 />
             </div>
         </div>
