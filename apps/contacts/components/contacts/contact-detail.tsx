@@ -15,6 +15,7 @@ import {
 import { Badge } from "@workspace/ui/components/badge";
 import { Link } from '@tanstack/react-router';
 import { DeleteDialog } from '@workspace/ui/components/delete-dialog';
+import { Label } from "@apps/api-server/types/label";
 
 interface ContactDetailProps {
   contact: Contact;
