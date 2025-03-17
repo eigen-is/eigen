@@ -14,10 +14,10 @@ import { Route as rootRoute } from './routes/__root'
 import { Route as LoginImport } from './routes/login'
 import { Route as AuthImport } from './routes/_auth'
 import { Route as IndexImport } from './routes/index'
-import { Route as AuthAllIndexImport } from './routes/_auth.all.index'
 import { Route as AuthLabelLabelIdImport } from './routes/_auth.label.$labelId'
-import { Route as AuthAllContactIdImport } from './routes/_auth.all.$contactId'
-import { Route as AuthAllEditContactIdImport } from './routes/_auth.all.edit.$contactId'
+import { Route as AuthCFilterIdIndexImport } from './routes/_auth.c.$filterId.index'
+import { Route as AuthCFilterIdContactIdImport } from './routes/_auth.c.$filterId.$contactId'
+import { Route as AuthCFilterIdEditContactIdImport } from './routes/_auth.c.$filterId.edit.$contactId'
 
 // Create/Update Routes
 
@@ -38,29 +38,31 @@ const IndexRoute = IndexImport.update({
   getParentRoute: () => rootRoute,
 } as any)
 
-const AuthAllIndexRoute = AuthAllIndexImport.update({
-  id: '/all/',
-  path: '/all/',
-  getParentRoute: () => AuthRoute,
-} as any)
-
 const AuthLabelLabelIdRoute = AuthLabelLabelIdImport.update({
   id: '/label/$labelId',
   path: '/label/$labelId',
   getParentRoute: () => AuthRoute,
 } as any)
 
-const AuthAllContactIdRoute = AuthAllContactIdImport.update({
-  id: '/all/$contactId',
-  path: '/all/$contactId',
+const AuthCFilterIdIndexRoute = AuthCFilterIdIndexImport.update({
+  id: '/c/$filterId/',
+  path: '/c/$filterId/',
   getParentRoute: () => AuthRoute,
 } as any)
 
-const AuthAllEditContactIdRoute = AuthAllEditContactIdImport.update({
-  id: '/all/edit/$contactId',
-  path: '/all/edit/$contactId',
+const AuthCFilterIdContactIdRoute = AuthCFilterIdContactIdImport.update({
+  id: '/c/$filterId/$contactId',
+  path: '/c/$filterId/$contactId',
   getParentRoute: () => AuthRoute,
 } as any)
+
+const AuthCFilterIdEditContactIdRoute = AuthCFilterIdEditContactIdImport.update(
+  {
+    id: '/c/$filterId/edit/$contactId',
+    path: '/c/$filterId/edit/$contactId',
+    getParentRoute: () => AuthRoute,
+  } as any,
+)
 
 // Populate the FileRoutesByPath interface
 
@@ -87,13 +89,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginImport
       parentRoute: typeof rootRoute
     }
-    '/_auth/all/$contactId': {
-      id: '/_auth/all/$contactId'
-      path: '/all/$contactId'
-      fullPath: '/all/$contactId'
-      preLoaderRoute: typeof AuthAllContactIdImport
-      parentRoute: typeof AuthImport
-    }
     '/_auth/label/$labelId': {
       id: '/_auth/label/$labelId'
       path: '/label/$labelId'
@@ -101,18 +96,25 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthLabelLabelIdImport
       parentRoute: typeof AuthImport
     }
-    '/_auth/all/': {
-      id: '/_auth/all/'
-      path: '/all'
-      fullPath: '/all'
-      preLoaderRoute: typeof AuthAllIndexImport
+    '/_auth/c/$filterId/$contactId': {
+      id: '/_auth/c/$filterId/$contactId'
+      path: '/c/$filterId/$contactId'
+      fullPath: '/c/$filterId/$contactId'
+      preLoaderRoute: typeof AuthCFilterIdContactIdImport
       parentRoute: typeof AuthImport
     }
-    '/_auth/all/edit/$contactId': {
-      id: '/_auth/all/edit/$contactId'
-      path: '/all/edit/$contactId'
-      fullPath: '/all/edit/$contactId'
-      preLoaderRoute: typeof AuthAllEditContactIdImport
+    '/_auth/c/$filterId/': {
+      id: '/_auth/c/$filterId/'
+      path: '/c/$filterId'
+      fullPath: '/c/$filterId'
+      preLoaderRoute: typeof AuthCFilterIdIndexImport
+      parentRoute: typeof AuthImport
+    }
+    '/_auth/c/$filterId/edit/$contactId': {
+      id: '/_auth/c/$filterId/edit/$contactId'
+      path: '/c/$filterId/edit/$contactId'
+      fullPath: '/c/$filterId/edit/$contactId'
+      preLoaderRoute: typeof AuthCFilterIdEditContactIdImport
       parentRoute: typeof AuthImport
     }
   }
@@ -121,17 +123,17 @@ declare module '@tanstack/react-router' {
 // Create and export the route tree
 
 interface AuthRouteChildren {
-  AuthAllContactIdRoute: typeof AuthAllContactIdRoute
   AuthLabelLabelIdRoute: typeof AuthLabelLabelIdRoute
-  AuthAllIndexRoute: typeof AuthAllIndexRoute
-  AuthAllEditContactIdRoute: typeof AuthAllEditContactIdRoute
+  AuthCFilterIdContactIdRoute: typeof AuthCFilterIdContactIdRoute
+  AuthCFilterIdIndexRoute: typeof AuthCFilterIdIndexRoute
+  AuthCFilterIdEditContactIdRoute: typeof AuthCFilterIdEditContactIdRoute
 }
 
 const AuthRouteChildren: AuthRouteChildren = {
-  AuthAllContactIdRoute: AuthAllContactIdRoute,
   AuthLabelLabelIdRoute: AuthLabelLabelIdRoute,
-  AuthAllIndexRoute: AuthAllIndexRoute,
-  AuthAllEditContactIdRoute: AuthAllEditContactIdRoute,
+  AuthCFilterIdContactIdRoute: AuthCFilterIdContactIdRoute,
+  AuthCFilterIdIndexRoute: AuthCFilterIdIndexRoute,
+  AuthCFilterIdEditContactIdRoute: AuthCFilterIdEditContactIdRoute,
 }
 
 const AuthRouteWithChildren = AuthRoute._addFileChildren(AuthRouteChildren)
@@ -140,20 +142,20 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '': typeof AuthRouteWithChildren
   '/login': typeof LoginRoute
-  '/all/$contactId': typeof AuthAllContactIdRoute
   '/label/$labelId': typeof AuthLabelLabelIdRoute
-  '/all': typeof AuthAllIndexRoute
-  '/all/edit/$contactId': typeof AuthAllEditContactIdRoute
+  '/c/$filterId/$contactId': typeof AuthCFilterIdContactIdRoute
+  '/c/$filterId': typeof AuthCFilterIdIndexRoute
+  '/c/$filterId/edit/$contactId': typeof AuthCFilterIdEditContactIdRoute
 }
 
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '': typeof AuthRouteWithChildren
   '/login': typeof LoginRoute
-  '/all/$contactId': typeof AuthAllContactIdRoute
   '/label/$labelId': typeof AuthLabelLabelIdRoute
-  '/all': typeof AuthAllIndexRoute
-  '/all/edit/$contactId': typeof AuthAllEditContactIdRoute
+  '/c/$filterId/$contactId': typeof AuthCFilterIdContactIdRoute
+  '/c/$filterId': typeof AuthCFilterIdIndexRoute
+  '/c/$filterId/edit/$contactId': typeof AuthCFilterIdEditContactIdRoute
 }
 
 export interface FileRoutesById {
@@ -161,10 +163,10 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_auth': typeof AuthRouteWithChildren
   '/login': typeof LoginRoute
-  '/_auth/all/$contactId': typeof AuthAllContactIdRoute
   '/_auth/label/$labelId': typeof AuthLabelLabelIdRoute
-  '/_auth/all/': typeof AuthAllIndexRoute
-  '/_auth/all/edit/$contactId': typeof AuthAllEditContactIdRoute
+  '/_auth/c/$filterId/$contactId': typeof AuthCFilterIdContactIdRoute
+  '/_auth/c/$filterId/': typeof AuthCFilterIdIndexRoute
+  '/_auth/c/$filterId/edit/$contactId': typeof AuthCFilterIdEditContactIdRoute
 }
 
 export interface FileRouteTypes {
@@ -173,28 +175,28 @@ export interface FileRouteTypes {
     | '/'
     | ''
     | '/login'
-    | '/all/$contactId'
     | '/label/$labelId'
-    | '/all'
-    | '/all/edit/$contactId'
+    | '/c/$filterId/$contactId'
+    | '/c/$filterId'
+    | '/c/$filterId/edit/$contactId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | ''
     | '/login'
-    | '/all/$contactId'
     | '/label/$labelId'
-    | '/all'
-    | '/all/edit/$contactId'
+    | '/c/$filterId/$contactId'
+    | '/c/$filterId'
+    | '/c/$filterId/edit/$contactId'
   id:
     | '__root__'
     | '/'
     | '/_auth'
     | '/login'
-    | '/_auth/all/$contactId'
     | '/_auth/label/$labelId'
-    | '/_auth/all/'
-    | '/_auth/all/edit/$contactId'
+    | '/_auth/c/$filterId/$contactId'
+    | '/_auth/c/$filterId/'
+    | '/_auth/c/$filterId/edit/$contactId'
   fileRoutesById: FileRoutesById
 }
 
@@ -231,29 +233,29 @@ export const routeTree = rootRoute
     "/_auth": {
       "filePath": "_auth.tsx",
       "children": [
-        "/_auth/all/$contactId",
         "/_auth/label/$labelId",
-        "/_auth/all/",
-        "/_auth/all/edit/$contactId"
+        "/_auth/c/$filterId/$contactId",
+        "/_auth/c/$filterId/",
+        "/_auth/c/$filterId/edit/$contactId"
       ]
     },
     "/login": {
       "filePath": "login.tsx"
     },
-    "/_auth/all/$contactId": {
-      "filePath": "_auth.all.$contactId.tsx",
-      "parent": "/_auth"
-    },
     "/_auth/label/$labelId": {
       "filePath": "_auth.label.$labelId.tsx",
       "parent": "/_auth"
     },
-    "/_auth/all/": {
-      "filePath": "_auth.all.index.tsx",
+    "/_auth/c/$filterId/$contactId": {
+      "filePath": "_auth.c.$filterId.$contactId.tsx",
       "parent": "/_auth"
     },
-    "/_auth/all/edit/$contactId": {
-      "filePath": "_auth.all.edit.$contactId.tsx",
+    "/_auth/c/$filterId/": {
+      "filePath": "_auth.c.$filterId.index.tsx",
+      "parent": "/_auth"
+    },
+    "/_auth/c/$filterId/edit/$contactId": {
+      "filePath": "_auth.c.$filterId.edit.$contactId.tsx",
       "parent": "/_auth"
     }
   }
