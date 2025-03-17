@@ -18,6 +18,4 @@ export interface Contact {
     avatar?: string;
     labels: string[];
     eigenId?: string;
-    createdAt?: number;
-    updatedAt?: number;
   }

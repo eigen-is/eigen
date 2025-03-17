@@ -60,15 +60,27 @@ export function ContactsSidebar() {
   const handleEditLabel = async (updatedLabel: Label) => {
     try {
       console.log('Editing label:', updatedLabel);
+      
+      // Direct post de data zoals bij toevoegen label
       const response = await contactsApi.labels[updatedLabel.id].put({
         name: updatedLabel.name,
         color: updatedLabel.color
       });
       console.log('Edit label response:', response);
       
-      if (response.status === 200) {
+      // Refetch labels to ensure we have the latest data
+      const labelsResponse = await contactsApi.labels.get();
+      if (labelsResponse.data) {
+        console.log('Updated labels from server:', labelsResponse.data);
+        setLabels(labelsResponse.data);
+      } else {
+        // Fallback to local update if fetch fails
         setLabels(labels.map(label => 
-          label.id === updatedLabel.id ? updatedLabel : label
+          label.id === updatedLabel.id ? {
+            id: updatedLabel.id,
+            name: updatedLabel.name,
+            color: updatedLabel.color
+          } : label
         ));
       }
     } catch (error) {

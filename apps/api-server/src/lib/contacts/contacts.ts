@@ -4,7 +4,7 @@ import { fsGetDatabase } from "../fs/fs";
 import type { Contact } from "../../types/contact";
 import type { Label } from "../../types/label";
 import { drizzle } from "drizzle-orm/bun-sqlite";
-import { eq } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import * as schema from "./schema";
 import { v4 as uuidv4 } from "uuid";
 
@@ -81,7 +81,7 @@ export async function getContacts(user: User) {
         firstName: contact.firstName,
         lastName: contact.lastName,
         eigenId: contact.eigenId,
-        ...(JSON.parse(contact.data) as Contact)
+        ...(JSON.parse(contact.data) as Omit<Contact, 'id' | 'firstName' | 'lastName' | 'eigenId' | 'createdAt' | 'updatedAt' | 'labels' | 'data'>)
     }));
 }
 
@@ -100,7 +100,7 @@ export async function addContact(user: User, contact: Omit<Contact, 'id'>) {
         id: contactId,
         firstName: contactData.firstName,
         lastName: contactData.lastName,
-        eigenId: contactData.eigenId || null,
+        eigenId: contactData.eigenId || 0,
         data: JSON.stringify({
             email: contactData.email,
             phone: contactData.phone,
@@ -151,7 +151,7 @@ export async function updateContact(user: User, id: string, contact: Omit<Contac
                 notes: contactData.notes,
                 avatar: contactData.avatar
             }),
-            updatedAt: Math.floor(Date.now() / 1000)
+            updatedAt: sql`unixepoch()`
         })
         .where(eq(schema.contacts.id, id));
     
@@ -193,13 +193,27 @@ export async function addContactLabel(user: User, label: Omit<Label, 'id'>) {
 export async function updateContactLabel(user: User, id: string, label: Omit<Label, 'id'>) {
     const db = await getContactsDatabase(user);
     
-    await db.update(schema.labels)
-        .set({
-            name: label.name,
-            color: label.color,
-            updatedAt: Math.floor(Date.now() / 1000)
-        })
-        .where(eq(schema.labels.id, id));
+    console.log('Updating label:', id, label);
+    
+    try {
+        await db.update(schema.labels)
+            .set({
+                name: label.name,
+                color: label.color,
+                updatedAt: sql`unixepoch()`
+            })
+            .where(eq(schema.labels.id, id));
+            
+        console.log('Label updated successfully');
+        
+        // Return the updated label
+        const updatedLabel = await db.select().from(schema.labels).where(eq(schema.labels.id, id)).get();
+        console.log('Updated label:', updatedLabel);
+        return updatedLabel;
+    } catch (error) {
+        console.error('Error updating label:', error);
+        throw error;
+    }
 }
 
 export async function deleteContactLabel(user: User, id: string) {
