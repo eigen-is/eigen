@@ -1,7 +1,7 @@
 import { createFileRoute } from '@tanstack/react-router';
 import { ContactsList } from '../../components/contacts/contacts-list';
 
-export const Route = createFileRoute('/_auth/all/')({
+export const Route = createFileRoute('/_auth/c/$filterId/')({
   component: ContactsIndexRoute,
 });
 

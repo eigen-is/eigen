@@ -3,7 +3,7 @@ import { ContactDetail } from '../../components/contacts/contact-detail';
 import { getContactById, mockContacts } from '../data/mockData';
 import { useState } from 'react';
 
-export const Route = createFileRoute('/_auth/all/$contactId')({
+export const Route = createFileRoute('/_auth/c/$filterId/$contactId')({
   component: ContactDetailRoute,
   validateParams: ({ params }) => {
     const contactId = params.contactId;
