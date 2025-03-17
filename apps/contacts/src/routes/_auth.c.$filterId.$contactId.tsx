@@ -11,7 +11,7 @@ export const Route = createFileRoute('/_auth/c/$filterId/$contactId')({
     
     if (!contact) {
       throw redirect({
-        to: '/all',
+        to: '/c/all',
       });
     }
     
