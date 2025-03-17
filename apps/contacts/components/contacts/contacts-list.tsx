@@ -11,7 +11,12 @@ import {
   DropdownMenuTrigger,
 } from "@workspace/ui/components/dropdown-menu";
 
-export function ContactsList() {
+interface ContactsListProps {
+  filterType?: string;
+  filterId?: string;
+}
+
+export function ContactsList({ filterType = 'filter', filterId = 'all' }: ContactsListProps) {
   const [sortBy, setSortBy] = useState<'firstName' | 'lastName'>('firstName');
   const [searchQuery, setSearchQuery] = useState('');
   
@@ -81,8 +86,9 @@ export function ContactsList() {
                   {contacts.map((contact) => (
                     <Link
                       key={contact.id}
-                      to={`/c/all/$contactId`}
-                      params={{ contactId: contact.id }}
+                      to="/c/$filterType/$filterId"
+                      params={{ filterType, filterId }}
+                      search={{ contactId: contact.id }}
                       className="flex items-center gap-3 px-6 py-3 hover:bg-muted transition-colors"
                       activeProps={{
                         className: "bg-primary/10",
