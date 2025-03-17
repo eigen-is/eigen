@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Trash2 } from 'lucide-react';
 import { z } from 'zod';
 import { useForm } from 'react-hook-form';
@@ -64,6 +64,23 @@ export function LabelDialog({
       ? { name: selectedLabel.name, color: selectedLabel.color }
       : { name: "", color: "#3b82f6" }, // Default blue color
   });
+
+  // Reset form values when selectedLabel changes
+  useEffect(() => {
+    if (selectedLabel) {
+      console.log('Resetting form with label data:', selectedLabel);
+      form.reset({
+        name: selectedLabel.name,
+        color: selectedLabel.color
+      });
+    } else if (open) {
+      // Reset to default values when opening for a new label
+      form.reset({
+        name: "",
+        color: "#3b82f6"
+      });
+    }
+  }, [selectedLabel, form, open]);
 
   // Handle form submission
   const handleSubmit = (data: LabelFormValues) => {
