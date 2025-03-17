@@ -1,32 +1,58 @@
-import {useAuth} from "@workspace/lib/auth/auth-context.tsx";
-import {useRouter} from "@tanstack/react-router";
-import {useState} from "react";
-import {Input} from "../input.tsx";
-import {Button} from "../button.tsx";
+import { useAuth } from "@workspace/lib/auth/auth-context.tsx";
+import { useRouter } from "@tanstack/react-router";
+import { useState } from "react";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useForm } from "react-hook-form";
+import { z } from "zod";
+import { Input } from "../input.tsx";
+import { Button } from "../button.tsx";
 import {
     Card,
     CardContent,
     CardDescription,
-    CardFooter,
     CardHeader,
     CardTitle,
 } from "../card.tsx";
+import {
+    Form,
+    FormControl,
+    FormField,
+    FormItem,
+    FormLabel,
+    FormMessage,
+} from "../form.tsx";
+
+// Define the login form schema with Zod
+const loginFormSchema = z.object({
+    email: z.string().email({ message: "Invalid email address" }),
+    password: z.string().min(1, { message: "Password is required" }),
+});
+
+// Type for the form values
+type LoginFormValues = z.infer<typeof loginFormSchema>;
 
 export function LoginPage({ appName = 'mail' }: { appName?: string }) {
-    const {login} = useAuth();
+    const { login } = useAuth();
     const router = useRouter();
-    const [email, setEmail] = useState('');
-    const [password, setPassword] = useState('');
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
+    // Initialize the form with react-hook-form and zod validator
+    const form = useForm<LoginFormValues>({
+        resolver: zodResolver(loginFormSchema),
+        defaultValues: {
+            email: "",
+            password: "",
+        },
+    });
+
+    // Form submission handler
+    const onSubmit = async (values: LoginFormValues) => {
         setIsLoading(true);
         setError('');
 
         try {
-            const {success, error} = await login(email, password);
+            const { success, error } = await login(values.email, values.password);
 
             if (!success && error) {
                 setError(error.message || 'Login failed');
@@ -52,7 +78,7 @@ export function LoginPage({ appName = 'mail' }: { appName?: string }) {
                         <span className="font-normal text-app">|{appName}&gt;</span>
                     </CardTitle>
                     <CardDescription>
-                        Voer je gegevens in om toegang te krijgen tot je account
+                        Enter your credentials to access your account
                     </CardDescription>
                 </CardHeader>
 
@@ -63,46 +89,45 @@ export function LoginPage({ appName = 'mail' }: { appName?: string }) {
                         </div>
                     )}
 
-                    <form onSubmit={handleSubmit} className="space-y-6">
-                        <div className="space-y-4">
-                            <div>
-                                <label htmlFor="email" className="block text-sm font-medium text-gray-700">
-                                    Email
-                                </label>
-                                <Input
-                                    id="email"
-                                    type="email"
-                                    value={email}
-                                    onChange={(e) => setEmail(e.target.value)}
-                                    required
-                                    className="mt-1"
-                                    placeholder="your@email.com"
-                                />
-                            </div>
+                    <Form {...form}>
+                        <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
+                            <FormField
+                                control={form.control}
+                                name="email"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Email</FormLabel>
+                                        <FormControl>
+                                            <Input placeholder="your@email.com" {...field} />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
 
-                            <div>
-                                <label htmlFor="password" className="block text-sm font-medium text-gray-700">
-                                    Password
-                                </label>
-                                <Input
-                                    id="password"
-                                    type="password"
-                                    value={password}
-                                    onChange={(e) => setPassword(e.target.value)}
-                                    required
-                                    className="mt-1"
-                                />
-                            </div>
-                        </div>
+                            <FormField
+                                control={form.control}
+                                name="password"
+                                render={({ field }) => (
+                                    <FormItem>
+                                        <FormLabel>Password</FormLabel>
+                                        <FormControl>
+                                            <Input type="password" {...field} />
+                                        </FormControl>
+                                        <FormMessage />
+                                    </FormItem>
+                                )}
+                            />
 
-                        <Button
-                            type="submit"
-                            className="w-full"
-                            disabled={isLoading}
-                        >
-                            {isLoading ? 'Bezig met inloggen...' : 'Inloggen'}
-                        </Button>
-                    </form>
+                            <Button 
+                                type="submit" 
+                                className="w-full" 
+                                disabled={isLoading}
+                            >
+                                {isLoading ? 'Signing in...' : 'Sign in'}
+                            </Button>
+                        </form>
+                    </Form>
                 </CardContent>
             </Card>
         </div>
