@@ -39,28 +39,50 @@ async function getContactsDatabase(user: User) {
             );
         `);
 
+        // Mock labels to add if none exist
         const mockLabels: Label[] = [
-            { id: '1', name: 'Family', color: '#f87171' },
-            { id: '2', name: 'Friends', color: '#60a5fa' },
-            { id: '3', name: 'Work', color: '#4ade80' },
-            { id: '4', name: 'Important', color: '#facc15' }
+            { id: uuidv4(), name: 'Family', color: '#f87171' },
+            { id: uuidv4(), name: 'Friends', color: '#60a5fa' },
+            { id: uuidv4(), name: 'Work', color: '#4ade80' },
+            { id: uuidv4(), name: 'Important', color: '#facc15' }
         ];
-        // add mock labels
+        
+        // Initialize drizzle
         const dr = drizzle(db, { schema });
-        for (const label of mockLabels) {
-            await dr.insert(schema.labels).values({
-                id: label.id,
-                name: label.name,
-                color: label.color
-            });
-        }   
+        
+        try {
+            // Check if labels already exist
+            const existingLabels = await dr.select().from(schema.labels).all();
+            console.log('Existing labels:', existingLabels);
+            
+            // Only add mock labels if none exist
+            if (existingLabels.length === 0) {
+                console.log('Adding mock labels...');
+                for (const label of mockLabels) {
+                    await dr.insert(schema.labels).values({
+                        id: label.id,
+                        name: label.name,
+                        color: label.color
+                    });
+                }
+                console.log('Mock labels added successfully');
+            }
+        } catch (error) {
+            console.error('Error setting up mock labels:', error);
+        }
     }); 
     return drizzle(db, { schema });
 }
 
 export async function getContacts(user: User) {
     const db = await getContactsDatabase(user);
-    return db.select().from(schema.contacts).all();
+    return db.select().from(schema.contacts).all().map(contact => ({
+        id: contact.id,
+        firstName: contact.firstName,
+        lastName: contact.lastName,
+        eigenId: contact.eigenId,
+        ...(JSON.parse(contact.data) as Contact)
+    }));
 }
 
 export async function getContactById(user: User, id: string) {
