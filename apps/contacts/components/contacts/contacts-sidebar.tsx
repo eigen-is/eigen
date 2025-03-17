@@ -2,8 +2,9 @@ import { UserPlus, Users, Star, Clock } from 'lucide-react';
 import { Link } from '@tanstack/react-router';
 import { Button } from "@workspace/ui/components/button";
 import { useState } from 'react';
-import { mockLabels, Label } from '../../src/data/mockData';
+import { mockLabels } from '../../src/data/mockData';
 import { LabelManager } from '@workspace/ui/components/layout/labels/label-manager';
+import { type Label } from "@apps/api-server/types/label";
 
 export function ContactsSidebar() {
   const [labels, setLabels] = useState<Label[]>(mockLabels);

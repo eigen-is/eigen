@@ -2,7 +2,8 @@ import { useState } from 'react';
 import { 
   Mail, Phone, Building, MapPin, Calendar, Edit, Trash, Plus, MoreVertical, ArrowLeft
 } from 'lucide-react';
-import { Contact, mockLabels } from '../../src/data/mockData';
+import { type Contact } from "@apps/api-server/types/contact";
+import { mockLabels } from '../../src/data/mockData';
 import { Button } from "@workspace/ui/components/button";
 import {
   DropdownMenu,

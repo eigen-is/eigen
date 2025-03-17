@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { Link } from '@tanstack/react-router';
 import { ArrowUpDown, Search } from 'lucide-react';
-import { mockContacts, groupContactsByLetter, type Contact } from '../../src/data/mockData';
+import { groupContactsByLetter } from '../../src/data/mockData';
 import { Button } from "@workspace/ui/components/button";
 import { Input } from "@workspace/ui/components/input";
+import { type Contact } from "@apps/api-server/types/contact";
 import {
   DropdownMenu,
   DropdownMenuContent,
