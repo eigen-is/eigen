@@ -1,8 +1,9 @@
 import { z } from 'zod';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Contact, mockLabels } from '../../src/data/mockData';
+import { mockLabels } from '../../src/data/mockData';
 import { Button } from "@workspace/ui/components/button";
+import { type Contact } from "@apps/api-server/types/contact";
 import {
   Form,
   FormControl,
