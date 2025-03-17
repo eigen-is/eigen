@@ -3,7 +3,7 @@ import {BunSQLiteDatabase, drizzle} from 'drizzle-orm/bun-sqlite';
 import {and, eq, like, sql} from 'drizzle-orm';
 import Database from "bun:sqlite";
 import type {User} from "better-auth/types";
-import {fsGetFileName} from "../fs/fs";
+import {fsGetDatabase, fsGetFileName} from "../fs/fs";
 
 // Import schema definitions
 import * as schema from './schema';
@@ -21,9 +21,19 @@ class imap {
     }
 
     public async login() {
-        const t= await fsGetFileName(this.user, 'mailbox.db');
+        const t = await fsGetDatabase(this.user, 'mailbox.eigen/mailbox.db', true, async (db: Database) => {
+            this.db = drizzle(db, {schema});
+            await this.create_tables();
+            await this.mailboxes_create('INBOX', []);
+            await this.mailboxes_create('[EigenMail]', ['\\NOSELECT']);
+            await this.mailboxes_create('[Eigen]/All Mail', ['\\All']);
+            await this.mailboxes_create('[Eigen]/Drafts', ['\\Drafts']);
+            await this.mailboxes_create('[Eigen]/Sent Mail', ['\\Sent']);
+            await this.mailboxes_create('[Eigen]/Spam', ['\\Junk']);
+            await this.mailboxes_create('[Eigen]/Starred', ['\\Flagged']);
+            await this.mailboxes_create('[Eigen]/Trash', ['\\Trash']);
+        });
         this.db = drizzle(t, {schema});
-//        this.db = drizzle(await fsGetDatabase(this.user, 'mailbox.db'), {schema});
     }
 
     public async logout() {

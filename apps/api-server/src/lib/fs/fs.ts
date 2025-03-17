@@ -14,7 +14,15 @@ export async function fsGetFileName(user: User, file: string): Promise<string> {
     return path;
 }
 
-export async function fsGetDatabase(user: User, file: string, create: boolean = true) {
+export async function fsGetDatabase(user: User, file: string, create: boolean = true, onCreate = async (db: Database) => {}) {
     const path = await fsGetFileName(user, file);
-    return new Database(path, {create});
+    const bunfile = Bun.file(path);
+    if (await bunfile.exists()) {
+        return new Database(path);
+    } else if (create) {
+        const db = new Database(path, {create});
+        await onCreate(db);
+        return db;
+    }
+    throw new Error(`File not found: ${path}`);
 }
