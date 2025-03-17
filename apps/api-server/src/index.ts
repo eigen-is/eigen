@@ -3,6 +3,7 @@ import swagger from "@elysiajs/swagger";
 import cors from "@elysiajs/cors";
 import {betterAuth} from "./routes/auth";
 import {mailRouter} from "./routes/mail";
+import {contactsRouter} from "./routes/contacts";
 import {trustedOrigins} from "./lib/auth/auth";
 
 const app = new Elysia()
@@ -17,6 +18,7 @@ const app = new Elysia()
     .get("/", () => "eigen|api>")
     .get("/health", () => "OK")
     .use(mailRouter)
+    .use(contactsRouter)    
     .listen(8000);
 
 export type app = typeof app;

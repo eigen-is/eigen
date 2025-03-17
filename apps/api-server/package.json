@@ -9,9 +9,11 @@
   "dependencies": {
     "@elysiajs/cors": "^1.2.0",
     "@elysiajs/swagger": "^1.2.2",
-    "better-auth": "^1.2.3",    "drizzle-kit": "^0.30.5",
+    "better-auth": "^1.2.3",    
+    "drizzle-kit": "^0.30.5",
     "drizzle-orm": "^0.40.0",
-    "elysia": "^1.2.25"
+    "elysia": "^1.2.25",
+    "uuidv4": "^1.0.0"
   },
   "devDependencies": {
     "@types/bun": "^1.2.5",
