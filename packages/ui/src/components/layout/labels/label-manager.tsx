@@ -108,7 +108,9 @@ export function LabelManager({
               className="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground grow cursor-pointer"
               to={getLabelPath(label)}
             >
-              <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: label.color }} />
+              <span className="flex items-center justify-center w-4 h-4">
+                <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: label.color }} />
+              </span>
               <span>{label.name}</span>
             </Link>
             {isEditMode && (
