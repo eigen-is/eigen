@@ -5,7 +5,6 @@ import { Button } from "@workspace/ui/components/button";
 import { Input } from "@workspace/ui/components/input";
 import { type Contact } from "@apps/api-server/types/contact";
 import { useContacts } from '../../src/hooks/use-contacts';
-import { useLabels } from '../../src/hooks/use-labels';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -24,8 +23,6 @@ export function ContactsList({ filterType = 'filter', filterId = 'all' }: Contac
   
   // Gebruik de useContacts hook om contacten op te halen
   const { data: contacts = [], isLoading, error } = useContacts();
-  // Haal labels op voor label-filtering
-  const { data: labels = [] } = useLabels();
   
   // Filter contacten op basis van filterType en filterId
   const applyFilters = (contacts: Contact[]) => {
