@@ -24,8 +24,8 @@ import {
 
 import { Input } from "@workspace/ui/components/input";
 import { Button } from "@workspace/ui/components/button";
-import { Label } from './types';
 import { DeleteDialog } from "@workspace/ui/components/delete-dialog";
+import type { Label } from "@apps/api-server/types/label";
 
 // Form schema for label management
 const labelFormSchema = z.object({
@@ -110,13 +110,15 @@ export function LabelDialog({
               <FormField
                 control={form.control}
                 name="name"
-                render={({ field }) => (
+                render={({ field, fieldState }) => (
                   <FormItem>
                     <FormLabel>Name</FormLabel>
                     <FormControl>
                       <Input placeholder="Enter label name" {...field} />
                     </FormControl>
-                    <FormMessage />
+                    <FormMessage>
+                      {fieldState.error?.message}
+                    </FormMessage>
                   </FormItem>
                 )}
               />
@@ -124,13 +126,15 @@ export function LabelDialog({
               <FormField
                 control={form.control}
                 name="color"
-                render={({ field }) => (
+                render={({ field, fieldState }) => (
                   <FormItem>
                     <FormLabel>Color</FormLabel>
                     <FormControl>
                       <Input type="color" {...field} />
                     </FormControl>
-                    <FormMessage />
+                    <FormMessage>
+                      {fieldState.error?.message}
+                    </FormMessage>
                   </FormItem>
                 )}
               />

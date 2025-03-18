@@ -1,9 +1,8 @@
-export interface Label {
-  id: string;
-  name: string;
-  color: string;
-}
+import type { Label } from "@apps/api-server/types/label";
 
+/**
+ * Props for the LabelManager component
+ */
 export interface LabelManagerProps {
   // Data props
   labels: Label[];

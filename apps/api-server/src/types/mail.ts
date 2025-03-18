@@ -1,10 +1,4 @@
-/**
- * Core type definitions for the mail application
- */
 
-/**
- * Email type representing an email message
- */
 export interface Email {
     id: string;
     read: boolean;
