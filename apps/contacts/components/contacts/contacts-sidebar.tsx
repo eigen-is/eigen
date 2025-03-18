@@ -55,9 +55,11 @@ export function ContactsSidebar() {
   return (
     <div className="w-64 border-r h-full flex flex-col bg-background">
       <div className="p-4">
-        <Button className="w-full justify-start gap-2" size="lg">
-          <UserPlus className="h-4 w-4"/>
-          Create contact
+        <Button className="w-full justify-start gap-2" size="lg" asChild>
+          <Link to="/new">
+            <UserPlus className="h-4 w-4"/>
+            Create contact
+          </Link>
         </Button>
       </div>
 

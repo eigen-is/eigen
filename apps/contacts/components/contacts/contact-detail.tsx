@@ -83,7 +83,7 @@ export function ContactDetail({ contact, onDelete, onBack, filterType, filterId 
         <div className="flex items-center">
           <div className="flex items-center gap-1 mr-2">
             <Link 
-              to="/c/edit/$filterType/$filterId"
+              to="/edit/$filterType/$filterId"
               params={{ 
                 filterType: filterType || 'filter',
                 filterId: filterId || 'all'
