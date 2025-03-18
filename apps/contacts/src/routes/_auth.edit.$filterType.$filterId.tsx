@@ -11,7 +11,7 @@ const searchSchema = z.object({
 
 export type ContactEditSearchParams = z.infer<typeof searchSchema>;
 
-export const Route = createFileRoute('/_auth/c/edit/$filterType/$filterId')({
+export const Route = createFileRoute('/_auth/edit/$filterType/$filterId')({
   component: EditContactRoute,
   validateSearch: (search: Record<string, unknown>) => {
     // Parse and validate the search params
