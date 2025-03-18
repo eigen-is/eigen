@@ -1,57 +1,28 @@
 import { UserPlus, Users, Star, Clock } from 'lucide-react';
 import { Link } from '@tanstack/react-router';
 import { Button } from "@workspace/ui/components/button";
-import { useState, useEffect } from 'react';
 import { LabelManager } from '@workspace/ui/components/layout/labels/label-manager';
 import { type Label } from "@apps/api-server/types/label";
-import { contactsApi } from "../../../../packages/lib/src/lib/api"
+import { useLabels, useAddLabel, useUpdateLabel, useDeleteLabel } from '../../src/hooks/use-labels';
 
 export function ContactsSidebar() {
-  const [labels, setLabels] = useState<Label[]>([]);
-  const [loading, setLoading] = useState(true);
-
-  // Fetch labels from the API
-  useEffect(() => {
-    const fetchLabels = async () => {
-      try {
-        setLoading(true);
-        console.log('Fetching labels...');
-        const response = await contactsApi.labels.get();
-        console.log('Labels API response:', response);
-        
-        if (response.data) {
-          console.log('Labels data:', response.data);
-          setLabels(response.data);
-        } else {
-          console.log('No labels data found in response');
-        }
-      } catch (error) {
-        console.error('Failed to fetch labels:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchLabels();
-  }, []);
+  // Gebruik de useLabels hook van TanStack Query
+  const { 
+    data: labels = [], 
+    isLoading: loading,
+    error 
+  } = useLabels();
+  
+  // Gebruik de mutatie hooks van TanStack Query
+  const addLabelMutation = useAddLabel();
+  const updateLabelMutation = useUpdateLabel();
+  const deleteLabelMutation = useDeleteLabel();
 
   // Handle label operations
   const handleAddLabel = async (labelData: Omit<Label, 'id'>) => {
     try {
       console.log('Adding label:', labelData);
-      const response = await contactsApi.labels.post({
-        name: labelData.name,
-        color: labelData.color
-      });
-      console.log('Add label response:', response);
-      
-      if (response.data) {
-        // Refetch labels to get the updated list
-        const labelsResponse = await contactsApi.labels.get();
-        if (labelsResponse.data) {
-          setLabels(labelsResponse.data);
-        }
-      }
+      await addLabelMutation.mutateAsync(labelData);
     } catch (error) {
       console.error('Failed to add label:', error);
     }
@@ -60,29 +31,7 @@ export function ContactsSidebar() {
   const handleEditLabel = async (updatedLabel: Label) => {
     try {
       console.log('Editing label:', updatedLabel);
-      
-      // Direct post de data zoals bij toevoegen label
-      const response = await contactsApi.labels[updatedLabel.id].put({
-        name: updatedLabel.name,
-        color: updatedLabel.color
-      });
-      console.log('Edit label response:', response);
-      
-      // Refetch labels to ensure we have the latest data
-      const labelsResponse = await contactsApi.labels.get();
-      if (labelsResponse.data) {
-        console.log('Updated labels from server:', labelsResponse.data);
-        setLabels(labelsResponse.data);
-      } else {
-        // Fallback to local update if fetch fails
-        setLabels(labels.map(label => 
-          label.id === updatedLabel.id ? {
-            id: updatedLabel.id,
-            name: updatedLabel.name,
-            color: updatedLabel.color
-          } : label
-        ));
-      }
+      await updateLabelMutation.mutateAsync(updatedLabel);
     } catch (error) {
       console.error('Failed to update label:', error);
     }
@@ -91,12 +40,7 @@ export function ContactsSidebar() {
   const handleDeleteLabel = async (labelId: string) => {
     try {
       console.log('Deleting label with ID:', labelId);
-      const response = await contactsApi.labels[labelId].delete();
-      console.log('Delete label response:', response);
-      
-      if (response.status === 200) {
-        setLabels(labels.filter(label => label.id !== labelId));
-      }
+      await deleteLabelMutation.mutateAsync(labelId);
     } catch (error) {
       console.error('Failed to delete label:', error);
     }
@@ -169,8 +113,10 @@ export function ContactsSidebar() {
         {/* Horizontal separator */}
         <div className="mx-3 my-2 border-t border-border"></div>
 
-        {/* Debug information */}
-        {loading ? (
+        {/* Status berichten */}
+        {error ? (
+          <div className="px-3 py-2 text-sm text-destructive">Er is een fout opgetreden bij het laden van labels.</div>
+        ) : loading ? (
           <div className="px-3 py-2 text-sm text-muted-foreground">Loading labels...</div>
         ) : labels.length === 0 ? (
           <div className="px-3 py-2 text-sm text-muted-foreground">No labels found. Add one with the + button.</div>
