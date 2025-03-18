@@ -74,6 +74,21 @@ async function getContactsDatabase(user: User) {
     return drizzle(db, { schema });
 }
 
+async function setContactLabels(user: User, contactId: string, labels: string[]) {
+    const db = await getContactsDatabase(user);
+    
+    // Delete existing labels
+    await db.delete(schema.contactsToLabels).where(eq(schema.contactsToLabels.contactId, contactId));
+    
+    // Insert new labels
+    for (const labelId of labels) {
+        await db.insert(schema.contactsToLabels).values({
+            contactId,
+            labelId
+        });
+    }
+}
+
 export async function addContact(user: User, contact: Omit<Contact, 'id'>) {
     const db = await getContactsDatabase(user);
     const contactId = uuidv4();
@@ -111,23 +126,24 @@ export async function deleteContact(user: User, id: string) {
 export async function updateContact(user: User, id: string, contact: Omit<Contact, 'id'>) {
     const db = await getContactsDatabase(user);
     const { labels, ...contactData } = contact;
-    
+    const data = {
+        email: contactData.email,
+        phone: contactData.phone,
+        company: contactData.company,
+        jobTitle: contactData.jobTitle,
+        address: contactData.address,
+        birthday: contactData.birthday,
+        notes: contactData.notes,
+        avatar: contactData.avatar
+    };
+
     // Update contact
     await db.update(schema.contacts)
         .set({
             firstName: contactData.firstName,
             lastName: contactData.lastName,
             eigenId: contactData.eigenId || null,
-            data: JSON.stringify({
-                email: contactData.email,
-                phone: contactData.phone,
-                company: contactData.company,
-                jobTitle: contactData.jobTitle,
-                address: contactData.address,
-                birthday: contactData.birthday,
-                notes: contactData.notes,
-                avatar: contactData.avatar
-            }),
+            data,
             updatedAt: sql`unixepoch()`
         })
         .where(eq(schema.contacts.id, id));
@@ -202,7 +218,7 @@ export async function getContactById(user: User, id: string) {
     const labelIds = labelRelations.map(rel => rel.labelId);
     
     // Parse the stored JSON data
-    const data = contact.data ? JSON.parse(contact.data) : {};
+    const data = contact.data ?? {};
     
     return {
         id: contact.id,
@@ -231,7 +247,7 @@ export async function getContacts(user: User) {
         const labelIds = labelRelations.map(rel => rel.labelId);
         
         // Parse the stored JSON data
-        const data = contact.data ? JSON.parse(contact.data) : {};
+        const data = contact.data ?? {};
         
         results.push({
             id: contact.id,
