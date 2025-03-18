@@ -1,7 +1,7 @@
 import { 
   useQuery, 
   useMutation, 
-  QueryClient 
+  useQueryClient 
 } from '@tanstack/react-query';
 import { contactsApi } from '../../../../packages/lib/src/lib/api';
 import { type Contact } from '@apps/api-server/types/contact';
@@ -41,7 +41,7 @@ export function useContact(id: string) {
 
 // Add a new contact
 export function useAddContact() {
-  const queryClient = new QueryClient();
+  const queryClient = useQueryClient();
   
   return useMutation({
     mutationFn: async (newContact: Omit<Contact, 'id'>) => {
@@ -57,7 +57,7 @@ export function useAddContact() {
 
 // Update an existing contact
 export function useUpdateContact() {
-  const queryClient = new QueryClient();
+  const queryClient = useQueryClient();
   
   return useMutation({
     mutationFn: async ({ id, ...data }: Contact) => {
@@ -74,16 +74,18 @@ export function useUpdateContact() {
 
 // Delete a contact
 export function useDeleteContact() {
-  const queryClient = new QueryClient();
+  const queryClient = useQueryClient();
   
   return useMutation({
     mutationFn: async (id: string) => {
       const response = await contactsApi.contacts[id].delete();
       return response.data;
     },
-    onSuccess: () => {
-      // Invalidate and refetch the contacts list
+    onSuccess: (_, id) => {
+      // Invalidate and refetch contacts list
       queryClient.invalidateQueries({ queryKey: contactKeys.lists() });
+      // Remove the contact from the cache
+      queryClient.removeQueries({ queryKey: contactKeys.detail(id) });
     },
   });
 }
