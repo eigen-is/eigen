@@ -164,7 +164,7 @@ export async function updateContact(user: User, id: string, contact: Omit<Contac
         .set({
             firstName: contactData.firstName,
             lastName: contactData.lastName,
-            eigenId: contactData.eigenId || null,
+            eigenId: contactData.eigenId || '',
             data,
             updatedAt: sql`unixepoch()`
         })
@@ -174,12 +174,12 @@ export async function updateContact(user: User, id: string, contact: Omit<Contac
     await setContactLabels(user, id, labels || []);
 }
 
-export async function getContactLabels(user: User) {
+export async function getContactLabels(user: User): Promise<Label[]> {
     const db = await getContactsDatabase(user);
     return db.select().from(schema.labels).all();
 }
 
-export async function addContactLabel(user: User, label: Omit<Label, 'id'>) {
+export async function addContactLabel(user: User, label: Omit<Label, 'id'>): Promise<string> {
     const db = await getContactsDatabase(user);
     const labelId = uuidv4();
     
@@ -226,7 +226,7 @@ export async function deleteContactLabel(user: User, id: string) {
     await db.delete(schema.contactsToLabels).where(eq(schema.contactsToLabels.labelId, id));
 }
 
-export async function getContactById(user: User, id: string) {
+export async function getContactById(user: User, id: string): Promise<Contact | null> {
     const db = await getContactsDatabase(user);
     
     const contact = await db.select().from(schema.contacts).where(eq(schema.contacts.id, id)).get();
@@ -250,12 +250,12 @@ export async function getContactById(user: User, id: string) {
         firstName: contact.firstName,
         lastName: contact.lastName,
         eigenId: contact.eigenId,
-        ...data,
+        ...data as Omit<Contact, 'id' | 'firstName' | 'lastName' | 'labels'>,
         labels: labelIds
     };
 }
 
-export async function getContacts(user: User) {
+export async function getContacts(user: User): Promise<Contact[]> {
     const db = await getContactsDatabase(user);
     
     const contacts = await db.select().from(schema.contacts).all();
@@ -279,7 +279,7 @@ export async function getContacts(user: User) {
             firstName: contact.firstName,
             lastName: contact.lastName,
             eigenId: contact.eigenId,
-            ...data,
+            ...data as Omit<Contact, 'id' | 'firstName' | 'lastName' | 'labels'>,
             labels: labelIds
         });
     }

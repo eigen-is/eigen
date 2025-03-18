@@ -7,7 +7,7 @@ export const contacts = sqliteTable('contacts', {
   id: text('id').primaryKey(),
   firstName: text('firstName').notNull(),
   lastName: text('lastName').notNull(),
-  eigenId: text('eigenId'),
+  eigenId: text('eigenId').notNull(),
   data: text('data', { mode: 'json' }).$type<Omit<Contact, 'id' | 'firstName' | 'lastName' | 'labels'>>(),
   createdAt: integer('createdAt', { mode: 'timestamp' }).default(sql`(unixepoch())`),
   updatedAt: integer('updatedAt', { mode: 'timestamp' }).default(sql`(unixepoch())`),
