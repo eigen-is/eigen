@@ -1,10 +1,10 @@
 import { useState } from 'react';
 import { Link } from '@tanstack/react-router';
 import { ArrowUpDown, Search } from 'lucide-react';
-import { groupContactsByLetter } from '../../src/data/mockData';
 import { Button } from "@workspace/ui/components/button";
 import { Input } from "@workspace/ui/components/input";
 import { type Contact } from "@apps/api-server/types/contact";
+import { useContacts } from '../../src/hooks/use-contacts';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -21,20 +21,60 @@ export function ContactsList({ filterType = 'filter', filterId = 'all' }: Contac
   const [sortBy, setSortBy] = useState<'firstName' | 'lastName'>('firstName');
   const [searchQuery, setSearchQuery] = useState('');
   
-  // Group contacts by first letter
-  const groupedContacts = groupContactsByLetter(sortBy);
+  // Gebruik de useContacts hook om contacten op te halen
+  const { data: contacts = [], isLoading, error } = useContacts();
   
-  // Filter grouped contacts based on search query
-  const filteredGroups = searchQuery.length === 0
-    ? groupedContacts
-    : groupedContacts.map(([letter, contacts]) => {
-        const filteredContacts = contacts.filter(contact => 
-          contact.firstName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          contact.lastName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          (contact.email && contact.email.some(email => email.toLowerCase().includes(searchQuery.toLowerCase())))
-        );
-        return [letter, filteredContacts] as [string, Contact[]];
-      }).filter(([_, contacts]) => contacts.length > 0);
+  // Sorteer contacten op de geselecteerde sorteermethode
+  const sortedContacts = [...contacts].sort((a, b) => {
+    if (sortBy === 'firstName') {
+      return a.firstName.localeCompare(b.firstName);
+    } else {
+      return a.lastName.localeCompare(b.lastName);
+    }
+  });
+  
+  // Filter contacten op basis van zoekopdracht
+  const filteredContacts = searchQuery.length === 0
+    ? sortedContacts
+    : sortedContacts.filter(contact => 
+        contact.firstName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        contact.lastName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (contact.email && contact.email.some((email: string) => 
+          email.toLowerCase().includes(searchQuery.toLowerCase())
+        ))
+      );
+  
+  // Groepeer contacten op eerste letter
+  const groupContactsByLetter = (contacts: Contact[]) => {
+    const groups: Record<string, Contact[]> = {};
+    
+    contacts.forEach(contact => {
+      // Gebruik de eerste letter van firstname of lastname, afhankelijk van sorteermethode
+      const firstChar = sortBy === 'firstName' 
+        ? contact.firstName.charAt(0).toUpperCase() 
+        : contact.lastName.charAt(0).toUpperCase();
+      
+      if (!groups[firstChar]) {
+        groups[firstChar] = [];
+      }
+      
+      groups[firstChar].push(contact);
+    });
+    
+    // Converteer het object naar een array van tuples [letter, contacts] en sorteer op letter
+    return Object.entries(groups).sort((a, b) => a[0].localeCompare(b[0]));
+  };
+  
+  const groupedContacts = groupContactsByLetter(filteredContacts);
+
+  if (error) {
+    return (
+      <div className="w-full h-full flex flex-col items-center justify-center text-destructive">
+        <p>Er is een fout opgetreden bij het laden van contacten.</p>
+        <p className="text-sm">{error instanceof Error ? error.message : 'Onbekende fout'}</p>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full h-full flex flex-col">
@@ -70,13 +110,17 @@ export function ContactsList({ filterType = 'filter', filterId = 'all' }: Contac
       </div>
 
       <div className="flex-1 overflow-auto">
-        {filteredGroups.length === 0 ? (
+        {isLoading ? (
+          <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
+            <p>Loading contacts...</p>
+          </div>
+        ) : groupedContacts.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
             <p>No contacts found.</p>
           </div>
         ) : (
           <div>
-            {filteredGroups.map(([letter, contacts]) => (
+            {groupedContacts.map(([letter, contacts]) => (
               <div key={letter} className="border-b last:border-b-0">
                 <div 
                   className="flex items-center px-6 py-2 bg-muted/50"
