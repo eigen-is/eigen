@@ -1,9 +1,8 @@
 import { useState } from 'react';
 import { 
-  Mail, Phone, Building, MapPin, Calendar, Edit, Trash, Plus, MoreVertical, ArrowLeft
+  Mail, Phone, Building, MapPin, Calendar, Edit, Trash, MoreVertical, ArrowLeft
 } from 'lucide-react';
 import { type Contact } from "@apps/api-server/types/contact";
-import { mockLabels } from '../../src/data/mockData';
 import { Button } from "@workspace/ui/components/button";
 import {
   DropdownMenu,
@@ -15,7 +14,7 @@ import {
 import { Badge } from "@workspace/ui/components/badge";
 import { Link } from '@tanstack/react-router';
 import { DeleteDialog } from '@workspace/ui/components/delete-dialog';
-import { Label } from "@apps/api-server/types/label";
+import { useLabels } from '../../src/hooks/use-labels';
 
 interface ContactDetailProps {
   contact: Contact;
@@ -27,6 +26,13 @@ interface ContactDetailProps {
 
 export function ContactDetail({ contact, onDelete, onBack, filterType, filterId }: ContactDetailProps) {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  
+  // Gebruik TanStack Query hook alleen voor het ophalen van labels
+  const { 
+    data: labels = [], 
+    isLoading: labelsLoading, 
+    error: labelsError 
+  } = useLabels();
 
   const handleDelete = () => {
     onDelete(contact.id);
@@ -44,7 +50,7 @@ export function ContactDetail({ contact, onDelete, onBack, filterType, filterId 
       address.street,
       address.city,
       address.state,
-      address.zipCode,
+      address.zip,
       address.country
     ].filter(Boolean);
     
@@ -152,24 +158,27 @@ export function ContactDetail({ contact, onDelete, onBack, filterType, filterId 
             </div>
 
             <div className="flex flex-wrap gap-2 justify-center">
-              {contact.labels.map(labelId => {
-                const label = mockLabels.find(l => l.id === labelId);
-                if (!label) return null;
-                
-                return (
-                  <Badge 
-                    key={label.id} 
-                    style={{ backgroundColor: label.color, color: '#fff' }}
-                    className="px-2 py-1"
-                  >
-                    {label.name}
-                  </Badge>
-                );
-              })}
-              <Button variant="outline" size="sm" className="h-6 px-2">
-                <Plus className="h-3 w-3 mr-1" />
-                Add label
-              </Button>
+              {contact.labels && contact.labels.length > 0 && !labelsLoading && !labelsError ? (
+                contact.labels.map((labelId: string) => {
+                  // Zoek het label object op basis van ID uit opgehaalde labels
+                  const label = labels.find(l => l.id === labelId);
+                  if (!label) return null;
+                  
+                  return (
+                    <Badge 
+                      key={label.id} 
+                      style={{ backgroundColor: label.color, color: '#fff' }}
+                      className="px-2 py-1"
+                    >
+                      {label.name}
+                    </Badge>
+                  );
+                })
+              ) : labelsLoading ? (
+                <p className="text-sm text-muted-foreground">Labels laden...</p>
+              ) : labelsError ? (
+                <p className="text-sm text-destructive">Fout bij laden van labels</p>
+              ) : null}
             </div>
           </div>
           
@@ -184,7 +193,7 @@ export function ContactDetail({ contact, onDelete, onBack, filterType, filterId 
                     <Mail className="h-4 w-4" />
                     Email
                   </h4>
-                  {contact.email.map((email, index) => (
+                  {contact.email.map((email: string, index: number) => (
                     <div key={index} className="pl-6">
                       <a href={`mailto:${email}`} className="text-blue-600 hover:underline">
                         {email}
@@ -200,7 +209,7 @@ export function ContactDetail({ contact, onDelete, onBack, filterType, filterId 
                     <Phone className="h-4 w-4" />
                     Phone
                   </h4>
-                  {contact.phone.map((phone, index) => (
+                  {contact.phone.map((phone: string, index: number) => (
                     <div key={index} className="pl-6">
                       <a href={`tel:${phone}`} className="text-blue-600 hover:underline">
                         {formatPhoneNumber(phone)}
@@ -241,7 +250,7 @@ export function ContactDetail({ contact, onDelete, onBack, filterType, filterId 
               <div className="space-y-4">
                 <h3 className="text-lg font-semibold border-b pb-2">Addresses</h3>
                 
-                {contact.address.map((address, index) => (
+                {contact.address.map((address: any, index: number) => (
                   <div key={index} className="space-y-2">
                     <h4 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
                       <MapPin className="h-4 w-4" />
