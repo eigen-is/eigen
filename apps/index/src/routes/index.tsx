@@ -33,6 +33,11 @@ function HomeComponent() {
             className: 'text-purple-600',
             href: '/docs',
         },
+        {
+            name: 'Space',
+            className: 'text-teal-600',
+            href: '/space',
+        },
     ];
     
     const [appIndex, setAppIndex] = React.useState(0);
@@ -66,12 +71,9 @@ function HomeComponent() {
                         showMore ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0'
                     }`}
                 >
-                    <p className="mb-4 text-center">
-                        It includes mail, calendar, docs, drive and more — everything you need, nothing you don't.
-                    </p>
                     <div className="flex justify-center w-full">
                         <div className="text-left">
-                            <p className="mb-2">Store your data where you want:</p>
+                            <p className="mb-2 text-center">Store your data where you want:</p>
                             <ul className="list-disc pl-6 text-sm">
                                 <li>Host with eigen.is — simple and secure by default</li>
                                 <li>Connect your preferred cloud storage</li>
