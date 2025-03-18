@@ -74,43 +74,6 @@ async function getContactsDatabase(user: User) {
     return drizzle(db, { schema });
 }
 
-export async function getContacts(user: User) {
-    const db = await getContactsDatabase(user);
-    return db.select().from(schema.contacts).all().map(contact => ({
-        id: contact.id,
-        firstName: contact.firstName,
-        lastName: contact.lastName,
-        eigenId: contact.eigenId,
-        ...(JSON.parse(contact.data) as Omit<Contact, 'id' | 'firstName' | 'lastName' | 'eigenId' | 'createdAt' | 'updatedAt' | 'labels' | 'data'>)
-    }));
-}
-
-export async function getContactById(user: User, id: string) {
-    const db = await getContactsDatabase(user);
-    return db.select().from(schema.contacts).where(eq(schema.contacts.id, id)).get();
-}
-
-async function setContactLabels(user: User, contactId: string, labels: string[]) {
-    const db = await getContactsDatabase(user);
-    
-    // Remove all existing labels
-    await db.delete(schema.contactsToLabels).where(eq(schema.contactsToLabels.contactId, contactId));
-    
-    const labelIds = await db.select().from(schema.labels).all();
-    const existingLabelIds = new Set(labelIds.map(label => label.id));
-
-    // Add new labels, if label exists
-    for (const labelId of labels) {
-        if (!existingLabelIds.has(labelId)) {
-            continue;
-        }
-        await db.insert(schema.contactsToLabels).values({
-            contactId,
-            labelId
-        });
-    }
-}
-
 export async function addContact(user: User, contact: Omit<Contact, 'id'>) {
     const db = await getContactsDatabase(user);
     const contactId = uuidv4();
@@ -222,7 +185,7 @@ export async function deleteContactLabel(user: User, id: string) {
     await db.delete(schema.labels).where(eq(schema.labels.id, id));
 }
 
-export async function getContactWithLabels(user: User, id: string) {
+export async function getContactById(user: User, id: string) {
     const db = await getContactsDatabase(user);
     
     const contact = await db.select().from(schema.contacts).where(eq(schema.contacts.id, id)).get();
@@ -251,7 +214,7 @@ export async function getContactWithLabels(user: User, id: string) {
     };
 }
 
-export async function getContactsWithLabels(user: User) {
+export async function getContacts(user: User) {
     const db = await getContactsDatabase(user);
     
     const contacts = await db.select().from(schema.contacts).all();
