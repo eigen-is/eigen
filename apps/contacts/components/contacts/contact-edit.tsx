@@ -5,6 +5,7 @@ import { useState } from 'react';
 import { Button } from "@workspace/ui/components/button";
 import { type Contact } from "@apps/api-server/types/contact";
 import { useLabels } from '../../src/hooks/use-labels';
+import { useAddContact, useUpdateContact } from '../../src/hooks/use-contacts';
 import {
   Form,
   FormControl,
@@ -68,9 +69,14 @@ export function ContactEdit({
   onSave, 
   onCancel
 }: ContactEditProps) {
-  // Gebruik useLabels hook in plaats van eigen state en fetch logica
+  // Gebruik useLabels hook voor het ophalen van labels
   const { data: labels = [], error: labelsError } = useLabels();
-  const [loading, setLoading] = useState(false);
+  
+  // Gebruik TanStack Query mutatie hooks voor het toevoegen/bijwerken van contacten
+  const addContactMutation = useAddContact();
+  const updateContactMutation = useUpdateContact();
+  
+  // State voor loading en error
   const [error, setError] = useState<string | null>(null);
 
   // Set up react-hook-form
@@ -92,42 +98,39 @@ export function ContactEdit({
 
   // Handle form submission
   const handleSubmit = form.handleSubmit(async (data) => {
-    setLoading(true);
     setError(null);
     
     try {
-      console.log('Saving contact with data:', data);
+      // Bereid de data voor om naar de API te sturen
+      // Zorg dat de birthday als string wordt doorgegeven als deze bestaat
+      // En zorg dat labels altijd een array is (niet undefined)
+      const contactData = {
+        ...data,
+        birthday: data.birthday ? data.birthday.toISOString().split('T')[0] : undefined,
+        labels: data.labels || []
+      };
       
       if (contact?.id) {
-        // Update existing contact
-        const response = await contactsApi.contacts[contact.id].put(data as any);
-        
-        console.log('Contact updated response:', response);
-        
-        if (response.data) {
-          onSave(data);
-        } else {
-          throw new Error('Failed to update contact');
-        }
+        // Update existing contact met TanStack Query
+        await updateContactMutation.mutateAsync({
+          id: contact.id,
+          ...contactData
+        });
       } else {
-        // Create new contact
-        const response = await contactsApi.contacts.post(data as any);
-        
-        console.log('Contact created response:', response);
-        
-        if (response.data) {
-          onSave(data);
-        } else {
-          throw new Error('Failed to create contact');
-        }
+        // Create new contact met TanStack Query
+        await addContactMutation.mutateAsync(contactData);
       }
+      
+      // Terug naar de detail pagina
+      onSave(data);
     } catch (err) {
       console.error('Error saving contact:', err);
       setError('Failed to save contact. Please try again later.');
-    } finally {
-      setLoading(false);
     }
   });
+
+  // Status bepaling voor loading
+  const isLoading = addContactMutation.isPending || updateContactMutation.isPending;
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
@@ -263,7 +266,7 @@ export function ContactEdit({
                               e.target.value = "";
                             }}
                             defaultValue=""
-                            disabled={loading}
+                            disabled={isLoading}
                           >
                             <option value="" disabled>Add label</option>
                             {labels.map((label) => (
@@ -599,11 +602,11 @@ export function ContactEdit({
               </div>
               
               <div className="flex gap-4 justify-end">
-                <Button type="button" variant="outline" onClick={onCancel} disabled={loading}>
+                <Button type="button" variant="outline" onClick={onCancel} disabled={isLoading}>
                   Cancel
                 </Button>
-                <Button type="submit" disabled={loading}>
-                  {loading ? 'Saving...' : 'Save changes'}
+                <Button type="submit" disabled={isLoading}>
+                  {isLoading ? 'Saving...' : 'Save changes'}
                 </Button>
               </div>
             </form>
