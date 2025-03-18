@@ -44,7 +44,6 @@
   },
   "exports": {
     "./*": "./src/lib/*",
-    "./api/*": "./src/lib/api/*",
-    "./types/*": "./src/types/*.ts"
+    "./api/*": "./src/lib/api/*"
   }
 }

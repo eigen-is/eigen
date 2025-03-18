@@ -35,6 +35,7 @@
   },
   "devDependencies": {
     "@workspace/config": "workspace:*",
+    "@apps/api-server": "workspace:*",
     "@tailwindcss/postcss": "^4.0.8",
     "@types/node": "^20",
     "@types/react": "^19",
