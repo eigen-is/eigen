@@ -4,7 +4,8 @@ import { Link } from '@tanstack/react-router';
 import { Button } from "@workspace/ui/components/button";
 import { cn } from "@workspace/ui/lib/utils";
 import { LabelDialog } from './label-dialog';
-import { Label, LabelManagerProps } from './types';
+import { LabelManagerProps } from './types';
+import type { Label } from "@apps/api-server/types/label";
 
 export function LabelManager({
   labels,
