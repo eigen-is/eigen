@@ -109,7 +109,9 @@ export async function addContact(user: User, contact: Omit<Contact, 'id'>) {
             birthday: contactData.birthday,
             notes: contactData.notes,
             avatar: contactData.avatar
-        })
+        }),
+        createdAt: sql`unixepoch()`,
+        updatedAt: sql`unixepoch()`,
     });
     
     // Add labels if provided
@@ -164,7 +166,9 @@ export async function addContactLabel(user: User, label: Omit<Label, 'id'>) {
     await db.insert(schema.labels).values({
         id: labelId,
         name: label.name,
-        color: label.color
+        color: label.color,
+        createdAt: sql`unixepoch()`,
+        updatedAt: sql`unixepoch()`,
     });
     
     return labelId;
@@ -199,6 +203,7 @@ export async function updateContactLabel(user: User, id: string, label: Omit<Lab
 export async function deleteContactLabel(user: User, id: string) {
     const db = await getContactsDatabase(user);
     await db.delete(schema.labels).where(eq(schema.labels.id, id));
+    await db.delete(schema.contactsToLabels).where(eq(schema.contactsToLabels.labelId, id));
 }
 
 export async function getContactById(user: User, id: string) {
