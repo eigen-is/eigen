@@ -69,7 +69,7 @@ export function ContactEdit({
   onCancel
 }: ContactEditProps) {
   // Gebruik useLabels hook in plaats van eigen state en fetch logica
-  const { data: labels = [], isLoading: labelsLoading, error: labelsError } = useLabels();
+  const { data: labels = [], error: labelsError } = useLabels();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
