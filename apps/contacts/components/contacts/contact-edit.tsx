@@ -1,9 +1,11 @@
 import { z } from 'zod';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { mockLabels } from '../../src/data/mockData';
+import { useState, useEffect } from 'react';
 import { Button } from "@workspace/ui/components/button";
 import { type Contact } from "@apps/api-server/types/contact";
+import { type Label } from "@apps/api-server/types/label";
+import { contactsApi } from "../../../../packages/lib/src/lib/api";
 import {
   Form,
   FormControl,
@@ -67,7 +69,27 @@ export function ContactEdit({
   onSave, 
   onCancel
 }: ContactEditProps) {
-  const labels = mockLabels;
+  const [labels, setLabels] = useState<Label[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Fetch labels on component mount
+  useEffect(() => {
+    const fetchLabels = async () => {
+      try {
+        const response = await contactsApi.labels.get();
+        if (response.data) {
+          console.log('Labels fetched successfully:', response.data);
+          setLabels(response.data);
+        }
+      } catch (err) {
+        console.error('Failed to fetch labels:', err);
+        setError('Failed to fetch labels. Please try again later.');
+      }
+    };
+
+    fetchLabels();
+  }, []);
 
   // Set up react-hook-form
   const form = useForm<ContactFormValues>({
@@ -87,8 +109,42 @@ export function ContactEdit({
   });
 
   // Handle form submission
-  const handleSubmit = form.handleSubmit((data) => {
-    onSave(data);
+  const handleSubmit = form.handleSubmit(async (data) => {
+    setLoading(true);
+    setError(null);
+    
+    try {
+      console.log('Saving contact with data:', data);
+      
+      if (contact?.id) {
+        // Update existing contact
+        const response = await contactsApi.contacts[contact.id].put(data);
+        
+        console.log('Contact updated response:', response);
+        
+        if (response.data) {
+          onSave(data);
+        } else {
+          throw new Error('Failed to update contact');
+        }
+      } else {
+        // Create new contact
+        const response = await contactsApi.contacts.post(data);
+        
+        console.log('Contact created response:', response);
+        
+        if (response.data) {
+          onSave(data);
+        } else {
+          throw new Error('Failed to create contact');
+        }
+      }
+    } catch (err) {
+      console.error('Error saving contact:', err);
+      setError('Failed to save contact. Please try again later.');
+    } finally {
+      setLoading(false);
+    }
   });
 
   return (
@@ -102,6 +158,12 @@ export function ContactEdit({
       </div>
       
       <div className="flex-1 overflow-y-auto p-6">
+        {error && (
+          <div className="bg-destructive/15 text-destructive px-4 py-2 rounded-md mb-4">
+            {error}
+          </div>
+        )}
+        
         <div className="space-y-8">
           <Form {...form}>
             <form onSubmit={handleSubmit} className="space-y-8">
@@ -183,9 +245,14 @@ export function ContactEdit({
                       <FormItem>
                         <FormLabel>Labels</FormLabel>
                         <div className="flex flex-wrap gap-2 mt-2">
-                          {field.value?.map((label, index) => (
-                            <Badge key={index} className="px-3 py-1">
-                              {label}
+                          {field.value?.map((labelId, index) => {
+                            const labelObj = labels.find(l => l.id === labelId);
+                            return (
+                            <Badge key={index} 
+                              className="px-3 py-1" 
+                              style={{ backgroundColor: labelObj?.color || '#3b82f6', color: '#fff' }}
+                            >
+                              {labelObj?.name || labelId}
                               <button 
                                 type="button" 
                                 className="ml-1 hover:text-destructive"
@@ -198,7 +265,7 @@ export function ContactEdit({
                                 <Trash className="h-3 w-3" />
                               </button>
                             </Badge>
-                          ))}
+                          )})}
                           <select 
                             className="h-7 w-auto rounded-md border border-input px-2 py-1 text-xs shadow-sm"
                             onChange={(e) => {
@@ -208,13 +275,14 @@ export function ContactEdit({
                               e.target.value = "";
                             }}
                             defaultValue=""
+                            disabled={loading}
                           >
                             <option value="" disabled>Add label</option>
                             {labels.map((label) => (
                               <option 
                                 key={label.id} 
-                                value={label.name}
-                                disabled={field.value?.includes(label.name)}
+                                value={label.id}
+                                disabled={field.value?.includes(label.id)}
                               >
                                 {label.name}
                               </option>
@@ -543,10 +611,12 @@ export function ContactEdit({
               </div>
               
               <div className="flex gap-4 justify-end">
-                <Button type="button" variant="outline" onClick={onCancel}>
+                <Button type="button" variant="outline" onClick={onCancel} disabled={loading}>
                   Cancel
                 </Button>
-                <Button type="submit">Save changes</Button>
+                <Button type="submit" disabled={loading}>
+                  {loading ? 'Saving...' : 'Save changes'}
+                </Button>
               </div>
             </form>
           </Form>

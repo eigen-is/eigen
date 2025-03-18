@@ -90,6 +90,27 @@ export async function getContactById(user: User, id: string) {
     return db.select().from(schema.contacts).where(eq(schema.contacts.id, id)).get();
 }
 
+async function setContactLabels(user: User, contactId: string, labels: string[]) {
+    const db = await getContactsDatabase(user);
+    
+    // Remove all existing labels
+    await db.delete(schema.contactsToLabels).where(eq(schema.contactsToLabels.contactId, contactId));
+    
+    const labelIds = await db.select().from(schema.labels).all();
+    const existingLabelIds = new Set(labelIds.map(label => label.id));
+
+    // Add new labels, if label exists
+    for (const labelId of labels) {
+        if (!existingLabelIds.has(labelId)) {
+            continue;
+        }
+        await db.insert(schema.contactsToLabels).values({
+            contactId,
+            labelId
+        });
+    }
+}
+
 export async function addContact(user: User, contact: Omit<Contact, 'id'>) {
     const db = await getContactsDatabase(user);
     const contactId = uuidv4();
@@ -114,14 +135,7 @@ export async function addContact(user: User, contact: Omit<Contact, 'id'>) {
     });
     
     // Add labels if provided
-    if (labels && labels.length > 0) {
-        for (const labelId of labels) {
-            await db.insert(schema.contactsToLabels).values({
-                contactId,
-                labelId
-            });
-        }
-    }
+    await setContactLabels(user, contactId, labels || []);
     
     return contactId;
 }
@@ -156,20 +170,7 @@ export async function updateContact(user: User, id: string, contact: Omit<Contac
         .where(eq(schema.contacts.id, id));
     
     // Update labels if provided
-    if (labels !== undefined) {
-        // Remove all existing labels
-        await db.delete(schema.contactsToLabels).where(eq(schema.contactsToLabels.contactId, id));
-        
-        // Add new labels
-        if (labels.length > 0) {
-            for (const labelId of labels) {
-                await db.insert(schema.contactsToLabels).values({
-                    contactId: id,
-                    labelId
-                });
-            }
-        }
-    }
+    await setContactLabels(user, id, labels || []);
 }
 
 export async function getContactLabels(user: User) {

@@ -5,9 +5,9 @@ import { type Contact } from '../../types/contact';
 // Contacts table
 export const contacts = sqliteTable('contacts', {
   id: text('id').primaryKey(),
-  firstName: text('first_name').notNull(),
-  lastName: text('last_name').notNull(),
-  eigenId: text('eigen_id'),
+  firstName: text('firstName').notNull(),
+  lastName: text('lastName').notNull(),
+  eigenId: text('eigenId'),
   data: text('data', { mode: 'json' }).$type<Omit<Contact, 'id' | 'firstName' | 'lastName' | 'labels'>>(),
   createdAt: integer('createdAt', { mode: 'timestamp' }).default(sql`(unixepoch())`),
   updatedAt: integer('updatedAt', { mode: 'timestamp' }).default(sql`(unixepoch())`),
@@ -24,8 +24,8 @@ export const labels = sqliteTable('labels', {
 
 // Junction table for contacts and labels
 export const contactsToLabels = sqliteTable('contacts_to_labels', {
-  contactId: text('contact_id').notNull().references(() => contacts.id, { onDelete: 'cascade' }),
-  labelId: text('label_id').notNull().references(() => labels.id, { onDelete: 'cascade' }),
+  contactId: text('contactId').notNull().references(() => contacts.id, { onDelete: 'cascade' }),
+  labelId: text('labelId').notNull().references(() => labels.id, { onDelete: 'cascade' }),
 }, (table) => ({
   pk: primaryKey({ columns: [table.contactId, table.labelId] }),
 }));
