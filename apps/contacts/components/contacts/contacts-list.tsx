@@ -5,6 +5,7 @@ import { Button } from "@workspace/ui/components/button";
 import { Input } from "@workspace/ui/components/input";
 import { type Contact } from "@apps/api-server/types/contact";
 import { useContacts } from '../../src/hooks/use-contacts';
+import { useLabels } from '../../src/hooks/use-labels';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -23,9 +24,38 @@ export function ContactsList({ filterType = 'filter', filterId = 'all' }: Contac
   
   // Gebruik de useContacts hook om contacten op te halen
   const { data: contacts = [], isLoading, error } = useContacts();
+  // Haal labels op voor label-filtering
+  const { data: labels = [] } = useLabels();
+  
+  // Filter contacten op basis van filterType en filterId
+  const applyFilters = (contacts: Contact[]) => {
+    if (!contacts.length) return [];
+    
+    // Eerste stap: filterType en filterId toepassen
+    let filtered = [...contacts];
+    
+    // Als filterType 'label' is, filter op label ID
+    if (filterType === 'label' && filterId !== 'all') {
+      filtered = filtered.filter(contact => 
+        contact.labels && contact.labels.includes(filterId)
+      );
+    } 
+    // Als filterType 'filter' is, pas speciale filters toe
+    else if (filterType === 'filter') {
+      if (filterId === 'frequent') {
+        // Hier zou je een frequentie-logica kunnen implementeren
+        // Voor nu tonen we gewoon alle contacten
+      } else if (filterId === 'recent') {
+        // Hier zou je recent toegevoegde/gewijzigde contacten kunnen filteren
+        // Voor nu tonen we gewoon alle contacten
+      }
+    }
+
+    return filtered;
+  };
   
   // Sorteer contacten op de geselecteerde sorteermethode
-  const sortedContacts = [...contacts].sort((a, b) => {
+  const sortedContacts = [...applyFilters(contacts)].sort((a, b) => {
     if (sortBy === 'firstName') {
       return a.firstName.localeCompare(b.firstName);
     } else {
