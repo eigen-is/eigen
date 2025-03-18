@@ -243,7 +243,7 @@ export function ContactEdit({
                               className="px-3 py-1" 
                               style={{ backgroundColor: labelObj?.color || '#3b82f6', color: '#fff' }}
                             >
-                              {labelObj?.name || labelId}
+                              {labelObj?.name}
                               <button 
                                 type="button" 
                                 className="ml-1 hover:text-destructive"
