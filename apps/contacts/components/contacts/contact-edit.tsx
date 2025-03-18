@@ -139,7 +139,7 @@ export function ContactEdit({
           <ArrowLeft className="h-4 w-4" />
           <span className="sr-only">Back</span>
         </Button>
-        <h1 className="font-medium">Edit Contact</h1>
+        <h1 className="font-medium">{contact.id ? 'Edit Contact' : 'Create Contact'}</h1>
       </div>
       
       <div className="flex-1 overflow-y-auto p-6">
