@@ -1,11 +1,10 @@
 import { z } from 'zod';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Button } from "@workspace/ui/components/button";
 import { type Contact } from "@apps/api-server/types/contact";
-import { type Label } from "@apps/api-server/types/label";
-import { contactsApi } from "../../../../packages/lib/src/lib/api";
+import { useLabels } from '../../src/hooks/use-labels';
 import {
   Form,
   FormControl,
@@ -69,27 +68,10 @@ export function ContactEdit({
   onSave, 
   onCancel
 }: ContactEditProps) {
-  const [labels, setLabels] = useState<Label[]>([]);
+  // Gebruik useLabels hook in plaats van eigen state en fetch logica
+  const { data: labels = [], isLoading: labelsLoading, error: labelsError } = useLabels();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  // Fetch labels on component mount
-  useEffect(() => {
-    const fetchLabels = async () => {
-      try {
-        const response = await contactsApi.labels.get();
-        if (response.data) {
-          console.log('Labels fetched successfully:', response.data);
-          setLabels(response.data);
-        }
-      } catch (err) {
-        console.error('Failed to fetch labels:', err);
-        setError('Failed to fetch labels. Please try again later.');
-      }
-    };
-
-    fetchLabels();
-  }, []);
 
   // Set up react-hook-form
   const form = useForm<ContactFormValues>({
@@ -118,7 +100,7 @@ export function ContactEdit({
       
       if (contact?.id) {
         // Update existing contact
-        const response = await contactsApi.contacts[contact.id].put(data);
+        const response = await contactsApi.contacts[contact.id].put(data as any);
         
         console.log('Contact updated response:', response);
         
@@ -129,7 +111,7 @@ export function ContactEdit({
         }
       } else {
         // Create new contact
-        const response = await contactsApi.contacts.post(data);
+        const response = await contactsApi.contacts.post(data as any);
         
         console.log('Contact created response:', response);
         
@@ -161,6 +143,12 @@ export function ContactEdit({
         {error && (
           <div className="bg-destructive/15 text-destructive px-4 py-2 rounded-md mb-4">
             {error}
+          </div>
+        )}
+        
+        {labelsError && (
+          <div className="bg-destructive/15 text-destructive px-4 py-2 rounded-md mb-4">
+            Er is een fout opgetreden bij het laden van labels.
           </div>
         )}
         
