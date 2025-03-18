@@ -39,18 +39,20 @@ async function getContactsDatabase(user: User) {
             );
         `);
 
-        // Mock labels to add if none exist
-        const mockLabels: Label[] = [
-            { id: uuidv4(), name: 'Family', color: '#f87171' },
-            { id: uuidv4(), name: 'Friends', color: '#60a5fa' },
-            { id: uuidv4(), name: 'Work', color: '#4ade80' },
-            { id: uuidv4(), name: 'Important', color: '#facc15' }
-        ];
         
-        // Initialize drizzle
-        const dr = drizzle(db, { schema });
         
         try {
+            // Initialize drizzle
+            const dr = drizzle(db, { schema });
+        
+            // Mock labels to add if none exist
+            const mockLabels: Label[] = [
+                { id: uuidv4(), name: 'Family', color: '#f87171' },
+                { id: uuidv4(), name: 'Friends', color: '#60a5fa' },
+                { id: uuidv4(), name: 'Work', color: '#4ade80' },
+                { id: uuidv4(), name: 'Important', color: '#facc15' }
+            ];
+
             // Check if labels already exist
             const existingLabels = await dr.select().from(schema.labels).all();
             console.log('Existing labels:', existingLabels);
@@ -70,7 +72,24 @@ async function getContactsDatabase(user: User) {
         } catch (error) {
             console.error('Error setting up mock labels:', error);
         }
+
+        // add the user to the contacts table
+        addContact(user, {
+            eigenId: user.id,
+            firstName: user.name,
+            lastName: '',
+            email: [user.email],
+            phone: [],
+            company: '',
+            jobTitle: '',
+            address: [],
+            birthday: '',
+            notes: '',
+            avatar: '',
+            labels: []
+        });
     }); 
+
     return drizzle(db, { schema });
 }
 
@@ -94,22 +113,23 @@ export async function addContact(user: User, contact: Omit<Contact, 'id'>) {
     const contactId = uuidv4();
     
     const { labels, ...contactData } = contact;
-    
+    const data = {
+        email: contactData.email,
+        phone: contactData.phone,
+        company: contactData.company,
+        jobTitle: contactData.jobTitle,
+        address: contactData.address,
+        birthday: contactData.birthday,
+        notes: contactData.notes,
+        avatar: contactData.avatar
+    };
+
     await db.insert(schema.contacts).values({
         id: contactId,
         firstName: contactData.firstName,
         lastName: contactData.lastName,
-        eigenId: contactData.eigenId || 0,
-        data: JSON.stringify({
-            email: contactData.email,
-            phone: contactData.phone,
-            company: contactData.company,
-            jobTitle: contactData.jobTitle,
-            address: contactData.address,
-            birthday: contactData.birthday,
-            notes: contactData.notes,
-            avatar: contactData.avatar
-        }),
+        eigenId: contactData.eigenId || '',
+        data,
         createdAt: sql`unixepoch()`,
         updatedAt: sql`unixepoch()`,
     });
