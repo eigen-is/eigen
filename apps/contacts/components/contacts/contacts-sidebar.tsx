@@ -1,4 +1,5 @@
 import { UserPlus, Users, Star, Clock, X } from 'lucide-react';
+import { Link } from '@tanstack/react-router';
 import { Button } from "@workspace/ui/components/button";
 import { LabelManager } from '@workspace/ui/components/layout/labels/label-manager';
 import { SidebarItem } from '../../../../packages/ui/src/components/layout/sidebar/sidebar-item';
@@ -67,14 +68,13 @@ export function ContactsSidebar({ condensed = false, onClose, isMobile = false }
         </div>
       )}
 
-      <div className="p-4">
-        <SidebarItem 
-          icon={<UserPlus className="h-4 w-4" />}
-          label="Create contact"
-          to="/new"
-          condensed={condensed}
-          className={condensed ? "w-10 px-0" : "w-full"}
-        />
+      <div className="px-3 py-2">
+        <Button variant="default" size={condensed ? "icon" : "default"} asChild className={`${condensed ? 'w-10 p-0' : 'w-full justify-start gap-3'}`}>
+          <Link to="/new">
+            <UserPlus className="h-4 w-4" />
+            {!condensed && <span>Create contact</span>}
+          </Link>
+        </Button>
       </div>
 
       <div className="overflow-auto flex-1">
