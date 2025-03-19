@@ -1,6 +1,8 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
 import { ContactEdit } from '../../components/contacts/contact-edit';
 import { type Contact } from "@apps/api-server/types/contact";
+import { useAddContact } from '../hooks/use-contacts';
+import { type ContactFormValues } from '../../components/contacts/contact-edit';
 
 export const Route = createFileRoute('/_auth/new')({
   component: NewContactRoute,
@@ -8,8 +10,9 @@ export const Route = createFileRoute('/_auth/new')({
 
 function NewContactRoute() {
   const navigate = useNavigate();
+  const addContactMutation = useAddContact();
   
-  // Leeg contact object voor nieuwe contacten
+  // Empty contact object for new contacts
   const emptyContact: Contact = {
     id: '',
     firstName: '',
@@ -21,18 +24,26 @@ function NewContactRoute() {
   };
 
   // Handle form submission
-  const handleSave = () => {
-    // Navigeer terug naar contactenlijst na het opslaan
-    navigate({
-      to: '/c/$filterType/$filterId',
-      params: {
-        filterType: 'filter',
-        filterId: 'all'
-      }
-    });
+  const handleSave = async (data: ContactFormValues) => {
+    try {
+      // Save the contact data
+      await addContactMutation.mutateAsync(data);
+      
+      // Navigate back to the contacts list after saving
+      navigate({
+        to: '/c/$filterType/$filterId',
+        params: {
+          filterType: 'filter',
+          filterId: 'all'
+        }
+      });
+    } catch (error) {
+      console.error("Error saving contact:", error);
+      // Error is handled in the ContactEdit component
+    }
   };
   
-  // Cancel knop navigeert terug naar contactenlijst
+  // Cancel button navigates back to contacts list
   const handleCancel = () => {
     navigate({
       to: '/c/$filterType/$filterId',
