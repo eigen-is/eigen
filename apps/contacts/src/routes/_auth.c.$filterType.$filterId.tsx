@@ -106,11 +106,11 @@ function ContactsRoute() {
   
   // Desktop/Tablet: Three-column layout (sidebar already handled in _auth.tsx)
   return (
-    <div className="flex h-full">
+    <div className="flex h-full w-full">
       {/* Middle column: Contacts list (hidden on mobile when viewing a contact) */}
       <div className={`
         ${isMobile && contactId ? 'hidden' : 'block'}
-        w-full md:w-[350px] border-r overflow-auto
+        w-full md:w-[350px] border-r h-full overflow-y-auto
       `}>
         <div className="flex h-full flex-col">
           {filterType === 'label' && (
@@ -143,7 +143,7 @@ function ContactsRoute() {
       {/* Right column: Contact details or empty state */}
       <div className={`
         ${isMobile && !contactId ? 'hidden' : 'block'}
-        flex-1 overflow-auto
+        flex-1 h-full overflow-y-auto
       `}>
         {contactId ? (
           (() => {
@@ -155,21 +155,22 @@ function ContactsRoute() {
                   onDelete={handleDeleteContact}
                   filterType={filterType}
                   filterId={filterId}
-                  onBack={isMobile ? handleBackToList : undefined}
+                  onBack={handleBackToList}
                 />
               );
             } else {
-              // On desktop, show empty state if contact not found
-              return (
-                <div className="h-full flex items-center justify-center text-muted-foreground">
-                  <p>Contact not found</p>
-                </div>
-              );
+              // Navigate back to the list if contact not found
+              navigate({
+                to: Route.fullPath,
+                params: { filterType, filterId },
+                search: {},
+              });
+              return null;
             }
           })()
         ) : (
-          <div className="h-full flex items-center justify-center text-muted-foreground">
-            <p>Select a contact to view details</p>
+          <div className="h-full w-full flex items-center justify-center">
+            <p className="text-muted-foreground">Select a contact to view details</p>
           </div>
         )}
       </div>

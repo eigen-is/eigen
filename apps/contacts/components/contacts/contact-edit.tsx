@@ -89,46 +89,29 @@ export function ContactEdit({
       jobTitle: contact?.jobTitle || "",
       email: contact?.email || [""],
       phone: contact?.phone || [""],
-      address: contact?.address || [{}],
+      address: contact?.address?.length ? contact.address : [{}],
       birthday: contact?.birthday ? new Date(contact.birthday) : null,
       notes: contact?.notes || "",
-      labels: contact?.labels || [],
+      labels: contact?.labels || []
     },
   });
-
-  // Handle form submission
-  const handleSubmit = form.handleSubmit(async (data) => {
+  
+  // Get the handleSubmit function from react-hook-form
+  const { handleSubmit: hookFormSubmit } = form;
+  
+  // Function to handle form submission
+  const handleSubmit = hookFormSubmit(async (data) => {
     setError(null);
-    
     try {
-      // Bereid de data voor om naar de API te sturen
-      // Zorg dat de birthday als string wordt doorgegeven als deze bestaat
-      // En zorg dat labels altijd een array is (niet undefined)
-      const contactData = {
-        ...data,
-        birthday: data.birthday ? data.birthday.toISOString().split('T')[0] : undefined,
-        labels: data.labels || []
-      };
-      
-      if (contact?.id) {
-        // Update existing contact met TanStack Query
-        await updateContactMutation.mutateAsync({
-          id: contact.id,
-          ...contactData
-        });
-      } else {
-        // Create new contact met TanStack Query
-        await addContactMutation.mutateAsync(contactData);
-      }
-      
-      // Terug naar de detail pagina
-      onSave(data);
-    } catch (err) {
-      console.error('Error saving contact:', err);
-      setError('Failed to save contact. Please try again later.');
+      // Call the onSave callback with the form data
+      await onSave(data);
+    } catch (e) {
+      // Handle any errors that might occur during save
+      console.error("Error saving contact:", e);
+      setError("An error occurred while saving the contact.");
     }
   });
-
+  
   // Status bepaling voor loading
   const isLoading = addContactMutation.isPending || updateContactMutation.isPending;
 
@@ -155,7 +138,7 @@ export function ContactEdit({
           </div>
         )}
         
-        <div className="space-y-8">
+        <div className="space-y-8 pb-20">
           <Form {...form}>
             <form onSubmit={handleSubmit} className="space-y-8">
               {/* Basic Info Section */}
