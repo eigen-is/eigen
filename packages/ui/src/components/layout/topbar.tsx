@@ -1,5 +1,5 @@
 import { useState } from "react";
-import {UserIcon} from "lucide-react";
+import {UserIcon, Menu} from "lucide-react";
 import {useRouter} from "@tanstack/react-router";
 import {
     DropdownMenu,
@@ -29,6 +29,9 @@ interface TopbarProps {
     rootRoute: {
         useNavigate: () => NavigateFunction;
     };
+    showMobileMenu?: boolean;
+    onMobileMenuClick?: () => void;
+    isMobile?: boolean;
 }
 
 function UserDropdown({ rootRoute }: { rootRoute: TopbarProps['rootRoute'] }) {
@@ -102,10 +105,21 @@ function UserDropdown({ rootRoute }: { rootRoute: TopbarProps['rootRoute'] }) {
         : null;
 }
 
-export function Topbar({ appName, rootRoute }: TopbarProps) {
+export function Topbar({ appName, rootRoute, showMobileMenu, onMobileMenuClick, isMobile }: TopbarProps) {
     return (
         <header className="bg-app">
             <div className="flex h-12 items-center px-4">
+                {isMobile && showMobileMenu && (
+                    <Button 
+                        variant="ghost" 
+                        size="icon" 
+                        onClick={onMobileMenuClick}
+                        className="mr-2 text-white hover:bg-primary/20 hover:text-white"
+                    >
+                        <Menu className="h-5 w-5" />
+                        <span className="sr-only">Open menu</span>
+                    </Button>
+                )}
                 <AppLogo appName={appName.toLowerCase()}/>
                 <div className="ml-auto flex items-center space-x-4">
                     <UserDropdown rootRoute={rootRoute} />
