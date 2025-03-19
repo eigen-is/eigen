@@ -30,7 +30,7 @@ function RootComponent() {
 
     return (
         <SidebarContext.Provider value={{ sidebarOpen, setSidebarOpen }}>
-            <div className="flex flex-col h-dvh">
+            <div className="flex flex-col h-screen">
                 <Topbar 
                     appName={appName} 
                     rootRoute={Route} 
