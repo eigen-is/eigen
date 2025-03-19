@@ -1,10 +1,11 @@
 import { useState, useRef, useEffect } from 'react';
 import { PlusIcon, Pencil } from 'lucide-react';
 import { Link } from '@tanstack/react-router';
-import { Button } from "@workspace/ui/components/button";
-import { cn } from "@workspace/ui/lib/utils";
+import { Button } from "../../../components/button";
+import { cn } from "../../../lib/utils";
 import { LabelDialog } from './label-dialog';
 import { LabelManagerProps } from './types';
+import { SidebarItem } from '../sidebar';
 import type { Label } from "@apps/api-server/types/label";
 
 export function LabelManager({
@@ -14,6 +15,7 @@ export function LabelManager({
   onDeleteLabel,
   getLabelPath = (label) => `/label/${label.id.toLowerCase()}`,
   className,
+  condensed = false,
 }: LabelManagerProps) {
   const [isEditMode, setIsEditMode] = useState(false);
   const [selectedLabel, setSelectedLabel] = useState<Label | null>(null);
@@ -77,55 +79,64 @@ export function LabelManager({
   };
 
   return (
-    <div className={cn("px-6 py-2", className)} ref={labelManagerRef}>
-      <div className="flex items-center justify-between mb-2">
-        <h3 className="text-xs font-semibold text-muted-foreground px-3">Labels</h3>
+    <div className={cn("py-2", className)} ref={labelManagerRef}>
+      <div className={cn(
+        "flex items-center mb-2",
+        condensed ? "justify-center" : "justify-between"
+      )}>
+        {!condensed && <h3 className="text-xs font-semibold text-muted-foreground px-3">Labels</h3>}
         <div className="flex items-center gap-1">
           <Button
             variant="ghost"
-            size="sm"
-            className="h-7 w-7 p-0"
+            size="icon"
             onClick={handleAddLabel}
+            className="h-8 w-8"
           >
-            <PlusIcon className="h-3.5 w-3.5" />
+            <PlusIcon className="h-4 w-4" />
             <span className="sr-only">Add new label</span>
           </Button>
-          <Button
-            variant={isEditMode ? "secondary" : "ghost"}
-            size="sm"
-            className={cn("h-7 w-7 p-0", isEditMode && "border border-primary")}
-            onClick={() => setIsEditMode(!isEditMode)}
-          >
-            <Pencil className={cn("h-3.5 w-3.5", isEditMode && "text-primary")} />
-            <span className="sr-only">Toggle edit mode</span>
-          </Button>
+          {!condensed && (
+            <Button
+              variant={isEditMode ? "secondary" : "ghost"}
+              size="icon"
+              className={cn("h-8 w-8", isEditMode && "border border-primary")}
+              onClick={() => setIsEditMode(!isEditMode)}
+            >
+              <Pencil className={cn("h-4 w-4", isEditMode && "text-primary")} />
+              <span className="sr-only">Toggle edit mode</span>
+            </Button>
+          )}
         </div>
       </div>
       
       <div className="space-y-1">
         {labels.map((label) => (
-          <div key={label.id} className="flex items-center justify-between">
-            <Link
-              className="flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground grow cursor-pointer"
-              to={getLabelPath(label)}
-            >
-              <span className="flex items-center justify-center w-4 h-4">
-                <span className="h-2.5 w-2.5 rounded-full" style={{ backgroundColor: label.color }} />
-              </span>
-              <span>{label.name}</span>
-            </Link>
-            {isEditMode && (
-              <Button
-                variant="ghost"
-                size="sm"
-                className="h-7 w-7 p-0"
-                onClick={() => handleEditClick(label)}
-              >
-                <Pencil className="h-3.5 w-3.5" />
-                <span className="sr-only">Edit {label.name}</span>
-              </Button>
+          <SidebarItem
+            key={label.id}
+            icon={<></>}
+            label={label.name}
+            colorDot={label.color}
+            to={getLabelPath(label)}
+            condensed={condensed}
+            className={isEditMode && !condensed ? "pr-8 relative" : ""}
+          >
+            {isEditMode && !condensed && (
+              <div className="absolute right-2">
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6"
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleEditClick(label);
+                  }}
+                >
+                  <Pencil className="h-3 w-3" />
+                </Button>
+              </div>
             )}
-          </div>
+          </SidebarItem>
         ))}
       </div>
 

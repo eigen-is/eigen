@@ -17,4 +17,7 @@ export interface LabelManagerProps {
   
   // Optional className for customizing appearance
   className?: string;
+  
+  // Condensed mode flag
+  condensed?: boolean;
 }
