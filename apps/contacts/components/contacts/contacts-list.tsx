@@ -105,13 +105,13 @@ export function ContactsList({ filterType = 'filter', filterId = 'all' }: Contac
 
   return (
     <div className="w-full h-full flex flex-col">
-      <div className="flex items-center justify-between p-4 border-b">
+      <div className="flex items-center justify-between h-12 px-4 border-b">
         <div className="relative w-full max-w-sm">
-          <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+          <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
           <Input
             type="text"
             placeholder="Search contacts..."
-            className="pl-8 w-full"
+            className="pl-8 w-full h-8"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
           />
