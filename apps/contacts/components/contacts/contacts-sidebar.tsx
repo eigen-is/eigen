@@ -6,6 +6,7 @@ import { SidebarItem } from '../../../../packages/ui/src/components/layout/sideb
 import { SidebarSection } from '../../../../packages/ui/src/components/layout/sidebar/sidebar-section';
 import { type Label } from "@apps/api-server/types/label";
 import { useLabels, useAddLabel, useUpdateLabel, useDeleteLabel } from '../../src/hooks/use-labels';
+import { AppLogo } from '@workspace/ui/components/layout/app-logo';
 
 interface ContactsSidebarProps {
   condensed?: boolean;
@@ -59,12 +60,14 @@ export function ContactsSidebar({ condensed = false, onClose, isMobile = false }
 
   return (
     <div className="h-full flex flex-col bg-background">
+      {/* Mobile Header with Close Button */}
       {isMobile && (
-        <div className="p-2 flex justify-between items-center border-b">
-          <h2 className="font-medium">Contacts</h2>
-          <Button variant="ghost" size="icon" onClick={onClose}>
-            <X className="h-4 w-4" />
+        <div className="flex items-center h-12 bg-app px-4">
+          <Button variant="ghost" size="icon" onClick={onClose} className="mr-2 text-white hover:bg-primary/20 hover:text-white">
+            <X className="h-5 w-5" />
+            <span className="sr-only">Close menu</span>
           </Button>
+          <AppLogo appName="contacts" />
         </div>
       )}
 
