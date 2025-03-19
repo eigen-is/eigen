@@ -27,7 +27,7 @@ interface ContactDetailProps {
 export function ContactDetail({ contact, onDelete, onBack, filterType, filterId }: ContactDetailProps) {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   
-  // Gebruik TanStack Query hook alleen voor het ophalen van labels
+  // Use TanStack Query hook only for fetching labels
   const { 
     data: labels = [], 
     isLoading: labelsLoading, 
@@ -43,14 +43,14 @@ export function ContactDetail({ contact, onDelete, onBack, filterType, filterId 
     return phone; // You might want to add formatting logic here
   };
 
-  const formatAddress = (address: Contact['address'][0]) => {
+  const formatAddress = (address: any) => {
     if (!address) return '';
     
     const parts = [
       address.street,
       address.city,
       address.state,
-      address.zip,
+      address.zipCode,
       address.country
     ].filter(Boolean);
     
@@ -68,6 +68,11 @@ export function ContactDetail({ contact, onDelete, onBack, filterType, filterId 
     }).format(date);
   };
 
+  // Get contact's label objects
+  const contactLabels = contact.labels
+    ? labels.filter(label => contact.labels?.includes(label.id))
+    : [];
+
   return (
     <div className="h-full flex flex-col overflow-hidden">
       <div className="flex items-center justify-between h-12 px-4 border-b">
@@ -78,7 +83,6 @@ export function ContactDetail({ contact, onDelete, onBack, filterType, filterId 
               <span className="sr-only">Back</span>
             </Button>
           )}
-          <h1 className="font-medium">Contact Details</h1>
         </div>
         <div className="flex items-center">
           <div className="flex items-center gap-1 mr-2">
@@ -158,26 +162,20 @@ export function ContactDetail({ contact, onDelete, onBack, filterType, filterId 
             </div>
 
             <div className="flex flex-wrap gap-2 justify-center">
-              {contact.labels && contact.labels.length > 0 && !labelsLoading && !labelsError ? (
-                contact.labels.map((labelId: string) => {
-                  // Zoek het label object op basis van ID uit opgehaalde labels
-                  const label = labels.find(l => l.id === labelId);
-                  if (!label) return null;
-                  
-                  return (
-                    <Badge 
-                      key={label.id} 
-                      style={{ backgroundColor: label.color, color: '#fff' }}
-                      className="px-2 py-1"
-                    >
-                      {label.name}
-                    </Badge>
-                  );
-                })
+              {contactLabels && contactLabels.length > 0 && !labelsLoading && !labelsError ? (
+                contactLabels.map((label: any) => (
+                  <Badge 
+                    key={label.id} 
+                    style={{ backgroundColor: label.color, color: '#fff' }}
+                    className="px-2 py-1"
+                  >
+                    {label.name}
+                  </Badge>
+                ))
               ) : labelsLoading ? (
-                <p className="text-sm text-muted-foreground">Labels laden...</p>
+                <p className="text-sm text-muted-foreground">Loading labels...</p>
               ) : labelsError ? (
-                <p className="text-sm text-destructive">Fout bij laden van labels</p>
+                <p className="text-sm text-destructive">Error loading labels</p>
               ) : null}
             </div>
           </div>

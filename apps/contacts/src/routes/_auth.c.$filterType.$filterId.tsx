@@ -3,6 +3,7 @@ import { ContactsList } from '../../components/contacts/contacts-list';
 import { ContactDetail } from '../../components/contacts/contact-detail';
 import { useContacts, useDeleteContact } from '../hooks/use-contacts';
 import { useLabels } from '../hooks/use-labels';
+import { useMediaQuery } from '../hooks/use-media-query';
 
 // Define search params type
 export interface ContactsSearchParams {
@@ -21,8 +22,9 @@ function ContactsRoute() {
   const { filterType, filterId } = Route.useParams();
   const { contactId } = Route.useSearch();
   const navigate = useNavigate();
+  const isMobile = useMediaQuery('(max-width: 768px)');
   
-  // Gebruik TanStack Query hooks voor contacten en labels
+  // Use TanStack Query hooks for contacts and labels
   const { data: contacts = [], isLoading: contactsLoading } = useContacts();
   const { data: labels = [] } = useLabels();
   const deleteMutation = useDeleteContact();
@@ -58,7 +60,16 @@ function ContactsRoute() {
     }
   };
   
-  // Toon laadstatus
+  // Handle back navigation (mainly for mobile)
+  const handleBackToList = () => {
+    navigate({
+      to: Route.fullPath,
+      params: { filterType, filterId },
+      search: {},
+    });
+  };
+  
+  // Show loading status
   if (contactsLoading) {
     return (
       <div className="h-full flex items-center justify-center">
@@ -67,28 +78,23 @@ function ContactsRoute() {
     );
   }
   
-  // If a contactId is provided in search params, show the contact detail view
-  if (contactId) {
+  // On mobile: If a contactId is provided, show only the contact detail view
+  if (isMobile && contactId) {
     const contact = contacts.find(c => c.id === contactId);
     if (contact) {
       return (
-        <ContactDetail 
-          contact={contact} 
-          onDelete={handleDeleteContact}
-          filterType={filterType}
-          filterId={filterId}
-          onBack={() => {
-            // Navigate back to the current filter without the contactId
-            navigate({
-              to: Route.fullPath,
-              params: { filterType, filterId },
-              search: {},
-            });
-          }}
-        />
+        <div className="flex flex-col h-full">
+          <ContactDetail 
+            contact={contact} 
+            onDelete={handleDeleteContact}
+            filterType={filterType}
+            filterId={filterId}
+            onBack={handleBackToList}
+          />
+        </div>
       );
     } else {
-      // Als het contact niet gevonden wordt, navigeer terug naar de lijst
+      // If contact not found, navigate back to the list
       navigate({
         to: Route.fullPath,
         params: { filterType, filterId },
@@ -98,33 +104,75 @@ function ContactsRoute() {
     }
   }
   
-  // Otherwise, show the contacts list view
+  // Desktop/Tablet: Three-column layout (sidebar already handled in _auth.tsx)
   return (
-    <div className="flex h-full flex-col">
-      {filterType === 'label' && (
-        <div className="py-3 px-6 border-b">
-          <h1 className="text-lg font-semibold flex items-center gap-2">
-            {(() => {
-              if (filterType === 'label') {
-                const label = labels.find(l => l.id === filterId);
-                if (label) {
-                  return (
-                    <>
-                      <span 
-                        className="h-3 w-3 rounded-full" 
-                        style={{ backgroundColor: label.color }}
-                      />
-                      {title}
-                    </>
-                  );
-                }
-              }
-              return title;
-            })()}
-          </h1>
+    <div className="flex h-full">
+      {/* Middle column: Contacts list (hidden on mobile when viewing a contact) */}
+      <div className={`
+        ${isMobile && contactId ? 'hidden' : 'block'}
+        w-full md:w-[350px] border-r overflow-auto
+      `}>
+        <div className="flex h-full flex-col">
+          {filterType === 'label' && (
+            <div className="h-12 px-4 flex items-center border-b">
+              <h1 className="text-base font-medium flex items-center gap-2">
+                {(() => {
+                  if (filterType === 'label') {
+                    const label = labels.find(l => l.id === filterId);
+                    if (label) {
+                      return (
+                        <>
+                          <span 
+                            className="h-3 w-3 rounded-full" 
+                            style={{ backgroundColor: label.color }}
+                          />
+                          {title}
+                        </>
+                      );
+                    }
+                  }
+                  return title;
+                })()}
+              </h1>
+            </div>
+          )}
+          <ContactsList filterType={filterType} filterId={filterId} />
         </div>
-      )}
-      <ContactsList filterType={filterType} filterId={filterId} />
+      </div>
+      
+      {/* Right column: Contact details or empty state */}
+      <div className={`
+        ${isMobile && !contactId ? 'hidden' : 'block'}
+        flex-1 overflow-auto
+      `}>
+        {contactId ? (
+          (() => {
+            const contact = contacts.find(c => c.id === contactId);
+            if (contact) {
+              return (
+                <ContactDetail 
+                  contact={contact} 
+                  onDelete={handleDeleteContact}
+                  filterType={filterType}
+                  filterId={filterId}
+                  onBack={isMobile ? handleBackToList : undefined}
+                />
+              );
+            } else {
+              // On desktop, show empty state if contact not found
+              return (
+                <div className="h-full flex items-center justify-center text-muted-foreground">
+                  <p>Contact not found</p>
+                </div>
+              );
+            }
+          })()
+        ) : (
+          <div className="h-full flex items-center justify-center text-muted-foreground">
+            <p>Select a contact to view details</p>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
