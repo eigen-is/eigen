@@ -30,13 +30,13 @@ function AuthLayout() {
     
     return (
         <QueryClientProvider client={queryClient}>
-            <div className="flex flex-1 overflow-hidden">
+            <div className="flex flex-1 w-full h-full overflow-hidden">
                 {/* Sidebar: overlay on mobile, normal display on larger screens */}
                 <div 
                     className={`
                         ${isMobile ? (sidebarOpen ? 'fixed inset-0 z-50 bg-background' : 'hidden') : 'block'}
                         ${isTablet ? 'w-16' : 'w-64'} 
-                        border-r h-full
+                        border-r h-full min-h-full
                     `}
                 >
                     <ContactsSidebar 
@@ -55,7 +55,7 @@ function AuthLayout() {
                 )}
                 
                 {/* Main content area */}
-                <main className="flex-1 overflow-auto">
+                <main className="flex-1 flex flex-col h-full overflow-auto">
                     <Outlet/>
                 </main>
             </div>
