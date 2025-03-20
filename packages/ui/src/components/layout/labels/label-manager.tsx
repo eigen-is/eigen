@@ -1,7 +1,6 @@
 import { useState, useRef, useEffect } from 'react';
 import { PlusIcon, Pencil } from 'lucide-react';
-import { Link } from '@tanstack/react-router';
-import { Button } from "../../../components/button";
+import { Button } from "../../button";
 import { cn } from "../../../lib/utils";
 import { LabelDialog } from './label-dialog';
 import { LabelManagerProps } from './types';

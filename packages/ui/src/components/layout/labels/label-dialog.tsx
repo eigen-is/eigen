@@ -24,7 +24,7 @@ import {
 
 import { Input } from "@workspace/ui/components/input";
 import { Button } from "@workspace/ui/components/button";
-import { DeleteDialog } from "@workspace/ui/components/delete-dialog";
+import { DeleteDialog } from "@workspace/ui/components/layout/delete/delete-dialog";
 import type { Label } from "@apps/api-server/types/label";
 
 // Form schema for label management

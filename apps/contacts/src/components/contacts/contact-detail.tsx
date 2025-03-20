@@ -13,8 +13,8 @@ import {
 } from "@workspace/ui/components/dropdown-menu";
 import { Badge } from "@workspace/ui/components/badge";
 import { Link } from '@tanstack/react-router';
-import { DeleteDialog } from '@workspace/ui/components/delete-dialog';
-import { useLabels } from '../../src/hooks/use-labels';
+import { DeleteDialog } from "@workspace/ui/components/layout/delete/delete-dialog";
+import { useLabels } from '../../hooks/use-labels';
 
 interface ContactDetailProps {
   contact: Contact;
