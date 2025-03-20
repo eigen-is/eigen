@@ -1,5 +1,6 @@
 import React, {createContext, ReactNode, useEffect, useState} from 'react';
 import {authClient} from "./auth-client.ts";
+import { LoadingScreen } from '@workspace/ui/components/layout/loading-screen';
 
 export type AuthContextType = {
     isAuthenticated: boolean;
@@ -64,7 +65,7 @@ export function AuthProvider({children}: { children: ReactNode }): React.ReactEl
         }
     };
 
-    return (
+    return isLoading ? <LoadingScreen /> : (
         <AuthContext.Provider
             value={{
                 isAuthenticated: !!user,
