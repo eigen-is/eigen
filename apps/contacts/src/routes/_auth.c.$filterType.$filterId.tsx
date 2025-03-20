@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { ContactsList } from '../../components/contacts/contacts-list';
-import { ContactDetail } from '../../components/contacts/contact-detail';
+import { ContactsList } from '../components/contacts/contacts-list';
+import { ContactDetail } from '../components/contacts/contact-detail';
 import { useContacts, useDeleteContact } from '../hooks/use-contacts';
 import { useLabels } from '../hooks/use-labels';
 import { useMediaQuery } from '../hooks/use-media-query';

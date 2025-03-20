@@ -5,8 +5,8 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@workspace/ui/components/dialog";
-import { Button } from "@workspace/ui/components/button";
+} from "./../../dialog";
+import { Button } from "./../../button";
 
 export interface DeleteDialogProps {
   open: boolean;
@@ -31,8 +31,8 @@ export function DeleteDialog({
 }: DeleteDialogProps) {
   // Format description with item name if provided
   const formattedDescription = itemName 
-    ? `${description} ${itemName}? <br /> This action cannot be undone.`
-    : `${description}? <br /> This action cannot be undone.`;
+    ? `${description} ${itemName}? This action cannot be undone.`
+    : `${description}? This action cannot be undone.`;
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>

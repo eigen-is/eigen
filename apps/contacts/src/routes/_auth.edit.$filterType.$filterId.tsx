@@ -1,6 +1,6 @@
 import { createFileRoute, redirect, useNavigate } from '@tanstack/react-router';
 import { z } from 'zod';
-import { ContactEdit, ContactFormValues } from '../../components/contacts/contact-edit';
+import { ContactEdit, ContactFormValues } from '../components/contacts/contact-edit';
 import { useContacts, useUpdateContact, useAddContact } from '../hooks/use-contacts';
 import { type Contact } from "@apps/api-server/types/contact";
 

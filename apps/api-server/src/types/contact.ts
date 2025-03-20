@@ -16,6 +16,6 @@ export interface Contact {
     birthday?: string;
     notes?: string;
     avatar?: string;
-    labels: string[];
+    labels?: string[];
     eigenId?: string;
   }
