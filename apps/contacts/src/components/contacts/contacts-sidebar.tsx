@@ -2,10 +2,11 @@ import { UserPlus, Users, Star, Clock, X } from 'lucide-react';
 import { Link } from '@tanstack/react-router';
 import { Button } from "@workspace/ui/components/button";
 import { LabelManager } from '@workspace/ui/components/layout/labels/label-manager';
-import { SidebarItem } from '../../../../packages/ui/src/components/layout/sidebar/sidebar-item';
-import { SidebarSection } from '../../../../packages/ui/src/components/layout/sidebar/sidebar-section';
+import { SidebarItem } from '@workspace/ui/components/layout/sidebar/sidebar-item';
+import { SidebarSection } from '@workspace/ui/components/layout/sidebar/sidebar-section';
+import { Separator } from '@workspace/ui/components/separator';
 import { type Label } from "@apps/api-server/types/label";
-import { useLabels, useAddLabel, useUpdateLabel, useDeleteLabel } from '../../src/hooks/use-labels';
+import { useLabels, useAddLabel, useUpdateLabel, useDeleteLabel } from '../../hooks/use-labels';
 import { AppLogo } from '@workspace/ui/components/layout/app-logo';
 
 interface ContactsSidebarProps {
@@ -108,7 +109,7 @@ export function ContactsSidebar({ condensed = false, onClose, isMobile = false }
         </SidebarSection>
 
         {/* Horizontal separator */}
-        <div className="mx-3 my-2 border-t border-border"></div>
+        <Separator/>
 
         {/* Status messages or labels */}
         {error ? (

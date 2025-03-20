@@ -4,8 +4,8 @@ import { zodResolver } from '@hookform/resolvers/zod';
 import { useState } from 'react';
 import { Button } from "@workspace/ui/components/button";
 import { type Contact } from "@apps/api-server/types/contact";
-import { useLabels } from '../../src/hooks/use-labels';
-import { useAddContact, useUpdateContact } from '../../src/hooks/use-contacts';
+import { useLabels } from '../../hooks/use-labels';
+import { useAddContact, useUpdateContact } from '../../hooks/use-contacts';
 import {
   Form,
   FormControl,

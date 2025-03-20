@@ -4,7 +4,7 @@ import { ArrowUpDown, Search } from 'lucide-react';
 import { Button } from "@workspace/ui/components/button";
 import { Input } from "@workspace/ui/components/input";
 import { type Contact } from "@apps/api-server/types/contact";
-import { useContacts } from '../../src/hooks/use-contacts';
+import { useContacts } from '../../hooks/use-contacts';
 import {
   DropdownMenu,
   DropdownMenuContent,
