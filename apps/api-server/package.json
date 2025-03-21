@@ -4,7 +4,7 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "bun run --watch src/index.ts",
-    "build": "bun build  --target=bun --outfile=build/index.js src/index.ts"
+    "build": "bun build  --target=bun src/index.ts --outfile=build/index.js "
   },
   "dependencies": {
     "@elysiajs/cors": "^1.2.0",
