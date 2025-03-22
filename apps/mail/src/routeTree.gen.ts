@@ -10,155 +10,130 @@
 
 // Import Routes
 
-import {Route as rootRoute} from './routes/__root'
-import {Route as LoginImport} from './routes/login'
-import {Route as AuthImport} from './routes/_auth'
-import {Route as IndexImport} from './routes/index'
-import {Route as AuthInboxIndexImport} from './routes/_auth.inbox.index'
-import {Route as AuthInboxMailIdImport} from './routes/_auth.inbox.$mailId'
+import { Route as rootRoute } from './routes/__root'
+import { Route as LoginImport } from './routes/login'
+import { Route as AuthImport } from './routes/_auth'
+import { Route as IndexImport } from './routes/index'
+import { Route as AuthMFilterTypeFilterIdImport } from './routes/_auth.m.$filterType.$filterId'
 
 // Create/Update Routes
 
 const LoginRoute = LoginImport.update({
-    id: '/login',
-    path: '/login',
-    getParentRoute: () => rootRoute,
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRoute,
 } as any)
 
 const AuthRoute = AuthImport.update({
-    id: '/_auth',
-    getParentRoute: () => rootRoute,
+  id: '/_auth',
+  getParentRoute: () => rootRoute,
 } as any)
 
 const IndexRoute = IndexImport.update({
-    id: '/',
-    path: '/',
-    getParentRoute: () => rootRoute,
+  id: '/',
+  path: '/',
+  getParentRoute: () => rootRoute,
 } as any)
 
-const AuthInboxIndexRoute = AuthInboxIndexImport.update({
-    id: '/inbox/',
-    path: '/inbox/',
-    getParentRoute: () => AuthRoute,
-} as any)
-
-const AuthInboxMailIdRoute = AuthInboxMailIdImport.update({
-    id: '/inbox/$mailId',
-    path: '/inbox/$mailId',
-    getParentRoute: () => AuthRoute,
+const AuthMFilterTypeFilterIdRoute = AuthMFilterTypeFilterIdImport.update({
+  id: '/m/$filterType/$filterId',
+  path: '/m/$filterType/$filterId',
+  getParentRoute: () => AuthRoute,
 } as any)
 
 // Populate the FileRoutesByPath interface
 
 declare module '@tanstack/react-router' {
-    interface FileRoutesByPath {
-        '/': {
-            id: '/'
-            path: '/'
-            fullPath: '/'
-            preLoaderRoute: typeof IndexImport
-            parentRoute: typeof rootRoute
-        }
-        '/_auth': {
-            id: '/_auth'
-            path: ''
-            fullPath: ''
-            preLoaderRoute: typeof AuthImport
-            parentRoute: typeof rootRoute
-        }
-        '/login': {
-            id: '/login'
-            path: '/login'
-            fullPath: '/login'
-            preLoaderRoute: typeof LoginImport
-            parentRoute: typeof rootRoute
-        }
-        '/_auth/inbox/$mailId': {
-            id: '/_auth/inbox/$mailId'
-            path: '/inbox/$mailId'
-            fullPath: '/inbox/$mailId'
-            preLoaderRoute: typeof AuthInboxMailIdImport
-            parentRoute: typeof AuthImport
-        }
-        '/_auth/inbox/': {
-            id: '/_auth/inbox/'
-            path: '/inbox'
-            fullPath: '/inbox'
-            preLoaderRoute: typeof AuthInboxIndexImport
-            parentRoute: typeof AuthImport
-        }
+  interface FileRoutesByPath {
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexImport
+      parentRoute: typeof rootRoute
     }
+    '/_auth': {
+      id: '/_auth'
+      path: ''
+      fullPath: ''
+      preLoaderRoute: typeof AuthImport
+      parentRoute: typeof rootRoute
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginImport
+      parentRoute: typeof rootRoute
+    }
+    '/_auth/m/$filterType/$filterId': {
+      id: '/_auth/m/$filterType/$filterId'
+      path: '/m/$filterType/$filterId'
+      fullPath: '/m/$filterType/$filterId'
+      preLoaderRoute: typeof AuthMFilterTypeFilterIdImport
+      parentRoute: typeof AuthImport
+    }
+  }
 }
 
 // Create and export the route tree
 
 interface AuthRouteChildren {
-    AuthInboxMailIdRoute: typeof AuthInboxMailIdRoute
-    AuthInboxIndexRoute: typeof AuthInboxIndexRoute
+  AuthMFilterTypeFilterIdRoute: typeof AuthMFilterTypeFilterIdRoute
 }
 
 const AuthRouteChildren: AuthRouteChildren = {
-    AuthInboxMailIdRoute: AuthInboxMailIdRoute,
-    AuthInboxIndexRoute: AuthInboxIndexRoute,
+  AuthMFilterTypeFilterIdRoute: AuthMFilterTypeFilterIdRoute,
 }
 
 const AuthRouteWithChildren = AuthRoute._addFileChildren(AuthRouteChildren)
 
 export interface FileRoutesByFullPath {
-    '/': typeof IndexRoute
-    '': typeof AuthRouteWithChildren
-    '/login': typeof LoginRoute
-    '/inbox/$mailId': typeof AuthInboxMailIdRoute
-    '/inbox': typeof AuthInboxIndexRoute
+  '/': typeof IndexRoute
+  '': typeof AuthRouteWithChildren
+  '/login': typeof LoginRoute
+  '/m/$filterType/$filterId': typeof AuthMFilterTypeFilterIdRoute
 }
 
 export interface FileRoutesByTo {
-    '/': typeof IndexRoute
-    '': typeof AuthRouteWithChildren
-    '/login': typeof LoginRoute
-    '/inbox/$mailId': typeof AuthInboxMailIdRoute
-    '/inbox': typeof AuthInboxIndexRoute
+  '/': typeof IndexRoute
+  '': typeof AuthRouteWithChildren
+  '/login': typeof LoginRoute
+  '/m/$filterType/$filterId': typeof AuthMFilterTypeFilterIdRoute
 }
 
 export interface FileRoutesById {
-    __root__: typeof rootRoute
-    '/': typeof IndexRoute
-    '/_auth': typeof AuthRouteWithChildren
-    '/login': typeof LoginRoute
-    '/_auth/inbox/$mailId': typeof AuthInboxMailIdRoute
-    '/_auth/inbox/': typeof AuthInboxIndexRoute
+  __root__: typeof rootRoute
+  '/': typeof IndexRoute
+  '/_auth': typeof AuthRouteWithChildren
+  '/login': typeof LoginRoute
+  '/_auth/m/$filterType/$filterId': typeof AuthMFilterTypeFilterIdRoute
 }
 
 export interface FileRouteTypes {
-    fileRoutesByFullPath: FileRoutesByFullPath
-    fullPaths: '/' | '' | '/login' | '/inbox/$mailId' | '/inbox'
-    fileRoutesByTo: FileRoutesByTo
-    to: '/' | '' | '/login' | '/inbox/$mailId' | '/inbox'
-    id:
-        | '__root__'
-        | '/'
-        | '/_auth'
-        | '/login'
-        | '/_auth/inbox/$mailId'
-        | '/_auth/inbox/'
-    fileRoutesById: FileRoutesById
+  fileRoutesByFullPath: FileRoutesByFullPath
+  fullPaths: '/' | '' | '/login' | '/m/$filterType/$filterId'
+  fileRoutesByTo: FileRoutesByTo
+  to: '/' | '' | '/login' | '/m/$filterType/$filterId'
+  id: '__root__' | '/' | '/_auth' | '/login' | '/_auth/m/$filterType/$filterId'
+  fileRoutesById: FileRoutesById
 }
 
 export interface RootRouteChildren {
-    IndexRoute: typeof IndexRoute
-    AuthRoute: typeof AuthRouteWithChildren
-    LoginRoute: typeof LoginRoute
+  IndexRoute: typeof IndexRoute
+  AuthRoute: typeof AuthRouteWithChildren
+  LoginRoute: typeof LoginRoute
 }
 
 const rootRouteChildren: RootRouteChildren = {
-    IndexRoute: IndexRoute,
-    AuthRoute: AuthRouteWithChildren,
-    LoginRoute: LoginRoute,
+  IndexRoute: IndexRoute,
+  AuthRoute: AuthRouteWithChildren,
+  LoginRoute: LoginRoute,
 }
 
 export const routeTree = rootRoute
-    ._addFileChildren(rootRouteChildren)
-    ._addFileTypes<FileRouteTypes>()
+  ._addFileChildren(rootRouteChildren)
+  ._addFileTypes<FileRouteTypes>()
 
 /* ROUTE_MANIFEST_START
 {
@@ -177,19 +152,14 @@ export const routeTree = rootRoute
     "/_auth": {
       "filePath": "_auth.tsx",
       "children": [
-        "/_auth/inbox/$mailId",
-        "/_auth/inbox/"
+        "/_auth/m/$filterType/$filterId"
       ]
     },
     "/login": {
       "filePath": "login.tsx"
     },
-    "/_auth/inbox/$mailId": {
-      "filePath": "_auth.inbox.$mailId.tsx",
-      "parent": "/_auth"
-    },
-    "/_auth/inbox/": {
-      "filePath": "_auth.inbox.index.tsx",
+    "/_auth/m/$filterType/$filterId": {
+      "filePath": "_auth.m.$filterType.$filterId.tsx",
       "parent": "/_auth"
     }
   }
