@@ -1,8 +1,8 @@
 import ReactDOM from 'react-dom/client';
-import {createRouter, RouterProvider} from '@tanstack/react-router';
+import {createRouter} from '@tanstack/react-router';
 import {routeTree} from './routeTree.gen';
 import '@workspace/ui/globals.css';
-import {AuthProvider, useAuth} from "@workspace/lib/auth/auth-context.tsx";
+import {HomeComponent} from "@/routes";
 
 // Set up a Router instance
 const router = createRouter({
@@ -22,16 +22,9 @@ declare module '@tanstack/react-router' {
     }
 }
 
-function InnerApp() {
-    const auth = useAuth()
-    return <RouterProvider router={router} context={{auth}}/>
-}
-
 function App() {
     return (
-        <AuthProvider>
-            <InnerApp/>
-        </AuthProvider>
+        <HomeComponent/>
     )
 }
 
@@ -49,12 +42,3 @@ if (!rootElement.innerHTML) {
     const root = ReactDOM.createRoot(rootElement);
     root.render(<App/>);
 }
-
-// const session = await authClient.getSession();
-//
-// if (session) {
-//     api.index.get().then(console.log);
-//     api.mail.mailboxes.get().then(console.log);
-//     // @ts-ignore
-//     api.mail.mailbox['[Eigen]/Spam'].get();
-// }
