@@ -5,7 +5,7 @@
   "private": true,
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "dev": "bunx --bun vite --mode development",
+    "dev": "bunx --bun vite",
     "build": "bunx --bun vite build --mode production",
     "start": "vite"
   },
