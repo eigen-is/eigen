@@ -1,8 +1,7 @@
-import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { ContactEdit } from '../components/contacts/contact-edit';
-import { type Contact } from "@apps/api-server/types/contact";
-import { useAddContact } from '../hooks/use-contacts';
-import { type ContactFormValues } from '../components/contacts/contact-edit';
+import {createFileRoute, useNavigate} from '@tanstack/react-router';
+import {ContactEdit, type ContactFormValues} from '../components/contacts/contact-edit';
+import {type Contact} from "@apps/api-server/types/contact";
+import {useAddContact} from '../hooks/use-contacts';
 
 export const Route = createFileRoute('/_auth/new')({
   component: NewContactRoute,
@@ -31,9 +30,9 @@ function NewContactRoute() {
       
       // Navigate back to the contacts list after saving
       navigate({
-        to: '/c/$filterType/$filterId',
+        to: '/$filterType/$filterId',
         params: {
-          filterType: 'filter',
+          filterType: 'book',
           filterId: 'all'
         }
       });
@@ -46,9 +45,9 @@ function NewContactRoute() {
   // Cancel button navigates back to contacts list
   const handleCancel = () => {
     navigate({
-      to: '/c/$filterType/$filterId',
+      to: '/$filterType/$filterId',
       params: {
-        filterType: 'filter',
+        filterType: 'book',
         filterId: 'all'
       }
     });
@@ -59,7 +58,7 @@ function NewContactRoute() {
       contact={emptyContact}
       onSave={handleSave}
       onCancel={handleCancel}
-      filterType="filter"
+      filterType="book"
       filterId="all"
     />
   );

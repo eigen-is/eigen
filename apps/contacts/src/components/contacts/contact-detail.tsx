@@ -1,20 +1,18 @@
-import { useState } from 'react';
-import { 
-  Mail, Phone, Building, MapPin, Calendar, Edit, Trash, MoreVertical, ArrowLeft
-} from 'lucide-react';
-import { type Contact } from "@apps/api-server/types/contact";
-import { Button } from "@workspace/ui/components/button";
+import {useState} from 'react';
+import {ArrowLeft, Building, Calendar, Edit, Mail, MapPin, MoreVertical, Phone, Trash} from 'lucide-react';
+import {type Contact} from "@apps/api-server/types/contact";
+import {Button} from "@workspace/ui/components/button";
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuTrigger,
   DropdownMenuSeparator,
+  DropdownMenuTrigger,
 } from "@workspace/ui/components/dropdown-menu";
-import { Badge } from "@workspace/ui/components/badge";
-import { Link } from '@tanstack/react-router';
-import { DeleteDialog } from "@workspace/ui/components/layout/delete/delete-dialog";
-import { useLabels } from '../../hooks/use-labels';
+import {Badge} from "@workspace/ui/components/badge";
+import {Link} from '@tanstack/react-router';
+import {DeleteDialog} from "@workspace/ui/components/layout/delete/delete-dialog";
+import {useLabels} from '../../hooks/use-labels';
 
 interface ContactDetailProps {
   contact: Contact;

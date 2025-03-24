@@ -1,8 +1,8 @@
 /// <reference types="node" />
 
 import StreamModule = require("stream");
-import { DecoderStream } from "iconv-lite";
 import Stream = StreamModule.Stream;
+import {DecoderStream} from "iconv-lite";
 
 /**
  * Structured object for headers with arguments.

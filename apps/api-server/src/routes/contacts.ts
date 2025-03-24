@@ -1,7 +1,17 @@
 // user middleware (compute user and session and pass to routes)
 import {Elysia} from "elysia";
 import {betterAuth} from "./auth";
-import {getContacts, getContactById, addContact, updateContact, deleteContact, getContactLabels, addContactLabel, updateContactLabel, deleteContactLabel} from "../lib/contacts/contacts";
+import {
+    addContact,
+    addContactLabel,
+    deleteContact,
+    deleteContactLabel,
+    getContactById,
+    getContactLabels,
+    getContacts,
+    updateContact,
+    updateContactLabel
+} from "../lib/contacts/contacts";
 import {type Contact} from "../types/contact";
 import {type Label} from "../types/label";
 import {type User} from "better-auth";

@@ -3,7 +3,7 @@ import {BunSQLiteDatabase, drizzle} from 'drizzle-orm/bun-sqlite';
 import {and, eq, like, sql} from 'drizzle-orm';
 import Database from "bun:sqlite";
 import type {User} from "better-auth/types";
-import {fsGetDatabase, fsGetFileName} from "../fs/fs";
+import {fsGetDatabase} from "../fs/fs";
 
 // Import schema definitions
 import * as schema from './schema';

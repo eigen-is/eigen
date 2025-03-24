@@ -1,13 +1,13 @@
-import {Archive, File, Inbox, MailPlus, Send, Star, Trash2, AlertOctagon, X} from "lucide-react";
+import {AlertOctagon, Archive, File, Inbox, MailPlus, Send, Star, Trash2, X} from "lucide-react";
 
 import {Button} from "@workspace/ui/components/button";
-import { useState, useContext } from "react";
-import { LabelManager } from "../../../../../packages/ui/src/components/layout/labels";
-import { SidebarContext } from "../../routes/__root";
-import { AppLogo } from '@workspace/ui/components/layout/app-logo';
-import { SidebarItem } from '@workspace/ui/components/layout/sidebar/sidebar-item';
-import { SidebarSection } from '@workspace/ui/components/layout/sidebar/sidebar-section';
-import { Separator } from '@workspace/ui/components/separator';
+import {useContext, useState} from "react";
+import {LabelManager} from "../../../../../packages/ui/src/components/layout/labels";
+import {SidebarContext} from "../../routes/__root";
+import {AppLogo} from '@workspace/ui/components/layout/app-logo';
+import {SidebarItem} from '@workspace/ui/components/layout/sidebar/sidebar-item';
+import {SidebarSection} from '@workspace/ui/components/layout/sidebar/sidebar-section';
+import {Separator} from '@workspace/ui/components/separator';
 
 
 // Menu items for the sidebar
@@ -15,37 +15,37 @@ const sidebarItems = [
     {
         title: "Inbox",
         icon: Inbox,
-        href: "/m/filter/inbox",
+        href: "/box/inbox",
     },
     {
         title: "Starred",
         icon: Star,
-        href: "/m/filter/starred",
+        href: "/box/starred",
     },
     {
         title: "Sent",
         icon: Send,
-        href: "/m/filter/sent",
+        href: "/box/sent",
     },
     {
         title: "Drafts",
         icon: File,
-        href: "/m/filter/drafts",
+        href: "/box/drafts",
     },
     {
         title: "Archive",
         icon: Archive,
-        href: "/m/filter/archive",
+        href: "/box/archive",
     },
     {
         title: "Spam",
         icon: AlertOctagon,
-        href: "/m/filter/spam",
+        href: "/box/spam",
     },
     {
         title: "Trash",
         icon: Trash2,
-        href: "/m/filter/trash",
+        href: "/box/trash",
     },
 ]
 
@@ -110,7 +110,7 @@ export function AppSidebar({ condensed = false, onClose, isMobile = false }: App
     };
 
     // Generate path for a label in the mail app
-    const getLabelPath = (label: MailLabel) => `/m/label/${label.name.toLowerCase()}`;
+    const getLabelPath = (label: MailLabel) => `/label/${label.name.toLowerCase()}`;
 
     return (
         <div className="h-full flex flex-col bg-background">

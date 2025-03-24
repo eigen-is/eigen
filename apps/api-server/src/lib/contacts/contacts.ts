@@ -1,12 +1,12 @@
-import type { User } from "better-auth";
+import type {User} from "better-auth";
 import type Database from "bun:sqlite";
-import { fsGetDatabase } from "../fs/fs";
-import type { Contact } from "../../types/contact";
-import type { Label } from "../../types/label";
-import { drizzle } from "drizzle-orm/bun-sqlite";
-import { eq, sql } from "drizzle-orm";
+import {fsGetDatabase} from "../fs/fs";
+import type {Contact} from "../../types/contact";
+import type {Label} from "../../types/label";
+import {drizzle} from "drizzle-orm/bun-sqlite";
+import {eq, sql} from "drizzle-orm";
 import * as schema from "./schema";
-import { v4 as uuidv4 } from "uuid";
+import {v4 as uuidv4} from "uuid";
 
 async function getContactsDatabase(user: User) {
     const db = await fsGetDatabase(user, 'contacts.eigen/contacts.db', true, async (db: Database) => {

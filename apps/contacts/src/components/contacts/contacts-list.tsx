@@ -1,10 +1,10 @@
-import { useState } from 'react';
-import { Link } from '@tanstack/react-router';
-import { ArrowUpDown, Search } from 'lucide-react';
-import { Button } from "@workspace/ui/components/button";
-import { Input } from "@workspace/ui/components/input";
-import { type Contact } from "@apps/api-server/types/contact";
-import { useContacts } from '../../hooks/use-contacts';
+import {useState} from 'react';
+import {Link} from '@tanstack/react-router';
+import {ArrowUpDown, Search} from 'lucide-react';
+import {Button} from "@workspace/ui/components/button";
+import {Input} from "@workspace/ui/components/input";
+import {type Contact} from "@apps/api-server/types/contact";
+import {useContacts} from '../../hooks/use-contacts';
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -158,7 +158,7 @@ export function ContactsList({ filterType = 'filter', filterId = 'all' }: Contac
                   {contacts.map((contact) => (
                     <Link
                       key={contact.id}
-                      to="/c/$filterType/$filterId"
+                      to="/$filterType/$filterId"
                       params={{ filterType, filterId }}
                       search={{ contactId: contact.id }}
                       className="flex items-center gap-3 px-6 py-3 hover:bg-muted transition-colors"
