@@ -1,5 +1,5 @@
-import { useState } from "react";
-import {UserIcon, Menu, LayoutDashboard, Mail, Calendar, Users, HardDrive, FileText} from "lucide-react";
+import {useState} from "react";
+import {Calendar, FileText, HardDrive, LayoutDashboard, Mail, Menu, UserIcon, Users} from "lucide-react";
 import {useRouter} from "@tanstack/react-router";
 import {
     DropdownMenu,
@@ -12,15 +12,8 @@ import {
 import {Button} from "../button";
 import {AppLogo} from "./app-logo";
 import {useAuth} from "@workspace/lib/auth/auth-context.tsx";
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-} from "../dialog";
-import { apps } from "@workspace/lib/apps.ts";
+import {Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,} from "../dialog";
+import {apps} from "@workspace/lib/apps.ts";
 
 // Meer generieke definitie voor de Route parameter
 type NavigateFunction = (...args: any[]) => any;
@@ -83,7 +76,7 @@ function UserDropdown({ rootRoute, appName }: { rootRoute: TopbarProps['rootRout
                 <DropdownMenuContent className="w-56" align="end" forceMount>
                     <DropdownMenuLabel className="font-normal">
                         <div className="flex flex-col space-y-1">
-                            <p className="text-sm font-medium leading-none">User</p>
+                            <p className="text-sm font-medium leading-none">{auth.user.name}</p>
                             <p className="text-xs leading-none text-muted-foreground">
                                 {auth.user.email}
                             </p>

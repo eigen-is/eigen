@@ -1,4 +1,5 @@
-import { Email } from "@workspace/lib/types/mail";
+// @ts-ignore
+import {Email} from "@workspace/lib/types/mail";
 
 export const mockEmails: Email[] = [
     {

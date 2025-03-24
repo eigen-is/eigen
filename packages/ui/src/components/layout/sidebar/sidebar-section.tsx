@@ -1,5 +1,5 @@
-import { ReactNode } from 'react';
-import { cn } from "../../../lib/utils";
+import {ReactNode} from 'react';
+import {cn} from "../../../lib/utils";
 
 export interface SidebarSectionProps {
   title?: string;

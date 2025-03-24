@@ -15,8 +15,8 @@ import { Route as LoginImport } from './routes/login'
 import { Route as AuthImport } from './routes/_auth'
 import { Route as IndexImport } from './routes/index'
 import { Route as AuthNewImport } from './routes/_auth.new'
+import { Route as AuthFilterTypeFilterIdImport } from './routes/_auth.$filterType.$filterId'
 import { Route as AuthEditFilterTypeFilterIdImport } from './routes/_auth.edit.$filterType.$filterId'
-import { Route as AuthCFilterTypeFilterIdImport } from './routes/_auth.c.$filterType.$filterId'
 
 // Create/Update Routes
 
@@ -43,6 +43,12 @@ const AuthNewRoute = AuthNewImport.update({
   getParentRoute: () => AuthRoute,
 } as any)
 
+const AuthFilterTypeFilterIdRoute = AuthFilterTypeFilterIdImport.update({
+  id: '/$filterType/$filterId',
+  path: '/$filterType/$filterId',
+  getParentRoute: () => AuthRoute,
+} as any)
+
 const AuthEditFilterTypeFilterIdRoute = AuthEditFilterTypeFilterIdImport.update(
   {
     id: '/edit/$filterType/$filterId',
@@ -50,12 +56,6 @@ const AuthEditFilterTypeFilterIdRoute = AuthEditFilterTypeFilterIdImport.update(
     getParentRoute: () => AuthRoute,
   } as any,
 )
-
-const AuthCFilterTypeFilterIdRoute = AuthCFilterTypeFilterIdImport.update({
-  id: '/c/$filterType/$filterId',
-  path: '/c/$filterType/$filterId',
-  getParentRoute: () => AuthRoute,
-} as any)
 
 // Populate the FileRoutesByPath interface
 
@@ -89,11 +89,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthNewImport
       parentRoute: typeof AuthImport
     }
-    '/_auth/c/$filterType/$filterId': {
-      id: '/_auth/c/$filterType/$filterId'
-      path: '/c/$filterType/$filterId'
-      fullPath: '/c/$filterType/$filterId'
-      preLoaderRoute: typeof AuthCFilterTypeFilterIdImport
+    '/_auth/$filterType/$filterId': {
+      id: '/_auth/$filterType/$filterId'
+      path: '/$filterType/$filterId'
+      fullPath: '/$filterType/$filterId'
+      preLoaderRoute: typeof AuthFilterTypeFilterIdImport
       parentRoute: typeof AuthImport
     }
     '/_auth/edit/$filterType/$filterId': {
@@ -110,13 +110,13 @@ declare module '@tanstack/react-router' {
 
 interface AuthRouteChildren {
   AuthNewRoute: typeof AuthNewRoute
-  AuthCFilterTypeFilterIdRoute: typeof AuthCFilterTypeFilterIdRoute
+  AuthFilterTypeFilterIdRoute: typeof AuthFilterTypeFilterIdRoute
   AuthEditFilterTypeFilterIdRoute: typeof AuthEditFilterTypeFilterIdRoute
 }
 
 const AuthRouteChildren: AuthRouteChildren = {
   AuthNewRoute: AuthNewRoute,
-  AuthCFilterTypeFilterIdRoute: AuthCFilterTypeFilterIdRoute,
+  AuthFilterTypeFilterIdRoute: AuthFilterTypeFilterIdRoute,
   AuthEditFilterTypeFilterIdRoute: AuthEditFilterTypeFilterIdRoute,
 }
 
@@ -127,7 +127,7 @@ export interface FileRoutesByFullPath {
   '': typeof AuthRouteWithChildren
   '/login': typeof LoginRoute
   '/new': typeof AuthNewRoute
-  '/c/$filterType/$filterId': typeof AuthCFilterTypeFilterIdRoute
+  '/$filterType/$filterId': typeof AuthFilterTypeFilterIdRoute
   '/edit/$filterType/$filterId': typeof AuthEditFilterTypeFilterIdRoute
 }
 
@@ -136,7 +136,7 @@ export interface FileRoutesByTo {
   '': typeof AuthRouteWithChildren
   '/login': typeof LoginRoute
   '/new': typeof AuthNewRoute
-  '/c/$filterType/$filterId': typeof AuthCFilterTypeFilterIdRoute
+  '/$filterType/$filterId': typeof AuthFilterTypeFilterIdRoute
   '/edit/$filterType/$filterId': typeof AuthEditFilterTypeFilterIdRoute
 }
 
@@ -146,7 +146,7 @@ export interface FileRoutesById {
   '/_auth': typeof AuthRouteWithChildren
   '/login': typeof LoginRoute
   '/_auth/new': typeof AuthNewRoute
-  '/_auth/c/$filterType/$filterId': typeof AuthCFilterTypeFilterIdRoute
+  '/_auth/$filterType/$filterId': typeof AuthFilterTypeFilterIdRoute
   '/_auth/edit/$filterType/$filterId': typeof AuthEditFilterTypeFilterIdRoute
 }
 
@@ -157,7 +157,7 @@ export interface FileRouteTypes {
     | ''
     | '/login'
     | '/new'
-    | '/c/$filterType/$filterId'
+    | '/$filterType/$filterId'
     | '/edit/$filterType/$filterId'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -165,7 +165,7 @@ export interface FileRouteTypes {
     | ''
     | '/login'
     | '/new'
-    | '/c/$filterType/$filterId'
+    | '/$filterType/$filterId'
     | '/edit/$filterType/$filterId'
   id:
     | '__root__'
@@ -173,7 +173,7 @@ export interface FileRouteTypes {
     | '/_auth'
     | '/login'
     | '/_auth/new'
-    | '/_auth/c/$filterType/$filterId'
+    | '/_auth/$filterType/$filterId'
     | '/_auth/edit/$filterType/$filterId'
   fileRoutesById: FileRoutesById
 }
@@ -212,7 +212,7 @@ export const routeTree = rootRoute
       "filePath": "_auth.tsx",
       "children": [
         "/_auth/new",
-        "/_auth/c/$filterType/$filterId",
+        "/_auth/$filterType/$filterId",
         "/_auth/edit/$filterType/$filterId"
       ]
     },
@@ -223,8 +223,8 @@ export const routeTree = rootRoute
       "filePath": "_auth.new.tsx",
       "parent": "/_auth"
     },
-    "/_auth/c/$filterType/$filterId": {
-      "filePath": "_auth.c.$filterType.$filterId.tsx",
+    "/_auth/$filterType/$filterId": {
+      "filePath": "_auth.$filterType.$filterId.tsx",
       "parent": "/_auth"
     },
     "/_auth/edit/$filterType/$filterId": {

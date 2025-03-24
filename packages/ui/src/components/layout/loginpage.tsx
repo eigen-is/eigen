@@ -1,26 +1,13 @@
-import { useAuth } from "@workspace/lib/auth/auth-context.tsx";
-import { useRouter } from "@tanstack/react-router";
-import { useState } from "react";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useForm } from "react-hook-form";
-import { z } from "zod";
-import { Input } from "../input.tsx";
-import { Button } from "../button.tsx";
-import {
-    Card,
-    CardContent,
-    CardDescription,
-    CardHeader,
-    CardTitle,
-} from "../card.tsx";
-import {
-    Form,
-    FormControl,
-    FormField,
-    FormItem,
-    FormLabel,
-    FormMessage,
-} from "../form.tsx";
+import {useAuth} from "@workspace/lib/auth/auth-context.tsx";
+import {useRouter} from "@tanstack/react-router";
+import {useState} from "react";
+import {zodResolver} from "@hookform/resolvers/zod";
+import {useForm} from "react-hook-form";
+import {z} from "zod";
+import {Input} from "../input.tsx";
+import {Button} from "../button.tsx";
+import {Card, CardContent, CardDescription, CardHeader, CardTitle,} from "../card.tsx";
+import {Form, FormControl, FormField, FormItem, FormLabel, FormMessage,} from "../form.tsx";
 
 // Define the login form schema with Zod
 const loginFormSchema = z.object({

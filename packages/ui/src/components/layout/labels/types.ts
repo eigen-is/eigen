@@ -1,4 +1,4 @@
-import type { Label } from "@apps/api-server/types/label";
+import type {Label} from "@apps/api-server/types/label";
 
 /**
  * Props for the LabelManager component

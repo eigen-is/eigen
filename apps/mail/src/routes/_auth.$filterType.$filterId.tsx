@@ -1,10 +1,10 @@
-import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { EmailDataTable } from "../components/mail/inbox/email-data-table.tsx";
-import { emailColumns } from "../components/mail/inbox/email-columns.tsx";
-import { mockEmails, getEmailById } from "../lib/mock-data.ts";
-import { EmailDetail } from "../components/mail/email-detail.tsx";
-import { useMediaQuery } from "../hooks/use-media-query";
-import { useEffect, useState } from "react";
+import {createFileRoute, useNavigate} from '@tanstack/react-router';
+import {EmailDataTable} from "../components/mail/inbox/email-data-table.tsx";
+import {emailColumns} from "../components/mail/inbox/email-columns.tsx";
+import {getEmailById, mockEmails} from "../lib/mock-data.ts";
+import {EmailDetail} from "../components/mail/email-detail.tsx";
+import {useMediaQuery} from "../hooks/use-media-query";
+import {useEffect, useState} from "react";
 
 // Define the Email interface locally to avoid import issues
 interface Email {
@@ -28,7 +28,7 @@ export interface MailSearchParams {
   mailId?: string;
 }
 
-export const Route = createFileRoute('/_auth/m/$filterType/$filterId')({
+export const Route = createFileRoute('/_auth/$filterType/$filterId')({
   component: MailRoute,
   validateSearch: (search: Record<string, unknown>) => {
     const mailId = typeof search.mailId === 'string' ? search.mailId : undefined;
@@ -80,7 +80,7 @@ function MailRoute() {
     filteredEmails = mockEmails.filter(email => 
       email.labels?.some((label: string) => label.toLowerCase() === filterId.toLowerCase())
     );
-  } else if (filterType === 'filter') {
+  } else if (filterType === 'box') {
     // Handle predefined filters
     if (filterId === 'starred') {
       filteredEmails = mockEmails.filter(email => email.starred);

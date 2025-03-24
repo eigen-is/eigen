@@ -8,13 +8,13 @@ import {
     SortingState,
     useReactTable,
 } from "@tanstack/react-table";
-import { rankItem } from "@tanstack/match-sorter-utils";
-import { Paperclip, Search } from "lucide-react";
-import { useNavigate } from "@tanstack/react-router";
-import { useState } from "react";
-import { Email } from "@workspace/lib/types/mail";
-import { cn } from "@workspace/ui/lib/utils";
-import { Input } from "@workspace/ui/components/input";
+import {rankItem} from "@tanstack/match-sorter-utils";
+import {Paperclip, Search} from "lucide-react";
+import {useNavigate} from "@tanstack/react-router";
+import {useState} from "react";
+import {Email} from "@workspace/lib/types/mail";
+import {cn} from "@workspace/ui/lib/utils";
+import {Input} from "@workspace/ui/components/input";
 
 // Define a fuzzy filter function
 const fuzzyFilter: FilterFn<any> = (row, columnId, value, addMeta) => {
