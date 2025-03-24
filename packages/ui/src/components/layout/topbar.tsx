@@ -1,5 +1,5 @@
 import { useState } from "react";
-import {UserIcon, Menu} from "lucide-react";
+import {UserIcon, Menu, LayoutDashboard, Mail, Calendar, Users, HardDrive, FileText} from "lucide-react";
 import {useRouter} from "@tanstack/react-router";
 import {
     DropdownMenu,
@@ -20,6 +20,7 @@ import {
     DialogHeader,
     DialogTitle,
 } from "../dialog";
+import { apps } from "@workspace/lib/apps.ts";
 
 // Meer generieke definitie voor de Route parameter
 type NavigateFunction = (...args: any[]) => any;
@@ -88,6 +89,20 @@ function UserDropdown({ rootRoute }: { rootRoute: TopbarProps['rootRoute'] }) {
                             </p>
                         </div>
                     </DropdownMenuLabel>
+                    <DropdownMenuSeparator/>
+                    {apps.map(app => (
+                        <DropdownMenuItem key={app.name}>
+                            <a href={app.href} className="flex items-center w-full gap-2">
+                                {app.icon === 'layout-dashboard' && <LayoutDashboard className={`h-4 w-4 ${app.className}`} />}
+                                {app.icon === 'mail' && <Mail className={`h-4 w-4 ${app.className}`} />}
+                                {app.icon === 'calendar' && <Calendar className={`h-4 w-4 ${app.className}`} />}
+                                {app.icon === 'users' && <Users className={`h-4 w-4 ${app.className}`} />}
+                                {app.icon === 'hard-drive' && <HardDrive className={`h-4 w-4 ${app.className}`} />}
+                                {app.icon === 'file-text' && <FileText className={`h-4 w-4 ${app.className}`} />}
+                                <span className={app.className}>{app.name}</span>
+                            </a>
+                        </DropdownMenuItem>
+                    ))}
                     <DropdownMenuSeparator/>
                     <DropdownMenuItem>
                         Profile

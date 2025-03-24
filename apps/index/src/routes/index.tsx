@@ -1,45 +1,13 @@
 import {createFileRoute} from '@tanstack/react-router'
 import React from 'react';
 import {Button} from "@workspace/ui/components/button";
+import {apps} from "@workspace/lib/apps.ts";
 
 export const Route = createFileRoute('/')({
     component: HomeComponent,
 })
 
-export function HomeComponent() {
-    const apps = [
-        {
-            name: 'Mail',
-            className: 'text-red-600',
-            href: '/mail',
-        },
-        {
-            name: 'Calendar',
-            className: 'text-blue-600',
-            href: '/calendar',
-        },
-        {
-            name: 'Contacts',
-            className: 'text-green-600',
-            href: '/contacts',
-        },
-        {
-            name: 'Drive',
-            className: 'text-yellow-600',
-            href: '/drive',
-        },
-        {
-            name: 'Docs',
-            className: 'text-purple-600',
-            href: '/docs',
-        },
-        {
-            name: 'Space',
-            className: 'text-teal-600',
-            href: '/space',
-        },
-    ];
-    
+export function HomeComponent() {    
     const [appIndex, setAppIndex] = React.useState(0);
     const [showMore, setShowMore] = React.useState(false);
     const app = apps[appIndex];
