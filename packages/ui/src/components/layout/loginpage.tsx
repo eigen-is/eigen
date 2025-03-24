@@ -98,7 +98,7 @@ export function LoginPage({ appName = 'mail' }: { appName?: string }) {
                                     <FormItem>
                                         <FormLabel>Email</FormLabel>
                                         <FormControl>
-                                            <Input placeholder="your@email.com" {...field} />
+                                            <Input placeholder="your@eigen.is" autoFocus {...field} />
                                         </FormControl>
                                         <FormMessage />
                                     </FormItem>
