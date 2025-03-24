@@ -5,8 +5,8 @@
   "private": true,
   "scripts": {
     "typecheck": "tsc --noEmit",
-    "dev": "bunx --bun vite",
-    "build": "bunx --bun vite build",
+    "dev": "bunx --bun vite --mode development",
+    "build": "bunx --bun vite build --mode production",
     "start": "vite"
   },
   "dependencies": {
