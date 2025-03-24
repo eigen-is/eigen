@@ -7,7 +7,6 @@
     "typecheck": "tsc --noEmit",
     "dev": "bunx --bun vite",
     "build": "bunx --bun vite build",
-    "serve": "bunx --bun vite preview --port 3003",
     "start": "vite"
   },
   "dependencies": {
