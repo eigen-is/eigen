@@ -51,5 +51,3 @@ if (!rootElement.innerHTML) {
     const root = ReactDOM.createRoot(rootElement);
     root.render(<App/>);
 }
-
-
