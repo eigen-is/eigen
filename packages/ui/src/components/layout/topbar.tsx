@@ -35,7 +35,7 @@ interface TopbarProps {
     isMobile?: boolean;
 }
 
-function UserDropdown({ rootRoute }: { rootRoute: TopbarProps['rootRoute'] }) {
+function UserDropdown({ rootRoute, appName }: { rootRoute: TopbarProps['rootRoute'], appName: string }) {
     const router = useRouter();
     const navigate = rootRoute.useNavigate();
     const auth = useAuth();
@@ -90,19 +90,22 @@ function UserDropdown({ rootRoute }: { rootRoute: TopbarProps['rootRoute'] }) {
                         </div>
                     </DropdownMenuLabel>
                     <DropdownMenuSeparator/>
-                    {apps.map(app => (
-                        <DropdownMenuItem key={app.name}>
-                            <a href={app.href} className="flex items-center w-full gap-2">
-                                {app.icon === 'layout-dashboard' && <LayoutDashboard className={`h-4 w-4 ${app.className}`} />}
-                                {app.icon === 'mail' && <Mail className={`h-4 w-4 ${app.className}`} />}
-                                {app.icon === 'calendar' && <Calendar className={`h-4 w-4 ${app.className}`} />}
-                                {app.icon === 'users' && <Users className={`h-4 w-4 ${app.className}`} />}
-                                {app.icon === 'hard-drive' && <HardDrive className={`h-4 w-4 ${app.className}`} />}
-                                {app.icon === 'file-text' && <FileText className={`h-4 w-4 ${app.className}`} />}
-                                <span className={app.className}>{app.name}</span>
+                    {apps.map(app => {
+                        const isActive = app.name.toLowerCase() === appName.toLowerCase();
+                        return (
+                        <DropdownMenuItem key={app.name} className={isActive ? "bg-muted" : ""}>
+                            <a href={app.href} className={`flex items-center w-full gap-2 ${isActive ? "font-medium" : ""}`}>
+                                {app.icon === 'layout-dashboard' && <LayoutDashboard className="h-4 w-4" />}
+                                {app.icon === 'mail' && <Mail className="h-4 w-4" />}
+                                {app.icon === 'calendar' && <Calendar className="h-4 w-4" />}
+                                {app.icon === 'users' && <Users className="h-4 w-4" />}
+                                {app.icon === 'hard-drive' && <HardDrive className="h-4 w-4" />}
+                                {app.icon === 'file-text' && <FileText className="h-4 w-4" />}
+                                <span className={isActive ? "text-foreground font-medium" : "text-muted-foreground"}>{app.name}</span>
                             </a>
                         </DropdownMenuItem>
-                    ))}
+                        );
+                    })}
                     <DropdownMenuSeparator/>
                     <DropdownMenuItem>
                         Profile
@@ -137,7 +140,7 @@ export function Topbar({ appName, rootRoute, showMobileMenu, onMobileMenuClick, 
                 )}
                 <AppLogo appName={appName.toLowerCase()}/>
                 <div className="ml-auto flex items-center space-x-4">
-                    <UserDropdown rootRoute={rootRoute} />
+                    <UserDropdown rootRoute={rootRoute} appName={appName} />
                 </div>
             </div>
         </header>

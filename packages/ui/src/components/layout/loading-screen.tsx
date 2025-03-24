@@ -9,14 +9,14 @@ type LoadingScreenProps = {
 const animationStyles = {
   moveLeftChevron: `
     @keyframes moveLeftChevron {
-      0%, 100% { transform: translateX(0); }
-      50% { transform: translateX(-10px); }
+      0%, 100% { transform: translateX(-12px); }
+      50% { transform: translateX(-20px); }
     }
   `,
   moveRightChevron: `
     @keyframes moveRightChevron {
-      0%, 100% { transform: translateX(0); }
-      50% { transform: translateX(10px); }
+      0%, 100% { transform: translateX(12px); }
+      50% { transform: translateX(20px); }
     }
   `
 };
