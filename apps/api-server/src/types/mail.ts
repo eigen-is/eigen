@@ -1,3 +1,4 @@
+export * from '../lib/mail/mail-parser';
 
 export interface Email {
     id: string;
