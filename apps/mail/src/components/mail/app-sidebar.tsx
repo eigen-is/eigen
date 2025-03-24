@@ -1,4 +1,4 @@
-import {AlertCircle, Archive, File, Inbox, MailPlus, Send, Star, X} from "lucide-react";
+import {Archive, File, Inbox, MailPlus, Send, Star, Trash2, AlertOctagon, X} from "lucide-react";
 
 import {Button} from "@workspace/ui/components/button";
 import { useState, useContext } from "react";
@@ -39,12 +39,12 @@ const sidebarItems = [
     },
     {
         title: "Spam",
-        icon: AlertCircle,
+        icon: AlertOctagon,
         href: "/m/filter/spam",
     },
     {
         title: "Trash",
-        icon: AlertCircle,
+        icon: Trash2,
         href: "/m/filter/trash",
     },
 ]

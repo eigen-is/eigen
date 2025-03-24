@@ -7,6 +7,7 @@ import viteTsConfigPaths from 'vite-tsconfig-paths'
 // https://vitejs.dev/config/
 export default defineConfig({
     base: '/mail',
+    envDir: './../../',
     server: {
         port: 3001,
     },
