@@ -1,7 +1,8 @@
 import {createAuthClient} from "better-auth/client";
 
 export const authClient = createAuthClient({
-    baseURL: `https://eigen.is:8000`, // the base url of your auth server
+    // baseURL: `https://eigen.is:8000`, // the base url of your auth server
+    baseURL: import.meta.env.NODE_ENV === 'developtment' ? 'http://localhost:8000' : 'https://eigen.is:8000', // the base url of your auth server
     session: {
         cookieCache: {
             enabled: true,
