@@ -10,11 +10,11 @@
 
 // Import Routes
 
-import { Route as rootRoute } from './routes/__root'
-import { Route as LoginImport } from './routes/login'
-import { Route as AuthImport } from './routes/_auth'
-import { Route as IndexImport } from './routes/index'
-import { Route as AuthMFilterTypeFilterIdImport } from './routes/_auth.m.$filterType.$filterId'
+import {Route as rootRoute} from './routes/__root'
+import {Route as LoginImport} from './routes/login'
+import {Route as AuthImport} from './routes/_auth'
+import {Route as IndexImport} from './routes/index'
+import {Route as AuthFilterTypeFilterIdImport} from './routes/_auth.$filterType.$filterId'
 
 // Create/Update Routes
 
@@ -35,9 +35,9 @@ const IndexRoute = IndexImport.update({
   getParentRoute: () => rootRoute,
 } as any)
 
-const AuthMFilterTypeFilterIdRoute = AuthMFilterTypeFilterIdImport.update({
-  id: '/m/$filterType/$filterId',
-  path: '/m/$filterType/$filterId',
+const AuthFilterTypeFilterIdRoute = AuthFilterTypeFilterIdImport.update({
+  id: '/$filterType/$filterId',
+  path: '/$filterType/$filterId',
   getParentRoute: () => AuthRoute,
 } as any)
 
@@ -66,11 +66,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginImport
       parentRoute: typeof rootRoute
     }
-    '/_auth/m/$filterType/$filterId': {
-      id: '/_auth/m/$filterType/$filterId'
-      path: '/m/$filterType/$filterId'
-      fullPath: '/m/$filterType/$filterId'
-      preLoaderRoute: typeof AuthMFilterTypeFilterIdImport
+    '/_auth/$filterType/$filterId': {
+      id: '/_auth/$filterType/$filterId'
+      path: '/$filterType/$filterId'
+      fullPath: '/$filterType/$filterId'
+      preLoaderRoute: typeof AuthFilterTypeFilterIdImport
       parentRoute: typeof AuthImport
     }
   }
@@ -79,11 +79,11 @@ declare module '@tanstack/react-router' {
 // Create and export the route tree
 
 interface AuthRouteChildren {
-  AuthMFilterTypeFilterIdRoute: typeof AuthMFilterTypeFilterIdRoute
+  AuthFilterTypeFilterIdRoute: typeof AuthFilterTypeFilterIdRoute
 }
 
 const AuthRouteChildren: AuthRouteChildren = {
-  AuthMFilterTypeFilterIdRoute: AuthMFilterTypeFilterIdRoute,
+  AuthFilterTypeFilterIdRoute: AuthFilterTypeFilterIdRoute,
 }
 
 const AuthRouteWithChildren = AuthRoute._addFileChildren(AuthRouteChildren)
@@ -92,14 +92,14 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '': typeof AuthRouteWithChildren
   '/login': typeof LoginRoute
-  '/m/$filterType/$filterId': typeof AuthMFilterTypeFilterIdRoute
+  '/$filterType/$filterId': typeof AuthFilterTypeFilterIdRoute
 }
 
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '': typeof AuthRouteWithChildren
   '/login': typeof LoginRoute
-  '/m/$filterType/$filterId': typeof AuthMFilterTypeFilterIdRoute
+  '/$filterType/$filterId': typeof AuthFilterTypeFilterIdRoute
 }
 
 export interface FileRoutesById {
@@ -107,15 +107,15 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_auth': typeof AuthRouteWithChildren
   '/login': typeof LoginRoute
-  '/_auth/m/$filterType/$filterId': typeof AuthMFilterTypeFilterIdRoute
+  '/_auth/$filterType/$filterId': typeof AuthFilterTypeFilterIdRoute
 }
 
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '' | '/login' | '/m/$filterType/$filterId'
+  fullPaths: '/' | '' | '/login' | '/$filterType/$filterId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '' | '/login' | '/m/$filterType/$filterId'
-  id: '__root__' | '/' | '/_auth' | '/login' | '/_auth/m/$filterType/$filterId'
+  to: '/' | '' | '/login' | '/$filterType/$filterId'
+  id: '__root__' | '/' | '/_auth' | '/login' | '/_auth/$filterType/$filterId'
   fileRoutesById: FileRoutesById
 }
 
@@ -152,14 +152,14 @@ export const routeTree = rootRoute
     "/_auth": {
       "filePath": "_auth.tsx",
       "children": [
-        "/_auth/m/$filterType/$filterId"
+        "/_auth/$filterType/$filterId"
       ]
     },
     "/login": {
       "filePath": "login.tsx"
     },
-    "/_auth/m/$filterType/$filterId": {
-      "filePath": "_auth.m.$filterType.$filterId.tsx",
+    "/_auth/$filterType/$filterId": {
+      "filePath": "_auth.$filterType.$filterId.tsx",
       "parent": "/_auth"
     }
   }

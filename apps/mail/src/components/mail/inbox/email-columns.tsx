@@ -1,7 +1,7 @@
-import { ColumnDef, FilterFnOption } from "@tanstack/react-table"
-import { Paperclip } from "lucide-react"
-import { Email } from "@workspace/lib/types/mail";
-import { cn } from "@workspace/ui/lib/utils";
+import {ColumnDef, FilterFnOption} from "@tanstack/react-table"
+import {Paperclip} from "lucide-react"
+import {Email} from "@workspace/lib/types/mail";
+import {cn} from "@workspace/ui/lib/utils";
 
 // Simplified columns based on Apple Mail inspiration
 export const emailColumns: ColumnDef<Email>[] = [

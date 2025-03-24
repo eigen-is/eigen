@@ -1,10 +1,10 @@
 import {createFileRoute, Outlet, redirect} from '@tanstack/react-router'
 import {AppSidebar} from "../components/mail/app-sidebar.tsx";
-import { useContext } from 'react';
-import { SidebarContext } from './__root';
-import { useMediaQuery } from '../hooks/use-media-query';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { ReactQueryDevtools } from '@tanstack/react-query-devtools';
+import {useContext} from 'react';
+import {SidebarContext} from './__root';
+import {useMediaQuery} from '../hooks/use-media-query';
+import {QueryClient, QueryClientProvider} from '@tanstack/react-query';
+import {ReactQueryDevtools} from '@tanstack/react-query-devtools';
 
 // Create a QueryClient instance
 const queryClient = new QueryClient();

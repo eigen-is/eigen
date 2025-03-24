@@ -1,7 +1,7 @@
-import { Search } from 'lucide-react';
-import { Input } from "@workspace/ui/components/input";
-import { cn } from "@workspace/ui/lib/utils";
-import { ChangeEvent } from 'react';
+import {Search} from 'lucide-react';
+import {Input} from "@workspace/ui/components/input";
+import {cn} from "@workspace/ui/lib/utils";
+import {ChangeEvent} from 'react';
 
 export interface SearchBarProps {
   placeholder?: string;

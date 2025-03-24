@@ -1,31 +1,24 @@
-import { useState, useEffect } from 'react';
-import { Trash2 } from 'lucide-react';
-import { z } from 'zod';
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
+import {useEffect, useState} from 'react';
+import {Trash2} from 'lucide-react';
+import {z} from 'zod';
+import {useForm} from 'react-hook-form';
+import {zodResolver} from '@hookform/resolvers/zod';
 
 import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle,
 } from "@workspace/ui/components/dialog";
 
-import {
-  Form,
-  FormControl,
-  FormField,
-  FormItem,
-  FormLabel,
-  FormMessage,
-} from "@workspace/ui/components/form";
+import {Form, FormControl, FormField, FormItem, FormLabel, FormMessage,} from "@workspace/ui/components/form";
 
-import { Input } from "@workspace/ui/components/input";
-import { Button } from "@workspace/ui/components/button";
-import { DeleteDialog } from "@workspace/ui/components/layout/delete/delete-dialog";
-import type { Label } from "@apps/api-server/types/label";
+import {Input} from "@workspace/ui/components/input";
+import {Button} from "@workspace/ui/components/button";
+import {DeleteDialog} from "@workspace/ui/components/layout/delete/delete-dialog";
+import type {Label} from "@apps/api-server/types/label";
 
 // Form schema for label management
 const labelFormSchema = z.object({

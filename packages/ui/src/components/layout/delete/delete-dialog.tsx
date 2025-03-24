@@ -1,12 +1,5 @@
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "./../../dialog";
-import { Button } from "./../../button";
+import {Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,} from "./../../dialog";
+import {Button} from "./../../button";
 
 export interface DeleteDialogProps {
   open: boolean;

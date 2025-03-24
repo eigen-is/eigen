@@ -7,9 +7,9 @@ export const Route = createFileRoute('/')({
 function HomeComponent() {
     const navigate = Route.useNavigate();
     navigate({
-        to: '/c/$filterType/$filterId',
+        to: '/$filterType/$filterId',
         params: {
-            filterType: 'filter',
+            filterType: 'book',
             filterId: 'all'
         }
     });

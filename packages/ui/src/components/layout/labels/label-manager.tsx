@@ -1,11 +1,11 @@
-import { useState, useRef, useEffect } from 'react';
-import { PlusIcon, Pencil } from 'lucide-react';
-import { Button } from "../../button";
-import { cn } from "../../../lib/utils";
-import { LabelDialog } from './label-dialog';
-import { LabelManagerProps } from './types';
-import { SidebarItem } from '../sidebar';
-import type { Label } from "@apps/api-server/types/label";
+import {useEffect, useRef, useState} from 'react';
+import {Pencil, PlusIcon} from 'lucide-react';
+import {Button} from "../../button";
+import {cn} from "../../../lib/utils";
+import {LabelDialog} from './label-dialog';
+import {LabelManagerProps} from './types';
+import {SidebarItem} from '../sidebar';
+import type {Label} from "@apps/api-server/types/label";
 
 export function LabelManager({
   labels,

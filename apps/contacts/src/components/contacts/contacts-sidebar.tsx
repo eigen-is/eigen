@@ -1,13 +1,13 @@
-import { UserPlus, Users, Star, Clock, X } from 'lucide-react';
-import { Link } from '@tanstack/react-router';
-import { Button } from "@workspace/ui/components/button";
-import { LabelManager } from '@workspace/ui/components/layout/labels/label-manager';
-import { SidebarItem } from '@workspace/ui/components/layout/sidebar/sidebar-item';
-import { SidebarSection } from '@workspace/ui/components/layout/sidebar/sidebar-section';
-import { Separator } from '@workspace/ui/components/separator';
-import { type Label } from "@apps/api-server/types/label";
-import { useLabels, useAddLabel, useUpdateLabel, useDeleteLabel } from '../../hooks/use-labels';
-import { AppLogo } from '@workspace/ui/components/layout/app-logo';
+import {Clock, Star, UserPlus, Users, X} from 'lucide-react';
+import {Link} from '@tanstack/react-router';
+import {Button} from "@workspace/ui/components/button";
+import {LabelManager} from '@workspace/ui/components/layout/labels/label-manager';
+import {SidebarItem} from '@workspace/ui/components/layout/sidebar/sidebar-item';
+import {SidebarSection} from '@workspace/ui/components/layout/sidebar/sidebar-section';
+import {Separator} from '@workspace/ui/components/separator';
+import {type Label} from "@apps/api-server/types/label";
+import {useAddLabel, useDeleteLabel, useLabels, useUpdateLabel} from '../../hooks/use-labels';
+import {AppLogo} from '@workspace/ui/components/layout/app-logo';
 
 interface ContactsSidebarProps {
   condensed?: boolean;
@@ -57,7 +57,7 @@ export function ContactsSidebar({ condensed = false, onClose, isMobile = false }
   };
 
   // Generate path for a label
-  const getLabelPath = (label: Label) => `/c/label/${label.id.toLowerCase()}`;
+  const getLabelPath = (label: Label) => `/label/${label.id.toLowerCase()}`;
 
   return (
     <div className="h-full flex flex-col bg-background">
@@ -86,24 +86,24 @@ export function ContactsSidebar({ condensed = false, onClose, isMobile = false }
           <SidebarItem 
             icon={<Users className="h-4 w-4" />}
             label="All contacts"
-            to="/c/$filterType/$filterId"
-            params={{ filterType: 'filter', filterId: 'all' }}
+            to="/$filterType/$filterId"
+            params={{ filterType: 'book', filterId: 'all' }}
             condensed={condensed}
           />
           
           <SidebarItem 
             icon={<Star className="h-4 w-4" />}
             label="Frequent"
-            to="/c/$filterType/$filterId"
-            params={{ filterType: 'filter', filterId: 'frequent' }}
+            to="/$filterType/$filterId"
+            params={{ filterType: 'book', filterId: 'frequent' }}
             condensed={condensed}
           />
           
           <SidebarItem 
             icon={<Clock className="h-4 w-4" />}
             label="Recent"
-            to="/c/$filterType/$filterId"
-            params={{ filterType: 'filter', filterId: 'recent' }}
+            to="/$filterType/$filterId"
+            params={{ filterType: 'book', filterId: 'recent' }}
             condensed={condensed}
           />
         </SidebarSection>

@@ -1,16 +1,7 @@
-import { 
-  Forward, 
-  Reply, 
-  ReplyAll,
-  Paperclip, 
-  Trash2, 
-  Archive, 
-  MoreHorizontal,
-  ArrowLeft
-} from "lucide-react";
-import { cn } from "@workspace/ui/lib/utils";
-import { Button } from "@workspace/ui/components/button";
-import { 
+import {Archive, ArrowLeft, Forward, MoreHorizontal, Paperclip, Reply, ReplyAll, Trash2} from "lucide-react";
+import {cn} from "@workspace/ui/lib/utils";
+import {Button} from "@workspace/ui/components/button";
+import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
