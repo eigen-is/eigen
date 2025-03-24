@@ -1,4 +1,4 @@
-import {Elysia} from "elysia";
+import Elysia from "elysia";
 import swagger from "@elysiajs/swagger";
 import cors from "@elysiajs/cors";
 import {betterAuth} from "./routes/auth";
@@ -18,8 +18,15 @@ const app = new Elysia()
     .get("/", () => "eigen|api>")
     .get("/health", () => "OK")
     .use(mailRouter)
-    .use(contactsRouter)    
-    .listen(8000);
+    .use(contactsRouter)
+    .listen({
+        port: 8000,
+        tls: {
+            key: Bun.file("/etc/letsencrypt/live/eigen.is/privkey.pem"),
+            cert: Bun.file("/etc/letsencrypt/live/eigen.is/fullchain.pem"),
+        },
+        hostname: "::",
+    });
 
 export type app = typeof app;
 

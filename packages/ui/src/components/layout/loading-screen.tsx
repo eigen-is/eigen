@@ -18,13 +18,6 @@ const animationStyles = {
       0%, 100% { transform: translateX(0); }
       50% { transform: translateX(10px); }
     }
-  `,
-  moveLine: `
-    @keyframes moveLine {
-      0% { transform: translateX(-15px); width: 20px; }
-      50% { transform: translateX(15px); width: 20px; }
-      100% { transform: translateX(-15px); width: 20px; }
-    }
   `
 };
 
@@ -48,7 +41,6 @@ export function LoadingScreen({ className }: LoadingScreenProps) {
       <style>
         {animationStyles.moveLeftChevron}
         {animationStyles.moveRightChevron}
-        {animationStyles.moveLine}
       </style>
       
       <div className={cn(
@@ -74,15 +66,6 @@ export function LoadingScreen({ className }: LoadingScreenProps) {
           >
             <path d="m9 7-5 5 5 5" />
           </svg>
-
-          {/* Moving Line */}
-          <div
-            className="h-1 bg-black absolute"
-            style={{
-              width: '20px',
-              animation: animationStarted ? 'moveLine 1.5s infinite ease-in-out' : 'none'
-            }}
-          />
 
           {/* Right Chevron */}
           <svg 

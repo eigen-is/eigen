@@ -14,6 +14,10 @@ export const trustedOrigins = [
 
 export const auth = betterAuth({
     database: drizzleAdapter( drizzle('./data/users3.db'), {
+        appName: "eigen",
+        baseURL: "https://eigen.is",
+        basePath: "/api/auth",
+        secret: "+/SmL4b3+bxwJgsJU7yT1Sbfm9YR/0GZhVGRaBm838c=",
         provider: "sqlite", // or "pg" or "mysql"
         schema: {
             user,

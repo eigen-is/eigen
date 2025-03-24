@@ -2,7 +2,7 @@ import {Context, Elysia} from "elysia";
 import {auth} from "../lib/auth/auth";
 
 export const betterAuthView = (context: Context) => {
-    const BETTER_AUTH_ACCEPT_METHODS = ["POST", "GET"]
+    const BETTER_AUTH_ACCEPT_METHODS = ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
     // validate request method
     if (BETTER_AUTH_ACCEPT_METHODS.includes(context.request.method)) {
         return auth.handler(context.request);
