@@ -537,10 +537,7 @@ export default class Maildir {
 
             // time to parse the message
             const start = Date.now();
-            const parsedMail = await simpleParser(fileContent, {
-                skipTextToHtml: true,
-                skipTextLinks: true,
-            });
+            const parsedMail = await simpleParser(fileContent, {});
             const end = Date.now();
             console.log(`Parsed message ${fileName} in ${end - start}ms`);
 

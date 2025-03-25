@@ -1,14 +1,197 @@
 // user middleware (compute user and session and pass to routes)
-import {Elysia} from "elysia";
+import {Elysia, t} from "elysia";
 import {betterAuth} from "./auth";
-import {mailboxesList, getMailbox} from "../lib/mail/mail";
+import {
+    mailboxesList, 
+    mailboxGet, 
+    mailboxCreate, 
+    mailboxExists, 
+    mailboxRename, 
+    mailboxDelete, 
+    mailboxSubscribe, 
+    mailboxUnsubscribe,
+    mailboxDeliver,
+    messageGet,
+    messageDelete,
+    messageFlag,
+    messageMove,
+    messageCopy,
+    messageCreateDraft,
+    messageUpdateDraft,
+    messageSetRead,
+    messageGetAttachment
+} from "../lib/mail/mail";
+import {type User} from "better-auth/types";
+
+// Define types for request bodies
+type CreateMailboxBody = {
+    mailbox: string;
+    attributes?: string[];
+}
+
+type RenameMailboxBody = {
+    oldName: string;
+    newName: string;
+}
+
+type DeliverMessageBody = {
+    message: string;
+}
+
+type MessageFlagBody = {
+    messageId: string;
+    flag: string;
+    value: boolean;
+}
+
+type MessageMoveBody = {
+    messageId: string;
+    targetMailbox: string;
+}
+
+type MessageReadBody = {
+    messageId: string;
+    read: boolean;
+}
+
+type MessageDraftBody = {
+    mail: any; // Using any for now, could be replaced with a proper Email type
+}
 
 export const mailRouter = new Elysia({name: "mail"})
     .use(betterAuth)
-    .get("/mail/mailboxes", async ({user}) => await mailboxesList(user), {
+    // Mailbox routes
+    .get("/mail/mailboxes", async ({user}: {user: User}) => {
+        return await mailboxesList(user);
+    }, {
         auth: true
     })
-    .get("/mail/mailbox/*", async ({params, user}) => await getMailbox(user, params['*']), {
+    .get("/mail/mailbox/*", async ({params, user}: {params: {'*': string}, user: User}) => {
+        return await mailboxGet(user, params['*']);
+    }, {
         auth: true,
+    })
+    .post("/mail/mailbox", async ({body, user}: {body: CreateMailboxBody, user: User}) => {
+        return await mailboxCreate(user, body['mailbox'], body['attributes']);
+    }, {
+        auth: true,
+        body: t.Object({
+            mailbox: t.String(),
+            attributes: t.Optional(t.Array(t.String()))
+        })
+    })
+    .get("/mail/mailbox-exists/*", async ({params, user}: {params: {'*': string}, user: User}) => {
+        return await mailboxExists(user, params['*']);
+    }, {
+        auth: true
+    })
+    .put("/mail/mailbox", async ({body, user}: {body: RenameMailboxBody, user: User}) => {
+        return await mailboxRename(user, body['oldName'], body['newName']);
+    }, {
+        auth: true,
+        body: t.Object({
+            oldName: t.String(),
+            newName: t.String()
+        })
+    })
+    .delete("/mail/mailbox/*", async ({params, user}: {params: {'*': string}, user: User}) => {
+        return await mailboxDelete(user, params['*']);
+    }, {
+        auth: true
+    })
+    .post("/mail/mailbox/subscribe/*", async ({params, user}: {params: {'*': string}, user: User}) => {
+        return await mailboxSubscribe(user, params['*']);
+    }, {
+        auth: true
+    })
+    .post("/mail/mailbox/unsubscribe/*", async ({params, user}: {params: {'*': string}, user: User}) => {
+        return await mailboxUnsubscribe(user, params['*']);
+    }, {
+        auth: true
+    })
+    .post("/mail/deliver", async ({body, user}: {body: DeliverMessageBody, user: User}) => {
+        return await mailboxDeliver(user, body['message']);
+    }, {
+        auth: true,
+        body: t.Object({
+            message: t.String()
+        })
+    })
+    
+    // Message routes
+    .get("/mail/message/:id", async ({params, user}: {params: {id: string}, user: User}) => {
+        return await messageGet(user, params['id']);
+    }, {
+        auth: true,
+        params: t.Object({
+            id: t.String()
+        })
+    })
+    .delete("/mail/message/:id", async ({params, user}: {params: {id: string}, user: User}) => {
+        return await messageDelete(user, params['id']);
+    }, {
+        auth: true,
+        params: t.Object({
+            id: t.String()
+        })
+    })
+    .put("/mail/message/flag", async ({body, user}: {body: MessageFlagBody, user: User}) => {
+        return await messageFlag(user, body['messageId'], body['flag'], body['value']);
+    }, {
+        auth: true,
+        body: t.Object({
+            messageId: t.String(),
+            flag: t.String(),
+            value: t.Boolean()
+        })
+    })
+    .put("/mail/message/move", async ({body, user}: {body: MessageMoveBody, user: User}) => {
+        return await messageMove(user, body['messageId'], body['targetMailbox']);
+    }, {
+        auth: true,
+        body: t.Object({
+            messageId: t.String(),
+            targetMailbox: t.String()
+        })
+    })
+    .post("/mail/message/copy", async ({body, user}: {body: MessageMoveBody, user: User}) => {
+        return await messageCopy(user, body['messageId'], body['targetMailbox']);
+    }, {
+        auth: true,
+        body: t.Object({
+            messageId: t.String(),
+            targetMailbox: t.String()
+        })
+    })
+    .post("/mail/message/draft", async ({user}: {user: User}) => {
+        return await messageCreateDraft(user);
+    }, {
+        auth: true
+    })
+    .put("/mail/message/draft", async ({body, user}: {body: MessageDraftBody, user: User}) => {
+        return await messageUpdateDraft(user, body['mail']);
+    }, {
+        auth: true,
+        body: t.Object({
+            mail: t.Any()
+        })
+    })
+    .put("/mail/message/read", async ({body, user}: {body: MessageReadBody, user: User}) => {
+        return await messageSetRead(user, body['messageId'], body['read']);
+    }, {
+        auth: true,
+        body: t.Object({
+            messageId: t.String(),
+            read: t.Boolean()
+        })
+    })
+    .get("/mail/message/:id/attachment/:index", async ({params, user}: {params: {id: string, index: string}, user: User}) => {
+        return await messageGetAttachment(user, params['id'], parseInt(params['index']));
+    }, {
+        auth: true,
+        params: t.Object({
+            id: t.String(),
+            index: t.String()
+        })
     })
 ;
