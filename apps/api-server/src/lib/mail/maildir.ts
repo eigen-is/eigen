@@ -42,11 +42,16 @@ export default class Maildir {
     private async createMailboxes() {
         // create Maildir - TODO: set correct attributes
         await fs.mkdir(this.basePath, { recursive: true });
-        await this.mailboxCreate(``);
-        // create .Sent, .Trash, .Drafts
-        await this.mailboxCreate(`Sent`);
-        await this.mailboxCreate(`Trash`);
-        await this.mailboxCreate(`Drafts`);
+        
+        // Create INBOX (root mailbox)
+        await this.mailboxCreate(``, ['\\HasNoChildren', '\\Inbox']);
+        
+        // Create special mailboxes with standard IMAP attributes
+        await this.mailboxCreate(`Sent`, ['\\HasNoChildren', '\\Sent']);
+        await this.mailboxCreate(`Drafts`, ['\\HasNoChildren', '\\Drafts']);
+        await this.mailboxCreate(`Archive`, ['\\HasNoChildren', '\\Archive']);
+        await this.mailboxCreate(`Spam`, ['\\HasNoChildren', '\\Junk']);
+        await this.mailboxCreate(`Trash`, ['\\HasNoChildren', '\\Trash']);
     }
 
     /**
@@ -60,6 +65,13 @@ export default class Maildir {
             // Get the root directory (INBOX)
             const rootMailbox = await this.getMailboxInfo('');
             if (rootMailbox) {
+                // Make sure the root mailbox is properly identified as INBOX
+                rootMailbox.name = 'INBOX';
+                rootMailbox.path = '';
+                // Ensure INBOX has the proper flag
+                if (!rootMailbox.flags.includes('\\Inbox')) {
+                    rootMailbox.flags.push('\\Inbox');
+                }
                 mailboxes.push(rootMailbox);
             }
             
@@ -145,41 +157,57 @@ export default class Maildir {
                 return null;
             }
             
-            // Count messages in cur and new directories
-            const newPath = path.join(mailboxPath, 'new');
+            // Check for cur and new directories
             const curPath = path.join(mailboxPath, 'cur');
+            const newPath = path.join(mailboxPath, 'new');
             
-            let totalMessages = 0;
-            let unreadMessages = 0;
-            
-            // Count unread messages (in new directory)
-            try {
-                await fs.access(newPath, fs.constants.F_OK);
-                const newFiles = await fs.readdir(newPath);
-                unreadMessages = newFiles.length;
-                totalMessages += unreadMessages;
-            } catch (error) {
-                // New directory doesn't exist
-            }
-            
-            // Count read messages (in cur directory)
             try {
                 await fs.access(curPath, fs.constants.F_OK);
-                const curFiles = await fs.readdir(curPath);
-                totalMessages += curFiles.length;
+                await fs.access(newPath, fs.constants.F_OK);
             } catch (error) {
-                // Cur directory doesn't exist
+                // Not a valid Maildir structure
+                return null;
             }
             
-            return {
-                name: mailboxName || 'INBOX',
-                path: mailboxName || 'INBOX',
+            // Count messages in cur directory
+            let curFiles: string[] = [];
+            try {
+                curFiles = await fs.readdir(curPath);
+            } catch (error) {
+                // Ignore errors
+            }
+            
+            // Count messages in new directory (unread)
+            let newFiles: string[] = [];
+            try {
+                newFiles = await fs.readdir(newPath);
+            } catch (error) {
+                // Ignore errors
+            }
+            
+            // Get mailbox attributes
+            const attributes = await this.getMailboxAttributes(mailboxName);
+            
+            // For the root mailbox (INBOX), ensure it has the \Inbox flag
+            if (!mailboxName && !attributes.includes('\\Inbox')) {
+                attributes.push('\\Inbox');
+            }
+            
+            // Determine if this mailbox is subscribed
+            const isSubscribed = this.subscriptions.has(mailboxName);
+            
+            // Create the mailbox object
+            const mailbox: MaildirMailbox = {
+                path: mailboxName,
+                name: mailboxName ? mailboxName.split('.').pop() || mailboxName : 'INBOX',
                 delimiter: '.',
-                total: totalMessages,
-                unread: unreadMessages,
-                subscribed: this.subscriptions.has(mailboxName || 'INBOX'),
-                flags: []
+                flags: attributes, // Use the attributes as flags
+                total: curFiles.length + newFiles.length,
+                unread: newFiles.length,
+                subscribed: isSubscribed
             };
+            
+            return mailbox;
         } catch (error) {
             console.error(`Error getting mailbox info for ${mailboxName}:`, error);
             return null;
@@ -203,16 +231,26 @@ export default class Maildir {
     /**
      * Creates a new mailbox
      * @param mailbox Mailbox name
-     * @param attributes Optional mailbox attributes
+     * @param attributes Optional IMAP attributes for the mailbox
      * @returns True if successful
      */
-    public async mailboxCreate(mailbox: string, attributes: string[] = []) {       
+    public async mailboxCreate(mailbox: string, attributes: string[] = []): Promise<boolean> {
         try {
-            // create directory and new, cur and tmp subdirectories
-            await fs.mkdir(await this.sanitizeDirName(mailbox), {recursive: true});
-            await fs.mkdir(await this.sanitizeDirName(mailbox, 'new'), {recursive: true});
-            await fs.mkdir(await this.sanitizeDirName(mailbox, 'cur'), {recursive: true});
-            await fs.mkdir(await this.sanitizeDirName(mailbox, 'tmp'), {recursive: true});
+            // Check if mailbox already exists
+            const exists = await this.mailboxExists(mailbox);
+            if (exists) {
+                console.error(`Cannot create: mailbox ${mailbox} already exists`);
+                return false;
+            }
+            
+            // Create the mailbox directory structure
+            const mailboxPath = await this.sanitizeDirName(mailbox);
+            await fs.mkdir(mailboxPath, { recursive: true });
+            
+            // Create the cur, new, and tmp subdirectories
+            await fs.mkdir(path.join(mailboxPath, 'cur'), { recursive: true });
+            await fs.mkdir(path.join(mailboxPath, 'new'), { recursive: true });
+            await fs.mkdir(path.join(mailboxPath, 'tmp'), { recursive: true });
             
             // Store attributes if provided
             if (attributes.length > 0) {
@@ -250,48 +288,36 @@ export default class Maildir {
      */
     public async mailboxRename(oldName: string, newName: string): Promise<boolean> {
         try {
-            // Sanitize both names
-            const oldPath = await this.sanitizeDirName(oldName);
-            const newPath = await this.sanitizeDirName(newName);
-            
-            // Check if old mailbox exists
-            try {
-                await fs.access(oldPath, fs.constants.F_OK);
-            } catch (error) {
+            // Check if source mailbox exists
+            const oldMailbox = await this.mailboxExists(oldName);
+            if (!oldMailbox) {
                 console.error(`Cannot rename: mailbox ${oldName} does not exist`);
                 return false;
             }
             
-            // Check if new mailbox already exists
-            try {
-                await fs.access(newPath, fs.constants.F_OK);
+            // Check if target mailbox already exists
+            const newMailbox = await this.mailboxExists(newName);
+            if (newMailbox) {
                 console.error(`Cannot rename: mailbox ${newName} already exists`);
                 return false;
-            } catch (error) {
-                // New mailbox doesn't exist
+            }
+            
+            // Check if this is a special mailbox that shouldn't be renamed
+            const attributes = await this.getMailboxAttributes(oldName);
+            const specialAttributes = ['\\Inbox', '\\Sent', '\\Drafts', '\\Trash', '\\Junk', '\\Archive'];
+            if (attributes.some(attr => specialAttributes.includes(attr))) {
+                console.error(`Cannot rename: ${oldName} is a special mailbox that cannot be renamed`);
+                return false;
             }
             
             // Rename the mailbox
+            const oldPath = await this.sanitizeDirName(oldName);
+            const newPath = await this.sanitizeDirName(newName);
             await fs.rename(oldPath, newPath);
-            
-            // Handle nested mailboxes (e.g., if renaming "prive" to "personal", also rename "prive.family" to "personal.family")
-            const allMailboxes = await this.mailboxesList();
-            const childMailboxes = allMailboxes.filter(mb => mb.path.startsWith(`${oldName}.`));
-            
-            for (const childMailbox of childMailboxes) {
-                const childNewName = childMailbox.path.replace(new RegExp(`^${oldName}\\.`), `${newName}.`);
-                await this.mailboxRename(childMailbox.path, childNewName);
-            }
-            
-            // Update subscriptions if needed
-            if (this.subscriptions.has(oldName)) {
-                this.subscriptions.delete(oldName);
-                this.subscriptions.add(newName);
-            }
             
             return true;
         } catch (error) {
-            console.error(`Error renaming mailbox from ${oldName} to ${newName}:`, error);
+            console.error(`Error renaming mailbox ${oldName} to ${newName}:`, error);
             return false;
         }
     }
@@ -303,38 +329,24 @@ export default class Maildir {
      */
     public async mailboxDelete(mailbox: string): Promise<boolean> {
         try {
-            // Don't allow deleting the root mailbox
-            if (!mailbox) {
-                console.error('Cannot delete the root mailbox');
-                return false;
-            }
-            
-            const mailboxPath = await this.sanitizeDirName(mailbox);
-            
             // Check if mailbox exists
-            try {
-                await fs.access(mailboxPath, fs.constants.F_OK);
-            } catch (error) {
+            const mailboxInfo = await this.mailboxExists(mailbox);
+            if (!mailboxInfo) {
                 console.error(`Cannot delete: mailbox ${mailbox} does not exist`);
                 return false;
             }
             
-            // Check for child mailboxes
-            const allMailboxes = await this.mailboxesList();
-            const childMailboxes = allMailboxes.filter(mb => mb.path.startsWith(`${mailbox}.`));
-            
-            // Delete child mailboxes first
-            for (const childMailbox of childMailboxes) {
-                await this.mailboxDelete(childMailbox.path);
+            // Check if this is a special mailbox that shouldn't be deleted
+            const attributes = await this.getMailboxAttributes(mailbox);
+            const specialAttributes = ['\\Inbox', '\\Sent', '\\Drafts', '\\Trash', '\\Junk', '\\Archive'];
+            if (attributes.some(attr => specialAttributes.includes(attr))) {
+                console.error(`Cannot delete: ${mailbox} is a special mailbox that cannot be deleted`);
+                return false;
             }
             
-            // Delete the mailbox
-            await fs.rm(mailboxPath, { recursive: true });
-            
-            // Remove from subscriptions if needed
-            if (this.subscriptions.has(mailbox)) {
-                this.subscriptions.delete(mailbox);
-            }
+            // Delete the mailbox directory
+            const mailboxPath = await this.sanitizeDirName(mailbox);
+            await fs.rm(mailboxPath, { recursive: true, force: true });
             
             return true;
         } catch (error) {
@@ -795,10 +807,17 @@ export default class Maildir {
      */
     public async messageCreateDraft(): Promise<Email> {
         try {
+            // Check if Drafts mailbox exists
+            const draftsMailbox = await this.mailboxExists('Drafts');
+            if (!draftsMailbox) {
+                // Create Drafts mailbox if it doesn't exist
+                await this.mailboxCreate('Drafts', ['\\HasNoChildren', '\\Drafts']);
+            }
+
             // Create a unique message ID
             const messageId = `${Date.now()}.${uuidv4()}`;
             const draftPath = await this.sanitizeDirName('Drafts', 'cur');
-            const filename = `${messageId}:2,D`;
+            const filename = `${messageId}:2,D`; // D flag for draft
             const filePath = path.join(draftPath, filename);
             
             // Create an empty message template with all required properties
@@ -817,7 +836,7 @@ export default class Maildir {
                 messageId: `<${messageId}@eigen.local>`,
                 inReplyTo: null,
                 isRead: true,
-                flags: ['\\Draft'],
+                flags: ['\\Draft', '\\Seen'], // Standard IMAP flags for drafts
                 _path: draftPath,
                 _filename: filename
             });
@@ -863,6 +882,17 @@ export default class Maildir {
             
             try {
                 await fs.access(filePath, fs.constants.F_OK);
+                
+                // Make sure the draft has the correct flags
+                if (!mail.flags.includes('\\Seen')) {
+                    mail.flags.push('\\Seen'); // Drafts should be marked as seen
+                }
+                
+                // Ensure the Draft flag is present
+                if (!mail.flags.includes('\\Draft')) {
+                    mail.flags.push('\\Draft');
+                }
+                
                 // Construct email content
                 const content = createELMContent(mail);
 
@@ -918,4 +948,26 @@ export default class Maildir {
         }
     }
 
+    /**
+     * Get mailbox attributes
+     * @param mailbox Mailbox name
+     * @returns Array of IMAP attributes
+     */
+    private async getMailboxAttributes(mailbox: string): Promise<string[]> {
+        try {
+            const attributesPath = await this.sanitizeDirName(mailbox, '.attributes');
+            
+            try {
+                await fs.access(attributesPath, fs.constants.F_OK);
+                const content = await Bun.file(attributesPath).text();
+                return JSON.parse(content);
+            } catch (error) {
+                // No attributes file exists
+                return [];
+            }
+        } catch (error) {
+            console.error(`Error getting attributes for mailbox ${mailbox}:`, error);
+            return [];
+        }
+    }
 }
