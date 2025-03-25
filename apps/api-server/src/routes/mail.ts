@@ -1,11 +1,11 @@
 // user middleware (compute user and session and pass to routes)
 import {Elysia} from "elysia";
 import {betterAuth} from "./auth";
-import {getMailbox, getMailboxes} from "../lib/mail/mail";
+import {mailboxesList, getMailbox} from "../lib/mail/mail";
 
 export const mailRouter = new Elysia({name: "mail"})
     .use(betterAuth)
-    .get("/mail/mailboxes", async ({user}) => await getMailboxes(user), {
+    .get("/mail/mailboxes", async ({user}) => await mailboxesList(user), {
         auth: true
     })
     .get("/mail/mailbox/*", async ({params, user}) => await getMailbox(user, params['*']), {

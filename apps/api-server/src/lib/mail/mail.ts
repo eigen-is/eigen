@@ -1,20 +1,20 @@
 import {type User} from "better-auth/types";
-import imap from "./imap";
+import Maildir from "./maildir";
 
 async function getMailClient(user: User) {
-    const mail = new imap(user);
-    await mail.login();
+    const mail = new Maildir(user);
+    await mail.init();
 
     return mail;
 }
 
 
-export async function getMailboxes(user: User) {
+export async function mailboxesList(user: User) {
     const mail = await getMailClient(user);
-    return await mail.mailboxes_list();
+    return await mail.mailboxesList();
 }
 
 export async function getMailbox(user: User, mailbox: string) {
     const mail = await getMailClient(user);
-    return mail.messages_fetch(mailbox);
+    return await mail.mailboxGet(mailbox);
 }

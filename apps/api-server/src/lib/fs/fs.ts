@@ -26,3 +26,7 @@ export async function fsGetDatabase(user: User, file: string, create: boolean = 
     }
     throw new Error(`File not found: ${path}`);
 }
+
+export function fsGetDirName(user: User, dir: string): string {
+    return `./data/home/${user.id}/${dir}`;
+}
