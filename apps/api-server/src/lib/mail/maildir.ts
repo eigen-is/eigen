@@ -9,6 +9,12 @@ import { watch } from "node:fs";
 import { createELMContent } from "./mailfile";
 import { fsGetDirName } from "../fs/fs";
 import Bun from 'bun';
+import { 
+    getMailIDfromFileName, 
+    extractFlagsFromFileName, 
+    updateFlagInFileName, 
+    createFileNameWithFlags 
+} from "./mailutils";
 
 // Define a custom interface that extends Mailbox for our implementation
 interface MaildirMailbox extends Omit<Mailbox, 'id'> {
@@ -499,21 +505,7 @@ export default class Maildir {
      * @returns Array of flags
      */
     private extractFlags(filename: string): string[] {
-        const flagPart = filename.split(':')[1];
-        if (!flagPart) return [];
-        
-        // Format is typically "2,flags" where flags are single characters
-        const flags = flagPart.split(',')[1] || '';
-        const flagArray: string[] = [];
-        
-        // Map characters to IMAP flags
-        if (flags.includes('S')) flagArray.push('\\Seen');
-        if (flags.includes('F')) flagArray.push('\\Flagged');
-        if (flags.includes('R')) flagArray.push('\\Answered');
-        if (flags.includes('D')) flagArray.push('\\Draft');
-        if (flags.includes('T')) flagArray.push('\\Deleted');
-        
-        return flagArray;
+        return extractFlagsFromFileName(filename);
     }
 
     /**
@@ -527,7 +519,16 @@ export default class Maildir {
     private async parseMessage(fileName: string, filePath: string, isUnread: boolean, mailboxPath: string): Promise<Email | null> {
         try {
             // Extract the message ID from the filename (part before the colon)
-            const messageId = fileName.split(':')[0];
+            // First remove the file extension if present
+            let messageId = fileName;
+            
+            // Remove file extension (.eml)
+            if (messageId.endsWith('.eml')) {
+                messageId = messageId.substring(0, messageId.length - 4);
+            }
+            
+            // Split by colon to get the ID part
+            messageId = getMailIDfromFileName(messageId);
             
             // Parse the email content using Bun for file reading (faster)
             const fileContent = await Bun.file(filePath).text();
@@ -567,16 +568,16 @@ export default class Maildir {
      */
     public async messageGet(messageId: string): Promise<Email | null> {
         try {
-            // Find the message in all mailboxes
-            const allMailboxes = await this.mailboxesList();
+            // Try to find the message in all mailboxes
+            const mailboxes = await this.mailboxesList();
             
-            for (const mailbox of allMailboxes) {
+            for (const mailbox of mailboxes) {
                 const messages = await this.mailboxGet(mailbox.path);
+                
                 if (messages) {
-                    // Find message by ID (the filename without extension and flags)
                     const message = messages.find(msg => {
-                        // Extract ID from filename (part before the colon)
-                        const fileId = msg._filename.split(':')[0];
+                        // Extract ID from filename using the utility function
+                        const fileId = getMailIDfromFileName(msg._filename);
                         return fileId === messageId;
                     });
                     
@@ -586,7 +587,6 @@ export default class Maildir {
                 }
             }
             
-            console.error(`Message ${messageId} not found in any mailbox`);
             return null;
         } catch (error) {
             console.error(`Error getting message ${messageId}:`, error);
@@ -655,25 +655,7 @@ export default class Maildir {
             }
             
             // Parse current flags
-            const flagMatch = message._filename.match(/:2,([A-Z]*)/);
-            let flagStr = flagMatch ? flagMatch[1] : '';
-            let newFileName = message._filename;
-            
-            // Add or remove flag
-            if (value) {
-                if (!flagStr.includes(mailDirFlag)) {
-                    flagStr += mailDirFlag;
-                }
-            } else {
-                flagStr = flagStr.replace(mailDirFlag, '');
-            }
-            
-            // Create new filename
-            if (flagMatch) {
-                newFileName = message._filename.replace(/:2,[A-Z]*/, `:2,${flagStr}`);
-            } else {
-                newFileName = `${message._filename}:2,${flagStr}`;
-            }
+            const newFileName = updateFlagInFileName(message._filename, mailDirFlag, value);
             
             // Rename the file
             const oldPath = path.join(message._path, message._filename);
@@ -817,7 +799,7 @@ export default class Maildir {
             // Create a unique message ID
             const messageId = `${Date.now()}.${uuidv4()}`;
             const draftPath = await this.sanitizeDirName('Drafts', 'cur');
-            const filename = `${messageId}:2,D`; // D flag for draft
+            const filename = createFileNameWithFlags(messageId, ['D']); // D flag for draft
             const filePath = path.join(draftPath, filename);
             
             // Create an empty message template with all required properties
@@ -917,7 +899,20 @@ export default class Maildir {
      * @returns True if successful
      */
     public async messageSetRead(messageId: string, read: boolean): Promise<boolean> {
-        return this.messageFlag(messageId, '\\Seen', read);
+        try {
+            // Find the message
+            const message = await this.messageGet(messageId);
+            if (!message) {
+                console.error(`Cannot set read status: message ${messageId} not found`);
+                return false;
+            }
+            
+            // Update the flag
+            return await this.messageFlag(messageId, '\\Seen', read);
+        } catch (error) {
+            console.error(`Error setting read status for message ${messageId}:`, error);
+            return false;
+        }
     }
 
     /**
