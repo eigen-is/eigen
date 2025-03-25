@@ -1,4 +1,4 @@
-import type { Email } from "./mailtypes";
+import type { Email, AddressObject } from "./mailtypes";
 
 /**
  * Creates an EML format content from an Email object
@@ -21,7 +21,7 @@ export function createELMContent(email: Email): string {
     if (email.to) {
         if (Array.isArray(email.to)) {
             // If it's an array of address objects, join their text representations
-            toStr = email.to.map(to => to.text).join(', ');
+            toStr = email.to.map((to: AddressObject) => to.text).join(', ');
         } else {
             // Single address object
             toStr = email.to.text;

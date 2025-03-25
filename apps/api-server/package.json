@@ -14,6 +14,15 @@
     "drizzle-kit": "^0.30.5",
     "drizzle-orm": "^0.40.0",
     "elysia": "^1.2.25",
+    "encoding-japanese": "^2.2.0",
+    "he": "^1.2.0",
+    "html-to-text": "^9.0.5",
+    "iconv-lite": "^0.6.3",
+    "libmime": "^5.3.6",
+    "linkify-it": "^5.0.0",
+    "nodemailer": "^6.10.0",
+    "punycode.js": "^2.3.1",
+    "tlds": "^1.256.0",
     "uuidv4": "^1.0.0"
   },
   "devDependencies": {

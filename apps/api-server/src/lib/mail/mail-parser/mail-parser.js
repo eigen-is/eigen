@@ -1,12 +1,11 @@
 'use strict';
 
-const mailsplit = require('mailsplit');
 const libmime = require('libmime');
 const addressparser = require('nodemailer/lib/addressparser');
 const Transform = require('stream').Transform;
-const Splitter = mailsplit.Splitter;
+const Splitter = require('./../mail-split/message-splitter');
 const punycode = require('punycode.js');
-const FlowedDecoder = require('mailsplit/lib/flowed-decoder');
+const FlowedDecoder = require('./../mail-split/flowed-decoder');
 const StreamHash = require('./stream-hash');
 const iconv = require('iconv-lite');
 const { htmlToText } = require('html-to-text');
@@ -230,7 +229,7 @@ class MailParser extends Transform {
                 }
                 return this.emit('error', err);
             }
-            setTimeout(() => this.readData(), 0);
+            process.nextTick(() => this.readData(), 0);
         });
     }
 
@@ -260,7 +259,7 @@ class MailParser extends Transform {
     }
 
     _flush(done) {
-        setTimeout(() => this.splitter.end(), 0);
+        process.nextTick(() => this.splitter.end(), 0);
         if (this.finished) {
             return this.cleanup(done);
         }
@@ -289,7 +288,7 @@ class MailParser extends Transform {
             });
             this.curnode.decoder.end();
         } else {
-            setTimeout(() => {
+            process.nextTick(() => {
                 finish();
             }, 0);
         }
@@ -825,7 +824,7 @@ class MailParser extends Transform {
                         release: () => {
                             attachment.release = null;
                             if (this.waitUntilAttachmentEnd && typeof this.attachmentCallback === 'function') {
-                                setTimeout(this.attachmentCallback, 0);
+                                process.nextTick(this.attachmentCallback, 0);
                             }
                             this.attachmentCallback = false;
                             this.waitUntilAttachmentEnd = false;
@@ -971,7 +970,7 @@ class MailParser extends Transform {
                 break;
         }
 
-        setTimeout(done, 0);
+        process.nextTick(done, 0);
     }
 
     _getPartId(parentBoundary) {
@@ -1042,7 +1041,7 @@ class MailParser extends Transform {
 
     updateImageLinks(replaceCallback, done) {
         if (!this.html) {
-            return setTimeout(() => done(null, false), 0);
+            return process.nextTick(() => done(null, false), 0);
         }
 
         let cids = new Map();
@@ -1084,14 +1083,14 @@ class MailParser extends Transform {
             let entry = cidList[pos++];
             replaceCallback(entry.attachment, (err, url) => {
                 if (err) {
-                    return setTimeout(() => done(err), 0);
+                    return process.nextTick(() => done(err), 0);
                 }
                 entry.url = url;
-                setTimeout(processNext, 0);
+                process.nextTick(processNext, 0);
             });
         };
 
-        setTimeout(processNext, 0);
+        process.nextTick(processNext, 0);
     }
 
     textToHtml(str) {

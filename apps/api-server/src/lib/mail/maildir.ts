@@ -1,5 +1,4 @@
 import type {User} from "better-auth";
-import type { Mailbox } from "./imap";
 import type { Email, Attachment } from "./mailtypes";
 import { simpleParser } from "./mail-parser";
 import * as path from "path";
@@ -21,7 +20,7 @@ import {
 } from "./mailutils";
 
 // Define a custom interface that extends Mailbox for our implementation
-interface MaildirMailbox extends Omit<Mailbox, 'id'> {
+interface MaildirMailbox  {
     path: string;
     name: string;
     delimiter: string;
@@ -427,7 +426,7 @@ export default class Maildir {
             const newPath = await this.sanitizeDirName($mailbox, 'new');
             
             // Using Node.js fs.watch instead of Bun.watch which is not available
-            const watcher = watch(newPath, (eventType, filename) => {
+            watch(newPath, (eventType, filename) => {
                 if (filename) {
                     $callback(eventType, filename);
                 }
@@ -535,7 +534,17 @@ export default class Maildir {
             // const parsedMail = await simpleParser(fileContent as unknown as NodeJS.ReadableStream);
             
             const fileContent = await Bun.file(filePath).text();
-            const parsedMail = await simpleParser(fileContent);
+
+            // time to parse the message
+            const start = Date.now();
+            const parsedMail = await simpleParser(fileContent, {
+                skipTextToHtml: true,
+                skipTextLinks: true,
+            });
+            const end = Date.now();
+            console.log(`Parsed message ${fileName} in ${end - start}ms`);
+
+            // const parsedMail = await simpleParser(fs.createReadStream(filePath));
 
             // Extract flags from the filename
             const flags = extractFlagsFromFileName(fileName);
