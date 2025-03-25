@@ -27,11 +27,12 @@ function AuthLayout() {
     const { sidebarOpen, setSidebarOpen } = useContext(SidebarContext);
     const isMobile = useMediaQuery('(max-width: 768px)');
     const isTablet = useMediaQuery('(min-width: 769px) and (max-width: 1024px)');
+    const isDesktop = useMediaQuery('(min-width: 1025px)');
     
     return (
         <QueryClientProvider client={queryClient}>
             <div className="flex flex-1 w-full h-full overflow-hidden">
-                {/* Sidebar: overlay on mobile, normal display on larger screens */}
+                {/* Sidebar: First column - always visible on desktop/tablet, overlay on mobile */}
                 <div 
                     className={`
                         ${isMobile ? (sidebarOpen ? 'fixed inset-0 z-50 bg-background' : 'hidden') : 'block'}
@@ -54,8 +55,8 @@ function AuthLayout() {
                     />
                 )}
                 
-                {/* Main content area */}
-                <main className="flex-1 flex flex-col h-full overflow-auto">
+                {/* Main content area - contains columns 2 and 3 */}
+                <main className="flex-1 flex h-full overflow-hidden">
                     <Outlet/>
                 </main>
             </div>
