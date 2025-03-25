@@ -1,4 +1,4 @@
-import type { Email, AddressObject } from "./mailtypes";
+import type { Email } from "./mailtypes";
 
 /**
  * Creates an EML format content from an Email object
@@ -11,27 +11,21 @@ export function createELMContent(email: Email): string {
     
     // Format the from address
     let fromStr = '';
-    if (typeof email.from === 'string') {
-        fromStr = email.from;
-    } else if (email.from && 'address' in email.from) {
-        fromStr = email.from.name 
-            ? `${email.from.name} <${email.from.address}>`
-            : email.from.address;
+    if (email.from) {
+        // Use the text representation which is already formatted
+        fromStr = email.from.text;
     }
     
     // Format the to address(es)
     let toStr = '';
-    if (typeof email.to === 'string') {
-        toStr = email.to;
-    } else if (Array.isArray(email.to)) {
-        toStr = email.to.map((to: string | AddressObject) => {
-            if (typeof to === 'string') return to;
-            return to.name ? `${to.name} <${to.address}>` : to.address;
-        }).join(', ');
-    } else if (email.to && 'address' in email.to) {
-        toStr = email.to.name 
-            ? `${email.to.name} <${email.to.address}>`
-            : email.to.address;
+    if (email.to) {
+        if (Array.isArray(email.to)) {
+            // If it's an array of address objects, join their text representations
+            toStr = email.to.map(to => to.text).join(', ');
+        } else {
+            // Single address object
+            toStr = email.to.text;
+        }
     }
     
     // Create the email headers

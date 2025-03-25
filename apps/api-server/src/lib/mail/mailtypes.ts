@@ -1,43 +1,14 @@
+// Re-export all types from mail-parser
+export * from "./mail-parser";
+
+// Import ParsedMail for the Email type definition
 import type { ParsedMail } from "./mail-parser";
 
-// Define the types we need since mailparser module might not be directly available
-export interface AddressObject {
-  name?: string;
-  address: string;
-}
-
-export interface Attachment {
-  filename: string;
-  contentType: string;
-  content: Buffer;
-  size: number;
-  contentId: string;
-  messageId?: string;
-}
-
-export interface AttachmentCommon {
-  filename: string;
-  contentType: string;
-  contentDisposition: string;
-  checksum: string;
-  size: number;
-  headers: Map<string, string>;
-  contentId?: string;
-  cid?: string;
-  related?: boolean;
-}
-
-export interface AttachmentStream extends AttachmentCommon {
-  content: NodeJS.ReadableStream;
-}
-
-
+// Define the Email type that extends ParsedMail with additional fields needed for maildir
 export type Email = ParsedMail & {
-  _path: string;
-  _filename: string;
-  id: string;
-  isRead: boolean;
-  flags: string[];
+  _path: string;      // Path to the mailbox containing the message
+  _filename: string;  // Filename of the message
+  id: string;         // Unique message ID
+  isRead: boolean;    // Whether the message has been read
+  flags: string[];    // IMAP flags for the message
 };
-
-
