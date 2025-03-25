@@ -1,5 +1,4 @@
 import {
-    ColumnDef,
     ColumnFiltersState,
     FilterFn,
     getCoreRowModel,
@@ -12,9 +11,12 @@ import {rankItem} from "@tanstack/match-sorter-utils";
 import {Paperclip, Search} from "lucide-react";
 import {useNavigate} from "@tanstack/react-router";
 import {useState} from "react";
-import {Email} from "@workspace/lib/types/mail";
+import {Email} from "@/types/email";
 import {cn} from "@workspace/ui/lib/utils";
 import {Input} from "@workspace/ui/components/input";
+import {useEmails} from "@/hooks/use-emails";
+import {emailColumns} from "./email-columns";
+import {Loader2} from "lucide-react";
 
 // Define a fuzzy filter function
 const fuzzyFilter: FilterFn<any> = (row, columnId, value, addMeta) => {
@@ -30,25 +32,39 @@ const fuzzyFilter: FilterFn<any> = (row, columnId, value, addMeta) => {
     return itemRank.passed
 }
 
-interface DataTableProps<TData> {
-    columns: ColumnDef<TData, unknown>[]
-    data: TData[]
-    onRowClick?: (emailId: string) => void
-    activeRowId?: string
+interface EmailDataTableProps {
+    mailboxPath: string;
+    onRowClick?: (emailId: string) => void;
+    activeRowId?: string;
 }
 
 export function EmailDataTable({
-    columns,
-    data,
+    mailboxPath,
     onRowClick,
     activeRowId
-}: DataTableProps<Email>) {
-
+}: EmailDataTableProps) {
     const [sorting, setSorting] = useState<SortingState>([])
     const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
     const [globalFilter, setGlobalFilter] = useState("")
     
     const navigate = useNavigate();
+
+    // Fetch emails using the enhanced useEmails hook
+    const {
+        data: emails = [],
+        isLoading,
+        error,
+        refetch
+    } = useEmails(mailboxPath);
+
+    // Debug: Log the emails data
+    console.log(`Mailbox: ${mailboxPath}, Emails:`, emails);
+    console.log(`Email count: ${emails?.length || 0}`);
+    
+    // Show the structure of the first email if available
+    if (emails && emails.length > 0) {
+        console.log("First email structure:", JSON.stringify(emails[0], null, 2));
+    }
 
     const handleRowClick = (row: Email) => {
         if (onRowClick) {
@@ -59,8 +75,8 @@ export function EmailDataTable({
     };
 
     const table = useReactTable({
-        data,
-        columns,
+        data: emails,
+        columns: emailColumns,
         filterFns: {
             fuzzy: fuzzyFilter,
         },
@@ -76,6 +92,32 @@ export function EmailDataTable({
             globalFilter,
         },
     });
+
+    // Render loading state
+    if (isLoading) {
+        return (
+            <div className="flex h-full items-center justify-center">
+                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+            </div>
+        );
+    }
+
+    // Render error state
+    if (error) {
+        return (
+            <div className="flex flex-col h-full items-center justify-center p-4">
+                <div className="text-red-500 mb-4">
+                    Error loading emails. Please try again.
+                </div>
+                <button
+                    onClick={() => refetch()}
+                    className="px-4 py-2 bg-primary text-primary-foreground rounded-md"
+                >
+                    Retry
+                </button>
+            </div>
+        );
+    }
 
     return (
         <div className="w-full h-full flex flex-col overflow-hidden bg-white">
@@ -125,7 +167,9 @@ export function EmailDataTable({
                                                     "text-sm text-gray-900",
                                                     !email.read && "font-semibold"
                                                 )}>
-                                                    {email.from.name}
+                                                    {typeof email.from === 'object' 
+                                                        ? email.from.name || email.from.email || "Unknown" 
+                                                        : email.from || "Unknown"}
                                                 </div>
                                                 <div className="text-xs text-gray-500 whitespace-nowrap ml-2">
                                                     {email.date}
