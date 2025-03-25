@@ -1,7 +1,7 @@
 import type {User} from "better-auth";
 import type { Mailbox } from "./imap";
 import type { Email, Attachment } from "./mailtypes";
-import { simpleParser } from "./mailtypes";
+import { simpleParser } from "./mail-parser";
 import * as path from "path";
 import * as fs from "node:fs/promises";
 import { watch } from "node:fs";
@@ -72,7 +72,7 @@ export default class Maildir {
                     // Create attributes file with standard flags
                     const attributesPath = path.join(mailboxPath, '.attributes');
                     const attributes = getStandardMailboxFlags(mailbox);
-                    await fs.writeFile(attributesPath, attributes.join('\n'));
+                    await Bun.file(attributesPath).write( JSON.stringify(attributes) );
                 }
             }
         } catch (error) {
@@ -517,15 +517,6 @@ export default class Maildir {
             return [];
         }
     }
-    
-    /**
-     * Extracts flags from a message filename
-     * @param filename Filename with flags (format: id:2,flags)
-     * @returns Array of flags
-     */
-    private extractFlags(filename: string): string[] {
-        return extractFlagsFromFileName(filename);
-    }
 
     /**
      * Parse a message file and extract its contents
@@ -540,12 +531,14 @@ export default class Maildir {
             // Extract the message ID using the utility function
             const messageId = getMailIDfromFileName(fileName);
             
-            // Parse the email content using Bun for file reading (faster)
+            // const fileContent = await Bun.file(filePath).stream();
+            // const parsedMail = await simpleParser(fileContent as unknown as NodeJS.ReadableStream);
+            
             const fileContent = await Bun.file(filePath).text();
             const parsedMail = await simpleParser(fileContent);
-            
+
             // Extract flags from the filename
-            const flags = this.extractFlags(fileName);
+            const flags = extractFlagsFromFileName(fileName);
             
             // If the message is in the new directory, it's unread
             if (isUnread) {
@@ -706,8 +699,7 @@ export default class Maildir {
             }
             
             // Check if target mailbox exists
-            const targetMailboxInfo = await this.mailboxExists(targetMailbox);
-            if (!targetMailboxInfo) {
+            if (!await this.mailboxExists(targetMailbox)) {
                 console.error(`Cannot move: target mailbox ${targetMailbox} does not exist`);
                 return false;
             }
@@ -725,11 +717,8 @@ export default class Maildir {
                 return false;
             }
             
-            // Read the file content using Bun (faster)
-            const content = await Bun.file(sourcePath).text();
-            
-            // Write to the target location using Bun (faster)
-            await Bun.write(targetFilePath, content);
+            // Read the file content and write to the target location using Bun (faster)
+            await Bun.write(targetFilePath, await Bun.file(sourcePath).text());
             
             // Delete the source file
             await fs.unlink(sourcePath);
@@ -812,17 +801,18 @@ export default class Maildir {
             const emptyMessage = createELMContent({
                 id: messageId,
                 subject: '',
-                from: { address: '' },
-                to: { address: '' },
+                from: undefined,
+                to: undefined,
                 date: new Date(),
                 text: '',
                 html: '',
                 textAsHtml: '',
                 attachments: [],
                 headers: new Map(),
+                headerLines: [], // Add the required headerLines property
                 references: [],
                 messageId: `<${messageId}@eigen.local>`,
-                inReplyTo: null,
+                inReplyTo: undefined,
                 isRead: true,
                 flags: ['\\Draft', '\\Seen'], // Standard IMAP flags for drafts
                 _path: draftPath,
@@ -883,11 +873,8 @@ export default class Maildir {
                 mail.flags.push('\\Draft');
             }
             
-            // Construct email content
-            const content = createELMContent(mail);
-
-            // Update the draft file using Bun.write (faster)
-            await Bun.write(filePath, content);
+            // Construct email content and update the draft file
+            await Bun.write(filePath, createELMContent(mail));
             
             return true;
         } catch (error) {
@@ -904,9 +891,8 @@ export default class Maildir {
      */
     public async messageSetRead(messageId: string, read: boolean): Promise<boolean> {
         try {
-            // Find the message
-            const message = await this.messageGet(messageId);
-            if (!message) {
+            // Find the message and update the flag if found
+            if (!await this.messageGet(messageId)) {
                 console.error(`Cannot set read status: message ${messageId} not found`);
                 return false;
             }
@@ -953,8 +939,7 @@ export default class Maildir {
      * @returns True if the mailbox is special
      */
     private async checkSpecialMailbox(mailbox: string): Promise<boolean> {
-        const attributes = await this.getMailboxAttributes(mailbox);
-        return isSpecialMailbox(attributes);
+        return isSpecialMailbox(await this.getMailboxAttributes(mailbox));
     }
 
     /**
@@ -974,8 +959,7 @@ export default class Maildir {
             }
             
             // Read attributes from file
-            const attributesContent = await Bun.file(attributesPath).text();
-            return attributesContent.split('\n').filter(Boolean);
+            return await Bun.file(attributesPath).json();
         } catch (error) {
             console.error(`Error getting attributes for mailbox ${mailbox}:`, error);
             return [];
