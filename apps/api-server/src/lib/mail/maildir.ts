@@ -2,7 +2,6 @@ import type {User} from "better-auth";
 import type { Mailbox } from "./imap";
 import type { Email, Attachment } from "./mailtypes";
 import { simpleParser } from "./mailtypes";
-import {v4 as uuidv4} from "uuid";
 import * as path from "path";
 import * as fs from "node:fs/promises";
 import { watch } from "node:fs";
@@ -13,7 +12,10 @@ import {
     getMailIDfromFileName, 
     extractFlagsFromFileName, 
     updateFlagInFileName, 
-    createFileNameWithFlags 
+    createFileNameWithFlags,
+    createUniqueMessageId,
+    isSpecialMailbox,
+    getStandardMailboxFlags
 } from "./mailutils";
 
 // Define a custom interface that extends Mailbox for our implementation
@@ -45,21 +47,40 @@ export default class Maildir {
         }
     }
 
-    private async createMailboxes() {
-        // create Maildir - TODO: set correct attributes
-        await fs.mkdir(this.basePath, { recursive: true });
-        
-        // Create INBOX (root mailbox)
-        await this.mailboxCreate(``, ['\\HasNoChildren', '\\Inbox']);
-        
-        // Create special mailboxes with standard IMAP attributes
-        await this.mailboxCreate(`Sent`, ['\\HasNoChildren', '\\Sent']);
-        await this.mailboxCreate(`Drafts`, ['\\HasNoChildren', '\\Drafts']);
-        await this.mailboxCreate(`Archive`, ['\\HasNoChildren', '\\Archive']);
-        await this.mailboxCreate(`Spam`, ['\\HasNoChildren', '\\Junk']);
-        await this.mailboxCreate(`Trash`, ['\\HasNoChildren', '\\Trash']);
+    /**
+     * Creates the standard mailboxes for a new user
+     */
+    private async createMailboxes(): Promise<void> {
+        try {
+            // Create the standard mailboxes
+            const standardMailboxes = ['', 'Sent', 'Drafts', 'Trash', 'Spam', 'Archive'];
+            
+            for (const mailbox of standardMailboxes) {
+                const mailboxPath = await this.sanitizeDirName(mailbox);
+                
+                try {
+                    // Check if mailbox already exists
+                    await fs.access(mailboxPath);
+                } catch (error) {
+                    // Create mailbox if it doesn't exist
+                    await fs.mkdir(mailboxPath, { recursive: true });
+                    
+                    // Create cur, new, and tmp directories
+                    await fs.mkdir(path.join(mailboxPath, 'cur'), { recursive: true });
+                    await fs.mkdir(path.join(mailboxPath, 'new'), { recursive: true });
+                    await fs.mkdir(path.join(mailboxPath, 'tmp'), { recursive: true });
+                    
+                    // Create attributes file with standard flags
+                    const attributesPath = path.join(mailboxPath, '.attributes');
+                    const attributes = getStandardMailboxFlags(mailbox);
+                    await fs.writeFile(attributesPath, attributes.join('\n'));
+                }
+            }
+        } catch (error) {
+            console.error('Error creating mailboxes:', error);
+        }
     }
-
+    
     /**
      * Lists all mailboxes in the Maildir structure
      * @returns Array of mailbox objects with hierarchy information
@@ -294,33 +315,34 @@ export default class Maildir {
      */
     public async mailboxRename(oldName: string, newName: string): Promise<boolean> {
         try {
-            // Check if source mailbox exists
-            const oldMailbox = await this.mailboxExists(oldName);
-            if (!oldMailbox) {
-                console.error(`Cannot rename: mailbox ${oldName} does not exist`);
+            // Check if the mailbox is special
+            if (await this.checkSpecialMailbox(oldName)) {
+                console.error(`Cannot rename special mailbox ${oldName}`);
                 return false;
             }
             
-            // Check if target mailbox already exists
-            const newMailbox = await this.mailboxExists(newName);
-            if (newMailbox) {
-                console.error(`Cannot rename: mailbox ${newName} already exists`);
+            const oldPath = await this.sanitizeDirName(oldName);
+            const newPath = await this.sanitizeDirName(newName);
+            
+            // Check if the source mailbox exists
+            try {
+                await fs.access(oldPath);
+            } catch (error) {
+                console.error(`Source mailbox ${oldName} does not exist`);
                 return false;
             }
             
-            // Check if this is a special mailbox that shouldn't be renamed
-            const attributes = await this.getMailboxAttributes(oldName);
-            const specialAttributes = ['\\Inbox', '\\Sent', '\\Drafts', '\\Trash', '\\Junk', '\\Archive'];
-            if (attributes.some(attr => specialAttributes.includes(attr))) {
-                console.error(`Cannot rename: ${oldName} is a special mailbox that cannot be renamed`);
+            // Check if the destination mailbox already exists
+            try {
+                await fs.access(newPath);
+                console.error(`Destination mailbox ${newName} already exists`);
                 return false;
+            } catch (error) {
+                // This is expected - the destination should not exist
             }
             
             // Rename the mailbox
-            const oldPath = await this.sanitizeDirName(oldName);
-            const newPath = await this.sanitizeDirName(newName);
             await fs.rename(oldPath, newPath);
-            
             return true;
         } catch (error) {
             console.error(`Error renaming mailbox ${oldName} to ${newName}:`, error);
@@ -335,25 +357,24 @@ export default class Maildir {
      */
     public async mailboxDelete(mailbox: string): Promise<boolean> {
         try {
-            // Check if mailbox exists
-            const mailboxInfo = await this.mailboxExists(mailbox);
-            if (!mailboxInfo) {
-                console.error(`Cannot delete: mailbox ${mailbox} does not exist`);
+            // Check if the mailbox is special
+            if (await this.checkSpecialMailbox(mailbox)) {
+                console.error(`Cannot delete special mailbox ${mailbox}`);
                 return false;
             }
             
-            // Check if this is a special mailbox that shouldn't be deleted
-            const attributes = await this.getMailboxAttributes(mailbox);
-            const specialAttributes = ['\\Inbox', '\\Sent', '\\Drafts', '\\Trash', '\\Junk', '\\Archive'];
-            if (attributes.some(attr => specialAttributes.includes(attr))) {
-                console.error(`Cannot delete: ${mailbox} is a special mailbox that cannot be deleted`);
-                return false;
-            }
-            
-            // Delete the mailbox directory
             const mailboxPath = await this.sanitizeDirName(mailbox);
-            await fs.rm(mailboxPath, { recursive: true, force: true });
             
+            // Check if the mailbox exists
+            try {
+                await fs.access(mailboxPath);
+            } catch (error) {
+                console.error(`Mailbox ${mailbox} does not exist`);
+                return false;
+            }
+            
+            // Delete the mailbox recursively
+            await fs.rm(mailboxPath, { recursive: true });
             return true;
         } catch (error) {
             console.error(`Error deleting mailbox ${mailbox}:`, error);
@@ -428,13 +449,21 @@ export default class Maildir {
         }
     }
 
-    public async mailboxDeliver($message: string) {
+    /**
+     * Delivers a message to the INBOX
+     * @param message Message content
+     * @returns Filename of the delivered message
+     */
+    public async mailboxDeliver(message: string): Promise<string> {
         try {
-            // Create unique filename
-            const filename = `${Date.now()}.${uuidv4()}.eml`;
-            // Write message to file in the INBOX/new directory
-            const newPath = path.join(this.basePath, 'new');
-            await Bun.write(path.join(newPath, filename), $message);
+            // Create a unique filename
+            const messageId = createUniqueMessageId();
+            const filename = `${messageId}.eml`;
+            const filePath = path.join(this.basePath, 'new', filename);
+            
+            // Write the message to the new directory
+            await fs.writeFile(filePath, message);
+            
             return filename;
         } catch (error) {
             console.error('Error delivering message:', error);
@@ -518,17 +547,8 @@ export default class Maildir {
      */
     private async parseMessage(fileName: string, filePath: string, isUnread: boolean, mailboxPath: string): Promise<Email | null> {
         try {
-            // Extract the message ID from the filename (part before the colon)
-            // First remove the file extension if present
-            let messageId = fileName;
-            
-            // Remove file extension (.eml)
-            if (messageId.endsWith('.eml')) {
-                messageId = messageId.substring(0, messageId.length - 4);
-            }
-            
-            // Split by colon to get the ID part
-            messageId = getMailIDfromFileName(messageId);
+            // Extract the message ID using the utility function
+            const messageId = getMailIDfromFileName(fileName);
             
             // Parse the email content using Bun for file reading (faster)
             const fileContent = await Bun.file(filePath).text();
@@ -797,7 +817,7 @@ export default class Maildir {
             }
 
             // Create a unique message ID
-            const messageId = `${Date.now()}.${uuidv4()}`;
+            const messageId = createUniqueMessageId();
             const draftPath = await this.sanitizeDirName('Drafts', 'cur');
             const filename = createFileNameWithFlags(messageId, ['D']); // D flag for draft
             const filePath = path.join(draftPath, filename);
@@ -944,25 +964,47 @@ export default class Maildir {
     }
 
     /**
-     * Get mailbox attributes
+     * Checks if a mailbox is a special mailbox that shouldn't be renamed or deleted
+     * @param mailbox Mailbox path
+     * @returns True if the mailbox is special
+     */
+    private async checkSpecialMailbox(mailbox: string): Promise<boolean> {
+        const attributes = await this.getMailboxAttributes(mailbox);
+        return isSpecialMailbox(attributes);
+    }
+
+    /**
+     * Gets mailbox attributes
      * @param mailbox Mailbox name
      * @returns Array of IMAP attributes
      */
     private async getMailboxAttributes(mailbox: string): Promise<string[]> {
         try {
-            const attributesPath = await this.sanitizeDirName(mailbox, '.attributes');
+            const attributesPath = path.join(this.sanitizeMailboxPath(mailbox), '.attributes');
             
             try {
-                await fs.access(attributesPath, fs.constants.F_OK);
-                const content = await Bun.file(attributesPath).text();
-                return JSON.parse(content);
+                // Check if attributes file exists
+                await fs.access(attributesPath);
+                
+                // Read attributes from file
+                const attributesContent = await Bun.file(attributesPath).text();
+                return attributesContent.split('\n').filter(Boolean);
             } catch (error) {
-                // No attributes file exists
-                return [];
+                // If file doesn't exist, return standard attributes based on mailbox name
+                const mailboxName = path.basename(mailbox);
+                return getStandardMailboxFlags(mailboxName);
             }
         } catch (error) {
             console.error(`Error getting attributes for mailbox ${mailbox}:`, error);
             return [];
         }
+    }
+
+    private sanitizeMailboxPath(mailbox: string): string {
+        let dirname = `${this.basePath}/.${mailbox.replace('/', '.')}`;
+        // replace .. with . and // with /
+        dirname = dirname.replace(/\.{2,}/g, '.');
+        dirname = dirname.replace(/\/+/g, '/');
+        return dirname;
     }
 }

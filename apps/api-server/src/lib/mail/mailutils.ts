@@ -147,3 +147,46 @@ export function createFileNameWithFlags(fileName: string, flags: string[]): stri
     // Construct the new filename
     return flagChars.length > 0 ? `${id}:2,${flagChars.join('')}` : id;
 }
+
+/**
+ * Creates a new unique message ID
+ * @returns Unique message ID
+ */
+export function createUniqueMessageId(): string {
+    return `${Date.now()}.${crypto.randomUUID()}`;
+}
+
+/**
+ * Determines if a mailbox is a special mailbox that shouldn't be renamed or deleted
+ * @param attributes Array of mailbox attributes
+ * @returns True if the mailbox is special
+ */
+export function isSpecialMailbox(attributes: string[]): boolean {
+    const specialAttributes = ['\\Inbox', '\\Sent', '\\Drafts', '\\Trash', '\\Junk', '\\Archive'];
+    return attributes.some(attr => specialAttributes.includes(attr));
+}
+
+/**
+ * Gets the standard IMAP flags for a special mailbox
+ * @param mailboxName Name of the mailbox
+ * @returns Array of IMAP flags
+ */
+export function getStandardMailboxFlags(mailboxName: string): string[] {
+    const name = mailboxName.toLowerCase();
+    
+    if (name === '' || name === 'inbox') {
+        return ['\\HasNoChildren', '\\Inbox'];
+    } else if (name === 'sent') {
+        return ['\\HasNoChildren', '\\Sent'];
+    } else if (name === 'drafts') {
+        return ['\\HasNoChildren', '\\Drafts'];
+    } else if (name === 'trash') {
+        return ['\\HasNoChildren', '\\Trash'];
+    } else if (name === 'junk' || name === 'spam') {
+        return ['\\HasNoChildren', '\\Junk'];
+    } else if (name === 'archive') {
+        return ['\\HasNoChildren', '\\Archive'];
+    } else {
+        return ['\\HasNoChildren'];
+    }
+}
