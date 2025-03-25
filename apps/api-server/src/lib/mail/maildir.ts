@@ -15,7 +15,9 @@ import {
     createFileNameWithFlags,
     createUniqueMessageId,
     isSpecialMailbox,
-    getStandardMailboxFlags
+    getStandardMailboxFlags,
+    fsDirectoryExists,
+    fsFileExists
 } from "./mailutils";
 
 // Define a custom interface that extends Mailbox for our implementation
@@ -39,10 +41,8 @@ export default class Maildir {
 
     public async init() {
         // check if basePath exists
-        try {
-            await fs.access(this.basePath, fs.constants.F_OK);
-            return;
-        } catch (error) {
+        const basePathExists = await fsDirectoryExists(this.basePath);
+        if (!basePathExists) {
             await this.createMailboxes();
         }
     }
@@ -58,10 +58,9 @@ export default class Maildir {
             for (const mailbox of standardMailboxes) {
                 const mailboxPath = await this.sanitizeDirName(mailbox);
                 
-                try {
-                    // Check if mailbox already exists
-                    await fs.access(mailboxPath);
-                } catch (error) {
+                // Check if mailbox already exists
+                const mailboxExists = await fsDirectoryExists(mailboxPath);
+                if (!mailboxExists) {
                     // Create mailbox if it doesn't exist
                     await fs.mkdir(mailboxPath, { recursive: true });
                     
@@ -177,9 +176,8 @@ export default class Maildir {
                 this.basePath;
             
             // Check if mailbox exists
-            try {
-                await fs.access(mailboxPath, fs.constants.F_OK);
-            } catch (error) {
+            const mailboxExists = await fsDirectoryExists(mailboxPath);
+            if (!mailboxExists) {
                 // Directory doesn't exist
                 return null;
             }
@@ -188,10 +186,10 @@ export default class Maildir {
             const curPath = path.join(mailboxPath, 'cur');
             const newPath = path.join(mailboxPath, 'new');
             
-            try {
-                await fs.access(curPath, fs.constants.F_OK);
-                await fs.access(newPath, fs.constants.F_OK);
-            } catch (error) {
+            const curExists = await fsDirectoryExists(curPath);
+            const newExists = await fsDirectoryExists(newPath);
+            
+            if (!curExists || !newExists) {
                 // Not a valid Maildir structure
                 return null;
             }
@@ -264,8 +262,8 @@ export default class Maildir {
     public async mailboxCreate(mailbox: string, attributes: string[] = []): Promise<boolean> {
         try {
             // Check if mailbox already exists
-            const exists = await this.mailboxExists(mailbox);
-            if (exists) {
+            const mailboxExists = await fsDirectoryExists(await this.sanitizeDirName(mailbox));
+            if (mailboxExists) {
                 console.error(`Cannot create: mailbox ${mailbox} already exists`);
                 return false;
             }
@@ -325,20 +323,15 @@ export default class Maildir {
             const newPath = await this.sanitizeDirName(newName);
             
             // Check if the source mailbox exists
-            try {
-                await fs.access(oldPath);
-            } catch (error) {
+            if (!await fsDirectoryExists(oldPath)) {
                 console.error(`Source mailbox ${oldName} does not exist`);
                 return false;
             }
             
             // Check if the destination mailbox already exists
-            try {
-                await fs.access(newPath);
+            if (await fsDirectoryExists(newPath)) {
                 console.error(`Destination mailbox ${newName} already exists`);
                 return false;
-            } catch (error) {
-                // This is expected - the destination should not exist
             }
             
             // Rename the mailbox
@@ -366,9 +359,7 @@ export default class Maildir {
             const mailboxPath = await this.sanitizeDirName(mailbox);
             
             // Check if the mailbox exists
-            try {
-                await fs.access(mailboxPath);
-            } catch (error) {
+            if (!await fsDirectoryExists(mailboxPath)) {
                 console.error(`Mailbox ${mailbox} does not exist`);
                 return false;
             }
@@ -390,8 +381,8 @@ export default class Maildir {
     public async mailboxSubscribe(mailbox: string): Promise<boolean> {
         try {
             // Check if mailbox exists
-            const exists = await this.mailboxExists(mailbox);
-            if (!exists) {
+            const mailboxExists = await this.mailboxExists(mailbox);
+            if (!mailboxExists) {
                 console.error(`Cannot subscribe: mailbox ${mailbox} does not exist`);
                 return false;
             }
@@ -481,50 +472,49 @@ export default class Maildir {
             const mailboxPath = await this.sanitizeDirName(mailbox);
             
             // Check if mailbox exists
-            try {
-                await fs.access(mailboxPath, fs.constants.F_OK);
-            } catch (error) {
+            if (!await fsDirectoryExists(mailboxPath)) {
                 console.error(`Cannot get messages: mailbox ${mailbox} does not exist`);
                 return false;
             }
             
-            const newPath = path.join(mailboxPath, 'new');
-            const curPath = path.join(mailboxPath, 'cur');
-            
             const messages: Email[] = [];
+            const curPath = path.join(mailboxPath, 'cur');
+            const newPath = path.join(mailboxPath, 'new');
             
             // Get messages from new directory (unread)
-            try {
-                await fs.access(newPath, fs.constants.F_OK);
-                const newFiles = await fs.readdir(newPath);
-                for (const fileName of newFiles) {
-                    const message = await this.parseMessage(fileName, path.join(newPath, fileName), true, mailboxPath);
-                    if (message) {
-                        messages.push(message);
+            if (await fsDirectoryExists(newPath)) {
+                try {
+                    const newFiles = await fs.readdir(newPath);
+                    for (const fileName of newFiles) {
+                        const message = await this.parseMessage(fileName, path.join(newPath, fileName), true, mailboxPath);
+                        if (message) {
+                            messages.push(message);
+                        }
                     }
+                } catch (error) {
+                    console.error(`Error reading new messages in ${mailbox}:`, error);
                 }
-            } catch (error) {
-                // New directory doesn't exist
             }
             
             // Get messages from cur directory (read)
-            try {
-                await fs.access(curPath, fs.constants.F_OK);
-                const curFiles = await fs.readdir(curPath);
-                for (const fileName of curFiles) {
-                    const message = await this.parseMessage(fileName, path.join(curPath, fileName), false, mailboxPath);
-                    if (message) {
-                        messages.push(message);
+            if (await fsDirectoryExists(curPath)) {
+                try {
+                    const curFiles = await fs.readdir(curPath);
+                    for (const fileName of curFiles) {
+                        const message = await this.parseMessage(fileName, path.join(curPath, fileName), false, mailboxPath);
+                        if (message) {
+                            messages.push(message);
+                        }
                     }
+                } catch (error) {
+                    console.error(`Error reading cur messages in ${mailbox}:`, error);
                 }
-            } catch (error) {
-                // Cur directory doesn't exist
             }
             
             return messages;
         } catch (error) {
             console.error(`Error getting messages from mailbox ${mailbox}:`, error);
-            return false;
+            return [];
         }
     }
     
@@ -631,14 +621,13 @@ export default class Maildir {
             // Delete the file
             const filePath = path.join(message._path, message._filename);
             
-            try {
-                await fs.access(filePath, fs.constants.F_OK);
-                await fs.unlink(filePath);
-                return true;
-            } catch (error) {
+            if (!await fsFileExists(filePath)) {
                 console.error(`Cannot delete: file for message ${messageId} not found`);
                 return false;
             }
+            
+            await fs.unlink(filePath);
+            return true;
         } catch (error) {
             console.error(`Error deleting message ${messageId}:`, error);
             return false;
@@ -681,13 +670,12 @@ export default class Maildir {
             const oldPath = path.join(message._path, message._filename);
             const newPath = path.join(message._path, newFileName);
             
-            try {
-                await fs.access(oldPath, fs.constants.F_OK);
-                await fs.rename(oldPath, newPath);
-            } catch (error) {
+            if (!await fsFileExists(oldPath)) {
                 console.error(`Cannot rename: file for message ${messageId} not found`);
                 return false;
             }
+            
+            await fs.rename(oldPath, newPath);
             
             // If setting \Seen flag, move from new to cur if needed
             if (flag.toUpperCase() === '\\SEEN' && value && message._path.endsWith('/new')) {
@@ -732,22 +720,21 @@ export default class Maildir {
             const sourcePath = path.join(message._path, message._filename);
             const targetFilePath = path.join(targetPath, message._filename);
             
-            try {
-                await fs.access(sourcePath, fs.constants.F_OK);
-                // Read the file content using Bun (faster)
-                const content = await Bun.file(sourcePath).text();
-                
-                // Write to the target location using Bun (faster)
-                await Bun.write(targetFilePath, content);
-                
-                // Delete the source file
-                await fs.unlink(sourcePath);
-                
-                return true;
-            } catch (error) {
+            if (!await fsFileExists(sourcePath)) {
                 console.error(`Cannot move: file for message ${messageId} not found`);
                 return false;
             }
+            
+            // Read the file content using Bun (faster)
+            const content = await Bun.file(sourcePath).text();
+            
+            // Write to the target location using Bun (faster)
+            await Bun.write(targetFilePath, content);
+            
+            // Delete the source file
+            await fs.unlink(sourcePath);
+            
+            return true;
         } catch (error) {
             console.error(`Error moving message ${messageId} to mailbox ${targetMailbox}:`, error);
             return false;
@@ -784,19 +771,18 @@ export default class Maildir {
             const sourcePath = path.join(message._path, message._filename);
             const targetFilePath = path.join(targetPath, message._filename);
             
-            try {
-                await fs.access(sourcePath, fs.constants.F_OK);
-                // Read the file content using Bun (faster)
-                const content = await Bun.file(sourcePath).text();
-                
-                // Write to the target location using Bun (faster)
-                await Bun.write(targetFilePath, content);
-                
-                return true;
-            } catch (error) {
+            if (!await fsFileExists(sourcePath)) {
                 console.error(`Cannot copy: file for message ${messageId} not found`);
                 return false;
             }
+            
+            // Read the file content using Bun (faster)
+            const content = await Bun.file(sourcePath).text();
+            
+            // Write to the target location using Bun (faster)
+            await Bun.write(targetFilePath, content);
+            
+            return true;
         } catch (error) {
             console.error(`Error copying message ${messageId} to mailbox ${targetMailbox}:`, error);
             return false;
@@ -882,30 +868,28 @@ export default class Maildir {
             // Update the draft file
             const filePath = path.join(mail._path, mail._filename);
             
-            try {
-                await fs.access(filePath, fs.constants.F_OK);
-                
-                // Make sure the draft has the correct flags
-                if (!mail.flags.includes('\\Seen')) {
-                    mail.flags.push('\\Seen'); // Drafts should be marked as seen
-                }
-                
-                // Ensure the Draft flag is present
-                if (!mail.flags.includes('\\Draft')) {
-                    mail.flags.push('\\Draft');
-                }
-                
-                // Construct email content
-                const content = createELMContent(mail);
-
-                // Update the draft file using Bun.write (faster)
-                await Bun.write(filePath, content);
-                
-                return true;
-            } catch (error) {
+            if (!await fsFileExists(filePath)) {
                 console.error('Cannot update: draft file does not exist');
                 return false;
             }
+            
+            // Make sure the draft has the correct flags
+            if (!mail.flags.includes('\\Seen')) {
+                mail.flags.push('\\Seen'); // Drafts should be marked as seen
+            }
+            
+            // Ensure the Draft flag is present
+            if (!mail.flags.includes('\\Draft')) {
+                mail.flags.push('\\Draft');
+            }
+            
+            // Construct email content
+            const content = createELMContent(mail);
+
+            // Update the draft file using Bun.write (faster)
+            await Bun.write(filePath, content);
+            
+            return true;
         } catch (error) {
             console.error('Error updating draft message:', error);
             return false;
@@ -982,18 +966,16 @@ export default class Maildir {
         try {
             const attributesPath = path.join(this.sanitizeMailboxPath(mailbox), '.attributes');
             
-            try {
-                // Check if attributes file exists
-                await fs.access(attributesPath);
-                
-                // Read attributes from file
-                const attributesContent = await Bun.file(attributesPath).text();
-                return attributesContent.split('\n').filter(Boolean);
-            } catch (error) {
+            // Check if attributes file exists
+            if (!await fsFileExists(attributesPath)) {
                 // If file doesn't exist, return standard attributes based on mailbox name
                 const mailboxName = path.basename(mailbox);
                 return getStandardMailboxFlags(mailboxName);
             }
+            
+            // Read attributes from file
+            const attributesContent = await Bun.file(attributesPath).text();
+            return attributesContent.split('\n').filter(Boolean);
         } catch (error) {
             console.error(`Error getting attributes for mailbox ${mailbox}:`, error);
             return [];

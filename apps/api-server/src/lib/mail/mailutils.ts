@@ -1,3 +1,6 @@
+import Bun from 'bun';
+import * as fs from "node:fs/promises";
+
 export function getMailIDfromFileName(fileName: string): string {
     // Extract ID from filename (part before the colon)
     let fileId = fileName.split(':')[0];
@@ -189,4 +192,27 @@ export function getStandardMailboxFlags(mailboxName: string): string[] {
     } else {
         return ['\\HasNoChildren'];
     }
+}
+
+/**
+ * Checks if a directory exists
+ * @param path Path to the directory
+ * @returns True if the directory exists
+ */
+export async function fsDirectoryExists(path: string): Promise<boolean> {
+    try {
+        await fs.access(path);
+        return true;
+    } catch (error) {
+        return false;
+    }
+}
+
+/**
+ * Checks if a file exists
+ * @param path Path to the file
+ * @returns True if the file exists
+ */
+export async function fsFileExists(path: string): Promise<boolean> {
+    return await Bun.file(path).exists();
 }
