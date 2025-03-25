@@ -7,23 +7,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger
 } from "@workspace/ui/components/dropdown-menu";
-
-// Define the Email interface locally to avoid import issues
-interface Email {
-  id: string;
-  read: boolean;
-  starred: boolean;
-  from: {
-    name: string;
-    email: string;
-  };
-  subject: string;
-  preview: string;
-  hasAttachment: boolean;
-  date: string;
-  important?: boolean;
-  labels?: string[];
-}
+import {Email} from "@/types/email";
+import {format} from "date-fns";
 
 interface EmailDetailProps {
   email: Email;
@@ -33,7 +18,53 @@ interface EmailDetailProps {
 }
 
 export function EmailDetail({ email, isMobile, className, onBackClick, ...props }: EmailDetailProps) {
-  if (!email) return null;
+  if (!email) {
+    console.log('No email provided to EmailDetail component');
+    return (
+      <div className="flex h-full items-center justify-center text-muted-foreground">
+        Email data not available
+      </div>
+    );
+  }
+  
+  console.log('Rendering EmailDetail with email:', email);
+  
+  // Handle different from formats from the API
+  let fromName = 'Unknown';
+  let fromEmail = 'unknown@example.com';
+  
+  // Extract from information
+  if (typeof email.from === 'object') {
+    if (email.from.name) {
+      fromName = email.from.name;
+      fromEmail = email.from.email || 'unknown@example.com';
+    } else if (email.from.value && Array.isArray(email.from.value) && email.from.value.length > 0) {
+      // Handle the structure from the screenshot
+      const firstFrom = email.from.value[0];
+      fromName = firstFrom.name || firstFrom.address || 'Unknown';
+      fromEmail = firstFrom.address || 'unknown@example.com';
+    } else if (email.from.email) {
+      fromName = email.from.name || email.from.email;
+      fromEmail = email.from.email;
+    }
+  } else if (typeof email.from === 'string') {
+    fromName = email.from;
+    fromEmail = email.from;
+  }
+  
+  // Format date
+  let formattedDate = 'Unknown date';
+  try {
+    if (email.date) {
+      const dateValue = new Date(email.date);
+      formattedDate = format(dateValue, "MMMM d, yyyy 'at' h:mm a");
+    }
+  } catch (error) {
+    console.error('Error formatting date:', error);
+  }
+  
+  // Get email content
+  const emailContent = email.html || email.text || email.preview || '';
   
   return (
     <div className={cn("flex flex-col h-full bg-white", className)} {...props}>
@@ -69,72 +100,82 @@ export function EmailDetail({ email, isMobile, className, onBackClick, ...props 
           </Button>
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className="h-8 w-8" title="More Options">
+              <Button variant="ghost" size="icon" className="h-8 w-8" title="More actions">
                 <MoreHorizontal className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem>Mark as unread</DropdownMenuItem>
-              <DropdownMenuItem>Mark as spam</DropdownMenuItem>
+              <DropdownMenuItem>Move to folder</DropdownMenuItem>
+              <DropdownMenuItem>Add label</DropdownMenuItem>
               <DropdownMenuItem>Print</DropdownMenuItem>
-              <DropdownMenuItem>Add to favorites</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
       </div>
       
-      <div className="p-4 flex-1 overflow-auto">
-        {/* Email header info */}
-        <div className="space-y-4 mb-6">
-          <div>
-            <h1 className="text-xl font-medium text-gray-900 mb-1">{email.subject}</h1>
+      {/* Email content */}
+      <div className="flex-1 overflow-auto p-6">
+        <div className="max-w-3xl mx-auto">
+          {/* Email header */}
+          <div className="mb-6">
+            <h1 className="text-xl font-semibold mb-4">
+              {email.subject ? String(email.subject) : '(No subject)'}
+            </h1>
             
-            <div className="flex items-center mt-4">
-              {/* Profile image/avatar placeholder */}
-              <div className="h-10 w-10 rounded-full bg-gray-200 flex items-center justify-center text-gray-600 font-medium">
-                {email.from.name[0]}
+            <div className="flex items-start">
+              <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center text-primary font-medium mr-3 mt-1">
+                {fromName.charAt(0).toUpperCase()}
               </div>
               
-              <div className="ml-3 flex-1">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between">
+              <div className="flex-1 min-w-0">
+                <div className="flex flex-col sm:flex-row sm:items-baseline sm:justify-between gap-1">
                   <div>
-                    <p className="text-sm font-medium text-gray-900">{email.from.name}</p>
-                    <p className="text-xs text-gray-500">{email.from.email}</p>
+                    <p className="font-medium">{fromName}</p>
+                    <p className="text-sm text-muted-foreground">{fromEmail}</p>
                   </div>
-                  <p className="text-xs text-gray-500 mt-1 sm:mt-0">{email.date}</p>
+                  <p className="text-sm text-muted-foreground whitespace-nowrap">
+                    {formattedDate}
+                  </p>
                 </div>
               </div>
             </div>
           </div>
           
-          {/* Attachments (if any) */}
-          {email.hasAttachment && (
-            <div className="bg-gray-50 p-3 rounded-md">
-              <div className="flex items-center space-x-2 mb-2 text-sm text-gray-600">
-                <Paperclip className="h-4 w-4" />
-                <span>Attachments</span>
+          {/* Email body */}
+          <div className="prose prose-sm max-w-none">
+            {email.html ? (
+              <div dangerouslySetInnerHTML={{ __html: email.html }} />
+            ) : (
+              <div style={{ whiteSpace: 'pre-wrap' }}>
+                {emailContent}
               </div>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-2">
-                {/* Mock attachment placeholders */}
-                <div className="border border-gray-200 rounded p-2 flex items-center bg-white">
-                  <div className="w-8 h-8 bg-blue-100 rounded flex items-center justify-center text-blue-600 mr-2">
-                    PDF
+            )}
+          </div>
+          
+          {/* Attachments */}
+          {email.attachments && email.attachments.length > 0 && (
+            <div className="mt-6 pt-6 border-t">
+              <h3 className="font-medium mb-3 flex items-center gap-2">
+                <Paperclip className="h-4 w-4" />
+                Attachments ({email.attachments.length})
+              </h3>
+              
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                {email.attachments.map((attachment: any, index: number) => (
+                  <div 
+                    key={index}
+                    className="flex items-center p-3 border rounded-md hover:bg-muted/50 cursor-pointer"
+                  >
+                    <Paperclip className="h-4 w-4 mr-2 text-muted-foreground" />
+                    <span className="text-sm truncate">
+                      {attachment.filename || `Attachment ${index + 1}`}
+                    </span>
                   </div>
-                  <div className="text-xs truncate">
-                    <p className="font-medium">Document.pdf</p>
-                    <p className="text-gray-500">245 KB</p>
-                  </div>
-                </div>
+                ))}
               </div>
             </div>
           )}
-        </div>
-        
-        {/* Email content */}
-        <div className="prose max-w-none text-sm text-gray-700">
-          <p>Hello,</p>
-          <p>{email.preview}</p>
-          <p className="mt-4">Best regards,<br />{email.from.name}</p>
         </div>
       </div>
     </div>
