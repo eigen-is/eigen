@@ -9,7 +9,7 @@ import * as schema from "./schema";
 import {v4 as uuidv4} from "uuid";
 
 async function getContactsDatabase(user: User) {
-    const db = await fsGetDatabase(user, 'contacts.eigen/contacts.db', true, async (db: Database) => {
+    const db = await fsGetDatabase(user, 'eigen.contacts/contacts.db', true, async (db: Database) => {
         // Execute migration SQL to create tables
         db.exec(`
             CREATE TABLE IF NOT EXISTS contacts (

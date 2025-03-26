@@ -5,7 +5,7 @@
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "bun run --env-file=../../.env --watch src/index.ts",
     "build": "bun build --env-file=../../.env.production --minify --target=bun  src/index.ts --outdir=./build ",
-    "compile": "bun build --minify  --compile --target=bun-linux-x64-modern src/index.ts --outfile myapp"
+    "compile": "bun build --minify --env-file=../../.env.production --compile --target=bun-linux-x64-modern src/index.ts --outfile myapp"
   },
   "dependencies": {
     "@elysiajs/cors": "^1.2.0",
