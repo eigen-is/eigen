@@ -45,38 +45,17 @@ function MailRoute() {
         });
     };
 
-    // Show loading status
-    if (isEmailLoading && mailId) {
-        return (
-            <div className="h-full flex items-center justify-center">
-                <p className="text-muted-foreground">Loading email...</p>
-            </div>
-        );
-    }
-
-    // On mobile: If a mailId is provided, show only the email detail view
-    if (isMobile && mailId && selectedEmail) {
-        return (
-            <div className="flex flex-col h-full">
+    // On mobile: Show full-width email list / detail
+    if (isMobile) {
+        return selectedEmail ? (
+            <div className="flex-1 h-full w-full">
                 <EmailDetail
                     email={selectedEmail}
                     isMobile={true}
                     onBackClick={handleBackToList}
                 />
             </div>
-        );
-    } else if (isMobile && mailId) {
-        // On mobile but email not loaded yet
-        return (
-            <div className="h-full flex items-center justify-center">
-                <p className="text-muted-foreground">Loading email...</p>
-            </div>
-        );
-    }
-
-    // On mobile: Show full-width email list
-    if (isMobile) {
-        return (
+        ) : (
             <div className="flex-1 h-full w-full">
                 <EmailList
                     emails={emails}

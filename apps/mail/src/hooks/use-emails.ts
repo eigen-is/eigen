@@ -15,6 +15,7 @@ export function useEmails(mailboxPath: string) {
     return useQuery({
         queryKey: emailKeys.list(mailboxPath),
         queryFn: async () => {
+            mailboxPath = mailboxPath === 'inbox' ? '' : mailboxPath;
             console.log(`Fetching emails for mailbox: ${mailboxPath}`);
             // @ts-ignore
             const response = await mailApi.mailbox[mailboxPath].get();
