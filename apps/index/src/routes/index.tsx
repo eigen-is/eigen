@@ -20,6 +20,10 @@ export function HomeComponent() {
         return () => clearInterval(interval);
     }, [apps.length]);
 
+    const handleLogin = () => {
+        window.location.href = './mail/';
+    };
+
     return (
         <div className="flex flex-col items-center justify-center min-h-screen p-4">
             <div className="text-5xl mb-8">
@@ -52,7 +56,7 @@ export function HomeComponent() {
                 </div>
             </div>
             <div className="flex gap-4">
-                <Button className="px-8 py-2 font-medium">
+                <Button className="px-8 py-2 font-medium" onClick={handleLogin}>
                     Login
                 </Button>
                 <Button variant="outline" className="px-6 py-2">

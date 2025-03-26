@@ -147,7 +147,27 @@
     }
 
     :root {
+        --app-space-color: var(--color-teal-600);
         --app-mail-color: var(--color-red-600);
         --app-contacts-color: var(--color-green-600);
+    }
+
+    .text-teal-600 {
+        @apply text-teal-600;
+    }
+    .text-red-600 {
+        @apply text-red-600;
+    }
+    .text-blue-600 {
+        @apply text-blue-600;
+    }
+    .text-green-600 {
+        @apply text-green-600;
+    }
+    .text-yellow-600 {
+        @apply text-yellow-600;
+    }
+    .text-purple-600 {
+        @apply text-purple-600;
     }
 }
