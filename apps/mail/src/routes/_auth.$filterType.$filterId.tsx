@@ -25,7 +25,7 @@ function MailRoute() {
     const isTablet = useMediaQuery('(max-width: 1024px) and (min-width: 769px)');
 
     const {data: emails = [], isLoading: isEmailsLoading, error: isEmailsError} = useEmails(filterId);
-    const {data: selectedEmail = null, isLoading: isEmailLoading} = useEmail(mailId);
+    const {data: selectedEmail = null} = useEmail(mailId);
 
     // Handle row click to show email details
     const handleRowClick = (emailId: string) => {
