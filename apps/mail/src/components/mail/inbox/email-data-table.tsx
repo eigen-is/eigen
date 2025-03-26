@@ -14,9 +14,8 @@ import {useState} from "react";
 import {Email} from "@/types/email";
 import {cn} from "@workspace/ui/lib/utils";
 import {Input} from "@workspace/ui/components/input";
-import {useEmails} from "@/hooks/use-emails";
 import {emailColumns} from "./email-columns";
-import {Loader2} from "lucide-react";
+import {EigenLoader} from "@workspace/ui/components/layout/eigen-loader";
 
 // Define a fuzzy filter function
 const fuzzyFilter: FilterFn<any> = (row, columnId, value, addMeta) => {
@@ -33,38 +32,25 @@ const fuzzyFilter: FilterFn<any> = (row, columnId, value, addMeta) => {
 }
 
 interface EmailDataTableProps {
-    mailboxPath: string;
+    emails: Email[];
     onRowClick?: (emailId: string) => void;
     activeRowId?: string;
+    isLoading?: boolean;
+    error?: any;
 }
 
 export function EmailDataTable({
-    mailboxPath,
-    onRowClick,
-    activeRowId
-}: EmailDataTableProps) {
+                                   emails,
+                                   onRowClick,
+                                   activeRowId,
+                                   isLoading,
+                                   error,
+                               }: EmailDataTableProps) {
     const [sorting, setSorting] = useState<SortingState>([])
     const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
     const [globalFilter, setGlobalFilter] = useState("")
-    
+
     const navigate = useNavigate();
-
-    // Fetch emails using the enhanced useEmails hook
-    const {
-        data: emails = [],
-        isLoading,
-        error,
-        refetch
-    } = useEmails(mailboxPath);
-
-    // Debug: Log the emails data
-    console.log(`Mailbox: ${mailboxPath}, Emails:`, emails);
-    console.log(`Email count: ${emails?.length || 0}`);
-    
-    // Show the structure of the first email if available
-    if (emails && emails.length > 0) {
-        console.log("First email structure:", JSON.stringify(emails[0], null, 2));
-    }
 
     const handleRowClick = (row: Email) => {
         if (onRowClick) {
@@ -93,11 +79,13 @@ export function EmailDataTable({
         },
     });
 
+    console.log(emails);
+
     // Render loading state
-    if (isLoading) {
+    if (isLoading || !emails) {
         return (
             <div className="flex h-full items-center justify-center">
-                <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                <EigenLoader/>
             </div>
         );
     }
@@ -109,12 +97,6 @@ export function EmailDataTable({
                 <div className="text-red-500 mb-4">
                     Error loading emails. Please try again.
                 </div>
-                <button
-                    onClick={() => refetch()}
-                    className="px-4 py-2 bg-primary text-primary-foreground rounded-md"
-                >
-                    Retry
-                </button>
             </div>
         );
     }
@@ -124,7 +106,7 @@ export function EmailDataTable({
             {/* Search header */}
             <div className="flex items-center h-12 px-4 border-b">
                 <div className="relative w-full">
-                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"/>
                     <Input
                         placeholder="Search emails..."
                         value={globalFilter}
@@ -133,7 +115,7 @@ export function EmailDataTable({
                     />
                 </div>
             </div>
-            
+
             {/* Email list as single column with blocks */}
             <div className="flex-1 overflow-y-auto">
                 <div className="w-full">
@@ -155,11 +137,6 @@ export function EmailDataTable({
                                         )}
                                         onClick={() => handleRowClick(email)}
                                     >
-                                        {/* Dot for important emails */}
-                                        {email.important && (
-                                            <div className="mt-1 mr-1.5 text-yellow-500 text-xs">•</div>
-                                        )}
-                                        
                                         {/* Content layout */}
                                         <div className="flex-1 min-w-0">
                                             <div className="flex justify-between items-baseline">
@@ -167,8 +144,8 @@ export function EmailDataTable({
                                                     "text-sm text-gray-900",
                                                     !email.read && "font-semibold"
                                                 )}>
-                                                    {typeof email.from === 'object' 
-                                                        ? email.from.name || email.from.email || "Unknown" 
+                                                    {typeof email.from === 'object'
+                                                        ? email.from.name || email.from.email || "Unknown"
                                                         : email.from || "Unknown"}
                                                 </div>
                                                 <div className="text-xs text-gray-500 whitespace-nowrap ml-2">
@@ -184,7 +161,7 @@ export function EmailDataTable({
                                             <div className="text-xs truncate text-gray-500 mt-0.5 flex items-center">
                                                 <span className="truncate">{email.preview}</span>
                                                 {email.hasAttachment && (
-                                                    <Paperclip className="h-3 w-3 ml-1 shrink-0 text-gray-400" />
+                                                    <Paperclip className="h-3 w-3 ml-1 shrink-0 text-gray-400"/>
                                                 )}
                                             </div>
                                         </div>
