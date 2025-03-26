@@ -5,7 +5,6 @@ import {SidebarItem} from '@workspace/ui/components/layout/sidebar/sidebar-item'
 import {SidebarSection} from '@workspace/ui/components/layout/sidebar/sidebar-section';
 import {Separator} from '@workspace/ui/components/separator';
 import {AppLogo} from '@workspace/ui/components/layout/app-logo';
-import {useMailboxes} from '../../hooks/use-mailboxes';
 import React from 'react';
 
 // Map of special mailbox flags to their icons and display names
@@ -80,11 +79,19 @@ interface AppSidebarProps {
     condensed?: boolean;
     onClose?: () => void;
     isMobile?: boolean;
+    mailboxes?: any[];
+    isLoading?: boolean;
+    error?: any;
 }
 
-export function EmailSidebar({condensed = false, onClose, isMobile = false}: AppSidebarProps) {
-    const {data: mailboxes = [], isLoading, error} = useMailboxes();
-
+export function EmailSidebar({
+                                 condensed = false,
+                                 onClose,
+                                 isMobile = false,
+                                 mailboxes = [],
+                                 isLoading = false,
+                                 error = false
+                             }: AppSidebarProps) {
     // Process mailboxes from API or use defaults if needed
     const processedMailboxes = mailboxes.map(mailbox => {
         const path = mailbox.path || '';
@@ -137,7 +144,7 @@ export function EmailSidebar({condensed = false, onClose, isMobile = false}: App
                     <Button variant="default" size={condensed ? "icon" : "default"} asChild
                             className={`${condensed ? 'w-10 p-0' : 'w-full justify-start gap-3'}`}>
                         <Link to="/">
-                            <Plus className="h-4 w-4"  />
+                            <Plus className="h-4 w-4"/>
                             {!condensed && "Compose"}
                         </Link>
                     </Button>

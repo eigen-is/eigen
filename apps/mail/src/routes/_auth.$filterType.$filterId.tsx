@@ -1,27 +1,8 @@
 import {createFileRoute, useNavigate} from '@tanstack/react-router';
-import {getEmailById} from "../lib/mock-data.ts";
 import {EmailDetail} from "../components/mail/email-detail.tsx";
 import {useMediaQuery} from "../hooks/use-media-query";
-import {useEffect, useState} from "react";
-import {useEmails} from "@/hooks/use-emails.ts";
+import {useEmail, useEmails} from "@/hooks/use-emails.ts";
 import {EmailList} from "@/components/mail/email-list.tsx";
-
-// Define the Email interface locally to avoid import issues
-interface Email {
-    id: string;
-    read: boolean;
-    starred: boolean;
-    from: {
-        name: string;
-        email: string;
-    };
-    subject: string;
-    preview: string;
-    hasAttachment: boolean;
-    date: string;
-    important?: boolean;
-    labels?: string[];
-}
 
 // Define search params type
 export interface MailSearchParams {
@@ -42,36 +23,9 @@ function MailRoute() {
     const navigate = useNavigate();
     const isMobile = useMediaQuery('(max-width: 768px)');
     const isTablet = useMediaQuery('(max-width: 1024px) and (min-width: 769px)');
-    const [selectedEmail, setSelectedEmail] = useState<Email | null>(null);
-    const [loading, setLoading] = useState(false);
+
     const {data: emails = [], isLoading: isEmailsLoading, error: isEmailsError} = useEmails(filterId);
-
-    // Load email when mailId changes
-    useEffect(() => {
-        async function loadEmail() {
-            if (mailId) {
-                setLoading(true);
-                try {
-                    const email = await getEmailById(mailId);
-                    setSelectedEmail(email);
-                } catch (error) {
-                    console.error('Failed to load email:', error);
-                    // Navigate back to list if email not found
-                    navigate({
-                        to: Route.fullPath,
-                        params: {filterType, filterId},
-                        search: {},
-                    });
-                } finally {
-                    setLoading(false);
-                }
-            } else {
-                setSelectedEmail(null);
-            }
-        }
-
-        loadEmail();
-    }, [mailId, filterType, filterId, navigate]);
+    const {data: selectedEmail = null, isLoading: isEmailLoading} = useEmail(mailId);
 
     // Handle row click to show email details
     const handleRowClick = (emailId: string) => {
@@ -92,7 +46,7 @@ function MailRoute() {
     };
 
     // Show loading status
-    if (loading && mailId) {
+    if (isEmailLoading && mailId) {
         return (
             <div className="h-full flex items-center justify-center">
                 <p className="text-muted-foreground">Loading email...</p>
