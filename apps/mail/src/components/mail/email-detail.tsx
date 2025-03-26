@@ -33,6 +33,7 @@ export function EmailDetail({email, isMobile, className, onBackClick, ...props}:
     const fromName = firstFrom?.name || firstFrom?.address || 'Unknown';
     const fromEmail = firstFrom?.address || 'unknown@example.com';
 
+
     // Format date
     let formattedDate = 'Unknown date';
     try {
