@@ -39,7 +39,7 @@ interface EmailDataTableProps {
     error?: any;
 }
 
-export function EmailDataTable({
+export function EmailList({
                                    emails,
                                    onRowClick,
                                    activeRowId,

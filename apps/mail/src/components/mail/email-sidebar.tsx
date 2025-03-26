@@ -82,7 +82,7 @@ interface AppSidebarProps {
     isMobile?: boolean;
 }
 
-export function AppSidebar({condensed = false, onClose, isMobile = false}: AppSidebarProps) {
+export function EmailSidebar({condensed = false, onClose, isMobile = false}: AppSidebarProps) {
     const {data: mailboxes = [], isLoading, error} = useMailboxes();
 
     // Process mailboxes from API or use defaults if needed
