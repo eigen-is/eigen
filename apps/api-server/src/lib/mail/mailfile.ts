@@ -1,4 +1,4 @@
-import type { Email, AddressObject } from "./mailtypes";
+import type {AddressObject, Email} from "./mailtypes";
 
 /**
  * Creates an EML format content from an Email object
@@ -8,14 +8,14 @@ import type { Email, AddressObject } from "./mailtypes";
 export function createELMContent(email: Email): string {
     // Format the date
     const date = email.date ? email.date.toUTCString() : new Date().toUTCString();
-    
+
     // Format the from address
     let fromStr = '';
     if (email.from) {
         // Use the text representation which is already formatted
         fromStr = email.from.text;
     }
-    
+
     // Format the to address(es)
     let toStr = '';
     if (email.to) {
@@ -27,7 +27,7 @@ export function createELMContent(email: Email): string {
             toStr = email.to.text;
         }
     }
-    
+
     // Create the email headers
     const headers = [
         `From: ${fromStr}`,
@@ -38,7 +38,7 @@ export function createELMContent(email: Email): string {
         `MIME-Version: 1.0`,
         `Content-Type: multipart/alternative; boundary="boundary-string"`
     ];
-    
+
     // Create the email body
     const body = [
         ``,
@@ -54,7 +54,7 @@ export function createELMContent(email: Email): string {
         ``,
         `--boundary-string--`
     ];
-    
+
     // Combine headers and body
     return [...headers, ...body].join('\r\n');
 }

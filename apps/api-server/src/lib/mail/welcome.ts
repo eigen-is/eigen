@@ -1,4 +1,4 @@
-export function welcomeMail(name:string) {
+export function welcomeMail(name: string) {
     return `From: Reinder Nijhoff <reinder@eigen.is>
 To: Reinder Nijhoff <reinder@eigen.is>
 Subject: Welcome!

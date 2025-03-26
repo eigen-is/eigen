@@ -44,6 +44,7 @@ export type HeaderLines = ReadonlyArray<{
     key: string;
     line: string;
 }>;
+
 /**
  * Address details.
  */
@@ -159,6 +160,7 @@ export interface AttachmentStream extends AttachmentCommon {
      * A Buffer that contains the attachment contents.
      */
     content: Stream;
+
     /**
      * Method must be called once you have processed the attachment.
      */
@@ -288,6 +290,7 @@ export interface MessageText {
  */
 export class MailParser extends StreamModule.Transform {
     constructor(options?: MailParserOptions);
+
     on(event: string, callback: (any: any) => void): this;
     on(event: "headers", callback: (headers: Headers) => void): this;
     on(event: "data" | "readable", callback: (data: AttachmentStream | MessageText) => void): this;

@@ -2,24 +2,28 @@
 import {Elysia, t} from "elysia";
 import {betterAuth} from "./auth";
 import {
-    mailboxesList, 
-    mailboxGet, 
-    mailboxCreate, 
-    mailboxExists, 
-    mailboxRename, 
-    mailboxDelete, 
-    mailboxSubscribe, 
-    mailboxUnsubscribe,
+    mailboxCreate,
+    mailboxDelete,
     mailboxDeliver,
-    messageGet,
-    messageDelete,
-    messageFlag,
-    messageMove,
+    mailboxesList,
+    mailboxExists,
+    mailboxGet,
+    mailboxRename,
+    mailboxSubscribe,
+    mailboxUnsubscribe,
     messageCopy,
     messageCreateDraft,
-    messageUpdateDraft,
+    messageDelete,
+    messageFlag,
+    messageGet,
+    messageGetAttachment,
+    messageMove,
+    messageMoveToArchive,
+    messageMoveToInbox,
+    messageMoveToSpam,
+    messageMoveToTrash,
     messageSetRead,
-    messageGetAttachment
+    messageUpdateDraft
 } from "../lib/mail/mail";
 import {type User} from "better-auth/types";
 
@@ -34,7 +38,7 @@ type RenameMailboxBody = {
     newName: string;
 }
 
-type DeliverMessageBody = File;
+type DeliverMessageBody = ArrayBuffer;
 
 type MessageFlagBody = {
     messageId: string;
@@ -59,17 +63,17 @@ type MessageDraftBody = {
 export const mailRouter = new Elysia({name: "mail"})
     .use(betterAuth)
     // Mailbox routes
-    .get("/mail/mailboxes", async ({user}: {user: User}) => {
+    .get("/mail/mailboxes", async ({user}: { user: User }) => {
         return await mailboxesList(user);
     }, {
         auth: true
     })
-    .get("/mail/mailbox/*", async ({params, user}: {params: {'*': string}, user: User}) => {
+    .get("/mail/mailbox/*", async ({params, user}: { params: { '*': string }, user: User }) => {
         return await mailboxGet(user, params['*']);
     }, {
         auth: true,
     })
-    .post("/mail/mailbox", async ({body, user}: {body: CreateMailboxBody, user: User}) => {
+    .post("/mail/mailbox", async ({body, user}: { body: CreateMailboxBody, user: User }) => {
         return await mailboxCreate(user, body['mailbox'], body['attributes']);
     }, {
         auth: true,
@@ -78,12 +82,12 @@ export const mailRouter = new Elysia({name: "mail"})
             attributes: t.Optional(t.Array(t.String()))
         })
     })
-    .get("/mail/mailbox-exists/*", async ({params, user}: {params: {'*': string}, user: User}) => {
+    .get("/mail/mailbox-exists/*", async ({params, user}: { params: { '*': string }, user: User }) => {
         return await mailboxExists(user, params['*']);
     }, {
         auth: true
     })
-    .put("/mail/mailbox", async ({body, user}: {body: RenameMailboxBody, user: User}) => {
+    .put("/mail/mailbox", async ({body, user}: { body: RenameMailboxBody, user: User }) => {
         return await mailboxRename(user, body['oldName'], body['newName']);
     }, {
         auth: true,
@@ -92,27 +96,26 @@ export const mailRouter = new Elysia({name: "mail"})
             newName: t.String()
         })
     })
-    .delete("/mail/mailbox/*", async ({params, user}: {params: {'*': string}, user: User}) => {
+    .delete("/mail/mailbox/*", async ({params, user}: { params: { '*': string }, user: User }) => {
         return await mailboxDelete(user, params['*']);
     }, {
         auth: true
     })
-    .post("/mail/mailbox/subscribe/*", async ({params, user}: {params: {'*': string}, user: User}) => {
+    .post("/mail/mailbox/subscribe/*", async ({params, user}: { params: { '*': string }, user: User }) => {
         return await mailboxSubscribe(user, params['*']);
     }, {
         auth: true
     })
-    .post("/mail/mailbox/unsubscribe/*", async ({params, user}: {params: {'*': string}, user: User}) => {
+    .post("/mail/mailbox/unsubscribe/*", async ({params, user}: { params: { '*': string }, user: User }) => {
         return await mailboxUnsubscribe(user, params['*']);
     }, {
         auth: true
     })
-    .post("/mail/deliver/:to", async ({params, body}: {body: DeliverMessageBody, params: { 'to': string }}) => {
+    .post("/mail/deliver/:to", async ({params, body}: { body: DeliverMessageBody, params: { 'to': string } }) => {
         return await mailboxDeliver(params.to, body);
     })
-    
     // Message routes
-    .get("/mail/message/:id", async ({params, user}: {params: {id: string}, user: User}) => {
+    .get("/mail/message/:id", async ({params, user}: { params: { id: string }, user: User }) => {
         return await messageGet(user, params['id']);
     }, {
         auth: true,
@@ -120,7 +123,7 @@ export const mailRouter = new Elysia({name: "mail"})
             id: t.String()
         })
     })
-    .delete("/mail/message/:id", async ({params, user}: {params: {id: string}, user: User}) => {
+    .delete("/mail/message/:id", async ({params, user}: { params: { id: string }, user: User }) => {
         return await messageDelete(user, params['id']);
     }, {
         auth: true,
@@ -128,7 +131,7 @@ export const mailRouter = new Elysia({name: "mail"})
             id: t.String()
         })
     })
-    .put("/mail/message/flag", async ({body, user}: {body: MessageFlagBody, user: User}) => {
+    .put("/mail/message/flag", async ({body, user}: { body: MessageFlagBody, user: User }) => {
         return await messageFlag(user, body['messageId'], body['flag'], body['value']);
     }, {
         auth: true,
@@ -138,7 +141,7 @@ export const mailRouter = new Elysia({name: "mail"})
             value: t.Boolean()
         })
     })
-    .put("/mail/message/move", async ({body, user}: {body: MessageMoveBody, user: User}) => {
+    .put("/mail/message/move", async ({body, user}: { body: MessageMoveBody, user: User }) => {
         return await messageMove(user, body['messageId'], body['targetMailbox']);
     }, {
         auth: true,
@@ -147,7 +150,39 @@ export const mailRouter = new Elysia({name: "mail"})
             targetMailbox: t.String()
         })
     })
-    .post("/mail/message/copy", async ({body, user}: {body: MessageMoveBody, user: User}) => {
+    .put("/mail/message/moveToInbox", async ({body, user}: { body: { messageId: string }, user: User }) => {
+        return await messageMoveToInbox(user, body['messageId']);
+    }, {
+        auth: true,
+        body: t.Object({
+            messageId: t.String()
+        })
+    })
+    .put("/mail/message/moveToArchive", async ({body, user}: { body: { messageId: string }, user: User }) => {
+        return await messageMoveToArchive(user, body['messageId']);
+    }, {
+        auth: true,
+        body: t.Object({
+            messageId: t.String()
+        })
+    })
+    .put("/mail/message/moveToSpam", async ({body, user}: { body: { messageId: string }, user: User }) => {
+        return await messageMoveToSpam(user, body['messageId']);
+    }, {
+        auth: true,
+        body: t.Object({
+            messageId: t.String()
+        })
+    })
+    .put("/mail/message/moveToTrash", async ({body, user}: { body: { messageId: string }, user: User }) => {
+        return await messageMoveToTrash(user, body['messageId']);
+    }, {
+        auth: true,
+        body: t.Object({
+            messageId: t.String()
+        })
+    })
+    .post("/mail/message/copy", async ({body, user}: { body: MessageMoveBody, user: User }) => {
         return await messageCopy(user, body['messageId'], body['targetMailbox']);
     }, {
         auth: true,
@@ -156,12 +191,12 @@ export const mailRouter = new Elysia({name: "mail"})
             targetMailbox: t.String()
         })
     })
-    .post("/mail/message/draft", async ({user}: {user: User}) => {
+    .post("/mail/message/draft", async ({user}: { user: User }) => {
         return await messageCreateDraft(user);
     }, {
         auth: true
     })
-    .put("/mail/message/draft", async ({body, user}: {body: MessageDraftBody, user: User}) => {
+    .put("/mail/message/draft", async ({body, user}: { body: MessageDraftBody, user: User }) => {
         return await messageUpdateDraft(user, body['mail']);
     }, {
         auth: true,
@@ -169,7 +204,7 @@ export const mailRouter = new Elysia({name: "mail"})
             mail: t.Any()
         })
     })
-    .put("/mail/message/read", async ({body, user}: {body: MessageReadBody, user: User}) => {
+    .put("/mail/message/read", async ({body, user}: { body: MessageReadBody, user: User }) => {
         return await messageSetRead(user, body['messageId'], body['read']);
     }, {
         auth: true,
@@ -178,7 +213,10 @@ export const mailRouter = new Elysia({name: "mail"})
             read: t.Boolean()
         })
     })
-    .get("/mail/message/:id/attachment/:index", async ({params, user}: {params: {id: string, index: string}, user: User}) => {
+    .get("/mail/message/:id/attachment/:index", async ({params, user}: {
+        params: { id: string, index: string },
+        user: User
+    }) => {
         return await messageGetAttachment(user, params['id'], parseInt(params['index']));
     }, {
         auth: true,

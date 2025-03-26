@@ -21,27 +21,44 @@ export const contactsRouter = new Elysia({name: "contacts"})
     .get("/contacts/contacts", async ({user}) => await getContacts(user), {
         auth: true
     })
-    .get("/contacts/contacts/:id", async ({params, user} : {params: {id: string}, user: User}) => await getContactById(user, params.id), {
+    .get("/contacts/contacts/:id", async ({params, user}: {
+        params: { id: string },
+        user: User
+    }) => await getContactById(user, params.id), {
         auth: true
     })
-    .post("/contacts/contacts", async ({body, user} : {body: Contact, user: User}) => await addContact(user, body), {
+    .post("/contacts/contacts", async ({body, user}: { body: Contact, user: User }) => await addContact(user, body), {
         auth: true
     })
-    .put("/contacts/contacts/:id", async ({params, body, user} : {params: {id: string}, body: Contact, user: User}) => await updateContact(user, params.id, body), {
+    .put("/contacts/contacts/:id", async ({params, body, user}: {
+        params: { id: string },
+        body: Contact,
+        user: User
+    }) => await updateContact(user, params.id, body), {
         auth: true
     })
-    .delete("/contacts/contacts/:id", async ({params, user} : {params: {id: string}, user: User}) => await deleteContact(user, params.id), {
+    .delete("/contacts/contacts/:id", async ({params, user}: {
+        params: { id: string },
+        user: User
+    }) => await deleteContact(user, params.id), {
         auth: true
     })
     .get("/contacts/labels", async ({user}) => await getContactLabels(user), {
         auth: true
     })
-    .post("/contacts/labels", async ({body, user} : {body: Label, user: User}) => await addContactLabel(user, body), {
+    .post("/contacts/labels", async ({body, user}: { body: Label, user: User }) => await addContactLabel(user, body), {
         auth: true
     })
-    .put("/contacts/labels/:id", async ({params, body, user} : {params: {id: string}, body: Label, user: User}) => await updateContactLabel(user, params.id, body), {
+    .put("/contacts/labels/:id", async ({params, body, user}: {
+        params: { id: string },
+        body: Label,
+        user: User
+    }) => await updateContactLabel(user, params.id, body), {
         auth: true
     })
-    .delete("/contacts/labels/:id", async ({params, user} : {params: {id: string}, user: User}) => await deleteContactLabel(user, params.id), {
+    .delete("/contacts/labels/:id", async ({params, user}: {
+        params: { id: string },
+        user: User
+    }) => await deleteContactLabel(user, params.id), {
         auth: true
     })

@@ -35,6 +35,5 @@ export function useEmail(messageId: string | undefined) {
         },
         enabled: !!messageId,
         staleTime: 60000, // 1 minute
-        refetchOnWindowFocus: false,
     });
 }

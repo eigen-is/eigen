@@ -39,24 +39,23 @@ async function getContactsDatabase(user: User) {
             );
         `);
 
-        
-        
+
         try {
             // Initialize drizzle
-            const dr = drizzle(db, { schema });
-        
+            const dr = drizzle(db, {schema});
+
             // Mock labels to add if none exist
             const mockLabels: Label[] = [
-                { id: uuidv4(), name: 'Family', color: '#f87171' },
-                { id: uuidv4(), name: 'Friends', color: '#60a5fa' },
-                { id: uuidv4(), name: 'Work', color: '#4ade80' },
-                { id: uuidv4(), name: 'Important', color: '#facc15' }
+                {id: uuidv4(), name: 'Family', color: '#f87171'},
+                {id: uuidv4(), name: 'Friends', color: '#60a5fa'},
+                {id: uuidv4(), name: 'Work', color: '#4ade80'},
+                {id: uuidv4(), name: 'Important', color: '#facc15'}
             ];
 
             // Check if labels already exist
             const existingLabels = await dr.select().from(schema.labels).all();
             console.log('Existing labels:', existingLabels);
-            
+
             // Only add mock labels if none exist
             if (existingLabels.length === 0) {
                 console.log('Adding mock labels...');
@@ -88,17 +87,17 @@ async function getContactsDatabase(user: User) {
             avatar: '',
             labels: []
         });
-    }); 
+    });
 
-    return drizzle(db, { schema });
+    return drizzle(db, {schema});
 }
 
 async function setContactLabels(user: User, contactId: string, labels: string[]) {
     const db = await getContactsDatabase(user);
-    
+
     // Delete existing labels
     await db.delete(schema.contactsToLabels).where(eq(schema.contactsToLabels.contactId, contactId));
-    
+
     // Insert new labels
     for (const labelId of labels) {
         await db.insert(schema.contactsToLabels).values({
@@ -111,8 +110,8 @@ async function setContactLabels(user: User, contactId: string, labels: string[])
 export async function addContact(user: User, contact: Omit<Contact, 'id'>) {
     const db = await getContactsDatabase(user);
     const contactId = uuidv4();
-    
-    const { labels, ...contactData } = contact;
+
+    const {labels, ...contactData} = contact;
     const data = {
         email: contactData.email,
         phone: contactData.phone,
@@ -133,10 +132,10 @@ export async function addContact(user: User, contact: Omit<Contact, 'id'>) {
         createdAt: sql`unixepoch()`,
         updatedAt: sql`unixepoch()`,
     });
-    
+
     // Add labels if provided
     await setContactLabels(user, contactId, labels || []);
-    
+
     return contactId;
 }
 
@@ -147,7 +146,7 @@ export async function deleteContact(user: User, id: string) {
 
 export async function updateContact(user: User, id: string, contact: Omit<Contact, 'id'>) {
     const db = await getContactsDatabase(user);
-    const { labels, ...contactData } = contact;
+    const {labels, ...contactData} = contact;
     const data = {
         email: contactData.email,
         phone: contactData.phone,
@@ -169,7 +168,7 @@ export async function updateContact(user: User, id: string, contact: Omit<Contac
             updatedAt: sql`unixepoch()`
         })
         .where(eq(schema.contacts.id, id));
-    
+
     // Update labels if provided
     await setContactLabels(user, id, labels || []);
 }
@@ -182,7 +181,7 @@ export async function getContactLabels(user: User): Promise<Label[]> {
 export async function addContactLabel(user: User, label: Omit<Label, 'id'>): Promise<string> {
     const db = await getContactsDatabase(user);
     const labelId = uuidv4();
-    
+
     await db.insert(schema.labels).values({
         id: labelId,
         name: label.name,
@@ -190,15 +189,15 @@ export async function addContactLabel(user: User, label: Omit<Label, 'id'>): Pro
         createdAt: sql`unixepoch()`,
         updatedAt: sql`unixepoch()`,
     });
-    
+
     return labelId;
 }
 
 export async function updateContactLabel(user: User, id: string, label: Omit<Label, 'id'>) {
     const db = await getContactsDatabase(user);
-    
+
     console.log('Updating label:', id, label);
-    
+
     try {
         await db.update(schema.labels)
             .set({
@@ -207,9 +206,9 @@ export async function updateContactLabel(user: User, id: string, label: Omit<Lab
                 updatedAt: sql`unixepoch()`
             })
             .where(eq(schema.labels.id, id));
-            
+
         console.log('Label updated successfully');
-        
+
         // Return the updated label
         const updatedLabel = await db.select().from(schema.labels).where(eq(schema.labels.id, id)).get();
         console.log('Updated label:', updatedLabel);
@@ -228,23 +227,23 @@ export async function deleteContactLabel(user: User, id: string) {
 
 export async function getContactById(user: User, id: string): Promise<Contact | null> {
     const db = await getContactsDatabase(user);
-    
+
     const contact = await db.select().from(schema.contacts).where(eq(schema.contacts.id, id)).get();
-    
+
     if (!contact) return null;
-    
+
     const labelRelations = await db.select({
         labelId: schema.contactsToLabels.labelId
     })
-    .from(schema.contactsToLabels)
-    .where(eq(schema.contactsToLabels.contactId, id))
-    .all();
-    
+        .from(schema.contactsToLabels)
+        .where(eq(schema.contactsToLabels.contactId, id))
+        .all();
+
     const labelIds = labelRelations.map(rel => rel.labelId);
-    
+
     // Parse the stored JSON data
     const data = contact.data ?? {};
-    
+
     return {
         id: contact.id,
         firstName: contact.firstName,
@@ -257,23 +256,23 @@ export async function getContactById(user: User, id: string): Promise<Contact | 
 
 export async function getContacts(user: User): Promise<Contact[]> {
     const db = await getContactsDatabase(user);
-    
+
     const contacts = await db.select().from(schema.contacts).all();
     const results = [];
-    
+
     for (const contact of contacts) {
         const labelRelations = await db.select({
             labelId: schema.contactsToLabels.labelId
         })
-        .from(schema.contactsToLabels)
-        .where(eq(schema.contactsToLabels.contactId, contact.id))
-        .all();
-        
+            .from(schema.contactsToLabels)
+            .where(eq(schema.contactsToLabels.contactId, contact.id))
+            .all();
+
         const labelIds = labelRelations.map(rel => rel.labelId);
-        
+
         // Parse the stored JSON data
         const data = contact.data ?? {};
-        
+
         results.push({
             id: contact.id,
             firstName: contact.firstName,
@@ -283,6 +282,6 @@ export async function getContacts(user: User): Promise<Contact[]> {
             labels: labelIds
         });
     }
-    
+
     return results;
 }

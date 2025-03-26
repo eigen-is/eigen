@@ -1,4 +1,4 @@
-import {Archive, ArrowLeft, Forward, MoreHorizontal, Paperclip, Reply, ReplyAll, Trash2} from "lucide-react";
+import {Archive, ArrowLeft, Forward, MoreVertical, Paperclip, Reply, ReplyAll, Trash2} from "lucide-react";
 import {cn} from "@workspace/ui/lib/utils";
 import {Button} from "@workspace/ui/components/button";
 import {
@@ -79,10 +79,13 @@ export function EmailDetail({email, isMobile, className, onBackClick, ...props}:
                     <Button variant="ghost" size="icon" className="h-8 w-8" title="Delete">
                         <Trash2 className="h-4 w-4"/>
                     </Button>
+
+                    <div className="h-6 w-[1px] bg-border mx-1"></div>
+
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                             <Button variant="ghost" size="icon" className="h-8 w-8" title="More actions">
-                                <MoreHorizontal className="h-4 w-4"/>
+                                <MoreVertical className="h-4 w-4"/>
                             </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
@@ -152,8 +155,8 @@ export function EmailDetail({email, isMobile, className, onBackClick, ...props}:
                                     >
                                         <Paperclip className="h-4 w-4 mr-2 text-muted-foreground"/>
                                         <span className="text-sm truncate">
-                      {attachment.filename || `Attachment ${index + 1}`}
-                    </span>
+                                            {attachment.filename || `Attachment ${index + 1}`}
+                                        </span>
                                     </div>
                                 ))}
                             </div>

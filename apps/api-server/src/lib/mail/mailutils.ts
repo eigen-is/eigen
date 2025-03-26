@@ -18,13 +18,13 @@ export function getMailIDfromFileName(fileName: string): string {
  */
 export function extractFlagsFromFileName(fileName: string): string[] {
     const flags: string[] = [];
-    
+
     // Check if the filename has flags (format: id:2,flags)
     const flagsMatch = fileName.match(/:2,([A-Z]+)$/);
     if (flagsMatch && flagsMatch[1]) {
         // Convert each character to a flag
         const flagChars = flagsMatch[1].split('');
-        
+
         // Map flag characters to IMAP flags
         for (const char of flagChars) {
             switch (char) {
@@ -49,7 +49,7 @@ export function extractFlagsFromFileName(fileName: string): string[] {
             }
         }
     }
-    
+
     return flags;
 }
 
@@ -69,30 +69,30 @@ export function updateFlagInFileName(fileName: string, flag: string, add: boolea
         '\\Draft': 'D',
         '\\Deleted': 'T'
     };
-    
+
     // Convert IMAP flag to character if needed
     const flagChar = flagMap[flag] || flag;
-    
+
     // Check if the filename has flags
     const parts = fileName.split(':');
     const id = parts[0];
-    
+
     if (parts.length < 2) {
         // No flags yet, add the flag section
         return add ? `${id}:2,${flagChar}` : id;
     }
-    
+
     // Extract existing flags
     const flagSection = parts[1];
     const flagsMatch = flagSection.match(/^2,([A-Z]*)$/);
-    
+
     if (!flagsMatch) {
         // Invalid flag format, return original
         return fileName;
     }
-    
+
     let flags = flagsMatch[1].split('');
-    
+
     if (add) {
         // Add flag if not already present
         if (!flags.includes(flagChar)) {
@@ -102,10 +102,10 @@ export function updateFlagInFileName(fileName: string, flag: string, add: boolea
         // Remove flag if present
         flags = flags.filter(f => f !== flagChar);
     }
-    
+
     // Sort flags alphabetically (standard practice)
     flags.sort();
-    
+
     // Reconstruct the filename
     return `${id}:2,${flags.join('')}`;
 }
@@ -119,10 +119,10 @@ export function updateFlagInFileName(fileName: string, flag: string, add: boolea
 export function createFileNameWithFlags(fileName: string, flags: string[]): string {
     // Get the ID part of the filename
     const id = getMailIDfromFileName(fileName);
-    
+
     // Convert IMAP flags to characters
     const flagChars: string[] = [];
-    
+
     for (const flag of flags) {
         switch (flag) {
             case '\\Seen':
@@ -143,10 +143,10 @@ export function createFileNameWithFlags(fileName: string, flags: string[]): stri
             // Skip other flags that don't have a character representation
         }
     }
-    
+
     // Sort flags alphabetically (standard practice)
     flagChars.sort();
-    
+
     // Construct the new filename
     return flagChars.length > 0 ? `${id}:2,${flagChars.join('')}` : id;
 }
@@ -176,7 +176,7 @@ export function isSpecialMailbox(attributes: string[]): boolean {
  */
 export function getStandardMailboxFlags(mailboxName: string): string[] {
     const name = mailboxName.toLowerCase();
-    
+
     if (name === '' || name === 'inbox') {
         return ['\\HasNoChildren', '\\Inbox'];
     } else if (name === 'sent') {
