@@ -28,12 +28,10 @@ interface MaildirMailbox {
     flags: string[];
     total: number;
     unread: number;
-    subscribed: boolean;
 }
 
 export default class Maildir {
     private basePath: string;
-    private subscriptions: Set<string> = new Set();
     private user: User;
 
     constructor(user: User) {
@@ -221,8 +219,6 @@ export default class Maildir {
                 attributes.push('\\Inbox');
             }
 
-            // Determine if this mailbox is subscribed
-            const isSubscribed = this.subscriptions.has(mailboxName);
 
             // Create the mailbox object
             const mailbox: MaildirMailbox = {
@@ -231,8 +227,7 @@ export default class Maildir {
                 delimiter: '.',
                 flags: attributes, // Use the attributes as flags
                 total: curFiles.length + newFiles.length,
-                unread: newFiles.length,
-                subscribed: isSubscribed
+                unread: newFiles.length
             };
 
             return mailbox;
@@ -376,47 +371,6 @@ export default class Maildir {
         }
     }
 
-    /**
-     * Subscribes to a mailbox
-     * @param mailbox Mailbox name
-     * @returns True if successful
-     */
-    public async mailboxSubscribe(mailbox: string): Promise<boolean> {
-        try {
-            // Check if mailbox exists
-            const mailboxExists = await this.mailboxExists(mailbox);
-            if (!mailboxExists) {
-                console.error(`Cannot subscribe: mailbox ${mailbox} does not exist`);
-                return false;
-            }
-
-            this.subscriptions.add(mailbox || 'INBOX');
-            return true;
-        } catch (error) {
-            console.error(`Error subscribing to mailbox ${mailbox}:`, error);
-            return false;
-        }
-    }
-
-    /**
-     * Unsubscribes from a mailbox
-     * @param mailbox Mailbox name
-     * @returns True if successful
-     */
-    public async mailboxUnsubscribe(mailbox: string): Promise<boolean> {
-        try {
-            if (this.subscriptions.has(mailbox || 'INBOX')) {
-                this.subscriptions.delete(mailbox || 'INBOX');
-                return true;
-            }
-
-            return false;
-        } catch (error) {
-            console.error(`Error unsubscribing from mailbox ${mailbox}:`, error);
-            return false;
-        }
-    }
-
     public async mailboxWatch($mailbox: string, $callback: (event: string, filename: string) => void) {
         try {
             // Check if mailbox exists
@@ -489,7 +443,7 @@ export default class Maildir {
                 try {
                     const newFiles = await fs.readdir(newPath);
                     for (const fileName of newFiles) {
-                        const message = await this.parseMessage(fileName, path.join(newPath, fileName), true, mailboxPath);
+                        const message = await this.parseMessage(fileName, path.join(newPath, fileName), true, newPath);
                         if (message) {
                             messages.push(message);
                         }
@@ -504,7 +458,7 @@ export default class Maildir {
                 try {
                     const curFiles = await fs.readdir(curPath);
                     for (const fileName of curFiles) {
-                        const message = await this.parseMessage(fileName, path.join(curPath, fileName), false, mailboxPath);
+                        const message = await this.parseMessage(fileName, path.join(curPath, fileName), false, curPath);
                         if (message) {
                             messages.push(message);
                         }
@@ -514,7 +468,7 @@ export default class Maildir {
                 }
             }
 
-            return messages;
+            return messages.sort((a,b) => (b.date?.getDate() || 0) - (a.date?.getDate() || 0));
         } catch (error) {
             console.error(`Error getting messages from mailbox ${mailbox}:`, error);
             return [];
@@ -731,6 +685,10 @@ export default class Maildir {
             // Move the file
             const sourcePath = path.join(message._path, message._filename);
             const targetFilePath = path.join(targetPath, message._filename);
+
+            console.log(message);
+
+            console.log(sourcePath, targetFilePath);
 
             if (!await fsFileExists(sourcePath)) {
                 console.error(`Cannot move: file for message ${messageId} not found`);

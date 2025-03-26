@@ -9,8 +9,6 @@ import {
     mailboxExists,
     mailboxGet,
     mailboxRename,
-    mailboxSubscribe,
-    mailboxUnsubscribe,
     messageCopy,
     messageCreateDraft,
     messageDelete,
@@ -98,16 +96,6 @@ export const mailRouter = new Elysia({name: "mail"})
     })
     .delete("/mail/mailbox/*", async ({params, user}: { params: { '*': string }, user: User }) => {
         return await mailboxDelete(user, params['*']);
-    }, {
-        auth: true
-    })
-    .post("/mail/mailbox/subscribe/*", async ({params, user}: { params: { '*': string }, user: User }) => {
-        return await mailboxSubscribe(user, params['*']);
-    }, {
-        auth: true
-    })
-    .post("/mail/mailbox/unsubscribe/*", async ({params, user}: { params: { '*': string }, user: User }) => {
-        return await mailboxUnsubscribe(user, params['*']);
     }, {
         auth: true
     })

@@ -77,28 +77,6 @@ export async function mailboxDelete(user: User, mailbox: string) {
 }
 
 /**
- * Subscribes to a mailbox
- * @param user User object
- * @param mailbox Mailbox name
- * @returns True if successful
- */
-export async function mailboxSubscribe(user: User, mailbox: string) {
-    const mail = await getMailClient(user);
-    return await mail.mailboxSubscribe(mailbox);
-}
-
-/**
- * Unsubscribes from a mailbox
- * @param user User object
- * @param mailbox Mailbox name
- * @returns True if successful
- */
-export async function mailboxUnsubscribe(user: User, mailbox: string) {
-    const mail = await getMailClient(user);
-    return await mail.mailboxUnsubscribe(mailbox);
-}
-
-/**
  * Sets up a watch on a mailbox for changes
  * @param user User object
  * @param mailbox Mailbox name
