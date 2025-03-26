@@ -11,11 +11,11 @@ import {rankItem} from "@tanstack/match-sorter-utils";
 import {Paperclip, Search} from "lucide-react";
 import {useNavigate} from "@tanstack/react-router";
 import {useState} from "react";
-import {Email} from "@/types/email";
 import {cn} from "@workspace/ui/lib/utils";
 import {Input} from "@workspace/ui/components/input";
-import {emailColumns} from "./email-columns";
 import {EigenLoader} from "@workspace/ui/components/layout/eigen-loader";
+import {emailColumns} from "@/components/mail/email-columns.tsx";
+import {Email} from "@apps/api-server/types/mail";
 
 // Define a fuzzy filter function
 const fuzzyFilter: FilterFn<any> = (row, columnId, value, addMeta) => {
@@ -40,12 +40,12 @@ interface EmailDataTableProps {
 }
 
 export function EmailList({
-                                   emails,
-                                   onRowClick,
-                                   activeRowId,
-                                   isLoading,
-                                   error,
-                               }: EmailDataTableProps) {
+                              emails,
+                              onRowClick,
+                              activeRowId,
+                              isLoading,
+                              error,
+                          }: EmailDataTableProps) {
     const [sorting, setSorting] = useState<SortingState>([])
     const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
     const [globalFilter, setGlobalFilter] = useState("")
@@ -133,7 +133,7 @@ export function EmailList({
                                             // Selected: highlight background (matching sidebar active button)
                                             activeRowId === email.id && "bg-accent text-accent-foreground",
                                             // Unread emails get slightly darker background if not selected
-                                            !email.read && activeRowId !== email.id && "bg-blue-50/20"
+                                            !email.isRead && activeRowId !== email.id && "bg-blue-50/20"
                                         )}
                                         onClick={() => handleRowClick(email)}
                                     >
@@ -142,11 +142,9 @@ export function EmailList({
                                             <div className="flex justify-between items-baseline">
                                                 <div className={cn(
                                                     "text-sm text-gray-900",
-                                                    !email.read && "font-semibold"
+                                                    !email.isRead && "font-semibold"
                                                 )}>
-                                                    {typeof email.from === 'object'
-                                                        ? email.from.name || email.from.email || "Unknown"
-                                                        : email.from || "Unknown"}
+                                                    {email.from?.value[0]?.name || email.from?.value[0]?.address || 'Unknown'}
                                                 </div>
                                                 <div className="text-xs text-gray-500 whitespace-nowrap ml-2">
                                                     {email.date}
@@ -154,13 +152,13 @@ export function EmailList({
                                             </div>
                                             <div className={cn(
                                                 "text-sm truncate mt-0.5 text-gray-700",
-                                                !email.read && "font-medium"
+                                                !email.isRead && "font-medium"
                                             )}>
                                                 {email.subject}
                                             </div>
                                             <div className="text-xs truncate text-gray-500 mt-0.5 flex items-center">
-                                                <span className="truncate">{email.preview}</span>
-                                                {email.hasAttachment && (
+                                                <span className="truncate">{email.text}</span>
+                                                {email.attachments.length > 0 && (
                                                     <Paperclip className="h-3 w-3 ml-1 shrink-0 text-gray-400"/>
                                                 )}
                                             </div>
