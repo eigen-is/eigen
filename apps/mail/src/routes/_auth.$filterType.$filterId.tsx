@@ -1,10 +1,10 @@
 import {createFileRoute, useNavigate} from '@tanstack/react-router';
-import {EmailDataTable} from "../components/mail/inbox/email-data-table.tsx";
 import {getEmailById} from "../lib/mock-data.ts";
 import {EmailDetail} from "../components/mail/email-detail.tsx";
 import {useMediaQuery} from "../hooks/use-media-query";
 import {useEffect, useState} from "react";
 import {useEmails} from "@/hooks/use-emails.ts";
+import {EmailList} from "@/components/mail/email-list.tsx";
 
 // Define the Email interface locally to avoid import issues
 interface Email {
@@ -124,7 +124,7 @@ function MailRoute() {
     if (isMobile) {
         return (
             <div className="flex-1 h-full w-full">
-                <EmailDataTable
+                <EmailList
                     emails={emails}
                     isLoading={isEmailsLoading}
                     error={isEmailsError}
@@ -151,7 +151,7 @@ function MailRoute() {
             <div className={`
         flex flex-col ${getListWidthClass()} border-r h-full overflow-hidden
       `}>
-                <EmailDataTable
+                <EmailList
                     emails={emails}
                     isLoading={isEmailsLoading}
                     error={isEmailsError}
