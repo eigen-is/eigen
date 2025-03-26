@@ -11,7 +11,7 @@ import {format} from "date-fns";
 import {Email} from "@apps/api-server/types/mail";
 
 interface EmailDetailProps {
-    email: Email;
+    email: Email | null;
     isMobile?: boolean;
     className?: string;
     onBackClick?: () => void;
@@ -127,8 +127,8 @@ export function EmailDetail({email, isMobile, className, onBackClick, ...props}:
 
                     {/* Email body */}
                     <div className="prose prose-sm max-w-none">
-                        {email.html ? (
-                            <div dangerouslySetInnerHTML={{__html: email.html}}/>
+                        {email.html || email.textAsHtml ? (
+                            <div dangerouslySetInnerHTML={{__html: emailContent}}/>
                         ) : (
                             <div style={{whiteSpace: 'pre-wrap'}}>
                                 {emailContent}

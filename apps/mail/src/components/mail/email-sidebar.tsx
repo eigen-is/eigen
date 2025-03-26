@@ -1,5 +1,4 @@
-import {AlertOctagon, Archive, File, Inbox, Loader2, Plus, Send, Trash2, X} from 'lucide-react';
-import {Link} from '@tanstack/react-router';
+import {AlertOctagon, Archive, File, Inbox, Loader2, MailPlus, Send, Trash2, X} from 'lucide-react';
 import {Button} from "@workspace/ui/components/button";
 import {SidebarItem} from '@workspace/ui/components/layout/sidebar/sidebar-item';
 import {SidebarSection} from '@workspace/ui/components/layout/sidebar/sidebar-section';
@@ -128,37 +127,55 @@ export function EmailSidebar({
 
     return (
         <div className="flex h-full min-h-[calc(100vh-3.5rem)] flex-col">
-            {/* Mobile header */}
+
             {isMobile && (
-                <div className="flex items-center justify-between p-4 border-b">
-                    <AppLogo appName="Mail"/>
-                    <Button variant="ghost" size="icon" onClick={onClose}>
+                <div className="flex items-center h-12 bg-app px-4">
+                    <Button variant="ghost" size="icon" onClick={onClose}
+                            className="mr-2 text-white hover:bg-primary/20 hover:text-white">
                         <X className="h-5 w-5"/>
+                        <span className="sr-only">Close menu</span>
                     </Button>
+                    <AppLogo appName="mail"/>
                 </div>
             )}
 
-            <div className="flex-1 overflow-auto py-2">
-                {/* Compose button */}
-                <div className="px-3 py-2">
-                    <Button variant="default" size={condensed ? "icon" : "default"} asChild
-                            className={`${condensed ? 'w-10 p-0' : 'w-full justify-start gap-3'}`}>
-                        <Link to="/">
-                            <Plus className="h-4 w-4"/>
-                            {!condensed && "Compose"}
-                        </Link>
-                    </Button>
-                </div>
+            <div className="px-3 py-2">
+                <Button variant="default" size={condensed ? "icon" : "default"}
+                        className={`${condensed ? 'w-10 p-0' : 'w-full justify-start gap-3'}`}>
+                    <MailPlus className="h-4 w-4"/>
+                    {!condensed && <span>Compose</span>}
+                </Button>
+            </div>
 
-                <SidebarSection condensed={condensed}>
+            <SidebarSection condensed={condensed}>
 
 
-                    {isLoading ? (
-                        <div className="flex items-center justify-center py-4">
-                            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground"/>
-                        </div>
-                    ) : (
-                        standardMailboxList.map((item) => (
+                {isLoading ? (
+                    <div className="flex items-center justify-center py-4">
+                        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground"/>
+                    </div>
+                ) : (
+                    standardMailboxList.map((item) => (
+                        <SidebarItem
+                            key={item.path || item.name}
+                            icon={item.icon}
+                            label={item.name}
+                            to={item.href}
+                            condensed={condensed}
+                        />
+                    ))
+                )}
+            </SidebarSection>
+
+            {/* Custom mailboxes section */}
+            {customMailboxes.length > 0 && (
+                <>
+                    <Separator className="my-2"/>
+                    <SidebarSection
+                        title="Folders"
+                        condensed={condensed}
+                    >
+                        {customMailboxes.map((item) => (
                             <SidebarItem
                                 key={item.path || item.name}
                                 icon={item.icon}
@@ -166,43 +183,22 @@ export function EmailSidebar({
                                 to={item.href}
                                 condensed={condensed}
                             />
-                        ))
-                    )}
-                </SidebarSection>
+                        ))}
+                    </SidebarSection>
+                </>
+            )}
 
-                {/* Custom mailboxes section */}
-                {customMailboxes.length > 0 && (
-                    <>
-                        <Separator className="my-2"/>
-                        <SidebarSection
-                            title="Folders"
-                            condensed={condensed}
-                        >
-                            {customMailboxes.map((item) => (
-                                <SidebarItem
-                                    key={item.path || item.name}
-                                    icon={item.icon}
-                                    label={item.name}
-                                    to={item.href}
-                                    condensed={condensed}
-                                />
-                            ))}
-                        </SidebarSection>
-                    </>
-                )}
-
-                {/* Create new folder button */}
-                {/*<div className="px-3 mt-4">*/}
-                {/*    <Button*/}
-                {/*        variant="outline"*/}
-                {/*        size="sm"*/}
-                {/*        className="w-full justify-start"*/}
-                {/*    >*/}
-                {/*        <Plus className="mr-2 h-4 w-4"/>*/}
-                {/*        {!condensed && "New Folder"}*/}
-                {/*    </Button>*/}
-                {/*</div>*/}
-            </div>
+            {/* Create new folder button */}
+            {/*<div className="px-3 mt-4">*/}
+            {/*    <Button*/}
+            {/*        variant="outline"*/}
+            {/*        size="sm"*/}
+            {/*        className="w-full justify-start"*/}
+            {/*    >*/}
+            {/*        <Plus className="mr-2 h-4 w-4"/>*/}
+            {/*        {!condensed && "New Folder"}*/}
+            {/*    </Button>*/}
+            {/*</div>*/}
         </div>
     );
 }

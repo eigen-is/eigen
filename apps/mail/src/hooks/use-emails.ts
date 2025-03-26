@@ -29,9 +29,9 @@ export function useEmail(messageId: string | undefined) {
     return useQuery({
         queryKey: emailKeys.detail(messageId || ''),
         queryFn: async () => {
-            if (!messageId) return {data: null, isLoading: false, error: null};
+            if (!messageId) return null;
             const response = await mailApi.message[messageId].get();
-            return response.data || [];
+            return response.data || null;
         },
         enabled: !!messageId,
         staleTime: 60000, // 1 minute
