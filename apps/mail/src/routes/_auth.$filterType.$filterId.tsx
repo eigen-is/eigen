@@ -1,195 +1,180 @@
 import {createFileRoute, useNavigate} from '@tanstack/react-router';
-import {EmailDataTable} from "@/components/mail/inbox/email-data-table";
-import {EmailDetail} from "@/components/mail/email-detail";
-import {useMediaQuery} from "@/hooks/use-media-query";
-import {useEmail} from "@/hooks/use-emails";
-import {useMailboxExists} from "@/hooks/use-mailboxes";
-import {Loader2} from "lucide-react";
+import {EmailDataTable} from "../components/mail/inbox/email-data-table.tsx";
+import {getEmailById} from "../lib/mock-data.ts";
+import {EmailDetail} from "../components/mail/email-detail.tsx";
+import {useMediaQuery} from "../hooks/use-media-query";
+import {useEffect, useState} from "react";
+import {useEmails} from "@/hooks/use-emails.ts";
 
+// Define the Email interface locally to avoid import issues
+interface Email {
+    id: string;
+    read: boolean;
+    starred: boolean;
+    from: {
+        name: string;
+        email: string;
+    };
+    subject: string;
+    preview: string;
+    hasAttachment: boolean;
+    date: string;
+    important?: boolean;
+    labels?: string[];
+}
+
+// Define search params type
 export interface MailSearchParams {
-  mailId?: string;
+    mailId?: string;
 }
 
 export const Route = createFileRoute('/_auth/$filterType/$filterId')({
-  component: MailRoute,
-  validateSearch: (search: Record<string, unknown>) => {
-    const mailId = typeof search.mailId === 'string' ? search.mailId : undefined;
-    return { mailId } as MailSearchParams;
-  },
+    component: MailRoute,
+    validateSearch: (search: Record<string, unknown>) => {
+        const mailId = typeof search.mailId === 'string' ? search.mailId : undefined;
+        return {mailId} as MailSearchParams;
+    },
 });
 
 function MailRoute() {
-  const { filterType, filterId } = Route.useParams();
-  const { mailId } = Route.useSearch();
-  const navigate = useNavigate();
-  const isMobile = useMediaQuery('(max-width: 768px)');
-  const isTablet = useMediaQuery('(min-width: 769px) and (max-width: 1024px)');
-  const isDesktop = useMediaQuery('(min-width: 1025px)');
-  
-  // Determine the actual mailbox path based on the filter params
-  const getMailboxPath = () => {
-    if (filterType === 'box') {
-      // Convert URL-friendly format back to mailbox format
-      // e.g., 'inbox' -> 'INBOX', 'sent-items' -> 'Sent.Items'
-      const mailboxMap: Record<string, string> = {
-        'inbox': 'INBOX',
-        'sent': 'Sent',
-        'drafts': 'Drafts',
-        'archive': 'Archive',
-        'spam': 'Spam',
-        'trash': 'Trash'
-      };
-      
-      // Check if it's a predefined mailbox
-      if (mailboxMap[filterId]) {
-        return mailboxMap[filterId];
-      }
-      
-      // Handle custom mailbox paths (convert dashes back to dots)
-      return filterId.replace(/-/g, '.');
+    const {filterType, filterId} = Route.useParams();
+    const {mailId} = Route.useSearch();
+    const navigate = useNavigate();
+    const isMobile = useMediaQuery('(max-width: 768px)');
+    const isTablet = useMediaQuery('(max-width: 1024px) and (min-width: 769px)');
+    const [selectedEmail, setSelectedEmail] = useState<Email | null>(null);
+    const [loading, setLoading] = useState(false);
+    const {data: emails = [], isLoading: isEmailsLoading, error: isEmailsError} = useEmails(filterId);
+
+    // Load email when mailId changes
+    useEffect(() => {
+        async function loadEmail() {
+            if (mailId) {
+                setLoading(true);
+                try {
+                    const email = await getEmailById(mailId);
+                    setSelectedEmail(email);
+                } catch (error) {
+                    console.error('Failed to load email:', error);
+                    // Navigate back to list if email not found
+                    navigate({
+                        to: Route.fullPath,
+                        params: {filterType, filterId},
+                        search: {},
+                    });
+                } finally {
+                    setLoading(false);
+                }
+            } else {
+                setSelectedEmail(null);
+            }
+        }
+
+        loadEmail();
+    }, [mailId, filterType, filterId, navigate]);
+
+    // Handle row click to show email details
+    const handleRowClick = (emailId: string) => {
+        navigate({
+            to: Route.fullPath,
+            params: {filterType, filterId},
+            search: (prev) => ({...prev, mailId: emailId}),
+        });
+    };
+
+    // Handle back navigation (mainly for mobile)
+    const handleBackToList = () => {
+        navigate({
+            to: Route.fullPath,
+            params: {filterType, filterId},
+            search: {},
+        });
+    };
+
+    // Show loading status
+    if (loading && mailId) {
+        return (
+            <div className="h-full flex items-center justify-center">
+                <p className="text-muted-foreground">Loading email...</p>
+            </div>
+        );
     }
-    
-    // Default to INBOX if not a box filter type
-    return 'INBOX';
-  };
-  
-  const requestedMailboxPath = getMailboxPath();
-  
-  // Check if the mailbox exists (this will use the case-insensitive check)
-  const { data: mailboxExistsData, isLoading: checkingMailbox } = useMailboxExists(requestedMailboxPath);
-  const mailboxExists = mailboxExistsData?.exists || false;
-  
-  // Use the correct case-sensitive mailbox path if it exists
-  const mailboxPath = mailboxExistsData?.path || requestedMailboxPath;
-  
-  // Fetch email details if mailId is provided
-  const { 
-    data: selectedEmail, 
-    isLoading: emailLoading, 
-    error: emailError 
-  } = useEmail(mailId || '');
 
-  // Debug the selected email
-  console.log(`Route: mailId=${mailId}, selectedEmail:`, selectedEmail);
+    // On mobile: If a mailId is provided, show only the email detail view
+    if (isMobile && mailId && selectedEmail) {
+        return (
+            <div className="flex flex-col h-full">
+                <EmailDetail
+                    email={selectedEmail}
+                    isMobile={true}
+                    onBackClick={handleBackToList}
+                />
+            </div>
+        );
+    } else if (isMobile && mailId) {
+        // On mobile but email not loaded yet
+        return (
+            <div className="h-full flex items-center justify-center">
+                <p className="text-muted-foreground">Loading email...</p>
+            </div>
+        );
+    }
 
-  // Handle row click to navigate to email detail view
-  const handleRowClick = (emailId: string) => {
-    // Use the correct syntax for TanStack Router v5
-    navigate({
-      to: Route.fullPath,
-      params: { filterType, filterId },
-      search: { mailId: emailId } as any,
-    });
-  };
-  
-  // Handle back button click to return to inbox view
-  const handleBackClick = () => {
-    // Use the correct syntax for TanStack Router v5
-    navigate({
-      to: Route.fullPath,
-      params: { filterType, filterId },
-      search: { mailId: undefined } as any,
-    });
-  };
-  
-  // Determine layout based on screen size and whether an email is selected
-  const showEmailList = !mailId || !isMobile;
-  const showEmailDetail = !!mailId;
-  
-  // Show loading state while checking if mailbox exists
-  if (checkingMailbox) {
+    // On mobile: Show full-width email list
+    if (isMobile) {
+        return (
+            <div className="flex-1 h-full w-full">
+                <EmailDataTable
+                    emails={emails}
+                    isLoading={isEmailsLoading}
+                    error={isEmailsError}
+                    onRowClick={handleRowClick}
+                    activeRowId={mailId}
+                />
+            </div>
+        );
+    }
+
+    // Calculate list width based on device type
+    const getListWidthClass = () => {
+        if (isTablet) {
+            return "w-[320px]"; // Narrower on tablet for more space for content
+        } else {
+            return "w-[400px]"; // Default on desktop
+        }
+    };
+
+    // Desktop/Tablet: Two-column layout (sidebar already handled in _auth.tsx)
     return (
-      <div className="flex h-full items-center justify-center">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    );
-  }
-  
-  // If mailbox doesn't exist, show error message
-  if (filterType === 'box' && !mailboxExists) {
-    return (
-      <div className="flex h-full items-center justify-center">
-        <div className="text-center">
-          <h2 className="text-2xl font-bold mb-2">Mailbox Not Found</h2>
-          <p className="text-muted-foreground mb-4">
-            The mailbox "{requestedMailboxPath}" does not exist or is not accessible.
-          </p>
-          <button
-            onClick={() => navigate({ 
-              to: '/_auth/box/inbox' as any,
-              search: {} as any
-            })}
-            className="px-4 py-2 bg-primary text-primary-foreground rounded-md"
-          >
-            Go to Inbox
-          </button>
-        </div>
-      </div>
-    );
-  }
-  
-  return (
-    <div className="flex h-full w-full">
-      {/* Email list column - Middle column */}
-      {showEmailList && (
-        <div
-          className={cn(
-            "h-full border-r",
-            // On mobile: full width when no email selected, hidden when email selected
-            isMobile && !showEmailDetail ? "w-full" : isMobile && showEmailDetail ? "hidden" : "",
-            // On tablet: 40% width when email selected
-            isTablet && showEmailDetail ? "w-[40%]" : "",
-            // On desktop: fixed width of 350px when email selected (like contacts app)
-            isDesktop && showEmailDetail ? "w-[350px]" : "",
-            // When no email selected and not mobile: full width
-            !showEmailDetail && !isMobile ? "w-full" : ""
-          )}
-        >
-          <EmailDataTable
-            mailboxPath={mailboxPath}
-            onRowClick={handleRowClick}
-            activeRowId={mailId}
-          />
-        </div>
-      )}
-      
-      {/* Email detail column - Right column */}
-      {showEmailDetail && (
-        <div
-          className={cn(
-            "h-full overflow-y-auto",
-            // On mobile: full width when email selected
-            isMobile ? "w-full" : "",
-            // On tablet and desktop: remaining width when email selected
-            !isMobile ? "flex-1" : ""
-          )}
-        >
-          {emailLoading ? (
-            <div className="flex h-full items-center justify-center">
-              <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        <div className="flex h-full w-full">
+            {/* Email list column */}
+            <div className={`
+        flex flex-col ${getListWidthClass()} border-r h-full overflow-hidden
+      `}>
+                <EmailDataTable
+                    emails={emails}
+                    isLoading={isEmailsLoading}
+                    error={isEmailsError}
+                    onRowClick={handleRowClick}
+                    activeRowId={mailId}
+                />
             </div>
-          ) : emailError ? (
-            <div className="flex h-full items-center justify-center text-red-500">
-              Error loading email. Please try again.
-            </div>
-          ) : selectedEmail ? (
-            <EmailDetail
-              email={selectedEmail}
-              isMobile={isMobile}
-              onBackClick={isMobile ? handleBackClick : undefined}
-            />
-          ) : (
-            <div className="flex h-full items-center justify-center text-muted-foreground">
-              Select an email to view
-            </div>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
 
-// Helper function to conditionally join class names
-function cn(...classes: (string | boolean | undefined)[]) {
-  return classes.filter(Boolean).join(" ");
+            {/* Email details column */}
+            <div className="flex-1 h-full overflow-hidden">
+                {mailId && selectedEmail ? (
+                    <div className="h-full">
+                        <EmailDetail
+                            email={selectedEmail}
+                            className="border-none h-full"
+                        />
+                    </div>
+                ) : (
+                    <div className="h-full w-full flex items-center justify-center">
+                        <p className="text-muted-foreground">Select an email to view details</p>
+                    </div>
+                )}
+            </div>
+        </div>
+    );
 }
