@@ -1,5 +1,7 @@
-import {useQuery} from '@tanstack/react-query';
+import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {mailApi} from '@workspace/lib/api.ts';
+import {Email} from "@apps/api-server/types/mail";
+import {useUpdateContact} from "@apps/contacts/src/hooks/use-contacts.ts";
 
 // Define query keys for reuse
 export const emailKeys = {

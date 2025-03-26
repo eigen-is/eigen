@@ -1,20 +1,10 @@
-import {
-    ColumnFiltersState,
-    FilterFn,
-    getCoreRowModel,
-    getFilteredRowModel,
-    getSortedRowModel,
-    SortingState,
-    useReactTable,
-} from "@tanstack/react-table";
+import {FilterFn, getCoreRowModel, getSortedRowModel, SortingState, useReactTable,} from "@tanstack/react-table";
 import {rankItem} from "@tanstack/match-sorter-utils";
 import {Paperclip, Search} from "lucide-react";
-import {useNavigate} from "@tanstack/react-router";
 import {useState} from "react";
 import {cn} from "@workspace/ui/lib/utils";
 import {Input} from "@workspace/ui/components/input";
 import {EigenLoader} from "@workspace/ui/components/layout/eigen-loader";
-import {emailColumns} from "@/components/mail/email-columns.tsx";
 import {Email} from "@apps/api-server/types/mail";
 
 // Define a fuzzy filter function
@@ -33,7 +23,7 @@ const fuzzyFilter: FilterFn<any> = (row, columnId, value, addMeta) => {
 
 interface EmailDataTableProps {
     emails: Email[];
-    onRowClick?: (emailId: string) => void;
+    onRowClick: (emailId: string) => void;
     activeRowId?: string;
     isLoading?: boolean;
     error?: any;
@@ -46,40 +36,44 @@ export function EmailList({
                               isLoading,
                               error,
                           }: EmailDataTableProps) {
+
+    const columns = [
+        {
+            header: 'Date',
+            accessor: 'date',
+        },
+        {
+            header: 'From',
+            accessor: 'from',
+        },
+        {
+            header: 'Subject',
+            accessor: 'subject',
+        }
+    ]
+
     const [sorting, setSorting] = useState<SortingState>([])
-    const [columnFilters, setColumnFilters] = useState<ColumnFiltersState>([])
     const [globalFilter, setGlobalFilter] = useState("")
 
-    const navigate = useNavigate();
-
-    const handleRowClick = (row: Email) => {
-        if (onRowClick) {
-            onRowClick(row.id);
-        } else {
-            navigate({to: '/inbox/' + row.id});
-        }
-    };
+    const handleRowClick = (row: Email) => onRowClick(row.id);
 
     const table = useReactTable({
         data: emails,
-        columns: emailColumns,
+        columns: columns,
         filterFns: {
             fuzzy: fuzzyFilter,
         },
         onSortingChange: setSorting,
-        onColumnFiltersChange: setColumnFilters,
         getCoreRowModel: getCoreRowModel(),
         getSortedRowModel: getSortedRowModel(),
-        getFilteredRowModel: getFilteredRowModel(),
         globalFilterFn: fuzzyFilter,
+        sortDescFirst: true,
         state: {
             sorting,
-            columnFilters,
             globalFilter,
         },
     });
 
-    console.log(emails);
 
     // Render loading state
     if (isLoading || !emails) {
@@ -123,6 +117,23 @@ export function EmailList({
                         <div className="divide-y divide-gray-100">
                             {table.getFilteredRowModel().rows.map((row) => {
                                 const email = row.original as Email;
+                                let formattedDate = '';
+                                if (email.date) {
+                                    const date = new Date(email.date);
+                                    const now = new Date();
+                                    const isToday = date.toDateString() === now.toDateString();
+                                    if (isToday) {
+                                        // Format as time if today
+                                        formattedDate = date.toLocaleTimeString([], {
+                                            hour: '2-digit',
+                                            minute: '2-digit'
+                                        });
+                                    } else {
+                                        // Format as date otherwise
+                                        formattedDate = date.toLocaleDateString([], {month: 'short', day: 'numeric'});
+                                    }
+                                }
+
                                 return (
                                     <div
                                         key={row.id}
@@ -147,7 +158,7 @@ export function EmailList({
                                                     {email.from?.value[0]?.name || email.from?.value[0]?.address || 'Unknown'}
                                                 </div>
                                                 <div className="text-xs text-gray-500 whitespace-nowrap ml-2">
-                                                    {email.date}
+                                                    {formattedDate}
                                                 </div>
                                             </div>
                                             <div className={cn(
