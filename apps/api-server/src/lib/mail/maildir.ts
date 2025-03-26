@@ -18,6 +18,7 @@ import {
     fsDirectoryExists,
     fsFileExists
 } from "./mailutils";
+import {welcomeMail} from "./welcome.ts";
 
 // Define a custom interface that extends Mailbox for our implementation
 interface MaildirMailbox  {
@@ -33,8 +34,10 @@ interface MaildirMailbox  {
 export default class Maildir {
     private basePath: string;
     private subscriptions: Set<string> = new Set();
+    private user: User;
 
     constructor(user: User) {
+        this.user = user;
         this.basePath = fsGetDirName(user, 'eigen.mail/Maildir');
     }
 
@@ -43,6 +46,7 @@ export default class Maildir {
         const basePathExists = await fsDirectoryExists(this.basePath);
         if (!basePathExists) {
             await this.createMailboxes();
+            await this.mailboxDeliver(welcomeMail(this.user.name));
         }
     }
 
