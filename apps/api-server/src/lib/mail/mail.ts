@@ -1,5 +1,6 @@
 import {type User} from "better-auth/types";
 import Maildir from "./maildir";
+import {getUserByEmail} from "../users/users.ts";
 
 async function getMailClient(user: User) {
     const mail = new Maildir(user);
@@ -111,13 +112,21 @@ export async function mailboxWatch(user: User, mailbox: string, callback: (event
 
 /**
  * Delivers a message to the INBOX
- * @param user User object
- * @param message Message content
+ * @param to Recipient email address
+ * @param file file as binary ArrayBuffer
  * @returns Filename of the delivered message
  */
-export async function mailboxDeliver(user: User, message: string) {
-    const mail = await getMailClient(user);
-    return await mail.mailboxDeliver(message);
+export async function mailboxDeliver(to: string, file: ArrayBuffer) {
+    const user = await getUserByEmail(to);
+    console.log('Delivering message to:', to, user, file);
+    if (user) {
+        const mail = await getMailClient(user);
+        // convert file to string
+        const message = new TextDecoder().decode(new Uint8Array(file));
+        return await mail.mailboxDeliver(message);
+    } else {
+        return false;
+    }
 }
 
 /**

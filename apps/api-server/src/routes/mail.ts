@@ -34,9 +34,7 @@ type RenameMailboxBody = {
     newName: string;
 }
 
-type DeliverMessageBody = {
-    message: string;
-}
+type DeliverMessageBody = File;
 
 type MessageFlagBody = {
     messageId: string;
@@ -109,13 +107,8 @@ export const mailRouter = new Elysia({name: "mail"})
     }, {
         auth: true
     })
-    .post("/mail/deliver", async ({body, user}: {body: DeliverMessageBody, user: User}) => {
-        return await mailboxDeliver(user, body['message']);
-    }, {
-        auth: true,
-        body: t.Object({
-            message: t.String()
-        })
+    .post("/mail/deliver/:to", async ({params, body}: {body: DeliverMessageBody, params: { 'to': string }}) => {
+        return await mailboxDeliver(params.to, body);
     })
     
     // Message routes
