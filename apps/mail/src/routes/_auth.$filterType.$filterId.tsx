@@ -1,8 +1,9 @@
 import {createFileRoute, useNavigate} from '@tanstack/react-router';
 import {EmailDetail} from "../components/mail/email-detail.tsx";
 import {useMediaQuery} from "../hooks/use-media-query";
-import {useEmail, useEmails} from "@/hooks/use-emails.ts";
+import {useDeleteEmail, useEmail, useEmails} from "@/hooks/use-emails.ts";
 import {EmailList} from "@/components/mail/email-list.tsx";
+import {Email} from "@apps/api-server/types/mail";
 
 // Define search params type
 export interface MailSearchParams {
@@ -23,6 +24,7 @@ function MailRoute() {
     const navigate = useNavigate();
     const isMobile = useMediaQuery('(max-width: 768px)');
     const isTablet = useMediaQuery('(max-width: 1024px) and (min-width: 769px)');
+    const deleteMail = useDeleteEmail();
 
     const {data: emails = [], isLoading: isEmailsLoading, error: isEmailsError} = useEmails(filterId);
     const {data: selectedEmail = null} = useEmail(mailId);
@@ -45,6 +47,16 @@ function MailRoute() {
         });
     };
 
+    const handleDeleteEmail = async (mail: Email) => {
+        console.log('delete email', mail.id)
+        await deleteMail(mail);
+        navigate({
+            to: Route.fullPath,
+            params: {filterType, filterId},
+            search: {},
+        });
+    }
+
     // On mobile: Show full-width email list / detail
     if (isMobile) {
         return selectedEmail ? (
@@ -53,6 +65,7 @@ function MailRoute() {
                     email={selectedEmail}
                     isMobile={true}
                     onBackClick={handleBackToList}
+                    onDelete={handleDeleteEmail}
                 />
             </div>
         ) : (
@@ -100,6 +113,7 @@ function MailRoute() {
                         <EmailDetail
                             email={selectedEmail}
                             className="border-none h-full"
+                            onDelete={handleDeleteEmail}
                         />
                     </div>
                 ) : (

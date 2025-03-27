@@ -6,10 +6,10 @@ import {Input} from "@workspace/ui/components/input";
 import {type Contact} from "@apps/api-server/types/contact";
 import {useContacts} from '../../hooks/use-contacts';
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
 } from "@workspace/ui/components/dropdown-menu";
 
 interface ContactsListProps {

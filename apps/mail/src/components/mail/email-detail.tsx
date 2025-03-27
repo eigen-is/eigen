@@ -15,9 +15,10 @@ interface EmailDetailProps {
     isMobile?: boolean;
     className?: string;
     onBackClick?: () => void;
+    onDelete: (mail: Email) => void;
 }
 
-export function EmailDetail({email, isMobile, className, onBackClick, ...props}: EmailDetailProps) {
+export function EmailDetail({email, isMobile, className, onBackClick, onDelete, ...props}: EmailDetailProps) {
     if (!email) {
         console.log('No email provided to EmailDetail component');
         return (
@@ -32,7 +33,6 @@ export function EmailDetail({email, isMobile, className, onBackClick, ...props}:
     const firstFrom = email.from?.value[0];
     const fromName = firstFrom?.name || firstFrom?.address || 'Unknown';
     const fromEmail = firstFrom?.address || 'unknown@example.com';
-
 
     // Format date
     let formattedDate = 'Unknown date';
@@ -77,7 +77,9 @@ export function EmailDetail({email, isMobile, className, onBackClick, ...props}:
                     <Button variant="ghost" size="icon" className="h-8 w-8" title="Archive">
                         <Archive className="h-4 w-4"/>
                     </Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8" title="Delete">
+                    <Button variant="ghost" size="icon" className="h-8 w-8" title="Delete"
+                    onClick={() => onDelete(email)}
+                    >
                         <Trash2 className="h-4 w-4"/>
                     </Button>
 

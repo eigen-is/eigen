@@ -1,7 +1,6 @@
-import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
+import {useQuery, useQueryClient} from '@tanstack/react-query';
 import {mailApi} from '@workspace/lib/api.ts';
 import {Email} from "@apps/api-server/types/mail";
-import {useUpdateContact} from "@apps/contacts/src/hooks/use-contacts.ts";
 
 // Define query keys for reuse
 export const emailKeys = {
@@ -21,7 +20,7 @@ export function useEmails(mailboxPath: string) {
             console.log(`Fetching emails for mailbox: ${mailboxPath}`);
             // @ts-ignore
             const response = await mailApi.mailbox[mailboxPath].get();
-            return response.data || [];
+            return (response.data || []) as Email[];
         }
     });
 }
@@ -38,4 +37,21 @@ export function useEmail(messageId: string | undefined) {
         enabled: !!messageId,
         staleTime: 60000, // 1 minute
     });
+}
+
+export function useDeleteEmail() {
+    const queryClient = useQueryClient();
+
+    return async (email: Email) => {
+        // if mail is not in the trash folder, move it to trash
+        if (email.flags.includes('\\Deleted')) {
+            console.log('DELETE');
+            await mailApi.message[email.id].delete();
+        } else {
+            await mailApi.message.moveToTrash.put({messageId: email.id});
+        }
+        // invalidate mailbox cache
+        await queryClient.invalidateQueries({queryKey: emailKeys.lists()});
+        await queryClient.invalidateQueries({queryKey: emailKeys.details()});
+    }
 }

@@ -1,5 +1,8 @@
 import {createAuthClient} from "better-auth/client";
 
+console.log(import.meta.env.VITE_API_HOST);
+
+
 export const authClient = createAuthClient({
     // baseURL: `https://eigen.is:8000`, // the base url of your auth server
     baseURL: import.meta.env.VITE_API_HOST, // the base url of your auth server
