@@ -44,8 +44,7 @@ export function useDeleteEmail() {
 
     return async (email: Email) => {
         // if mail is not in the trash folder, move it to trash
-        if (email.flags.includes('\\Deleted')) {
-            console.log('DELETE');
+        if (email.mailbox === 'trash') {
             await mailApi.message[email.id].delete();
         } else {
             await mailApi.message.moveToTrash.put({messageId: email.id});
