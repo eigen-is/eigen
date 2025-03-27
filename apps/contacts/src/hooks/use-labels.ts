@@ -32,9 +32,9 @@ export function useAddLabel() {
             const response = await contactsApi.labels.post(labelData as any);
             return response.data;
         },
-        onSuccess: () => {
+        onSuccess: async () => {
             // Invalideer de label-lijst zodat deze opnieuw wordt opgehaald
-            queryClient.invalidateQueries({queryKey: labelKeys.lists()});
+            await queryClient.invalidateQueries({queryKey: labelKeys.lists()});
         },
     });
 }
@@ -52,12 +52,12 @@ export function useUpdateLabel() {
             } as any);
             return response.data;
         },
-        onSuccess: (_, variables) => {
+        onSuccess: async (_, variables) => {
             // Invalideer zowel de specifieke label als de volledige lijst
-            queryClient.invalidateQueries({
+            await queryClient.invalidateQueries({
                 queryKey: labelKeys.detail(variables.id)
             });
-            queryClient.invalidateQueries({
+            await queryClient.invalidateQueries({
                 queryKey: labelKeys.lists()
             });
         },
@@ -73,14 +73,14 @@ export function useDeleteLabel() {
             const response = await contactsApi.labels[labelId].delete();
             return response.data;
         },
-        onSuccess: (_, labelId) => {
-            // Invalideer de label-lijst zodat deze opnieuw wordt opgehaald
-            queryClient.invalidateQueries({
-                queryKey: labelKeys.lists()
-            });
+        onSuccess: async (_, labelId) => {
             // Verwijder de cache voor deze specifieke label
-            queryClient.removeQueries({
+            await queryClient.removeQueries({
                 queryKey: labelKeys.detail(labelId)
+            });
+            // Invalideer de label-lijst zodat deze opnieuw wordt opgehaald
+            await queryClient.invalidateQueries({
+                queryKey: labelKeys.lists()
             });
         },
     });

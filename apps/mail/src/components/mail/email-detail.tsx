@@ -10,6 +10,7 @@ import {
 import {format} from "date-fns";
 import {Email} from "@apps/api-server/types/mail";
 import {ShadowContent} from "@workspace/ui/components/layout/shadow-content";
+import {Separator} from "@workspace/ui/components/separator";
 
 interface EmailDetailProps {
     email: Email | null;
@@ -131,6 +132,8 @@ export function EmailDetail({email, isMobile, className, onBackClick, onDelete, 
                             </div>
                         </div>
                     </div>
+
+                    <Separator/>
 
                     {/* Email body */}
                     <div className="prose prose-sm max-w-none">
