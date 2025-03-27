@@ -3,16 +3,13 @@ import {Elysia, t} from "elysia";
 import {betterAuth} from "./auth";
 import {
     mailboxCreate,
-    mailboxDelete,
     mailboxDeliver,
     mailboxesList,
     mailboxExists,
     mailboxGet,
-    mailboxRename,
     messageCopy,
     messageCreateDraft,
     messageDelete,
-    messageFlag,
     messageGet,
     messageGetAttachment,
     messageMove,
@@ -31,18 +28,7 @@ type CreateMailboxBody = {
     attributes?: string[];
 }
 
-type RenameMailboxBody = {
-    oldName: string;
-    newName: string;
-}
-
 type DeliverMessageBody = ArrayBuffer;
-
-type MessageFlagBody = {
-    messageId: string;
-    flag: string;
-    value: boolean;
-}
 
 type MessageMoveBody = {
     messageId: string;
@@ -85,20 +71,6 @@ export const mailRouter = new Elysia({name: "mail"})
     }, {
         auth: true
     })
-    .put("/mail/mailbox", async ({body, user}: { body: RenameMailboxBody, user: User }) => {
-        return await mailboxRename(user, body['oldName'], body['newName']);
-    }, {
-        auth: true,
-        body: t.Object({
-            oldName: t.String(),
-            newName: t.String()
-        })
-    })
-    .delete("/mail/mailbox/*", async ({params, user}: { params: { '*': string }, user: User }) => {
-        return await mailboxDelete(user, params['*']);
-    }, {
-        auth: true
-    })
     .post("/mail/deliver/:to", async ({params, body}: { body: DeliverMessageBody, params: { 'to': string } }) => {
         return await mailboxDeliver(params.to, body);
     })
@@ -117,16 +89,6 @@ export const mailRouter = new Elysia({name: "mail"})
         auth: true,
         params: t.Object({
             id: t.String()
-        })
-    })
-    .put("/mail/message/flag", async ({body, user}: { body: MessageFlagBody, user: User }) => {
-        return await messageFlag(user, body['messageId'], body['flag'], body['value']);
-    }, {
-        auth: true,
-        body: t.Object({
-            messageId: t.String(),
-            flag: t.String(),
-            value: t.Boolean()
         })
     })
     .put("/mail/message/move", async ({body, user}: { body: MessageMoveBody, user: User }) => {

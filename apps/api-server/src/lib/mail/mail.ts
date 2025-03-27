@@ -54,29 +54,6 @@ export async function mailboxExists(user: User, mailbox: string) {
 }
 
 /**
- * Renames a mailbox
- * @param user User object
- * @param oldName Old mailbox name
- * @param newName New mailbox name
- * @returns True if successful
- */
-export async function mailboxRename(user: User, oldName: string, newName: string) {
-    const mail = await getMailClient(user);
-    return await mail.mailboxRename(oldName, newName);
-}
-
-/**
- * Deletes a mailbox
- * @param user User object
- * @param mailbox Mailbox name
- * @returns True if successful
- */
-export async function mailboxDelete(user: User, mailbox: string) {
-    const mail = await getMailClient(user);
-    return await mail.mailboxDelete(mailbox);
-}
-
-/**
  * Sets up a watch on a mailbox for changes
  * @param user User object
  * @param mailbox Mailbox name
@@ -127,19 +104,6 @@ export async function messageGet(user: User, messageId: string) {
 export async function messageDelete(user: User, messageId: string) {
     const mail = await getMailClient(user);
     return await mail.messageDelete(messageId);
-}
-
-/**
- * Sets or unsets a flag on a message
- * @param user User object
- * @param messageId Message ID
- * @param flag Flag to set or unset
- * @param value True to set, false to unset
- * @returns True if successful
- */
-export async function messageFlag(user: User, messageId: string, flag: string, value: boolean) {
-    const mail = await getMailClient(user);
-    return await mail.messageFlag(messageId, flag, value);
 }
 
 /**

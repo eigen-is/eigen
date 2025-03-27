@@ -5,7 +5,7 @@ import {useState} from "react";
 import {cn} from "@workspace/ui/lib/utils";
 import {Input} from "@workspace/ui/components/input";
 import {EigenLoader} from "@workspace/ui/components/layout/eigen-loader";
-import {Email} from "@apps/api-server/types/mail";
+import {EmailSummary} from "@apps/api-server/types/mail";
 
 // Define a fuzzy filter function
 const fuzzyFilter: FilterFn<any> = (row, columnId, value, addMeta) => {
@@ -22,7 +22,7 @@ const fuzzyFilter: FilterFn<any> = (row, columnId, value, addMeta) => {
 }
 
 interface EmailDataTableProps {
-    emails: Email[];
+    emails: EmailSummary[];
     onRowClick: (emailId: string) => void;
     activeRowId?: string;
     isLoading?: boolean;
@@ -55,7 +55,10 @@ export function EmailList({
     const [sorting, setSorting] = useState<SortingState>([])
     const [globalFilter, setGlobalFilter] = useState("")
 
-    const handleRowClick = (row: Email) => onRowClick(row.id);
+    const handleRowClick = (row: EmailSummary) => {
+        onRowClick(row.id);
+        row.isRead = true;
+    }
 
     const table = useReactTable({
         data: emails,
@@ -116,7 +119,7 @@ export function EmailList({
                     {table.getFilteredRowModel().rows.length > 0 ? (
                         <div className="divide-y divide-gray-100">
                             {table.getFilteredRowModel().rows.map((row) => {
-                                const email = row.original as Email;
+                                const email = row.original as EmailSummary;
                                 let formattedDate = '';
                                 if (email.date) {
                                     const date = new Date(email.date);
@@ -155,7 +158,7 @@ export function EmailList({
                                                     "text-sm text-gray-900",
                                                     !email.isRead && "font-semibold"
                                                 )}>
-                                                    {email.from?.value[0]?.name || email.from?.value[0]?.address || 'Unknown'}
+                                                    {email.fromShort || 'Unknown'}
                                                 </div>
                                                 <div className="text-xs text-gray-500 whitespace-nowrap ml-2">
                                                     {formattedDate}
@@ -168,8 +171,8 @@ export function EmailList({
                                                 {email.subject}
                                             </div>
                                             <div className="text-xs truncate text-gray-500 mt-0.5 flex items-center">
-                                                <span className="truncate">{email.text}</span>
-                                                {email.attachments.length > 0 && (
+                                                <span className="truncate">{email.textShort}</span>
+                                                {email.hasAttachments && (
                                                     <Paperclip className="h-3 w-3 ml-1 shrink-0 text-gray-400"/>
                                                 )}
                                             </div>
