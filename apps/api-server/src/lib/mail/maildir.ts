@@ -427,13 +427,15 @@ export default class Maildir {
     public async mailboxGet(mailbox: string): Promise<Email[] | false> {
         try {
             const mailboxPath = await this.sanitizeDirName(mailbox);
+            const mailboxInfo = await this.mailboxExists(mailbox);
 
             // Check if mailbox exists
-            if (!await fsDirectoryExists(mailboxPath)) {
+            if (!mailboxInfo) {
                 console.error(`Cannot get messages: mailbox ${mailbox} does not exist`);
                 return false;
             }
 
+            const isDeleted = mailboxInfo.flags.includes('\\Trash');
             const messages: Email[] = [];
             const curPath = path.join(mailboxPath, 'cur');
             const newPath = path.join(mailboxPath, 'new');
@@ -443,7 +445,7 @@ export default class Maildir {
                 try {
                     const newFiles = await fs.readdir(newPath);
                     for (const fileName of newFiles) {
-                        const message = await this.parseMessage(fileName, path.join(newPath, fileName), true, newPath);
+                        const message = await this.parseMessage(fileName, path.join(newPath, fileName), true, newPath, isDeleted);
                         if (message) {
                             messages.push(message);
                         }
@@ -458,7 +460,7 @@ export default class Maildir {
                 try {
                     const curFiles = await fs.readdir(curPath);
                     for (const fileName of curFiles) {
-                        const message = await this.parseMessage(fileName, path.join(curPath, fileName), false, curPath);
+                        const message = await this.parseMessage(fileName, path.join(curPath, fileName), false, curPath, isDeleted);
                         if (message) {
                             messages.push(message);
                         }
@@ -468,7 +470,7 @@ export default class Maildir {
                 }
             }
 
-            return messages.sort((a,b) => (b.date?.getDate() || 0) - (a.date?.getDate() || 0));
+            return messages;
         } catch (error) {
             console.error(`Error getting messages from mailbox ${mailbox}:`, error);
             return [];
@@ -483,14 +485,10 @@ export default class Maildir {
      * @param mailboxPath Path to the mailbox containing the message
      * @returns Parsed email message or null if parsing failed
      */
-    private async parseMessage(fileName: string, filePath: string, isUnread: boolean, mailboxPath: string): Promise<Email | null> {
+    private async parseMessage(fileName: string, filePath: string, isUnread: boolean, mailboxPath: string, isDeleted: boolean = false): Promise<Email | null> {
         try {
             // Extract the message ID using the utility function
             const messageId = getMailIDfromFileName(fileName);
-
-            // const fileContent = await Bun.file(filePath).stream();
-            // const parsedMail = await simpleParser(fileContent as unknown as NodeJS.ReadableStream);
-
             const fileContent = await Bun.file(filePath).text();
 
             // time to parse the message
@@ -498,8 +496,6 @@ export default class Maildir {
             const parsedMail = await simpleParser(fileContent, {});
             const end = Date.now();
             console.log(`Parsed message ${fileName} in ${end - start}ms`);
-
-            // const parsedMail = await simpleParser(fs.createReadStream(filePath));
 
             // Extract flags from the filename
             const flags = extractFlagsFromFileName(fileName);
@@ -510,7 +506,9 @@ export default class Maildir {
             } else {
                 flags.push('\\Seen');
             }
-
+            if (isDeleted) {
+                flags.push('\\Deleted');
+            }
             // Create the Email object with the correct ID and path information
             const message: Email = {
                 ...parsedMail,
@@ -673,7 +671,8 @@ export default class Maildir {
             }
 
             // Check if target mailbox exists
-            if (!await this.mailboxExists(targetMailbox)) {
+            const target = await this.mailboxExists(targetMailbox);
+            if (!target) {
                 console.error(`Cannot move: target mailbox ${targetMailbox} does not exist`);
                 return false;
             }
@@ -686,21 +685,22 @@ export default class Maildir {
             const sourcePath = path.join(message._path, message._filename);
             const targetFilePath = path.join(targetPath, message._filename);
 
-            console.log(message);
-
-            console.log(sourcePath, targetFilePath);
 
             if (!await fsFileExists(sourcePath)) {
                 console.error(`Cannot move: file for message ${messageId} not found`);
                 return false;
             }
 
-            // Read the file content and write to the target location using Bun (faster)
-            await Bun.write(targetFilePath, await Bun.file(sourcePath).text());
-
-            // Delete the source file
-            await fs.unlink(sourcePath);
-
+            // use fs move function to move
+            await fs.rename(sourcePath, targetFilePath);
+            //
+            // // Read the file content and write to the target location using Bun (faster)
+            // await Bun.write(targetFilePath, await Bun.file(sourcePath).text());
+            //
+            // // Delete the source file
+            // await fs.unlink(sourcePath);
+            //
+            // // update deleted flag based on targetMailbox
             return true;
         } catch (error) {
             console.error(`Error moving message ${messageId} to mailbox ${targetMailbox}:`, error);

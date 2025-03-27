@@ -20,7 +20,7 @@ const app = new Elysia()
     .use(mailRouter)
     .use(contactsRouter)
     .listen(process.env.NODE_ENV !== 'production' ? 8000 : {
-        port: 8000,
+            port: 8000,
         tls: {
             key: Bun.file("/etc/letsencrypt/live/eigen.is/privkey.pem"),
             cert: Bun.file("/etc/letsencrypt/live/eigen.is/fullchain.pem"),
