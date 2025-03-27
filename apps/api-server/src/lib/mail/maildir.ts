@@ -19,6 +19,7 @@ import {
     updateFlagInFileName
 } from "./mailutils";
 import {welcomeMail} from "./welcome.ts";
+import DOMPurify from 'isomorphic-dompurify';
 
 // Define a custom interface that extends Mailbox for our implementation
 interface MaildirMailbox {
@@ -509,6 +510,12 @@ export default class Maildir {
             if (isDeleted) {
                 flags.push('\\Deleted');
             }
+
+            // just to be sure, dompurify html
+            if (parsedMail.html) {
+                parsedMail.html = DOMPurify.sanitize(parsedMail.html, {FORCE_BODY: true});
+            }
+
             // Create the Email object with the correct ID and path information
             const message: Email = {
                 ...parsedMail,
