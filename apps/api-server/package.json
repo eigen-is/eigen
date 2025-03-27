@@ -19,7 +19,6 @@
     "he": "^1.2.0",
     "html-to-text": "^9.0.5",
     "iconv-lite": "^0.6.3",
-    "isomorphic-dompurify": "^2.22.0",
     "libmime": "^5.3.6",
     "linkify-it": "^5.0.0",
     "nodemailer": "^6.10.0",
