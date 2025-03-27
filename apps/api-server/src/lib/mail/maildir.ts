@@ -359,7 +359,7 @@ export default class Maildir {
         }
     }
 
-    private async parseMessage(messageId: string,  mailbox: string): Promise<Email | null> {
+    private async parseMessage(messageId: string, mailbox: string): Promise<Email | null> {
         try {
             const filePath = this.getFullPath({id: messageId, mailbox: mailbox});
             const fileContent = await Bun.file(filePath).text();
@@ -400,8 +400,13 @@ export default class Maildir {
             // get mail from db
             const cached = await this.db.getEmail(messageId);
             if (cached) {
-                const parsed = this.parseMessage(messageId, cached.mailbox);
-                if (parsed) {
+                const parsed = await this.parseMessage(messageId, cached.mailbox);
+                if (parsed !== null) {
+                    // strip the attachment data for now
+                    parsed.attachments.forEach(a => {
+                        a.content = new Buffer(0);
+                    });
+
                     return parsed;
                 }
             } else {
