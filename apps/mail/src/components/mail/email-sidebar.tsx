@@ -9,11 +9,11 @@ import React from 'react';
 // Map of special mailbox flags to their icons and display names
 const standardMailboxes: Record<string, { icon: React.ComponentType<any>, name: string }> = {
     '\\Inbox': {icon: Inbox, name: 'Inbox'},
-    '\\Sent': {icon: Send, name: 'Sent'},
     '\\Drafts': {icon: File, name: 'Drafts'},
-    '\\Archive': {icon: Archive, name: 'Archive'},
-    '\\Junk': {icon: AlertOctagon, name: 'Spam'},
+    '\\Sent': {icon: Send, name: 'Sent'},
     '\\Trash': {icon: Trash2, name: 'Trash'},
+    '\\Junk': {icon: AlertOctagon, name: 'Spam'},
+    '\\Archive': {icon: Archive, name: 'Archive'},
 };
 
 // Default mailboxes to display if API call fails
@@ -27,14 +27,6 @@ const defaultMailboxes = [
         flags: ['\\HasNoChildren', '\\Inbox']
     },
     {
-        path: "Sent",
-        name: "Sent",
-        icon: <Send className="h-4 w-4"/>,
-        href: "/box/sent",
-        unread: 0,
-        flags: ['\\HasNoChildren', '\\Sent']
-    },
-    {
         path: "Drafts",
         name: "Drafts",
         icon: <File className="h-4 w-4"/>,
@@ -43,12 +35,20 @@ const defaultMailboxes = [
         flags: ['\\HasNoChildren', '\\Drafts']
     },
     {
-        path: "Archive",
-        name: "Archive",
-        icon: <Archive className="h-4 w-4"/>,
-        href: "/box/archive",
+        path: "Sent",
+        name: "Sent",
+        icon: <Send className="h-4 w-4"/>,
+        href: "/box/sent",
         unread: 0,
-        flags: ['\\HasNoChildren', '\\Archive']
+        flags: ['\\HasNoChildren', '\\Sent']
+    },
+    {
+        path: "Trash",
+        name: "Trash",
+        icon: <Trash2 className="h-4 w-4"/>,
+        href: "/box/trash",
+        unread: 0,
+        flags: ['\\HasNoChildren', '\\Trash']
     },
     {
         path: "Spam",
@@ -59,12 +59,12 @@ const defaultMailboxes = [
         flags: ['\\HasNoChildren', '\\Junk']
     },
     {
-        path: "Trash",
-        name: "Trash",
-        icon: <Trash2 className="h-4 w-4"/>,
-        href: "/box/trash",
+        path: "Archive",
+        name: "Archive",
+        icon: <Archive className="h-4 w-4"/>,
+        href: "/box/archive",
         unread: 0,
-        flags: ['\\HasNoChildren', '\\Trash']
+        flags: ['\\HasNoChildren', '\\Archive']
     },
 ];
 
@@ -122,7 +122,13 @@ export function EmailSidebar({
     const displayMailboxes = isLoading || error ? defaultMailboxes : processedMailboxes;
 
     // Separate standard mailboxes from custom mailboxes
-    const standardMailboxList = displayMailboxes.filter(mailbox => mailbox.isStandard);
+    const standardMailboxListFetched = displayMailboxes.filter(mailbox => mailbox.isStandard);
+    // order standard mailboxes, similar to the order of defaultMailboxes
+    const standardMailboxList = defaultMailboxes.filter(defaultMailbox =>
+        standardMailboxListFetched.some(mailbox => mailbox.name === defaultMailbox.name)
+    );
+
+
     const customMailboxes = displayMailboxes.filter(mailbox => !mailbox.isStandard);
 
     return (
