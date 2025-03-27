@@ -9,6 +9,7 @@ import {
 } from "@workspace/ui/components/dropdown-menu";
 import {format} from "date-fns";
 import {Email} from "@apps/api-server/types/mail";
+import {ShadowContent} from "@workspace/ui/components/layout/shadow-content";
 
 interface EmailDetailProps {
     email: Email | null;
@@ -134,7 +135,11 @@ export function EmailDetail({email, isMobile, className, onBackClick, onDelete, 
                     {/* Email body */}
                     <div className="prose prose-sm max-w-none">
                         {email.html || email.textAsHtml ? (
-                            <div dangerouslySetInnerHTML={{__html: emailContent}}/>
+                            <ShadowContent 
+                                content={emailContent} 
+                                contentType="html" 
+                                className="w-full"
+                            />
                         ) : (
                             <div style={{whiteSpace: 'pre-wrap'}}>
                                 {emailContent}
