@@ -1,7 +1,7 @@
 import {createFileRoute, useNavigate} from '@tanstack/react-router';
 import {EmailDetail} from "../components/mail/email-detail.tsx";
 import {useMediaQuery} from "../hooks/use-media-query";
-import {useDeleteEmail, useEmail, useEmails} from "@/hooks/use-emails.ts";
+import {useDeleteEmail, useEmail, useEmails, useToggleReadEmail} from "@/hooks/use-emails.ts";
 import {EmailList} from "@/components/mail/email-list.tsx";
 import {Email} from "@apps/api-server/types/mail";
 
@@ -25,6 +25,7 @@ function MailRoute() {
     const isMobile = useMediaQuery('(max-width: 768px)');
     const isTablet = useMediaQuery('(max-width: 1024px) and (min-width: 769px)');
     const deleteMail = useDeleteEmail();
+    const toggleMailRead = useToggleReadEmail();
 
     const {data: emails = [], isLoading: isEmailsLoading, error: isEmailsError} = useEmails(filterId);
     const {data: selectedEmail = null} = useEmail(mailId);
@@ -66,6 +67,7 @@ function MailRoute() {
                     isMobile={true}
                     onBackClick={handleBackToList}
                     onDelete={handleDeleteEmail}
+                    toggleMailRead={toggleMailRead}
                 />
             </div>
         ) : (
@@ -114,6 +116,7 @@ function MailRoute() {
                             email={selectedEmail}
                             className="border-none h-full"
                             onDelete={handleDeleteEmail}
+                            toggleMailRead={toggleMailRead}
                         />
                     </div>
                 ) : (

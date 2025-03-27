@@ -55,3 +55,15 @@ export function useDeleteEmail() {
         await queryClient.invalidateQueries({queryKey: emailKeys.details()});
     }
 }
+
+export function useToggleReadEmail() {
+    const queryClient = useQueryClient();
+
+    return async (email: Email, isRead: boolean) => {
+        await mailApi.message.read.put({
+            messageId: email.id,
+            read: isRead
+        });
+        await queryClient.invalidateQueries({queryKey: emailKeys.details()});
+    }
+}

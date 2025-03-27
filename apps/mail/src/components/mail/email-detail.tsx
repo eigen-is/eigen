@@ -18,9 +18,10 @@ interface EmailDetailProps {
     className?: string;
     onBackClick?: () => void;
     onDelete: (mail: Email) => void;
+    toggleMailRead: (mail: Email, isRead: boolean) => void;
 }
 
-export function EmailDetail({email, isMobile, className, onBackClick, onDelete, ...props}: EmailDetailProps) {
+export function EmailDetail({email, isMobile, className, onBackClick, onDelete, toggleMailRead, ...props}: EmailDetailProps) {
     if (!email) {
         console.log('No email provided to EmailDetail component');
         return (
@@ -29,6 +30,8 @@ export function EmailDetail({email, isMobile, className, onBackClick, onDelete, 
             </div>
         );
     }
+
+    toggleMailRead(email, true);
 
     console.log('Rendering EmailDetail with email:', email);
 
