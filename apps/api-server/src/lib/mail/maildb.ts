@@ -1,13 +1,14 @@
 import type {User} from "better-auth";
-import {fsGetDatabase} from "../fs/fs.ts";
 import type Database from "bun:sqlite";
 import {drizzle} from "drizzle-orm/bun-sqlite";
 import {eq} from "drizzle-orm";
 import * as schema from "./schema.ts";
-import type { EmailSummary } from "./mailtypes.ts";
+import type {EmailSummary} from "./mailtypes.ts";
+import {getHome} from "../home/home.ts";
 
 async function getMailDatabase(user: User) {
-    const db = await fsGetDatabase(user, 'eigen.mail/mail.db', true, async (db: Database) => {
+    const home = await getHome(user);
+    const db = await home.openSQLiteDatabase('eigen.mail/mail.db', async (db: Database) => {
         // Execute migration SQL to create tables
         db.exec(`
             CREATE TABLE IF NOT EXISTS emails (
@@ -60,8 +61,8 @@ export default class maildb {
     }
 
     public async addEmail(email: EmailSummary) {
-        const date = email.date instanceof Date 
-            ? email.date 
+        const date = email.date instanceof Date
+            ? email.date
             : (email.date ? new Date(email.date) : new Date());
 
         // Use type assertion to help TypeScript understand the types match the schema
@@ -73,7 +74,7 @@ export default class maildb {
             date: date,
             isRead: Boolean(email.isRead),
             isStarred: Boolean(email.isStarred),
-            isDraft: Boolean(email.isDraft), 
+            isDraft: Boolean(email.isDraft),
             hasAttachments: Boolean(email.hasAttachments),
             mailbox: String(email.mailbox || ''),
             _isParsed: Boolean(email._isParsed),

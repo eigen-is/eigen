@@ -1,4 +1,4 @@
-import {User} from "better-auth/types";
+import type {User} from "better-auth/types";
 import {mkdir} from "node:fs/promises";
 import Database from "bun:sqlite";
 
@@ -14,8 +14,7 @@ export async function fsGetFileName(user: User, file: string): Promise<string> {
     return path;
 }
 
-export async function fsGetDatabase(user: User, file: string, create: boolean = true, onCreate = async (db: Database) => {
-}) {
+export async function fsGetDatabase(user: User, file: string, create: boolean = true, onCreate: (db:Database) => Promise<void> = async () => {}) {
     const path = await fsGetFileName(user, file);
     const bunfile = Bun.file(path);
     if (await bunfile.exists()) {

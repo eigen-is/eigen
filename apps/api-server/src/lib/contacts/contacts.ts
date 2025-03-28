@@ -1,15 +1,16 @@
 import type {User} from "better-auth";
 import type Database from "bun:sqlite";
-import {fsGetDatabase} from "../fs/fs";
 import type {Contact} from "../../types/contact";
 import type {Label} from "../../types/label";
 import {drizzle} from "drizzle-orm/bun-sqlite";
 import {eq, sql} from "drizzle-orm";
 import * as schema from "./schema";
 import {v4 as uuidv4} from "uuid";
+import {getHome} from "../home/home.ts";
 
 async function getContactsDatabase(user: User) {
-    const db = await fsGetDatabase(user, 'eigen.contacts/contacts.db', true, async (db: Database) => {
+    const home = await getHome(user);
+    const db = await home.openSQLiteDatabase('eigen.contacts/contacts.db', async (db: Database) => {
         // Execute migration SQL to create tables
         db.exec(`
             CREATE TABLE IF NOT EXISTS contacts (
