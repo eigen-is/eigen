@@ -1,4 +1,4 @@
-import {Archive, ArrowLeft, Forward, MoreVertical, Paperclip, Reply, ReplyAll, Trash2} from "lucide-react";
+import {Archive, ArchiveX, ArrowLeft, Forward, MoreVertical, Paperclip, Reply, ReplyAll, Trash2} from "lucide-react";
 import {cn} from "@workspace/ui/lib/utils";
 import {Button} from "@workspace/ui/components/button";
 import {
@@ -11,6 +11,7 @@ import {format} from "date-fns";
 import {Email} from "@apps/api-server/types/mail";
 import {ShadowContent} from "@workspace/ui/components/layout/shadow-content";
 import {Separator} from "@workspace/ui/components/separator";
+import {Tooltip, TooltipContent, TooltipProvider, TooltipTrigger} from "@workspace/ui/components/tooltip";
 
 interface EmailDetailProps {
     email: Email | null;
@@ -21,7 +22,15 @@ interface EmailDetailProps {
     toggleMailRead: (mail: Email, isRead: boolean) => void;
 }
 
-export function EmailDetail({email, isMobile, className, onBackClick, onDelete, toggleMailRead, ...props}: EmailDetailProps) {
+export function EmailDetail({
+                                email,
+                                isMobile,
+                                className,
+                                onBackClick,
+                                onDelete,
+                                toggleMailRead,
+                                ...props
+                            }: EmailDetailProps) {
     if (!email) {
         console.log('No email provided to EmailDetail component');
         return (
@@ -60,12 +69,39 @@ export function EmailDetail({email, isMobile, className, onBackClick, onDelete, 
                 <div className="flex items-center gap-1">
                     {/* Mobile back button when needed */}
                     {isMobile && onBackClick && (
-                        <Button variant="ghost" size="icon" className="h-8 w-8 mr-1" onClick={onBackClick} title="Back">
-                            <ArrowLeft className="h-4 w-4"/>
-                        </Button>
+                        <>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 mr-1" onClick={onBackClick}
+                                    title="Back">
+                                <ArrowLeft className="h-4 w-4"/>
+                            </Button>
+                            <div className="h-6 w-[1px] bg-border mx-1"></div>
+                        </>
                     )}
 
                     {/* Left side icons */}
+                    <Button variant="ghost" size="icon" className="h-8 w-8" title="Archive">
+                        <Archive className="h-4 w-4"/>
+                    </Button>
+                    <Button variant="ghost" size="icon" className="h-8 w-8" title="Junk">
+                        <ArchiveX className="h-4 w-4"/>
+                    </Button>
+                    <TooltipProvider>
+                        <Tooltip>
+                            <TooltipTrigger asChild>
+                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onDelete(email)}
+                                >
+                                    <Trash2 className="h-4 w-4"/>
+                                </Button>
+                            </TooltipTrigger>
+                            <TooltipContent>
+                                <p>Move to Trash</p>
+                            </TooltipContent>
+                        </Tooltip>
+                    </TooltipProvider>
+                </div>
+
+                <div className="flex items-center gap-1">
+                    {/* Right side icons */}
                     <Button variant="ghost" size="icon" className="h-8 w-8" title="Reply">
                         <Reply className="h-4 w-4"/>
                     </Button>
@@ -74,18 +110,6 @@ export function EmailDetail({email, isMobile, className, onBackClick, onDelete, 
                     </Button>
                     <Button variant="ghost" size="icon" className="h-8 w-8" title="Forward">
                         <Forward className="h-4 w-4"/>
-                    </Button>
-                </div>
-
-                <div className="flex items-center gap-1">
-                    {/* Right side icons */}
-                    <Button variant="ghost" size="icon" className="h-8 w-8" title="Archive">
-                        <Archive className="h-4 w-4"/>
-                    </Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8" title="Delete"
-                    onClick={() => onDelete(email)}
-                    >
-                        <Trash2 className="h-4 w-4"/>
                     </Button>
 
                     <div className="h-6 w-[1px] bg-border mx-1"></div>
@@ -141,9 +165,9 @@ export function EmailDetail({email, isMobile, className, onBackClick, onDelete, 
                     {/* Email body */}
                     <div className="prose prose-sm max-w-none">
                         {email.html || email.textAsHtml ? (
-                            <ShadowContent 
-                                content={emailContent} 
-                                contentType="html" 
+                            <ShadowContent
+                                content={emailContent}
+                                contentType="html"
                                 className="w-full"
                             />
                         ) : (

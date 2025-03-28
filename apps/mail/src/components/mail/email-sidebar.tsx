@@ -1,4 +1,4 @@
-import {AlertOctagon, Archive, File, Inbox, Loader2, MailPlus, Send, Trash2, X} from 'lucide-react';
+import {AlertOctagon, Archive, ArchiveX, File, Inbox, Loader2, MailPlus, Send, Trash2, X} from 'lucide-react';
 import {Button} from "@workspace/ui/components/button";
 import {SidebarItem} from '@workspace/ui/components/layout/sidebar/sidebar-item';
 import {SidebarSection} from '@workspace/ui/components/layout/sidebar/sidebar-section';
@@ -11,8 +11,8 @@ const standardMailboxes: Record<string, { icon: React.ComponentType<any>, name: 
     '\\Inbox': {icon: Inbox, name: 'Inbox'},
     '\\Drafts': {icon: File, name: 'Drafts'},
     '\\Sent': {icon: Send, name: 'Sent'},
-    '\\Trash': {icon: Trash2, name: 'Trash'},
     '\\Junk': {icon: AlertOctagon, name: 'Spam'},
+    '\\Trash': {icon: Trash2, name: 'Trash'},
     '\\Archive': {icon: Archive, name: 'Archive'},
 };
 
@@ -43,20 +43,20 @@ const defaultMailboxes = [
         flags: ['\\HasNoChildren', '\\Sent']
     },
     {
+        path: "Spam",
+        name: "Spam",
+        icon: <ArchiveX className="h-4 w-4"/>,
+        href: "/box/spam",
+        unread: 0,
+        flags: ['\\HasNoChildren', '\\Junk']
+    },
+    {
         path: "Trash",
         name: "Trash",
         icon: <Trash2 className="h-4 w-4"/>,
         href: "/box/trash",
         unread: 0,
         flags: ['\\HasNoChildren', '\\Trash']
-    },
-    {
-        path: "Spam",
-        name: "Spam",
-        icon: <AlertOctagon className="h-4 w-4"/>,
-        href: "/box/spam",
-        unread: 0,
-        flags: ['\\HasNoChildren', '\\Junk']
     },
     {
         path: "Archive",

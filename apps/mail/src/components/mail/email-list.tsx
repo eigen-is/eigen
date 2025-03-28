@@ -141,7 +141,7 @@ export function EmailList({
                                     <div
                                         key={row.id}
                                         className={cn(
-                                            "flex items-start py-2 px-3 cursor-pointer bg-white",
+                                            "flex items-start py-2 px-3 cursor-pointer bg-white select-none",
                                             // Not selected: hover color (matching sidebar buttons)
                                             activeRowId !== email.id && "hover:bg-accent",
                                             // Selected: highlight background (matching sidebar active button)
