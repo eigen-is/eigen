@@ -2,6 +2,7 @@ import ReactDOM from 'react-dom/client';
 import {createRouter, RouterProvider} from '@tanstack/react-router';
 import {routeTree} from './routeTree.gen';
 import {AuthProvider, useAuth} from "@workspace/lib/auth/auth-context.tsx";
+import {Toaster} from "@workspace/ui/components/sonner";
 
 import '@workspace/ui/globals.css';
 import './../css/globals.css';
@@ -33,6 +34,7 @@ function App() {
     return (
         <AuthProvider>
             <InnerApp/>
+            <Toaster />
         </AuthProvider>
     )
 }
