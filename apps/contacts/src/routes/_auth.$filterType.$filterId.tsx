@@ -90,6 +90,7 @@ function ContactsRoute() {
                         filterType={filterType}
                         filterId={filterId}
                         onBack={handleBackToList}
+                        isMobile={isMobile}
                     />
                 </div>
             );

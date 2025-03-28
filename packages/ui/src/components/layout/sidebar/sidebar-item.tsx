@@ -30,7 +30,7 @@ export function SidebarItem({
 }: SidebarItemProps) {
   // Common styling for both button and link variants
   const baseStyles = cn(
-    "flex items-center rounded-md px-3 py-2 text-sm font-medium",
+    "flex items-center rounded-md px-3 py-2 text-sm font-medium select-none",
     condensed ? "justify-center" : "gap-3",
     isActive ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted hover:text-foreground",
     className

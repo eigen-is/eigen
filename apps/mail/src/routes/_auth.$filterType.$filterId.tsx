@@ -4,6 +4,7 @@ import {useMediaQuery} from "../hooks/use-media-query";
 import {useDeleteEmail, useEmail, useEmails, useToggleReadEmail} from "@/hooks/use-emails.ts";
 import {EmailList} from "@/components/mail/email-list.tsx";
 import {Email} from "@apps/api-server/types/mail";
+import { toast } from "sonner";
 
 // Define search params type
 export interface MailSearchParams {
@@ -51,6 +52,9 @@ function MailRoute() {
     const handleDeleteEmail = async (mail: Email) => {
         console.log('delete email', mail.id)
         await deleteMail(mail);
+        toast("Email has been deleted", {
+            description: "Email is moved to Trash",
+          })
         navigate({
             to: Route.fullPath,
             params: {filterType, filterId},

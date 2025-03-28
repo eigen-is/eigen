@@ -20,9 +20,10 @@ interface ContactDetailProps {
     onBack?: () => void;
     filterType?: string;
     filterId?: string;
+    isMobile?: boolean;
 }
 
-export function ContactDetail({contact, onDelete, onBack, filterType, filterId}: ContactDetailProps) {
+export function ContactDetail({contact, onDelete, onBack, filterType, filterId, isMobile}: ContactDetailProps) {
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
     // Use TanStack Query hook only for fetching labels
@@ -75,11 +76,14 @@ export function ContactDetail({contact, onDelete, onBack, filterType, filterId}:
         <div className="h-full flex flex-col overflow-hidden">
             <div className="flex items-center justify-between h-12 px-4 border-b">
                 <div className="flex items-center">
-                    {onBack && (
-                        <Button variant="ghost" size="icon" onClick={onBack} className="mr-2 h-8 w-8">
-                            <ArrowLeft className="h-4 w-4"/>
-                            <span className="sr-only">Back</span>
-                        </Button>
+                    {isMobile && onBack && (
+                        <>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 mr-1" onClick={onBack}
+                                    title="Back">
+                                <ArrowLeft className="h-4 w-4"/>
+                            </Button>
+                            <div className="h-6 w-[1px] bg-border mx-1"></div>
+                        </>
                     )}
                 </div>
                 <div className="flex items-center">
