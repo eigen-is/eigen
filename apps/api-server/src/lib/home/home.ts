@@ -51,8 +51,8 @@ export class Home {
     }
 
     public async init() {
-        if (this.touch() && this.initialized) {
-            return true;
+        if (this.initialized) {
+            return this;
         }
         if (this.initializationStarted) {
             // Wait for initialization to complete
@@ -60,13 +60,14 @@ export class Home {
                 const interval = setInterval(() => {
                     if (this.initialized) {
                         clearInterval(interval);
-                        resolve(true);
+                        resolve(this);
                     }
                 }, 1);
             });
         }
         this.initializationStarted = true;
         this.initialized = true;
+        return this;
     }
 
     public touch() {
@@ -79,13 +80,12 @@ export class Home {
             city.delete(this.user.id);
             console.log(`Closed home for ${this.user.id}`);
         }, 1000 * 30);
-        return true;
+        return this;
     }
 
     public async openSQLiteDatabase(file: string, onCreate: (db: Database) => Promise<void>) {
         if (this.databases.has(file)) {
             return await (this.databases.get(file)!.get()) as Database;
-            ;
         }
         this.databases.set(file, new asyncCache(async () => {
             const db = await fsGetDatabase(this.user, file, true, onCreate);
@@ -101,11 +101,11 @@ export async function getHome(user: User) {
     if (city.has(user.id)) {
         const home = city.get(user.id)!;
         await home.init();
-        return home;
+        return home.touch();
     } else {
         const home = new Home(user);
         city.set(user.id, home);
         await home.init();
-        return home;
+        return home.touch();
     }
 }
