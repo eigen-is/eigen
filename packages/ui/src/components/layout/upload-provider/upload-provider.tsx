@@ -62,7 +62,7 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
           // Auto-remove after 3 seconds
           setTimeout(() => {
             setUploads(prev => prev.filter(upload => upload.id !== id))
-          }, 3000)
+          }, 1000)
         },
         error: () => {
           setUploads(prev => 

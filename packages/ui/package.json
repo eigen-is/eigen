@@ -50,7 +50,7 @@
     "./globals.css": "./src/styles/globals.css",
     "./postcss.config": "./postcss.config.mjs",
     "./lib/*": "./src/lib/*.ts",
-    "./components/*": "./src/components/*.tsx",
+    "./components/*": ["./src/components/*.tsx", "./src/components/*.ts"],
     "./hooks/*": "./src/hooks/*.ts"
   }
 }
