@@ -1,6 +1,7 @@
 import {useState} from "react";
-import {Calendar, FileText, HardDrive, LayoutDashboard, Mail, Menu, UserIcon, Users} from "lucide-react";
+import {Calendar, FileText, HardDrive, LayoutDashboard, Mail, Menu, User as UserIcon, Users} from "lucide-react";
 import {useRouter} from "@tanstack/react-router";
+import {Button} from "@workspace/ui/components/button";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -8,12 +9,12 @@ import {
     DropdownMenuLabel,
     DropdownMenuSeparator,
     DropdownMenuTrigger
-} from "../dropdown-menu";
-import {Button} from "../button";
-import {AppLogo} from "./app-logo";
+} from "@workspace/ui/components/dropdown-menu";
 import {useAuth} from "@workspace/lib/auth/auth-context.tsx";
 import {Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,} from "../dialog";
 import {apps} from "@workspace/lib/apps.ts";
+import {UserItem} from "@workspace/ui/components/layout/user-item";
+import {AppLogo} from "./app-logo";
 
 // Meer generieke definitie voor de Route parameter
 type NavigateFunction = (...args: any[]) => any;
@@ -75,12 +76,11 @@ function UserDropdown({ rootRoute, appName }: { rootRoute: TopbarProps['rootRout
                 </DropdownMenuTrigger>
                 <DropdownMenuContent className="w-56" align="end" forceMount>
                     <DropdownMenuLabel className="font-normal">
-                        <div className="flex flex-col space-y-1">
-                            <p className="text-sm font-medium leading-none">{auth.user.name}</p>
-                            <p className="text-xs leading-none text-muted-foreground">
-                                {auth.user.email}
-                            </p>
-                        </div>
+                        <UserItem
+                            name={auth.user.name}
+                            email={auth.user.email}
+                            className="p-0"
+                        />
                     </DropdownMenuLabel>
                     <DropdownMenuSeparator/>
                     {apps.map(app => {
