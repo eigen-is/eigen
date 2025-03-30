@@ -59,6 +59,10 @@ export function useToggleReadEmail() {
     const queryClient = useQueryClient();
 
     return async (email: Email, isRead: boolean) => {
+        if (isRead === email.isRead) {
+            return;
+        }
+
         await mailApi.message.read.put({
             messageId: email.id,
             read: isRead
