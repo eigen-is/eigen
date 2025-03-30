@@ -27,7 +27,7 @@ export function UploadContainer({
         >
           <CardContent className="p-3">
             <div className="flex justify-between items-center mb-2">
-              <p className="text-sm font-medium truncate mr-2">{upload.filename}</p>
+              <p className="text-sm font-medium truncate mr-2">Uploading {upload.filename}</p>
               {/* Only show cancel button if cancelFn exists */}
               {upload.cancelFn && (
                 <button 

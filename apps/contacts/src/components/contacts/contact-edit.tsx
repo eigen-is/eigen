@@ -8,6 +8,8 @@ import {cn} from "@workspace/ui/lib/utils";
 import {useLabels} from '../../hooks/use-labels';
 import {useAddContact, useUpdateContact} from '../../hooks/use-contacts';
 import {type Contact} from "@apps/api-server/types/contact";
+import {useUpload} from '@workspace/ui/components/layout/upload-provider/upload-provider';
+import {uploadWithProgress} from "@workspace/ui/components/layout/upload-provider/upload-with-progress";
 
 // UI Components
 import {Button} from "@workspace/ui/components/button";
@@ -24,8 +26,6 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger
 } from "@workspace/ui/components/dropdown-menu";
-import { useUpload } from '@workspace/ui/components/layout/upload-provider/upload-provider';
-import {contactsApi} from "@workspace/lib/api";
 
 // Define the form schema
 export const formSchema = z.object({
@@ -77,7 +77,7 @@ export function ContactEdit({
   const fileInputRef = React.useRef<HTMLInputElement>(null);
   
   // Upload context for tracking upload progress
-  const { createUpload } = useUpload();
+  const upload = useUpload();
   
   // Set up react-hook-form
   const form = useForm<ContactFormValues>({
@@ -172,26 +172,48 @@ export function ContactEdit({
                     onChange={async (e) => {
                       const file = e.target.files?.[0];
                       if (file) {
-                        // Create a temporary URL for preview
-                        // const imageUrl = URL.createObjectURL(file);
-                        // setAvatar(imageUrl);
-
                         // Upload the file using the API and track progress
                         const formData = new FormData();
                         formData.append('file', file);
-                        formData.append('multipleFiles', file); // Required by the API
                         
-                        // Create upload tracking
-                        const url = await contactsApi.avatar.post({file});
-                        setAvatar(url.data);
+                        // Create upload tracking object with the methods returned by createUpload
+                        const uploadHandler = upload.createUpload(file.name);
 
-                        console.log('File uploaded:', url.data);
-
-                        // const {id, updateProgress, complete, error, cancel} = createUpload(file.name, () => {
-                        //   // Cancel function if needed
-                        //   console.log('Upload canceled');
-                        // });
-                        //
+                        try {
+                          // Use the uploadWithProgress helper with authentication
+                          const response = await uploadWithProgress({
+                            url: `${import.meta.env.VITE_API_HOST}/contacts/avatar`,
+                            formData,
+                            headers: {
+                              'credentials': 'include'
+                            },
+                            onProgress: (progress: number) => {
+                              // Update the progress in the UI
+                              uploadHandler.updateProgress(progress);
+                            },
+                            onSuccess: async (response: Response) => {
+                              // Mark upload as complete
+                              uploadHandler.complete();
+                              const responseData = await response.text();
+                              setAvatar(responseData);
+                            },
+                            onError: (err) => {
+                              // Mark upload as failed
+                              uploadHandler.error();
+                              console.error('Upload error:', err);
+                            }
+                          });
+                          
+                          // Parse the response and update the avatar
+                          if (response.ok) {
+                            const responseData = await response.text();
+                            setAvatar(responseData);
+                          }
+                        } catch (err: any) {
+                          console.error('Error uploading file:', err);
+                          uploadHandler.error();
+                        }
+                        
                         // Clean up the file input value so the same file can be selected again if needed
                         e.target.value = '';
                       }
