@@ -1,12 +1,10 @@
 import {type User} from "better-auth/types";
-import Maildir from "./maildir";
 import {getUserByEmail} from "../users/users.ts";
+import {getHome} from "../home/home.ts";
 
 async function getMailClient(user: User) {
-    const mail = new Maildir(user);
-    await mail.init();
-
-    return mail;
+    const home = await getHome(user);
+    return home.mail;
 }
 
 /**

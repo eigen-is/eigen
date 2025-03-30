@@ -18,15 +18,18 @@ import {
 import {welcomeMail} from "./welcome.ts";
 // import DOMPurify from 'isomorphic-dompurify';
 import maildb from "./maildb.ts";
+import type {Home} from "../home/home.ts";
 
 export default class Maildir {
     private basePath: string;
     private user: User;
+    private home: Home;
     private db!: maildb;
 
-    constructor(user: User) {
-        this.user = user;
-        this.basePath = fsGetDirName(user, 'eigen.mail/Maildir');
+    constructor(home: Home) {
+        this.home = home;
+        this.user = this.home.user;
+        this.basePath = fsGetDirName(this.user, 'eigen.mail/Maildir');
     }
 
     public async init() {
@@ -36,7 +39,7 @@ export default class Maildir {
             await this.createMailboxes();
             await this.mailboxDeliver(welcomeMail(this.user.name));
         }
-        this.db = new maildb(this.user);
+        this.db = new maildb(this.home);
         await this.db.init();
     }
 

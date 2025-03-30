@@ -8,7 +8,8 @@ export const contacts = sqliteTable('contacts', {
     firstName: text('firstName').notNull(),
     lastName: text('lastName').notNull(),
     eigenId: text('eigenId').notNull(),
-    data: text('data', {mode: 'json'}).$type<Omit<Contact, 'id' | 'firstName' | 'lastName' | 'labels'>>(),
+    avatar: text('avatar'),
+    data: text('data', {mode: 'json'}).$type<Omit<Contact, 'id' | 'firstName' | 'lastName' | 'eigenId' | 'labels' | 'avatar'>>(),
     createdAt: integer('createdAt', {mode: 'timestamp'}).default(sql`(unixepoch())`),
     updatedAt: integer('updatedAt', {mode: 'timestamp'}).default(sql`(unixepoch())`),
 });

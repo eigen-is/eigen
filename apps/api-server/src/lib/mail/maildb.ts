@@ -1,13 +1,11 @@
-import type {User} from "better-auth";
 import type Database from "bun:sqlite";
 import {drizzle} from "drizzle-orm/bun-sqlite";
 import {eq} from "drizzle-orm";
 import * as schema from "./schema.ts";
 import type {EmailSummary} from "./mailtypes.ts";
-import {getHome} from "../home/home.ts";
+import {Home} from "../home/home.ts";
 
-async function getMailDatabase(user: User) {
-    const home = await getHome(user);
+async function getMailDatabase(home: Home) {
     const db = await home.openSQLiteDatabase('eigen.mail/mail.db', async (db: Database) => {
         // Execute migration SQL to create tables
         db.exec(`
@@ -49,15 +47,15 @@ async function getMailDatabase(user: User) {
 }
 
 export default class maildb {
-    private user: User;
+    private home: Home;
     private db!: ReturnType<typeof drizzle<typeof schema>>;
 
-    constructor(user: User) {
-        this.user = user;
+    constructor(home: Home) {
+        this.home = home;
     }
 
     public async init() {
-        this.db = await getMailDatabase(this.user);
+        this.db = await getMailDatabase(this.home);
     }
 
     public async addEmail(email: EmailSummary) {

@@ -1,15 +1,23 @@
-import type {User} from "better-auth";
 import type Database from "bun:sqlite";
 import type {Contact} from "../../types/contact";
 import type {Label} from "../../types/label";
-import {drizzle} from "drizzle-orm/bun-sqlite";
+import {BunSQLiteDatabase, drizzle} from "drizzle-orm/bun-sqlite";
 import {eq, sql} from "drizzle-orm";
 import * as schema from "./schema";
 import {v4 as uuidv4} from "uuid";
-import {getHome} from "../home/home.ts";
+import {getHome, Home} from "../home/home";
+import type {User} from "better-auth/types";
+import {getUserByEmail} from "../users/users.ts";
 
-async function getContactsDatabase(user: User) {
+export async function getContacts(user: User) {
     const home = await getHome(user);
+   // const contacts = new Contacts(home);
+   // await contacts.init();
+   // return contacts;
+    return home.contacts;
+}
+
+async function getContactsDatabase(home: Home) {
     const db = await home.openSQLiteDatabase('eigen.contacts/contacts.db', async (db: Database) => {
         // Execute migration SQL to create tables
         db.exec(`
@@ -18,6 +26,7 @@ async function getContactsDatabase(user: User) {
                 firstName TEXT NOT NULL,
                 lastName TEXT NOT NULL,
                 eigenId TEXT,
+                avatar TEXT,
                 data TEXT,
                 createdAt INTEGER DEFAULT (unixepoch()),
                 updatedAt INTEGER DEFAULT (unixepoch())
@@ -72,201 +81,204 @@ async function getContactsDatabase(user: User) {
         } catch (error) {
             console.error('Error setting up mock labels:', error);
         }
-
-        // add the user to the contacts table
-        addContact(user, {
-            eigenId: user.id,
-            firstName: user.name,
-            lastName: '',
-            email: [user.email],
-            phone: [],
-            company: '',
-            jobTitle: '',
-            address: [],
-            birthday: '',
-            notes: '',
-            avatar: '',
-            labels: []
-        });
     });
 
     return drizzle(db, {schema});
 }
 
-async function setContactLabels(user: User, contactId: string, labels: string[]) {
-    const db = await getContactsDatabase(user);
+export class Contacts {
+    private db!: BunSQLiteDatabase<typeof schema>;
+    private home: Home;
 
-    // Delete existing labels
-    await db.delete(schema.contactsToLabels).where(eq(schema.contactsToLabels.contactId, contactId));
-
-    // Insert new labels
-    for (const labelId of labels) {
-        await db.insert(schema.contactsToLabels).values({
-            contactId,
-            labelId
-        });
+    constructor(home: Home) {
+        this.home = home;
     }
-}
 
-export async function addContact(user: User, contact: Omit<Contact, 'id'>) {
-    const db = await getContactsDatabase(user);
-    const contactId = uuidv4();
+    public async init() {
+        this.db = await getContactsDatabase(this.home);
+        if (!(await this.getContacts()).length) {
+            const user = this.home.user;
 
-    const {labels, ...contactData} = contact;
-    const data = {
-        email: contactData.email,
-        phone: contactData.phone,
-        company: contactData.company,
-        jobTitle: contactData.jobTitle,
-        address: contactData.address,
-        birthday: contactData.birthday,
-        notes: contactData.notes,
-        avatar: contactData.avatar
-    };
+            // add the user to the contacts table
+            await this.addContact({
+                eigenId: user.id,
+                firstName: user.name,
+                lastName: '',
+                email: [user.email],
+                phone: [],
+                company: '',
+                jobTitle: '',
+                address: [],
+                birthday: '',
+                notes: '',
+                avatar: '',
+                labels: []
+            });
 
-    await db.insert(schema.contacts).values({
-        id: contactId,
-        firstName: contactData.firstName,
-        lastName: contactData.lastName,
-        eigenId: contactData.eigenId || '',
-        data,
-        createdAt: sql`unixepoch()`,
-        updatedAt: sql`unixepoch()`,
-    });
+            // get reinder
+            const reinder = await getUserByEmail('reinder@eigen.is');
+            if (reinder && reinder.id !== user.id) {
+                this.addContact({
+                    eigenId: reinder.id,
+                    firstName: 'Reinder',
+                    lastName: 'Nijhoff',
+                    email: [reinder.email],
+                    phone: [],
+                    company: '',
+                    jobTitle: '',
+                    address: [],
+                    birthday: '',
+                    notes: '',
+                    avatar: '',
+                    labels: []
+                });
+            }
+        }
+    }
 
-    // Add labels if provided
-    await setContactLabels(user, contactId, labels || []);
+    public async setContactLabels(contactId: string, labels: string[]) {
+        // Delete existing labels
+        await this.db.delete(schema.contactsToLabels).where(eq(schema.contactsToLabels.contactId, contactId));
 
-    return contactId;
-}
+        // Insert new labels
+        for (const labelId of labels) {
+            await this.db.insert(schema.contactsToLabels).values({
+                contactId,
+                labelId
+            });
+        }
+    }
 
-export async function deleteContact(user: User, id: string) {
-    const db = await getContactsDatabase(user);
-    await db.delete(schema.contacts).where(eq(schema.contacts.id, id));
-}
+    public async addContact(contact: Omit<Contact, 'id'>) {
+        const contactId = uuidv4();
 
-export async function updateContact(user: User, id: string, contact: Omit<Contact, 'id'>) {
-    const db = await getContactsDatabase(user);
-    const {labels, ...contactData} = contact;
-    const data = {
-        email: contactData.email,
-        phone: contactData.phone,
-        company: contactData.company,
-        jobTitle: contactData.jobTitle,
-        address: contactData.address,
-        birthday: contactData.birthday,
-        notes: contactData.notes,
-        avatar: contactData.avatar
-    };
+        const {labels, ...contactData} = contact;
+        const data = {
+            email: contactData.email,
+            phone: contactData.phone,
+            company: contactData.company,
+            jobTitle: contactData.jobTitle,
+            address: contactData.address,
+            birthday: contactData.birthday,
+            notes: contactData.notes,
+            avatar: contactData.avatar
+        };
 
-    // Update contact
-    await db.update(schema.contacts)
-        .set({
+        await this.db.insert(schema.contacts).values({
+            id: contactId,
             firstName: contactData.firstName,
             lastName: contactData.lastName,
             eigenId: contactData.eigenId || '',
             data,
-            updatedAt: sql`unixepoch()`
-        })
-        .where(eq(schema.contacts.id, id));
+            createdAt: sql`unixepoch()`,
+            updatedAt: sql`unixepoch()`,
+        });
 
-    // Update labels if provided
-    await setContactLabels(user, id, labels || []);
-}
+        // Add labels if provided
+        await this.setContactLabels(contactId, labels || []);
 
-export async function getContactLabels(user: User): Promise<Label[]> {
-    const db = await getContactsDatabase(user);
-    return db.select().from(schema.labels).all();
-}
+        return contactId;
+    }
 
-export async function addContactLabel(user: User, label: Omit<Label, 'id'>): Promise<string> {
-    const db = await getContactsDatabase(user);
-    const labelId = uuidv4();
+    public async deleteContact(id: string) {
+        const user = this.home.user;
+        // you can't delete yourself!
+        if (id === user.id) {
+            throw new Error('You cannot delete yourself');
+        } else {
+            await this.db.delete(schema.contacts).where(eq(schema.contacts.id, id));
+        }
+    }
 
-    await db.insert(schema.labels).values({
-        id: labelId,
-        name: label.name,
-        color: label.color,
-        createdAt: sql`unixepoch()`,
-        updatedAt: sql`unixepoch()`,
-    });
 
-    return labelId;
-}
+    public async updateContact(id: string, contact: Omit<Contact, 'id'>) {
+        const {labels, ...contactData} = contact;
+        const data = {
+            email: contactData.email,
+            phone: contactData.phone,
+            company: contactData.company,
+            jobTitle: contactData.jobTitle,
+            address: contactData.address,
+            birthday: contactData.birthday,
+            notes: contactData.notes,
+            avatar: contactData.avatar
+        };
 
-export async function updateContactLabel(user: User, id: string, label: Omit<Label, 'id'>) {
-    const db = await getContactsDatabase(user);
-
-    console.log('Updating label:', id, label);
-
-    try {
-        await db.update(schema.labels)
+        // Update contact
+        await this.db.update(schema.contacts)
             .set({
-                name: label.name,
-                color: label.color,
+                firstName: contactData.firstName,
+                lastName: contactData.lastName,
+                eigenId: contactData.eigenId || '',
+                data,
                 updatedAt: sql`unixepoch()`
             })
-            .where(eq(schema.labels.id, id));
+            .where(eq(schema.contacts.id, id));
 
-        console.log('Label updated successfully');
-
-        // Return the updated label
-        const updatedLabel = await db.select().from(schema.labels).where(eq(schema.labels.id, id)).get();
-        console.log('Updated label:', updatedLabel);
-        return updatedLabel;
-    } catch (error) {
-        console.error('Error updating label:', error);
-        throw error;
+        // Update labels if provided
+        await this.setContactLabels(id, labels || []);
     }
-}
 
-export async function deleteContactLabel(user: User, id: string) {
-    const db = await getContactsDatabase(user);
-    await db.delete(schema.labels).where(eq(schema.labels.id, id));
-    await db.delete(schema.contactsToLabels).where(eq(schema.contactsToLabels.labelId, id));
-}
 
-export async function getContactById(user: User, id: string): Promise<Contact | null> {
-    const db = await getContactsDatabase(user);
+    public async getLabels(): Promise<Label[]> {
+        return this.db.select().from(schema.labels).all();
+    }
 
-    const contact = await db.select().from(schema.contacts).where(eq(schema.contacts.id, id)).get();
 
-    if (!contact) return null;
+    public async addLabel(label: Omit<Label, 'id'>): Promise<string> {
+        const labelId = uuidv4();
 
-    const labelRelations = await db.select({
-        labelId: schema.contactsToLabels.labelId
-    })
-        .from(schema.contactsToLabels)
-        .where(eq(schema.contactsToLabels.contactId, id))
-        .all();
+        await this.db.insert(schema.labels).values({
+            id: labelId,
+            name: label.name,
+            color: label.color,
+            createdAt: sql`unixepoch()`,
+            updatedAt: sql`unixepoch()`,
+        });
 
-    const labelIds = labelRelations.map(rel => rel.labelId);
+        return labelId;
+    }
 
-    // Parse the stored JSON data
-    const data = contact.data ?? {};
+    public async updateLabel(id: string, label: Omit<Label, 'id'>) {
+        console.log('Updating label:', id, label);
 
-    return {
-        id: contact.id,
-        firstName: contact.firstName,
-        lastName: contact.lastName,
-        eigenId: contact.eigenId,
-        ...data as Omit<Contact, 'id' | 'firstName' | 'lastName' | 'labels'>,
-        labels: labelIds
-    };
-}
+        try {
+            await this.db.update(schema.labels)
+                .set({
+                    name: label.name,
+                    color: label.color,
+                    updatedAt: sql`unixepoch()`
+                })
+                .where(eq(schema.labels.id, id));
 
-export async function getContacts(user: User): Promise<Contact[]> {
-    const db = await getContactsDatabase(user);
+            console.log('Label updated successfully');
 
-    const contacts = await db.select().from(schema.contacts).all();
-    const results = [];
+            // Return the updated label
+            const updatedLabel = await this.db.select().from(schema.labels).where(eq(schema.labels.id, id)).get();
+            console.log('Updated label:', updatedLabel);
+            return updatedLabel;
+        } catch (error) {
+            console.error('Error updating label:', error);
+            throw error;
+        }
+    }
 
-    for (const contact of contacts) {
-        const labelRelations = await db.select({
+
+    public async deleteLabel(id: string) {
+        await this.db.delete(schema.labels).where(eq(schema.labels.id, id));
+        await this.db.delete(schema.contactsToLabels).where(eq(schema.contactsToLabels.labelId, id));
+    }
+
+    public async getContactById(id: string): Promise<Contact | null> {
+        const contact = await this.db.select().from(schema.contacts).where(eq(schema.contacts.id, id)).get();
+
+        if (!contact) return null;
+
+        const labelRelations = this.db.select({
             labelId: schema.contactsToLabels.labelId
         })
             .from(schema.contactsToLabels)
-            .where(eq(schema.contactsToLabels.contactId, contact.id))
+            .where(eq(schema.contactsToLabels.contactId, id))
             .all();
 
         const labelIds = labelRelations.map(rel => rel.labelId);
@@ -274,15 +286,43 @@ export async function getContacts(user: User): Promise<Contact[]> {
         // Parse the stored JSON data
         const data = contact.data ?? {};
 
-        results.push({
+        return {
             id: contact.id,
             firstName: contact.firstName,
             lastName: contact.lastName,
             eigenId: contact.eigenId,
             ...data as Omit<Contact, 'id' | 'firstName' | 'lastName' | 'labels'>,
             labels: labelIds
-        });
+        };
     }
 
-    return results;
+    public async getContacts(): Promise<Contact[]> {
+        const contacts = await this.db.select().from(schema.contacts).all();
+        const results = [];
+
+        for (const contact of contacts) {
+            const labelRelations = this.db.select({
+                labelId: schema.contactsToLabels.labelId
+            })
+                .from(schema.contactsToLabels)
+                .where(eq(schema.contactsToLabels.contactId, contact.id))
+                .all();
+
+            const labelIds = labelRelations.map(rel => rel.labelId);
+
+            // Parse the stored JSON data
+            const data = contact.data ?? {};
+
+            results.push({
+                id: contact.id,
+                firstName: contact.firstName,
+                lastName: contact.lastName,
+                eigenId: contact.eigenId,
+                ...data as Omit<Contact, 'id' | 'firstName' | 'lastName' | 'labels'>,
+                labels: labelIds
+            });
+        }
+
+        return results;
+    }
 }

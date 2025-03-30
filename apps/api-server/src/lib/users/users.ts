@@ -13,3 +13,15 @@ export async function getUserByEmail(email: string) {
     });
     return await db.select().from(user).where(eq(user.email, email)).get();
 }
+
+export async function getUserById(id: string) {
+    const db = drizzle('./data/users3.db', {
+        schema: {
+            user,
+            session,
+            verification,
+            account,
+        },
+    });
+    return await db.select().from(user).where(eq(user.id, id)).get();
+}

@@ -1,8 +1,8 @@
-// Home class for a user. Will be used to handle all the user's file operations, and cache the user's files.
-
 import type {User} from "better-auth/types";
 import type Database from "bun:sqlite";
 import {fsGetDatabase} from "../fs/fs.ts";
+import {Contacts} from "../contacts/contacts.ts";
+import Maildir from "../mail/maildir.ts";
 
 const city = new Map<string, Home>();
 
@@ -15,7 +15,7 @@ class asyncCache<T> {
         this.createPromise = create;
     }
 
-    public async get() {
+    public async get(): Promise<T> {
         if (this.value) {
             console.log('Database from cache');
             return this.value;
@@ -40,6 +40,9 @@ class asyncCache<T> {
 export class Home {
     public user: User;
 
+    public contacts: Contacts;
+    public mail: Maildir;
+
     private initialized: boolean = false;
     private initializationStarted: boolean = false;
     private timeout: Timer | undefined;
@@ -48,6 +51,8 @@ export class Home {
 
     constructor(user: User) {
         this.user = user;
+        this.contacts = new Contacts(this);
+        this.mail = new Maildir(this);
     }
 
     public async init() {
@@ -66,6 +71,10 @@ export class Home {
             });
         }
         this.initializationStarted = true;
+
+        await this.contacts.init();
+        await this.mail.init();
+
         this.initialized = true;
         return this;
     }
@@ -78,6 +87,7 @@ export class Home {
         this.timeout = setTimeout(() => {
             // remove the home from the cache
             city.delete(this.user.id);
+            this.destruct();
             console.log(`Closed home for ${this.user.id}`);
         }, 1000 * 30);
         return this;
@@ -93,6 +103,10 @@ export class Home {
             return db;
         }));
         return await (this.databases.get(file)!.get()) as Database;
+    }
+
+    private async destruct() {
+        this.contacts = undefined!;
     }
 }
 
