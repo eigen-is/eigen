@@ -1,7 +1,7 @@
 import {z} from 'zod';
 import {useForm} from 'react-hook-form';
 import {zodResolver} from '@hookform/resolvers/zod';
-import {useState} from 'react';
+import React, {useState} from 'react';
 import {ArrowLeft, Calendar, Plus, Trash, Camera} from 'lucide-react';
 import {format} from "date-fns";
 import {cn} from "@workspace/ui/lib/utils";
@@ -24,6 +24,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger
 } from "@workspace/ui/components/dropdown-menu";
+import { useUpload } from '@workspace/ui/components/layout/upload-provider/upload-provider';
+import {contactsApi} from "@workspace/lib/api";
 
 // Define the form schema
 export const formSchema = z.object({
@@ -71,7 +73,12 @@ export function ContactEdit({
   
   // State voor loading en error
   const [error, setError] = useState<string | null>(null);
-
+  const [avatar, setAvatar] = useState<string | null>(contact?.avatar || null);
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+  
+  // Upload context for tracking upload progress
+  const { createUpload } = useUpload();
+  
   // Set up react-hook-form
   const form = useForm<ContactFormValues>({
     resolver: zodResolver(formSchema),
@@ -96,8 +103,14 @@ export function ContactEdit({
   const handleSubmit = hookFormSubmit(async (data) => {
     setError(null);
     try {
+      // Add avatar to form data
+      const formData = {
+        ...data,
+        avatar: avatar
+      };
+      
       // Call the onSave callback with the form data
-      await onSave(data);
+      await onSave(formData);
     } catch (e) {
       // Handle any errors that might occur during save
       console.error("Error saving contact:", e);
@@ -138,9 +151,9 @@ export function ContactEdit({
               <div className="flex justify-center mb-8">
                 <div className="h-32 w-32 relative group">
                   <Avatar className="h-full w-full">
-                    {contact.avatar && (
+                    {avatar && (
                       <AvatarImage 
-                        src={contact.avatar} 
+                        src={avatar}
                         alt={`${contact.firstName} ${contact.lastName}`} 
                       />
                     )}
@@ -149,6 +162,41 @@ export function ContactEdit({
                       {contact.lastName?.charAt(0) || ''}
                     </AvatarFallback>
                   </Avatar>
+                  
+                  {/* Hidden file input element */}
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={async (e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        // Create a temporary URL for preview
+                        // const imageUrl = URL.createObjectURL(file);
+                        // setAvatar(imageUrl);
+
+                        // Upload the file using the API and track progress
+                        const formData = new FormData();
+                        formData.append('file', file);
+                        formData.append('multipleFiles', file); // Required by the API
+                        
+                        // Create upload tracking
+                        const url = await contactsApi.avatar.post({file});
+                        setAvatar(url.data);
+
+                        console.log('File uploaded:', url.data);
+
+                        // const {id, updateProgress, complete, error, cancel} = createUpload(file.name, () => {
+                        //   // Cancel function if needed
+                        //   console.log('Upload canceled');
+                        // });
+                        //
+                        // Clean up the file input value so the same file can be selected again if needed
+                        e.target.value = '';
+                      }
+                    }}
+                  />
                   
                   {/* Camera icon with dropdown */}
                   <DropdownMenu>
@@ -162,11 +210,17 @@ export function ContactEdit({
                       </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="end">
-                      <DropdownMenuItem>
+                      <DropdownMenuItem onSelect={() => {
+                        // Trigger file input click when menu item is selected
+                        fileInputRef.current?.click();
+                      }}>
                         Upload from files
                       </DropdownMenuItem>
-                      {contact.avatar && (
-                        <DropdownMenuItem>
+                      {avatar && (
+                        <DropdownMenuItem onSelect={() => {
+                          // Remove avatar
+                          setAvatar(null);
+                        }}>
                           Remove avatar
                         </DropdownMenuItem>
                       )}
