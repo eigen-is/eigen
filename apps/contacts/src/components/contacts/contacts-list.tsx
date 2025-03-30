@@ -3,6 +3,7 @@ import {Link} from '@tanstack/react-router';
 import {ArrowUpDown, Search} from 'lucide-react';
 import {Button} from "@workspace/ui/components/button";
 import {Input} from "@workspace/ui/components/input";
+import {UserItem} from "@workspace/ui/components/layout/user-item";
 import {type Contact} from "@apps/api-server/types/contact";
 import {useContacts} from '../../hooks/use-contacts';
 import {
@@ -166,30 +167,14 @@ export function ContactsList({ filterType = 'filter', filterId = 'all' }: Contac
                         className: "bg-primary/10",
                       }}
                     >
-                      <div className="h-8 w-8 rounded-full overflow-hidden bg-muted">
-                        {contact.avatar ? (
-                          <img 
-                            src={contact.avatar} 
-                            alt={`${contact.firstName} ${contact.lastName}`}
-                            className="h-full w-full object-cover"
-                          />
-                        ) : (
-                          <div className="h-full w-full flex items-center justify-center bg-primary/10 text-primary font-medium">
-                            {contact.firstName.charAt(0)}
-                            {contact.lastName.charAt(0)}
-                          </div>
-                        )}
-                      </div>
-                      <div className="flex flex-col">
-                        <span className="font-medium">
-                          {sortBy === 'firstName' 
-                            ? `${contact.firstName} ${contact.lastName}` 
-                            : `${contact.lastName}, ${contact.firstName}`}
-                        </span>
-                        {contact.email && contact.email.length > 0 && (
-                          <span className="text-sm text-muted-foreground">{contact.email[0]}</span>
-                        )}
-                      </div>
+                      <UserItem
+                        name={sortBy === 'firstName' 
+                          ? `${contact.firstName} ${contact.lastName}` 
+                          : `${contact.lastName}, ${contact.firstName}`}
+                        email={contact.email && contact.email.length > 0 ? contact.email[0] : undefined}
+                        imageUrl={contact.avatar}
+                        className="flex-1"
+                      />
                     </Link>
                   ))}
                 </div>
