@@ -1,7 +1,8 @@
 import ReactDOM from 'react-dom/client';
 import {createRouter, RouterProvider} from '@tanstack/react-router';
 import {routeTree} from './routeTree.gen';
-import {AuthProvider, useAuth} from "@workspace/lib/auth/auth-context.tsx";
+import {useAuth} from "@workspace/lib/auth/auth-context.tsx";
+import { EigenApp } from "@workspace/ui/components/layout/eigen-app";
 
 import '@workspace/ui/globals.css';
 import './../css/globals.css';
@@ -31,9 +32,9 @@ function InnerApp() {
 
 function App() {
     return (
-        <AuthProvider>
+        <EigenApp>
             <InnerApp/>
-        </AuthProvider>
+        </EigenApp>
     )
 }
 
