@@ -35,7 +35,7 @@ export function useEmail(messageId: string | undefined) {
             return response.data || null;
         },
         enabled: !!messageId,
-        staleTime: 60000, // 1 minute
+        staleTime: Infinity,
     });
 }
 
