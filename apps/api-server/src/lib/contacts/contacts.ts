@@ -9,6 +9,8 @@ import {getHome, Home} from "../home/home";
 import type {User} from "better-auth/types";
 import {getUserByEmail} from "../users/users.ts";
 import { fsGetDirName } from "../fs/fs.ts";
+import sharp from "sharp";
+import * as fs from "node:fs/promises";
 
 export async function getContacts(user: User) {
     const home = await getHome(user);
@@ -135,6 +137,8 @@ export class Contacts {
                 });
             }
         }
+
+        this.cleanupAvatarImages();
     }
 
     public async setContactLabels(contactId: string, labels: string[]) {
@@ -327,23 +331,52 @@ export class Contacts {
         return results;
     }
 
-    public async uploadAvatar(file: File) {   
+    private async cleanupAvatarImages() {
+        const baseDir = fsGetDirName(this.home.user, 'eigen.contacts/avatars/');
+        const files = await fs.readdir(baseDir);
+        const contacts = await this.getContacts();
+        for (const file of files) {
+            // delete file if it is not in the database
+            const contact = contacts.find(c => c.avatar?.includes(file));
+            if (!contact) {
+                await fs.unlink(`${baseDir}${file}`);
+            }
+        }
+    }
+
+    public async uploadAvatar(file: File) {
+        this.cleanupAvatarImages();
+        
         // create random file name in 'eigen.contacts/avatars' with correct extension
-        const baseDir =  fsGetDirName(this.home.user, 'eigen.contacts/avatars/');
-        const extension = file.name.split('.').pop();
+        const baseDir = fsGetDirName(this.home.user, 'eigen.contacts/avatars/');
+
+        // Read file content as buffer
+        const buffer = Buffer.from(await file.arrayBuffer());
+
+        // convert file to webp
+        const convertedFile = await sharp(buffer)
+            .webp({ quality: 80 })
+            .resize(512, 512, {
+                fit: 'cover',
+                position: 'center'
+            })  
+            .toBuffer();
+
+        const extension = 'webp';
         // create file name
         const fileName = `${uuidv4()}.${extension}`;
         const fullFileName = `${baseDir}${fileName}`;
 
-        await Bun.write(fullFileName, file);
+        await Bun.write(fullFileName, convertedFile);
 
         return `${process.env['VITE_API_HOST']}/contacts/avatar/${fileName}`;
     }
 
-    public async downloadAvatar(filename: string  ) {
+    public async downloadAvatar(filename: string) {
         // return file if exists with correct headers
         const filePath = `${fsGetDirName(this.home.user, 'eigen.contacts/avatars/')}${filename}`;
         const file = Bun.file(filePath);
+
         if (!file.exists()) {
             return null;
         }

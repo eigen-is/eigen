@@ -58,11 +58,13 @@ export const contactsRouter = new Elysia({name: "contacts"})
     })
     .post("/contacts/avatar", async ({body, user}: { body: AvatarBody, user: User }) => await (await getContacts(user)).uploadAvatar(body.file), {
         body: t.Object({
-			file: t.File({ format: 'image/*' })
+			file: t.File({ 
+                format: 'image/*',
+                maxSize: 5 * 1024 * 1024  // 5MB maximum file size
+            })
 		}),
         auth: true
     })
     .get("/contacts/avatar/:filename", async ({params, user}: {params: {filename: string}, user: User}) => await (await getContacts(user)).downloadAvatar(params.filename), {
         auth: true
     })
-        
