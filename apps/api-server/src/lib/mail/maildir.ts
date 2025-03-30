@@ -407,7 +407,7 @@ export default class Maildir {
                         a.content = new Buffer(0);
                     });
 
-                    return parsed;
+                    return {...parsed, ...cached} as Email;
                 }
             } else {
                 console.error('Message not found in db', messageId);
