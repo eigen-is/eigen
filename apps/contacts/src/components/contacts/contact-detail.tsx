@@ -13,6 +13,7 @@ import {Badge} from "@workspace/ui/components/badge";
 import {Link} from '@tanstack/react-router';
 import {DeleteDialog} from "@workspace/ui/components/layout/delete/delete-dialog";
 import {useLabels} from '@/hooks/use-labels.ts';
+import {Avatar, AvatarFallback, AvatarImage} from "@workspace/ui/components/avatar";
 
 interface ContactDetailProps {
     contact: Contact;
@@ -138,20 +139,19 @@ export function ContactDetail({contact, onDelete, onBack, filterType, filterId, 
             <div className="flex-1 overflow-auto p-6">
                 <div className="flex flex-col md:flex-row gap-8">
                     <div className="flex flex-col items-center gap-4">
-                        <div className="h-40 w-40 rounded-full overflow-hidden bg-muted">
-                            {contact.avatar ? (
-                                <img
-                                    src={contact.avatar}
-                                    alt={`${contact.firstName} ${contact.lastName}`}
-                                    className="h-full w-full object-cover"
-                                />
-                            ) : (
-                                <div
-                                    className="h-full w-full flex items-center justify-center bg-primary/10 text-primary text-4xl font-medium">
+                        <div className="h-40 w-40">
+                            <Avatar className="h-full w-full">
+                                {contact.avatar && (
+                                    <AvatarImage 
+                                        src={contact.avatar} 
+                                        alt={`${contact.firstName} ${contact.lastName}`} 
+                                    />
+                                )}
+                                <AvatarFallback className="text-4xl bg-primary/10 text-primary font-medium">
                                     {contact.firstName.charAt(0)}
                                     {contact.lastName.charAt(0)}
-                                </div>
-                            )}
+                                </AvatarFallback>
+                            </Avatar>
                         </div>
 
                         <div className="text-center">

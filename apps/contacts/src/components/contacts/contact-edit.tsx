@@ -2,19 +2,28 @@ import {z} from 'zod';
 import {useForm} from 'react-hook-form';
 import {zodResolver} from '@hookform/resolvers/zod';
 import {useState} from 'react';
-import {Button} from "@workspace/ui/components/button";
-import {type Contact} from "@apps/api-server/types/contact";
-import {useLabels} from '../../hooks/use-labels';
-import {useAddContact, useUpdateContact} from '../../hooks/use-contacts';
-import {Form, FormControl, FormField, FormItem, FormLabel, FormMessage,} from "@workspace/ui/components/form";
-import {Input} from "@workspace/ui/components/input";
-import {Textarea} from "@workspace/ui/components/textarea";
-import {ArrowLeft, Calendar, Plus, Trash} from 'lucide-react';
-import {Popover, PopoverContent, PopoverTrigger,} from "@workspace/ui/components/popover";
-import {Calendar as CalendarComponent} from "@workspace/ui/components/calendar";
+import {ArrowLeft, Calendar, Plus, Trash, Camera} from 'lucide-react';
 import {format} from "date-fns";
 import {cn} from "@workspace/ui/lib/utils";
+import {useLabels} from '../../hooks/use-labels';
+import {useAddContact, useUpdateContact} from '../../hooks/use-contacts';
+import {type Contact} from "@apps/api-server/types/contact";
+
+// UI Components
+import {Button} from "@workspace/ui/components/button";
+import {Input} from "@workspace/ui/components/input";
 import {Badge} from "@workspace/ui/components/badge";
+import {Textarea} from "@workspace/ui/components/textarea";
+import {Form, FormControl, FormField, FormItem, FormLabel, FormMessage} from "@workspace/ui/components/form";
+import {Popover, PopoverContent, PopoverTrigger} from "@workspace/ui/components/popover";
+import {Calendar as CalendarComponent} from "@workspace/ui/components/calendar";
+import {Avatar, AvatarFallback, AvatarImage} from "@workspace/ui/components/avatar";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger
+} from "@workspace/ui/components/dropdown-menu";
 
 // Define the form schema
 export const formSchema = z.object({
@@ -125,6 +134,47 @@ export function ContactEdit({
         <div className="space-y-8 pb-20">
           <Form {...form}>
             <form onSubmit={handleSubmit} className="space-y-8">
+              {/* Avatar Section */}
+              <div className="flex justify-center mb-8">
+                <div className="h-32 w-32 relative group">
+                  <Avatar className="h-full w-full">
+                    {contact.avatar && (
+                      <AvatarImage 
+                        src={contact.avatar} 
+                        alt={`${contact.firstName} ${contact.lastName}`} 
+                      />
+                    )}
+                    <AvatarFallback className="text-3xl bg-primary/10 text-primary font-medium">
+                      {contact.firstName?.charAt(0) || ''}
+                      {contact.lastName?.charAt(0) || ''}
+                    </AvatarFallback>
+                  </Avatar>
+                  
+                  {/* Camera icon with dropdown */}
+                  <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                      <Button 
+                        size="icon" 
+                        variant="secondary" 
+                        className="absolute bottom-1 right-1 rounded-full h-8 w-8 shadow-md opacity-80 hover:opacity-100"
+                      >
+                        <Camera className="h-4 w-4" />
+                      </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                      <DropdownMenuItem>
+                        Upload from files
+                      </DropdownMenuItem>
+                      {contact.avatar && (
+                        <DropdownMenuItem>
+                          Remove avatar
+                        </DropdownMenuItem>
+                      )}
+                    </DropdownMenuContent>
+                  </DropdownMenu>
+                </div>
+              </div>
+
               {/* Basic Info Section */}
               <div className="space-y-6">
                 <div>
