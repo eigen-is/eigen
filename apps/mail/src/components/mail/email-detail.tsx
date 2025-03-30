@@ -9,8 +9,9 @@ import {
 } from "@workspace/ui/components/dropdown-menu";
 import {format} from "date-fns";
 import {Email} from "@apps/api-server/types/mail";
-import {ShadowContent} from "@workspace/ui/components/layout/shadow-content";
 import {Separator} from "@workspace/ui/components/separator";
+import {ShadowContent} from "@workspace/ui/components/layout/shadow-content";
+import {UserItem} from "@workspace/ui/components/layout/user-item";
 import {Tooltip, TooltipContent, TooltipProvider, TooltipTrigger} from "@workspace/ui/components/tooltip";
 
 interface EmailDetailProps {
@@ -139,24 +140,12 @@ export function EmailDetail({
                             {email.subject ? String(email.subject) : '(No subject)'}
                         </h1>
 
-                        <div className="flex items-center mt-4">
-                            {/* Profile image/avatar placeholder */}
-                            <div
-                                className="h-8 w-8 rounded-full bg-gray-200 flex items-center justify-center text-gray-600 font-medium">
-                                {fromName.charAt(0).toUpperCase()}
-                            </div>
-
-                            <div className="ml-3 flex-1">
-                                <div className="flex flex-col sm:flex-row sm:items-center justify-between">
-                                    <div>
-                                        <p className="text-sm font-medium text-gray-900">{fromName}</p>
-                                        <p className="text-xs text-gray-500">{fromEmail}</p>
-                                    </div>
-                                    <p className="text-xs text-gray-500 mt-1 sm:mt-0 whitespace-nowrap">
-                                        {formattedDate}
-                                    </p>
-                                </div>
-                            </div>
+                        <div className="mt-4">
+                            <UserItem
+                                name={fromName}
+                                email={fromEmail}
+                                label={formattedDate}
+                            />
                         </div>
                     </div>
 
