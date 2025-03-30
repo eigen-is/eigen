@@ -8,6 +8,7 @@ import {v4 as uuidv4} from "uuid";
 import {getHome, Home} from "../home/home";
 import type {User} from "better-auth/types";
 import {getUserByEmail} from "../users/users.ts";
+import { fsGetDirName } from "../fs/fs.ts";
 
 export async function getContacts(user: User) {
     const home = await getHome(user);
@@ -324,5 +325,28 @@ export class Contacts {
         }
 
         return results;
+    }
+
+    public async uploadAvatar(file: File) {   
+        // create random file name in 'eigen.contacts/avatars' with correct extension
+        const baseDir =  fsGetDirName(this.home.user, 'eigen.contacts/avatars/');
+        const extension = file.name.split('.').pop();
+        // create file name
+        const fileName = `${uuidv4()}.${extension}`;
+        const fullFileName = `${baseDir}${fileName}`;
+
+        await Bun.write(fullFileName, file);
+
+        return `${process.env['VITE_API_HOST']}/contacts/avatar/${fileName}`;
+    }
+
+    public async downloadAvatar(filename: string  ) {
+        // return file if exists with correct headers
+        const filePath = `${fsGetDirName(this.home.user, 'eigen.contacts/avatars/')}${filename}`;
+        const file = Bun.file(filePath);
+        if (!file.exists()) {
+            return null;
+        }
+        return file.arrayBuffer();
     }
 }
