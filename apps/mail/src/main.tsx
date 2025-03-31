@@ -1,8 +1,8 @@
 import ReactDOM from 'react-dom/client';
-import { createRouter, RouterProvider } from '@tanstack/react-router';
-import { routeTree } from './routeTree.gen';
-import { useAuth } from '@workspace/lib/auth/auth-context.tsx';
-import { EigenApp } from "@workspace/ui/components/layout/eigen-app";
+import {createRouter, RouterProvider} from '@tanstack/react-router';
+import {routeTree} from './routeTree.gen';
+import {useAuth} from '@workspace/lib/auth/auth-context.tsx';
+import {EigenApp} from "@workspace/ui/components/layout/eigen-app";
 
 import '@workspace/ui/globals.css';
 import './../css/globals.css';
