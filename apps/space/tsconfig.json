@@ -1,0 +1,26 @@
+{
+  "extends": "@workspace/config/base.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "baseUrl": "./src/",
+    "paths": {
+      "@/*": [
+        "./*"
+      ],
+      "@workspace/ui/*": [
+        "../../packages/ui/src/*"
+      ],
+      "@workspace/lib/*": [
+        "../../packages/lib/src/*"
+      ]
+    }
+  },
+  "include": [
+    "**/*.ts",
+    "**/*.tsx",
+    "src"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
+}

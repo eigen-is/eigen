@@ -1,0 +1,7 @@
+.bg-app {
+    background-color: var(--app-drive-color);
+}
+
+.text-app {
+    color: var(--app-drive-color);
+}
