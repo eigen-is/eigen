@@ -7,7 +7,7 @@ import * as schema from "./schema";
 import {v4 as uuidv4} from "uuid";
 import {getHome, Home} from "../home/home";
 import type {User} from "better-auth/types";
-import {getUserByEmail} from "../users/users.ts";
+import {getUserByEmail, updateUser} from "../users/users.ts";
 import sharp from "sharp";
 
 export async function getContacts(user: User) {
@@ -184,17 +184,29 @@ export class Contacts {
     }
 
     public async deleteContact(id: string) {
-        const user = this.home.user;
         // you can't delete yourself!
-        if (id === user.id) {
+        if (await this.you(id)) {
             throw new Error('You cannot delete yourself');
         } else {
             await this.db.delete(schema.contacts).where(eq(schema.contacts.id, id));
         }
     }
 
+    private async you(id: string) {
+        const maybeYou = await this.getContactById(id);
+        return maybeYou?.eigenId === this.home.user.id;
+    }
+
 
     public async updateContact(id: string, contact: Omit<Contact, 'id'>) {
+        if (await this.you(id)) {
+            updateUser(this.home.user, `${contact.firstName} ${contact.lastName}`, contact.avatar || '');
+            // check if this.home.user.email is included in contact.email, add as first element if not
+            if (!contact.email.includes(this.home.user.email)) {
+                contact.email = [this.home.user.email, ...contact.email];
+            }
+        }
+
         const {labels, ...contactData} = contact;
         const data = {
             email: contactData.email,
@@ -212,7 +224,6 @@ export class Contacts {
             .set({
                 firstName: contactData.firstName,
                 lastName: contactData.lastName,
-                eigenId: contactData.eigenId || '',
                 data,
                 updatedAt: sql`unixepoch()`
             })

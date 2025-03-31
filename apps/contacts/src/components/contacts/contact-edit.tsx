@@ -2,7 +2,7 @@ import {z} from 'zod';
 import {useForm} from 'react-hook-form';
 import {zodResolver} from '@hookform/resolvers/zod';
 import React, {useState} from 'react';
-import {ArrowLeft, Calendar, Plus, Trash, Camera} from 'lucide-react';
+import {ArrowLeft, Calendar, Plus, Trash2, Camera} from 'lucide-react';
 import {format} from "date-fns";
 import {cn} from "@workspace/ui/lib/utils";
 import {useLabels} from '../../hooks/use-labels';
@@ -344,7 +344,7 @@ export function ContactEdit({
                                   field.onChange(newLabels);
                                 }}
                               >
-                                <Trash className="h-3 w-3" />
+                                <Trash2 className="h-3 w-3" />
                               </button>
                             </Badge>
                           )})}
@@ -437,7 +437,7 @@ export function ContactEdit({
                                 form.setValue("email", newEmails);
                               }}
                             >
-                              <Trash className="h-4 w-4" />
+                              <Trash2 className="h-4 w-4" />
                             </Button>
                           )}
                         </div>
@@ -494,7 +494,7 @@ export function ContactEdit({
                                 form.setValue("phone", newPhones);
                               }}
                             >
-                              <Trash className="h-4 w-4" />
+                              <Trash2 className="h-4 w-4" />
                             </Button>
                           )}
                         </div>
@@ -540,7 +540,7 @@ export function ContactEdit({
                                   }
                                 }}
                               >
-                                <Trash className="h-4 w-4" />
+                                <Trash2 className="h-4 w-4" />
                               </Button>
                             )}
                           </div>
