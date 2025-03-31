@@ -151,12 +151,10 @@ export function ContactEdit({
               <div className="flex justify-center mb-8">
                 <div className="h-32 w-32 relative group">
                   <Avatar className="h-full w-full">
-                    {avatar && (
                       <AvatarImage 
-                        src={avatar}
+                        src={avatar ?? ''}
                         alt={`${contact.firstName} ${contact.lastName}`} 
                       />
-                    )}
                     <AvatarFallback className="text-3xl bg-primary/10 text-primary font-medium">
                       {contact.firstName?.charAt(0) || ''}
                       {contact.lastName?.charAt(0) || ''}

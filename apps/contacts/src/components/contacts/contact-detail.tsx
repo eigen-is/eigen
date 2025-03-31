@@ -138,15 +138,13 @@ export function ContactDetail({contact, onDelete, onBack, filterType, filterId, 
 
             <div className="flex-1 overflow-auto p-6">
                 <div className="flex flex-col md:flex-row gap-8">
-                    <div className="flex flex-col items-center gap-4">
+                    <div className="flex flex-col items-center gap-4 w-50">
                         <div className="h-40 w-40">
                             <Avatar className="h-full w-full">
-                                {contact.avatar && (
-                                    <AvatarImage 
-                                        src={contact.avatar} 
-                                        alt={`${contact.firstName} ${contact.lastName}`} 
-                                    />
-                                )}
+                                <AvatarImage 
+                                    src={contact.avatar} 
+                                    alt={`${contact.firstName} ${contact.lastName}`} 
+                                />
                                 <AvatarFallback className="text-4xl bg-primary/10 text-primary font-medium">
                                     {contact.firstName.charAt(0)}
                                     {contact.lastName.charAt(0)}
@@ -205,7 +203,7 @@ export function ContactDetail({contact, onDelete, onBack, filterType, filterId, 
                                 </div>
                             )}
 
-                            {contact.phone && contact.phone.length > 0 && (
+                            {contact.phone && contact.phone.length > 0 && contact.phone[0].length > 0&& (
                                 <div className="space-y-2">
                                     <h4 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
                                         <Phone className="h-4 w-4"/>
