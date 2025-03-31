@@ -115,7 +115,7 @@ export function ContactsSidebar({ condensed = false, onClose, isMobile = false }
         {error ? (
           <div className="px-3 py-2 text-sm text-destructive">An error occurred while loading labels.</div>
         ) : loading ? (
-          <div className="px-3 py-2 text-sm text-muted-foreground">Loading labels...</div>
+          <EigenLoader />
         ) : labels.length === 0 ? (
           <div className="px-3 py-2 text-sm text-muted-foreground">No labels found. Add one with the + button.</div>
         ) : (

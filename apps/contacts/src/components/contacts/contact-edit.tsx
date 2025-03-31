@@ -2,7 +2,7 @@ import {z} from 'zod';
 import {useForm} from 'react-hook-form';
 import {zodResolver} from '@hookform/resolvers/zod';
 import React, {useState} from 'react';
-import {ArrowLeft, Calendar, Plus, Trash2, Camera} from 'lucide-react';
+import {ArrowLeft, Calendar, Camera, Plus, Trash2} from 'lucide-react';
 import {format} from "date-fns";
 import {cn} from "@workspace/ui/lib/utils";
 import {useLabels} from '../../hooks/use-labels';
@@ -21,10 +21,10 @@ import {Popover, PopoverContent, PopoverTrigger} from "@workspace/ui/components/
 import {Calendar as CalendarComponent} from "@workspace/ui/components/calendar";
 import {Avatar, AvatarFallback, AvatarImage} from "@workspace/ui/components/avatar";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger
 } from "@workspace/ui/components/dropdown-menu";
 
 // Define the form schema

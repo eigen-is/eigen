@@ -15,6 +15,7 @@ import {DeleteDialog} from "@workspace/ui/components/layout/delete/delete-dialog
 import {useLabels} from '@/hooks/use-labels.ts';
 import {Avatar, AvatarFallback, AvatarImage} from "@workspace/ui/components/avatar";
 import {TooltipButton} from "@workspace/ui";
+import {EigenLoader} from '@workspace/ui/components/layout/eigen-loader';
 
 interface ContactDetailProps {
     contact: Contact;
@@ -171,9 +172,7 @@ export function ContactDetail({contact, onDelete, onBack, filterType, filterId, 
                                         {label.name}
                                     </Badge>
                                 ))
-                            ) : labelsLoading ? (
-                                <p className="text-sm text-muted-foreground">Loading labels...</p>
-                            ) : labelsError ? (
+                            ) : labelsLoading ? (<EigenLoader />) : labelsError ? (
                                 <p className="text-sm text-destructive">Error loading labels</p>
                             ) : null}
                         </div>
