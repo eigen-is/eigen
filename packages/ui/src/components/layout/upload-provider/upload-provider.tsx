@@ -70,6 +70,10 @@ export function UploadProvider({ children }: { children: React.ReactNode }) {
               upload.id === id ? { ...upload, status: "error" } : upload
             )
           )
+          // Auto-remove after 3 seconds
+          setTimeout(() => {
+            setUploads(prev => prev.filter(upload => upload.id !== id))
+          }, 1000)
         },
         cancel: () => {
           // Call the cancelFn if it exists
