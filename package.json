@@ -2,7 +2,8 @@
   "name": "eigen",
   "private": true,
   "scripts": {
-    "serve": "bun --filter '*' dev"
+    "serve": "bun --filter '*' dev",
+    "build": "bun --filter '*' build"
   },
   "workspaces": [
     "packages/*",
