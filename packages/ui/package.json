@@ -47,10 +47,12 @@
     "typescript": "^5"
   },
   "exports": {
+    ".": "./src/index.ts",
     "./globals.css": "./src/styles/globals.css",
     "./postcss.config": "./postcss.config.mjs",
     "./lib/*": "./src/lib/*.ts",
     "./components/*": ["./src/components/*.tsx", "./src/components/*.ts"],
+    "./components/layout/*": ["./src/components/layout/*.tsx", "./src/components/layout/*.ts", "./src/components/layout/*/index.ts"],
     "./hooks/*": "./src/hooks/*.ts"
   }
 }
