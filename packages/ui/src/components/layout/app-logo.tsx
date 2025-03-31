@@ -1,23 +1,91 @@
-import {Link} from "@tanstack/react-router";
-import {cn} from "@workspace/ui/lib/utils";
+import { useState, useEffect, useRef } from "react";
+import { Link } from "@tanstack/react-router";
+import { cn } from "@workspace/ui/lib/utils";
+import { apps } from "@workspace/lib/apps.ts";
 
 interface AppLogoProps {
     appName?: string;
     className?: string;
+    linkable?: boolean;
 }
 
-export function AppLogo({appName = "Mail", className}: AppLogoProps) {
+export function AppLogo({ appName = "Mail", className, linkable = true }: AppLogoProps) {
+    const [expanded, setExpanded] = useState(false);
+    const logoRef = useRef<HTMLDivElement>(null);
+
+    // Handle clicks outside the logo to collapse it
+    useEffect(() => {
+        function handleClickOutside(event: MouseEvent) {
+            if (logoRef.current && !logoRef.current.contains(event.target as Node)) {
+                setExpanded(false);
+            }
+        }
+
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => {
+            document.removeEventListener("mousedown", handleClickOutside);
+        };
+    }, []);
+
+    const handleLogoClick = () => {
+        if (linkable) {
+            setExpanded(!expanded);
+        }
+    };
+
+    const LogoContent = () => (
+        <>
+            {expanded ? (<>
+                    <span className="text-white font-bold">
+                        eigen
+                    </span>
+                <div className="flex items-center animate-in slide-in-from-left-5 duration-300">
+                    {apps.map((app) => (
+                        <div key={app.name} className="flex items-center">
+                            <span className="text-white">
+                            <a 
+                                href={app.href}
+                                onClick={(e) => e.stopPropagation()}
+                                className={"hover:underline"}
+                            >|{app.name.toLowerCase()}
+                            </a>
+                            </span>
+                        </div>
+                    ))}
+                    <span className="text-white">&gt;</span>
+                </div>
+            </>) : (<>
+                <span className="text-white font-bold">
+                    eigen
+                </span>
+                <span className="text-white">
+                    |{appName.toLowerCase()}&gt;
+                </span>
+            </>)}
+        </>
+    );
+
     return (
-        <Link
-            className={cn("text-xl flex items-center cursor-pointer", className)}
-            to="/"
+        <div 
+            ref={logoRef}
+            className={cn("text-xl flex items-center cursor-pointer select-none", className)}
+            onClick={handleLogoClick}
         >
-            <span className="text-white font-bold">
-                eigen
-            </span>
-            <span className="text-white">
-                |{appName.toLowerCase()}&gt;
-            </span>
-        </Link>
+            {linkable ? (
+                <LogoContent />
+            ) : (
+                <Link
+                    className="flex items-center"
+                    to="/"
+                >
+                    <span className="text-white font-bold">
+                        eigen
+                    </span>
+                    <span className="text-white">
+                        |{appName.toLowerCase()}&gt;
+                    </span>
+                </Link>
+            )}
+        </div>
     );
 }

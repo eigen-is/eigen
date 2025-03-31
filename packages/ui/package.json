@@ -38,6 +38,7 @@
   },
   "devDependencies": {
     "@workspace/config": "workspace:*",
+    "@workspace/lib": "workspace:*",
     "@apps/api-server": "workspace:*",
     "@tailwindcss/postcss": "^4.0.8",
     "@types/node": "^20",
