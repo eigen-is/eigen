@@ -4,6 +4,7 @@ import {ContactDetail} from '../components/contacts/contact-detail';
 import {useContacts, useDeleteContact} from '../hooks/use-contacts';
 import {useLabels} from '../hooks/use-labels';
 import {useMediaQuery} from '../hooks/use-media-query';
+import { toast } from "sonner";
 
 // Define search params type
 export interface ContactsSearchParams {
@@ -49,6 +50,9 @@ function ContactsRoute() {
     const handleDeleteContact = async (id: string) => {
         try {
             await deleteMutation.mutateAsync(id);
+            toast("Contact deleted", {
+                description: "Moved to Trash"
+            });
             // Navigate back to the current filter without the contactId
             navigate({
                 to: Route.fullPath,
