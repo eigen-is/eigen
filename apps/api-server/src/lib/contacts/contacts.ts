@@ -12,9 +12,9 @@ import sharp from "sharp";
 
 export async function getContacts(user: User) {
     const home = await getHome(user);
-   // const contacts = new Contacts(home);
-   // await contacts.init();
-   // return contacts;
+    // const contacts = new Contacts(home);
+    // await contacts.init();
+    // return contacts;
     return home.contacts;
 }
 
@@ -192,12 +192,6 @@ export class Contacts {
         }
     }
 
-    private async you(id: string) {
-        const maybeYou = await this.getContactById(id);
-        return maybeYou?.eigenId === this.home.user.id;
-    }
-
-
     public async updateContact(id: string, contact: Omit<Contact, 'id'>) {
         if (await this.you(id)) {
             updateUser(this.home.user, `${contact.firstName} ${contact.lastName}`, contact.avatar || '');
@@ -233,11 +227,9 @@ export class Contacts {
         await this.setContactLabels(id, labels || []);
     }
 
-
     public async getLabels(): Promise<Label[]> {
         return this.db.select().from(schema.labels).all();
     }
-
 
     public async addLabel(label: Omit<Label, 'id'>): Promise<string> {
         const labelId = uuidv4();
@@ -276,7 +268,6 @@ export class Contacts {
             throw error;
         }
     }
-
 
     public async deleteLabel(id: string) {
         await this.db.delete(schema.labels).where(eq(schema.labels.id, id));
@@ -340,38 +331,23 @@ export class Contacts {
         return results;
     }
 
-    private async cleanupAvatarImages() {
-        const baseDir = 'eigen.contacts/avatars/';
-        await this.home.fs.mkdir(baseDir, { recursive: true });
-
-        const files = await this.home.fs.readdir(baseDir);
-        const contacts = await this.getContacts();
-        for (const file of files) {
-            // delete file if it is not in the database
-            const contact = contacts.find(c => c.avatar?.includes(file));
-            if (!contact) {
-                await this.home.fs.unlink(`${baseDir}${file}`);
-            }
-        }
-    }
-
     public async uploadAvatar(file: File) {
         this.cleanupAvatarImages();
-        
+
         // create random file name in 'eigen.contacts/avatars' with correct extension
         const baseDir = 'eigen.contacts/avatars/';
-        await this.home.fs.mkdir(baseDir, { recursive: true });
-        
+        await this.home.fs.mkdir(baseDir, {recursive: true});
+
         // Read file content as buffer
         const buffer = Buffer.from(await file.arrayBuffer());
 
         // convert file to webp
         const convertedFile = await sharp(buffer)
-            .webp({ quality: 80 })
+            .webp({quality: 80})
             .resize(512, 512, {
                 fit: 'cover',
                 position: 'center'
-            })  
+            })
             .toBuffer();
 
         const extension = 'webp';
@@ -393,5 +369,25 @@ export class Contacts {
             return null;
         }
         return file.arrayBuffer();
+    }
+
+    private async you(id: string) {
+        const maybeYou = await this.getContactById(id);
+        return maybeYou?.eigenId === this.home.user.id;
+    }
+
+    private async cleanupAvatarImages() {
+        const baseDir = 'eigen.contacts/avatars/';
+        await this.home.fs.mkdir(baseDir, {recursive: true});
+
+        const files = await this.home.fs.readdir(baseDir);
+        const contacts = await this.getContacts();
+        for (const file of files) {
+            // delete file if it is not in the database
+            const contact = contacts.find(c => c.avatar?.includes(file));
+            if (!contact) {
+                await this.home.fs.unlink(`${baseDir}${file}`);
+            }
+        }
     }
 }

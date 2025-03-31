@@ -4,7 +4,8 @@ import {ContactDetail} from '../components/contacts/contact-detail';
 import {useContacts, useDeleteContact} from '../hooks/use-contacts';
 import {useLabels} from '../hooks/use-labels';
 import {useMediaQuery} from '../hooks/use-media-query';
-import { toast } from "sonner";
+import {toast} from "sonner";
+import {EigenLoader} from '@workspace/ui/components/layout/eigen-loader';
 
 // Define search params type
 export interface ContactsSearchParams {
@@ -77,7 +78,7 @@ function ContactsRoute() {
     if (contactsLoading) {
         return (
             <div className="h-full flex items-center justify-center">
-                <p className="text-muted-foreground">Loading contacts...</p>
+                <EigenLoader />
             </div>
         );
     }

@@ -4,7 +4,7 @@ import {useMediaQuery} from "../hooks/use-media-query";
 import {useDeleteEmail, useEmail, useEmails, useToggleReadEmail} from "@/hooks/use-emails.ts";
 import {EmailList} from "@/components/mail/email-list.tsx";
 import {Email} from "@apps/api-server/types/mail";
-import { toast } from "sonner";
+import {toast} from "sonner";
 
 // Define search params type
 export interface MailSearchParams {

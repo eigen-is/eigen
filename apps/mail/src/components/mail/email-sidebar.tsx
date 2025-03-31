@@ -1,4 +1,4 @@
-import {AlertOctagon, Archive, ArchiveX, File, Inbox, Loader2, MailPlus, Send, Trash2, X} from 'lucide-react';
+import {AlertOctagon, Archive, ArchiveX, File, Inbox, MailPlus, Send, Trash2, X} from 'lucide-react';
 import {Button} from "@workspace/ui/components/button";
 import {SidebarItem} from '@workspace/ui/components/layout/sidebar/sidebar-item';
 import {SidebarSection} from '@workspace/ui/components/layout/sidebar/sidebar-section';
@@ -157,8 +157,7 @@ export function EmailSidebar({
 
 
                 {isLoading ? (
-                    <div className="flex items-center justify-center py-4">
-                        <Loader2 className="h-5 w-5 animate-spin text-muted-foreground"/>
+                    <div className="flex items-center justify-center py-4"><EigenLoader />
                     </div>
                 ) : (
                     standardMailboxList.map((item) => (

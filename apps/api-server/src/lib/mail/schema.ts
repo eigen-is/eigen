@@ -8,14 +8,14 @@ export const emails = sqliteTable('emails', {
     fromShort: text('fromShort').notNull(),
     textShort: text('textShort').notNull(),
     date: integer('date', {mode: 'timestamp'}).notNull(),
-    isRead: integer('isRead', { mode: 'boolean' }).notNull().default(false),
-    isStarred: integer('isStarred', { mode: 'boolean' }).notNull().default(false),
-    isDraft: integer('isDraft', { mode: 'boolean' }).notNull().default(false),
-    hasAttachments: integer('hasAttachments', { mode: 'boolean' }).notNull().default(false),
+    isRead: integer('isRead', {mode: 'boolean'}).notNull().default(false),
+    isStarred: integer('isStarred', {mode: 'boolean'}).notNull().default(false),
+    isDraft: integer('isDraft', {mode: 'boolean'}).notNull().default(false),
+    hasAttachments: integer('hasAttachments', {mode: 'boolean'}).notNull().default(false),
     mailbox: text('mailbox').notNull(),
 
-    _isParsed: integer('_isParsed', { mode: 'boolean' }).notNull().default(false),
-    
+    _isParsed: integer('_isParsed', {mode: 'boolean'}).notNull().default(false),
+
     createdAt: integer('createdAt', {mode: 'timestamp'}).default(sql`(unixepoch())`),
     updatedAt: integer('updatedAt', {mode: 'timestamp'}).default(sql`(unixepoch())`),
 });

@@ -1,8 +1,8 @@
-import type { Home } from "./home";
+import type {Home} from "./home";
 import * as path from "path";
 import * as fs from "node:fs/promises";
-import { watch } from "node:fs";
-import { Database } from "bun:sqlite";
+import {watch} from "node:fs";
+import {Database} from "bun:sqlite";
 import Bun from 'bun';
 
 export default class FileSystem {
@@ -16,7 +16,7 @@ export default class FileSystem {
 
     public async init() {
         // Create the home directory if it doesn't exist
-        await fs.mkdir(this.homeDir, { recursive: true });
+        await fs.mkdir(this.homeDir, {recursive: true});
     }
 
     /**
@@ -24,7 +24,7 @@ export default class FileSystem {
      * @param dirPath Path to create
      * @param options Options for mkdir
      */
-    public async mkdir(dirPath: string, options: { recursive?: boolean } = { recursive: true }) {
+    public async mkdir(dirPath: string, options: { recursive?: boolean } = {recursive: true}) {
         const absolutePath = this.makeAbsolutePath(dirPath);
         return await fs.mkdir(absolutePath, options);
     }
@@ -138,18 +138,19 @@ export default class FileSystem {
      * @param create Whether to create the database if it doesn't exist
      * @param onCreate Callback to run when creating a new database
      */
-    public async createAndOpenDatabase(dbPath: string, create: boolean = true, onCreate: (db: Database) => Promise<void> = async () => {}) {
+    public async createAndOpenDatabase(dbPath: string, create: boolean = true, onCreate: (db: Database) => Promise<void> = async () => {
+    }) {
         const absolutePath = this.makeAbsolutePath(dbPath);
-        
+
         // Ensure the directory exists
         const dirPath = path.dirname(absolutePath);
-        await fs.mkdir(dirPath, { recursive: true });
-        
+        await fs.mkdir(dirPath, {recursive: true});
+
         const bunfile = Bun.file(absolutePath);
         if (await bunfile.exists()) {
             return new Database(absolutePath);
         } else if (create) {
-            const db = new Database(absolutePath, { create });
+            const db = new Database(absolutePath, {create});
             await onCreate(db);
             return db;
         }

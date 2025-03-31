@@ -2,12 +2,7 @@ import type {User} from "better-auth";
 import type {Attachment, Email, EmailSummary, MaildirMailbox} from "./mailtypes";
 import {simpleParser} from "./mail-parser";
 import {createELMContent} from "./mailfile";
-import {
-    createUniqueMessageId,
-    getMailIDfromFileName,
-    getStandardMailboxFlags,
-    isSpecialMailbox
-} from "./mailutils";
+import {createUniqueMessageId, getMailIDfromFileName, getStandardMailboxFlags, isSpecialMailbox} from "./mailutils";
 import {welcomeMail} from "./welcome.ts";
 // import DOMPurify from 'isomorphic-dompurify';
 import maildb from "./maildb.ts";
@@ -34,39 +29,6 @@ export default class Maildir {
         }
         this.db = new maildb(this.home);
         await this.db.init();
-    }
-
-    /**
-     * Creates the standard mailboxes for a new user
-     */
-    private async createMailboxes(): Promise<void> {
-        try {
-            // Create the standard mailboxes
-            const standardMailboxes = ['', 'Sent', 'Drafts', 'Trash', 'Spam', 'Archive'];
-
-            for (const mailbox of standardMailboxes) {
-                const mailboxPath = await this.sanitizeDirName(mailbox);
-
-                // Check if mailbox already exists
-                const mailboxExists = await this.home.fs.dirExists(mailboxPath);
-                if (!mailboxExists) {
-                    // Create mailbox if it doesn't exist
-                    await this.home.fs.mkdir(mailboxPath);
-
-                    // Create cur, new, and tmp directories
-                    await this.home.fs.mkdir(this.home.fs.pathJoin(mailboxPath, 'cur'));
-                    await this.home.fs.mkdir(this.home.fs.pathJoin(mailboxPath, 'new'));
-                    await this.home.fs.mkdir(this.home.fs.pathJoin(mailboxPath, 'tmp'));
-
-                    // Create attributes file with standard flags
-                    const attributesPath = this.home.fs.pathJoin(mailboxPath, '.attributes');
-                    const attributes = getStandardMailboxFlags(mailbox);
-                    await this.home.fs.file(attributesPath).write(JSON.stringify(attributes));
-                }
-            }
-        } catch (error) {
-            console.error('Error creating mailboxes:', error);
-        }
     }
 
     /**
@@ -118,100 +80,6 @@ export default class Maildir {
             console.error('Error listing mailboxes:', error);
             return [];
         }
-    }
-
-    /**
-     * Recursively processes nested mailboxes
-     * @param parentPath Parent mailbox path
-     * @param mailboxes Array to store found mailboxes
-     */
-    private async processNestedMailboxes(parentPath: string, mailboxes: MaildirMailbox[]) {
-        try {
-            // Get all entries in the parent directory
-            const parentFullPath = this.home.fs.pathJoin(this.basePath, `.${parentPath}`);
-            const entries = await this.home.fs.readdir(parentFullPath);
-
-            // Check each entry to see if it's a directory
-            for (const entry of entries) {
-                const entryPath = this.home.fs.pathJoin(parentFullPath, entry);
-                const stats = await this.home.fs.stat(entryPath);
-
-                if (stats.isDirectory() && entry.startsWith('.')) {
-                    // This is a nested mailbox
-                    const nestedName = `${parentPath}.${entry.substring(1)}`;
-                    const mailbox = await this.getMailboxInfo(nestedName);
-
-                    if (mailbox) {
-                        mailboxes.push(mailbox);
-                        // Recursively check for more nested mailboxes
-                        await this.processNestedMailboxes(nestedName, mailboxes);
-                    }
-                }
-            }
-        } catch (error) {
-            console.error(`Error processing nested mailboxes for ${parentPath}:`, error);
-        }
-    }
-
-    /**
-     * Gets information about a specific mailbox
-     * @param mailboxName Name of the mailbox
-     * @returns Mailbox object with information or null if not found
-     */
-    private async getMailboxInfo(mailboxName: string): Promise<MaildirMailbox | null> {
-        try {
-            const mailboxPath = await this.sanitizeDirName(mailboxName);
-
-            // Check if mailbox exists
-            if (!await this.home.fs.dirExists(mailboxPath)) {
-                // Directory doesn't exist
-                return null;
-            }
-
-            // Get mailbox attributes
-            const attributes = await this.getMailboxAttributes(mailboxName);
-
-            // For the root mailbox (INBOX), ensure it has the \Inbox flag
-            if (!mailboxName && !attributes.includes('\\Inbox')) {
-                attributes.push('\\Inbox');
-            }
-
-            // todo: get number of messages in mailbox - using db to speed up things
-
-
-            // Create the mailbox object
-            const mailbox: MaildirMailbox = {
-                path: mailboxName,
-                name: mailboxName ? mailboxName.split('.').pop() || mailboxName : 'INBOX',
-                delimiter: '.',
-                flags: attributes, // Use the attributes as flags
-                total: 0,
-                unread: 0
-            };
-
-            return mailbox;
-        } catch (error) {
-            console.error(`Error getting mailbox info for ${mailboxName}:`, error);
-            return null;
-        }
-    }
-
-    /**
-     * Sanitizes directory names for mailbox paths
-     * @param mailbox Mailbox name
-     * @param sub Optional subdirectory
-     * @returns Sanitized directory path
-     */
-    private sanitizeDirName(mailbox: string, sub: string = '') {
-        let dirname = `${this.basePath}/.${mailbox.toLowerCase().replace('/', '.')}`;
-        // replace .. with . and // with /
-        dirname = dirname.replace(/\.{2,}/g, '.');
-        dirname = dirname.replace(/\/+/g, '/');
-        return sub ? `${dirname}/${sub}` : dirname;
-    }
-
-    private getFullPath(mail: { id: string, mailbox: string }) {
-        return `${this.sanitizeDirName(mail.mailbox)}/cur/${mail.id}.eml`;
     }
 
     public async mailboxCreate(mailbox: string, attributes: string[] = []): Promise<boolean> {
@@ -323,7 +191,7 @@ export default class Maildir {
                 for (const fileName of newFiles) {
                     // move to cur
                     await this.home.fs.rename(
-                        this.home.fs.pathJoin(newPath, fileName), 
+                        this.home.fs.pathJoin(newPath, fileName),
                         this.home.fs.pathJoin(curPath, fileName)
                     );
                 }
@@ -340,7 +208,7 @@ export default class Maildir {
                     const cachedMessage = dbMessages.find((m) => m.id === getMailIDfromFileName(fileName));
                     if (cachedMessage) {
                         messages.push(cachedMessage);
-                        continue;
+
                     } else {
                         const message = await this.parseMessage(getMailIDfromFileName(fileName), mailbox);
                         if (message) {
@@ -355,37 +223,6 @@ export default class Maildir {
         } catch (error) {
             console.error(`Error getting messages from mailbox ${mailbox}:`, error);
             return [];
-        }
-    }
-
-    private async parseMessage(messageId: string, mailbox: string): Promise<Email | null> {
-        try {
-            const filePath = this.getFullPath({id: messageId, mailbox: mailbox});
-            const fileContent = await this.home.fs.file(filePath).text();
-
-            // time to parse the message
-            const start = Date.now();
-            const parsedMail = await simpleParser(fileContent, {});
-            const end = Date.now();
-            console.log(`Parsed message ${messageId} in ${end - start}ms`);
-
-            // just to be sure, dompurify html
-            // if (parsedMail.html) {
-            //     parsedMail.html = DOMPurify.sanitize(parsedMail.html, {FORCE_BODY: true});
-            // }
-
-            // Create the Email object with the correct ID and path information
-            return {
-                ...parsedMail,
-                id: messageId,
-                mailbox: mailbox,
-                hasAttachments: (parsedMail.attachments && parsedMail.attachments.length > 0),
-                fromShort: (parsedMail.from?.value[0]?.name || parsedMail.from?.value[0]?.address || 'Unknown'),
-                textShort: parsedMail.text || ''
-            } as Email;
-        } catch (error) {
-            console.error(`Error parsing message ${messageId}:`, error);
-            return null;
         }
     }
 
@@ -638,6 +475,164 @@ export default class Maildir {
             return message.attachments[index];
         } catch (error) {
             console.error(`Error getting attachment ${index} from message ${messageId}:`, error);
+            return null;
+        }
+    }
+
+    /**
+     * Creates the standard mailboxes for a new user
+     */
+    private async createMailboxes(): Promise<void> {
+        try {
+            // Create the standard mailboxes
+            const standardMailboxes = ['', 'Sent', 'Drafts', 'Trash', 'Spam', 'Archive'];
+
+            for (const mailbox of standardMailboxes) {
+                const mailboxPath = await this.sanitizeDirName(mailbox);
+
+                // Check if mailbox already exists
+                const mailboxExists = await this.home.fs.dirExists(mailboxPath);
+                if (!mailboxExists) {
+                    // Create mailbox if it doesn't exist
+                    await this.home.fs.mkdir(mailboxPath);
+
+                    // Create cur, new, and tmp directories
+                    await this.home.fs.mkdir(this.home.fs.pathJoin(mailboxPath, 'cur'));
+                    await this.home.fs.mkdir(this.home.fs.pathJoin(mailboxPath, 'new'));
+                    await this.home.fs.mkdir(this.home.fs.pathJoin(mailboxPath, 'tmp'));
+
+                    // Create attributes file with standard flags
+                    const attributesPath = this.home.fs.pathJoin(mailboxPath, '.attributes');
+                    const attributes = getStandardMailboxFlags(mailbox);
+                    await this.home.fs.file(attributesPath).write(JSON.stringify(attributes));
+                }
+            }
+        } catch (error) {
+            console.error('Error creating mailboxes:', error);
+        }
+    }
+
+    /**
+     * Recursively processes nested mailboxes
+     * @param parentPath Parent mailbox path
+     * @param mailboxes Array to store found mailboxes
+     */
+    private async processNestedMailboxes(parentPath: string, mailboxes: MaildirMailbox[]) {
+        try {
+            // Get all entries in the parent directory
+            const parentFullPath = this.home.fs.pathJoin(this.basePath, `.${parentPath}`);
+            const entries = await this.home.fs.readdir(parentFullPath);
+
+            // Check each entry to see if it's a directory
+            for (const entry of entries) {
+                const entryPath = this.home.fs.pathJoin(parentFullPath, entry);
+                const stats = await this.home.fs.stat(entryPath);
+
+                if (stats.isDirectory() && entry.startsWith('.')) {
+                    // This is a nested mailbox
+                    const nestedName = `${parentPath}.${entry.substring(1)}`;
+                    const mailbox = await this.getMailboxInfo(nestedName);
+
+                    if (mailbox) {
+                        mailboxes.push(mailbox);
+                        // Recursively check for more nested mailboxes
+                        await this.processNestedMailboxes(nestedName, mailboxes);
+                    }
+                }
+            }
+        } catch (error) {
+            console.error(`Error processing nested mailboxes for ${parentPath}:`, error);
+        }
+    }
+
+    /**
+     * Gets information about a specific mailbox
+     * @param mailboxName Name of the mailbox
+     * @returns Mailbox object with information or null if not found
+     */
+    private async getMailboxInfo(mailboxName: string): Promise<MaildirMailbox | null> {
+        try {
+            const mailboxPath = await this.sanitizeDirName(mailboxName);
+
+            // Check if mailbox exists
+            if (!await this.home.fs.dirExists(mailboxPath)) {
+                // Directory doesn't exist
+                return null;
+            }
+
+            // Get mailbox attributes
+            const attributes = await this.getMailboxAttributes(mailboxName);
+
+            // For the root mailbox (INBOX), ensure it has the \Inbox flag
+            if (!mailboxName && !attributes.includes('\\Inbox')) {
+                attributes.push('\\Inbox');
+            }
+
+            // todo: get number of messages in mailbox - using db to speed up things
+
+
+            // Create the mailbox object
+            const mailbox: MaildirMailbox = {
+                path: mailboxName,
+                name: mailboxName ? mailboxName.split('.').pop() || mailboxName : 'INBOX',
+                delimiter: '.',
+                flags: attributes, // Use the attributes as flags
+                total: 0,
+                unread: 0
+            };
+
+            return mailbox;
+        } catch (error) {
+            console.error(`Error getting mailbox info for ${mailboxName}:`, error);
+            return null;
+        }
+    }
+
+    /**
+     * Sanitizes directory names for mailbox paths
+     * @param mailbox Mailbox name
+     * @param sub Optional subdirectory
+     * @returns Sanitized directory path
+     */
+    private sanitizeDirName(mailbox: string, sub: string = '') {
+        let dirname = `${this.basePath}/.${mailbox.toLowerCase().replace('/', '.')}`;
+        // replace .. with . and // with /
+        dirname = dirname.replace(/\.{2,}/g, '.');
+        dirname = dirname.replace(/\/+/g, '/');
+        return sub ? `${dirname}/${sub}` : dirname;
+    }
+
+    private getFullPath(mail: { id: string, mailbox: string }) {
+        return `${this.sanitizeDirName(mail.mailbox)}/cur/${mail.id}.eml`;
+    }
+
+    private async parseMessage(messageId: string, mailbox: string): Promise<Email | null> {
+        try {
+            const filePath = this.getFullPath({id: messageId, mailbox: mailbox});
+            const fileContent = await this.home.fs.file(filePath).text();
+
+            // time to parse the message
+            const start = Date.now();
+            const parsedMail = await simpleParser(fileContent, {});
+            const end = Date.now();
+            console.log(`Parsed message ${messageId} in ${end - start}ms`);
+
+            // just to be sure, dompurify html
+            // if (parsedMail.html) {
+            //     parsedMail.html = DOMPurify.sanitize(parsedMail.html, {FORCE_BODY: true});
+            // }
+
+            // Create the Email object with the correct ID and path information
+            return {
+                ...parsedMail,
+                id: messageId,
+                mailbox: mailbox,
+                hasAttachments: (parsedMail.attachments && parsedMail.attachments.length > 0),
+                fromShort: (parsedMail.from?.value[0]?.name || parsedMail.from?.value[0]?.address || 'Unknown'),
+                textShort: parsedMail.text || ''
+            } as Email;
+        } catch (error) {
+            console.error(`Error parsing message ${messageId}:`, error);
             return null;
         }
     }
