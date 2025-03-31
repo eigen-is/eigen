@@ -1,0 +1,7 @@
+.bg-app {
+    background-color: var(--app-space-color);
+}
+
+.text-app {
+    color: var(--app-space-color);
+}

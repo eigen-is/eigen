@@ -150,6 +150,9 @@
         --app-space-color: var(--color-teal-600);
         --app-mail-color: var(--color-red-600);
         --app-contacts-color: var(--color-green-600);
+        --app-drive-color: var(--color-yellow-600);
+        --app-docs-color: var(--color-purple-600);
+        --app-calendar-color: var(--color-blue-600);
     }
 
     .text-teal-600 {
