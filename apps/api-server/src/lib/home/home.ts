@@ -1,8 +1,8 @@
 import type {User} from "better-auth/types";
 import type Database from "bun:sqlite";
-import {fsGetDatabase} from "../fs/fs.ts";
 import {Contacts} from "../contacts/contacts.ts";
 import Maildir from "../mail/maildir.ts";
+import FileSystem from "./filesystem.ts";
 
 const city = new Map<string, Home>();
 
@@ -40,6 +40,7 @@ class asyncCache<T> {
 export class Home {
     public user: User;
 
+    public fs: FileSystem;
     public contacts: Contacts;
     public mail: Maildir;
 
@@ -51,6 +52,7 @@ export class Home {
 
     constructor(user: User) {
         this.user = user;
+        this.fs = new FileSystem(this);
         this.contacts = new Contacts(this);
         this.mail = new Maildir(this);
     }
@@ -72,6 +74,7 @@ export class Home {
         }
         this.initializationStarted = true;
 
+        await this.fs.init();
         await this.contacts.init();
         await this.mail.init();
 
@@ -98,7 +101,7 @@ export class Home {
             return await (this.databases.get(file)!.get()) as Database;
         }
         this.databases.set(file, new asyncCache(async () => {
-            const db = await fsGetDatabase(this.user, file, true, onCreate);
+            const db = await this.fs.createAndOpenDatabase(file, true, onCreate);
             db.exec("PRAGMA journal_mode = WAL;");
             return db;
         }));

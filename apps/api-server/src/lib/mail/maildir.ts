@@ -1,16 +1,9 @@
 import type {User} from "better-auth";
 import type {Attachment, Email, EmailSummary, MaildirMailbox} from "./mailtypes";
 import {simpleParser} from "./mail-parser";
-import * as path from "path";
-import * as fs from "node:fs/promises";
-import {watch} from "node:fs";
 import {createELMContent} from "./mailfile";
-import {fsGetDirName} from "../fs/fs";
-import Bun from 'bun';
 import {
     createUniqueMessageId,
-    fsDirectoryExists,
-    fsFileExists,
     getMailIDfromFileName,
     getStandardMailboxFlags,
     isSpecialMailbox
@@ -29,12 +22,12 @@ export default class Maildir {
     constructor(home: Home) {
         this.home = home;
         this.user = this.home.user;
-        this.basePath = fsGetDirName(this.user, 'eigen.mail/Maildir');
+        this.basePath = 'eigen.mail/Maildir';
     }
 
     public async init() {
         // check if basePath exists
-        const basePathExists = await fsDirectoryExists(this.basePath);
+        const basePathExists = await this.home.fs.dirExists(this.basePath);
         if (!basePathExists) {
             await this.createMailboxes();
             await this.mailboxDeliver(welcomeMail(this.user.name));
@@ -55,20 +48,20 @@ export default class Maildir {
                 const mailboxPath = await this.sanitizeDirName(mailbox);
 
                 // Check if mailbox already exists
-                const mailboxExists = await fsDirectoryExists(mailboxPath);
+                const mailboxExists = await this.home.fs.dirExists(mailboxPath);
                 if (!mailboxExists) {
                     // Create mailbox if it doesn't exist
-                    await fs.mkdir(mailboxPath, {recursive: true});
+                    await this.home.fs.mkdir(mailboxPath);
 
                     // Create cur, new, and tmp directories
-                    await fs.mkdir(path.join(mailboxPath, 'cur'), {recursive: true});
-                    await fs.mkdir(path.join(mailboxPath, 'new'), {recursive: true});
-                    await fs.mkdir(path.join(mailboxPath, 'tmp'), {recursive: true});
+                    await this.home.fs.mkdir(this.home.fs.pathJoin(mailboxPath, 'cur'));
+                    await this.home.fs.mkdir(this.home.fs.pathJoin(mailboxPath, 'new'));
+                    await this.home.fs.mkdir(this.home.fs.pathJoin(mailboxPath, 'tmp'));
 
                     // Create attributes file with standard flags
-                    const attributesPath = path.join(mailboxPath, '.attributes');
+                    const attributesPath = this.home.fs.pathJoin(mailboxPath, '.attributes');
                     const attributes = getStandardMailboxFlags(mailbox);
-                    await Bun.file(attributesPath).write(JSON.stringify(attributes));
+                    await this.home.fs.file(attributesPath).write(JSON.stringify(attributes));
                 }
             }
         } catch (error) {
@@ -98,7 +91,7 @@ export default class Maildir {
             }
 
             // Get all directories in the base path
-            const entries = await fs.readdir(this.basePath, {withFileTypes: true});
+            const entries = await this.home.fs.readdir(this.basePath, {withFileTypes: true});
 
             for (const entry of entries) {
                 // Only process directories that start with a dot (nested mailboxes)
@@ -135,13 +128,13 @@ export default class Maildir {
     private async processNestedMailboxes(parentPath: string, mailboxes: MaildirMailbox[]) {
         try {
             // Get all entries in the parent directory
-            const parentFullPath = path.join(this.basePath, `.${parentPath}`);
-            const entries = await fs.readdir(parentFullPath);
+            const parentFullPath = this.home.fs.pathJoin(this.basePath, `.${parentPath}`);
+            const entries = await this.home.fs.readdir(parentFullPath);
 
             // Check each entry to see if it's a directory
             for (const entry of entries) {
-                const entryPath = path.join(parentFullPath, entry);
-                const stats = await fs.stat(entryPath);
+                const entryPath = this.home.fs.pathJoin(parentFullPath, entry);
+                const stats = await this.home.fs.stat(entryPath);
 
                 if (stats.isDirectory() && entry.startsWith('.')) {
                     // This is a nested mailbox
@@ -170,7 +163,7 @@ export default class Maildir {
             const mailboxPath = await this.sanitizeDirName(mailboxName);
 
             // Check if mailbox exists
-            if (!await fsDirectoryExists(mailboxPath)) {
+            if (!await this.home.fs.dirExists(mailboxPath)) {
                 // Directory doesn't exist
                 return null;
             }
@@ -224,25 +217,25 @@ export default class Maildir {
     public async mailboxCreate(mailbox: string, attributes: string[] = []): Promise<boolean> {
         try {
             // Check if mailbox already exists
-            const mailboxExists = await fsDirectoryExists(await this.sanitizeDirName(mailbox));
+            const mailboxPath = await this.sanitizeDirName(mailbox);
+            const mailboxExists = await this.home.fs.dirExists(mailboxPath);
             if (mailboxExists) {
                 console.error(`Cannot create: mailbox ${mailbox} already exists`);
                 return false;
             }
 
             // Create the mailbox directory structure
-            const mailboxPath = await this.sanitizeDirName(mailbox);
-            await fs.mkdir(mailboxPath, {recursive: true});
+            await this.home.fs.mkdir(mailboxPath);
 
             // Create the cur, new, and tmp subdirectories
-            await fs.mkdir(path.join(mailboxPath, 'cur'), {recursive: true});
-            await fs.mkdir(path.join(mailboxPath, 'new'), {recursive: true});
-            await fs.mkdir(path.join(mailboxPath, 'tmp'), {recursive: true});
+            await this.home.fs.mkdir(this.home.fs.pathJoin(mailboxPath, 'cur'));
+            await this.home.fs.mkdir(this.home.fs.pathJoin(mailboxPath, 'new'));
+            await this.home.fs.mkdir(this.home.fs.pathJoin(mailboxPath, 'tmp'));
 
             // Store attributes if provided
             if (attributes.length > 0) {
                 const attributesPath = this.sanitizeDirName(mailbox, '.attributes');
-                await Bun.write(attributesPath, JSON.stringify(attributes));
+                await this.home.fs.file(attributesPath).write(JSON.stringify(attributes));
             }
 
             return true;
@@ -269,7 +262,7 @@ export default class Maildir {
             const newPath = await this.sanitizeDirName($mailbox, 'new');
 
             // Using Node.js fs.watch instead of Bun.watch which is not available
-            watch(newPath, (eventType, filename) => {
+            this.home.fs.watch(newPath, (eventType, filename) => {
                 if (filename) {
                     $callback(eventType, filename);
                 }
@@ -292,10 +285,10 @@ export default class Maildir {
             // Create a unique filename
             const messageId = createUniqueMessageId();
             const filename = `${messageId}.eml`;
-            const filePath = path.join(this.basePath, 'new', filename);
+            const filePath = this.home.fs.pathJoin(this.basePath, 'new', filename);
 
             // Write the message to the new directory
-            await fs.writeFile(filePath, message);
+            await this.home.fs.file(filePath).write(message);
 
             return filename;
         } catch (error) {
@@ -321,15 +314,18 @@ export default class Maildir {
             }
 
             const messages: EmailSummary[] = [];
-            const curPath = path.join(mailboxPath, 'cur');
-            const newPath = path.join(mailboxPath, 'new');
+            const curPath = this.home.fs.pathJoin(mailboxPath, 'cur');
+            const newPath = this.home.fs.pathJoin(mailboxPath, 'new');
 
             // Get messages from new directory (unread)
-            if (await fsDirectoryExists(newPath)) {
-                const newFiles = await fs.readdir(newPath);
+            if (await this.home.fs.dirExists(newPath)) {
+                const newFiles = await this.home.fs.readdir(newPath);
                 for (const fileName of newFiles) {
                     // move to cur
-                    await fs.rename(path.join(newPath, fileName), path.join(curPath, fileName));
+                    await this.home.fs.rename(
+                        this.home.fs.pathJoin(newPath, fileName), 
+                        this.home.fs.pathJoin(curPath, fileName)
+                    );
                 }
             }
 
@@ -337,8 +333,8 @@ export default class Maildir {
             const dbMessages = await this.db.getAllEmails(mailbox);
 
             // Get messages from cur directory (read)
-            if (await fsDirectoryExists(curPath)) {
-                const curFiles = await fs.readdir(curPath);
+            if (await this.home.fs.dirExists(curPath)) {
+                const curFiles = await this.home.fs.readdir(curPath);
                 for (const fileName of curFiles) {
                     // is parsed?
                     const cachedMessage = dbMessages.find((m) => m.id === getMailIDfromFileName(fileName));
@@ -365,7 +361,7 @@ export default class Maildir {
     private async parseMessage(messageId: string, mailbox: string): Promise<Email | null> {
         try {
             const filePath = this.getFullPath({id: messageId, mailbox: mailbox});
-            const fileContent = await Bun.file(filePath).text();
+            const fileContent = await this.home.fs.file(filePath).text();
 
             // time to parse the message
             const start = Date.now();
@@ -439,12 +435,12 @@ export default class Maildir {
             // Delete the file
             const filePath = this.getFullPath(message);
 
-            if (!await fsFileExists(filePath)) {
+            if (!await this.home.fs.fileExists(filePath)) {
                 console.error(`Cannot delete: file for message ${messageId} not found`);
                 return false;
             }
 
-            await fs.unlink(filePath);
+            await this.home.fs.unlink(filePath);
             return true;
         } catch (error) {
             console.error(`Error deleting message ${messageId}:`, error);
@@ -478,14 +474,13 @@ export default class Maildir {
             const sourcePath = this.getFullPath(message);
             const targetFilePath = this.getFullPath({id: message.id, mailbox: targetMailbox});
 
-
-            if (!await fsFileExists(sourcePath)) {
+            if (!await this.home.fs.fileExists(sourcePath)) {
                 console.error(`Cannot move: file for message ${messageId} not found`);
                 return false;
             }
 
             // use fs move function to move
-            await fs.rename(sourcePath, targetFilePath);
+            await this.home.fs.rename(sourcePath, targetFilePath);
 
             this.db.moveEmail(messageId, targetMailbox);
 
@@ -521,16 +516,16 @@ export default class Maildir {
             const sourcePath = this.getFullPath(message);
             const targetFilePath = this.getFullPath({id: message.id, mailbox: targetMailbox});
 
-            if (!await fsFileExists(sourcePath)) {
+            if (!await this.home.fs.fileExists(sourcePath)) {
                 console.error(`Cannot copy: file for message ${messageId} not found`);
                 return false;
             }
 
-            // Read the file content using Bun (faster)
-            const content = await Bun.file(sourcePath).text();
+            // Read the file content using home.fs
+            const content = await this.home.fs.file(sourcePath).text();
 
-            // Write to the target location using Bun (faster)
-            await Bun.write(targetFilePath, content);
+            // Write to the target location using home.fs
+            await this.home.fs.file(targetFilePath).write(content);
 
             return true;
         } catch (error) {
@@ -556,7 +551,7 @@ export default class Maildir {
             const messageId = createUniqueMessageId();
             const draftPath = await this.sanitizeDirName('Drafts', 'cur');
             const filename = messageId + '.eml';
-            const filePath = path.join(draftPath, filename);
+            const filePath = this.home.fs.pathJoin(draftPath, filename);
 
             // Create an empty message template with all required properties
             const emptyMessage = createELMContent({
@@ -584,8 +579,8 @@ export default class Maildir {
                 _isParsed: false
             });
 
-            // Use Bun.write for file content operations (faster)
-            await Bun.write(filePath, emptyMessage);
+            // Use home.fs for file content operations
+            await this.home.fs.file(filePath).write(emptyMessage);
 
             // Get the newly created message
             const message = await this.messageGet(messageId);
@@ -663,17 +658,17 @@ export default class Maildir {
      */
     private async getMailboxAttributes(mailbox: string): Promise<string[]> {
         try {
-            const attributesPath = path.join(this.sanitizeMailboxPath(mailbox), '.attributes');
+            const attributesPath = this.home.fs.pathJoin(this.sanitizeMailboxPath(mailbox), '.attributes');
 
             // Check if attributes file exists
-            if (!await fsFileExists(attributesPath)) {
+            if (!await this.home.fs.fileExists(attributesPath)) {
                 // If file doesn't exist, return standard attributes based on mailbox name
-                const mailboxName = path.basename(mailbox);
+                const mailboxName = this.home.fs.pathBasename(mailbox);
                 return getStandardMailboxFlags(mailboxName);
             }
 
             // Read attributes from file
-            return await Bun.file(attributesPath).json();
+            return await this.home.fs.file(attributesPath).json();
         } catch (error) {
             console.error(`Error getting attributes for mailbox ${mailbox}:`, error);
             return [];
