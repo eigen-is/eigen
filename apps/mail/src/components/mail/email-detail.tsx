@@ -12,7 +12,7 @@ import {Email} from "@apps/api-server/types/mail";
 import {Separator} from "@workspace/ui/components/separator";
 import {ShadowContent} from "@workspace/ui/components/layout/shadow-content";
 import {UserItem} from "@workspace/ui/components/layout/user-item";
-import {Tooltip, TooltipContent, TooltipProvider, TooltipTrigger} from "@workspace/ui/components/tooltip";
+import {TooltipButton} from "@workspace/ui";
 
 interface EmailDetailProps {
     email: Email | null;
@@ -80,38 +80,40 @@ export function EmailDetail({
                     )}
 
                     {/* Left side icons */}
-                    <Button variant="ghost" size="icon" className="h-8 w-8" title="Archive">
-                        <Archive className="h-4 w-4"/>
-                    </Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8" title="Junk">
-                        <ArchiveX className="h-4 w-4"/>
-                    </Button>
-                    <TooltipProvider>
-                        <Tooltip>
-                            <TooltipTrigger asChild>
-                                <Button variant="ghost" size="icon" className="h-8 w-8" onClick={() => onDelete(email)}
-                                >
-                                    <Trash2 className="h-4 w-4"/>
-                                </Button>
-                            </TooltipTrigger>
-                            <TooltipContent>
-                                <p>Move to Trash</p>
-                            </TooltipContent>
-                        </Tooltip>
-                    </TooltipProvider>
+                    <TooltipButton
+                        icon={Archive}
+                        tooltipText="Archive"
+                        onClick={() => {/* TODO: Implement reply functionality */}}
+                    />
+                    <TooltipButton
+                        icon={ArchiveX}
+                        tooltipText="Report Spam"
+                        onClick={() => {/* TODO: Implement reply functionality */}}
+                    />
+                    <TooltipButton
+                        icon={Trash2}
+                        tooltipText="Delete"
+                        onClick={() => onDelete(email)}
+                    />
                 </div>
 
                 <div className="flex items-center gap-1">
                     {/* Right side icons */}
-                    <Button variant="ghost" size="icon" className="h-8 w-8" title="Reply">
-                        <Reply className="h-4 w-4"/>
-                    </Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8" title="Reply All">
-                        <ReplyAll className="h-4 w-4"/>
-                    </Button>
-                    <Button variant="ghost" size="icon" className="h-8 w-8" title="Forward">
-                        <Forward className="h-4 w-4"/>
-                    </Button>
+                    <TooltipButton
+                        icon={Reply}
+                        tooltipText="Reply"
+                        onClick={() => {/* TODO: Implement reply functionality */}}
+                    />
+                    <TooltipButton
+                        icon={ReplyAll}
+                        tooltipText="Reply All"
+                        onClick={() => {/* TODO: Implement reply all functionality */}}
+                    />
+                    <TooltipButton
+                        icon={Forward}
+                        tooltipText="Forward"
+                        onClick={() => {/* TODO: Implement forward functionality */}}
+                    />
 
                     <div className="h-6 w-[1px] bg-border mx-1"></div>
 
