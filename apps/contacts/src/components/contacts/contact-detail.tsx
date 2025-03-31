@@ -14,6 +14,7 @@ import {Link} from '@tanstack/react-router';
 import {DeleteDialog} from "@workspace/ui/components/layout/delete/delete-dialog";
 import {useLabels} from '@/hooks/use-labels.ts';
 import {Avatar, AvatarFallback, AvatarImage} from "@workspace/ui/components/avatar";
+import {TooltipButton} from "@workspace/ui";
 
 interface ContactDetailProps {
     contact: Contact;
@@ -99,21 +100,17 @@ export function ContactDetail({contact, onDelete, onBack, filterType, filterId, 
                                 contactId: contact.id
                             }}
                         >
-                            <Button variant="ghost" size="icon" className="h-8 w-8">
-                                <Edit className="h-4 w-4"/>
-                                <span className="sr-only">Edit</span>
-                            </Button>
+                            <TooltipButton
+                                icon={Edit}
+                                tooltipText="Edit"
+                                className="h-8 w-8"
+                            />
                         </Link>
-                        <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-8 w-8"
-                            title="Delete"
+                        <TooltipButton
+                            icon={Trash2}
+                            tooltipText="Delete"
                             onClick={() => setDeleteDialogOpen(true)}
-                        >
-                            <Trash2 className="h-4 w-4"/>
-                            <span className="sr-only">Delete</span>
-                        </Button>
+                        />
                     </div>
 
                     <div className="h-6 w-[1px] bg-border mx-1"></div>
