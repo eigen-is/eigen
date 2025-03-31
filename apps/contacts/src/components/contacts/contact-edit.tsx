@@ -19,7 +19,7 @@ import {Textarea} from "@workspace/ui/components/textarea";
 import {Form, FormControl, FormField, FormItem, FormLabel, FormMessage} from "@workspace/ui/components/form";
 import {Popover, PopoverContent, PopoverTrigger} from "@workspace/ui/components/popover";
 import {Calendar as CalendarComponent} from "@workspace/ui/components/calendar";
-import {Avatar, AvatarFallback, AvatarImage} from "@workspace/ui/components/avatar";
+import {UserAvatar} from "@workspace/ui";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -150,16 +150,13 @@ export function ContactEdit({
               {/* Avatar Section */}
               <div className="flex justify-center mb-8">
                 <div className="h-32 w-32 relative group">
-                  <Avatar className="h-full w-full">
-                      <AvatarImage 
-                        src={avatar ?? ''}
-                        alt={`${contact.firstName} ${contact.lastName}`} 
-                      />
-                    <AvatarFallback className="text-3xl bg-primary/10 text-primary font-medium">
-                      {contact.firstName?.charAt(0) || ''}
-                      {contact.lastName?.charAt(0) || ''}
-                    </AvatarFallback>
-                  </Avatar>
+                  <UserAvatar
+                    name={`${contact.firstName} ${contact.lastName}`}
+                    email={contact.email?.[0]}
+                    imageUrl={avatar ?? undefined}
+                    className="h-full w-full"
+                    size="lg"
+                  />
                   
                   {/* Hidden file input element */}
                   <input

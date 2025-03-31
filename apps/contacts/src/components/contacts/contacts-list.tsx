@@ -12,6 +12,7 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger,
 } from "@workspace/ui/components/dropdown-menu";
+import { EigenLoader } from '@workspace/ui';
 
 interface ContactsListProps {
   filterType?: string;
@@ -140,7 +141,7 @@ export function ContactsList({ filterType = 'filter', filterId = 'all' }: Contac
       <div className="flex-1 overflow-auto">
         {isLoading ? (
           <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
-            <p>Loading contacts...</p>
+            <EigenLoader />   
           </div>
         ) : groupedContacts.length === 0 ? (
           <div className="flex flex-col items-center justify-center h-full text-muted-foreground">

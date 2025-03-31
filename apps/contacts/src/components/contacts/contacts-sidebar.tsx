@@ -8,6 +8,7 @@ import {Separator} from '@workspace/ui/components/separator';
 import {type Label} from "@apps/api-server/types/label";
 import {useAddLabel, useDeleteLabel, useLabels, useUpdateLabel} from '../../hooks/use-labels';
 import {AppLogo} from '@workspace/ui/components/layout/app-logo';
+import {EigenLoader} from "@workspace/ui";
 
 interface ContactsSidebarProps {
   condensed?: boolean;
