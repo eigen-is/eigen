@@ -13,8 +13,7 @@ import {Badge} from "@workspace/ui/components/badge";
 import {Link} from '@tanstack/react-router';
 import {DeleteDialog} from "@workspace/ui/components/layout/delete/delete-dialog";
 import {useLabels} from '@/hooks/use-labels.ts';
-import {Avatar, AvatarFallback, AvatarImage} from "@workspace/ui/components/avatar";
-import {TooltipButton} from "@workspace/ui";
+import {TooltipButton, UserAvatar} from "@workspace/ui";
 import {EigenLoader} from '@workspace/ui/components/layout/eigen-loader';
 
 interface ContactDetailProps {
@@ -138,16 +137,13 @@ export function ContactDetail({contact, onDelete, onBack, filterType, filterId, 
                 <div className="flex flex-col md:flex-row gap-8">
                     <div className="flex flex-col items-center gap-4 w-50">
                         <div className="h-40 w-40">
-                            <Avatar className="h-full w-full">
-                                <AvatarImage 
-                                    src={contact.avatar} 
-                                    alt={`${contact.firstName} ${contact.lastName}`} 
-                                />
-                                <AvatarFallback className="text-4xl bg-primary/10 text-primary font-medium">
-                                    {contact.firstName.charAt(0)}
-                                    {contact.lastName.charAt(0)}
-                                </AvatarFallback>
-                            </Avatar>
+                            <UserAvatar
+                                name={`${contact.firstName} ${contact.lastName}`}
+                                email={contact.email?.[0]}
+                                imageUrl={contact.avatar}
+                                className="h-full w-full"
+                                size="lg"
+                            />
                         </div>
 
                         <div className="text-center">

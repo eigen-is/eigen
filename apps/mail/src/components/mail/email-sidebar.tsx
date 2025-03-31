@@ -5,6 +5,7 @@ import {SidebarSection} from '@workspace/ui/components/layout/sidebar/sidebar-se
 import {Separator} from '@workspace/ui/components/separator';
 import {AppLogo} from '@workspace/ui/components/layout/app-logo';
 import React from 'react';
+import {EigenLoader} from "@workspace/ui";
 
 // Map of special mailbox flags to their icons and display names
 const standardMailboxes: Record<string, { icon: React.ComponentType<any>, name: string }> = {
@@ -157,7 +158,8 @@ export function EmailSidebar({
 
 
                 {isLoading ? (
-                    <div className="flex items-center justify-center py-4"><EigenLoader />
+                    <div className="flex items-center justify-center py-4">
+                        <EigenLoader/>
                     </div>
                 ) : (
                     standardMailboxList.map((item) => (

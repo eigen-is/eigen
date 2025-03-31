@@ -10,3 +10,4 @@ export const api = edenTreaty<app>(import.meta.env.VITE_API_HOST as string, {
 
 export const contactsApi = api.contacts;
 export const mailApi = api.mail;
+export const spaceApi = api.space;
