@@ -1,13 +1,9 @@
 import {createFileRoute, Outlet, redirect} from '@tanstack/react-router'
 import {ContactsSidebar} from "../components/contacts/contacts-sidebar.tsx";
-import {QueryClient, QueryClientProvider} from '@tanstack/react-query'
-import {ReactQueryDevtools} from '@tanstack/react-query-devtools'
 import {useContext} from 'react';
 import {SidebarContext} from './__root';
 import {useMediaQuery} from '../hooks/use-media-query';
 
-// Create a QueryClient instance
-const queryClient = new QueryClient()
 
 export const Route = createFileRoute('/_auth')({
     beforeLoad: ({context, location}) => {
@@ -29,7 +25,6 @@ function AuthLayout() {
     const isTablet = useMediaQuery('(min-width: 769px) and (max-width: 1024px)');
     
     return (
-        <QueryClientProvider client={queryClient}>
             <div className="flex flex-1 w-full h-full overflow-hidden">
                 {/* Sidebar: overlay on mobile, normal display on larger screens */}
                 <div 
@@ -59,7 +54,5 @@ function AuthLayout() {
                     <Outlet/>
                 </main>
             </div>
-            <ReactQueryDevtools initialIsOpen={false} />
-        </QueryClientProvider>
     );
 }

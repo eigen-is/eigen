@@ -5,6 +5,7 @@ import {betterAuth} from "./routes/auth";
 import {mailRouter} from "./routes/mail";
 import {contactsRouter} from "./routes/contacts";
 import {trustedOrigins} from "./lib/auth/auth";
+import { spaceRouter } from "./routes/space";
 
 const app = new Elysia()
     .use(swagger())
@@ -19,6 +20,7 @@ const app = new Elysia()
     .get("/health", () => "OK")
     .use(mailRouter)
     .use(contactsRouter)
+    .use(spaceRouter)
     .listen(process.env.NODE_ENV !== 'production' ? 8000 : {
         port: 8000,
         tls: {

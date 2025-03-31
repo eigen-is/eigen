@@ -1,15 +1,15 @@
 "use client"
 
-import * as React from "react"
+import { HTMLAttributes, ReactNode } from "react"
 import { cn } from "@workspace/ui/lib/utils"
-import { Avatar, AvatarFallback, AvatarImage } from "@workspace/ui/components/avatar"
+import { UserAvatar } from "./user-avatar"
 
-export interface UserItemProps extends React.HTMLAttributes<HTMLDivElement> {
+export interface UserItemProps extends HTMLAttributes<HTMLDivElement> {
   name?: string
   email?: string
   imageUrl?: string
   userId?: string
-  label?: React.ReactNode
+  label?: ReactNode
   className?: string
 }
 
@@ -23,17 +23,15 @@ export function UserItem({
   ...props
 }: UserItemProps) {
   const displayName = name || email || ""
-  const firstChar = displayName.charAt(0).toUpperCase()
-
+  
   return (
     <div className={cn("flex items-center", className)} {...props}>
-      {/* Profile image/avatar placeholder */}
-      <Avatar className="h-8 w-8">
-        {imageUrl && <AvatarImage src={imageUrl} alt={displayName} />}
-        <AvatarFallback className="bg-gray-200 text-gray-600 font-medium">
-          {firstChar}
-        </AvatarFallback>
-      </Avatar>
+      <UserAvatar
+        name={name}
+        email={email}
+        imageUrl={imageUrl}
+        userId={userId}
+      />
 
       <div className="ml-3 flex-1">
         <p className="text-sm font-medium text-gray-900">{displayName}</p>
@@ -47,5 +45,5 @@ export function UserItem({
         </div>
       </div>
     </div>
-  )
+  );
 }

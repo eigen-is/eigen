@@ -3,6 +3,7 @@ import type Database from "bun:sqlite";
 import {Contacts} from "../contacts/contacts.ts";
 import Maildir from "../mail/maildir.ts";
 import FileSystem from "./filesystem.ts";
+import { getUserById } from "../users/users.ts";
 
 const city = new Map<string, Home>();
 
@@ -122,6 +123,12 @@ export async function getHome(user: User) {
     } else {
         const home = new Home(user);
         city.set(user.id, home);
+        // check if user exists
+        const userExists = await getUserById(user.id);
+        if (!userExists) {
+            city.delete(user.id);
+            throw new Error('User not found');
+        }
         await home.init();
         return home.touch();
     }

@@ -1,5 +1,5 @@
 import {useState} from "react";
-import {Calendar, FileText, HardDrive, LayoutDashboard, Mail, Menu, User as UserIcon, Users} from "lucide-react";
+import {Calendar, FileText, HardDrive, LayoutDashboard, Mail, Menu, Users} from "lucide-react";
 import {useRouter} from "@tanstack/react-router";
 import {Button} from "@workspace/ui/components/button";
 import {
@@ -15,6 +15,7 @@ import {Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, Di
 import {apps} from "@workspace/lib/apps.ts";
 import {UserItem} from "@workspace/ui/components/layout/user-item";
 import {AppLogo} from "./app-logo";
+import {UserAvatar} from "@workspace/ui";
 
 // Meer generieke definitie voor de Route parameter
 type NavigateFunction = (...args: any[]) => any;
@@ -70,8 +71,13 @@ function UserDropdown({ rootRoute, appName }: { rootRoute: TopbarProps['rootRout
             <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                     <Button variant="ghost"
-                            className="relative h-8 w-8 rounded-full app-text bg-white hover:bg-app hover:text-black p-0">
-                        <UserIcon className="h-5 w-5"/>
+                            className="relative h-8 w-8 rounded-full overflow-hidden p-0">
+                        <UserAvatar
+                            name={auth.user.name}
+                            email={auth.user.email}
+                            userId={auth.user.id}
+                            size="sm"
+                        />
                     </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent className="w-56" align="end" forceMount>
