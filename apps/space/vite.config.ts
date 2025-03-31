@@ -26,6 +26,7 @@ export default defineConfig({
         extensions: ['.tsx', '.ts', '.jsx', '.js']
     },
     build: {
-        outDir: '../../dist/space',
+        outDir: './../../dist/space',
+        emptyOutDir: true,
     }
 });

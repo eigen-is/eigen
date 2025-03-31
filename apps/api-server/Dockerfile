@@ -12,7 +12,7 @@ COPY apps/api-server ./apps/api-server
 # Install dependencies and build
 WORKDIR /app/apps/api-server
 RUN cd /app && bun install
-RUN bun run build
+RUN bun run buildfordocker
 
 # Production stage
 FROM oven/bun:alpine
