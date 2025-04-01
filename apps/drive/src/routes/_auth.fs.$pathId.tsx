@@ -72,6 +72,7 @@ function DriveRoute() {
         error: isFolderContentLoadingError
     } = useFolderContent(skipDataFetch ? '' : pathId);
     const {data: selectedPath = null} = usePathInfo(pid);
+    const {data: currentPath = null} = usePathInfo(pathId);
 
     // Show loading state while resolving root folder ID
     if ((pathId === 'root' && isRootLoading) || (isFolderContentLoading && !skipDataFetch)) {
@@ -237,6 +238,7 @@ function DriveRoute() {
                             activeRowId={pid}
                             onCreateFolder={openCreateFolderDialog}
                             onUploadFile={handleFileUpload}
+                            currentPath={currentPath}
                         />
                     </div>
                 )}
@@ -297,6 +299,7 @@ function DriveRoute() {
                         activeRowId={pid}
                         onCreateFolder={openCreateFolderDialog}
                         onUploadFile={handleFileUpload}
+                        currentPath={currentPath}
                     />
                 </div>
 
