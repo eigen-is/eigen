@@ -4,9 +4,9 @@
 4. I am using tanstack query for data fetching and caching
 5. I am using tanstack router for routing
 6. I am using tailwindcss and shadcn ui for styling
-6. I am using drizzle for database
-7. I am using better-auth for authentication
-8. I am using typescript for type safety
-9. I am using elysia for server routes
-10. ALWAYS USE ENGLISH in all code and all texts you generate
-11. Prefer a simple and clean implementation. Keep code simple and html layout clean and simple. Use shadcn defaults.
+7. I am using drizzle for database
+8. I am using better-auth for authentication
+9. I am using typescript for type safety
+10. I am using elysia for server routes
+11. ALWAYS USE ENGLISH in all code and all texts you generate
+12. Prefer a simple and clean implementation. Keep code simple and html layout clean and simple. Use shadcn defaults.
