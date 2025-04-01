@@ -50,20 +50,6 @@ export function DriveSidebar({
                 </div>
             )}
 
-            <div className="px-3 py-2 space-y-2">
-                <Button variant="default" size={condensed ? "icon" : "default"}
-                        className={`${condensed ? 'w-10 p-0' : 'w-full justify-start gap-3'}`}>
-                    <Upload className="h-4 w-4"/>
-                    {!condensed && <span>Upload</span>}
-                </Button>
-                
-                <Button variant="outline" size={condensed ? "icon" : "default"}
-                       className={`${condensed ? 'w-10 p-0' : 'w-full justify-start gap-3'}`}
-                       onClick={onCreateFolder}>
-                    <FolderPlus className="h-4 w-4"/>
-                    {!condensed && <span>New Folder</span>}
-                </Button>
-            </div>
 
             <SidebarSection 
                 title={condensed ? undefined : "Folders"} 
@@ -114,7 +100,7 @@ function FolderItem({ folder, condensed, onCreateSubfolder }: FolderItemProps) {
     return (
         <div className="flex items-center group px-2">
             <Link
-                to="/drive/$pathId"
+                to="/fs/$pathId"
                 params={{ pathId: folder.id }}
                 className={cn(
                     "flex items-center rounded-md px-2 py-1.5 text-sm font-medium",
