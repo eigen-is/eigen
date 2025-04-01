@@ -22,7 +22,8 @@ export function useRootFolder() {
     queryFn: async () => {
       const response = await driveApi.root.get();
       return response.data;
-    }
+    },
+    staleTime: Infinity
   });
 }
 
@@ -35,7 +36,8 @@ export function useFolderContent(pathId: string) {
       const response = await driveApi.folder[pathId].get();
       return response.data || [];
     },
-    enabled: !!pathId
+    enabled: !!pathId,
+    staleTime: 1000 * 60 * 5 // 5 minutes
   });
 }
 
@@ -48,7 +50,8 @@ export function usePathInfo(pathId: string | undefined) {
       const response = await driveApi.path[pathId].get();
       return response.data || null;
     },
-    enabled: !!pathId
+    enabled: !!pathId,
+    staleTime: 1000 * 60 * 5 // 5 minutes
   });
 }
 
