@@ -1,7 +1,7 @@
-import {FilterFn, getCoreRowModel, getSortedRowModel, SortingState, useReactTable,} from "@tanstack/react-table";
+import {FilterFn, getCoreRowModel, getSortedRowModel, SortingState, useReactTable} from "@tanstack/react-table";
 import {rankItem} from "@tanstack/match-sorter-utils";
 import {Paperclip, Search} from "lucide-react";
-import {useState} from "react";
+import {useState, useMemo} from "react";
 import {cn} from "@workspace/ui/lib/utils";
 import {Input} from "@workspace/ui/components/input";
 import {EigenLoader} from "@workspace/ui/components/layout/eigen-loader";
@@ -37,7 +37,8 @@ export function EmailList({
                               error,
                           }: EmailDataTableProps) {
 
-    const columns = [
+    // Define columns with useMemo to prevent recreation on each render
+    const columns = useMemo(() => [
         {
             header: 'Date',
             accessor: 'date',
@@ -50,18 +51,29 @@ export function EmailList({
             header: 'Subject',
             accessor: 'subject',
         }
-    ]
+    ], []);
 
-    const [sorting, setSorting] = useState<SortingState>([])
-    const [globalFilter, setGlobalFilter] = useState("")
+    const [sorting, setSorting] = useState<SortingState>([
+        {
+            id: 'date',
+            desc: true
+        }
+    ]);
+    const [globalFilter, setGlobalFilter] = useState("");
 
     const handleRowClick = (row: EmailSummary) => {
         onRowClick(row.id);
         row.isRead = true;
-    }
+    };
+
+    // Using useMemo to prevent infinite rendering when emails array remains the same
+    const emailData = useMemo(() => {
+        // Create a stable reference to avoid recreating the array on each render
+        return [...emails].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()) || [];
+    }, [emails]);
 
     const table = useReactTable({
-        data: emails,
+        data: emailData,
         columns: columns,
         filterFns: {
             fuzzy: fuzzyFilter,
@@ -76,7 +88,6 @@ export function EmailList({
             globalFilter,
         },
     });
-
 
     // Render loading state
     if (isLoading || !emails) {
