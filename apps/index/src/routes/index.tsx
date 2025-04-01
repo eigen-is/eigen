@@ -2,6 +2,10 @@ import {createFileRoute} from '@tanstack/react-router'
 import React from 'react';
 import {Button} from "@workspace/ui/components/button";
 import {apps} from "@workspace/lib/apps.ts";
+import { Input } from "@workspace/ui/components/input";
+import { Textarea } from "@workspace/ui/components/textarea";
+import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@workspace/ui/components/card";
+import { Label } from '@workspace/ui/components/label';
 
 export const Route = createFileRoute('/')({
     component: HomeComponent,
@@ -10,6 +14,10 @@ export const Route = createFileRoute('/')({
 export function HomeComponent() {    
     const [appIndex, setAppIndex] = React.useState(0);
     const [showMore, setShowMore] = React.useState(false);
+    const [showWaitlistForm, setShowWaitlistForm] = React.useState(false);
+    const [email, setEmail] = React.useState("");
+    const [notes, setNotes] = React.useState("");
+    const [isSubmitting, setIsSubmitting] = React.useState(false);
     const app = apps[appIndex];
     
     React.useEffect(() => {
@@ -22,6 +30,25 @@ export function HomeComponent() {
 
     const handleLogin = () => {
         window.location.href = './mail/';
+    };
+    
+    const handleShowWaitlistButton = () => {
+        setShowWaitlistForm(true);
+        setShowMore(false);
+    };
+
+    const handleWaitlistSubmit = (e: React.FormEvent) => {
+        e.preventDefault();
+        setIsSubmitting(true);
+        
+        // Simulate submission - in a real app, this would be an API call
+        setTimeout(() => {
+            setIsSubmitting(false);
+            setShowWaitlistForm(false);
+            // Reset form
+            setEmail("");
+            setNotes("");
+        }, 1000);
     };
 
     return (
@@ -55,22 +82,82 @@ export function HomeComponent() {
                     </div>
                 </div>
             </div>
-            <div className="flex gap-4">
-                <Button className="px-8 py-2 font-medium" onClick={handleLogin}>
-                    Login
-                </Button>
-                <Button variant="outline" className="px-6 py-2">
-                    Join Waitlist
-                </Button>
-            </div>
-            <div className="flex justify-center">
-                <button
-                    onClick={() => setShowMore(!showMore)}
-                    className="text-blue-600 hover:text-blue-800 underline text-sm mt-4"
-                >
-                    {showMore ? 'Show less' : 'Learn more'}
-                </button>
-            </div>
+            
+            {!showWaitlistForm ? (
+                <>
+                <div className="flex gap-4">
+                    <Button className="px-8 py-2 font-medium flex-3" onClick={handleLogin}>
+                        Login
+                    </Button>
+                    <Button 
+                        variant="outline" 
+                        className="px-6 py-2 flex-1"
+                        onClick={handleShowWaitlistButton}
+                    >
+                        Join Waitlist
+                    </Button>
+                </div>
+                <div className="flex justify-center mt-4">
+                    <button
+                        onClick={() => setShowMore(!showMore)}
+                        className="text-blue-600 hover:text-blue-800 underline text-sm cursor-pointer"
+                    >
+                        {showMore ? 'Show less' : 'Learn more'}
+                    </button>
+                </div>
+                </>
+            ) : (
+                <Card className="w-full max-w-md">
+                    <CardHeader>
+                        <CardTitle>Join the Waitlist <small>(Exclusive Access Only)</small></CardTitle>
+                    </CardHeader>
+                    <form onSubmit={handleWaitlistSubmit}>
+                        <CardContent className="space-y-4">
+                            <div className="space-y-2">
+                                <Label htmlFor="email">
+                                    Email
+                                </Label>
+                                <Input
+                                    id="email"
+                                    type="email"
+                                    placeholder="Enter your email"
+                                    value={email}
+                                    disabled={isSubmitting}
+                                    onChange={(e) => setEmail(e.target.value)}
+                                    required
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <Label htmlFor="notes">
+                                    Notes (Optional)
+                                </Label>
+                                <Textarea
+                                    id="notes"
+                                    placeholder="Tell us why you're interested"
+                                    value={notes}
+                                    disabled={isSubmitting}
+                                    onChange={(e) => setNotes(e.target.value)}
+                                />
+                            </div>
+                        </CardContent>
+                        <CardFooter className="flex justify-between mt-4 gap-2">
+                            <Button 
+                                type="button" 
+                                variant="outline" 
+                                className="flex-1"
+                                disabled={isSubmitting}
+                                onClick={() => setShowWaitlistForm(false)}
+                            >
+                                Cancel
+                            </Button>
+                            <Button type="submit" disabled={isSubmitting} className="flex-3">
+                                {isSubmitting ? "Submitting..." : "Submit"}
+                            </Button>
+                        </CardFooter>
+                    </form>
+                </Card>
+            )}
+            
         </div>
     );
 }
