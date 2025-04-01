@@ -51,7 +51,7 @@ function ContactsRoute() {
     const handleDeleteContact = async (id: string) => {
         try {
             await deleteMutation.mutateAsync(id);
-            toast("Contact deleted", {
+            toast.info("Contact deleted", {
                 description: "Moved to Trash"
             });
             // Navigate back to the current filter without the contactId
