@@ -12,7 +12,9 @@
 
 import { Route as rootRoute } from './routes/__root'
 import { Route as LoginImport } from './routes/login'
-import { Route as IndexImport } from './routes/index'
+import { Route as AuthImport } from './routes/_auth'
+import { Route as AuthIndexImport } from './routes/_auth.index'
+import { Route as AuthPasswordImport } from './routes/_auth.password'
 
 // Create/Update Routes
 
@@ -22,21 +24,32 @@ const LoginRoute = LoginImport.update({
   getParentRoute: () => rootRoute,
 } as any)
 
-const IndexRoute = IndexImport.update({
+const AuthRoute = AuthImport.update({
+  id: '/_auth',
+  getParentRoute: () => rootRoute,
+} as any)
+
+const AuthIndexRoute = AuthIndexImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => AuthRoute,
+} as any)
+
+const AuthPasswordRoute = AuthPasswordImport.update({
+  id: '/password',
+  path: '/password',
+  getParentRoute: () => AuthRoute,
 } as any)
 
 // Populate the FileRoutesByPath interface
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexImport
+    '/_auth': {
+      id: '/_auth'
+      path: ''
+      fullPath: ''
+      preLoaderRoute: typeof AuthImport
       parentRoute: typeof rootRoute
     }
     '/login': {
@@ -46,43 +59,74 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginImport
       parentRoute: typeof rootRoute
     }
+    '/_auth/password': {
+      id: '/_auth/password'
+      path: '/password'
+      fullPath: '/password'
+      preLoaderRoute: typeof AuthPasswordImport
+      parentRoute: typeof AuthImport
+    }
+    '/_auth/': {
+      id: '/_auth/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof AuthIndexImport
+      parentRoute: typeof AuthImport
+    }
   }
 }
 
 // Create and export the route tree
 
+interface AuthRouteChildren {
+  AuthPasswordRoute: typeof AuthPasswordRoute
+  AuthIndexRoute: typeof AuthIndexRoute
+}
+
+const AuthRouteChildren: AuthRouteChildren = {
+  AuthPasswordRoute: AuthPasswordRoute,
+  AuthIndexRoute: AuthIndexRoute,
+}
+
+const AuthRouteWithChildren = AuthRoute._addFileChildren(AuthRouteChildren)
+
 export interface FileRoutesByFullPath {
-  '/': typeof IndexRoute
+  '': typeof AuthRouteWithChildren
   '/login': typeof LoginRoute
+  '/password': typeof AuthPasswordRoute
+  '/': typeof AuthIndexRoute
 }
 
 export interface FileRoutesByTo {
-  '/': typeof IndexRoute
   '/login': typeof LoginRoute
+  '/password': typeof AuthPasswordRoute
+  '/': typeof AuthIndexRoute
 }
 
 export interface FileRoutesById {
   __root__: typeof rootRoute
-  '/': typeof IndexRoute
+  '/_auth': typeof AuthRouteWithChildren
   '/login': typeof LoginRoute
+  '/_auth/password': typeof AuthPasswordRoute
+  '/_auth/': typeof AuthIndexRoute
 }
 
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/login'
+  fullPaths: '' | '/login' | '/password' | '/'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/login'
-  id: '__root__' | '/' | '/login'
+  to: '/login' | '/password' | '/'
+  id: '__root__' | '/_auth' | '/login' | '/_auth/password' | '/_auth/'
   fileRoutesById: FileRoutesById
 }
 
 export interface RootRouteChildren {
-  IndexRoute: typeof IndexRoute
+  AuthRoute: typeof AuthRouteWithChildren
   LoginRoute: typeof LoginRoute
 }
 
 const rootRouteChildren: RootRouteChildren = {
-  IndexRoute: IndexRoute,
+  AuthRoute: AuthRouteWithChildren,
   LoginRoute: LoginRoute,
 }
 
@@ -96,15 +140,27 @@ export const routeTree = rootRoute
     "__root__": {
       "filePath": "__root.tsx",
       "children": [
-        "/",
+        "/_auth",
         "/login"
       ]
     },
-    "/": {
-      "filePath": "index.tsx"
+    "/_auth": {
+      "filePath": "_auth.tsx",
+      "children": [
+        "/_auth/password",
+        "/_auth/"
+      ]
     },
     "/login": {
       "filePath": "login.tsx"
+    },
+    "/_auth/password": {
+      "filePath": "_auth.password.tsx",
+      "parent": "/_auth"
+    },
+    "/_auth/": {
+      "filePath": "_auth.index.tsx",
+      "parent": "/_auth"
     }
   }
 }
