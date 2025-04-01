@@ -14,7 +14,7 @@ import { Route as rootRoute } from './routes/__root'
 import { Route as LoginImport } from './routes/login'
 import { Route as AuthImport } from './routes/_auth'
 import { Route as IndexImport } from './routes/index'
-import { Route as AuthDrivePathIdImport } from './routes/_auth.drive.$pathId'
+import { Route as AuthFsPathIdImport } from './routes/_auth.fs.$pathId'
 
 // Create/Update Routes
 
@@ -35,9 +35,9 @@ const IndexRoute = IndexImport.update({
   getParentRoute: () => rootRoute,
 } as any)
 
-const AuthDrivePathIdRoute = AuthDrivePathIdImport.update({
-  id: '/drive/$pathId',
-  path: '/drive/$pathId',
+const AuthFsPathIdRoute = AuthFsPathIdImport.update({
+  id: '/fs/$pathId',
+  path: '/fs/$pathId',
   getParentRoute: () => AuthRoute,
 } as any)
 
@@ -66,11 +66,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginImport
       parentRoute: typeof rootRoute
     }
-    '/_auth/drive/$pathId': {
-      id: '/_auth/drive/$pathId'
-      path: '/drive/$pathId'
-      fullPath: '/drive/$pathId'
-      preLoaderRoute: typeof AuthDrivePathIdImport
+    '/_auth/fs/$pathId': {
+      id: '/_auth/fs/$pathId'
+      path: '/fs/$pathId'
+      fullPath: '/fs/$pathId'
+      preLoaderRoute: typeof AuthFsPathIdImport
       parentRoute: typeof AuthImport
     }
   }
@@ -79,11 +79,11 @@ declare module '@tanstack/react-router' {
 // Create and export the route tree
 
 interface AuthRouteChildren {
-  AuthDrivePathIdRoute: typeof AuthDrivePathIdRoute
+  AuthFsPathIdRoute: typeof AuthFsPathIdRoute
 }
 
 const AuthRouteChildren: AuthRouteChildren = {
-  AuthDrivePathIdRoute: AuthDrivePathIdRoute,
+  AuthFsPathIdRoute: AuthFsPathIdRoute,
 }
 
 const AuthRouteWithChildren = AuthRoute._addFileChildren(AuthRouteChildren)
@@ -92,14 +92,14 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '': typeof AuthRouteWithChildren
   '/login': typeof LoginRoute
-  '/drive/$pathId': typeof AuthDrivePathIdRoute
+  '/fs/$pathId': typeof AuthFsPathIdRoute
 }
 
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '': typeof AuthRouteWithChildren
   '/login': typeof LoginRoute
-  '/drive/$pathId': typeof AuthDrivePathIdRoute
+  '/fs/$pathId': typeof AuthFsPathIdRoute
 }
 
 export interface FileRoutesById {
@@ -107,15 +107,15 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/_auth': typeof AuthRouteWithChildren
   '/login': typeof LoginRoute
-  '/_auth/drive/$pathId': typeof AuthDrivePathIdRoute
+  '/_auth/fs/$pathId': typeof AuthFsPathIdRoute
 }
 
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '' | '/login' | '/drive/$pathId'
+  fullPaths: '/' | '' | '/login' | '/fs/$pathId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '' | '/login' | '/drive/$pathId'
-  id: '__root__' | '/' | '/_auth' | '/login' | '/_auth/drive/$pathId'
+  to: '/' | '' | '/login' | '/fs/$pathId'
+  id: '__root__' | '/' | '/_auth' | '/login' | '/_auth/fs/$pathId'
   fileRoutesById: FileRoutesById
 }
 
@@ -152,14 +152,14 @@ export const routeTree = rootRoute
     "/_auth": {
       "filePath": "_auth.tsx",
       "children": [
-        "/_auth/drive/$pathId"
+        "/_auth/fs/$pathId"
       ]
     },
     "/login": {
       "filePath": "login.tsx"
     },
-    "/_auth/drive/$pathId": {
-      "filePath": "_auth.drive.$pathId.tsx",
+    "/_auth/fs/$pathId": {
+      "filePath": "_auth.fs.$pathId.tsx",
       "parent": "/_auth"
     }
   }

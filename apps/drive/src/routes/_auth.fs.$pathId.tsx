@@ -3,8 +3,8 @@ import {toast} from "sonner";
 import {DriveDetail} from "@/components/drive/drive-detail.tsx";
 import {DriveList} from "@/components/drive/drive-list.tsx";
 import {useMediaQuery} from "@/hooks/use-media-query.ts";
-import {useCreateFolder, useDeleteFile, useFolderContent, usePathInfo} from "@/hooks/use-drive.ts";
-import {useState} from "react";
+import {useCreateFolder, useDeleteFile, useFolderContent, usePathInfo, useRootFolder} from "@/hooks/use-drive.ts";
+import {useState, useEffect} from "react";
 import {
     Dialog,
     DialogContent,
@@ -15,13 +15,14 @@ import {
 import {Input} from "@workspace/ui/components/input";
 import {Label} from "@workspace/ui/components/label";
 import {Button} from "@workspace/ui/components/button";
+import {EigenLoader} from "@workspace/ui";
 
 // Define search params type
 export interface DriveSearchParams {
     pid?: string;
 }
 
-export const Route = createFileRoute('/_auth/drive/$pathId')({
+export const Route = createFileRoute('/_auth/fs/$pathId')({
     component: DriveRoute,
     validateSearch: (search: Record<string, unknown>) => {
         const pid = typeof search.pid === 'string' ? search.pid : undefined;
@@ -34,6 +35,19 @@ function DriveRoute() {
     const {pid} = Route.useSearch();
     const navigate = useNavigate();
 
+    // Get the root folder ID to replace "root" pathId
+    const {data: rootFolder, isLoading: isRootLoading} = useRootFolder();
+    
+    // If pathId is "root", navigate to the actual root folder ID when available
+    useEffect(() => {
+        if (pathId === 'root' && rootFolder?.id) {
+            navigate({
+                to: Route.fullPath,
+                params: { pathId: rootFolder.id }
+            });
+        }
+    }, [pathId, rootFolder, navigate]);
+
     const isMobile = useMediaQuery('(max-width: 768px)');
     // const isTablet = useMediaQuery('(max-width: 1024px) and (min-width: 769px)');
     const deleteFileMutation = useDeleteFile();
@@ -43,12 +57,24 @@ function DriveRoute() {
     const [newFolderName, setNewFolderName] = useState('');
     const createFolderMutation = useCreateFolder();
     
+    // Don't fetch data until we have the actual root folder ID (not "root")
+    const skipDataFetch = pathId === 'root';
+    
     const {
         data: folderContents = [],
         isLoading: isFolderContentLoading,
         error: isFolderContentLoadingError
-    } = useFolderContent(pathId);
+    } = useFolderContent(skipDataFetch ? '' : pathId);
     const {data: selectedPath = null} = usePathInfo(pid);
+
+    // Show loading state while resolving root folder ID
+    if ((pathId === 'root' && isRootLoading) || (isFolderContentLoading && !skipDataFetch)) {
+        return (
+            <div className="flex items-center justify-center h-full w-full">
+                <EigenLoader />
+            </div>
+        );
+    }
 
     // Handle folder creation
     const handleCreateFolder = async () => {
@@ -77,19 +103,15 @@ function DriveRoute() {
 
     // Handle row click to show path details
     const handleRowClick = (itemId: string) => {
-        navigate({
-            to: '/drive/$pathId',
-            params: {pathId},
-            search: (prev) => ({...prev, pid: itemId}),
-        });
+        // navigateToPath(pathId, { pid: itemId });
+        console.log(itemId);
     };
 
     // Handle back navigation (mainly for mobile)
     const handleBackToList = () => {
         navigate({
-            to: '/drive/$pathId',
-            params: {pathId},
-            search: {},
+            to: Route.fullPath,
+            params: { pathId: pathId }
         });
     };
 
@@ -104,9 +126,8 @@ function DriveRoute() {
             }
             toast("Item deleted");
             navigate({
-                to: '/drive/$pathId',
-                params: {pathId},
-                search: {},
+                to: Route.fullPath,
+                params: { pathId: pathId }
             });
         } catch (error) {
             console.error('Failed to delete item:', error);
