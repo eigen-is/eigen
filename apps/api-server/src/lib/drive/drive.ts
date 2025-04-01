@@ -235,7 +235,7 @@ export default class Drive {
         }
 
         // Delete folder in filesystem (recursive)
-        const folderPath = path.join(await this.getFolderPath(parentId), pathId);
+        const folderPath = await this.getFolderPath(pathId);
         await this.home.fs.rm(folderPath, {recursive: true, force: true});
 
         // Delete folder and all children from database (cascade delete will handle this)

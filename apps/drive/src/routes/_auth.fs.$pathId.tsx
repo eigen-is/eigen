@@ -3,7 +3,7 @@ import {toast} from "sonner";
 import {DriveDetail} from "@/components/drive/drive-detail.tsx";
 import {DriveList} from "@/components/drive/drive-list.tsx";
 import {useMediaQuery} from "@/hooks/use-media-query.ts";
-import {useCreateFolder, useDeleteFile, useFolderContent, usePathInfo, useRootFolder, useUploadFile} from "@/hooks/use-drive.ts";
+import {useDeleteFolder, useCreateFolder, useDeleteFile, useFolderContent, usePathInfo, useRootFolder, useUploadFile} from "@/hooks/use-drive.ts";
 import {useState, useEffect, useRef} from "react";
 import {
     Dialog,
@@ -19,6 +19,7 @@ import {EigenLoader} from "@workspace/ui";
 import {useUpload} from "@workspace/ui/components/layout/upload-provider/upload-provider";
 import {uploadWithProgress} from "@workspace/ui/components/layout/upload-provider/upload-with-progress";
 import {DrivePath} from "@apps/api-server/types/drive";
+import {DeleteDialog} from "@workspace/ui/components/layout/delete/delete-dialog";
 
 // Define search params type
 export interface DriveSearchParams {
@@ -54,6 +55,7 @@ function DriveRoute() {
     const isMobile = useMediaQuery('(max-width: 768px)');
     // const isTablet = useMediaQuery('(max-width: 1024px) and (min-width: 769px)');
     const deleteFileMutation = useDeleteFile();
+    const deleteFolderMutation = useDeleteFolder();
     const uploadFileMutation = useUploadFile();
     const upload = useUpload();
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -62,6 +64,10 @@ function DriveRoute() {
     const [createFolderOpen, setCreateFolderOpen] = useState(false);
     const [newFolderName, setNewFolderName] = useState('');
     const createFolderMutation = useCreateFolder();
+    
+    // Delete confirmation dialog state
+    const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+    const [itemToDelete, setItemToDelete] = useState<DrivePath | null>(null);
     
     // Don't fetch data until we have the actual root folder ID (not "root")
     const skipDataFetch = pathId === 'root';
@@ -154,14 +160,10 @@ function DriveRoute() {
                 onError: (err) => {
                     // Mark upload as failed
                     uploadHandler.error();
-                    console.error('Upload error:', err);
-                    toast.error(`Failed to upload ${file.name}`);
                 }
             });
         } catch (err: any) {
-            console.error('Error uploading file:', err);
             uploadHandler.error();
-            toast.error(`Failed to upload ${file.name}`);
         }
         
         // Clean up the file input value so the same file can be selected again if needed
@@ -195,23 +197,39 @@ function DriveRoute() {
         });
     };
 
-    const handleDeletePath = async () => {
-        if (!selectedPath) return;
+    const handleDeletePath = async (path: DrivePath) => {
+        // Open the delete confirmation dialog and store the path to be deleted
+        setItemToDelete(path);
+        setDeleteDialogOpen(true);
+    };
+    
+    // Function to perform the actual delete after confirmation
+    const confirmDelete = async () => {
+        if (!itemToDelete) return;
         
         try {
-            if (selectedPath.type === 'file') {
-                await deleteFileMutation.mutateAsync(selectedPath.id);
-            } else {
-                // Handle folder deletion when implemented
+            if (itemToDelete.type === 'file') {
+                await deleteFileMutation.mutateAsync(itemToDelete.id);
+                toast("File deleted");
+            } else if (itemToDelete.type === 'folder') {
+                await deleteFolderMutation.mutateAsync(itemToDelete.id);
+                toast("Folder deleted");
             }
-            toast("Item deleted");
+            
+            // Close the dialog and reset state
+            setDeleteDialogOpen(false);
+            setItemToDelete(null);
+            
+            // Navigate back to the folder view
             navigate({
                 to: Route.fullPath,
-                params: { pathId: pathId }
+                params: { pathId: pathId },
+                search: { pid: undefined }
             });
         } catch (error) {
             console.error('Failed to delete item:', error);
             toast.error("Failed to delete item");
+            setDeleteDialogOpen(false);
         }
     };
 
@@ -238,6 +256,7 @@ function DriveRoute() {
                             activeRowId={pid}
                             onCreateFolder={openCreateFolderDialog}
                             onUploadFile={handleFileUpload}
+                            onDelete={handleDeletePath}
                             currentPath={currentPath}
                         />
                     </div>
@@ -281,6 +300,16 @@ function DriveRoute() {
                     className="hidden"
                     onChange={handleFileChange}
                 />
+                
+                {/* Delete Confirmation Dialog */}
+                <DeleteDialog
+                    open={deleteDialogOpen}
+                    onOpenChange={setDeleteDialogOpen}
+                    title="Delete Item"
+                    description="Are you sure you want to delete"
+                    itemName={itemToDelete?.name}
+                    onDelete={confirmDelete}
+                />
             </>
         );
     }
@@ -300,6 +329,7 @@ function DriveRoute() {
                         onCreateFolder={openCreateFolderDialog}
                         onUploadFile={handleFileUpload}
                         currentPath={currentPath}
+                        onDelete={handleDeletePath}
                     />
                 </div>
 
@@ -353,6 +383,16 @@ function DriveRoute() {
                 type="file"
                 className="hidden"
                 onChange={handleFileChange}
+            />
+            
+            {/* Delete Confirmation Dialog */}
+            <DeleteDialog
+                open={deleteDialogOpen}
+                onOpenChange={setDeleteDialogOpen}
+                title="Delete Item"
+                description="Are you sure you want to delete"
+                itemName={itemToDelete?.name}
+                onDelete={confirmDelete}
             />
         </>
     );
