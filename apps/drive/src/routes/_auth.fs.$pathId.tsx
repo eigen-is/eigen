@@ -3,7 +3,7 @@ import {toast} from "sonner";
 import {DriveDetail} from "@/components/drive/drive-detail.tsx";
 import {DriveList} from "@/components/drive/drive-list.tsx";
 import {useMediaQuery} from "@/hooks/use-media-query.ts";
-import {useCreateFolder, useDeleteFile, useFolderContent, usePathInfo, useRootFolder, useUploadFile} from "@/hooks/use-drive.ts";
+import {useDeleteFolder, useCreateFolder, useDeleteFile, useFolderContent, usePathInfo, useRootFolder, useUploadFile} from "@/hooks/use-drive.ts";
 import {useState, useEffect, useRef} from "react";
 import {
     Dialog,
@@ -55,6 +55,7 @@ function DriveRoute() {
     const isMobile = useMediaQuery('(max-width: 768px)');
     // const isTablet = useMediaQuery('(max-width: 1024px) and (min-width: 769px)');
     const deleteFileMutation = useDeleteFile();
+    const deleteFolderMutation = useDeleteFolder();
     const uploadFileMutation = useUploadFile();
     const upload = useUpload();
     const fileInputRef = useRef<HTMLInputElement>(null);
@@ -214,8 +215,8 @@ function DriveRoute() {
             if (itemToDelete.type === 'file') {
                 await deleteFileMutation.mutateAsync(itemToDelete.id);
                 toast("File deleted");
-            } else {
-                // await useDeleteFolder().mutateAsync(path.id);
+            } else if (itemToDelete.type === 'folder') {
+                await deleteFolderMutation.mutateAsync(itemToDelete.id);
                 toast("Folder deleted");
             }
             
