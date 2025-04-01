@@ -129,21 +129,27 @@ export default class Drive {
         const folderPath = path.join(this.basePath, parentId, folderName);
         await this.home.fs.mkdir(folderPath, { recursive: true });
         
-        // Create folder in database
-        const folderId = randomUUID();
-        await this.db.insert(drivePaths).values({
-            id: folderId,
-            name: folderName,
-            type: "folder",
-            parentId: parentId,
-            ownerId: this.user.id,
-            mimeType: "folder",
-            acl: null, // Will inherit from parent
-            createdAt: new Date(),
-            updatedAt: new Date()
-        });
-        
-        return folderId;
+        // Check if folder exists
+        const exists = await this.home.fs.dirExists(folderPath);
+        if (exists) {
+            // Create folder in database
+            const folderId = randomUUID();
+            await this.db.insert(drivePaths).values({
+                id: folderId,
+                name: folderName,
+                type: "folder",
+                parentId: parentId,
+                ownerId: this.user.id,
+                mimeType: "folder",
+                acl: null, // Will inherit from parent
+                createdAt: new Date(),
+                updatedAt: new Date()
+            });
+            
+            return folderId;
+        } else {
+        throw new Error(`Folder not created on filesystem ${folderPath}`);
+        }
     }
 
     /**
