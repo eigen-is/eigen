@@ -357,7 +357,7 @@ export class Contacts {
 
         await this.home.fs.file(fullFileName).write(convertedFile);
 
-        return `${process.env['VITE_API_HOST']}/contacts/avatar/${fileName}`;
+        return `${Bun.env['VITE_API_HOST']}/contacts/avatar/${fileName}`;
     }
 
     public async downloadAvatar(filename: string) {

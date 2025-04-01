@@ -9,7 +9,7 @@ export async function getPublicInfo(mailOrId: string) {
     if (user && image) {
         // get filename from path
         const filename = image.split('/').pop();
-        image = `${process.env['VITE_API_HOST']}/space/avatar/${user.id}/${filename}`;
+        image = `${Bun.env["VITE_API_HOST"]}/space/avatar/${user.id}/${filename}`;
     }
     return {
         name: user?.name,
