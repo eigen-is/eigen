@@ -162,6 +162,10 @@ export default class FileSystem {
         throw new Error(`Database not found: ${absolutePath}`);
     }
 
+    public absolutePath(path: string) {
+        return this.makeAbsolutePath(path);
+    }
+
     private makeAbsolutePath(path: string) {
         // Make sure that path stays inside this.homeDir
         const normalizedPath = path.replace(/\.\.\//g, ''); // Remove any "../" to prevent directory traversal

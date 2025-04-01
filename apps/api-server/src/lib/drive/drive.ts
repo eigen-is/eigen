@@ -9,6 +9,7 @@ import type {DriveACL, DrivePath} from "../../types/drive.ts";
 import {randomUUID} from "crypto";
 import path from "path";
 import {getHome} from "../home/home.ts";
+import sharp from "sharp";
 
 async function getDriveDatabase(home: Home) {
     const db = await home.openSQLiteDatabase('eigen.drive/metadata.db', async (db: Database) => {
@@ -83,7 +84,8 @@ export default class Drive {
         }
 
         // Ensure the base drive directory exists
-        await this.home.fs.mkdir(this.basePath, {recursive: true});
+        await this.home.fs.mkdir(this.home.fs.pathJoin(this.basePath, "Drive"), {recursive: true});
+        await this.home.fs.mkdir(this.home.fs.pathJoin(this.basePath, "thumbs"), {recursive: true});
 
         // Check if root folder exists in DB
         const rootFolder = this.db.select().from(drivePaths).where(and(
@@ -215,20 +217,24 @@ export default class Drive {
         const buffer = await file.arrayBuffer();
         await this.home.fs.file(filePath).write(buffer);
 
-        const size =  this.home.fs.file(filePath).size;
+        const bunFile = this.home.fs.file(filePath);
+        const size = bunFile.size || 0;
+        const mimeType = bunFile.type || "application/octet-stream";
 
         // Save file metadata in database
         if (!fileExists) {
+            const thumbnail = await this.generateThumbnail(fileId, mimeType,filePath);
+
             await this.db.insert(drivePaths).values({
                 id: fileId,
                 name: file.name,
                 type: "file",
                 parentId: parent.id,
                 ownerId: this.user.id,
-                // @ts-ignore
-                mimeType: this.home.fs.file(filePath).type || "application/octet-stream",
+                mimeType: mimeType,
                 acl: null, // Will inherit from parent
                 size: size,
+                thumbnail: thumbnail,
                 createdAt: new Date(),
                 updatedAt: new Date()
             });
@@ -240,8 +246,11 @@ export default class Drive {
                 throw new Error("File not found");
             }
 
+            const thumbnail = await this.generateThumbnail(dbfile.id, mimeType,filePath);
+
             await this.db.update(drivePaths).set({
                 size: size,
+                thumbnail: thumbnail,
                 updatedAt: new Date()
             }).where(eq(drivePaths.id, dbfile.id));
         }
@@ -295,7 +304,7 @@ export default class Drive {
         }
 
         // Delete folder in filesystem (recursive)
-        const parentId = await this.getPath(pathId)?.parentId;
+        const parentId = (await this.getPath(pathId))?.parentId;
         const folderPath = await this.getFolderPath(pathId);
         await this.home.fs.rm(folderPath, {recursive: true, force: true});
 
@@ -564,4 +573,38 @@ export default class Drive {
 
         return false;
     }
+
+    private async generateThumbnail(id: string, mimeType: string, filePath:string): Promise<string | null> {
+        console.log("Generating thumbnail for", id, mimeType, filePath);
+        if (!mimeType.includes('image')) {
+            return null;
+        }
+        console.log("Probably an image, checking dimensions for thumbnail generation");
+        console.log("Absolute path:", this.home.fs.absolutePath(filePath    ));
+        try {
+        const image = sharp(this.home.fs.absolutePath(filePath));
+        const { width, height } = await image.metadata();
+        console.log("Image dimensions", width, height);
+        if (!width || !height || width > 6000 || height > 6000) {
+            return null;
+        }
+
+        const thumbnail = await image
+        .webp({quality: 80})
+            .resize(512, 512, {
+                fit: 'inside',
+                withoutEnlargement: true
+            })
+            .toBuffer();
+
+        const url = this.home.fs.pathJoin(this.basePath, 'thumbs', `${id}.webp`);
+        this.home.fs.file(url).write(thumbnail);   
+
+        return url;
+        } catch (e) {
+            console.error("Failed to generate thumbnail", e);
+            return null;
+        }
+    }
+
 }
