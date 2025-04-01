@@ -21,13 +21,9 @@ const app = new Elysia()
     .use(mailRouter)
     .use(contactsRouter)
     .use(spaceRouter)
-    .listen(process.env.NODE_ENV !== 'production' ? 8000 : {
+    .listen({
         port: 8000,
-        tls: {
-            key: Bun.file("/etc/letsencrypt/live/eigen.is/privkey.pem"),
-            cert: Bun.file("/etc/letsencrypt/live/eigen.is/fullchain.pem"),
-        },
-        hostname: "::",
+        hostname: "localhost",
     });
 
 export type app = typeof app;
