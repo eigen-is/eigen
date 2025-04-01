@@ -97,7 +97,7 @@ export class Home {
             city.delete(this.user.id);
             this.destruct();
             console.log(`Closed home for ${this.user.id}`);
-        }, 1000 * 30);
+        }, 1000 * 60 * 5); // 5 minutes
         return this;
     }
 

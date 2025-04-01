@@ -1,4 +1,4 @@
-import {useState} from 'react';
+import {useState, useMemo} from 'react';
 import {Link} from '@tanstack/react-router';
 import {ArrowUpDown, Search} from 'lucide-react';
 import {Button} from "@workspace/ui/components/button";
@@ -53,25 +53,35 @@ export function ContactsList({ filterType = 'filter', filterId = 'all' }: Contac
     return filtered;
   };
   
+  // Use memoization to prevent unnecessary recalculations
+  // Only recalculate when contacts, filterType, or filterId changes
+  const filteredContacts = useMemo(() => applyFilters(contacts), [contacts, filterType, filterId]);
+  
   // Sorteer contacten op de geselecteerde sorteermethode
-  const sortedContacts = [...applyFilters(contacts)].sort((a, b) => {
-    if (sortBy === 'firstName') {
-      return a.firstName.localeCompare(b.firstName);
-    } else {
-      return a.lastName.localeCompare(b.lastName);
-    }
-  });
+  // Use memoization to prevent unnecessary sorting operations
+  const sortedContacts = useMemo(() => {
+    return [...filteredContacts].sort((a, b) => {
+      if (sortBy === 'firstName') {
+        return a.firstName.localeCompare(b.firstName);
+      } else {
+        return a.lastName.localeCompare(b.lastName);
+      }
+    });
+  }, [filteredContacts, sortBy]);
   
   // Filter contacten op basis van zoekopdracht
-  const filteredContacts = searchQuery.length === 0
-    ? sortedContacts
-    : sortedContacts.filter(contact => 
-        contact.firstName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        contact.lastName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        (contact.email && contact.email.some((email: string) => 
-          email.toLowerCase().includes(searchQuery.toLowerCase())
-        ))
-      );
+  // Use memoization to prevent unnecessary filtering on each render
+  const searchedContacts = useMemo(() => {
+    return searchQuery.length === 0
+      ? sortedContacts
+      : sortedContacts.filter(contact => 
+          contact.firstName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          contact.lastName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          (contact.email && contact.email.some((email: string) => 
+            email.toLowerCase().includes(searchQuery.toLowerCase())
+          ))
+        );
+  }, [sortedContacts, searchQuery]);
   
   // Groepeer contacten op eerste letter
   const groupContactsByLetter = (contacts: Contact[]) => {
@@ -94,7 +104,12 @@ export function ContactsList({ filterType = 'filter', filterId = 'all' }: Contac
     return Object.entries(groups).sort((a, b) => a[0].localeCompare(b[0]));
   };
   
-  const groupedContacts = groupContactsByLetter(filteredContacts);
+  // Use memoization for grouping to prevent unnecessary recalculations
+  // This intensive operation should only run when the sorted and filtered contacts change
+  const groupedContacts = useMemo(() => 
+    groupContactsByLetter(searchedContacts), 
+    [searchedContacts, sortBy]
+  );
 
   if (error) {
     return (
