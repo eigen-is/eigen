@@ -13,6 +13,8 @@ export const drivePaths = sqliteTable('drive_paths', {
     parentId: text('parentId'),  // We'll reference this in the relations
     ownerId: text('ownerId').notNull(),
     mimeType: text('mimeType').notNull(),
+    size: integer('size'),
+    thumbnail: text('thumbnail'),
     acl: text('acl', {mode: 'json'}).$type<DriveACL[] | null>(),
     createdAt: integer('createdAt', {mode: 'timestamp'}).default(sql`(unixepoch())`),
     updatedAt: integer('updatedAt', {mode: 'timestamp'}).default(sql`(unixepoch())`),

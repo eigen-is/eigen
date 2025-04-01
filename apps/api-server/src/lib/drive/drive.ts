@@ -20,6 +20,8 @@ async function getDriveDatabase(home: Home) {
             name TEXT NOT NULL,
             type TEXT NOT NULL,
             parentId TEXT,
+            size INTEGER DEFAULT 0,
+            thumbnail TEXT,
             ownerId TEXT NOT NULL,
             mimeType TEXT NOT NULL,
             acl TEXT,

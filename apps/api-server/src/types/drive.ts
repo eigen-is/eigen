@@ -13,6 +13,8 @@ export type DrivePath = {
     ownerId: string;
     labels: string[];
     mimeType: string;
+    size: number;
+    thumbnail: string;
     acl: DriveACL[] | null;
     createdAt: Date;
     updatedAt: Date;
