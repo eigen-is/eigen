@@ -192,7 +192,7 @@ export default class Drive {
         const fileId = randomUUID();
 
         // Save file in filesystem
-        const filePath = path.join(await this.getFolderPath(parentId), parentId, file.name);
+        const filePath = path.join(await this.getFolderPath(parentId), file.name);
         const buffer = await file.arrayBuffer();
         await this.home.fs.file(filePath).write(buffer);
 

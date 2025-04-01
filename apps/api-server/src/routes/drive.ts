@@ -11,7 +11,6 @@ type CreateFolderBody = {
 }
 
 type UploadFileBody = {
-    parentId: string;
     file: File;
 }
 
@@ -71,13 +70,12 @@ export const driveRouter = new Elysia({name: "drive"})
     })
     
     // Upload file
-    .post("/drive/file", async ({body, user}: { body: UploadFileBody, user: User }) => {
+    .post("/drive/file/:pathId", async ({params, body, user}: { params: { pathId: string }, body: UploadFileBody, user: User }) => {
         const drive = await getDrive(user);
-        return await drive.uploadFile(body.parentId, body.file);
+        return await drive.uploadFile(params.pathId, body.file);
     }, {
         auth: true,
         body: t.Object({
-            parentId: t.String(),
             file: t.Any()
         })
     })
