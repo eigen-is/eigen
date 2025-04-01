@@ -71,7 +71,7 @@ export default class Drive {
     constructor(home: Home) {
         this.home = home;
         this.user = this.home.user;
-        this.basePath = 'eigen.drive/Drive';
+        this.basePath = 'eigen.drive/';
     }
 
     public async init() {
@@ -79,17 +79,17 @@ export default class Drive {
         if (!this.db) {
             throw new Error("No drive database found");
         }
-        
+
         // Ensure the base drive directory exists
-        await this.home.fs.mkdir(this.basePath, { recursive: true });
-        
+        await this.home.fs.mkdir(this.basePath, {recursive: true});
+
         // Check if root folder exists in DB
         const rootFolder = this.db.select().from(drivePaths).where(and(
             isNull(drivePaths.parentId),
             eq(drivePaths.type, "folder"),
             eq(drivePaths.ownerId, this.user.id)
         )).get();
-        
+
         // Create root folder if not exists
         if (!rootFolder) {
             const rootId = randomUUID();
@@ -107,6 +107,24 @@ export default class Drive {
         }
     }
 
+    public async getParentPaths(pathId: string): Promise<DrivePath[]> {
+        const paths: DrivePath[] = [];
+        let currentPathId: string | null = pathId;
+
+        while (currentPathId) {
+            const path = await this.getPath(currentPathId);
+            if (!path) break;
+            paths.push(path);
+            currentPathId = path.parentId || null;
+        }
+
+        return paths.reverse();
+    }
+
+    private async getFolderPath(pathId: string): Promise<string> {
+        return path.join(this.basePath, ...(await this.getParentPaths(pathId)).map(a => a.name));
+    }
+
     /**
      * Create a folder in the drive
      * @param parentId ID of the parent folder
@@ -119,31 +137,37 @@ export default class Drive {
         if (!parent || parent.type !== "folder") {
             throw new Error("Parent folder not found");
         }
-        
+
         // Check write permissions
         if (!(await this.canWrite(parentId, this.user))) {
             throw new Error("No write permission");
         }
-        
+
         // Create filesystem folder
-        const folderPath = path.join(this.basePath, parentId, folderName);
-        await this.home.fs.mkdir(folderPath, { recursive: true });
-        
-        // Create folder in database
-        const folderId = randomUUID();
-        await this.db.insert(drivePaths).values({
-            id: folderId,
-            name: folderName,
-            type: "folder",
-            parentId: parentId,
-            ownerId: this.user.id,
-            mimeType: "folder",
-            acl: null, // Will inherit from parent
-            createdAt: new Date(),
-            updatedAt: new Date()
-        });
-        
-        return folderId;
+        const folderPath = path.join(await this.getFolderPath(parentId), folderName);
+        await this.home.fs.mkdir(folderPath, {recursive: true});
+
+        // Check if folder exists
+        const exists = await this.home.fs.dirExists(folderPath);
+        if (exists) {
+            // Create folder in database
+            const folderId = randomUUID();
+            await this.db.insert(drivePaths).values({
+                id: folderId,
+                name: folderName,
+                type: "folder",
+                parentId: parentId,
+                ownerId: this.user.id,
+                mimeType: "folder",
+                acl: null, // Will inherit from parent
+                createdAt: new Date(),
+                updatedAt: new Date()
+            });
+
+            return folderId;
+        } else {
+            throw new Error(`Folder not created on filesystem ${folderPath}`);
+        }
     }
 
     /**
@@ -158,20 +182,20 @@ export default class Drive {
         if (!parent || parent.type !== "folder") {
             throw new Error("Parent folder not found");
         }
-        
+
         // Check write permissions
         if (!(await this.canWrite(parentId, this.user))) {
             throw new Error("No write permission");
         }
-        
+
         // Create file ID
         const fileId = randomUUID();
-        
+
         // Save file in filesystem
-        const filePath = path.join(this.basePath, parentId, file.name);
+        const filePath = path.join(await this.getFolderPath(parentId), parentId, file.name);
         const buffer = await file.arrayBuffer();
         await this.home.fs.file(filePath).write(buffer);
-        
+
         // Save file metadata in database
         await this.db.insert(drivePaths).values({
             id: fileId,
@@ -185,7 +209,7 @@ export default class Drive {
             createdAt: new Date(),
             updatedAt: new Date()
         });
-        
+
         return fileId;
     }
 
@@ -204,16 +228,16 @@ export default class Drive {
         if (folder.parentId === null) {
             throw new Error("Cannot delete root folder");
         }
-        
+
         // Check write permissions
         if (!(await this.canWrite(pathId, this.user))) {
             throw new Error("No write permission");
         }
-        
+
         // Delete folder in filesystem (recursive)
-        const folderPath = path.join(this.basePath, pathId);
-        await this.home.fs.rm(folderPath, { recursive: true, force: true });
-        
+        const folderPath = path.join(await this.getFolderPath(parentId), pathId);
+        await this.home.fs.rm(folderPath, {recursive: true, force: true});
+
         // Delete folder and all children from database (cascade delete will handle this)
         await this.db.delete(drivePaths).where(eq(drivePaths.id, pathId));
     }
@@ -228,22 +252,22 @@ export default class Drive {
         if (!file || file.type !== "file") {
             throw new Error("File not found");
         }
-        
+
         // Check write permissions
         if (!(await this.canWrite(pathId, this.user))) {
             throw new Error("No write permission");
         }
-        
+
         // Get parent to find file path
         const parent = await this.getPath(file.parentId || "");
         if (!parent) {
             throw new Error("Parent folder not found");
         }
-        
+
         // Delete file in filesystem
-        const filePath = path.join(this.basePath, file.parentId || "", file.name);
+        const filePath = path.join(await this.getFolderPath(parent.id), file.name);
         await this.home.fs.unlink(filePath);
-        
+
         // Delete file from database
         await this.db.delete(drivePaths).where(eq(drivePaths.id, pathId));
     }
@@ -269,17 +293,17 @@ export default class Drive {
         if (!folder || folder.type !== "folder") {
             throw new Error("Folder not found");
         }
-        
+
         // Check read permissions
         if (!(await this.canRead(pathId, this.user))) {
             throw new Error("No read permission");
         }
-        
+
         // Get contents from database
         const results = await this.db.select().from(drivePaths)
             .where(eq(drivePaths.parentId, pathId))
             .all();
-            
+
         // Convert to DrivePath type
         return results.map(result => ({
             id: result.id,
@@ -306,12 +330,12 @@ export default class Drive {
         if (!item) {
             throw new Error("Path not found");
         }
-        
+
         // Check write permissions
         if (!(await this.canWrite(pathId, this.user))) {
             throw new Error("No write permission");
         }
-        
+
         // Get parent to find file path
         let parentPath = "";
         if (item.parentId) {
@@ -319,17 +343,19 @@ export default class Drive {
             if (!parent) {
                 throw new Error("Parent folder not found");
             }
-            parentPath = item.parentId;
+            parentPath = await this.getFolderPath(parent.id);
+        } else {
+            parentPath = this.basePath;
         }
-        
+
         // Rename in filesystem
-        const oldPath = path.join(this.basePath, parentPath, item.name);
-        const newPath = path.join(this.basePath, parentPath, newName);
+        const oldPath = path.join(parentPath, item.name);
+        const newPath = path.join(parentPath, newName);
         await this.home.fs.rename(oldPath, newPath);
-        
+
         // Update in database
         await this.db.update(drivePaths)
-            .set({ 
+            .set({
                 name: newName,
                 updatedAt: new Date()
             })
@@ -345,11 +371,11 @@ export default class Drive {
         const result = await this.db.select().from(drivePaths)
             .where(eq(drivePaths.id, pathId))
             .get();
-            
+
         if (!result) {
             return null;
         }
-        
+
         return {
             id: result.id,
             name: result.name,
@@ -360,7 +386,7 @@ export default class Drive {
             mimeType: result.mimeType,
             acl: result.acl ?? null,
             createdAt: new Date(result.createdAt || ''),
-            updatedAt: new Date(result.updatedAt|| '')
+            updatedAt: new Date(result.updatedAt || '')
         };
     }
 
@@ -375,15 +401,15 @@ export default class Drive {
         if (!item) {
             throw new Error("Path not found");
         }
-        
+
         // Check write permissions
         if (!(await this.canWrite(pathId, this.user))) {
             throw new Error("No write permission");
         }
-        
+
         // Update in database
         await this.db.update(drivePaths)
-            .set({ 
+            .set({
                 acl,
                 updatedAt: new Date()
             })
@@ -402,19 +428,19 @@ export default class Drive {
         if (!item) {
             return false;
         }
-        
+
         // If user is owner, they have read access
         if (item.ownerId === user.id) {
             return true;
         }
-        
+
         // Check ACL
         if (item.acl && item.acl.length > 0) {
             const userAcl = item.acl.find(a => a.userId === user.id);
             if (userAcl) {
                 return userAcl.read || userAcl.public;
             }
-            
+
             // Check if there's a public access entry
             const publicAcl = item.acl.find(a => a.public);
             if (publicAcl) {
@@ -427,7 +453,7 @@ export default class Drive {
             // Root folder with no ACL - only owner has access
             return item.ownerId === user.id;
         }
-        
+
         return false;
     }
 
@@ -443,12 +469,12 @@ export default class Drive {
         if (!item) {
             return false;
         }
-        
+
         // If user is owner, they have write access
         if (item.ownerId === user.id) {
             return true;
         }
-        
+
         // Check ACL
         if (item.acl && item.acl.length > 0) {
             const userAcl = item.acl.find(a => a.userId === user.id);
@@ -462,7 +488,7 @@ export default class Drive {
             // Root folder with no ACL - only owner has access
             return item.ownerId === user.id;
         }
-        
+
         return false;
     }
 }
