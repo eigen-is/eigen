@@ -3,7 +3,7 @@ import type Database from "bun:sqlite";
 import {BunSQLiteDatabase, drizzle} from "drizzle-orm/bun-sqlite";
 import * as schema from "./schema.ts";
 import {drivePaths} from "./schema.ts";
-import {eq, and, isNull} from "drizzle-orm";
+import {eq, and, isNull, sql} from "drizzle-orm";
 import type {User} from "better-auth/types";
 import type {DriveACL, DrivePath} from "../../types/drive.ts";
 import {randomUUID} from "crypto";
@@ -133,7 +133,7 @@ export default class Drive {
      * @param folderName Name of the new folder
      * @returns ID of the created folder
      */
-    public async createFolder(parentId: string, folderName: string): Promise<string> {
+    public async createFolder(parentId: string, folderName: string): Promise<string | undefined> {
         // Get parent folder
         const parent = await this.getPath(parentId);
         if (!parent || parent.type !== "folder") {
@@ -190,6 +190,7 @@ export default class Drive {
     public async uploadFile(parentId: string, file: File): Promise<string> {
         // Get parent folder
         const parent = await this.getPath(parentId);
+
         if (!parent || parent.type !== "folder") {
             throw new Error("Parent folder not found");
         }
@@ -214,23 +215,62 @@ export default class Drive {
         const buffer = await file.arrayBuffer();
         await this.home.fs.file(filePath).write(buffer);
 
+        const size =  this.home.fs.file(filePath).size;
+
         // Save file metadata in database
         if (!fileExists) {
             await this.db.insert(drivePaths).values({
                 id: fileId,
                 name: file.name,
                 type: "file",
-                parentId: parentId,
+                parentId: parent.id,
                 ownerId: this.user.id,
                 // @ts-ignore
                 mimeType: this.home.fs.file(filePath).type || "application/octet-stream",
                 acl: null, // Will inherit from parent
+                size: size,
                 createdAt: new Date(),
                 updatedAt: new Date()
             });
+        } else {
+            // update file metadata, first find file in database based on fileName and parentId
+            const dbfile = await this.db.select().from(drivePaths).where(
+                and(eq(drivePaths.name, fileName), eq(drivePaths.parentId, parent.id))).get();
+            if (!dbfile) {
+                throw new Error("File not found");
+            }
+
+            await this.db.update(drivePaths).set({
+                size: size,
+                updatedAt: new Date()
+            }).where(eq(drivePaths.id, dbfile.id));
         }
 
+        // Update parent folder size
+        await this.updateSizeOfFolder(parent.id);
+
         return fileId;
+    }
+
+    private async updateSizeOfFolder(pathId: string): Promise<void> {
+        const folder = await this.getPath(pathId);
+        if (!folder || folder.type !== "folder") {
+            throw new Error("Folder not found");
+        }
+
+        // Get folder size by adding size of all children in database
+        const size = await this.db.select({
+            totalSize:sql<number>`sum(${drivePaths.size})`
+        }).from(drivePaths).where(eq(drivePaths.parentId, folder.id)).get();
+
+        await this.db.update(drivePaths).set({
+            size: size?.totalSize || 0,
+            updatedAt: new Date()
+        }).where(eq(drivePaths.id, folder.id));
+        // update parent
+        if (folder.parentId) {
+            await this.updateSizeOfFolder(folder.parentId);
+        }
     }
 
     /**
@@ -331,6 +371,8 @@ export default class Drive {
             type: result.type as "folder" | "file" | "eigendocs",
             parentId: result.parentId || undefined,
             ownerId: result.ownerId,
+            size: result.size ?? 0,
+            thumbnail: result.thumbnail || '',
             labels: [], // We would need to fetch labels separately
             mimeType: result.mimeType,
             acl: result.acl ?? null,
@@ -404,6 +446,8 @@ export default class Drive {
             ownerId: result.ownerId,
             labels: [], // We would need to fetch labels separately
             mimeType: result.mimeType,
+            size: result.size ?? 0,
+            thumbnail: result.thumbnail || '',
             acl: result.acl ?? null,
             createdAt: new Date(result.createdAt || ''),
             updatedAt: new Date(result.updatedAt || '')
