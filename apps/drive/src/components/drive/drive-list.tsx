@@ -201,7 +201,7 @@ export function DriveList({
                                         <DropdownMenuContent align="end">
                                             {/* <DropdownMenuItem>Rename</DropdownMenuItem> */}
                                             <DropdownMenuItem
-                                                onClick={() => onDelete?.(item)}
+                                                onClick={(e) => { e.stopPropagation(); onDelete?.(item) }}
                                             >
                                                 Delete
                                             </DropdownMenuItem>
