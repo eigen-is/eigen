@@ -3,6 +3,7 @@ import {createRouter} from '@tanstack/react-router';
 import {routeTree} from './routeTree.gen';
 import '@workspace/ui/globals.css';
 import {HomeComponent} from "@/routes";
+import { Toaster } from '@workspace/ui/components/sonner';
 
 // Set up a Router instance
 const router = createRouter({
@@ -24,7 +25,10 @@ declare module '@tanstack/react-router' {
 
 function App() {
     return (
-        <HomeComponent/>
+        <>
+            <Toaster/>
+            <HomeComponent/>
+        </>
     )
 }
 
