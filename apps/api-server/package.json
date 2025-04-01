@@ -4,8 +4,7 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "bun run --env-file=../../.env --watch src/index.ts",
-    "buildfordocker": "bun build --env-file=../../.env.production --minify --target=bun  src/index.ts --outdir=./build ",
-    "compile": "bun build --minify --env-file=../../.env.production --compile --target=bun-linux-x64-modern src/index.ts --outfile myapp"
+    "buildfordocker": "bun build --minify --target=bun  src/index.ts --outdir=./build "
   },
   "dependencies": {
     "@elysiajs/cors": "^1.2.0",
