@@ -143,28 +143,37 @@ export default class Drive {
             throw new Error("No write permission");
         }
 
+        // remove all / and \ from folder name
+        folderName = folderName.replace(/[/\\]/g, "_");
+
         // Create filesystem folder
         const folderPath = path.join(await this.getFolderPath(parentId), folderName);
-        await this.home.fs.mkdir(folderPath, {recursive: true});
 
-        // Check if folder exists
-        const exists = await this.home.fs.dirExists(folderPath);
-        if (exists) {
-            // Create folder in database
-            const folderId = randomUUID();
-            await this.db.insert(drivePaths).values({
-                id: folderId,
-                name: folderName,
-                type: "folder",
-                parentId: parentId,
-                ownerId: this.user.id,
-                mimeType: "folder",
-                acl: null, // Will inherit from parent
-                createdAt: new Date(),
-                updatedAt: new Date()
-            });
+        // check if folder already exists
+        const folderExists = await this.home.fs.dirExists(folderPath);
 
-            return folderId;
+        if (!folderExists) {
+            await this.home.fs.mkdir(folderPath, {recursive: true});
+
+            // Check if folder exists
+            const exists = await this.home.fs.dirExists(folderPath);
+            if (exists) {
+                // Create folder in database
+                const folderId = randomUUID();
+                await this.db.insert(drivePaths).values({
+                    id: folderId,
+                    name: folderName,
+                    type: "folder",
+                    parentId: parentId,
+                    ownerId: this.user.id,
+                    mimeType: "folder",
+                    acl: null, // Will inherit from parent
+                    createdAt: new Date(),
+                    updatedAt: new Date()
+                });
+
+                return folderId;
+            }
         } else {
             throw new Error(`Folder not created on filesystem ${folderPath}`);
         }
@@ -191,24 +200,33 @@ export default class Drive {
         // Create file ID
         const fileId = randomUUID();
 
+        // remove all / and \ from folder name
+        const fileName = file.name.replace(/[/\\]/g, "_");
+
         // Save file in filesystem
-        const filePath = path.join(await this.getFolderPath(parentId), file.name);
+        const filePath = path.join(await this.getFolderPath(parentId), fileName);
+
+        // check if file already exists
+        const fileExists = await this.home.fs.file(filePath).exists();
+
         const buffer = await file.arrayBuffer();
         await this.home.fs.file(filePath).write(buffer);
 
         // Save file metadata in database
-        await this.db.insert(drivePaths).values({
-            id: fileId,
-            name: file.name,
-            type: "file",
-            parentId: parentId,
-            ownerId: this.user.id,
-            // @ts-ignore
-            mimeType: this.home.fs.file(filePath).type || "application/octet-stream",
-            acl: null, // Will inherit from parent
-            createdAt: new Date(),
-            updatedAt: new Date()
-        });
+        if (!fileExists) {
+            await this.db.insert(drivePaths).values({
+                id: fileId,
+                name: file.name,
+                type: "file",
+                parentId: parentId,
+                ownerId: this.user.id,
+                // @ts-ignore
+                mimeType: this.home.fs.file(filePath).type || "application/octet-stream",
+                acl: null, // Will inherit from parent
+                createdAt: new Date(),
+                updatedAt: new Date()
+            });
+        }
 
         return fileId;
     }
