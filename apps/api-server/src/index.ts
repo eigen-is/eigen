@@ -21,10 +21,7 @@ const app = new Elysia()
     .use(mailRouter)
     .use(contactsRouter)
     .use(spaceRouter)
-    .listen({
-        port: 8000,
-        hostname: "localhost",
-    });
+    .listen(8000);
 
 export type app = typeof app;
 
