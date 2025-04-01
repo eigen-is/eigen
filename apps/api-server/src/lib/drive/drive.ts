@@ -248,6 +248,16 @@ export default class Drive {
         await this.db.delete(drivePaths).where(eq(drivePaths.id, pathId));
     }
 
+    public async getRootFolder(): Promise<DrivePath | null> {
+        return await this.db.select().from(drivePaths)
+            .where(and(
+                isNull(drivePaths.parentId),
+                eq(drivePaths.type, "folder"),
+                eq(drivePaths.ownerId, this.user.id)
+            ))
+            .get() as DrivePath | null;
+    }
+
     /**
      * Get contents of a folder
      * @param pathId ID of the folder
