@@ -36,6 +36,7 @@ interface DriveListProps {
     onCreateFolder?: () => void;
     onUploadFile?: () => void;
     currentPath?: DrivePath | null;
+    onDelete?: (path: DrivePath) => void;
 }
 
 export function DriveList({
@@ -45,8 +46,9 @@ export function DriveList({
                               onRowClick,
                               activeRowId,
                               onCreateFolder,
-                              onUploadFile,
-                              currentPath
+                              onUploadFile, 
+                              onDelete,
+                              currentPath,
                           }: DriveListProps) {
     const [searchTerm, setSearchTerm] = useState('');
 
@@ -197,8 +199,12 @@ export function DriveList({
                                             </Button>
                                         </DropdownMenuTrigger>
                                         <DropdownMenuContent align="end">
-                                            <DropdownMenuItem>Rename</DropdownMenuItem>
-                                            <DropdownMenuItem>Delete</DropdownMenuItem>
+                                            {/* <DropdownMenuItem>Rename</DropdownMenuItem> */}
+                                            <DropdownMenuItem
+                                                onClick={() => onDelete?.(item)}
+                                            >
+                                                Delete
+                                            </DropdownMenuItem>
                                         </DropdownMenuContent>
                                     </DropdownMenu>
                                 </TableCell>

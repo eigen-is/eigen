@@ -195,14 +195,14 @@ function DriveRoute() {
         });
     };
 
-    const handleDeletePath = async () => {
+    const handleDeletePath = async (path: DrivePath) => {
         if (!selectedPath) return;
         
         try {
             if (selectedPath.type === 'file') {
-                await deleteFileMutation.mutateAsync(selectedPath.id);
+                await deleteFileMutation.mutateAsync(path.id);
             } else {
-                // Handle folder deletion when implemented
+                // await useDeleteFolder().mutateAsync(path.id);
             }
             toast("Item deleted");
             navigate({
@@ -238,6 +238,7 @@ function DriveRoute() {
                             activeRowId={pid}
                             onCreateFolder={openCreateFolderDialog}
                             onUploadFile={handleFileUpload}
+                            onDelete={handleDeletePath}
                             currentPath={currentPath}
                         />
                     </div>
@@ -300,6 +301,7 @@ function DriveRoute() {
                         onCreateFolder={openCreateFolderDialog}
                         onUploadFile={handleFileUpload}
                         currentPath={currentPath}
+                        onDelete={handleDeletePath}
                     />
                 </div>
 
