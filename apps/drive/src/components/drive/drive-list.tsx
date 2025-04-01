@@ -34,6 +34,7 @@ interface DriveListProps {
     onRowClick?: (id: string) => void;
     activeRowId?: string;
     onCreateFolder?: () => void;
+    onUploadFile?: () => void;
 }
 
 export function DriveList({
@@ -42,7 +43,8 @@ export function DriveList({
     error = null,
     onRowClick,
     activeRowId,
-    onCreateFolder
+    onCreateFolder,
+    onUploadFile
 }: DriveListProps) {
     const [searchTerm, setSearchTerm] = useState('');
     
@@ -90,7 +92,7 @@ export function DriveList({
 
                 <div className="flex items-center gap-2">
                     <Button
-                        onClick={onCreateFolder}
+                        onClick={onUploadFile}
                         size="sm"
                         className="flex items-center gap-1"
                     >
