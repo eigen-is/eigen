@@ -9,6 +9,7 @@
   "dependencies": {
     "@elysiajs/cors": "^1.2.0",
     "@elysiajs/swagger": "^1.2.2",
+    "@types/nodemailer": "^6.4.17",
     "@types/uuid": "^10.0.0",
     "better-auth": "^1.2.3",
     "drizzle-kit": "^0.30.5",
