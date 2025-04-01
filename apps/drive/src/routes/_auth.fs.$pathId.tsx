@@ -19,6 +19,7 @@ import {EigenLoader} from "@workspace/ui";
 import {useUpload} from "@workspace/ui/components/layout/upload-provider/upload-provider";
 import {uploadWithProgress} from "@workspace/ui/components/layout/upload-provider/upload-with-progress";
 import {DrivePath} from "@apps/api-server/types/drive";
+import {DeleteDialog} from "@workspace/ui/components/layout/delete/delete-dialog";
 
 // Define search params type
 export interface DriveSearchParams {
@@ -62,6 +63,10 @@ function DriveRoute() {
     const [createFolderOpen, setCreateFolderOpen] = useState(false);
     const [newFolderName, setNewFolderName] = useState('');
     const createFolderMutation = useCreateFolder();
+    
+    // Delete confirmation dialog state
+    const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+    const [itemToDelete, setItemToDelete] = useState<DrivePath | null>(null);
     
     // Don't fetch data until we have the actual root folder ID (not "root")
     const skipDataFetch = pathId === 'root';
@@ -196,22 +201,38 @@ function DriveRoute() {
     };
 
     const handleDeletePath = async (path: DrivePath) => {
-        if (!selectedPath) return;
+        // Open the delete confirmation dialog and store the path to be deleted
+        setItemToDelete(path);
+        setDeleteDialogOpen(true);
+    };
+    
+    // Function to perform the actual delete after confirmation
+    const confirmDelete = async () => {
+        if (!itemToDelete) return;
         
         try {
-            if (selectedPath.type === 'file') {
-                await deleteFileMutation.mutateAsync(path.id);
+            if (itemToDelete.type === 'file') {
+                await deleteFileMutation.mutateAsync(itemToDelete.id);
+                toast("File deleted");
             } else {
                 // await useDeleteFolder().mutateAsync(path.id);
+                toast("Folder deleted");
             }
-            toast("Item deleted");
+            
+            // Close the dialog and reset state
+            setDeleteDialogOpen(false);
+            setItemToDelete(null);
+            
+            // Navigate back to the folder view
             navigate({
                 to: Route.fullPath,
-                params: { pathId: pathId }
+                params: { pathId: pathId },
+                search: { pid: undefined }
             });
         } catch (error) {
             console.error('Failed to delete item:', error);
             toast.error("Failed to delete item");
+            setDeleteDialogOpen(false);
         }
     };
 
@@ -281,6 +302,16 @@ function DriveRoute() {
                     type="file"
                     className="hidden"
                     onChange={handleFileChange}
+                />
+                
+                {/* Delete Confirmation Dialog */}
+                <DeleteDialog
+                    open={deleteDialogOpen}
+                    onOpenChange={setDeleteDialogOpen}
+                    title="Delete Item"
+                    description="Are you sure you want to delete"
+                    itemName={itemToDelete?.name}
+                    onDelete={confirmDelete}
                 />
             </>
         );
@@ -355,6 +386,16 @@ function DriveRoute() {
                 type="file"
                 className="hidden"
                 onChange={handleFileChange}
+            />
+            
+            {/* Delete Confirmation Dialog */}
+            <DeleteDialog
+                open={deleteDialogOpen}
+                onOpenChange={setDeleteDialogOpen}
+                title="Delete Item"
+                description="Are you sure you want to delete"
+                itemName={itemToDelete?.name}
+                onDelete={confirmDelete}
             />
         </>
     );
