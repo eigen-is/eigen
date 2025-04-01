@@ -3,6 +3,7 @@ import {z} from 'zod';
 import {ContactEdit, ContactFormValues} from '../components/contacts/contact-edit';
 import {useAddContact, useContacts, useUpdateContact} from '../hooks/use-contacts';
 import {type Contact} from "@apps/api-server/types/contact";
+import {toast} from "sonner";
 
 // Define search params type with Zod schema
 const searchSchema = z.object({
@@ -86,6 +87,7 @@ function EditContactRoute() {
                 params: {filterType, filterId},
                 search: contactId ? {contactId} : {},
             });
+            toast('Contact saved');
         } catch (error) {
             console.error('Error saving contact:', error);
             // Hier zou je een foutmelding kunnen tonen
