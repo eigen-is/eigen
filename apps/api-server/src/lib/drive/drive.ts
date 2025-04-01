@@ -600,7 +600,7 @@ export default class Drive {
         const url = this.home.fs.pathJoin(this.basePath, 'thumbs', `${id}.webp`);
         this.home.fs.file(url).write(thumbnail);   
 
-        return url;
+        return `${id}.webp`;
         } catch (e) {
             console.error("Failed to generate thumbnail", e);
             return null;
