@@ -1,4 +1,4 @@
-import {useState} from 'react';
+import {useState, useMemo} from 'react';
 import {DrivePath} from "@apps/api-server/types/drive";
 import {Button} from "@workspace/ui/components/button";
 import {
@@ -53,9 +53,12 @@ export function DriveList({
     const [searchTerm, setSearchTerm] = useState('');
 
     // Filter items based on search term
-    const filteredItems = items.filter(item =>
-        item.name.toLowerCase().includes(searchTerm.toLowerCase())
-    );
+    // Use useMemo to prevent unnecessary filtering on each render
+    const filteredItems = useMemo(() => {
+        return items.filter(item =>
+            item.name.toLowerCase().includes(searchTerm.toLowerCase())
+        );
+    }, [items, searchTerm]);
 
     // Handle showing empty, loading, and error states
     if (isLoading) {
@@ -141,6 +144,8 @@ export function DriveList({
                                     ownerId: '',
                                     labels: [],
                                     mimeType: 'folder',
+                                    size: 0,
+                                    thumbnail: '',
                                     acl: null,
                                     createdAt: new Date(),
                                     updatedAt: new Date()
