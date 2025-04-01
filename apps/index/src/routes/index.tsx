@@ -1,11 +1,13 @@
 import {createFileRoute} from '@tanstack/react-router'
-import React from 'react';
+import React, { useCallback } from 'react';
 import {Button} from "@workspace/ui/components/button";
 import {apps} from "@workspace/lib/apps.ts";
 import { Input } from "@workspace/ui/components/input";
 import { Textarea } from "@workspace/ui/components/textarea";
 import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@workspace/ui/components/card";
 import { Label } from '@workspace/ui/components/label';
+import { spaceApi } from '@workspace/lib/api.js';
+import {toast} from "sonner";
 
 export const Route = createFileRoute('/')({
     component: HomeComponent,
@@ -28,28 +30,42 @@ export function HomeComponent() {
         return () => clearInterval(interval);
     }, [apps.length]);
 
-    const handleLogin = () => {
+    const resetForm = useCallback(() => {
+        setIsSubmitting(false);
+        setShowWaitlistForm(false);
+        setEmail("");
+        setNotes("");
+    }, []);
+
+    const handleLogin = useCallback (() => {
         window.location.href = './mail/';
-    };
+    }, []);
     
-    const handleShowWaitlist = () => {
+    const handleShowWaitlist = useCallback(() => {
         setShowMore(false);
         setShowWaitlistForm(true);
-    };
+    }, []);
 
-    const handleWaitlistSubmit = (e: React.FormEvent) => {
+    const handleWaitlistSubmit = useCallback(async (e: React.FormEvent) => {
         e.preventDefault();
         setIsSubmitting(true);
         
-        // Simulate submission - in a real app, this would be an API call
-        setTimeout(() => {
-            setIsSubmitting(false);
-            setShowWaitlistForm(false);
-            // Reset form
-            setEmail("");
-            setNotes("");
-        }, 1000);
-    };
+        const time = new Date().getTime();
+        const waitlistResult = await spaceApi.waitlist.post({email, notes});
+        const duration = new Date().getTime() - time;
+        // Make sure it takes a bit
+        await new Promise(resolve => setTimeout(resolve, Math.max(350 - duration, 0)));
+
+        resetForm();
+
+        const isSignedUp = waitlistResult.data === true;
+        if (isSignedUp) {
+            toast.success('Joined the waitlist', {description: 'Thanks for signing up'});
+        } else {
+            toast.error('Failed to sign up', {description: 'Signing up currently not available, please try again'});
+        }
+
+    }, [spaceApi.waitlist]);
 
     return (
         <div className="flex flex-col items-center justify-center min-h-screen p-4">
@@ -140,17 +156,16 @@ export function HomeComponent() {
                                 />
                             </div>
                         </CardContent>
-                        <CardFooter className="flex justify-between mt-4 gap-2">
+                        <CardFooter className="flex justify-end mt-4 gap-4">
                             <Button 
                                 type="button" 
                                 variant="outline" 
-                                className="flex-1"
                                 disabled={isSubmitting}
-                                onClick={() => setShowWaitlistForm(false)}
+                                onClick={resetForm}
                             >
                                 Cancel
                             </Button>
-                            <Button type="submit" disabled={isSubmitting} className="flex-3">
+                            <Button type="submit" disabled={isSubmitting}>
                                 {isSubmitting ? "Submitting..." : "Submit"}
                             </Button>
                         </CardFooter>
