@@ -27,7 +27,15 @@ type UpdateACLBody = {
 
 export const driveRouter = new Elysia({name: "drive"})
     .use(betterAuth)
-    
+
+    // Get root folder
+    .get("/drive/root", async ({user}: { user: User }) => {
+        const drive = await getDrive(user);
+        return await drive.getRootFolder();
+    }, {
+        auth: true
+    })
+
     // Get folder contents
     .get("/drive/folder/:pathId", async ({params, user}: { params: { pathId: string }, user: User }) => {
         const drive = await getDrive(user);
