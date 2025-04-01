@@ -36,20 +36,21 @@ export function AppLogo({ appName = "Mail", className, linkable = true }: AppLog
     const LogoContent = () => (
         <>
             {expanded ? (<>
-                    <span className="text-white font-bold">
+                    <span className="text-white font-bold pr-0.25">
                         eigen
                     </span>
                 <div className="flex items-center animate-in slide-in-from-left-5 duration-300">
                     {apps.map((app) => (
                         <div key={app.name} className="flex items-center">
-                            <span className="text-white">
-                            <a 
-                                href={app.href}
-                                onClick={(e) => e.stopPropagation()}
-                                className={"hover:underline"}
-                            >|{app.name.toLowerCase()}
+                            <span className="text-white p-0.5">
+                                <a 
+                                    href={app.href}
+                                    onClick={(e) => e.stopPropagation()}
+                                    className={"hover:underline hover:opacity-75 transition-opacity duration-150 " + (appName.toLowerCase() === app.name.toLowerCase() ? ' underline' : '')}
+                                >{app.name.toLowerCase()}
                             </a>
                             </span>
+                            {app !== apps[apps.length - 1] && <span className="text-white p-0.5">|</span>}
                         </div>
                     ))}
                     <span className="text-white">&gt;</span>
@@ -59,7 +60,9 @@ export function AppLogo({ appName = "Mail", className, linkable = true }: AppLog
                     eigen
                 </span>
                 <span className="text-white">
-                    |{appName.toLowerCase()}&gt;
+                    <span className="p-0.5">|</span>
+                    {appName.toLowerCase()}
+                    &gt;
                 </span>
             </>)}
         </>
@@ -68,7 +71,7 @@ export function AppLogo({ appName = "Mail", className, linkable = true }: AppLog
     return (
         <div 
             ref={logoRef}
-            className={cn("text-xl flex items-center cursor-pointer select-none", className)}
+            className={cn("text-xl flex items-center cursor-pointer select-none -mt-1", className)}
             onClick={handleLogoClick}
         >
             {linkable ? (
@@ -82,7 +85,9 @@ export function AppLogo({ appName = "Mail", className, linkable = true }: AppLog
                         eigen
                     </span>
                     <span className="text-white">
-                        |{appName.toLowerCase()}&gt;
+                        <span className="p-0.5">|</span>
+                        {appName.toLowerCase()}
+                        &gt;
                     </span>
                 </Link>
             )}
