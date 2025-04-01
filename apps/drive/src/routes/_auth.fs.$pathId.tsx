@@ -3,8 +3,8 @@ import {toast} from "sonner";
 import {DriveDetail} from "@/components/drive/drive-detail.tsx";
 import {DriveList} from "@/components/drive/drive-list.tsx";
 import {useMediaQuery} from "@/hooks/use-media-query.ts";
-import {useCreateFolder, useDeleteFile, useFolderContent, usePathInfo, useRootFolder} from "@/hooks/use-drive.ts";
-import {useState, useEffect} from "react";
+import {useCreateFolder, useDeleteFile, useFolderContent, usePathInfo, useRootFolder, useUploadFile} from "@/hooks/use-drive.ts";
+import {useState, useEffect, useRef} from "react";
 import {
     Dialog,
     DialogContent,
@@ -16,6 +16,8 @@ import {Input} from "@workspace/ui/components/input";
 import {Label} from "@workspace/ui/components/label";
 import {Button} from "@workspace/ui/components/button";
 import {EigenLoader} from "@workspace/ui";
+import {useUpload} from "@workspace/ui/components/layout/upload-provider/upload-provider";
+import {uploadWithProgress} from "@workspace/ui/components/layout/upload-provider/upload-with-progress";
 
 // Define search params type
 export interface DriveSearchParams {
@@ -51,6 +53,9 @@ function DriveRoute() {
     const isMobile = useMediaQuery('(max-width: 768px)');
     // const isTablet = useMediaQuery('(max-width: 1024px) and (min-width: 769px)');
     const deleteFileMutation = useDeleteFile();
+    const uploadFileMutation = useUploadFile();
+    const upload = useUpload();
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
     // Folder creation state and handlers
     const [createFolderOpen, setCreateFolderOpen] = useState(false);
@@ -99,6 +104,66 @@ function DriveRoute() {
     // Function to open the create folder dialog
     const openCreateFolderDialog = () => {
         setCreateFolderOpen(true);
+    };
+
+    // Function to handle file upload
+    const handleFileUpload = () => {
+        if (fileInputRef.current) {
+            fileInputRef.current.click();
+        }
+    };
+
+    // Function to process the selected file
+    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        // Create upload tracking object with the methods returned by createUpload
+        const uploadHandler = upload.createUpload(file.name);
+        
+        try {
+            // Create a FormData object to send the file
+            const formData = new FormData();
+            formData.append('file', file);
+            
+            // Use the uploadWithProgress helper with authentication
+            await uploadWithProgress({
+                url: `${import.meta.env.VITE_API_HOST}/drive/file/${pathId}`,
+                formData,
+                headers: {
+                    'credentials': 'include'
+                },
+                onProgress: (progress: number) => {
+                    // Update the progress in the UI
+                    uploadHandler.updateProgress(progress);
+                },
+                onSuccess: async () => {
+                    // Mark upload as complete
+                    uploadHandler.complete();
+                    
+                    // Add file to the drive using the mutation
+                    await uploadFileMutation.mutateAsync({
+                        parentId: pathId,
+                        file
+                    });
+                    
+                    toast(`Uploaded ${file.name}`);
+                },
+                onError: (err) => {
+                    // Mark upload as failed
+                    uploadHandler.error();
+                    console.error('Upload error:', err);
+                    toast.error(`Failed to upload ${file.name}`);
+                }
+            });
+        } catch (err: any) {
+            console.error('Error uploading file:', err);
+            uploadHandler.error();
+            toast.error(`Failed to upload ${file.name}`);
+        }
+        
+        // Clean up the file input value so the same file can be selected again if needed
+        e.target.value = '';
     };
 
     // Handle row click to show path details
@@ -157,6 +222,7 @@ function DriveRoute() {
                             onRowClick={handleRowClick}
                             activeRowId={pid}
                             onCreateFolder={openCreateFolderDialog}
+                            onUploadFile={handleFileUpload}
                         />
                     </div>
                 )}
@@ -191,6 +257,14 @@ function DriveRoute() {
                         </DialogFooter>
                     </DialogContent>
                 </Dialog>
+
+                {/* Hidden file input element */}
+                <input
+                    ref={fileInputRef}
+                    type="file"
+                    className="hidden"
+                    onChange={handleFileChange}
+                />
             </>
         );
     }
@@ -208,6 +282,7 @@ function DriveRoute() {
                         onRowClick={handleRowClick}
                         activeRowId={pid}
                         onCreateFolder={openCreateFolderDialog}
+                        onUploadFile={handleFileUpload}
                     />
                 </div>
 
@@ -254,6 +329,14 @@ function DriveRoute() {
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
+
+            {/* Hidden file input element */}
+            <input
+                ref={fileInputRef}
+                type="file"
+                className="hidden"
+                onChange={handleFileChange}
+            />
         </>
     );
 }
