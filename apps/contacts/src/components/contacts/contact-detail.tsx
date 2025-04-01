@@ -231,7 +231,7 @@ export function ContactDetail({contact, onDelete, onBack, filterType, filterId, 
                                         Birthday
                                     </h4>
                                     <div className="pl-6">
-                                        {formatDate(contact.birthday)}
+                                        {formatDate(new Date(contact.birthday).toISOString())}
                                     </div>
                                 </div>
                             )}
