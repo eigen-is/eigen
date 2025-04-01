@@ -52,9 +52,7 @@ function MailRoute() {
     const handleDeleteEmail = async (mail: Email) => {
         console.log('delete email', mail.id)
         await deleteMail(mail);
-        toast("Email deleted", {
-            description: "Moved to Trash"
-        });
+        toast("Email deleted");
         navigate({
             to: Route.fullPath,
             params: {filterType, filterId},
