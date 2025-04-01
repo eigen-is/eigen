@@ -295,11 +295,17 @@ export default class Drive {
         }
 
         // Delete folder in filesystem (recursive)
+        const parentId = await this.getPath(pathId)?.parentId;
         const folderPath = await this.getFolderPath(pathId);
         await this.home.fs.rm(folderPath, {recursive: true, force: true});
 
         // Delete folder and all children from database (cascade delete will handle this)
         await this.db.delete(drivePaths).where(eq(drivePaths.id, pathId));
+
+        // Update parent folder size
+        if (parentId) {
+            await this.updateSizeOfFolder(parentId);
+        }
     }
 
     /**
@@ -330,6 +336,9 @@ export default class Drive {
 
         // Delete file from database
         await this.db.delete(drivePaths).where(eq(drivePaths.id, pathId));
+
+        // Update parent folder size
+        await this.updateSizeOfFolder(parent.id);
     }
 
     public async getRootFolder(): Promise<DrivePath | null> {
