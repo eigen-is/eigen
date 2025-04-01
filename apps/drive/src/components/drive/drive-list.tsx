@@ -133,7 +133,7 @@ export function DriveList({
                         {currentPath?.parentId && (
                             <TableRow
                                 className="cursor-pointer hover:bg-muted/50"
-                                onClick={() => onRowClick && onRowClick({
+                                onClick={() => onRowClick?.({
                                     id: currentPath.parentId || '',
                                     name: '..',
                                     type: 'folder',
@@ -165,7 +165,7 @@ export function DriveList({
                                     "cursor-pointer hover:bg-muted/50",
                                     activeRowId === item.id && "bg-muted"
                                 )}
-                                onClick={() => onRowClick && onRowClick(item)}
+                                onClick={() => onRowClick?.(item)}
                             >
                                 <TableCell className="font-medium">
                                     <div className="flex items-center">
