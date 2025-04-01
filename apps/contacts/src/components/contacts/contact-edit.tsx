@@ -29,8 +29,8 @@ import {
 
 // Define the form schema
 export const formSchema = z.object({
-  firstName: z.string().min(1, "First name is required"),
-  lastName: z.string().min(1, "Last name is required"),
+  firstName: z.string().optional(),
+  lastName: z.string().optional(),
   company: z.string().optional(),
   jobTitle: z.string().optional(),
   email: z.array(z.string().email().or(z.string().length(0))),
@@ -47,7 +47,13 @@ export const formSchema = z.object({
   birthday: z.date().nullable(),
   notes: z.string().optional(),
   labels: z.array(z.string()).optional(),
-});
+}).refine(
+  (data) => (data.firstName ? data.firstName.trim().length > 0 : false) || (data.lastName ? data.lastName.trim().length > 0 : false),
+  {
+    message: "Either first name or last name is required",
+    path: ["firstName"], // This will show the error on the firstName field
+  }
+);
 
 export type ContactFormValues = z.infer<typeof formSchema>;
 

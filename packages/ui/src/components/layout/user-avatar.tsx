@@ -45,8 +45,8 @@ export function UserAvatar({
   size = "md",
   ...props
 }: UserAvatarProps) {
-  const displayName = name || email || "";
-  const firstChar = displayName.charAt(0).toUpperCase();
+  const displayName = (name || email || "");
+  const firstChar = displayName.trim().charAt(0).toUpperCase();
   
   // Use the ID for lookup (prefer userId if available, fall back to email)
   const lookupId = userId || email;
