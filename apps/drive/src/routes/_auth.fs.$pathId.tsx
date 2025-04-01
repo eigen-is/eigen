@@ -18,6 +18,7 @@ import {Button} from "@workspace/ui/components/button";
 import {EigenLoader} from "@workspace/ui";
 import {useUpload} from "@workspace/ui/components/layout/upload-provider/upload-provider";
 import {uploadWithProgress} from "@workspace/ui/components/layout/upload-provider/upload-with-progress";
+import {DrivePath} from "@apps/api-server/types/drive";
 
 // Define search params type
 export interface DriveSearchParams {
@@ -140,7 +141,7 @@ function DriveRoute() {
                 onSuccess: async () => {
                     // Mark upload as complete
                     uploadHandler.complete();
-                    
+
                     // Add file to the drive using the mutation
                     await uploadFileMutation.mutateAsync({
                         parentId: pathId,
@@ -167,9 +168,22 @@ function DriveRoute() {
     };
 
     // Handle row click to show path details
-    const handleRowClick = (itemId: string) => {
+    const handleRowClick = (path: DrivePath) => {
         // navigateToPath(pathId, { pid: itemId });
-        console.log(itemId);
+        console.log(path.id);
+        if (path.type === 'folder') {
+            navigate({
+                to: Route.fullPath,
+                params: { pathId: path.id },
+                search: { pid: undefined }
+            });
+        } else {
+            navigate({
+                to: Route.fullPath,
+                params: { pathId: pathId },
+                search: { pid: path.id }
+            });
+        }
     };
 
     // Handle back navigation (mainly for mobile)
@@ -274,7 +288,7 @@ function DriveRoute() {
         <>
             <div className="flex h-full w-full">
                 {/* Path list column */}
-                <div className={`${selectedPath ? 'w-1/3' : 'w-full'} h-full overflow-hidden border-r`}>
+                <div className={`${selectedPath ? 'w-2/3' : 'w-full'} h-full overflow-hidden border-r`}>
                     <DriveList
                         items={folderContents}
                         isLoading={isFolderContentLoading}
