@@ -4,7 +4,7 @@ import {simpleParser} from "./mail-parser";
 import {createELMContent} from "./mailfile";
 import {createUniqueMessageId, getMailIDfromFileName, getStandardMailboxFlags, isSpecialMailbox} from "./mailutils";
 import {welcomeMail} from "./welcome.ts";
-// import DOMPurify from 'isomorphic-dompurify';
+import DOMPurify from 'isomorphic-dompurify';
 import maildb from "./maildb.ts";
 import type {Home} from "../home/home.ts";
 
@@ -618,9 +618,9 @@ export default class Maildir {
             console.log(`Parsed message ${messageId} in ${end - start}ms`);
 
             // just to be sure, dompurify html
-            // if (parsedMail.html) {
-            //     parsedMail.html = DOMPurify.sanitize(parsedMail.html, {FORCE_BODY: true});
-            // }
+            if (parsedMail.html) {
+                parsedMail.html = DOMPurify.sanitize(parsedMail.html, {FORCE_BODY: true});
+            }
 
             // Create the Email object with the correct ID and path information
             return {

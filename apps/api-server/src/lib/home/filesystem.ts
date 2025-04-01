@@ -68,6 +68,11 @@ export default class FileSystem {
         return await fs.unlink(absolutePath);
     }
 
+    public async rm(filePath: string, options: {recursive: true, force: true}) {
+        const absolutePath = this.makeAbsolutePath(filePath);
+        return await fs.rm(absolutePath, options);
+    }
+
     /**
      * Returns a Bun file object with extended methods
      * @param filePath Path to file
