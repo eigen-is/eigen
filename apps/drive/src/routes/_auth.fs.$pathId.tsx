@@ -34,6 +34,10 @@ export const Route = createFileRoute('/_auth/fs/$pathId')({
     },
 });
 
+function getDefaultNewFolderName() {
+    return 'Untitled Folder ' + Math.random().toString().substring(2, 8);
+}
+
 function DriveRoute() {
     const {pathId} = Route.useParams();
     const {pid} = Route.useSearch();
@@ -62,7 +66,7 @@ function DriveRoute() {
 
     // Folder creation state and handlers
     const [createFolderOpen, setCreateFolderOpen] = useState(false);
-    const [newFolderName, setNewFolderName] = useState('');
+    const [newFolderName, setNewFolderName] = useState(getDefaultNewFolderName());
     const createFolderMutation = useCreateFolder();
     
     // Delete confirmation dialog state
@@ -72,6 +76,16 @@ function DriveRoute() {
     // Don't fetch data until we have the actual root folder ID (not "root")
     const skipDataFetch = pathId === 'root';
     
+    // on createFolderOpen = false, reset setNewFolderName  
+    useEffect(() => {
+        if (!createFolderOpen) {
+            setTimeout(() => {
+                setNewFolderName(getDefaultNewFolderName());
+            }, 100);
+        }
+    }, [createFolderOpen]);
+
+
     const {
         data: folderContents = [],
         isLoading: isFolderContentLoading,
@@ -93,19 +107,19 @@ function DriveRoute() {
     const handleCreateFolder = async () => {
         if (!newFolderName.trim()) return;
         
+        const newFolderNameName = newFolderName.trim();
         try {
             await createFolderMutation.mutateAsync({
                 parentId: pathId,
-                folderName: newFolderName.trim()
+                folderName: newFolderNameName
             });
             
             // Reset state and show success message
-            setNewFolderName('');
             setCreateFolderOpen(false);
-            toast("Folder created");
+            toast(`Folder "${newFolderNameName}" created`);
         } catch (error) {
             console.error('Failed to create folder:', error);
-            toast.error("Failed to create folder");
+            toast.error(`Failed to create folder "${newFolderNameName}"`);
         }
     };
     
@@ -233,6 +247,43 @@ function DriveRoute() {
         }
     };
 
+    const CreateFolderDialog = () => <Dialog open={createFolderOpen} onOpenChange={setCreateFolderOpen}>
+        <DialogContent>
+            <DialogHeader>
+                <DialogTitle>New Folder</DialogTitle>
+            </DialogHeader>
+            <div className="py-4">
+                <Label htmlFor="folderName">Folder Name</Label>
+                <Input
+                    id="folderName"
+                    value={newFolderName}
+                    onChange={(e) => setNewFolderName(e.target.value)}
+                    placeholder="Enter folder name"
+                    className="mt-2"
+                    autoFocus
+                    onKeyDown={(e) => {
+                        console.log(e.key);
+                        if (e.key === 'Enter' && newFolderName.trim() && !createFolderMutation.isPending) {
+                            e.preventDefault();
+                            handleCreateFolder();
+                        }
+                    }}
+                />
+            </div>
+            <DialogFooter>
+                <Button variant="outline" onClick={() => setCreateFolderOpen(false)}>
+                    Cancel
+                </Button>
+                <Button 
+                    onClick={handleCreateFolder}
+                    disabled={!newFolderName.trim() || createFolderMutation.isPending}
+                >
+                    {createFolderMutation.isPending ? "Creating..." : "Create"}
+                </Button>
+            </DialogFooter>
+        </DialogContent>
+    </Dialog>;
+
     // On mobile: Show full-width path list / detail
     if (isMobile) {
         return (
@@ -263,35 +314,7 @@ function DriveRoute() {
                 )}
                 
                 {/* Create Folder Dialog */}
-                <Dialog open={createFolderOpen} onOpenChange={setCreateFolderOpen}>
-                    <DialogContent>
-                        <DialogHeader>
-                            <DialogTitle>Create New Folder</DialogTitle>
-                        </DialogHeader>
-                        <div className="py-4">
-                            <Label htmlFor="folderName">Folder Name</Label>
-                            <Input
-                                id="folderName"
-                                value={newFolderName}
-                                onChange={(e) => setNewFolderName(e.target.value)}
-                                placeholder="Enter folder name"
-                                className="mt-2"
-                                autoFocus
-                            />
-                        </div>
-                        <DialogFooter>
-                            <Button variant="outline" onClick={() => setCreateFolderOpen(false)}>
-                                Cancel
-                            </Button>
-                            <Button 
-                                onClick={handleCreateFolder}
-                                disabled={!newFolderName.trim() || createFolderMutation.isPending}
-                            >
-                                {createFolderMutation.isPending ? "Creating..." : "Create"}
-                            </Button>
-                        </DialogFooter>
-                    </DialogContent>
-                </Dialog>
+                {CreateFolderDialog()}
 
                 {/* Hidden file input element */}
                 <input
@@ -347,35 +370,8 @@ function DriveRoute() {
             </div>
             
             {/* Create Folder Dialog */}
-            <Dialog open={createFolderOpen} onOpenChange={setCreateFolderOpen}>
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>Create New Folder</DialogTitle>
-                    </DialogHeader>
-                    <div className="py-4">
-                        <Label htmlFor="folderName">Folder Name</Label>
-                        <Input
-                            id="folderName"
-                            value={newFolderName}
-                            onChange={(e) => setNewFolderName(e.target.value)}
-                            placeholder="Enter folder name"
-                            className="mt-2"
-                            autoFocus
-                        />
-                    </div>
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setCreateFolderOpen(false)}>
-                            Cancel
-                        </Button>
-                        <Button 
-                            onClick={handleCreateFolder}
-                            disabled={!newFolderName.trim() || createFolderMutation.isPending}
-                        >
-                            {createFolderMutation.isPending ? "Creating..." : "Create"}
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+            {CreateFolderDialog()}
+            
 
             {/* Hidden file input element */}
             <input
