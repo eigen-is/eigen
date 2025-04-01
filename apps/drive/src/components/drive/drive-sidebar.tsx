@@ -73,14 +73,21 @@ export function DriveSidebar({
                                 No folders
                             </div>
                         ) : (
-                            folderItems.map((folder) => (
+                            <>  
+                            <FolderItem 
+                                key={folderItems[0].parentId}
+                                folder={{id: folderItems[0].parentId || "", name: "/", type: "folder"}}
+                                condensed={condensed}
+                            />
+                            {folderItems.map((folder) => (
                                 <FolderItem 
                                     key={folder.id}
                                     folder={folder}
                                     condensed={condensed}
                                     onCreateSubfolder={onCreateFolder}
                                 />
-                            ))
+                            ))}
+                            </>
                         )}
                     </div>
                 )}
