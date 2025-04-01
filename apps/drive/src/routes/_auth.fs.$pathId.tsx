@@ -160,14 +160,10 @@ function DriveRoute() {
                 onError: (err) => {
                     // Mark upload as failed
                     uploadHandler.error();
-                    console.error('Upload error:', err);
-                    toast.error(`Failed to upload ${file.name}`);
                 }
             });
         } catch (err: any) {
-            console.error('Error uploading file:', err);
             uploadHandler.error();
-            toast.error(`Failed to upload ${file.name}`);
         }
         
         // Clean up the file input value so the same file can be selected again if needed
