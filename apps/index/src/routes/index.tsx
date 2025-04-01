@@ -32,9 +32,9 @@ export function HomeComponent() {
         window.location.href = './mail/';
     };
     
-    const handleShowWaitlistButton = () => {
-        setShowWaitlistForm(true);
+    const handleShowWaitlist = () => {
         setShowMore(false);
+        setShowWaitlistForm(true);
     };
 
     const handleWaitlistSubmit = (e: React.FormEvent) => {
@@ -92,7 +92,7 @@ export function HomeComponent() {
                     <Button 
                         variant="outline" 
                         className="px-6 py-2 flex-1"
-                        onClick={handleShowWaitlistButton}
+                        onClick={handleShowWaitlist}
                     >
                         Join Waitlist
                     </Button>
