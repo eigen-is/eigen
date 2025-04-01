@@ -262,7 +262,7 @@ export function ContactEdit({
                       name="firstName"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>First name</FormLabel>
+                          <FormLabel>First name<span className="text-muted-foreground">*</span></FormLabel>
                           <FormControl>
                             <Input {...field} />
                           </FormControl>
@@ -276,7 +276,7 @@ export function ContactEdit({
                       name="lastName"
                       render={({ field }) => (
                         <FormItem>
-                          <FormLabel>Last name</FormLabel>
+                          <FormLabel>Last name<span className="text-muted-foreground">*</span></FormLabel>
                           <FormControl>
                             <Input {...field} />
                           </FormControl>
@@ -388,7 +388,7 @@ export function ContactEdit({
                   {/* Email Fields */}
                   <div>
                     <div className="flex items-center justify-between">
-                      <FormLabel className="text-base">Email Addresses</FormLabel>
+                      <FormLabel className="text-base">Email Addresses<span className="text-muted-foreground">*</span></FormLabel>
                       <Button
                         type="button"
                         variant="outline"
