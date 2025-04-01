@@ -52,7 +52,7 @@ function EditContactRoute() {
             // Transformeer de data voor compatibiliteit met API
             const contactData: Omit<Contact, 'id'> = {
                 ...data,
-                birthday: data.birthday ? data.birthday.toISOString().split('T')[0] : undefined,
+                birthday: data.birthday?.toISOString() ?? undefined,
                 labels: data.labels || []
             };
 
