@@ -4,6 +4,7 @@ import {Contacts} from "../contacts/contacts.ts";
 import Maildir from "../mail/maildir.ts";
 import FileSystem from "./filesystem.ts";
 import { getUserById } from "../users/users.ts";
+import Drive from "../drive/drive.ts";
 
 const city = new Map<string, Home>();
 
@@ -42,6 +43,7 @@ export class Home {
     public user: User;
 
     public fs: FileSystem;
+    public drive: Drive;
     public contacts: Contacts;
     public mail: Maildir;
 
@@ -54,6 +56,7 @@ export class Home {
     constructor(user: User) {
         this.user = user;
         this.fs = new FileSystem(this);
+        this.drive = new Drive(this);
         this.contacts = new Contacts(this);
         this.mail = new Maildir(this);
     }
@@ -76,6 +79,7 @@ export class Home {
         this.initializationStarted = true;
 
         await this.fs.init();
+        await this.drive.init();
         await this.contacts.init();
         await this.mail.init();
 
