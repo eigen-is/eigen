@@ -31,7 +31,7 @@ interface DriveListProps {
     items: DrivePath[];
     isLoading?: boolean;
     error?: Error | null;
-    onRowClick?: (id: string) => void;
+    onRowClick?: (path: DrivePath) => void;
     activeRowId?: string;
     onCreateFolder?: () => void;
     onUploadFile?: () => void;
@@ -147,7 +147,7 @@ export function DriveList({
                                         "cursor-pointer hover:bg-muted/50",
                                         activeRowId === item.id && "bg-muted"
                                     )}
-                                    onClick={() => onRowClick && onRowClick(item.id)}
+                                    onClick={() => onRowClick && onRowClick(item)}
                                 >
                                     <TableCell className="font-medium">
                                         <div className="flex items-center">
