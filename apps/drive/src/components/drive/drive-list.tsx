@@ -10,12 +10,12 @@ import {
     TableCell 
 } from "@workspace/ui/components/table";
 import { EigenLoader } from "@workspace/ui";
-import { 
-    File, 
-    Folder, 
-    FolderPlus, 
-    MoreHorizontal, 
-    Search 
+import {
+    File,
+    Folder,
+    FolderPlus,
+    MoreHorizontal,
+    Search, UploadIcon
 } from "lucide-react";
 import { Input } from "@workspace/ui/components/input";
 import { 
@@ -87,17 +87,28 @@ export function DriveList({
                         onChange={(e) => setSearchTerm(e.target.value)}
                     />
                 </div>
-                
-                {onCreateFolder && (
+
+                <div className="flex items-center gap-2">
                     <Button
                         onClick={onCreateFolder}
                         size="sm"
                         className="flex items-center gap-1"
                     >
-                        <FolderPlus className="h-4 w-4" />
-                        <span>New Folder</span>
+                        <UploadIcon className="h-4 w-4" />
+                        <span>Upload</span>
                     </Button>
-                )}
+
+                    {onCreateFolder && (
+                        <Button
+                            onClick={onCreateFolder}
+                            size="sm"
+                            className="flex items-center gap-1"
+                        >
+                            <FolderPlus className="h-4 w-4" />
+                            <span>New Folder</span>
+                        </Button>
+                    )}
+                </div>
             </div>
             
             {/* Table listing files and folders */}
@@ -170,14 +181,6 @@ export function DriveList({
                                             <DropdownMenuContent align="end">
                                                 <DropdownMenuItem>Rename</DropdownMenuItem>
                                                 <DropdownMenuItem>Delete</DropdownMenuItem>
-                                                {item.type === 'folder' && (
-                                                    <DropdownMenuItem onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        onCreateFolder && onCreateFolder();
-                                                    }}>
-                                                        Create folder
-                                                    </DropdownMenuItem>
-                                                )}
                                             </DropdownMenuContent>
                                         </DropdownMenu>
                                     </TableCell>
