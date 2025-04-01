@@ -34,10 +34,6 @@ export const Route = createFileRoute('/_auth/fs/$pathId')({
     },
 });
 
-function getDefaultNewFolderName() {
-    return 'Untitled Folder ' + Math.random().toString().substring(2, 8);
-}
-
 function DriveRoute() {
     const {pathId} = Route.useParams();
     const {pid} = Route.useSearch();
@@ -66,7 +62,7 @@ function DriveRoute() {
 
     // Folder creation state and handlers
     const [createFolderOpen, setCreateFolderOpen] = useState(false);
-    const [newFolderName, setNewFolderName] = useState(getDefaultNewFolderName());
+    const [newFolderName, setNewFolderName] = useState('');
     const createFolderMutation = useCreateFolder();
     
     // Delete confirmation dialog state
@@ -76,16 +72,6 @@ function DriveRoute() {
     // Don't fetch data until we have the actual root folder ID (not "root")
     const skipDataFetch = pathId === 'root';
     
-    // on createFolderOpen = false, reset setNewFolderName  
-    useEffect(() => {
-        if (!createFolderOpen) {
-            setTimeout(() => {
-                setNewFolderName(getDefaultNewFolderName());
-            }, 100);
-        }
-    }, [createFolderOpen]);
-
-
     const {
         data: folderContents = [],
         isLoading: isFolderContentLoading,
@@ -121,6 +107,7 @@ function DriveRoute() {
             console.error('Failed to create folder:', error);
             toast.error(`Failed to create folder "${newFolderNameName}"`);
         }
+        setNewFolderName('');
     };
     
     // Function to open the create folder dialog
@@ -271,7 +258,10 @@ function DriveRoute() {
                 />
             </div>
             <DialogFooter>
-                <Button variant="outline" onClick={() => setCreateFolderOpen(false)}>
+                <Button variant="outline" onClick={() => {
+                    setCreateFolderOpen(false);
+                    setNewFolderName('');
+                }}>
                     Cancel
                 </Button>
                 <Button 
