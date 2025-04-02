@@ -57,7 +57,7 @@ export function UserAvatar({
   );
   
   // Determine the image to display
-  const avatarImage = imageUrl || publicUserData?.image || "";
+  const avatarImage = imageUrl || publicUserData?.image || '';
 
   // Size classes
   const sizeClasses = {
@@ -68,7 +68,7 @@ export function UserAvatar({
 
   return (
     <Avatar className={cn(sizeClasses[size], className)} {...props}>
-      {avatarImage && <AvatarImage src={avatarImage} alt={displayName} />}
+      {avatarImage && <AvatarImage src={`${import.meta.env.VITE_API_HOST}/${avatarImage}`} alt={displayName} />}
       <AvatarFallback className="bg-gray-200 text-gray-600 font-medium">
         {firstChar}
       </AvatarFallback>
