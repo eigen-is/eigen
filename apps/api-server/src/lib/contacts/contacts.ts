@@ -99,18 +99,18 @@ export class Contacts {
         this.db = await getContactsDatabase(this.home);
         if (!(await this.getContacts()).length) {
             const user = this.home.user;
-
+            const nameParts = (user.name || '').split(' ');
             // add the user to the contacts table
             await this.addContact({
                 eigenId: user.id,
-                firstName: user.name,
-                lastName: '',
+                firstName: nameParts[0] || '',
+                lastName: [...nameParts.slice(1)].join(' ') || '',
                 email: [user.email],
                 phone: [],
                 company: '',
                 jobTitle: '',
                 address: [],
-                birthday: '',
+                birthday: 0,
                 notes: '',
                 avatar: '',
                 labels: []
