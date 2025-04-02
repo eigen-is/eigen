@@ -163,4 +163,14 @@ export const driveRouter = new Elysia({name: "drive"})
         params: t.Object({
             pathId: t.String()
         })
-    });
+    })
+
+    .get("/drive/thumb/:fileName", async ({params, user}: { params: { fileName: string }, user: User }) => {
+        const drive = await getDrive(user);
+        return await drive.getThumbnail(params.fileName);
+    }, {
+        auth: true,
+        params: t.Object({
+            fileName: t.String()
+        })
+    })

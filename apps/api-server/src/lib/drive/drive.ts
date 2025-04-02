@@ -574,6 +574,15 @@ export default class Drive {
         }
     }
 
+    public async getThumbnail(fileName: string): Promise<ArrayBuffer | null> {
+        const url = this.home.fs.pathJoin(this.basePath, 'thumbs', fileName);
+        const file = this.home.fs.file(url);
+        if (!file.exists()) {
+            return null;
+        }
+        return file.arrayBuffer();
+    }
+
     private async generateThumbnail(id: string, mimeType: string, filePath: string): Promise<string | null> {
         console.log("Generating thumbnail for", id, mimeType, filePath);
         if (!mimeType.includes('image')) {
