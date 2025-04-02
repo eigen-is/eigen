@@ -6,11 +6,13 @@ export const Route = createFileRoute('/')({
 
 function HomeComponent() {
     const navigate = Route.useNavigate();
-    navigate({to: '/$filterType/$filterId',
+    navigate({
+        to: '/$filterType/$filterId',
         params: {
             filterType: 'box',
             filterId: 'inbox'
-        }});
+        }
+    });
 
     return null;
 }

@@ -168,7 +168,7 @@ export function ContactDetail({contact, onDelete, onBack, filterType, filterId, 
                                         {label.name}
                                     </Badge>
                                 ))
-                            ) : labelsLoading ? (<EigenLoader />) : labelsError ? (
+                            ) : labelsLoading ? (<EigenLoader/>) : labelsError ? (
                                 <p className="text-sm text-destructive">Error loading labels</p>
                             ) : null}
                         </div>
@@ -195,7 +195,7 @@ export function ContactDetail({contact, onDelete, onBack, filterType, filterId, 
                                 </div>
                             )}
 
-                            {contact.phone && contact.phone.length > 0 && contact.phone[0].length > 0&& (
+                            {contact.phone && contact.phone.length > 0 && contact.phone[0].length > 0 && (
                                 <div className="space-y-2">
                                     <h4 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
                                         <Phone className="h-4 w-4"/>
