@@ -1,2 +1,2 @@
 export * from './use-drive';
-export * from './use-media-query';
+export { useMediaQuery } from '../../media/hooks/use-media-query';
