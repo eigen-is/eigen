@@ -128,7 +128,7 @@ export class Contacts {
                     company: '',
                     jobTitle: '',
                     address: [],
-                    birthday: '',
+                    birthday: 0,
                     notes: '',
                     avatar: '',
                     labels: []
