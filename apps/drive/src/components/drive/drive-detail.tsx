@@ -75,7 +75,7 @@ export function DriveDetail({
                             }
                         }}
                     />
-                    
+
                     <div className="h-6 w-[1px] bg-border mx-1"></div>
 
                     <DropdownMenu>
@@ -102,8 +102,8 @@ export function DriveDetail({
                 </div>
                 {path.thumbnail && (
                     <div className="mt-4">
-                        <img 
-                            src={`${import.meta.env.VITE_API_HOST}/drive/thumb/${path.thumbnail}`} 
+                        <img
+                            src={`${import.meta.env.VITE_API_HOST}/drive/thumb/${path.thumbnail}`}
                             alt={`Thumbnail for ${path.name}`}
                             className="max-w-full max-h-[25%] object-contain"
                         />

@@ -1,5 +1,5 @@
 // Re-export types that might be useful for consumers
-export type { UploadItem } from "./upload-provider"
+export type {UploadItem} from "./upload-provider"
 
 // Helper function for handling file upload with progress tracking
 interface UploadWithProgressOptions {
@@ -23,7 +23,7 @@ export async function uploadWithProgress({
         const xhr = new XMLHttpRequest();
         xhr.withCredentials = true;
         xhr.open("POST", url);
-        
+
         // Set authentication and other headers
         // Object.entries(headers).forEach(([key, value]) => {
         //     xhr.setRequestHeader(key, value)

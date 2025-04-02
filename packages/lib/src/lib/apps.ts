@@ -37,4 +37,4 @@ const apps = [
     },
 ];
 
-export { apps };
+export {apps};
