@@ -174,3 +174,14 @@ export const driveRouter = new Elysia({name: "drive"})
             fileName: t.String()
         })
     })
+
+    .get("/drive/download/:pathId", async ({params, user}: { params: { pathId: string }, user: User }) => {
+        const drive = await getDrive(user);
+        return await drive.downloadFile(params.pathId);
+    }, {
+        auth: true,
+        params: t.Object({
+            pathId: t.String()
+        })
+    })
+

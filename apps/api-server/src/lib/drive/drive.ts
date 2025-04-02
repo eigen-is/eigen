@@ -583,6 +583,19 @@ export default class Drive {
         return file.arrayBuffer();
     }
 
+    public async downloadFile(pathId: string): Promise<ArrayBuffer | null> {
+        const path = await this.getPath(pathId);
+        console.log("Path:", path);
+        if (!path || path.type !== "file" || !path.parentId) {
+            return null;
+        }
+        const file = this.home.fs.file(this.home.fs.pathJoin(await this.getFolderPath(path.parentId), path.name));
+        if (!file.exists()) {
+            return null;
+        }
+        return file.arrayBuffer();
+    }
+
     private async generateThumbnail(id: string, mimeType: string, filePath: string): Promise<string | null> {
         console.log("Generating thumbnail for", id, mimeType, filePath);
         if (!mimeType.includes('image')) {
