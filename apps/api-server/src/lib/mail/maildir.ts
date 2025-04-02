@@ -546,9 +546,6 @@ export default class Maildir {
 
                 // Text content
                 text: mail.text || '',
-
-                // HTML content if available
-                ...(mail.html ? {html: mail.html} : {})
             };
 
             // Send mail with defined transport object
