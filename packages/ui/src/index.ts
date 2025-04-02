@@ -9,3 +9,4 @@ export * from './components/layout/user-item';
 export * from './components/layout/user-avatar';
 export * from './components/layout/app-logo';
 export * from './components/layout/user-item';
+export * from './components/layout/drive';
