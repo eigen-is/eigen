@@ -3,7 +3,7 @@ import {DrivePath} from "@apps/api-server/types/drive";
 import {Button} from "@workspace/ui/components/button";
 import {Table, TableBody, TableCell, TableHead, TableHeader, TableRow} from "@workspace/ui/components/table";
 import {EigenLoader} from "@workspace/ui";
-import {ChevronLeft, File, Folder, FolderPlus, MoreHorizontal, Search, UploadIcon} from "lucide-react";
+import {ChevronLeft, FolderPlus, MoreHorizontal, Search, UploadIcon} from "lucide-react";
 import {Input} from "@workspace/ui/components/input";
 import {
     DropdownMenu,
@@ -13,6 +13,7 @@ import {
 } from "@workspace/ui/components/dropdown-menu";
 import {cn} from "@workspace/ui/lib/utils";
 import {formatDistanceToNow} from "date-fns";
+import {getFileIcon} from "../../lib/file-icon-helper";
 
 interface DriveListProps {
     items: DrivePath[];
@@ -161,11 +162,16 @@ export function DriveList({
                             >
                                 <TableCell className="font-medium">
                                     <div className="flex items-center">
-                                        {item.type === 'folder' ? (
-                                            <Folder className="h-4 w-4 mr-2 text-app"
-                                                    fill="var(--app-drive-light-color)"/>
-                                        ) : (
-                                            <File className="h-4 w-4 mr-2 text-muted-foreground"/>
+                                        {getFileIcon(
+                                            item.mimeType,
+                                            item.type,
+                                            {
+                                                className: "h-4 w-4 mr-2 text-muted-foreground",
+                                                ...(item.type === 'folder' ? {
+                                                    className: "h-4 w-4 mr-2 text-app",
+                                                    fill: "var(--app-drive-light-color)"
+                                                } : {})
+                                            }
                                         )}
                                         <span className="truncate">{item.name}</span>
                                     </div>
