@@ -59,7 +59,7 @@ export function DriveList({
     return (
         <div className="h-full flex flex-col">
             {/* Search and actions toolbar */}
-            <div className="p-4 border-b flex flex-col sm:flex-row gap-2">
+            <div className="h-12 flex items-center justify-between border-b flex-col sm:flex-row gap-2 pl-2 pr-2">
                 <div className="relative flex-1">
                     <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground"/>
                     <Input
@@ -106,30 +106,32 @@ export function DriveList({
             />
 
             {filteredItems.length === 0 && (
-                <div className="flex flex-col items-center justify-center p-8 text-center">
-                    <p className="text-muted-foreground mb-2">This folder is empty</p>
-                    {onCreateFolder && (
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-9 mr-2"
-                            onClick={onCreateFolder}
-                        >
-                            <FolderPlus className="h-4 w-4 mr-2"/>
-                            New Folder
-                        </Button>
-                    )}
-                    {onUploadFile && (
-                        <Button
-                            variant="default"
-                            size="sm"
-                            className="h-9"
-                            onClick={onUploadFile}
-                        >
-                            <UploadIcon className="h-4 w-4 mr-2"/>
-                            Upload
-                        </Button>
-                    )}
+                <div className="flex-1 flex flex-col items-center justify-top text-center">
+                    <p className="text-muted-foreground mb-4">This folder is empty</p>
+                    <div className="flex gap-2">
+                        {onCreateFolder && (
+                            <Button
+                                variant="outline"
+                                size="sm"
+                                className="h-9"
+                                onClick={onCreateFolder}
+                            >
+                                <FolderPlus className="h-4 w-4 mr-2"/>
+                                New Folder
+                            </Button>
+                        )}
+                        {onUploadFile && (
+                            <Button
+                                variant="default"
+                                size="sm"
+                                className="h-9"
+                                onClick={onUploadFile}
+                            >
+                                <UploadIcon className="h-4 w-4 mr-2"/>
+                                Upload
+                            </Button>
+                        )}
+                    </div>
                 </div>
             )}
         </div>
