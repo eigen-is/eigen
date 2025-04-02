@@ -1,8 +1,7 @@
 import {createFileRoute, Outlet, redirect} from '@tanstack/react-router'
-import {useContext, createContext} from 'react';
+import {createContext, useContext} from 'react';
 import {SidebarContext} from './__root';
-import {useMediaQuery} from '@workspace/lib/drive';
-import {useRootFolder, useFolderContent} from '@workspace/lib/drive';
+import {useFolderContent, useMediaQuery, useRootFolder} from '@workspace/lib/drive';
 import {DriveSidebar} from "@/components/drive/drive-sidebar.tsx";
 import {EigenLoader} from '@workspace/ui';
 
@@ -41,7 +40,7 @@ function AuthLayout() {
 
     // Get contents of the root folder
     const {data: folders = [], isLoading: isFoldersLoading, error: isFoldersError} = useFolderContent(rootPathId || '');
-    
+
     // Loading state
     const isLoading = isRootLoading || isFoldersLoading;
     const error = rootError || isFoldersError;
@@ -49,7 +48,7 @@ function AuthLayout() {
     if (isLoading) {
         return (
             <div className="flex items-center justify-center h-screen w-screen">
-                <EigenLoader />
+                <EigenLoader/>
             </div>
         );
     }
@@ -99,7 +98,7 @@ function AuthLayout() {
             {/* Main content area - contains columns 2 and 3 */}
             <main className="flex-1 flex h-full overflow-hidden">
                 <DriveContext.Provider value={driveContextValue}>
-                    <Outlet />
+                    <Outlet/>
                 </DriveContext.Provider>
             </main>
         </div>
