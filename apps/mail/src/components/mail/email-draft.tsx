@@ -1,4 +1,4 @@
-import {ArrowLeft, Paperclip, Trash2} from "lucide-react";
+import {ArrowLeft, Paperclip, Send, Trash2} from "lucide-react";
 import {cn} from "@workspace/ui/lib/utils";
 import {Button} from "@workspace/ui/components/button";
 import {format} from "date-fns";
@@ -75,14 +75,19 @@ export function EmailDraft({
 
                     {/* Left side icons */}
                     <TooltipButton
-                        icon={Trash2}
-                        tooltipText="Delete"
+                        icon={Send}
+                        tooltipText="Send"
                         onClick={() => onDelete(email)}
                     />
                 </div>
 
                 <div className="flex items-center gap-1">
-                    {/* Right side icons, todo: add send button */}
+                    {/* Right side icons */}
+                    <TooltipButton
+                        icon={Trash2}
+                        tooltipText="Delete"
+                        onClick={() => onDelete(email)}
+                    />
                 </div>
             </div>
 
