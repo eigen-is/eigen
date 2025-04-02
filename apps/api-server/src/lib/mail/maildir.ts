@@ -472,7 +472,10 @@ export default class Maildir {
                 return null;
             }
 
-            return message.attachments[index];
+            // parse the message to get the attachment
+            const parsedMessage = await this.parseMessage(messageId, message.mailbox);
+
+            return parsedMessage?.attachments[index] || null;
         } catch (error) {
             console.error(`Error getting attachment ${index} from message ${messageId}:`, error);
             return null;

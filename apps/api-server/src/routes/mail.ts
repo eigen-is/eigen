@@ -163,16 +163,26 @@ export const mailRouter = new Elysia({name: "mail"})
             read: t.Boolean()
         })
     })
-    .get("/mail/message/:id/attachment/:index", async ({params, user}: {
-        params: { id: string, index: string },
-        user: User
+    .get("/mail/message/:id/attachment/:index/:fileName", async ({params, user,     set}: {
+        params: { id: string, index: number, fileName: string },
+        user: User,
+        set: any
     }) => {
-        return await messageGetAttachment(user, params['id'], parseInt(params['index']));
+        // Set caching headers for attachments (1 day)
+        set.headers['Cache-Control'] = 'public, max-age=86400';
+        set.headers['Expires'] = new Date(Date.now() + 86400000).toUTCString();
+        set.headers['Content-Type'] = 'application/octet-stream';
+        set.headers['Content-Disposition'] = `attachment; filename="${params['fileName']}"`;
+
+        const attachment = await messageGetAttachment(user, params['id'], params['index']);
+
+        return attachment?.content ?? null;
     }, {
         auth: true,
         params: t.Object({
             id: t.String(),
-            index: t.String()
+            index: t.Number(),
+            fileName: t.String()
         })
     })
 ;

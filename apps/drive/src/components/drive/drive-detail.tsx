@@ -65,31 +65,13 @@ export function DriveDetail({
                         onClick={() => {
                             if (path && path.id) {
                                 const downloadUrl = `${import.meta.env.VITE_API_HOST}/drive/download/${path.id}`;
-                                
-                                // For files that browsers can display inline, we need to force download
-                                // by creating a blob and using URL.createObjectURL
-                                fetch(downloadUrl)
-                                    .then(response => response.blob())
-                                    .then(blob => {
-                                        // Create a URL for the blob
-                                        const url = window.URL.createObjectURL(blob);
-                                        
-                                        // Create a temporary anchor element to trigger the download
-                                        const a = document.createElement('a');
-                                        a.href = url;
-                                        a.download = path.name || 'download'; // Use the file name or a default
-                                        document.body.appendChild(a);
-                                        a.click();
-                                        
-                                        // Clean up
-                                        setTimeout(() => {
-                                            document.body.removeChild(a);
-                                            window.URL.revokeObjectURL(url);
-                                        }, 100);
-                                    })
-                                    .catch(error => {
-                                        console.error('Download failed:', error);
-                                    });
+                                // Create a temporary anchor element to trigger the download
+                                const a = document.createElement('a');
+                                a.href = downloadUrl;
+                                a.download = path.name || 'download'; // Use the file name or a default
+                                document.body.appendChild(a);
+                                a.click();
+                                document.body.removeChild(a);
                             }
                         }}
                     />
