@@ -6,9 +6,16 @@ import {waitlist} from "../lib/space/waitlist";
 
 export const spaceRouter = new Elysia({name: "space"})
     // .use(betterAuth)
-    .get("/space/avatar/:id/:filename", async ({params}: {
-        params: { id: string, filename: string }
-    }) => await getAvatar(params.id, params.filename), {
+    .get("/space/avatar/:id/:filename", async ({params, set}: {
+        params: { id: string, filename: string },
+        set: any
+    }) => {
+        // Set caching headers for thumbnails (1 day)
+        set.headers['Cache-Control'] = 'public, max-age=86400';
+        set.headers['Expires'] = new Date(Date.now() + 86400000).toUTCString();
+
+        return await getAvatar(params.id, params.filename);
+    }, {
         params: t.Object({
             id: t.String(),
             filename: t.String()

@@ -59,18 +59,32 @@ export function DriveList({
     return (
         <div className="h-full flex flex-col">
             {/* Search and actions toolbar */}
-            <div className="h-12 flex items-center justify-between border-b flex-col sm:flex-row gap-2 pl-2 pr-2">
-                <div className="relative flex-1">
+            <div className="h-12 flex items-center justify-between border-b px-2">
+                {/* Search - hidden on small screens */}
+                <div className="relative flex-1 max-w-xs hidden sm:block">
                     <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground"/>
                     <Input
                         type="search"
                         placeholder="Search files..."
-                        className="pl-8"
+                        className="pl-8 h-9"
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
                     />
                 </div>
-                <div className="flex gap-2 justify-end">
+                
+                {/* Mobile search button */}
+                <div className="sm:hidden">
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        className="h-9 w-9"
+                        title="Search"
+                    >
+                        <Search className="h-4 w-4" />
+                    </Button>
+                </div>
+                
+                <div className="flex gap-1">
                     {onCreateFolder && (
                         <Button
                             variant="outline"
@@ -78,8 +92,8 @@ export function DriveList({
                             className="h-9"
                             onClick={onCreateFolder}
                         >
-                            <FolderPlus className="h-4 w-4 mr-2"/>
-                            New Folder
+                            <FolderPlus className="h-4 w-4 sm:mr-2" />
+                            <span className="hidden sm:inline">New Folder</span>
                         </Button>
                     )}
                     {onUploadFile && (
@@ -89,8 +103,8 @@ export function DriveList({
                             className="h-9"
                             onClick={onUploadFile}
                         >
-                            <UploadIcon className="h-4 w-4 mr-2"/>
-                            Upload
+                            <UploadIcon className="h-4 w-4 sm:mr-2" />
+                            <span className="hidden sm:inline">Upload</span>
                         </Button>
                     )}
                 </div>

@@ -165,7 +165,11 @@ export const driveRouter = new Elysia({name: "drive"})
         })
     })
 
-    .get("/drive/thumb/:fileName", async ({params, user}: { params: { fileName: string }, user: User }) => {
+    .get("/drive/thumb/:fileName", async ({params, user, set}: { params: { fileName: string }, user: User, set: any }) => {
+        // Set caching headers for thumbnails (1 day)
+        set.headers['Cache-Control'] = 'public, max-age=86400';
+        set.headers['Expires'] = new Date(Date.now() + 86400000).toUTCString();
+        
         const drive = await getDrive(user);
         return await drive.getThumbnail(params.fileName);
     }, {
@@ -175,8 +179,15 @@ export const driveRouter = new Elysia({name: "drive"})
         })
     })
 
-    .get("/drive/download/:pathId", async ({params, user}: { params: { pathId: string }, user: User }) => {
+    .get("/drive/download/:pathId", async ({params, user, set}: { params: { pathId: string }, user: User, set: any }) => {
         const drive = await getDrive(user);
+        const path = await drive.getPath(params.pathId);
+        
+        if (path && path.name) {
+            // Set the Content-Disposition header with the file's name
+            set.headers['Content-Disposition'] = `attachment; filename="${path.name}"`;
+        }
+        
         return await drive.downloadFile(params.pathId);
     }, {
         auth: true,
@@ -184,4 +195,3 @@ export const driveRouter = new Elysia({name: "drive"})
             pathId: t.String()
         })
     })
-
