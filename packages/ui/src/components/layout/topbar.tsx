@@ -30,7 +30,7 @@ interface TopbarProps {
     isMobile?: boolean;
 }
 
-function UserDropdown({ rootRoute, appName }: { rootRoute: TopbarProps['rootRoute'], appName: string }) {
+function UserDropdown({rootRoute, appName}: { rootRoute: TopbarProps['rootRoute'], appName: string }) {
     const router = useRouter();
     const navigate = rootRoute.useNavigate();
     const auth = useAuth();
@@ -67,7 +67,7 @@ function UserDropdown({ rootRoute, appName }: { rootRoute: TopbarProps['rootRout
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
-            
+
             <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                     <Button variant="ghost"
@@ -92,17 +92,19 @@ function UserDropdown({ rootRoute, appName }: { rootRoute: TopbarProps['rootRout
                     {apps.map(app => {
                         const isActive = app.name.toLowerCase() === appName.toLowerCase();
                         return (
-                        <DropdownMenuItem key={app.name} className={isActive ? "bg-muted" : ""}>
-                            <a href={app.href} className={`flex items-center w-full gap-2 ${isActive ? "font-medium" : ""}`}>
-                                {app.icon === 'layout-dashboard' && <LayoutDashboard className="h-4 w-4" />}
-                                {app.icon === 'mail' && <Mail className="h-4 w-4" />}
-                                {app.icon === 'calendar' && <Calendar className="h-4 w-4" />}
-                                {app.icon === 'users' && <Users className="h-4 w-4" />}
-                                {app.icon === 'hard-drive' && <HardDrive className="h-4 w-4" />}
-                                {app.icon === 'file-text' && <FileText className="h-4 w-4" />}
-                                <span className={isActive ? "text-foreground font-medium" : "text-muted-foreground"}>{app.name}</span>
-                            </a>
-                        </DropdownMenuItem>
+                            <DropdownMenuItem key={app.name} className={isActive ? "bg-muted" : ""}>
+                                <a href={app.href}
+                                   className={`flex items-center w-full gap-2 ${isActive ? "font-medium" : ""}`}>
+                                    {app.icon === 'layout-dashboard' && <LayoutDashboard className="h-4 w-4"/>}
+                                    {app.icon === 'mail' && <Mail className="h-4 w-4"/>}
+                                    {app.icon === 'calendar' && <Calendar className="h-4 w-4"/>}
+                                    {app.icon === 'users' && <Users className="h-4 w-4"/>}
+                                    {app.icon === 'hard-drive' && <HardDrive className="h-4 w-4"/>}
+                                    {app.icon === 'file-text' && <FileText className="h-4 w-4"/>}
+                                    <span
+                                        className={isActive ? "text-foreground font-medium" : "text-muted-foreground"}>{app.name}</span>
+                                </a>
+                            </DropdownMenuItem>
                         );
                     })}
                     <DropdownMenuSeparator/>
@@ -122,24 +124,24 @@ function UserDropdown({ rootRoute, appName }: { rootRoute: TopbarProps['rootRout
         : null;
 }
 
-export function Topbar({ appName, rootRoute, showMobileMenu, onMobileMenuClick, isMobile }: TopbarProps) {
+export function Topbar({appName, rootRoute, showMobileMenu, onMobileMenuClick, isMobile}: TopbarProps) {
     return (
         <header className="bg-app">
             <div className="flex h-12 items-center px-4">
                 {isMobile && showMobileMenu && (
-                    <Button 
-                        variant="ghost" 
-                        size="icon" 
+                    <Button
+                        variant="ghost"
+                        size="icon"
                         onClick={onMobileMenuClick}
                         className="mr-2 text-white hover:bg-primary/20 hover:text-white"
                     >
-                        <Menu className="h-5 w-5" />
+                        <Menu className="h-5 w-5"/>
                         <span className="sr-only">Open menu</span>
                     </Button>
                 )}
                 <AppLogo appName={appName.toLowerCase()}/>
                 <div className="ml-auto flex items-center space-x-4">
-                    <UserDropdown rootRoute={rootRoute} appName={appName} />
+                    <UserDropdown rootRoute={rootRoute} appName={appName}/>
                 </div>
             </div>
         </header>

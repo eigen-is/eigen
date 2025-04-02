@@ -1,6 +1,13 @@
 import {createFileRoute, useNavigate} from '@tanstack/react-router';
 import {EmailDetail} from "../components/mail/email-detail.tsx";
-import {useDeleteEmail, useEmail, useEmails, useMediaQuery, useToggleReadEmail} from '@workspace/lib/mail';
+import {
+    useCreateDraft,
+    useDeleteEmail,
+    useEmail,
+    useEmails,
+    useMediaQuery,
+    useToggleReadEmail
+} from '@workspace/lib/mail';
 import {EmailList} from "@/components/mail/email-list.tsx";
 import {Email} from "@apps/api-server/types/mail";
 import {toast} from "sonner";
@@ -26,6 +33,7 @@ function MailRoute() {
     const isTablet = useMediaQuery('(max-width: 1024px) and (min-width: 769px)');
     const deleteMail = useDeleteEmail();
     const toggleMailRead = useToggleReadEmail();
+    const createDraft = useCreateDraft();
 
     const {data: emails = [], isLoading: isEmailsLoading, error: isEmailsError} = useEmails(filterId);
     const {data: selectedEmail = null} = useEmail(mailId);
@@ -41,6 +49,13 @@ function MailRoute() {
 
     // Handle back navigation (mainly for mobile)
     const handleBackToList = () => {
+        // createDraft.mutate({
+        //     subject: 'test',
+        //     text: selectedEmail?.text || '',
+        //     to: selectedEmail?.to || '',
+        //     cc: selectedEmail?.cc || '',
+        //     bcc: selectedEmail?.bcc || '',
+        // })
         navigate({
             to: Route.fullPath,
             params: {filterType, filterId},

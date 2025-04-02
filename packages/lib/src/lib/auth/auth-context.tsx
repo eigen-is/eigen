@@ -65,7 +65,7 @@ export function AuthProvider({children}: { children: ReactNode }): React.ReactEl
         }
     };
 
-    return isLoading ? <LoadingScreen /> : (
+    return isLoading ? <LoadingScreen/> : (
         <AuthContext.Provider
             value={{
                 isAuthenticated: !!user,

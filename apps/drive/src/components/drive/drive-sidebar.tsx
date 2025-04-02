@@ -1,4 +1,4 @@
-import {Folder, HardDrive, Trash2, X} from 'lucide-react';
+import {Folder, X} from 'lucide-react';
 import {Button} from "@workspace/ui/components/button";
 import {SidebarSection} from '@workspace/ui/components/layout/sidebar/sidebar-section';
 import {AppLogo} from '@workspace/ui/components/layout/app-logo';
@@ -56,15 +56,15 @@ export function DriveSidebar({
                 condensed={condensed}
             >
 
-            {isLoading ? (
-                <div className="flex items-center justify-center py-4">
-                    <EigenLoader/>
-                </div>
-            ) : error ? (
-                <div className="text-sm text-destructive px-3 py-2">
-                    Failed to load folders
-                </div>
-            ) : (
+                {isLoading ? (
+                    <div className="flex items-center justify-center py-4">
+                        <EigenLoader/>
+                    </div>
+                ) : error ? (
+                    <div className="text-sm text-destructive px-3 py-2">
+                        Failed to load folders
+                    </div>
+                ) : (
                     (folderItems && folderItems.length === 0) ? (
                         <div className="text-sm text-muted-foreground px-3 py-2">
                             No folders
@@ -72,7 +72,7 @@ export function DriveSidebar({
                     ) : (
                         <>
                             <SidebarItem
-                                icon={<Folder  className="h-4 w-4"/>}
+                                icon={<Folder className="h-4 w-4"/>}
                                 key={folderItems[0].parentId}
                                 to={`/fs/${folderItems[0].parentId}`}
                                 label="/"
@@ -80,7 +80,7 @@ export function DriveSidebar({
                             />
                             {folderItems.map((folder) => (
                                 <SidebarItem
-                                    icon={<Folder  className="h-4 w-4"/>}
+                                    icon={<Folder className="h-4 w-4"/>}
                                     key={folder.id}
                                     to={`/fs/${folder.id}`}
                                     label={folder.name}
@@ -90,7 +90,7 @@ export function DriveSidebar({
                         </>
                     )
                 )}
-        </SidebarSection>
+            </SidebarSection>
         </div>
     );
 }

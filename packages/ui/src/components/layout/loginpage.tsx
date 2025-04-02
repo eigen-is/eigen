@@ -11,15 +11,15 @@ import {Form, FormControl, FormField, FormItem, FormLabel, FormMessage,} from ".
 
 // Define the login form schema with Zod
 const loginFormSchema = z.object({
-    email: z.string().email({ message: "Invalid email address" }),
-    password: z.string().min(1, { message: "Password is required" }),
+    email: z.string().email({message: "Invalid email address"}),
+    password: z.string().min(1, {message: "Password is required"}),
 });
 
 // Type for the form values
 type LoginFormValues = z.infer<typeof loginFormSchema>;
 
-export function LoginPage({ appName = 'mail' }: { appName?: string }) {
-    const { login } = useAuth();
+export function LoginPage({appName = 'mail'}: { appName?: string }) {
+    const {login} = useAuth();
     const router = useRouter();
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
@@ -39,7 +39,7 @@ export function LoginPage({ appName = 'mail' }: { appName?: string }) {
         setError('');
 
         try {
-            const { success, error } = await login(values.email, values.password);
+            const {success, error} = await login(values.email, values.password);
 
             if (!success && error) {
                 setError(error.message || 'Login failed');
@@ -81,13 +81,13 @@ export function LoginPage({ appName = 'mail' }: { appName?: string }) {
                             <FormField
                                 control={form.control}
                                 name="email"
-                                render={({ field }) => (
+                                render={({field}) => (
                                     <FormItem>
                                         <FormLabel>Email</FormLabel>
                                         <FormControl>
                                             <Input placeholder="your@eigen.is" autoFocus {...field} />
                                         </FormControl>
-                                        <FormMessage />
+                                        <FormMessage/>
                                     </FormItem>
                                 )}
                             />
@@ -95,20 +95,20 @@ export function LoginPage({ appName = 'mail' }: { appName?: string }) {
                             <FormField
                                 control={form.control}
                                 name="password"
-                                render={({ field }) => (
+                                render={({field}) => (
                                     <FormItem>
                                         <FormLabel>Password</FormLabel>
                                         <FormControl>
                                             <Input type="password" {...field} />
                                         </FormControl>
-                                        <FormMessage />
+                                        <FormMessage/>
                                     </FormItem>
                                 )}
                             />
 
-                            <Button 
-                                type="submit" 
-                                className="w-full" 
+                            <Button
+                                type="submit"
+                                className="w-full"
                                 disabled={isLoading}
                             >
                                 {isLoading ? 'Signing in...' : 'Sign in'}
