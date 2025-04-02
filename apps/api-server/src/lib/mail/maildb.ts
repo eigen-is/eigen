@@ -14,6 +14,7 @@ async function getMailDatabase(home: Home) {
                 subject TEXT NOT NULL,
                 textShort TEXT NOT NULL,
                 fromShort TEXT NOT NULL,
+                size INTEGER NOT NULL DEFAULT 0,
                 date INTEGER NOT NULL,
                 isRead INTEGER NOT NULL DEFAULT 0,  
                 isStarred INTEGER NOT NULL DEFAULT 0,
