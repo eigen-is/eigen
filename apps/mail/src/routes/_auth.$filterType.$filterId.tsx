@@ -1,7 +1,7 @@
 import {createFileRoute, useNavigate} from '@tanstack/react-router';
 import {EmailDetail} from "../components/mail/email-detail.tsx";
-import {useMediaQuery} from "../hooks/use-media-query";
-import {useDeleteEmail, useEmail, useEmails, useToggleReadEmail} from "@/hooks/use-emails.ts";
+import {useMediaQuery} from '@workspace/lib/mail';
+import {useDeleteEmail, useEmail, useEmails, useToggleReadEmail} from '@workspace/lib/mail';
 import {EmailList} from "@/components/mail/email-list.tsx";
 import {Email} from "@apps/api-server/types/mail";
 import {toast} from "sonner";

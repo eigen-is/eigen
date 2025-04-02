@@ -21,7 +21,8 @@ export function useEmails(mailboxPath: string) {
             // @ts-ignore
             const response = await mailApi.mailbox[mailboxPath].get();
             return (response.data || []) as Email[];
-        }
+        },
+        staleTime: 5 * 60 * 1000, // 5 minutes
     });
 }
 
