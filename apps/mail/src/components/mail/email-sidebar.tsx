@@ -1,4 +1,4 @@
-import {AlertOctagon, Archive, ArchiveX, File, Inbox, MailPlus, Send, Trash2, X} from 'lucide-react';
+import {AlertOctagon, Archive, ArchiveX, File, Inbox, Send, Trash2, X} from 'lucide-react';
 import {Button} from "@workspace/ui/components/button";
 import {SidebarItem} from '@workspace/ui/components/layout/sidebar/sidebar-item';
 import {SidebarSection} from '@workspace/ui/components/layout/sidebar/sidebar-section';
@@ -6,6 +6,7 @@ import {Separator} from '@workspace/ui/components/separator';
 import {AppLogo} from '@workspace/ui/components/layout/app-logo';
 import React from 'react';
 import {EigenLoader} from "@workspace/ui";
+import { EmailComposeButton } from "./email-compose-button";
 
 // Map of special mailbox flags to their icons and display names
 const standardMailboxes: Record<string, { icon: React.ComponentType<any>, name: string }> = {
@@ -147,11 +148,7 @@ export function EmailSidebar({
             )}
 
             <div className="px-3 py-2">
-                <Button variant="default" size={condensed ? "icon" : "default"}
-                        className={`${condensed ? 'w-10 p-0' : 'w-full justify-start gap-3'}`}>
-                    <MailPlus className="h-4 w-4"/>
-                    {!condensed && <span>Compose</span>}
-                </Button>
+                <EmailComposeButton condensed={condensed} />
             </div>
 
             <SidebarSection condensed={condensed}>
