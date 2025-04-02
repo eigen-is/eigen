@@ -1,23 +1,9 @@
-import {useState, useMemo} from 'react';
+import {useMemo, useState} from 'react';
 import {DrivePath} from "@apps/api-server/types/drive";
 import {Button} from "@workspace/ui/components/button";
-import {
-    Table,
-    TableHeader,
-    TableBody,
-    TableRow,
-    TableHead,
-    TableCell
-} from "@workspace/ui/components/table";
+import {Table, TableBody, TableCell, TableHead, TableHeader, TableRow} from "@workspace/ui/components/table";
 import {EigenLoader} from "@workspace/ui";
-import {
-    ChevronLeft,
-    File,
-    Folder,
-    FolderPlus,
-    MoreHorizontal,
-    Search, UploadIcon
-} from "lucide-react";
+import {ChevronLeft, File, Folder, FolderPlus, MoreHorizontal, Search, UploadIcon} from "lucide-react";
 import {Input} from "@workspace/ui/components/input";
 import {
     DropdownMenu,
@@ -47,7 +33,7 @@ export function DriveList({
                               onRowClick,
                               activeRowId,
                               onCreateFolder,
-                              onUploadFile, 
+                              onUploadFile,
                               onDelete,
                               currentPath,
                           }: DriveListProps) {
@@ -176,7 +162,8 @@ export function DriveList({
                                 <TableCell className="font-medium">
                                     <div className="flex items-center">
                                         {item.type === 'folder' ? (
-                                            <Folder className="h-4 w-4 mr-2 text-app" fill="var(--app-drive-light-color)"/>
+                                            <Folder className="h-4 w-4 mr-2 text-app"
+                                                    fill="var(--app-drive-light-color)"/>
                                         ) : (
                                             <File className="h-4 w-4 mr-2 text-muted-foreground"/>
                                         )}
@@ -207,7 +194,10 @@ export function DriveList({
                                         <DropdownMenuContent align="end">
                                             {/* <DropdownMenuItem>Rename</DropdownMenuItem> */}
                                             <DropdownMenuItem
-                                                onClick={(e) => { e.stopPropagation(); onDelete?.(item) }}
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    onDelete?.(item)
+                                                }}
                                             >
                                                 Delete
                                             </DropdownMenuItem>

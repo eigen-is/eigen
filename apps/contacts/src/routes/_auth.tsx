@@ -23,39 +23,39 @@ export const Route = createFileRoute('/_auth')({
 })
 
 function AuthLayout() {
-    const { sidebarOpen, setSidebarOpen } = useContext(SidebarContext);
+    const {sidebarOpen, setSidebarOpen} = useContext(SidebarContext);
     const isMobile = useMediaQuery('(max-width: 768px)');
     const isTablet = useMediaQuery('(min-width: 769px) and (max-width: 1024px)');
-    
+
     return (
-            <div className="flex flex-1 w-full h-full overflow-hidden">
-                {/* Sidebar: overlay on mobile, normal display on larger screens */}
-                <div 
-                    className={`
+        <div className="flex flex-1 w-full h-full overflow-hidden">
+            {/* Sidebar: overlay on mobile, normal display on larger screens */}
+            <div
+                className={`
                         ${isMobile ? (sidebarOpen ? 'fixed inset-0 z-50 bg-background' : 'hidden') : 'block'}
                         ${isTablet ? 'w-16' : 'w-64'} 
                         border-r h-full min-h-full
                     `}
-                >
-                    <ContactsSidebar 
-                        condensed={isTablet}
-                        isMobile={isMobile}
-                        onClose={() => setSidebarOpen(false)}
-                    />
-                </div>
-                
-                {/* Backdrop for mobile to close sidebar when clicking outside */}
-                {isMobile && sidebarOpen && (
-                    <div 
-                        className="fixed inset-0 z-40 bg-background/80"
-                        onClick={() => setSidebarOpen(false)}
-                    />
-                )}
-                
-                {/* Main content area */}
-                <main className="flex-1 flex flex-col h-full overflow-auto">
-                    <Outlet/>
-                </main>
+            >
+                <ContactsSidebar
+                    condensed={isTablet}
+                    isMobile={isMobile}
+                    onClose={() => setSidebarOpen(false)}
+                />
             </div>
+
+            {/* Backdrop for mobile to close sidebar when clicking outside */}
+            {isMobile && sidebarOpen && (
+                <div
+                    className="fixed inset-0 z-40 bg-background/80"
+                    onClick={() => setSidebarOpen(false)}
+                />
+            )}
+
+            {/* Main content area */}
+            <main className="flex-1 flex flex-col h-full overflow-auto">
+                <Outlet/>
+            </main>
+        </div>
     );
 }
