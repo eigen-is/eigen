@@ -1,6 +1,10 @@
 import { Button } from "@workspace/ui/components/button";
 import { MailPlus } from "lucide-react";
-import { useParams } from "@tanstack/react-router";
+import { useNavigate, useParams } from "@tanstack/react-router";
+import { useCreateDraft } from "@workspace/lib/mail";
+
+// Import route to get correct path information
+import { Route as FilterRoute } from '../../routes/_auth.$filterType.$filterId';
 
 interface EmailComposeButtonProps {
   condensed: boolean;
@@ -12,14 +16,25 @@ export function EmailComposeButton({ condensed }: EmailComposeButtonProps) {
     from: '/_auth/$filterType/$filterId',
   });
   
-  const handleComposeClick = () => {
-    // You can use filterType and filterId here for context-aware compose functionality
-    console.log("Composing email with context:", { filterType, filterId });
-    
-    // Add your compose email logic here
-    // For example:
-    // if (filterType === "label") { ... }
-    // if (filterType === "mailbox" && filterId === "drafts") { ... }
+  const navigate = useNavigate();
+  const createDraft = useCreateDraft();
+  
+  const handleComposeClick = async () => {
+    try {
+      // Create an empty draft email
+      const draftId = await createDraft.mutateAsync({});
+      
+      // Navigate to the current filter with the new draft ID as mailId parameter
+      if (draftId) {
+        navigate({
+          to: FilterRoute.fullPath,
+          params: { filterType, filterId },
+          search: { mailId: draftId },
+        });
+      }
+    } catch (error) {
+      console.error("Failed to create draft email:", error);
+    }
   };
   
   return (

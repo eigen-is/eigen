@@ -1,5 +1,6 @@
 import {createFileRoute, useNavigate} from '@tanstack/react-router';
 import {EmailDetail} from "../components/mail/email-detail.tsx";
+import {EmailDraft} from "../components/mail/email-draft.tsx";
 import {
     useCreateDraft,
     useDeleteEmail,
@@ -78,13 +79,23 @@ function MailRoute() {
     if (isMobile) {
         return selectedEmail ? (
             <div className="flex-1 h-full w-full">
-                <EmailDetail
-                    email={selectedEmail}
-                    isMobile={true}
-                    onBackClick={handleBackToList}
-                    onDelete={handleDeleteEmail}
-                    toggleMailRead={toggleMailRead}
-                />
+                {selectedEmail.isDraft ? (
+                    <EmailDraft
+                        email={selectedEmail}
+                        isMobile={true}
+                        onBackClick={handleBackToList}
+                        onDelete={handleDeleteEmail}
+                        toggleMailRead={toggleMailRead}
+                    />
+                ) : (
+                    <EmailDetail
+                        email={selectedEmail}
+                        isMobile={true}
+                        onBackClick={handleBackToList}
+                        onDelete={handleDeleteEmail}
+                        toggleMailRead={toggleMailRead}
+                    />
+                )}
             </div>
         ) : (
             <div className="flex-1 h-full w-full">
@@ -128,12 +139,21 @@ function MailRoute() {
             <div className="flex-1 h-full overflow-hidden">
                 {mailId && selectedEmail ? (
                     <div className="h-full">
-                        <EmailDetail
-                            email={selectedEmail}
-                            className="border-none h-full"
-                            onDelete={handleDeleteEmail}
-                            toggleMailRead={toggleMailRead}
-                        />
+                        {selectedEmail.isDraft ? (
+                            <EmailDraft
+                                email={selectedEmail}
+                                className="border-none h-full"
+                                onDelete={handleDeleteEmail}
+                                toggleMailRead={toggleMailRead}
+                            />
+                        ) : (
+                            <EmailDetail
+                                email={selectedEmail}
+                                className="border-none h-full"
+                                onDelete={handleDeleteEmail}
+                                toggleMailRead={toggleMailRead}
+                            />
+                        )}
                     </div>
                 ) : (
                     <div className="h-full w-full flex items-center justify-center">
