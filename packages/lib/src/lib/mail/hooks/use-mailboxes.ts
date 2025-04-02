@@ -28,7 +28,7 @@ export function useMailboxes() {
             const response = await mailApi.mailboxes.get();
             return response.data || [];
         },
-        staleTime: 60000, // 1 minute
+        staleTime: 5 * 60 * 1000, // 5 minutes (increased from 1 minute)
         refetchOnWindowFocus: false,
         retry: 1,
     });
