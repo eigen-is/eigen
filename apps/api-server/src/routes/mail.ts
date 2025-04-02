@@ -158,7 +158,7 @@ export const mailRouter = new Elysia({name: "mail"})
             mail: t.Any()
         })
     })
-    .post("/mail/send", async ({body, user}: { body: MessageDraftBody, user: User }) => {
+    .post("/mail/message/send", async ({body, user}: { body: MessageDraftBody, user: User }) => {
         return await messageSend(user, body['mail']);
     }, {
         auth: true,

@@ -8,6 +8,7 @@ import DOMPurify from 'isomorphic-dompurify';
 import maildb from "./maildb.ts";
 import type {Home} from "../home/home.ts";
 import nodemailer from 'nodemailer';
+import type { EmailDraft } from "../../types/mail.ts";
 
 export default class Maildir {
     private basePath: string;
@@ -320,10 +321,9 @@ export default class Maildir {
                 return false;
             }
 
+            this.db.moveEmail(messageId, targetMailbox);
             // use fs move function to move
             await this.home.fs.rename(sourcePath, targetFilePath);
-
-            this.db.moveEmail(messageId, targetMailbox);
 
             return true;
         } catch (error) {
@@ -379,7 +379,7 @@ export default class Maildir {
      * Creates a new draft message
      * @returns New draft message
      */
-    public async messageCreateDraft(email: Email, forcedMessageId: string | undefined = undefined): Promise<Email> {
+    public async messageCreateDraft(email: EmailDraft, forcedMessageId: string | undefined = undefined): Promise<EmailDraft> {
         try {
             // Check if Drafts mailbox exists
             let draftsMailbox = await this.mailboxExists('Drafts');
@@ -451,7 +451,7 @@ export default class Maildir {
                 throw new Error(`Failed to create draft message: ${messageId}`);
             }
 
-            return parsedMessage;
+            return parsedMessage as EmailDraft;
         } catch (error) {
             console.error('Error creating draft message:', error);
             throw error;
@@ -463,7 +463,7 @@ export default class Maildir {
      * @param mail Draft message to update
      * @returns True if successful
      */
-    public async messageUpdateDraft(mail: Email): Promise<Email | null> {
+    public async messageUpdateDraft(mail: EmailDraft): Promise<EmailDraft | null> {
         // check if message exists, if it is a draft and located in the Drafts mailbox
         const message = await this.messageGet(mail.id);
         if (!message) {
@@ -482,7 +482,7 @@ export default class Maildir {
      * @returns True if successful
      */
     // @ts-ignore - Ignore TypeScript errors in this method
-    public async messageSend(mail: Email): Promise<Email | null> {
+    public async messageSend(mail: EmailDraft): Promise<EmailDraft | null> {
         // check if message exists, if it is a draft and located in the Drafts mailbox
         const message = await this.messageGet(mail.id);
         if (!message) {
@@ -556,6 +556,10 @@ export default class Maildir {
             // await transporter.sendMail(nodemailerMail);
 
             console.log(nodemailerMail);
+
+            // move message to send directory
+
+            await this.messageMove(newMail.id, 'sent');
         } catch (error) {
             console.error('Error sending email:', error);
             return null;
