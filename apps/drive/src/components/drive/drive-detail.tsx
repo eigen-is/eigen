@@ -62,7 +62,17 @@ export function DriveDetail({
                     <TooltipButton
                         icon={Download}
                         tooltipText="Download"
-                        onClick={() => {/* TODO: Implement reply all functionality */
+                        onClick={() => {
+                            if (path && path.id) {
+                                const downloadUrl = `${import.meta.env.VITE_API_HOST}/drive/download/${path.id}`;
+                                // Create a temporary anchor element to trigger the download
+                                const a = document.createElement('a');
+                                a.href = downloadUrl;
+                                a.download = path.name || 'download'; // Use the file name or a default
+                                document.body.appendChild(a);
+                                a.click();
+                                document.body.removeChild(a);
+                            }
                         }}
                     />
                     
