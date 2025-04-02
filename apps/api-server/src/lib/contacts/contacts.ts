@@ -169,8 +169,8 @@ export class Contacts {
 
         await this.db.insert(schema.contacts).values({
             id: contactId,
-            firstName: contactData.firstName,
-            lastName: contactData.lastName,
+            firstName: contactData.firstName.trim(),
+            lastName: contactData.lastName.trim(),
             eigenId: contactData.eigenId || '',
             data,
             createdAt: sql`unixepoch()`,
@@ -216,8 +216,8 @@ export class Contacts {
         // Update contact
         await this.db.update(schema.contacts)
             .set({
-                firstName: contactData.firstName,
-                lastName: contactData.lastName,
+                firstName: contactData.firstName.trim(),
+                lastName: contactData.lastName.trim(),
                 data,
                 updatedAt: sql`unixepoch()`
             })
@@ -236,7 +236,7 @@ export class Contacts {
 
         await this.db.insert(schema.labels).values({
             id: labelId,
-            name: label.name,
+            name: label.name.trim(),
             color: label.color,
             createdAt: sql`unixepoch()`,
             updatedAt: sql`unixepoch()`,
@@ -251,7 +251,7 @@ export class Contacts {
         try {
             await this.db.update(schema.labels)
                 .set({
-                    name: label.name,
+                    name: label.name.trim(),
                     color: label.color,
                     updatedAt: sql`unixepoch()`
                 })
@@ -293,8 +293,8 @@ export class Contacts {
 
         return {
             id: contact.id,
-            firstName: contact.firstName,
-            lastName: contact.lastName,
+            firstName: contact.firstName.trim(),
+            lastName: contact.lastName.trim(),
             eigenId: contact.eigenId,
             ...data as Omit<Contact, 'id' | 'firstName' | 'lastName' | 'labels'>,
             labels: labelIds
@@ -320,8 +320,8 @@ export class Contacts {
 
             results.push({
                 id: contact.id,
-                firstName: contact.firstName,
-                lastName: contact.lastName,
+                firstName: contact.firstName.trim(),
+                lastName: contact.lastName.trim(),
                 eigenId: contact.eigenId,
                 ...data as Omit<Contact, 'id' | 'firstName' | 'lastName' | 'labels'>,
                 labels: labelIds

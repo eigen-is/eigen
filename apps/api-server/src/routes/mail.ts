@@ -17,6 +17,7 @@ import {
     messageMoveToInbox,
     messageMoveToSpam,
     messageMoveToTrash,
+    messageSend,
     messageSetRead,
     messageUpdateDraft
 } from "../lib/mail/mail";
@@ -141,13 +142,24 @@ export const mailRouter = new Elysia({name: "mail"})
             targetMailbox: t.String()
         })
     })
-    .post("/mail/message/draft", async ({user}: { user: User }) => {
-        return await messageCreateDraft(user);
+    .post("/mail/message/draft", async ({body, user}: { body: MessageDraftBody, user: User }) => {
+        return await messageCreateDraft(user, body['mail']);
     }, {
-        auth: true
+        auth: true,
+        body: t.Object({
+            mail: t.Any()
+        })
     })
     .put("/mail/message/draft", async ({body, user}: { body: MessageDraftBody, user: User }) => {
         return await messageUpdateDraft(user, body['mail']);
+    }, {
+        auth: true,
+        body: t.Object({
+            mail: t.Any()
+        })
+    })
+    .post("/mail/send", async ({body, user}: { body: MessageDraftBody, user: User }) => {
+        return await messageSend(user, body['mail']);
     }, {
         auth: true,
         body: t.Object({
@@ -163,7 +175,7 @@ export const mailRouter = new Elysia({name: "mail"})
             read: t.Boolean()
         })
     })
-    .get("/mail/message/:id/attachment/:index/:fileName", async ({params, user,     set}: {
+    .get("/mail/message/:id/attachment/:index/:fileName", async ({params, user, set}: {
         params: { id: string, index: number, fileName: string },
         user: User,
         set: any

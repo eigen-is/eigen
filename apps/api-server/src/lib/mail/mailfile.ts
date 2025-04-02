@@ -1,4 +1,4 @@
-import type {AddressObject, Email} from "./mailtypes";
+import type {Email, EmailAddress} from "./mailtypes";
 
 /**
  * Creates an EML format content from an Email object
@@ -9,29 +9,34 @@ export function createELMContent(email: Email): string {
     // Format the date
     const date = email.date ? email.date.toUTCString() : new Date().toUTCString();
 
-    // Format the from address
-    let fromStr = '';
-    if (email.from) {
-        // Use the text representation which is already formatted
-        fromStr = email.from.text;
-    }
-
-    // Format the to address(es)
-    let toStr = '';
-    if (email.to) {
-        if (Array.isArray(email.to)) {
-            // If it's an array of address objects, join their text representations
-            toStr = email.to.map((to: AddressObject) => to.text).join(', ');
-        } else {
-            // Single address object
-            toStr = email.to.text;
+    const formatAdresses = (field: { value: EmailAddress[] }) => {
+        if (field.value && Array.isArray(field.value)) {
+            return field.value.map(addr => {
+                if (addr.name && addr.address) {
+                    return `${addr.name.trim()} <${addr.address.trim()}>`;
+                } else if (addr.address) {
+                    return addr.address;
+                } else if (addr.name) {
+                    return addr.name;
+                }
+                return '';
+            }).join(', ');
         }
-    }
+        return '';
+    };
+
+    // Format the from address
+    const fromStr = email.from && email.from.value && Array.isArray(email.from.value) ? formatAdresses(email.from) : '';
+    const toStr = email.to && !Array.isArray(email.to) && email.to.value && Array.isArray(email.to.value) ? formatAdresses(email.to) : '';
+    const ccStr = email.cc && !Array.isArray(email.cc) && email.cc.value && Array.isArray(email.cc.value) ? formatAdresses(email.cc) : '';
+    const bccStr = email.bcc && !Array.isArray(email.bcc) && email.bcc.value && Array.isArray(email.bcc.value) ? formatAdresses(email.bcc) : '';
 
     // Create the email headers
     const headers = [
         `From: ${fromStr}`,
         `To: ${toStr}`,
+        `CC: ${ccStr}`,
+        `BCC: ${bccStr}`,
         `Subject: ${email.subject || ''}`,
         `Date: ${date}`,
         `Message-ID: <${email.id}@eigen.local>`,

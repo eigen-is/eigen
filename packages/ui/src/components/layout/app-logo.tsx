@@ -1,7 +1,7 @@
-import { useState, useEffect, useRef } from "react";
-import { Link } from "@tanstack/react-router";
-import { cn } from "@workspace/ui/lib/utils";
-import { apps } from "@workspace/lib/apps.ts";
+import {useEffect, useRef, useState} from "react";
+import {Link} from "@tanstack/react-router";
+import {cn} from "@workspace/ui/lib/utils";
+import {apps} from "@workspace/lib/apps.ts";
 
 interface AppLogoProps {
     appName?: string;
@@ -9,7 +9,7 @@ interface AppLogoProps {
     linkable?: boolean;
 }
 
-export function AppLogo({ appName = "Mail", className, linkable = true }: AppLogoProps) {
+export function AppLogo({appName = "Mail", className, linkable = true}: AppLogoProps) {
     const [expanded, setExpanded] = useState(false);
     const logoRef = useRef<HTMLDivElement>(null);
 
@@ -43,7 +43,7 @@ export function AppLogo({ appName = "Mail", className, linkable = true }: AppLog
                     {apps.map((app) => (
                         <div key={app.name} className="flex items-center">
                             <span className="text-white p-0.5">
-                                <a 
+                                <a
                                     href={app.href}
                                     onClick={(e) => e.stopPropagation()}
                                     className={"hover:underline hover:opacity-75 transition-opacity duration-150 " + (appName.toLowerCase() === app.name.toLowerCase() ? ' underline' : '')}
@@ -69,13 +69,13 @@ export function AppLogo({ appName = "Mail", className, linkable = true }: AppLog
     );
 
     return (
-        <div 
+        <div
             ref={logoRef}
             className={cn("text-xl flex items-center cursor-pointer select-none -mt-1", className)}
             onClick={handleLogoClick}
         >
             {linkable ? (
-                <LogoContent />
+                <LogoContent/>
             ) : (
                 <Link
                     className="flex items-center"

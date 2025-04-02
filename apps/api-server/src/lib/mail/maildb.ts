@@ -81,46 +81,53 @@ export default class maildb {
             updatedAt: new Date()
         } as const;
 
-        // Cast the record to the expected type using 'as any' to bypass TypeScript checking
-        // This is safe because we've structured the data to match the schema
-        return await this.db.insert(schema.emails).values(emailRecord as any);
+        // check if emailRecord already exists
+        const existingEmail = this.db.select().from(schema.emails).where(eq(schema.emails.id, emailRecord.id)).get();
+        if (existingEmail) {
+            // Update the existing email record
+            // remove id from emailRecord
+            const {id, ...rest} = emailRecord;
+            return this.db.update(schema.emails).set(rest).where(eq(schema.emails.id, email.id));
+        } else {
+            return this.db.insert(schema.emails).values(emailRecord);
+        }
     }
 
     public async getEmail(id: string) {
-        return await this.db.select().from(schema.emails).where(eq(schema.emails.id, id)).get();
+        return this.db.select().from(schema.emails).where(eq(schema.emails.id, id)).get();
     }
 
     public async deleteEmail(id: string) {
-        return await this.db.delete(schema.emails).where(eq(schema.emails.id, id));
+        return this.db.delete(schema.emails).where(eq(schema.emails.id, id));
     }
 
     public async moveEmail(id: string, mailbox: string) {
         console.log('move email to mailbox:', mailbox);
-        return await this.db.update(schema.emails).set({mailbox}).where(eq(schema.emails.id, id));
+        return this.db.update(schema.emails).set({mailbox}).where(eq(schema.emails.id, id));
     }
 
     public async renameMailbox(mailbox: string, newMailbox: string) {
-        return await this.db.update(schema.emails).set({mailbox: newMailbox}).where(eq(schema.emails.mailbox, mailbox));
+        return this.db.update(schema.emails).set({mailbox: newMailbox}).where(eq(schema.emails.mailbox, mailbox));
     }
 
     public async deleteMailbox(mailbox: string) {
-        return await this.db.delete(schema.emails).where(eq(schema.emails.mailbox, mailbox));
+        return this.db.delete(schema.emails).where(eq(schema.emails.mailbox, mailbox));
     }
 
     public async setRead(id: string, isRead: boolean) {
-        return await this.db.update(schema.emails).set({isRead}).where(eq(schema.emails.id, id));
+        return this.db.update(schema.emails).set({isRead}).where(eq(schema.emails.id, id));
     }
 
     public async setStarred(id: string, isStarred: boolean) {
-        return await this.db.update(schema.emails).set({isStarred}).where(eq(schema.emails.id, id));
+        return this.db.update(schema.emails).set({isStarred}).where(eq(schema.emails.id, id));
     }
 
     public async setDraft(id: string, isDraft: boolean) {
-        return await this.db.update(schema.emails).set({isDraft}).where(eq(schema.emails.id, id));
+        return this.db.update(schema.emails).set({isDraft}).where(eq(schema.emails.id, id));
     }
 
     public async getAllEmails(mailbox: string) {
         console.log('search mails in mailbox:', mailbox);
-        return await this.db.select().from(schema.emails).where(eq(schema.emails.mailbox, mailbox));
+        return this.db.select().from(schema.emails).where(eq(schema.emails.mailbox, mailbox));
     }
 }

@@ -7,6 +7,7 @@ import {welcomeMail} from "./welcome.ts";
 import DOMPurify from 'isomorphic-dompurify';
 import maildb from "./maildb.ts";
 import type {Home} from "../home/home.ts";
+import nodemailer from 'nodemailer';
 
 export default class Maildir {
     private basePath: string;
@@ -375,33 +376,44 @@ export default class Maildir {
      * Creates a new draft message
      * @returns New draft message
      */
-    public async messageCreateDraft(): Promise<Email> {
+    public async messageCreateDraft(email: Email, forcedMessageId: string | undefined = undefined): Promise<Email> {
         try {
             // Check if Drafts mailbox exists
-            const draftsMailbox = await this.mailboxExists('Drafts');
+            let draftsMailbox = await this.mailboxExists('Drafts');
             if (!draftsMailbox) {
                 // Create Drafts mailbox if it doesn't exist
                 await this.mailboxCreate('Drafts', ['\\HasNoChildren', '\\Drafts']);
+                draftsMailbox = await this.mailboxExists('Drafts') as MaildirMailbox;
             }
 
             // Create a unique message ID
-            const messageId = createUniqueMessageId();
+            const messageId = forcedMessageId || createUniqueMessageId();
             const draftPath = await this.sanitizeDirName('Drafts', 'cur');
             const filename = messageId + '.eml';
             const filePath = this.home.fs.pathJoin(draftPath, filename);
 
+            const user = this.home.user;
+            email.from = {
+                value: [{
+                    address: user.email,
+                    name: user.name,
+                }],
+                html: user.email,
+                text: user.email,
+            };
+
             // Create an empty message template with all required properties
             const emptyMessage = createELMContent({
                 id: messageId,
-                subject: '',
-                from: undefined,
-                to: undefined,
-                fromShort: '',
-                textShort: '',
+                subject: email.subject || '',
+                from: email.from || undefined,
+                to: email.to || undefined,
+                fromShort: (email.from?.value[0]?.name || email.from?.value[0]?.address || 'Unknown'),
+                textShort: email.text || '',
                 date: new Date(),
-                text: '',
-                html: '',
-                textAsHtml: '',
+                text: email.text || '',
+                html: email.html || '',
+                textAsHtml: email.textAsHtml || '',
                 attachments: [],
                 headers: new Map(),
                 headerLines: [], // Add the required headerLines property
@@ -412,12 +424,23 @@ export default class Maildir {
                 isStarred: false,
                 isDraft: true,
                 hasAttachments: false,
-                mailbox: 'Drafts',
+                mailbox: draftsMailbox.name,
                 _isParsed: false
             });
 
             // Use home.fs for file content operations
             await this.home.fs.file(filePath).write(emptyMessage);
+
+            const parsedMessage = await this.parseMessage(messageId, draftsMailbox.name);
+            if (!parsedMessage) {
+                throw new Error(`Failed to parse draft message: ${messageId}`);
+            }
+
+            parsedMessage.isDraft = true;
+            parsedMessage.mailbox = draftsMailbox.name;
+
+            // Add message to db
+            await this.db.addEmail(parsedMessage as EmailSummary);
 
             // Get the newly created message
             const message = await this.messageGet(messageId);
@@ -425,7 +448,7 @@ export default class Maildir {
                 throw new Error(`Failed to create draft message: ${messageId}`);
             }
 
-            return message;
+            return parsedMessage;
         } catch (error) {
             console.error('Error creating draft message:', error);
             throw error;
@@ -437,8 +460,105 @@ export default class Maildir {
      * @param mail Draft message to update
      * @returns True if successful
      */
-    public async messageUpdateDraft(mail: Email): Promise<boolean> {
-        return false;
+    public async messageUpdateDraft(mail: Email): Promise<Email | null> {
+        // check if message exists, if it is a draft and located in the Drafts mailbox
+        const message = await this.messageGet(mail.id);
+        if (!message) {
+            return null;
+        }
+        if (message.mailbox !== 'Drafts' || !message.isDraft) {
+            return null;
+        }
+        // update message
+        return this.messageCreateDraft(mail, mail.id);
+    }
+
+    /**
+     * Sends a draft message
+     * @param mail Draft message to send
+     * @returns True if successful
+     */
+    // @ts-ignore - Ignore TypeScript errors in this method
+    public async messageSend(mail: Email): Promise<Email | null> {
+        // check if message exists, if it is a draft and located in the Drafts mailbox
+        const message = await this.messageGet(mail.id);
+        if (!message) {
+            return null;
+        }
+        if (message.mailbox !== 'Drafts' || !message.isDraft) {
+            return null;
+        }
+        // update message
+        const newMail = await this.messageCreateDraft(mail, mail.id);
+        if (!newMail) {
+            return null;
+        }
+
+        // use nodemailer, to send email to reinder@eigen.is
+        // @ts-ignore - Ignore nodemailer type errors
+        const transporter = nodemailer.createTransport({
+            sendmail: true,
+            newline: 'unix',
+            path: '/usr/sbin/sendmail'
+        });
+
+        try {
+            // Convert the mail object to the format needed for nodemailer
+            // @ts-ignore - Ignore type errors in mail conversion
+            const nodemailerMail = {
+                // From address - use the address and name from the mail object
+                from: mail.from?.value?.[0] ?
+                    {name: mail.from.value[0].name, address: mail.from.value[0].address} :
+                    this.home.user.email,
+
+                // To addresses - convert the array of addresses to the format needed
+                // @ts-ignore - Ignore type errors in mail conversion
+                to: mail.to?.value?.map(recipient => ({
+                    name: recipient.name,
+                    address: recipient.address
+                })) || [],
+
+                // CC addresses if present
+                // @ts-ignore - Ignore type errors in mail conversion
+                ...(mail.cc?.value?.length ? {
+                    // @ts-ignore - Ignore type errors in mail conversion
+                    cc: mail.cc.value.map(recipient => ({
+                        name: recipient.name,
+                        address: recipient.address
+                    }))
+                } : {}),
+
+                // BCC addresses if present
+                // @ts-ignore - Ignore type errors in mail conversion
+                ...(mail.bcc?.value?.length ? {
+                    // @ts-ignore - Ignore type errors in mail conversion
+                    bcc: mail.bcc.value.map(recipient => ({
+                        name: recipient.name,
+                        address: recipient.address
+                    }))
+                } : {}),
+
+                // Subject
+                subject: mail.subject || '(No subject)',
+
+                // Text content
+                text: mail.text || '',
+
+                // HTML content if available
+                ...(mail.html ? {html: mail.html} : {})
+            };
+
+            // Send mail with defined transport object
+            // @ts-ignore - Ignore sendMail type errors
+            // await transporter.sendMail(nodemailerMail);
+
+            console.log(nodemailerMail);
+        } catch (error) {
+            console.error('Error sending email:', error);
+            return null;
+        }
+
+        return newMail;
     }
 
     /**

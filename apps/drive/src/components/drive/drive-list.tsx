@@ -71,7 +71,7 @@ export function DriveList({
                         onChange={(e) => setSearchTerm(e.target.value)}
                     />
                 </div>
-                
+
                 {/* Mobile search button */}
                 <div className="sm:hidden">
                     <Button
@@ -80,10 +80,10 @@ export function DriveList({
                         className="h-9 w-9"
                         title="Search"
                     >
-                        <Search className="h-4 w-4" />
+                        <Search className="h-4 w-4"/>
                     </Button>
                 </div>
-                
+
                 <div className="flex gap-1">
                     {onCreateFolder && (
                         <Button
@@ -92,7 +92,7 @@ export function DriveList({
                             className="h-9"
                             onClick={onCreateFolder}
                         >
-                            <FolderPlus className="h-4 w-4 sm:mr-2" />
+                            <FolderPlus className="h-4 w-4 sm:mr-2"/>
                             <span className="hidden sm:inline">New Folder</span>
                         </Button>
                     )}
@@ -103,7 +103,7 @@ export function DriveList({
                             className="h-9"
                             onClick={onUploadFile}
                         >
-                            <UploadIcon className="h-4 w-4 sm:mr-2" />
+                            <UploadIcon className="h-4 w-4 sm:mr-2"/>
                             <span className="hidden sm:inline">Upload</span>
                         </Button>
                     )}

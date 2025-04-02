@@ -549,6 +549,28 @@ export default class Drive {
         return false;
     }
 
+    public async getThumbnail(fileName: string): Promise<ArrayBuffer | null> {
+        const url = this.home.fs.pathJoin(this.basePath, 'thumbs', fileName);
+        const file = this.home.fs.file(url);
+        if (!file.exists()) {
+            return null;
+        }
+        return file.arrayBuffer();
+    }
+
+    public async downloadFile(pathId: string): Promise<ArrayBuffer | null> {
+        const path = await this.getPath(pathId);
+        console.log("Path:", path);
+        if (!path || path.type !== "file" || !path.parentId) {
+            return null;
+        }
+        const file = this.home.fs.file(this.home.fs.pathJoin(await this.getFolderPath(path.parentId), path.name));
+        if (!file.exists()) {
+            return null;
+        }
+        return file.arrayBuffer();
+    }
+
     private async getFolderPath(pathId: string): Promise<string> {
         return path.join(this.basePath, ...(await this.getParentPaths(pathId)).map(a => a.name));
     }
@@ -572,28 +594,6 @@ export default class Drive {
         if (folder.parentId) {
             await this.updateSizeOfFolder(folder.parentId);
         }
-    }
-
-    public async getThumbnail(fileName: string): Promise<ArrayBuffer | null> {
-        const url = this.home.fs.pathJoin(this.basePath, 'thumbs', fileName);
-        const file = this.home.fs.file(url);
-        if (!file.exists()) {
-            return null;
-        }
-        return file.arrayBuffer();
-    }
-
-    public async downloadFile(pathId: string): Promise<ArrayBuffer | null> {
-        const path = await this.getPath(pathId);
-        console.log("Path:", path);
-        if (!path || path.type !== "file" || !path.parentId) {
-            return null;
-        }
-        const file = this.home.fs.file(this.home.fs.pathJoin(await this.getFolderPath(path.parentId), path.name));
-        if (!file.exists()) {
-            return null;
-        }
-        return file.arrayBuffer();
     }
 
     private async generateThumbnail(id: string, mimeType: string, filePath: string): Promise<string | null> {
