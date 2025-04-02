@@ -6,7 +6,7 @@ import {SidebarItem} from '@workspace/ui/components/layout/sidebar/sidebar-item'
 import {SidebarSection} from '@workspace/ui/components/layout/sidebar/sidebar-section';
 import {Separator} from '@workspace/ui/components/separator';
 import {type Label} from "@apps/api-server/types/label";
-import {useAddLabel, useDeleteLabel, useLabels, useUpdateLabel} from '../../hooks/use-labels';
+import {useAddLabel, useDeleteLabel, useLabels, useUpdateLabel} from '@workspace/lib/contacts';
 import {AppLogo} from '@workspace/ui/components/layout/app-logo';
 import {EigenLoader} from "@workspace/ui";
 

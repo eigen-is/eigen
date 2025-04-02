@@ -1,9 +1,7 @@
 import {createFileRoute, useNavigate} from '@tanstack/react-router';
 import {ContactsList} from '../components/contacts/contacts-list';
 import {ContactDetail} from '../components/contacts/contact-detail';
-import {useContacts, useDeleteContact} from '../hooks/use-contacts';
-import {useLabels} from '../hooks/use-labels';
-import {useMediaQuery} from '../hooks/use-media-query';
+import {useContacts, useDeleteContact, useLabels, useMediaQuery} from '@workspace/lib/contacts';
 import {toast} from "sonner";
 import {EigenLoader} from '@workspace/ui/components/layout/eigen-loader';
 

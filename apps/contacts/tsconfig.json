@@ -9,6 +9,9 @@
       ],
       "@workspace/ui/*": [
         "../../packages/ui/src/*"
+      ],
+      "@workspace/lib/*": [
+        "../../packages/lib/src/lib/*"
       ]
     }
   },
