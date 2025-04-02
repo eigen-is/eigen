@@ -9,7 +9,7 @@ export async function getPublicInfo(mailOrId: string) {
     if (user && image) {
         // get filename from path
         const filename = image.split('/').pop();
-        image = `https://api.eigen.is/space/avatar/${user.id}/${filename}`;
+        image = `space/avatar/${user.id}/${filename}`;
     }
     return {
         name: user?.name,

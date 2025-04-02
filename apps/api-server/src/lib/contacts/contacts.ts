@@ -357,7 +357,7 @@ export class Contacts {
 
         await this.home.fs.file(fullFileName).write(convertedFile);
 
-        return `https://api.eigen.is/contacts/avatar/${fileName}`;
+        return `contacts/avatar/${fileName}`;
     }
 
     public async downloadAvatar(filename: string) {
