@@ -553,7 +553,7 @@ export default class Maildir {
 
             // Send mail with defined transport object
             // @ts-ignore - Ignore sendMail type errors
-            // await transporter.sendMail(nodemailerMail);
+            await transporter.sendMail(nodemailerMail);
 
             console.log(nodemailerMail);
 
