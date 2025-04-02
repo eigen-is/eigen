@@ -55,6 +55,8 @@
     "./lib/*": "./src/lib/*.ts",
     "./components/*": ["./src/components/*.tsx", "./src/components/*.ts"],
     "./components/layout/*": ["./src/components/layout/*.tsx", "./src/components/layout/*.ts", "./src/components/layout/*/index.ts"],
+    "./components/layout/drive": "./src/components/layout/drive/index.ts",
+    "./components/layout/drive/*": ["./src/components/layout/drive/*.tsx", "./src/components/layout/drive/*.ts"],
     "./hooks/*": "./src/hooks/*.ts"
   }
 }
