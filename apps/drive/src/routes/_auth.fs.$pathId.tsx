@@ -2,8 +2,8 @@ import {createFileRoute, useNavigate} from '@tanstack/react-router';
 import {toast} from "sonner";
 import {DriveDetail} from "@/components/drive/drive-detail.tsx";
 import {DriveList} from "@/components/drive/drive-list.tsx";
-import {useMediaQuery} from "@/hooks/use-media-query.ts";
-import {useDeleteFolder, useCreateFolder, useDeleteFile, useFolderContent, usePathInfo, useRootFolder, useUploadFile} from "@/hooks/use-drive.ts";
+import {useMediaQuery} from '@workspace/lib/drive';
+import {useDeleteFolder, useCreateFolder, useDeleteFile, useFolderContent, usePathInfo, useRootFolder, useUploadFile} from '@workspace/lib/drive';
 import {useState, useEffect, useRef} from "react";
 import {
     Dialog,
