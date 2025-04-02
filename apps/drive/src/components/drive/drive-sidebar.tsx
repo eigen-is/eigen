@@ -1,11 +1,11 @@
-import {FolderPlus, HardDrive, Upload, X, Plus, Folder} from 'lucide-react';
+import {Folder, HardDrive, Plus, X} from 'lucide-react';
 import {Button} from "@workspace/ui/components/button";
 import {SidebarSection} from '@workspace/ui/components/layout/sidebar/sidebar-section';
 import {AppLogo} from '@workspace/ui/components/layout/app-logo';
 import {EigenLoader} from "@workspace/ui";
 import {Link} from '@tanstack/react-router';
 import {cn} from "@workspace/ui/lib/utils";
-import {TooltipProvider, Tooltip, TooltipTrigger, TooltipContent} from "@workspace/ui/components/tooltip";
+import {Tooltip, TooltipContent, TooltipProvider, TooltipTrigger} from "@workspace/ui/components/tooltip";
 
 // Define proper types for drive items
 interface DriveItem {
@@ -51,13 +51,13 @@ export function DriveSidebar({
             )}
 
 
-            <SidebarSection 
-                title={condensed ? undefined : "Folders"} 
+            <SidebarSection
+                title={condensed ? undefined : "Folders"}
                 condensed={condensed}
             >
                 {/* Show folders icon for condensed mode */}
-                {condensed && <HardDrive className="h-4 w-4 mb-2" />}
-                
+                {condensed && <HardDrive className="h-4 w-4 mb-2"/>}
+
                 {isLoading ? (
                     <div className="flex items-center justify-center py-4">
                         <EigenLoader/>
@@ -73,20 +73,20 @@ export function DriveSidebar({
                                 No folders
                             </div>
                         ) : (
-                            <>  
-                            <FolderItem 
-                                key={folderItems[0].parentId}
-                                folder={{id: folderItems[0].parentId || "", name: "/", type: "folder"}}
-                                condensed={condensed}
-                            />
-                            {folderItems.map((folder) => (
-                                <FolderItem 
-                                    key={folder.id}
-                                    folder={folder}
+                            <>
+                                <FolderItem
+                                    key={folderItems[0].parentId}
+                                    folder={{id: folderItems[0].parentId || "", name: "/", type: "folder"}}
                                     condensed={condensed}
-                                    onCreateSubfolder={onCreateFolder}
                                 />
-                            ))}
+                                {folderItems.map((folder) => (
+                                    <FolderItem
+                                        key={folder.id}
+                                        folder={folder}
+                                        condensed={condensed}
+                                        onCreateSubfolder={onCreateFolder}
+                                    />
+                                ))}
                             </>
                         )}
                     </div>
@@ -103,12 +103,12 @@ interface FolderItemProps {
 }
 
 // Component for displaying an individual folder item in the sidebar
-function FolderItem({ folder, condensed, onCreateSubfolder }: FolderItemProps) {
+function FolderItem({folder, condensed, onCreateSubfolder}: FolderItemProps) {
     return (
         <div className="flex items-center group px-2">
             <Link
                 to="/fs/$pathId"
-                params={{ pathId: folder.id }}
+                params={{pathId: folder.id}}
                 className={cn(
                     "flex items-center rounded-md px-2 py-1.5 text-sm font-medium",
                     "hover:bg-muted hover:text-foreground",
@@ -121,10 +121,10 @@ function FolderItem({ folder, condensed, onCreateSubfolder }: FolderItemProps) {
                     className: "text-muted-foreground"
                 }}
             >
-                <Folder className="h-4 w-4 mr-2 shrink-0" />
+                <Folder className="h-4 w-4 mr-2 shrink-0"/>
                 {!condensed && <span className="truncate">{folder.name}</span>}
             </Link>
-            
+
             {!condensed && onCreateSubfolder && (
                 <TooltipProvider>
                     <Tooltip>
@@ -135,7 +135,7 @@ function FolderItem({ folder, condensed, onCreateSubfolder }: FolderItemProps) {
                                 className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
                                 onClick={onCreateSubfolder}
                             >
-                                <Plus className="h-3.5 w-3.5" />
+                                <Plus className="h-3.5 w-3.5"/>
                                 <span className="sr-only">Create subfolder</span>
                             </Button>
                         </TooltipTrigger>

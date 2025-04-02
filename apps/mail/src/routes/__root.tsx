@@ -9,11 +9,12 @@ const appName = 'mail';
 
 // Create sidebar context to manage sidebar visibility
 export const SidebarContext = createContext<{
-  sidebarOpen: boolean;
-  setSidebarOpen: (open: boolean) => void;
+    sidebarOpen: boolean;
+    setSidebarOpen: (open: boolean) => void;
 }>({
-  sidebarOpen: false,
-  setSidebarOpen: () => {},
+    sidebarOpen: false,
+    setSidebarOpen: () => {
+    },
 });
 
 interface MyRouterContext {
@@ -25,22 +26,22 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
     component: () => {
         const [sidebarOpen, setSidebarOpen] = useState(false);
         const isMobile = useMediaQuery('(max-width: 768px)');
-        
+
         return (
-        <>
-            <SidebarContext.Provider value={{ sidebarOpen, setSidebarOpen }}>
-                <div className="flex flex-col h-dvh">
-                    <Topbar 
-                        appName={appName} 
-                        rootRoute={Route}
-                        showMobileMenu={isMobile}
-                        onMobileMenuClick={() => setSidebarOpen(true)}
-                        isMobile={isMobile}
-                    />
+            <>
+                <SidebarContext.Provider value={{sidebarOpen, setSidebarOpen}}>
+                    <div className="flex flex-col h-dvh">
+                        <Topbar
+                            appName={appName}
+                            rootRoute={Route}
+                            showMobileMenu={isMobile}
+                            onMobileMenuClick={() => setSidebarOpen(true)}
+                            isMobile={isMobile}
+                        />
                         <Outlet/>
-                </div>
-            </SidebarContext.Provider>
-            <TanStackRouterDevtools position="bottom-right"/>
-        </>)
+                    </div>
+                </SidebarContext.Provider>
+                <TanStackRouterDevtools position="bottom-right"/>
+            </>)
     }
 });

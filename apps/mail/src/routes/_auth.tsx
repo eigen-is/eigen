@@ -2,8 +2,7 @@ import {createFileRoute, Outlet, redirect} from '@tanstack/react-router'
 import {EmailSidebar} from "../components/mail/email-sidebar.tsx";
 import {useContext} from 'react';
 import {SidebarContext} from './__root';
-import {useMediaQuery} from '@workspace/lib/mail';
-import {useMailboxes} from '@workspace/lib/mail';
+import {useMailboxes, useMediaQuery} from '@workspace/lib/mail';
 
 
 export const Route = createFileRoute('/_auth')({

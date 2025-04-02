@@ -1,7 +1,7 @@
 import {FilterFn, getCoreRowModel, getSortedRowModel, SortingState, useReactTable} from "@tanstack/react-table";
 import {rankItem} from "@tanstack/match-sorter-utils";
 import {Paperclip, Search} from "lucide-react";
-import {useState, useMemo} from "react";
+import {useMemo, useState} from "react";
 import {cn} from "@workspace/ui/lib/utils";
 import {Input} from "@workspace/ui/components/input";
 import {EigenLoader} from "@workspace/ui/components/layout/eigen-loader";

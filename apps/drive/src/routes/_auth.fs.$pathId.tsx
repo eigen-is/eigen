@@ -2,16 +2,18 @@ import {createFileRoute, useNavigate} from '@tanstack/react-router';
 import {toast} from "sonner";
 import {DriveDetail} from "@/components/drive/drive-detail.tsx";
 import {DriveList} from "@/components/drive/drive-list.tsx";
-import {useMediaQuery} from '@workspace/lib/drive';
-import {useDeleteFolder, useCreateFolder, useDeleteFile, useFolderContent, usePathInfo, useRootFolder, useUploadFile} from '@workspace/lib/drive';
-import {useState, useEffect, useRef} from "react";
 import {
-    Dialog,
-    DialogContent,
-    DialogHeader,
-    DialogTitle,
-    DialogFooter,
-} from "@workspace/ui/components/dialog";
+    useCreateFolder,
+    useDeleteFile,
+    useDeleteFolder,
+    useFolderContent,
+    useMediaQuery,
+    usePathInfo,
+    useRootFolder,
+    useUploadFile
+} from '@workspace/lib/drive';
+import {useEffect, useRef, useState} from "react";
+import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,} from "@workspace/ui/components/dialog";
 import {Input} from "@workspace/ui/components/input";
 import {Label} from "@workspace/ui/components/label";
 import {Button} from "@workspace/ui/components/button";
@@ -41,13 +43,13 @@ function DriveRoute() {
 
     // Get the root folder ID to replace "root" pathId
     const {data: rootFolder, isLoading: isRootLoading} = useRootFolder();
-    
+
     // If pathId is "root", navigate to the actual root folder ID when available
     useEffect(() => {
         if (pathId === 'root' && rootFolder?.id) {
             navigate({
                 to: Route.fullPath,
-                params: { pathId: rootFolder.id }
+                params: {pathId: rootFolder.id}
             });
         }
     }, [pathId, rootFolder, navigate]);
@@ -64,14 +66,14 @@ function DriveRoute() {
     const [createFolderOpen, setCreateFolderOpen] = useState(false);
     const [newFolderName, setNewFolderName] = useState('');
     const createFolderMutation = useCreateFolder();
-    
+
     // Delete confirmation dialog state
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
     const [itemToDelete, setItemToDelete] = useState<DrivePath | null>(null);
-    
+
     // Don't fetch data until we have the actual root folder ID (not "root")
     const skipDataFetch = pathId === 'root';
-    
+
     const {
         data: folderContents = [],
         isLoading: isFolderContentLoading,
@@ -84,7 +86,7 @@ function DriveRoute() {
     if ((pathId === 'root' && isRootLoading) || (isFolderContentLoading && !skipDataFetch)) {
         return (
             <div className="flex items-center justify-center h-full w-full">
-                <EigenLoader />
+                <EigenLoader/>
             </div>
         );
     }
@@ -92,14 +94,14 @@ function DriveRoute() {
     // Handle folder creation
     const handleCreateFolder = async () => {
         if (!newFolderName.trim()) return;
-        
+
         const newFolderNameName = newFolderName.trim();
         try {
             await createFolderMutation.mutateAsync({
                 parentId: pathId,
                 folderName: newFolderNameName
             });
-            
+
             // Reset state and show success message
             setCreateFolderOpen(false);
             toast(`Folder "${newFolderNameName}" created`);
@@ -109,7 +111,7 @@ function DriveRoute() {
         }
         setNewFolderName('');
     };
-    
+
     // Function to open the create folder dialog
     const openCreateFolderDialog = () => {
         setCreateFolderOpen(true);
@@ -129,12 +131,12 @@ function DriveRoute() {
 
         // Create upload tracking object with the methods returned by createUpload
         const uploadHandler = upload.createUpload(file.name);
-        
+
         try {
             // Create a FormData object to send the file
             const formData = new FormData();
             formData.append('file', file);
-            
+
             // Use the uploadWithProgress helper with authentication
             await uploadWithProgress({
                 url: `${import.meta.env.VITE_API_HOST}/drive/file/${pathId}`,
@@ -155,7 +157,7 @@ function DriveRoute() {
                         parentId: pathId,
                         file
                     });
-                    
+
                     toast(`Uploaded ${file.name}`);
                 },
                 onError: (err) => {
@@ -166,7 +168,7 @@ function DriveRoute() {
         } catch (err: any) {
             uploadHandler.error();
         }
-        
+
         // Clean up the file input value so the same file can be selected again if needed
         e.target.value = '';
     };
@@ -178,14 +180,14 @@ function DriveRoute() {
         if (path.type === 'folder') {
             navigate({
                 to: Route.fullPath,
-                params: { pathId: path.id },
-                search: { pid: undefined }
+                params: {pathId: path.id},
+                search: {pid: undefined}
             });
         } else {
             navigate({
                 to: Route.fullPath,
-                params: { pathId: pathId },
-                search: { pid: path.id }
+                params: {pathId: pathId},
+                search: {pid: path.id}
             });
         }
     };
@@ -194,7 +196,7 @@ function DriveRoute() {
     const handleBackToList = () => {
         navigate({
             to: Route.fullPath,
-            params: { pathId: pathId }
+            params: {pathId: pathId}
         });
     };
 
@@ -203,11 +205,11 @@ function DriveRoute() {
         setItemToDelete(path);
         setDeleteDialogOpen(true);
     };
-    
+
     // Function to perform the actual delete after confirmation
     const confirmDelete = async () => {
         if (!itemToDelete) return;
-        
+
         try {
             if (itemToDelete.type === 'file') {
                 await deleteFileMutation.mutateAsync(itemToDelete.id);
@@ -216,16 +218,16 @@ function DriveRoute() {
                 await deleteFolderMutation.mutateAsync(itemToDelete.id);
                 toast("Folder deleted");
             }
-            
+
             // Close the dialog and reset state
             setDeleteDialogOpen(false);
             setItemToDelete(null);
-            
+
             // Navigate back to the folder view
             navigate({
                 to: Route.fullPath,
-                params: { pathId: pathId },
-                search: { pid: undefined }
+                params: {pathId: pathId},
+                search: {pid: undefined}
             });
         } catch (error) {
             console.error('Failed to delete item:', error);
@@ -264,7 +266,7 @@ function DriveRoute() {
                 }}>
                     Cancel
                 </Button>
-                <Button 
+                <Button
                     onClick={handleCreateFolder}
                     disabled={!newFolderName.trim() || createFolderMutation.isPending}
                 >
@@ -302,7 +304,7 @@ function DriveRoute() {
                         />
                     </div>
                 )}
-                
+
                 {/* Create Folder Dialog */}
                 {CreateFolderDialog()}
 
@@ -313,7 +315,7 @@ function DriveRoute() {
                     className="hidden"
                     onChange={handleFileChange}
                 />
-                
+
                 {/* Delete Confirmation Dialog */}
                 <DeleteDialog
                     open={deleteDialogOpen}
@@ -358,10 +360,10 @@ function DriveRoute() {
                     </div>
                 )}
             </div>
-            
+
             {/* Create Folder Dialog */}
             {CreateFolderDialog()}
-            
+
 
             {/* Hidden file input element */}
             <input
@@ -370,7 +372,7 @@ function DriveRoute() {
                 className="hidden"
                 onChange={handleFileChange}
             />
-            
+
             {/* Delete Confirmation Dialog */}
             <DeleteDialog
                 open={deleteDialogOpen}
