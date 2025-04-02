@@ -552,13 +552,18 @@ export default class Maildir {
             };
 
             // Send mail with defined transport object
-            // @ts-ignore - Ignore sendMail type errors
-            await transporter.sendMail(nodemailerMail);
 
             console.log(nodemailerMail);
 
-            // move message to send directory
+            try {
+                // @ts-ignore - Ignore sendMail type errors
+                const result = await transporter.sendMail(nodemailerMail);
+            } catch (error) {
+                console.error('Error sending email:', error);
+                return null;
+            }
 
+            // move message to send directory
             await this.messageMove(newMail.id, 'sent');
         } catch (error) {
             console.error('Error sending email:', error);

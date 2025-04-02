@@ -71,12 +71,12 @@ export default class maildb {
             fromShort: String(email.fromShort || ''),
             textShort: String(email.textShort || ''),
             date: date,
-            isRead: Boolean(email.isRead) ? 1 : 0,
-            isStarred: Boolean(email.isStarred) ? 1 : 0,
-            isDraft: Boolean(email.isDraft) ? 1 : 0,
-            hasAttachments: Boolean(email.hasAttachments) ? 1 : 0,
+            isRead: Boolean(email.isRead),
+            isStarred: Boolean(email.isStarred),
+            isDraft: Boolean(email.isDraft),
+            hasAttachments: Boolean(email.hasAttachments),
             mailbox: String(email.mailbox || ''),
-            _isParsed: Boolean(email._isParsed) ? 1 : 0,
+            _isParsed: Boolean(email._isParsed),
             createdAt: new Date(),
             updatedAt: new Date()
         } as const;

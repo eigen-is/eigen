@@ -1,11 +1,11 @@
-import {ArrowLeft, Paperclip, Trash2, Send} from "lucide-react";
+import {ArrowLeft, Trash2, Send} from "lucide-react";
 import {cn} from "@workspace/ui/lib/utils";
 import {Button} from "@workspace/ui/components/button";
 import {EmailDraft as EmailDraftType} from "@apps/api-server/types/mail";
 import {TooltipButton} from "@workspace/ui";
 import {Input} from "@workspace/ui/components/input";
 import {Textarea} from "@workspace/ui/components/textarea";
-import {useEffect, useRef, useState} from "react";
+import {useEffect, useRef, useState, useMemo} from "react";
 import {toast} from "sonner";
 
 interface EmailDraftProps {
@@ -37,8 +37,6 @@ export function EmailDraft({
     const ccFieldRef = useRef<HTMLInputElement>(null);
     const bccFieldRef = useRef<HTMLInputElement>(null);
     const [isSending, setIsSending] = useState(false);
-    const [autoSaveTimer, setAutoSaveTimer] = useState<NodeJS.Timeout | null>(null);
-    const [lastSavedTime, setLastSavedTime] = useState<Date | null>(null);
 
     if (!email) {
         console.log('No email provided to EmailDraft component');
@@ -78,15 +76,18 @@ export function EmailDraft({
     }, [email]);
 
     // Create a function to get the current draft values
-    const getCurrentDraft = (): EmailDraftType => {
+    const getCurrentDraft = useMemo(() => () => {
         const convertStringToEmailAddressArray = (field: string) => {
+            if (!field || field.trim() === '') {
+                return [];
+            }
             // field can be a comma separated list of email addresses
             return field.split(',').map(value => {
                 // value can be name <address> but also only address
                 const [name, address] = value.split('<');
                 if (!address) {
                     return {
-                        name: name.trim(),
+                        name: '',
                         address: name.trim()
                     };
                 }
@@ -97,21 +98,19 @@ export function EmailDraft({
             });
         }
 
-
-
         return {
             ...email,
-            to: email.to ? {
+            to: toFieldRef.current?.value ? {
                 value: convertStringToEmailAddressArray(toFieldRef.current?.value || ''),
                 text: toFieldRef.current?.value || '',
                 html: toFieldRef.current?.value || '',
             } : undefined,
-            cc: email.cc ? {
-                    value: convertStringToEmailAddressArray(ccFieldRef.current?.value || ''),
+            cc: ccFieldRef.current?.value ? {
+                value: convertStringToEmailAddressArray(ccFieldRef.current?.value || ''),
                 text: ccFieldRef.current?.value || '',
                 html: ccFieldRef.current?.value || '',
             } : undefined,
-            bcc: email.bcc ? {
+            bcc: bccFieldRef.current?.value ? {
                 value: convertStringToEmailAddressArray(bccFieldRef.current?.value || ''),
                 text: bccFieldRef.current?.value || '',
                 html: bccFieldRef.current?.value || '',
@@ -119,45 +118,7 @@ export function EmailDraft({
             subject: subjectFieldRef.current?.value || '',
             text: textareaRef.current?.value || ''
         };
-    };
-
-    // Auto-save functionality
-    const scheduleSave = () => {
-        // Clear any existing timer
-        if (autoSaveTimer) {
-            clearTimeout(autoSaveTimer);
-        }
-
-        // Set a new timer to save after 2 seconds of inactivity
-        const timer = setTimeout(() => {
-            saveDraft();
-        }, 30000);
-
-        setAutoSaveTimer(timer);
-    };
-
-    // Function to save the draft
-    const saveDraft = async () => {
-        if (!email) return;
-
-        try {
-            const updatedDraft = getCurrentDraft();
-            await updateDraft(updatedDraft);
-            setLastSavedTime(new Date());
-        } catch (error) {
-            console.error("Failed to auto-save draft:", error);
-            // Don't show error to user for auto-save failures
-        }
-    };
-
-    // Clean up timer on unmount
-    useEffect(() => {
-        return () => {
-            if (autoSaveTimer) {
-                clearTimeout(autoSaveTimer);
-            }
-        };
-    }, [autoSaveTimer]);
+    }, [email]);
 
     // Handle send email functionality
     const handleSendEmail = async () => {
@@ -187,25 +148,6 @@ export function EmailDraft({
         }
     };
 
-    // Generate save status text
-    const getSaveStatusText = () => {
-        if (lastSavedTime) {
-            const now = new Date();
-            const diffMs = now.getTime() - lastSavedTime.getTime();
-            const diffMins = Math.floor(diffMs / 60000);
-
-            if (diffMins < 1) {
-                return "Saved just now";
-            } else if (diffMins === 1) {
-                return "Saved 1 minute ago";
-            } else {
-                return `Saved ${diffMins} minutes ago`;
-            }
-        }
-
-        return "";
-    };
-
     return (
         <div className={cn("flex flex-col h-full w-full", className)}>
             {/* Header */}
@@ -226,9 +168,6 @@ export function EmailDraft({
                     />
                 </div>
                 <div className="flex items-center gap-2">
-                    {lastSavedTime && (
-                        <span className="text-xs text-muted-foreground mr-2">{getSaveStatusText()}</span>
-                    )}
                     <TooltipButton
                         icon={Trash2}
                         tooltipText="Delete"
@@ -252,7 +191,6 @@ export function EmailDraft({
                                 defaultValue={email.to?.text || ""}
                                 className="bg-transparent border-none focus-visible:ring-0 py-2 px-0 h-auto"
                                 disabled={isSending}
-                                onChange={scheduleSave}
                             />
                         </div>
 
@@ -265,7 +203,6 @@ export function EmailDraft({
                                 defaultValue={email.cc?.text || ""}
                                 className="bg-transparent border-none focus-visible:ring-0 py-2 px-0 h-auto"
                                 disabled={isSending}
-                                onChange={scheduleSave}
                             />
                         </div>
 
@@ -278,7 +215,6 @@ export function EmailDraft({
                                 defaultValue={email.bcc?.text || ""}
                                 className="bg-transparent border-none focus-visible:ring-0 py-2 px-0 h-auto"
                                 disabled={isSending}
-                                onChange={scheduleSave}
                             />
                         </div>
 
@@ -302,7 +238,6 @@ export function EmailDraft({
                                 defaultValue={email.subject ? String(email.subject) : ""}
                                 className="bg-transparent border-none focus-visible:ring-0 py-2 px-0 h-auto"
                                 disabled={isSending}
-                                onChange={scheduleSave}
                             />
                         </div>
                     </div>
@@ -315,7 +250,6 @@ export function EmailDraft({
                             defaultValue={email.text || ""}
                             ref={textareaRef}
                             disabled={isSending}
-                            onChange={scheduleSave}
                         />
                     </div>
                 </form>
