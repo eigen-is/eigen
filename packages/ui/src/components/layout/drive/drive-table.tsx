@@ -60,8 +60,8 @@ export function DriveTable({
         <TableHeader>
           <TableRow>
             <TableHead className="w-[75%]">Name</TableHead>
-            <TableHead className="w-[10%]">Type</TableHead>
-            <TableHead className="w-[15%]">Modified</TableHead>
+            <TableHead className="w-[10%] hidden sm:table-cell">Type</TableHead>
+            <TableHead className="w-[15%] hidden sm:table-cell">Modified</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -90,8 +90,8 @@ export function DriveTable({
                   <span>..</span>
                 </div>
               </TableCell>
-              <TableCell>Folder</TableCell>
-              <TableCell>-</TableCell>
+              <TableCell className="hidden sm:table-cell">Folder</TableCell>
+              <TableCell className="hidden sm:table-cell">-</TableCell>
             </TableRow>
           )}
 
@@ -105,26 +105,26 @@ export function DriveTable({
               onClick={() => onItemClick?.(item)}
             >
               <TableCell className="font-medium">
-                <div className="flex items-center">
+                <div className="flex items-center max-w-full overflow-hidden">
                   {getFileIcon && getFileIcon(
                     item.mimeType,
                     item.type,
                     {
-                      className: "h-4 w-4 mr-2 text-muted-foreground",
+                      className: "h-4 w-4 mr-2 text-muted-foreground flex-shrink-0",
                       ...(item.type === 'folder' ? {
-                        className: "h-4 w-4 mr-2 text-app",
+                        className: "h-4 w-4 mr-2 text-app flex-shrink-0",
                         fill: "var(--app-drive-light-color)"
                       } : {})
                     }
                   )}
-                  <span className="truncate">{item.name}</span>
+                  <span className="truncate max-w-[calc(100%-1.5rem)]">{item.name}</span>
                 </div>
               </TableCell>
-              <TableCell>
+              <TableCell className="hidden sm:table-cell">
                 {item.type === 'folder' ? 'Folder' :
                   item.type === 'eigendocs' ? 'EigenDocs' : 'File'}
               </TableCell>
-              <TableCell>
+              <TableCell className="hidden sm:table-cell">
                 {item.updatedAt ?
                   formatDistanceToNow(new Date(item.updatedAt instanceof Date ? item.updatedAt : new Date(item.updatedAt)), { addSuffix: true }) :
                   'Unknown'}
