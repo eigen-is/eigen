@@ -37,15 +37,31 @@ export function DriveTable({
   onItemClick,
   getFileIcon
 }: DriveTableProps) {
+
+  // Sort items: folders first, then sort alphabetically by name
+  const sortedItems = useMemo(() => {
+    return [...items].sort((a, b) => {
+      // First sort by type (folders first)
+      if (a.type === 'folder' && b.type !== 'folder') {
+        return -1;
+      }
+      if (a.type !== 'folder' && b.type === 'folder') {
+        return 1;
+      }
+      
+      // Then sort alphabetically by name
+      return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
+    });
+  }, [items]);
+
   return (
     <div className="flex-1 overflow-auto">
       <Table>
         <TableHeader>
           <TableRow>
-            <TableHead className="w-[50%]">Name</TableHead>
-            <TableHead>Type</TableHead>
-            <TableHead>Modified</TableHead>
-            <TableHead className="w-[50px]"></TableHead>
+            <TableHead className="w-[75%]">Name</TableHead>
+            <TableHead className="w-[10%]">Type</TableHead>
+            <TableHead className="w-[15%]">Modified</TableHead>
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -76,11 +92,10 @@ export function DriveTable({
               </TableCell>
               <TableCell>Folder</TableCell>
               <TableCell>-</TableCell>
-              <TableCell>-</TableCell>
             </TableRow>
           )}
 
-          {items.map((item) => (
+          {sortedItems.map((item) => (
             <TableRow
               key={item.id}
               className={cn(
@@ -113,9 +128,6 @@ export function DriveTable({
                 {item.updatedAt ?
                   formatDistanceToNow(new Date(item.updatedAt instanceof Date ? item.updatedAt : new Date(item.updatedAt)), { addSuffix: true }) :
                   'Unknown'}
-              </TableCell>
-              <TableCell>
-                {/* Context menu removed as requested */}
               </TableCell>
             </TableRow>
           ))}
