@@ -2,9 +2,12 @@ import {createFileRoute, Outlet, redirect} from '@tanstack/react-router'
 import {ContactsSidebar} from "../components/contacts/contacts-sidebar.tsx";
 import {useContext} from 'react';
 import {SidebarContext} from './__root';
-import {useMediaQuery} from '../hooks/use-media-query';
+import {useMediaQuery} from '@workspace/lib/contacts';
 
-
+/**
+ * Auth route that checks if the user is authenticated before loading the component.
+ * If not authenticated, redirects to the login page.
+ */
 export const Route = createFileRoute('/_auth')({
     beforeLoad: ({context, location}) => {
         if (!context.auth.isAuthenticated) {

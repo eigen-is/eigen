@@ -44,6 +44,7 @@
   },
   "exports": {
     "./*": "./src/lib/*",
-    "./api": "./src/lib/api.ts"
+    "./api": "./src/lib/api.ts",
+    "./contacts": "./src/lib/contacts/index.ts"
   }
 }

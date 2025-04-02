@@ -12,7 +12,7 @@ import {
 import {Badge} from "@workspace/ui/components/badge";
 import {Link} from '@tanstack/react-router';
 import {DeleteDialog} from "@workspace/ui/components/layout/delete/delete-dialog";
-import {useLabels} from '@/hooks/use-labels.ts';
+import {useLabels} from '@workspace/lib/contacts';
 import {TooltipButton, UserAvatar} from "@workspace/ui";
 import {EigenLoader} from '@workspace/ui/components/layout/eigen-loader';
 
