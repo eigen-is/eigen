@@ -5,7 +5,7 @@ import {Button} from "@workspace/ui/components/button";
 import {Input} from "@workspace/ui/components/input";
 import {UserItem} from "@workspace/ui/components/layout/user-item";
 import {type Contact} from "@apps/api-server/types/contact";
-import {useContacts} from '../../hooks/use-contacts';
+import {useContacts} from '@workspace/lib/contacts';
 import {
     DropdownMenu,
     DropdownMenuContent,

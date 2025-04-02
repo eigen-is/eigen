@@ -1,7 +1,7 @@
 import {createFileRoute, useNavigate} from '@tanstack/react-router';
 import {ContactEdit, type ContactFormValues} from '../components/contacts/contact-edit';
 import {type Contact} from "@apps/api-server/types/contact";
-import {useAddContact} from '../hooks/use-contacts';
+import {useAddContact} from '@workspace/lib/contacts';
 
 export const Route = createFileRoute('/_auth/new')({
   component: NewContactRoute,

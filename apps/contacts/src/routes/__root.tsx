@@ -2,7 +2,7 @@ import {createRootRouteWithContext, Outlet} from '@tanstack/react-router'
 import {TanStackRouterDevtools} from '@tanstack/react-router-devtools'
 import {AuthContextType} from "@workspace/lib/auth/auth-context.tsx";
 import {Topbar} from "@workspace/ui/components/layout/topbar";
-import {useMediaQuery} from '../hooks/use-media-query';
+import {useMediaQuery} from '@workspace/lib/contacts';
 import {createContext, useState} from 'react';
 
 const appName = 'contacts';
