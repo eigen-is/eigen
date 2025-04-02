@@ -67,16 +67,16 @@ export default class maildb {
         // Use type assertion to help TypeScript understand the types match the schema
         const emailRecord = {
             id: email.id,
-            subject: email.subject?.toString() || '(No subject)',
+            subject: email.subject?.toString() || '',
             fromShort: String(email.fromShort || ''),
             textShort: String(email.textShort || ''),
             date: date,
-            isRead: Boolean(email.isRead),
-            isStarred: Boolean(email.isStarred),
-            isDraft: Boolean(email.isDraft),
-            hasAttachments: Boolean(email.hasAttachments),
+            isRead: Boolean(email.isRead) ? 1 : 0,
+            isStarred: Boolean(email.isStarred) ? 1 : 0,
+            isDraft: Boolean(email.isDraft) ? 1 : 0,
+            hasAttachments: Boolean(email.hasAttachments) ? 1 : 0,
             mailbox: String(email.mailbox || ''),
-            _isParsed: Boolean(email._isParsed),
+            _isParsed: Boolean(email._isParsed) ? 1 : 0,
             createdAt: new Date(),
             updatedAt: new Date()
         } as const;

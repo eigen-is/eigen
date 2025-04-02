@@ -270,6 +270,9 @@ export default class Maildir {
                 return false;
             }
 
+            // delete from db
+            await this.db.deleteEmail(messageId);
+
             // Delete the file
             const filePath = this.getFullPath(message);
 
@@ -466,7 +469,7 @@ export default class Maildir {
         if (!message) {
             return null;
         }
-        if (message.mailbox !== 'Drafts' || !message.isDraft) {
+        if (message.mailbox != 'drafts' || !message.isDraft) {
             return null;
         }
         // update message
@@ -485,7 +488,7 @@ export default class Maildir {
         if (!message) {
             return null;
         }
-        if (message.mailbox !== 'Drafts' || !message.isDraft) {
+        if (message.mailbox !== 'drafts' || !message.isDraft) {
             return null;
         }
         // update message
@@ -745,6 +748,9 @@ export default class Maildir {
                 parsedMail.html = DOMPurify.sanitize(parsedMail.html, {FORCE_BODY: true});
             }
 
+            parsedMail.isDraft = mailbox === 'drafts';
+            parsedMail.isRead = parsedMail.isDraft;
+            
             // Create the Email object with the correct ID and path information
             return {
                 ...parsedMail,
