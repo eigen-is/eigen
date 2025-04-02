@@ -1,12 +1,11 @@
-import {ArrowLeft, Paperclip, Send, Trash2} from "lucide-react";
+import {ArrowLeft, Paperclip, Trash2, Send} from "lucide-react";
 import {cn} from "@workspace/ui/lib/utils";
 import {Button} from "@workspace/ui/components/button";
 import {format} from "date-fns";
 import {Email} from "@apps/api-server/types/mail";
-import {Separator} from "@workspace/ui/components/separator";
-import {ShadowContent} from "@workspace/ui/components/layout/shadow-content";
-import {UserItem} from "@workspace/ui/components/layout/user-item";
 import {TooltipButton} from "@workspace/ui";
+import {Input} from "@workspace/ui/components/input";
+import {Textarea} from "@workspace/ui/components/textarea";
 
 interface EmailDraftProps {
     email: Email | null;
@@ -27,7 +26,7 @@ export function EmailDraft({
                                ...props
                            }: EmailDraftProps) {
     if (!email) {
-        console.log('No email provided to EmailDetail component');
+        console.log('No email provided to EmailDraft component');
         return (
             <div className="flex h-full items-center justify-center text-muted-foreground">
                 Email data not available
@@ -37,52 +36,43 @@ export function EmailDraft({
 
     toggleMailRead(email, true);
 
-    console.log('Rendering EmailDetail with email:', email);
+    console.log('Rendering EmailDraft with email:', email);
 
-    const firstFrom = email.from?.value[0];
-    const fromName = firstFrom?.name || firstFrom?.address || 'Unknown';
-    const fromEmail = firstFrom?.address || 'unknown@example.com';
+    // Get sender info
+    const from = email.from?.value?.[0] || {
+        name: '',
+        address: '',
+    };
+
+    const fromName = from.name || from.address;
+    const fromEmail = from.address;
 
     // Format date
-    let formattedDate = 'Unknown date';
-    try {
-        if (email.date) {
-            const dateValue = new Date(email.date);
-            formattedDate = format(dateValue, "MMMM d, yyyy 'at' h:mm a");
-        }
-    } catch (error) {
-        console.error('Error formatting date:', error);
-    }
+    const date = email.date ? new Date(email.date) : new Date();
+    const formattedDate = format(date, 'MMM d, yyyy h:mm a');
 
-    // Get email content
+    // Email content
     const emailContent = email.html || email.textAsHtml || email.text || '';
 
     return (
-        <div className={cn("flex flex-col h-full bg-white", className)} {...props}>
-            {/* Action toolbar */}
-            <div className="h-12 flex items-center justify-between px-4 border-b">
-                <div className="flex items-center gap-1">
-                    {/* Mobile back button when needed */}
-                    {isMobile && onBackClick && (
-                        <>
-                            <Button variant="ghost" size="icon" className="h-8 w-8 mr-1" onClick={onBackClick}
-                                    title="Back">
-                                <ArrowLeft className="h-4 w-4"/>
-                            </Button>
-                            <div className="h-6 w-[1px] bg-border mx-1"></div>
-                        </>
+        <div className={cn("flex flex-col h-full w-full", className)}>
+            {/* Header */}
+            <div className="flex items-center justify-between h-12 border-b px-4">
+                <div className="flex items-center">
+                    {isMobile && (
+                        <Button variant="ghost" size="icon" onClick={onBackClick}
+                                className="mr-2">
+                            <ArrowLeft className="h-5 w-5"/>
+                            <span className="sr-only">Back</span>
+                        </Button>
                     )}
-
-                    {/* Left side icons */}
                     <TooltipButton
                         icon={Send}
                         tooltipText="Send"
-                        onClick={() => onDelete(email)}
+                        onClick={() => console.log('Send email')}
                     />
                 </div>
-
-                <div className="flex items-center gap-1">
-                    {/* Right side icons */}
+                <div className="flex items-center gap-2">
                     <TooltipButton
                         icon={Trash2}
                         tooltipText="Delete"
@@ -91,77 +81,72 @@ export function EmailDraft({
                 </div>
             </div>
 
-            {/* Email content */}
-            <div className="p-4 flex-1 overflow-auto">
-                {/* Email header */}
-                <div className="space-y-4 mb-6">
-                    <div>
-                        <h1 className="text-xl font-semibold mb-4">
-                            {email.subject ? String(email.subject) : '(No subject)'}
-                        </h1>
+            {/* Email Form */}
+            <div className="flex-1 overflow-auto">
+                <form className="flex flex-col h-full">
+                    <div className="space-y-1 px-4 py-2">
+                        
+                        {/* To field */}
+                        <div className="flex items-center border-b">
+                            <div className="w-16 text-sm text-muted-foreground py-2">To:</div>
+                            <Input 
+                                id="to" 
+                                defaultValue={email.to?.text || ""}
+                                className="bg-transparent border-none focus-visible:ring-0 py-2 px-0 h-auto"
+                            />
+                        </div>
+                        
+                        {/* CC field */}
+                        <div className="flex items-center border-b">
+                            <div className="w-16 text-sm text-muted-foreground py-2">Cc:</div>
+                            <Input 
+                                id="cc" 
+                                defaultValue={email.cc?.text || ""}
+                                className="bg-transparent border-none focus-visible:ring-0 py-2 px-0 h-auto"
+                            />
+                        </div>
+                        
+                        {/* BCC field */}
+                        <div className="flex items-center border-b">
+                            <div className="w-16 text-sm text-muted-foreground py-2">Bcc:</div>
+                            <Input 
+                                id="bcc" 
+                                defaultValue={email.bcc?.text || ""}
+                                className="bg-transparent border-none focus-visible:ring-0 py-2 px-0 h-auto"
+                            />
+                        </div>
 
-                        <div className="mt-4">
-                            <UserItem
-                                name={fromName}
-                                email={fromEmail}
-                                label={formattedDate}
+                        {/* From field (non-editable) */}
+                        <div className="flex items-center border-b">
+                            <div className="w-16 text-sm text-muted-foreground py-2">From:</div>
+                            <Input 
+                                id="from" 
+                                value={`${fromName} <${fromEmail}>`} 
+                                disabled 
+                                className="bg-transparent border-none focus-visible:ring-0 py-2 px-0 h-auto"
+                            />
+                        </div>
+                        
+                        {/* Subject field */}
+                        <div className="flex items-center border-b">
+                            <div className="w-16 text-sm text-muted-foreground py-2">Subject:</div>
+                            <Input 
+                                id="subject" 
+                                defaultValue={email.subject ? String(email.subject) : ""}
+                                className="bg-transparent border-none focus-visible:ring-0 py-2 px-0 h-auto"
                             />
                         </div>
                     </div>
-
-                    <Separator/>
-
+                    
                     {/* Email body */}
-                    <div className="prose prose-sm max-w-none">
-                        {email.html || email.textAsHtml ? (
-                            <ShadowContent
-                                content={emailContent}
-                                contentType="html"
-                                className="w-full"
-                            />
-                        ) : (
-                            <div style={{whiteSpace: 'pre-wrap'}}>
-                                {emailContent}
-                            </div>
-                        )}
+                    <div className="flex-1 p-4">
+                        <Textarea 
+                            className="w-full h-full min-h-[200px] border-none resize-none focus-visible:ring-0 bg-transparent p-0"
+                            placeholder="Write your message here..."
+                            defaultValue={email.text || ""}
+                        />
                     </div>
-
-                    {/* Attachments */}
-                    {email.attachments && email.attachments.length > 0 && (
-                        <div className="mt-6 pt-6 border-t">
-                            <h3 className="font-medium mb-3 flex items-center gap-2">
-                                <Paperclip className="h-4 w-4"/>
-                                Attachments ({email.attachments.length})
-                            </h3>
-
-                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                {email.attachments.map((attachment: any, index: number) => (
-                                    <div
-                                        key={index}
-                                        className="flex items-center p-3 border rounded-md hover:bg-muted/50 cursor-pointer select-none"
-                                        onClick={() => {
-                                            const fileName = attachment.filename || `Attachment ${index + 1}`;
-                                            const downloadUrl = `${import.meta.env.VITE_API_HOST}/mail/message/${email.id}/attachment/${index}/${encodeURIComponent(fileName)}`;
-
-                                            // Create a temporary anchor element to trigger the download
-                                            const a = document.createElement('a');
-                                            a.href = downloadUrl;
-                                            a.download = fileName;
-                                            document.body.appendChild(a);
-                                            a.click();
-                                            document.body.removeChild(a);
-                                        }}
-                                    >
-                                        <Paperclip className="h-4 w-4 mr-2 text-muted-foreground"/>
-                                        <span className="text-sm truncate">
-                                            {attachment.filename || `Attachment ${index + 1}`}
-                                        </span>
-                                    </div>
-                                ))}
-                            </div>
-                        </div>
-                    )}
-                </div>
+                </form>
             </div>
         </div>
     );

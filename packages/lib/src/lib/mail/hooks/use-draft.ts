@@ -1,6 +1,7 @@
 import {useMutation, useQueryClient} from '@tanstack/react-query';
 import {mailApi} from '@workspace/lib/api';
 import {Email} from '@apps/api-server/types/mail';
+import { emailKeys } from './use-emails';
 
 // Define interface for recipient
 export interface EmailRecipient {
@@ -77,8 +78,7 @@ export function useCreateDraft() {
         mutationFn: createDraftEmail,
         onSuccess: () => {
             // Invalidate relevant queries to refresh the drafts list
-            queryClient.invalidateQueries({queryKey: ['mailboxes']});
-            queryClient.invalidateQueries({queryKey: ['mailbox', 'Drafts']});
+            queryClient.invalidateQueries({queryKey: emailKeys.list('drafts')});
         }
     });
 }
