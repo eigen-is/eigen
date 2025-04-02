@@ -4,62 +4,62 @@ import {type Contact} from "@apps/api-server/types/contact";
 import {useAddContact} from '@workspace/lib/contacts';
 
 export const Route = createFileRoute('/_auth/new')({
-  component: NewContactRoute,
+    component: NewContactRoute,
 });
 
 function NewContactRoute() {
-  const navigate = useNavigate();
-  const addContactMutation = useAddContact();
-  
-  // Empty contact object for new contacts
-  const emptyContact: Contact = {
-    id: '',
-    firstName: '',
-    lastName: '',
-    email: [''],
-    phone: [''],
-    address: [{}],
-    labels: [],
-  };
+    const navigate = useNavigate();
+    const addContactMutation = useAddContact();
 
-  // Handle form submission
-  const handleSave = async (data: ContactFormValues) => {
-    try {
-      // Save the contact data
-      await addContactMutation.mutateAsync(data);
-      
-      // Navigate back to the contacts list after saving
-      navigate({
-        to: '/$filterType/$filterId',
-        params: {
-          filterType: 'book',
-          filterId: 'all'
+    // Empty contact object for new contacts
+    const emptyContact: Contact = {
+        id: '',
+        firstName: '',
+        lastName: '',
+        email: [''],
+        phone: [''],
+        address: [{}],
+        labels: [],
+    };
+
+    // Handle form submission
+    const handleSave = async (data: ContactFormValues) => {
+        try {
+            // Save the contact data
+            await addContactMutation.mutateAsync(data);
+
+            // Navigate back to the contacts list after saving
+            navigate({
+                to: '/$filterType/$filterId',
+                params: {
+                    filterType: 'book',
+                    filterId: 'all'
+                }
+            });
+        } catch (error) {
+            console.error("Error saving contact:", error);
+            // Error is handled in the ContactEdit component
         }
-      });
-    } catch (error) {
-      console.error("Error saving contact:", error);
-      // Error is handled in the ContactEdit component
-    }
-  };
-  
-  // Cancel button navigates back to contacts list
-  const handleCancel = () => {
-    navigate({
-      to: '/$filterType/$filterId',
-      params: {
-        filterType: 'book',
-        filterId: 'all'
-      }
-    });
-  };
+    };
 
-  return (
-    <ContactEdit
-      contact={emptyContact}
-      onSave={handleSave}
-      onCancel={handleCancel}
-      filterType="book"
-      filterId="all"
-    />
-  );
+    // Cancel button navigates back to contacts list
+    const handleCancel = () => {
+        navigate({
+            to: '/$filterType/$filterId',
+            params: {
+                filterType: 'book',
+                filterId: 'all'
+            }
+        });
+    };
+
+    return (
+        <ContactEdit
+            contact={emptyContact}
+            onSave={handleSave}
+            onCancel={handleCancel}
+            filterType="book"
+            filterId="all"
+        />
+    );
 }
