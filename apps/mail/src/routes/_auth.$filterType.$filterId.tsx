@@ -7,11 +7,14 @@ import {
     useEmail,
     useEmails,
     useMediaQuery,
-    useToggleReadEmail
+    useSendDraft,
+    useToggleReadEmail,
+    useUpdateDraft
 } from '@workspace/lib/mail';
 import {EmailList} from "@/components/mail/email-list.tsx";
 import {Email} from "@apps/api-server/types/mail";
 import {toast} from "sonner";
+import {EmailDraft as EmailDraftType} from "@apps/api-server/types/mail";
 
 // Define search params type
 export interface MailSearchParams {
@@ -35,6 +38,8 @@ function MailRoute() {
     const deleteMail = useDeleteEmail();
     const toggleMailRead = useToggleReadEmail();
     const createDraft = useCreateDraft();
+    const updateDraft = useUpdateDraft();
+    const sendDraft = useSendDraft();
 
     const {data: emails = [], isLoading: isEmailsLoading, error: isEmailsError} = useEmails(filterId);
     const {data: selectedEmail = null} = useEmail(mailId);
@@ -50,13 +55,6 @@ function MailRoute() {
 
     // Handle back navigation (mainly for mobile)
     const handleBackToList = () => {
-        // createDraft.mutate({
-        //     subject: 'test',
-        //     text: selectedEmail?.text || '',
-        //     to: selectedEmail?.to || '',
-        //     cc: selectedEmail?.cc || '',
-        //     bcc: selectedEmail?.bcc || '',
-        // })
         navigate({
             to: Route.fullPath,
             params: {filterType, filterId},
@@ -75,17 +73,29 @@ function MailRoute() {
         });
     }
 
+    const handleSendEmail = async (mail: EmailDraftType) => {
+        console.log('send email', mail.id)
+        await sendDraft.mutateAsync(mail);
+        toast("Email sent");
+        navigate({
+            to: Route.fullPath,
+            params: {filterType, filterId},
+            search: {},
+        });
+    }
     // On mobile: Show full-width email list / detail
     if (isMobile) {
         return selectedEmail ? (
             <div className="flex-1 h-full w-full">
                 {selectedEmail.isDraft ? (
                     <EmailDraft
-                        email={selectedEmail}
+                        email={selectedEmail as EmailDraftType}
                         isMobile={true}
                         onBackClick={handleBackToList}
                         onDelete={handleDeleteEmail}
                         toggleMailRead={toggleMailRead}
+                        sendDraft={handleSendEmail}
+                        updateDraft={updateDraft.mutateAsync}
                     />
                 ) : (
                     <EmailDetail
@@ -141,10 +151,12 @@ function MailRoute() {
                     <div className="h-full">
                         {selectedEmail.isDraft ? (
                             <EmailDraft
-                                email={selectedEmail}
+                                email={selectedEmail as EmailDraftType}
                                 className="border-none h-full"
                                 onDelete={handleDeleteEmail}
                                 toggleMailRead={toggleMailRead}
+                                sendDraft={handleSendEmail}
+                                updateDraft={updateDraft.mutateAsync}
                             />
                         ) : (
                             <EmailDetail
