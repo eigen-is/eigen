@@ -47,6 +47,7 @@
     "./api": "./src/lib/api.ts",
     "./contacts": "./src/lib/contacts/index.ts",
     "./mail": "./src/lib/mail/index.ts",
-    "./drive": "./src/lib/drive/index.ts"
+    "./drive": "./src/lib/drive/index.ts",
+    "./media": "./src/lib/media/index.ts"
   }
 }
