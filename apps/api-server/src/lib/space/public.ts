@@ -1,4 +1,4 @@
-import { getHome } from "../home/home";
+import {getHome} from "../home/home";
 import {getUserByEmail, getUserById} from "../users/users";
 
 export async function getPublicInfo(mailOrId: string) {

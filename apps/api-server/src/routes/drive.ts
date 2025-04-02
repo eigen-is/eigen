@@ -45,7 +45,7 @@ export const driveRouter = new Elysia({name: "drive"})
             pathId: t.String()
         })
     })
-    
+
     // Get path info
     .get("/drive/path/:pathId", async ({params, user}: { params: { pathId: string }, user: User }) => {
         const drive = await getDrive(user);
@@ -56,7 +56,7 @@ export const driveRouter = new Elysia({name: "drive"})
             pathId: t.String()
         })
     })
-    
+
     // Create folder
     .post("/drive/folder", async ({body, user}: { body: CreateFolderBody, user: User }) => {
         const drive = await getDrive(user);
@@ -68,9 +68,13 @@ export const driveRouter = new Elysia({name: "drive"})
             folderName: t.String()
         })
     })
-    
+
     // Upload file
-    .post("/drive/file/:pathId", async ({params, body, user}: { params: { pathId: string }, body: UploadFileBody, user: User }) => {
+    .post("/drive/file/:pathId", async ({params, body, user}: {
+        params: { pathId: string },
+        body: UploadFileBody,
+        user: User
+    }) => {
         const drive = await getDrive(user);
         return await drive.uploadFile(params.pathId, body.file);
     }, {
@@ -81,36 +85,36 @@ export const driveRouter = new Elysia({name: "drive"})
             })
         })
     })
-    
+
     // Delete folder
     .delete("/drive/folder/:pathId", async ({params, user}: { params: { pathId: string }, user: User }) => {
         const drive = await getDrive(user);
         await drive.deleteFolder(params.pathId);
-        return { success: true };
+        return {success: true};
     }, {
         auth: true,
         params: t.Object({
             pathId: t.String()
         })
     })
-    
+
     // Delete file
     .delete("/drive/file/:pathId", async ({params, user}: { params: { pathId: string }, user: User }) => {
         const drive = await getDrive(user);
         await drive.deleteFile(params.pathId);
-        return { success: true };
+        return {success: true};
     }, {
         auth: true,
         params: t.Object({
             pathId: t.String()
         })
     })
-    
+
     // Rename path (file or folder)
     .put("/drive/path/rename", async ({body, user}: { body: RenamePathBody, user: User }) => {
         const drive = await getDrive(user);
         await drive.renamePath(body.pathId, body.newName);
-        return { success: true };
+        return {success: true};
     }, {
         auth: true,
         body: t.Object({
@@ -118,12 +122,12 @@ export const driveRouter = new Elysia({name: "drive"})
             newName: t.String()
         })
     })
-    
+
     // Update ACL
     .put("/drive/path/acl", async ({body, user}: { body: UpdateACLBody, user: User }) => {
         const drive = await getDrive(user);
         await drive.updateACL(body.pathId, body.acl);
-        return { success: true };
+        return {success: true};
     }, {
         auth: true,
         body: t.Object({
@@ -138,22 +142,22 @@ export const driveRouter = new Elysia({name: "drive"})
             )
         })
     })
-    
+
     // Check read permission
     .get("/drive/permissions/read/:pathId", async ({params, user}: { params: { pathId: string }, user: User }) => {
         const drive = await getDrive(user);
-        return { canRead: await drive.canRead(params.pathId, user) };
+        return {canRead: await drive.canRead(params.pathId, user)};
     }, {
         auth: true,
         params: t.Object({
             pathId: t.String()
         })
     })
-    
+
     // Check write permission
     .get("/drive/permissions/write/:pathId", async ({params, user}: { params: { pathId: string }, user: User }) => {
         const drive = await getDrive(user);
-        return { canWrite: await drive.canWrite(params.pathId, user) };
+        return {canWrite: await drive.canWrite(params.pathId, user)};
     }, {
         auth: true,
         params: t.Object({

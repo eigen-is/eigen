@@ -3,7 +3,7 @@ import type Database from "bun:sqlite";
 import {Contacts} from "../contacts/contacts.ts";
 import Maildir from "../mail/maildir.ts";
 import FileSystem from "./filesystem.ts";
-import { getUserById } from "../users/users.ts";
+import {getUserById} from "../users/users.ts";
 import Drive from "../drive/drive.ts";
 
 const city = new Map<string, Home>();

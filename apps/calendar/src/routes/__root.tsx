@@ -7,26 +7,27 @@ const appName = 'calendar';
 
 interface MyRouterContext {
     auth: AuthContextType
-}   
+}
 
 
 export const Route = createRootRouteWithContext<MyRouterContext>()({
     component: () => {
         const isMobile = false;
-        
+
         return (
-        <>
+            <>
                 <div className="flex flex-col h-dvh">
-                    <Topbar 
-                        appName={appName} 
+                    <Topbar
+                        appName={appName}
                         rootRoute={Route}
                         showMobileMenu={isMobile}
-                        onMobileMenuClick={() => {}}
+                        onMobileMenuClick={() => {
+                        }}
                         isMobile={isMobile}
                     />
-                        <Outlet/>
+                    <Outlet/>
                 </div>
-            <TanStackRouterDevtools position="bottom-right"/>
-        </>)
+                <TanStackRouterDevtools position="bottom-right"/>
+            </>)
     }
 });

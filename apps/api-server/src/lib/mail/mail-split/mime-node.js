@@ -28,7 +28,7 @@ class MimeNode {
         this.delSp = false;
 
         this.config = config || {};
-        this.libmime = new libmime.Libmime({ Iconv: this.config.Iconv });
+        this.libmime = new libmime.Libmime({Iconv: this.config.Iconv});
 
         this.parentPartNumber = (parentNode && this.partNr) || [];
         this.partNr = false; // resolved later

@@ -13,7 +13,8 @@ export const SidebarContext = createContext<{
     setSidebarOpen: (open: boolean) => void;
 }>({
     sidebarOpen: false,
-    setSidebarOpen: () => {},
+    setSidebarOpen: () => {
+    },
 });
 
 interface MyRouterContext {
@@ -28,7 +29,7 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
 
         return (
             <>
-                <SidebarContext.Provider value={{ sidebarOpen, setSidebarOpen }}>
+                <SidebarContext.Provider value={{sidebarOpen, setSidebarOpen}}>
                     <div className="flex flex-col h-dvh">
                         <Topbar
                             appName={appName}

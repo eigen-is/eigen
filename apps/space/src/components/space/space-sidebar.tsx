@@ -34,13 +34,13 @@ export function SpaceSidebar({
 
             <SidebarSection condensed={condensed}>
                 <SidebarItem
-                    icon={<Users className="h-4 w-4" />}
+                    icon={<Users className="h-4 w-4"/>}
                     label="Home"
-                    to='/' params={{}}  />
+                    to='/' params={{}}/>
                 <SidebarItem
-                    icon={<Users className="h-4 w-4" />}
+                    icon={<Users className="h-4 w-4"/>}
                     label="Change password"
-                    to='/password' params={{}}  />
+                    to='/password' params={{}}/>
             </SidebarSection>
         </div>
     );

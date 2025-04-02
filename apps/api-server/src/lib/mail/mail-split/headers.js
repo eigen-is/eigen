@@ -26,7 +26,7 @@ class Headers {
         this.mbox = false;
         this.http = false;
 
-        this.libmime = new libmime.Libmime({ Iconv: config.Iconv });
+        this.libmime = new libmime.Libmime({Iconv: config.Iconv});
     }
 
     hasHeader(key) {

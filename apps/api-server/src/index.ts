@@ -5,7 +5,7 @@ import {betterAuth} from "./routes/auth";
 import {mailRouter} from "./routes/mail";
 import {contactsRouter} from "./routes/contacts";
 import {trustedOrigins} from "./lib/auth/auth";
-import { spaceRouter } from "./routes/space";
+import {spaceRouter} from "./routes/space";
 import {driveRouter} from "./routes/drive.ts";
 
 const app = new Elysia()

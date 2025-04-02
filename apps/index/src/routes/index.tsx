@@ -1,19 +1,19 @@
 import {createFileRoute} from '@tanstack/react-router'
-import React, { useCallback } from 'react';
+import React, {useCallback} from 'react';
 import {Button} from "@workspace/ui/components/button";
 import {apps} from "@workspace/lib/apps.ts";
-import { Input } from "@workspace/ui/components/input";
-import { Textarea } from "@workspace/ui/components/textarea";
-import { Card, CardContent, CardFooter, CardHeader, CardTitle } from "@workspace/ui/components/card";
-import { Label } from '@workspace/ui/components/label';
-import { spaceApi } from '@workspace/lib/api.js';
+import {Input} from "@workspace/ui/components/input";
+import {Textarea} from "@workspace/ui/components/textarea";
+import {Card, CardContent, CardFooter, CardHeader, CardTitle} from "@workspace/ui/components/card";
+import {Label} from '@workspace/ui/components/label';
+import {spaceApi} from '@workspace/lib/api.js';
 import {toast} from "sonner";
 
 export const Route = createFileRoute('/')({
     component: HomeComponent,
 })
 
-export function HomeComponent() {    
+export function HomeComponent() {
     const [appIndex, setAppIndex] = React.useState(0);
     const [showMore, setShowMore] = React.useState(false);
     const [showWaitlistForm, setShowWaitlistForm] = React.useState(false);
@@ -21,12 +21,12 @@ export function HomeComponent() {
     const [notes, setNotes] = React.useState("");
     const [isSubmitting, setIsSubmitting] = React.useState(false);
     const app = apps[appIndex];
-    
+
     React.useEffect(() => {
         const interval = setInterval(() => {
             setAppIndex((prevIndex) => (prevIndex + 1) % apps.length);
         }, 2000);
-        
+
         return () => clearInterval(interval);
     }, [apps.length]);
 
@@ -37,10 +37,10 @@ export function HomeComponent() {
         setNotes("");
     }, []);
 
-    const handleLogin = useCallback (() => {
+    const handleLogin = useCallback(() => {
         window.location.href = './mail/';
     }, []);
-    
+
     const handleShowWaitlist = useCallback(() => {
         setShowMore(false);
         setShowWaitlistForm(true);
@@ -49,7 +49,7 @@ export function HomeComponent() {
     const handleWaitlistSubmit = useCallback(async (e: React.FormEvent) => {
         e.preventDefault();
         setIsSubmitting(true);
-        
+
         const time = new Date().getTime();
         const waitlistResult = await spaceApi.waitlist.post({email, notes});
         const duration = new Date().getTime() - time;
@@ -77,7 +77,7 @@ export function HomeComponent() {
                 <div className={`transition-all duration-500 linear overflow-hidden`}>
                     <p className="mb-4">
                         Your personal workspace in the cloud.
-                        <br />
+                        <br/>
                         Simple and secure. You control your own data.
                     </p>
                 </div>
@@ -98,29 +98,29 @@ export function HomeComponent() {
                     </div>
                 </div>
             </div>
-            
+
             {!showWaitlistForm ? (
                 <>
-                <div className="flex gap-4">
-                    <Button className="px-8 py-2 font-medium flex-3" onClick={handleLogin}>
-                        Login
-                    </Button>
-                    <Button 
-                        variant="outline" 
-                        className="px-6 py-2 flex-1"
-                        onClick={handleShowWaitlist}
-                    >
-                        Join Waitlist
-                    </Button>
-                </div>
-                <div className="flex justify-center mt-4">
-                    <button
-                        onClick={() => setShowMore(!showMore)}
-                        className="text-blue-600 hover:text-blue-800 underline text-sm cursor-pointer"
-                    >
-                        {showMore ? 'Show less' : 'Learn more'}
-                    </button>
-                </div>
+                    <div className="flex gap-4">
+                        <Button className="px-8 py-2 font-medium flex-3" onClick={handleLogin}>
+                            Login
+                        </Button>
+                        <Button
+                            variant="outline"
+                            className="px-6 py-2 flex-1"
+                            onClick={handleShowWaitlist}
+                        >
+                            Join Waitlist
+                        </Button>
+                    </div>
+                    <div className="flex justify-center mt-4">
+                        <button
+                            onClick={() => setShowMore(!showMore)}
+                            className="text-blue-600 hover:text-blue-800 underline text-sm cursor-pointer"
+                        >
+                            {showMore ? 'Show less' : 'Learn more'}
+                        </button>
+                    </div>
                 </>
             ) : (
                 <Card className="w-full max-w-md">
@@ -157,9 +157,9 @@ export function HomeComponent() {
                             </div>
                         </CardContent>
                         <CardFooter className="flex justify-end mt-4 gap-4">
-                            <Button 
-                                type="button" 
-                                variant="outline" 
+                            <Button
+                                type="button"
+                                variant="outline"
                                 disabled={isSubmitting}
                                 onClick={resetForm}
                             >
@@ -172,7 +172,7 @@ export function HomeComponent() {
                     </form>
                 </Card>
             )}
-            
+
         </div>
     );
 }

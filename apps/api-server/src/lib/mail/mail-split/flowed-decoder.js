@@ -19,7 +19,7 @@ class FlowedDecoder extends Transform {
         this.chunks = [];
         this.chunklen = 0;
 
-        this.libmime = new libmime.Libmime({ Iconv: config.Iconv });
+        this.libmime = new libmime.Libmime({Iconv: config.Iconv});
     }
 
     _transform(chunk, encoding, callback) {

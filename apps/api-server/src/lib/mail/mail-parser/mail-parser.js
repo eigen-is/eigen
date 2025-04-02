@@ -8,7 +8,7 @@ const punycode = require('punycode.js');
 const FlowedDecoder = require('./../mail-split/flowed-decoder');
 const StreamHash = require('./stream-hash');
 const iconv = require('iconv-lite');
-const { htmlToText } = require('html-to-text');
+const {htmlToText} = require('html-to-text');
 const he = require('he');
 const linkify = require('linkify-it')();
 const tlds = require('tlds');
@@ -19,7 +19,7 @@ linkify
     .tlds('onion', true) // Add unofficial `.onion` domain
     .add('git:', 'http:') // Add `git:` ptotocol as "alias"
     .add('ftp:', null) // Disable `ftp:` ptotocol
-    .set({ fuzzyIP: true, fuzzyLink: true, fuzzyEmail: true });
+    .set({fuzzyIP: true, fuzzyLink: true, fuzzyEmail: true});
 
 // twitter linkifier from
 // https://github.com/markdown-it/linkify-it#example-2-add-twitter-mentions-handler
@@ -181,7 +181,7 @@ class MailParser extends Transform {
             this.emit('error', err);
         });
 
-        this.libmime = new libmime.Libmime({ Iconv: this.options.Iconv });
+        this.libmime = new libmime.Libmime({Iconv: this.options.Iconv});
     }
 
     getDecoder() {
@@ -673,53 +673,53 @@ class MailParser extends Transform {
                 if (this.hasHtml) {
                     html.push(
                         '<table class="mp_head">' +
-                            meta
-                                .map(entry => {
-                                    let value = entry.value;
-                                    switch (entry.key) {
-                                        case 'From':
-                                        case 'To':
-                                        case 'Cc':
-                                        case 'Bcc':
-                                            value = value.html;
-                                            break;
-                                        case 'Date':
-                                            value = this.options.formatDateString ? this.options.formatDateString(value) : value.toUTCString();
-                                            break;
-                                        case 'Subject':
-                                            value = '<strong>' + he.encode(value) + '</strong>';
-                                            break;
-                                        default:
-                                            value = he.encode(value);
-                                    }
+                        meta
+                            .map(entry => {
+                                let value = entry.value;
+                                switch (entry.key) {
+                                    case 'From':
+                                    case 'To':
+                                    case 'Cc':
+                                    case 'Bcc':
+                                        value = value.html;
+                                        break;
+                                    case 'Date':
+                                        value = this.options.formatDateString ? this.options.formatDateString(value) : value.toUTCString();
+                                        break;
+                                    case 'Subject':
+                                        value = '<strong>' + he.encode(value) + '</strong>';
+                                        break;
+                                    default:
+                                        value = he.encode(value);
+                                }
 
-                                    return '<tr><td class="mp_head_key">' + he.encode(entry.key) + ':</td><td class="mp_head_value">' + value + '<td></tr>';
-                                })
-                                .join('\n') +
-                            '<table>'
+                                return '<tr><td class="mp_head_key">' + he.encode(entry.key) + ':</td><td class="mp_head_value">' + value + '<td></tr>';
+                            })
+                            .join('\n') +
+                        '<table>'
                     );
                 }
                 if (this.hasText) {
                     text.push(
                         '\n' +
-                            meta
-                                .map(entry => {
-                                    let value = entry.value;
-                                    switch (entry.key) {
-                                        case 'From':
-                                        case 'To':
-                                        case 'Cc':
-                                        case 'Bcc':
-                                            value = value.text;
-                                            break;
-                                        case 'Date':
-                                            value = this.options.formatDateString ? this.options.formatDateString(value) : value.toUTCString();
-                                            break;
-                                    }
-                                    return entry.key + ': ' + value;
-                                })
-                                .join('\n') +
-                            '\n'
+                        meta
+                            .map(entry => {
+                                let value = entry.value;
+                                switch (entry.key) {
+                                    case 'From':
+                                    case 'To':
+                                    case 'Cc':
+                                    case 'Bcc':
+                                        value = value.text;
+                                        break;
+                                    case 'Date':
+                                        value = this.options.formatDateString ? this.options.formatDateString(value) : value.toUTCString();
+                                        break;
+                                }
+                                return entry.key + ': ' + value;
+                            })
+                            .join('\n') +
+                        '\n'
                     );
                 }
             }
@@ -799,7 +799,7 @@ class MailParser extends Transform {
 
                     if (node.headerLines) {
                         this.emit('headerLines', node.headerLines);
-                    }                    
+                    }
                 }
 
                 if (data.contentType === 'message/rfc822' && data.messageNode) {
@@ -976,7 +976,7 @@ class MailParser extends Transform {
     _getPartId(parentBoundary) {
         let boundaryIndex = this.boundaries.findIndex(item => item.name === parentBoundary);
         if (boundaryIndex === -1) {
-            this.boundaries.push({ name: parentBoundary, count: 1 });
+            this.boundaries.push({name: parentBoundary, count: 1});
             boundaryIndex = this.boundaries.length - 1;
         } else {
             this.boundaries[boundaryIndex].count++;

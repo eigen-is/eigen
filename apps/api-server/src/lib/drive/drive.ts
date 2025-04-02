@@ -1,14 +1,14 @@
 import type {Home} from "../home/home.ts";
+import {getHome} from "../home/home.ts";
 import type Database from "bun:sqlite";
 import {BunSQLiteDatabase, drizzle} from "drizzle-orm/bun-sqlite";
 import * as schema from "./schema.ts";
 import {drivePaths} from "./schema.ts";
-import {eq, and, isNull, sql} from "drizzle-orm";
+import {and, eq, isNull, sql} from "drizzle-orm";
 import type {User} from "better-auth/types";
 import type {DriveACL, DrivePath} from "../../types/drive.ts";
 import {randomUUID} from "crypto";
 import path from "path";
-import {getHome} from "../home/home.ts";
 import sharp from "sharp";
 
 async function getDriveDatabase(home: Home) {
@@ -125,10 +125,6 @@ export default class Drive {
         return paths.reverse();
     }
 
-    private async getFolderPath(pathId: string): Promise<string> {
-        return path.join(this.basePath, ...(await this.getParentPaths(pathId)).map(a => a.name));
-    }
-
     /**
      * Create a folder in the drive
      * @param parentId ID of the parent folder
@@ -223,7 +219,7 @@ export default class Drive {
 
         // Save file metadata in database
         if (!fileExists) {
-            const thumbnail = await this.generateThumbnail(fileId, mimeType,filePath);
+            const thumbnail = await this.generateThumbnail(fileId, mimeType, filePath);
 
             await this.db.insert(drivePaths).values({
                 id: fileId,
@@ -246,7 +242,7 @@ export default class Drive {
                 throw new Error("File not found");
             }
 
-            const thumbnail = await this.generateThumbnail(dbfile.id, mimeType,filePath);
+            const thumbnail = await this.generateThumbnail(dbfile.id, mimeType, filePath);
 
             await this.db.update(drivePaths).set({
                 size: size,
@@ -259,27 +255,6 @@ export default class Drive {
         await this.updateSizeOfFolder(parent.id);
 
         return fileId;
-    }
-
-    private async updateSizeOfFolder(pathId: string): Promise<void> {
-        const folder = await this.getPath(pathId);
-        if (!folder || folder.type !== "folder") {
-            throw new Error("Folder not found");
-        }
-
-        // Get folder size by adding size of all children in database
-        const size = await this.db.select({
-            totalSize:sql<number>`sum(${drivePaths.size})`
-        }).from(drivePaths).where(eq(drivePaths.parentId, folder.id)).get();
-
-        await this.db.update(drivePaths).set({
-            size: size?.totalSize || 0,
-            updatedAt: new Date()
-        }).where(eq(drivePaths.id, folder.id));
-        // update parent
-        if (folder.parentId) {
-            await this.updateSizeOfFolder(folder.parentId);
-        }
     }
 
     /**
@@ -574,33 +549,58 @@ export default class Drive {
         return false;
     }
 
-    private async generateThumbnail(id: string, mimeType: string, filePath:string): Promise<string | null> {
+    private async getFolderPath(pathId: string): Promise<string> {
+        return path.join(this.basePath, ...(await this.getParentPaths(pathId)).map(a => a.name));
+    }
+
+    private async updateSizeOfFolder(pathId: string): Promise<void> {
+        const folder = await this.getPath(pathId);
+        if (!folder || folder.type !== "folder") {
+            throw new Error("Folder not found");
+        }
+
+        // Get folder size by adding size of all children in database
+        const size = await this.db.select({
+            totalSize: sql<number>`sum(${drivePaths.size})`
+        }).from(drivePaths).where(eq(drivePaths.parentId, folder.id)).get();
+
+        await this.db.update(drivePaths).set({
+            size: size?.totalSize || 0,
+            updatedAt: new Date()
+        }).where(eq(drivePaths.id, folder.id));
+        // update parent
+        if (folder.parentId) {
+            await this.updateSizeOfFolder(folder.parentId);
+        }
+    }
+
+    private async generateThumbnail(id: string, mimeType: string, filePath: string): Promise<string | null> {
         console.log("Generating thumbnail for", id, mimeType, filePath);
         if (!mimeType.includes('image')) {
             return null;
         }
         console.log("Probably an image, checking dimensions for thumbnail generation");
-        console.log("Absolute path:", this.home.fs.absolutePath(filePath    ));
+        console.log("Absolute path:", this.home.fs.absolutePath(filePath));
         try {
-        const image = sharp(this.home.fs.absolutePath(filePath));
-        const { width, height } = await image.metadata();
-        console.log("Image dimensions", width, height);
-        if (!width || !height || width > 6000 || height > 6000) {
-            return null;
-        }
+            const image = sharp(this.home.fs.absolutePath(filePath));
+            const {width, height} = await image.metadata();
+            console.log("Image dimensions", width, height);
+            if (!width || !height || width > 6000 || height > 6000) {
+                return null;
+            }
 
-        const thumbnail = await image
-        .webp({quality: 80})
-            .resize(512, 512, {
-                fit: 'inside',
-                withoutEnlargement: true
-            })
-            .toBuffer();
+            const thumbnail = await image
+                .webp({quality: 80})
+                .resize(512, 512, {
+                    fit: 'inside',
+                    withoutEnlargement: true
+                })
+                .toBuffer();
 
-        const url = this.home.fs.pathJoin(this.basePath, 'thumbs', `${id}.webp`);
-        this.home.fs.file(url).write(thumbnail);   
+            const url = this.home.fs.pathJoin(this.basePath, 'thumbs', `${id}.webp`);
+            this.home.fs.file(url).write(thumbnail);
 
-        return `${id}.webp`;
+            return `${id}.webp`;
         } catch (e) {
             console.error("Failed to generate thumbnail", e);
             return null;

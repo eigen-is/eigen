@@ -83,12 +83,14 @@ export function EmailDetail({
                     <TooltipButton
                         icon={Archive}
                         tooltipText="Archive"
-                        onClick={() => {/* TODO: Implement reply functionality */}}
+                        onClick={() => {/* TODO: Implement reply functionality */
+                        }}
                     />
                     <TooltipButton
                         icon={ArchiveX}
                         tooltipText="Report Spam"
-                        onClick={() => {/* TODO: Implement reply functionality */}}
+                        onClick={() => {/* TODO: Implement reply functionality */
+                        }}
                     />
                     <TooltipButton
                         icon={Trash2}
@@ -102,17 +104,20 @@ export function EmailDetail({
                     <TooltipButton
                         icon={Reply}
                         tooltipText="Reply"
-                        onClick={() => {/* TODO: Implement reply functionality */}}
+                        onClick={() => {/* TODO: Implement reply functionality */
+                        }}
                     />
                     <TooltipButton
                         icon={ReplyAll}
                         tooltipText="Reply All"
-                        onClick={() => {/* TODO: Implement reply all functionality */}}
+                        onClick={() => {/* TODO: Implement reply all functionality */
+                        }}
                     />
                     <TooltipButton
                         icon={Forward}
                         tooltipText="Forward"
-                        onClick={() => {/* TODO: Implement forward functionality */}}
+                        onClick={() => {/* TODO: Implement forward functionality */
+                        }}
                     />
 
                     <div className="h-6 w-[1px] bg-border mx-1"></div>
