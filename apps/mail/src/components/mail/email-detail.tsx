@@ -185,7 +185,19 @@ export function EmailDetail({
                                 {email.attachments.map((attachment: any, index: number) => (
                                     <div
                                         key={index}
-                                        className="flex items-center p-3 border rounded-md hover:bg-muted/50 cursor-pointer"
+                                        className="flex items-center p-3 border rounded-md hover:bg-muted/50 cursor-pointer select-none"
+                                        onClick={() => {
+                                            const fileName = attachment.filename || `Attachment ${index + 1}`;
+                                            const downloadUrl = `${import.meta.env.VITE_API_HOST}/mail/message/${email.id}/attachment/${index}/${encodeURIComponent(fileName)}`;
+
+                                            // Create a temporary anchor element to trigger the download
+                                            const a = document.createElement('a');
+                                            a.href = downloadUrl;
+                                            a.download = fileName;
+                                            document.body.appendChild(a);
+                                            a.click();
+                                            document.body.removeChild(a);
+                                        }}
                                     >
                                         <Paperclip className="h-4 w-4 mr-2 text-muted-foreground"/>
                                         <span className="text-sm truncate">
