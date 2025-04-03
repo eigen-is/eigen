@@ -4,9 +4,9 @@ import {SidebarItem} from '@workspace/ui/components/layout/sidebar/sidebar-item'
 import {SidebarSection} from '@workspace/ui/components/layout/sidebar/sidebar-section';
 import {Separator} from '@workspace/ui/components/separator';
 import {AppLogo} from '@workspace/ui/components/layout/app-logo';
-import React from 'react';
+import React, {useMemo} from 'react';
 import {EigenLoader} from "@workspace/ui";
-import { EmailComposeButton } from "./email-compose-button";
+import {EmailComposeButton} from "./email-compose-button";
 
 // Map of special mailbox flags to their icons and display names
 const standardMailboxes: Record<string, { icon: React.ComponentType<any>, name: string }> = {
@@ -93,45 +93,49 @@ export function EmailSidebar({
                                  isLoading = false,
                                  error = false
                              }: AppSidebarProps) {
-    // Process mailboxes from API or use defaults if needed
-    const processedMailboxes = mailboxes.map(mailbox => {
-        const path = mailbox.path || '';
-        const name = mailbox.name || path;
-        const flags = mailbox.flags || [];
 
-        // Get the standard mailbox flag if it exists
-        const standardFlag = getStandardMailboxFlag(flags);
+    // Memoize the processed mailboxes to avoid unnecessary recalculations
+    const standardMailboxList = useMemo(() => {
+        const processedMailboxes = mailboxes.map(mailbox => {
+            const path = mailbox.path || '';
+            const name = mailbox.name || path;
+            const flags = mailbox.flags || [];
 
-        // Get icon component based on standard flag or use default
-        let icon;
-        if (standardFlag && standardMailboxes[standardFlag]) {
-            const IconComponent = standardMailboxes[standardFlag].icon;
-            icon = <IconComponent className="h-4 w-4"/>;
-        } else {
-            icon = <File className="h-4 w-4"/>;
-        }
+            // Get the standard mailbox flag if it exists
+            const standardFlag = getStandardMailboxFlag(flags);
 
-        return {
-            ...mailbox,
-            name: standardFlag ? standardMailboxes[standardFlag].name : name,
-            href: `/box/${path.toLowerCase() || 'inbox'}`,
-            icon,
-            isStandard: !!standardFlag
-        };
-    });
+            // Get icon component based on standard flag or use default
+            let icon;
+            if (standardFlag && standardMailboxes[standardFlag]) {
+                const IconComponent = standardMailboxes[standardFlag].icon;
+                icon = <IconComponent className="h-4 w-4"/>;
+            } else {
+                icon = <File className="h-4 w-4"/>;
+            }
 
-    // Use API mailboxes if available, otherwise fall back to defaults
-    const displayMailboxes = isLoading || error ? defaultMailboxes : processedMailboxes;
+            return {
+                ...mailbox,
+                name: standardFlag ? standardMailboxes[standardFlag].name : name,
+                href: `/box/${path.toLowerCase() || 'inbox'}`,
+                icon,
+                isStandard: !!standardFlag
+            };
+        });
 
-    // Separate standard mailboxes from custom mailboxes
-    const standardMailboxListFetched = displayMailboxes.filter(mailbox => mailbox.isStandard);
-    // order standard mailboxes, similar to the order of defaultMailboxes
-    const standardMailboxList = defaultMailboxes.filter(defaultMailbox =>
-        standardMailboxListFetched.some(mailbox => mailbox.name === defaultMailbox.name)
-    );
+        // Use API mailboxes if available, otherwise fall back to defaults
+        const displayMailboxes = isLoading || error ? defaultMailboxes : processedMailboxes;
+
+        // Separate standard mailboxes from custom mailboxes
+        const standardMailboxListFetched = displayMailboxes.filter(mailbox => mailbox.isStandard);
+
+        // order standard mailboxes, similar to the order of defaultMailboxes
+        const standardMailboxList = defaultMailboxes.map(defaultMailbox =>
+            standardMailboxListFetched.filter(mailbox => mailbox.name.toLowerCase() === defaultMailbox.name.toLowerCase())
+        ).flat();
 
 
-    const customMailboxes = displayMailboxes.filter(mailbox => !mailbox.isStandard);
+        return standardMailboxList;
+    }, [mailboxes]);
 
     return (
         <div className="flex h-full min-h-[calc(100vh-3.5rem)] flex-col">
@@ -148,7 +152,7 @@ export function EmailSidebar({
             )}
 
             <div className="px-3 py-2">
-                <EmailComposeButton condensed={condensed} />
+                <EmailComposeButton condensed={condensed}/>
             </div>
 
             <SidebarSection condensed={condensed}>
@@ -163,7 +167,7 @@ export function EmailSidebar({
                         <SidebarItem
                             key={item.path || item.name}
                             icon={item.icon}
-                            label={item.name}
+                            label={item.unread > 0 ? `${item.name} (${item.unread})` : item.name}
                             to={item.href}
                             condensed={condensed}
                         />
@@ -172,7 +176,7 @@ export function EmailSidebar({
             </SidebarSection>
 
             {/* Custom mailboxes section */}
-            {customMailboxes.length > 0 && (
+            {/* {customMailboxes.length > 0 && (
                 <>
                     <Separator className="my-2"/>
                     <SidebarSection
@@ -183,14 +187,14 @@ export function EmailSidebar({
                             <SidebarItem
                                 key={item.path || item.name}
                                 icon={item.icon}
-                                label={item.name}
+                                label={item.unread > 0 ? `${item.name} (${item.unread})` : item.name}
                                 to={item.href}
                                 condensed={condensed}
                             />
                         ))}
                     </SidebarSection>
                 </>
-            )}
+            )} */}
 
             {/* Create new folder button */}
             {/*<div className="px-3 mt-4">*/}
