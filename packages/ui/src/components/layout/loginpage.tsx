@@ -11,7 +11,7 @@ import {Form, FormControl, FormField, FormItem, FormLabel, FormMessage,} from ".
 
 // Define the login form schema with Zod
 const loginFormSchema = z.object({
-    email: z.string().email({message: "Invalid email address"}),
+    email: z.string().min(1, {message: "Username is required"}),
     password: z.string().min(1, {message: "Password is required"}),
 });
 
@@ -37,6 +37,9 @@ export function LoginPage({appName = 'mail'}: { appName?: string }) {
     const onSubmit = async (values: LoginFormValues) => {
         setIsLoading(true);
         setError('');
+
+        // check if email is emailadress ending with eigen.is, if not, change it
+        values.email = values.email.toLowerCase().split('@')[0] + '@eigen.is';
 
         try {
             const {success, error} = await login(values.email, values.password);
