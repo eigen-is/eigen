@@ -78,7 +78,7 @@ export function HomeComponent() {
                     <p className="mb-4">
                         Your personal workspace in the cloud.
                         <br/>
-                        Simple and secure. You control your own data.
+                        Simple and secure. You control your data.
                     </p>
                 </div>
                 <div

@@ -32,7 +32,7 @@ export const Route = createFileRoute('/_auth/$filterType/$filterId')({
         // Only set mode if mailId is not present
         const mode = (!mailId && typeof search.mode === 'string') ? search.mode : undefined;
 
-        return {mailId, mode} as MailSearchParams;
+        return {mailId, mode, to} as MailSearchParams;
     },
 });
 
@@ -101,6 +101,18 @@ function MailRoute() {
         });
     }
 
+    const handleNewDraftEmail = async (mail: EmailDraftType) => {
+        const draft = await updateDraft.mutateAsync(mail);
+        if (draft) {
+            toast("Email draft updated");
+            navigate({
+                to: Route.fullPath,
+                params: {filterType, filterId},
+                search: {mailId : draft.id},
+            });
+        }
+    }
+
     // Ensure that if mailId is set, mode is removed from URL
     useEffect(() => {
         if (mailId && mode) {
@@ -138,6 +150,7 @@ function MailRoute() {
                         onDelete={handleDeleteEmail}
                         toggleMailRead={toggleMailRead}
                         onMove={handleMoveEmail}
+                        onNewDraft={handleNewDraftEmail}
                     />
                 )}
             </div>
@@ -200,6 +213,7 @@ function MailRoute() {
                                 onDelete={handleDeleteEmail}
                                 toggleMailRead={toggleMailRead}
                                 onMove={handleMoveEmail}
+                                onNewDraft={handleNewDraftEmail}
                             />
                         )}
                     </div>

@@ -2,7 +2,6 @@ import {AlertOctagon, Archive, ArchiveX, File, Inbox, Send, Trash2, X} from 'luc
 import {Button} from "@workspace/ui/components/button";
 import {SidebarItem} from '@workspace/ui/components/layout/sidebar/sidebar-item';
 import {SidebarSection} from '@workspace/ui/components/layout/sidebar/sidebar-section';
-import {Separator} from '@workspace/ui/components/separator';
 import {AppLogo} from '@workspace/ui/components/layout/app-logo';
 import React, {useMemo} from 'react';
 import {EigenLoader} from "@workspace/ui";
