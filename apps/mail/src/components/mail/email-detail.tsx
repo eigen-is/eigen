@@ -13,6 +13,7 @@ import {Separator} from "@workspace/ui/components/separator";
 import {ShadowContent} from "@workspace/ui/components/layout/shadow-content";
 import {UserItem} from "@workspace/ui/components/layout/user-item";
 import {TooltipButton} from "@workspace/ui";
+import { mailApi } from "@workspace/lib/api.js";
 
 interface EmailDetailProps {
     email: Email | null;
@@ -20,6 +21,7 @@ interface EmailDetailProps {
     className?: string;
     onBackClick?: () => void;
     onDelete: (mail: Email) => void;
+    onMove: (mail: Email, mailbox: string) => void;
     toggleMailRead: (mail: Email, isRead: boolean) => void;
 }
 
@@ -29,6 +31,7 @@ export function EmailDetail({
                                 className,
                                 onBackClick,
                                 onDelete,
+                                onMove,
                                 toggleMailRead,
                                 ...props
                             }: EmailDetailProps) {
@@ -80,18 +83,24 @@ export function EmailDetail({
                     )}
 
                     {/* Left side icons */}
-                    <TooltipButton
-                        icon={Archive}
-                        tooltipText="Archive"
-                        onClick={() => {/* TODO: Implement reply functionality */
-                        }}
-                    />
-                    <TooltipButton
-                        icon={ArchiveX}
-                        tooltipText="Report Spam"
-                        onClick={() => {/* TODO: Implement reply functionality */
-                        }}
-                    />
+                    {email.mailbox !== 'archive' && (
+                        <TooltipButton
+                            icon={Archive}
+                            tooltipText="Archive"
+                            onClick={() => {
+                                onMove(email, 'archive');
+                            }}
+                        />
+                    )}
+                    {email.mailbox !== 'spam' && (
+                        <TooltipButton
+                            icon={ArchiveX}
+                            tooltipText="Report Spam"
+                            onClick={() => {
+                                onMove(email, 'spam');
+                            }}
+                        />
+                    )}
                     <TooltipButton
                         icon={Trash2}
                         tooltipText="Delete"
