@@ -10,129 +10,129 @@
 
 // Import Routes
 
-import {Route as rootRoute} from './routes/__root'
-import {Route as LoginImport} from './routes/login'
-import {Route as AuthImport} from './routes/_auth'
-import {Route as AuthIndexImport} from './routes/_auth.index'
-import {Route as AuthPasswordImport} from './routes/_auth.password'
+import { Route as rootRoute } from './routes/__root'
+import { Route as LoginImport } from './routes/login'
+import { Route as AuthImport } from './routes/_auth'
+import { Route as AuthIndexImport } from './routes/_auth.index'
+import { Route as AuthSecurityPasswordImport } from './routes/_auth.security.password'
 
 // Create/Update Routes
 
 const LoginRoute = LoginImport.update({
-    id: '/login',
-    path: '/login',
-    getParentRoute: () => rootRoute,
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRoute,
 } as any)
 
 const AuthRoute = AuthImport.update({
-    id: '/_auth',
-    getParentRoute: () => rootRoute,
+  id: '/_auth',
+  getParentRoute: () => rootRoute,
 } as any)
 
 const AuthIndexRoute = AuthIndexImport.update({
-    id: '/',
-    path: '/',
-    getParentRoute: () => AuthRoute,
+  id: '/',
+  path: '/',
+  getParentRoute: () => AuthRoute,
 } as any)
 
-const AuthPasswordRoute = AuthPasswordImport.update({
-    id: '/password',
-    path: '/password',
-    getParentRoute: () => AuthRoute,
+const AuthSecurityPasswordRoute = AuthSecurityPasswordImport.update({
+  id: '/security/password',
+  path: '/security/password',
+  getParentRoute: () => AuthRoute,
 } as any)
 
 // Populate the FileRoutesByPath interface
 
 declare module '@tanstack/react-router' {
-    interface FileRoutesByPath {
-        '/_auth': {
-            id: '/_auth'
-            path: ''
-            fullPath: ''
-            preLoaderRoute: typeof AuthImport
-            parentRoute: typeof rootRoute
-        }
-        '/login': {
-            id: '/login'
-            path: '/login'
-            fullPath: '/login'
-            preLoaderRoute: typeof LoginImport
-            parentRoute: typeof rootRoute
-        }
-        '/_auth/password': {
-            id: '/_auth/password'
-            path: '/password'
-            fullPath: '/password'
-            preLoaderRoute: typeof AuthPasswordImport
-            parentRoute: typeof AuthImport
-        }
-        '/_auth/': {
-            id: '/_auth/'
-            path: '/'
-            fullPath: '/'
-            preLoaderRoute: typeof AuthIndexImport
-            parentRoute: typeof AuthImport
-        }
+  interface FileRoutesByPath {
+    '/_auth': {
+      id: '/_auth'
+      path: ''
+      fullPath: ''
+      preLoaderRoute: typeof AuthImport
+      parentRoute: typeof rootRoute
     }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginImport
+      parentRoute: typeof rootRoute
+    }
+    '/_auth/': {
+      id: '/_auth/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof AuthIndexImport
+      parentRoute: typeof AuthImport
+    }
+    '/_auth/security/password': {
+      id: '/_auth/security/password'
+      path: '/security/password'
+      fullPath: '/security/password'
+      preLoaderRoute: typeof AuthSecurityPasswordImport
+      parentRoute: typeof AuthImport
+    }
+  }
 }
 
 // Create and export the route tree
 
 interface AuthRouteChildren {
-    AuthPasswordRoute: typeof AuthPasswordRoute
-    AuthIndexRoute: typeof AuthIndexRoute
+  AuthIndexRoute: typeof AuthIndexRoute
+  AuthSecurityPasswordRoute: typeof AuthSecurityPasswordRoute
 }
 
 const AuthRouteChildren: AuthRouteChildren = {
-    AuthPasswordRoute: AuthPasswordRoute,
-    AuthIndexRoute: AuthIndexRoute,
+  AuthIndexRoute: AuthIndexRoute,
+  AuthSecurityPasswordRoute: AuthSecurityPasswordRoute,
 }
 
 const AuthRouteWithChildren = AuthRoute._addFileChildren(AuthRouteChildren)
 
 export interface FileRoutesByFullPath {
-    '': typeof AuthRouteWithChildren
-    '/login': typeof LoginRoute
-    '/password': typeof AuthPasswordRoute
-    '/': typeof AuthIndexRoute
+  '': typeof AuthRouteWithChildren
+  '/login': typeof LoginRoute
+  '/': typeof AuthIndexRoute
+  '/security/password': typeof AuthSecurityPasswordRoute
 }
 
 export interface FileRoutesByTo {
-    '/login': typeof LoginRoute
-    '/password': typeof AuthPasswordRoute
-    '/': typeof AuthIndexRoute
+  '/login': typeof LoginRoute
+  '/': typeof AuthIndexRoute
+  '/security/password': typeof AuthSecurityPasswordRoute
 }
 
 export interface FileRoutesById {
-    __root__: typeof rootRoute
-    '/_auth': typeof AuthRouteWithChildren
-    '/login': typeof LoginRoute
-    '/_auth/password': typeof AuthPasswordRoute
-    '/_auth/': typeof AuthIndexRoute
+  __root__: typeof rootRoute
+  '/_auth': typeof AuthRouteWithChildren
+  '/login': typeof LoginRoute
+  '/_auth/': typeof AuthIndexRoute
+  '/_auth/security/password': typeof AuthSecurityPasswordRoute
 }
 
 export interface FileRouteTypes {
-    fileRoutesByFullPath: FileRoutesByFullPath
-    fullPaths: '' | '/login' | '/password' | '/'
-    fileRoutesByTo: FileRoutesByTo
-    to: '/login' | '/password' | '/'
-    id: '__root__' | '/_auth' | '/login' | '/_auth/password' | '/_auth/'
-    fileRoutesById: FileRoutesById
+  fileRoutesByFullPath: FileRoutesByFullPath
+  fullPaths: '' | '/login' | '/' | '/security/password'
+  fileRoutesByTo: FileRoutesByTo
+  to: '/login' | '/' | '/security/password'
+  id: '__root__' | '/_auth' | '/login' | '/_auth/' | '/_auth/security/password'
+  fileRoutesById: FileRoutesById
 }
 
 export interface RootRouteChildren {
-    AuthRoute: typeof AuthRouteWithChildren
-    LoginRoute: typeof LoginRoute
+  AuthRoute: typeof AuthRouteWithChildren
+  LoginRoute: typeof LoginRoute
 }
 
 const rootRouteChildren: RootRouteChildren = {
-    AuthRoute: AuthRouteWithChildren,
-    LoginRoute: LoginRoute,
+  AuthRoute: AuthRouteWithChildren,
+  LoginRoute: LoginRoute,
 }
 
 export const routeTree = rootRoute
-    ._addFileChildren(rootRouteChildren)
-    ._addFileTypes<FileRouteTypes>()
+  ._addFileChildren(rootRouteChildren)
+  ._addFileTypes<FileRouteTypes>()
 
 /* ROUTE_MANIFEST_START
 {
@@ -147,19 +147,19 @@ export const routeTree = rootRoute
     "/_auth": {
       "filePath": "_auth.tsx",
       "children": [
-        "/_auth/password",
-        "/_auth/"
+        "/_auth/",
+        "/_auth/security/password"
       ]
     },
     "/login": {
       "filePath": "login.tsx"
     },
-    "/_auth/password": {
-      "filePath": "_auth.password.tsx",
-      "parent": "/_auth"
-    },
     "/_auth/": {
       "filePath": "_auth.index.tsx",
+      "parent": "/_auth"
+    },
+    "/_auth/security/password": {
+      "filePath": "_auth.security.password.tsx",
       "parent": "/_auth"
     }
   }

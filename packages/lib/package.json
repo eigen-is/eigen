@@ -49,6 +49,8 @@
     "./mail": "./src/lib/mail/index.ts",
     "./mail/hooks": "./src/lib/mail/hooks/index.ts",
     "./drive": "./src/lib/drive/index.ts",
-    "./media": "./src/lib/media/index.ts"
+    "./media": "./src/lib/media/index.ts",
+    "./auth": "./src/lib/auth/index.ts",
+    "./auth/hooks": "./src/lib/auth/hooks/index.ts"
   }
 }
