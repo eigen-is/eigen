@@ -238,7 +238,7 @@ export function ContactDetail({contact, onDelete, onBack, filterType, filterId, 
                         </div>
 
                         {/* Addresses */}
-                        {contact.address && contact.address.length > 0 && (
+                        {contact.address && contact.address.length > 0 && Object.keys(contact.address[0]).length > 0 && (
                             <div className="space-y-4">
                                 <h3 className="text-lg font-semibold border-b pb-2">Addresses</h3>
 

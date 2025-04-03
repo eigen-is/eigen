@@ -99,3 +99,11 @@ export function useAvatarUrl(email: string, options: { enabled?: boolean } = { e
     isLoading: contactsLoading || (needPublicUserData && publicUserLoading)
   };
 }
+
+export function invalidateAvatar(email: string) {
+  avatarMap.delete(email);
+}
+
+export function invalidateAllAvatars() {
+  avatarMap.clear();
+}

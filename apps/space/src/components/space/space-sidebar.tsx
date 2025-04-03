@@ -41,7 +41,7 @@ export function SpaceSidebar({
                 <SidebarItem
                         icon={<BookUser className="h-4 w-4"/>}
                         label="Personal info"
-                        to='/personal-info' params={{}}/>
+                        to='/user' params={{}}/>
             </SidebarSection>
             
             <Separator/>
