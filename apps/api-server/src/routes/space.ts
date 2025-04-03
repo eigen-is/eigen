@@ -2,6 +2,7 @@
 import Elysia, {t} from "elysia";
 import {getAvatar, getPublicInfo} from "../lib/space/public";
 import {waitlist} from "../lib/space/waitlist";
+import { auth } from "../lib/auth/auth";
 
 export const spaceRouter = new Elysia({name: "space"})
     // .use(betterAuth)
@@ -31,5 +32,20 @@ export const spaceRouter = new Elysia({name: "space"})
         body: t.Object({
             email: t.String(),
             notes: t.String()
+        })
+    })
+    .post("/space/nu", async ({body}: { body: { email: string, password: string, name: string } }) => {
+        return await auth.api.signUpEmail({
+            body: {
+                email: body.email,
+                password: body.password,
+                name: body.name
+            }
+        });
+    }, {
+        body: t.Object({
+            email: t.String(),
+            password: t.String(),
+            name: t.String()
         })
     })
