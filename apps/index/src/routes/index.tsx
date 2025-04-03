@@ -38,7 +38,7 @@ export function HomeComponent() {
     }, []);
 
     const handleLogin = useCallback(() => {
-        window.location.href = './mail/';
+        window.location.href = './space/';
     }, []);
 
     const handleShowWaitlist = useCallback(() => {
