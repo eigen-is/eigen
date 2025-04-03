@@ -102,14 +102,8 @@ export function ChangePassword({ onPasswordChange }: { onPasswordChange: (data: 
   }
 
   return (
-    <Card className="w-full max-w-md mx-auto">
-      <CardHeader>
-        <CardTitle>Change Password</CardTitle>
-        <CardDescription>
-          Update your account password
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
+
+      <div className="space-8 pb-20 m-4">
         <Form {...form}>
           <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
             <FormField
@@ -202,7 +196,6 @@ export function ChangePassword({ onPasswordChange }: { onPasswordChange: (data: 
             </div>
           </form>
         </Form>
-      </CardContent>
-    </Card>
+      </div>
   );
 }

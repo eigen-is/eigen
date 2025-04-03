@@ -37,38 +37,41 @@ export function SpaceSidebar({
                 <SidebarItem
                     icon={<CircleUser className="h-4 w-4"/>}
                     label="Home"
+                    condensed={condensed}
                     to='/' params={{}}/>
                 <SidebarItem
                         icon={<BookUser className="h-4 w-4"/>}
                         label="Personal info"
+                    condensed={condensed}
                         to='/user' params={{}}/>
             </SidebarSection>
             
             <Separator/>
             
-            <SidebarSection condensed={condensed} title="Security">
+            <SidebarSection condensed={condensed}>
                 <SidebarItem
                     icon={<LockKeyholeIcon className="h-4 w-4"/>}
                     label="Change password"
+                    condensed={condensed}
                     to='/security/password' params={{}}/>
-                <SidebarItem
+                {/* <SidebarItem
                     icon={<KeySquare className="h-4 w-4"/>}
                     label="Two factor authentication"
                     to='/security/fa2' params={{}}/>
                 <SidebarItem
                     icon={<Smartphone className="h-4 w-4"/>}
                     label="Recovery codes"
-                    to='/security/recovery-codes' params={{}}/>
+                    to='/security/recovery-codes' params={{}}/> */}
             </SidebarSection>
             
-            <Separator/>
+            {/* <Separator/>
 
             <SidebarSection condensed={condensed}>
                 <SidebarItem
                         icon={<CreditCard className="h-4 w-4"/>}
                         label="Payment and subscriptions"
                         to='/payment/payment-and-subscriptions' params={{}}/>
-            </SidebarSection>
+            </SidebarSection> */}
         </div>
     );
 }
