@@ -54,7 +54,7 @@ function EditContactRoute() {
             // Transformeer de data voor compatibiliteit met API
             const contactData: Omit<Contact, 'id'> = {
                 ...data,
-                birthday: data.birthday?.toISOString() ?? undefined,
+                birthday: data.birthday?.toISOString(),
                 labels: data.labels || []
             };
 

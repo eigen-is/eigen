@@ -1,9 +1,10 @@
-import {createRootRouteWithContext, Outlet} from '@tanstack/react-router'
+import {createFileRoute, Outlet, redirect} from '@tanstack/react-router'
 import {TanStackRouterDevtools} from '@tanstack/react-router-devtools'
 import {AuthContextType} from "@workspace/lib/auth/auth-context.tsx";
 import {useMediaQuery} from '../hooks/use-media-query';
 import {createContext, useState} from 'react';
 import {SpaceSidebar} from "@/components/space/space-sidebar.tsx";
+
 
 // Create a context for sidebar state
 export const SidebarContext = createContext<{
@@ -19,11 +20,22 @@ interface MyRouterContext {
     auth: AuthContextType;
 }
 
-export const Route = createRootRouteWithContext<MyRouterContext>()({
-    component: RootComponent
-});
 
-function RootComponent() {
+export const Route = createFileRoute('/_auth')({
+    beforeLoad: ({context, location}) => {
+        if (!context.auth.isAuthenticated) {
+            throw redirect({
+                to: '/login',
+                search: {
+                    redirect: location.href,
+                },
+            })
+        }
+    },
+    component: AuthLayout,
+})
+
+function AuthLayout() {
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const isMobile = useMediaQuery('(max-width: 768px)');
     const isTablet = useMediaQuery('(min-width: 769px) and (max-width: 1024px)');
