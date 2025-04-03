@@ -1,5 +1,5 @@
 import {useState} from 'react';
-import {ArrowLeft, Building, Calendar, Edit, Mail, MapPin, MoreVertical, Phone, Route, Trash2} from 'lucide-react';
+import {ArrowLeft, Building, Calendar, Edit, Mail, MapPin, MoreVertical, Phone, Trash2} from 'lucide-react';
 import {type Contact} from "@apps/api-server/types/contact";
 import {Button} from "@workspace/ui/components/button";
 import {
@@ -232,7 +232,7 @@ export function ContactDetail({contact, onDelete, onBack, filterType, filterId, 
                                 </div>
                             )}
 
-                            {contact.birthday && (
+                            {Boolean(contact.birthday) && (
                                 <div className="space-y-2">
                                     <h4 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
                                         <Calendar className="h-4 w-4"/>
