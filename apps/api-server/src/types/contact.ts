@@ -13,7 +13,7 @@ export interface Contact {
         zipCode?: string;
         country?: string;
     }[];
-    birthday?: number;
+    birthday?: string;
     notes?: string;
     avatar?: string;
     labels?: string[];

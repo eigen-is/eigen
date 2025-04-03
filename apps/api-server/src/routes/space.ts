@@ -3,7 +3,6 @@ import Elysia, {t} from "elysia";
 import {getAvatar, getPublicInfo} from "../lib/space/public";
 import {waitlist} from "../lib/space/waitlist";
 
-
 export const spaceRouter = new Elysia({name: "space"})
     // .use(betterAuth)
     .get("/space/avatar/:id/:filename", async ({params, set}: {

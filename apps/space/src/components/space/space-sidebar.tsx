@@ -1,8 +1,10 @@
-import {Users, X} from 'lucide-react';
+import {Users, X, User, CircleUser, BookUser, LockKeyholeIcon, KeySquare, Smartphone, CreditCard} from 'lucide-react';
 import {Button} from "@workspace/ui/components/button";
 import {SidebarSection} from '@workspace/ui/components/layout/sidebar/sidebar-section';
 import {AppLogo} from '@workspace/ui/components/layout/app-logo';
 import {SidebarItem} from "@workspace/ui";
+import { Separator } from '@workspace/ui/components/separator';
+import { title } from 'process';
 
 
 interface SpaceSidebarProps {
@@ -31,16 +33,41 @@ export function SpaceSidebar({
                 </div>
             )}
 
-
             <SidebarSection condensed={condensed}>
                 <SidebarItem
-                    icon={<Users className="h-4 w-4"/>}
+                    icon={<CircleUser className="h-4 w-4"/>}
                     label="Home"
                     to='/' params={{}}/>
                 <SidebarItem
-                    icon={<Users className="h-4 w-4"/>}
+                        icon={<BookUser className="h-4 w-4"/>}
+                        label="Personal info"
+                        to='/personal-info' params={{}}/>
+            </SidebarSection>
+            
+            <Separator/>
+            
+            <SidebarSection condensed={condensed} title="Security">
+                <SidebarItem
+                    icon={<LockKeyholeIcon className="h-4 w-4"/>}
                     label="Change password"
-                    to='/password' params={{}}/>
+                    to='/security/password' params={{}}/>
+                <SidebarItem
+                    icon={<KeySquare className="h-4 w-4"/>}
+                    label="Two factor authentication"
+                    to='/security/fa2' params={{}}/>
+                <SidebarItem
+                    icon={<Smartphone className="h-4 w-4"/>}
+                    label="Recovery codes"
+                    to='/security/recovery-codes' params={{}}/>
+            </SidebarSection>
+            
+            <Separator/>
+
+            <SidebarSection condensed={condensed}>
+                <SidebarItem
+                        icon={<CreditCard className="h-4 w-4"/>}
+                        label="Payment and subscriptions"
+                        to='/payment/payment-and-subscriptions' params={{}}/>
             </SidebarSection>
         </div>
     );

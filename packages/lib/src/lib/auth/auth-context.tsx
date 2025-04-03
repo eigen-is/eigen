@@ -1,5 +1,5 @@
 import React, {createContext, ReactNode, useEffect, useState} from 'react';
-import {authClient} from "./auth-client.ts";
+import {authClient} from "./hooks/use-auth-client.ts";
 import {LoadingScreen} from '@workspace/ui/components/layout/loading-screen';
 
 export type AuthContextType = {
