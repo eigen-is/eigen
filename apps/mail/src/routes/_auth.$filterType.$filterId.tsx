@@ -14,6 +14,7 @@ import {EmailList} from "@/components/mail/email-list.tsx";
 import {Email} from "@apps/api-server/types/mail";
 import {toast} from "sonner";
 import {EmailDraft as EmailDraftType} from "@apps/api-server/types/mail";
+import {useEffect} from 'react';
 
 // Define search params type
 export interface MailSearchParams {
@@ -25,7 +26,9 @@ export const Route = createFileRoute('/_auth/$filterType/$filterId')({
     component: MailRoute,
     validateSearch: (search: Record<string, unknown>) => {
         const mailId = typeof search.mailId === 'string' ? search.mailId : undefined;
-        return {mailId} as MailSearchParams;
+        // Only set mode if mailId is not present
+        const mode = (!mailId && typeof search.mode === 'string') ? search.mode : undefined;
+        return {mailId, mode} as MailSearchParams;
     },
 });
 
@@ -82,6 +85,21 @@ function MailRoute() {
             search: {},
         });
     }
+
+    // Ensure that if mailId is set, mode is removed from URL
+    useEffect(() => {
+        if (mailId && mode) {
+            // Navigate to the same route but without the mode parameter
+            navigate({
+                to: `/_auth/${filterType}/${filterId}`,
+                search: {
+                    mailId
+                },
+                replace: true // Replace the current history entry
+            });
+        }
+    }, [mailId, mode, navigate, filterType, filterId]);
+
     // On mobile: Show full-width email list / detail
     if (isMobile) {
         return selectedEmail  || mode === "compose" ? (

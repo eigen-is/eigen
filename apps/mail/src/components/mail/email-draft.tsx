@@ -191,12 +191,13 @@ export function EmailDraft({
                         onClick={handleSendEmail}
                         disabled={isSending}
                     />
+                    {email.id && (
                     <TooltipButton
                         icon={Trash2}
                         tooltipText="Delete"
                         onClick={() => onDelete(email)}
                         disabled={isSending}
-                    />
+                    />)}
                 </div>
                 <div className="flex items-center gap-2">
                 </div>
