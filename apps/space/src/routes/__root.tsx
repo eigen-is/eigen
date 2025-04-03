@@ -39,7 +39,7 @@ function RootComponent() {
                     onMobileMenuClick={() => setSidebarOpen(true)}
                     isMobile={isMobile}
                 />
-                <div className="flex-1 overflow-hidden">
+                <div className="flex-1 overflow-auto">
                     <Outlet/>
                 </div>
             </div>
