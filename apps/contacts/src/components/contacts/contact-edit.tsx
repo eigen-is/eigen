@@ -115,6 +115,7 @@ export function ContactEdit({
 
             // Call the onSave callback with the form data
             await onSave(formData);
+            invalidateAllAvatars();
         } catch (e) {
             // Handle any errors that might occur during save
             console.error("Error saving contact:", e);
@@ -158,6 +159,7 @@ export function ContactEdit({
                                         name={`${contact.firstName} ${contact.lastName}`}
                                         email={contact.email?.[0]}
                                         imageUrl={avatar ?? undefined}
+                                        forceUseImageUrl={true}
                                         className="h-full w-full"
                                         size="lg"
                                     />
@@ -207,7 +209,6 @@ export function ContactEdit({
                                                     if (response.ok) {
                                                         const responseData = await response.text();
                                                         setAvatar(responseData);
-                                                        invalidateAllAvatars();
                                                     }
                                                 } catch (err: any) {
                                                     console.error('Error uploading file:', err);
@@ -242,7 +243,6 @@ export function ContactEdit({
                                                 <DropdownMenuItem onSelect={() => {
                                                     // Remove avatar
                                                     setAvatar(null);
-                                                    invalidateAllAvatars();
                                                 }}>
                                                     Remove avatar
                                                 </DropdownMenuItem>
