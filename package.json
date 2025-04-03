@@ -3,6 +3,13 @@
   "private": true,
   "scripts": {
     "serve": "bun --filter '*' dev",
+    "serve:index": "bun --filter './apps/api-server' --filter './apps/index' dev",
+    "serve:mail": "bun --filter './apps/api-server' --filter './apps/mail' dev",
+    "serve:space": "bun --filter './apps/api-server' --filter './apps/space' dev",
+    "serve:calendar": "bun --filter './apps/api-server' --filter './apps/calendar' dev",
+    "serve:contacts": "bun --filter './apps/api-server' --filter './apps/contacts' dev",
+    "serve:drive": "bun --filter './apps/api-server' --filter './apps/drive' dev",
+    "serve:docs": "bun --filter './apps/api-server' --filter './apps/docs' dev",
     "build": "bun --filter '*' build"
   },
   "workspaces": [
