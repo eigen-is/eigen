@@ -109,14 +109,20 @@ function UserDropdown({rootRoute, appName}: { rootRoute: TopbarProps['rootRoute'
                     })}
                     <DropdownMenuSeparator/>
                     <DropdownMenuItem>
+                        <a href={`${import.meta.env.VITE_APP_SPACE_URL}/user`} className={`flex items-center w-full gap-2`}>
                         Profile
+                        </a>
                     </DropdownMenuItem>
                     <DropdownMenuItem>
+                        <a href={`${import.meta.env.VITE_APP_SPACE_URL}/security/password`} className={`flex items-center w-full gap-2`}>
                         Settings
+                        </a>
                     </DropdownMenuItem>
                     <DropdownMenuSeparator/>
                     <DropdownMenuItem onClick={() => setLogoutDialogOpen(true)}>
+                        <span className={`flex items-center w-full gap-2`}>
                         Log out
+                            </span>
                     </DropdownMenuItem>
                 </DropdownMenuContent>
             </DropdownMenu>
