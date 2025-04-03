@@ -9,8 +9,6 @@ import {useAddContact, useLabels, useUpdateContact} from '@workspace/lib/contact
 import {type Contact} from "@apps/api-server/types/contact";
 import {useUpload} from '@workspace/ui/components/layout/upload-provider/upload-provider';
 import {uploadWithProgress} from "@workspace/ui/components/layout/upload-provider/upload-with-progress";
-
-// UI Components
 import {Button} from "@workspace/ui/components/button";
 import {Input} from "@workspace/ui/components/input";
 import {Badge} from "@workspace/ui/components/badge";
@@ -25,6 +23,7 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger
 } from "@workspace/ui/components/dropdown-menu";
+import {invalidateAllAvatars} from "@workspace/lib/media";
 
 // Define the form schema
 export const formSchema = z.object({
@@ -208,6 +207,7 @@ export function ContactEdit({
                                                     if (response.ok) {
                                                         const responseData = await response.text();
                                                         setAvatar(responseData);
+                                                        invalidateAllAvatars();
                                                     }
                                                 } catch (err: any) {
                                                     console.error('Error uploading file:', err);
@@ -242,6 +242,7 @@ export function ContactEdit({
                                                 <DropdownMenuItem onSelect={() => {
                                                     // Remove avatar
                                                     setAvatar(null);
+                                                    invalidateAllAvatars();
                                                 }}>
                                                     Remove avatar
                                                 </DropdownMenuItem>
