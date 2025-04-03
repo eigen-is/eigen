@@ -2,7 +2,7 @@ import type {User} from "better-auth";
 import type {Attachment, Email, EmailSummary, MaildirMailbox} from "./mailtypes";
 import {simpleParser} from "./mail-parser";
 import {createELMContent} from "./mailfile";
-import {createUniqueMessageId, getMailIDfromFileName, getStandardMailboxFlags, isSpecialMailbox} from "./mailutils";
+import {createUniqueMessageId, getMailIDfromFileName, getStandardMailboxFlags} from "./mailutils";
 import {welcomeMail} from "./welcome.ts";
 import DOMPurify from 'isomorphic-dompurify';
 import maildb from "./maildb.ts";
@@ -725,6 +725,8 @@ export default class Maildir {
             // just to be sure, dompurify html
             if (parsedMail.html) {
                 parsedMail.html = DOMPurify.sanitize(parsedMail.html, {FORCE_BODY: true});
+                // replace newlines and all types of whitespace with a single space
+                parsedMail.html = parsedMail.html.replace(/\s+/g, ' ').trim();
             }
 
             parsedMail.isDraft = mailbox === 'drafts';

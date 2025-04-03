@@ -8,18 +8,18 @@ import {
     DropdownMenuTrigger
 } from "@workspace/ui/components/dropdown-menu";
 import {format} from "date-fns";
-import {Email} from "@apps/api-server/types/mail";
+import {Email, EmailDraft} from "@apps/api-server/types/mail";
 import {Separator} from "@workspace/ui/components/separator";
 import {ShadowContent} from "@workspace/ui/components/layout/shadow-content";
 import {UserItem} from "@workspace/ui/components/layout/user-item";
 import {TooltipButton} from "@workspace/ui";
-import { mailApi } from "@workspace/lib/api.js";
 
 interface EmailDetailProps {
     email: Email | null;
     isMobile?: boolean;
     className?: string;
     onBackClick?: () => void;
+    onNewDraft: (draft: EmailDraft) => void;
     onDelete: (mail: Email) => void;
     onMove: (mail: Email, mailbox: string) => void;
     toggleMailRead: (mail: Email, isRead: boolean) => void;
@@ -32,6 +32,7 @@ export function EmailDetail({
                                 onBackClick,
                                 onDelete,
                                 onMove,
+                                onNewDraft,
                                 toggleMailRead,
                                 ...props
                             }: EmailDetailProps) {
@@ -113,19 +114,39 @@ export function EmailDetail({
                     <TooltipButton
                         icon={Reply}
                         tooltipText="Reply"
-                        onClick={() => {/* TODO: Implement reply functionality */
+                        onClick={() => {
+                            // @ts-ignore
+                            const draft: EmailDraft = {
+                                to: email.from,
+                                subject: `RE: ${email.subject}`,
+                                text: `\n\n--\n\n${email.text}`,
+                            };
+                            onNewDraft(draft);
                         }}
                     />
                     <TooltipButton
                         icon={ReplyAll}
                         tooltipText="Reply All"
-                        onClick={() => {/* TODO: Implement reply all functionality */
+                        onClick={() => {
+                            const draft: EmailDraft = {
+                                // @ts-ignore
+                                to: {value: [...(email.from?.value || []), ...(email.cc?.value || [])]},
+                                subject: `FW: ${email.subject}`,
+                                text: `\n\n--\n\n${email.text}`,
+                            };
+                            onNewDraft(draft);
                         }}
                     />
                     <TooltipButton
                         icon={Forward}
                         tooltipText="Forward"
-                        onClick={() => {/* TODO: Implement forward functionality */
+                        onClick={() => {
+                            // @ts-ignore
+                            const draft: EmailDraft = {
+                                subject: `FW: ${email.subject}`,
+                                text: `\n\n--\n\n${email.text}`,
+                            };
+                            onNewDraft(draft);
                         }}
                     />
 

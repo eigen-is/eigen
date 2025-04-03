@@ -24,8 +24,8 @@ Content-Transfer-Encoding: quoted-printable
 
 Hi ${name},
 
-Welcome to eigen, your personal workspace in the cloud.
-Simple and secure. You control your own data.
+Welcome to eigen, a personal workspace in the cloud.
+Simple and secure. You control your data.
 
 Best,
 
