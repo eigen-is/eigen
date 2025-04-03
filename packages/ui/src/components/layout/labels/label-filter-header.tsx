@@ -8,7 +8,7 @@ export interface LabelFilterHeaderProps {
 export function LabelFilterHeader({
                                       labels,
                                       labelId,
-                                  } : LabelFilterHeaderProps) {
+                                  }: LabelFilterHeaderProps) {
 
     const label = labels.find(l => l.id === labelId);
 
