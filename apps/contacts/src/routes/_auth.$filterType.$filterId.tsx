@@ -66,31 +66,30 @@ function ContactsRoute() {
         );
     }
 
+    const contact = contacts.find(c => c.id === contactId);
+    if (contactId && !contact) {
+        // If contact not found, navigate back to the list
+        navigate({
+            to: Route.fullPath,
+            params: {filterType, filterId},
+            search: {},
+        });
+    }
+
     // On mobile: If a contactId is provided, show only the contact detail view
-    if (isMobile && contactId) {
-        const contact = contacts.find(c => c.id === contactId);
-        if (contact) {
-            return (
-                <div className="flex flex-col h-full">
-                    <ContactDetail
-                        contact={contact}
-                        onDelete={handleDeleteContact}
-                        filterType={filterType}
-                        filterId={filterId}
-                        onBack={handleBackToList}
-                        isMobile={isMobile}
-                    />
-                </div>
-            );
-        } else {
-            // If contact not found, navigate back to the list
-            navigate({
-                to: Route.fullPath,
-                params: {filterType, filterId},
-                search: {},
-            });
-            return null;
-        }
+    if (isMobile && contact) {
+        return (
+            <div className="flex flex-col h-full">
+                <ContactDetail
+                    contact={contact}
+                    onDelete={handleDeleteContact}
+                    filterType={filterType}
+                    filterId={filterId}
+                    onBack={handleBackToList}
+                    isMobile={isMobile}
+                />
+            </div>
+        );
     }
 
     // Desktop/Tablet: Three-column layout (sidebar already handled in _auth.tsx)
@@ -112,29 +111,15 @@ function ContactsRoute() {
         ${isMobile && !contactId ? 'hidden' : 'block'}
         flex-1 h-full overflow-y-auto
       `}>
-                {contactId ? (
-                    (() => {
-                        const contact = contacts.find(c => c.id === contactId);
-                        if (contact) {
-                            return (
-                                <ContactDetail
-                                    contact={contact}
-                                    onDelete={handleDeleteContact}
-                                    filterType={filterType}
-                                    filterId={filterId}
-                                    onBack={handleBackToList}
-                                />
-                            );
-                        } else {
-                            // Navigate back to the list if contact not found
-                            navigate({
-                                to: Route.fullPath,
-                                params: {filterType, filterId},
-                                search: {},
-                            });
-                            return null;
-                        }
-                    })()
+                {contact ? (
+                    <ContactDetail
+                        contact={contact}
+                        onDelete={handleDeleteContact}
+                        filterType={filterType}
+                        filterId={filterId}
+                        onBack={handleBackToList}
+                        isMobile={isMobile}
+                    />
                 ) : (
                     <div className="h-full w-full flex items-center justify-center">
                         <p className="text-muted-foreground">Select a contact to view details</p>
