@@ -16,27 +16,28 @@ import {useAuth} from "@workspace/lib/auth/auth-context.tsx";
  * @returns Object with sendable and saveable status
  */
 export function getEmailDraftStatus(draft: EmailDraftType) {
-  // Check if draft is sendable (to field is not empty)
-  const isSendable = !!(draft.to && 
-    draft.to.text && 
-    draft.to.text.trim() !== '');
-  
-  // Check if draft is saveable (at least one of subject, to, cc, bcc, or text is not empty)
-  const isSaveable = !!(
-    (draft.subject && draft.subject.toString().trim() !== '') || 
-    (draft.to && draft.to.text && draft.to.text.trim() !== '') || 
-    (draft.cc && draft.cc.text && draft.cc.text.trim() !== '') || 
-    (draft.bcc && draft.bcc.text && draft.bcc.text.trim() !== '') || 
-    (draft.text && draft.text.trim() !== '')
-  );
-  
-  return { isSendable, isSaveable };
+    // Check if draft is sendable (to field is not empty)
+    const isSendable = !!(draft.to &&
+        draft.to.text &&
+        draft.to.text.trim() !== '');
+
+    // Check if draft is saveable (at least one of subject, to, cc, bcc, or text is not empty)
+    const isSaveable = !!(
+        (draft.subject && draft.subject.toString().trim() !== '') ||
+        (draft.to && draft.to.text && draft.to.text.trim() !== '') ||
+        (draft.cc && draft.cc.text && draft.cc.text.trim() !== '') ||
+        (draft.bcc && draft.bcc.text && draft.bcc.text.trim() !== '') ||
+        (draft.text && draft.text.trim() !== '')
+    );
+
+    return {isSendable, isSaveable};
 }
 
 interface EmailDraftProps {
     email: EmailDraftType | null;
     isMobile?: boolean;
     className?: string;
+    to?: string;
     onBackClick?: () => void;
     onDelete: (mail: EmailDraftType) => void;
     toggleMailRead: (mail: EmailDraftType, isRead: boolean) => void;
@@ -48,6 +49,7 @@ export function EmailDraft({
                                email,
                                isMobile,
                                className,
+                               to,
                                onBackClick,
                                onDelete,
                                sendDraft,
@@ -61,7 +63,7 @@ export function EmailDraft({
     const [isSending, setIsSending] = useState(false);
 
     if (!email) {
-      email = createDraftEmail({});
+        email = createDraftEmail({});
     }
     const auth = useAuth();
 
@@ -79,6 +81,17 @@ export function EmailDraft({
         html: '',
         text: '',
     };
+
+    if (to) {
+        email.to = {
+            value: [{
+                name: '',
+                address: to,
+            }],
+            html: to,
+            text: to,
+        }
+    }
 
     const fromName = email.from?.value[0].name || email.from?.value[0].address;
     const fromEmail = email.from?.value[0].address;
@@ -192,12 +205,12 @@ export function EmailDraft({
                         disabled={isSending}
                     />
                     {email.id && (
-                    <TooltipButton
-                        icon={Trash2}
-                        tooltipText="Delete"
-                        onClick={() => onDelete(email)}
-                        disabled={isSending}
-                    />)}
+                        <TooltipButton
+                            icon={Trash2}
+                            tooltipText="Delete"
+                            onClick={() => onDelete(email)}
+                            disabled={isSending}
+                        />)}
                 </div>
                 <div className="flex items-center gap-2">
                 </div>
@@ -205,7 +218,10 @@ export function EmailDraft({
 
             {/* Email Form */}
             <div className="flex-1 overflow-auto">
-                <form className="flex flex-col h-full" onSubmit={(e) => { e.preventDefault(); handleSendEmail(); }}>
+                <form className="flex flex-col h-full" onSubmit={(e) => {
+                    e.preventDefault();
+                    handleSendEmail();
+                }}>
                     <div className="space-y-1 px-4 py-2">
 
                         {/* To field */}
