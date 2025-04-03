@@ -71,11 +71,12 @@ export default class maildb {
             fromShort: String(email.fromShort || ''),
             textShort: String(email.textShort || ''),
             date: date,
+            size: email.size,
             isRead: Boolean(email.isRead),
             isStarred: Boolean(email.isStarred),
             isDraft: Boolean(email.isDraft),
             hasAttachments: Boolean(email.hasAttachments),
-            mailbox: String(email.mailbox || ''),
+            mailbox: String(email.mailbox || '').toLowerCase(),
             _isParsed: Boolean(email._isParsed),
             createdAt: new Date(),
             updatedAt: new Date()
@@ -102,16 +103,19 @@ export default class maildb {
     }
 
     public async moveEmail(id: string, mailbox: string) {
-        console.log('move email to mailbox:', mailbox);
+        mailbox = mailbox.toLowerCase();
         const isDraft = mailbox == 'drafts';
         return this.db.update(schema.emails).set({mailbox, isDraft}).where(eq(schema.emails.id, id));
     }
 
     public async renameMailbox(mailbox: string, newMailbox: string) {
+        mailbox = mailbox.toLowerCase();
+        newMailbox = newMailbox.toLowerCase();
         return this.db.update(schema.emails).set({mailbox: newMailbox}).where(eq(schema.emails.mailbox, mailbox));
     }
 
     public async deleteMailbox(mailbox: string) {
+        mailbox = mailbox.toLowerCase();
         return this.db.delete(schema.emails).where(eq(schema.emails.mailbox, mailbox));
     }
 
@@ -128,7 +132,7 @@ export default class maildb {
     }
 
     public async getAllEmails(mailbox: string) {
-        console.log('search mails in mailbox:', mailbox);
+        mailbox = mailbox.toLowerCase();
         return this.db.select().from(schema.emails).where(eq(schema.emails.mailbox, mailbox));
     }
 }

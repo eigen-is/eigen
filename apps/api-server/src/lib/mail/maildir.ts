@@ -427,6 +427,7 @@ export default class Maildir {
                 isRead: true,
                 isStarred: false,
                 isDraft: true,
+                size: 0,
                 hasAttachments: false,
                 mailbox: draftsMailbox.name,
                 _isParsed: false
@@ -714,8 +715,10 @@ export default class Maildir {
 
     private async parseMessage(messageId: string, mailbox: string): Promise<Email | null> {
         try {
+            mailbox = mailbox.toLowerCase();
             const filePath = this.getFullPath({id: messageId, mailbox: mailbox});
-            const fileContent = await this.home.fs.file(filePath).text();
+            const file = this.home.fs.file(filePath);
+            const fileContent = await file.text();
 
             // time to parse the message
             const start = Date.now();
@@ -730,6 +733,10 @@ export default class Maildir {
 
             parsedMail.isDraft = mailbox === 'drafts';
             parsedMail.isRead = parsedMail.isDraft;
+            parsedMail.isStarred = false;
+            parsedMail.isDeleted = mailbox === 'trash';
+            // @ts-ignore
+            parsedMail.size = file.size;
             
             // Create the Email object with the correct ID and path information
             return {
@@ -744,15 +751,6 @@ export default class Maildir {
             console.error(`Error parsing message ${messageId}:`, error);
             return null;
         }
-    }
-
-    /**
-     * Checks if a mailbox is a special mailbox that shouldn't be renamed or deleted
-     * @param mailbox Mailbox path
-     * @returns True if the mailbox is special
-     */
-    private async checkSpecialMailbox(mailbox: string): Promise<boolean> {
-        return isSpecialMailbox(await this.getMailboxAttributes(mailbox));
     }
 
     /**

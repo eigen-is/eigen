@@ -1,3 +1,5 @@
+import {v4 as uuidv4} from "uuid";
+
 export function getMailIDfromFileName(fileName: string): string {
     // Extract ID from filename (part before the colon)
     let fileId = fileName.split(':')[0];
@@ -13,7 +15,7 @@ export function getMailIDfromFileName(fileName: string): string {
  * @returns Unique message ID
  */
 export function createUniqueMessageId(): string {
-    return `${Date.now()}.${crypto.randomUUID()}`;
+    return `${Date.now()}.${uuidv4()}`;
 }
 
 /**
