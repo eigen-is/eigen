@@ -2,6 +2,7 @@ import {useQuery, useQueryClient} from '@tanstack/react-query';
 import {mailApi} from '@workspace/lib/api.ts';
 import {Email} from "@apps/api-server/types/mail";
 import {mailboxKeys} from "./use-mailboxes.ts";
+import {emails} from "@apps/api-server/src/lib/mail/schema.ts";
 
 // Define query keys for reuse
 export const emailKeys = {
@@ -71,6 +72,22 @@ export function useToggleReadEmail() {
             read: isRead
         });
         await queryClient.invalidateQueries({queryKey: emailKeys.detail(email.id)});
+        await queryClient.invalidateQueries({queryKey: mailboxKeys.lists()});
+    }
+}
+
+export function useMoveEmail() {
+    const queryClient = useQueryClient();
+
+    return async (email: Email, mailbox: string) => {
+        const currentMailbox = email.mailbox;
+        await mailApi.message.move.put({
+            messageId: email.id,
+            targetMailbox: mailbox
+        });
+        await queryClient.invalidateQueries({queryKey: emailKeys.detail(email.id)});
+        await queryClient.invalidateQueries({queryKey: emailKeys.list(currentMailbox)});
+        await queryClient.invalidateQueries({queryKey: emailKeys.list(mailbox)});
         await queryClient.invalidateQueries({queryKey: mailboxKeys.lists()});
     }
 }
