@@ -1,8 +1,8 @@
-import { useContacts } from '../../contacts/hooks/use-contacts';
-import { useQuery } from '@tanstack/react-query';
-import { spaceApi } from '@workspace/lib/api';
-import { useState, useEffect } from 'react';
-import { Contact } from '@apps/api-server/types/contact';
+import {useContacts} from '../../contacts/hooks/use-contacts';
+import {useQuery} from '@tanstack/react-query';
+import {spaceApi} from '@workspace/lib/api';
+import {useEffect, useState} from 'react';
+import {Contact} from '@apps/api-server/types/contact';
 
 // In-memory cache for avatar URLs
 const avatarMap = new Map<string, string | undefined>();
@@ -15,7 +15,7 @@ const publicUserKeys = {
 };
 
 // Hook to fetch public user data
-export function usePublicUser(email: string | undefined, options: { enabled: boolean } = { enabled: true }) {
+export function usePublicUser(email: string | undefined, options: { enabled: boolean } = {enabled: true}) {
     return useQuery({
         queryKey: publicUserKeys.detail(email || ''),
         queryFn: async () => {
@@ -31,79 +31,79 @@ export function usePublicUser(email: string | undefined, options: { enabled: boo
     });
 }
 
-export function useAvatarUrl(email: string, options: { enabled?: boolean } = { enabled: true }) {
-  const [needPublicUserData, setNeedPublicUserData] = useState(false && options.enabled);
-  const { data: contacts = [], isLoading: contactsLoading } = useContacts();
-  
-  // Only fetch public user data if we couldn't find an avatar in contacts
-  const { data: publicUserData, isLoading: publicUserLoading } = usePublicUser(email, {
-    enabled: needPublicUserData
-  });
+export function useAvatarUrl(email: string, options: { enabled?: boolean } = {enabled: true}) {
+    const [needPublicUserData, setNeedPublicUserData] = useState(false && options.enabled);
+    const {data: contacts = [], isLoading: contactsLoading} = useContacts();
 
-  // Check contacts for avatar when contacts data changes
-  useEffect(() => {
-    if (contactsLoading || !email) return;
-    
-    // If we already have the avatar in cache, no need to check
-    if (avatarMap.has(email)) return;
-    
-    // Check if there's a contact with this email and an avatar
-    const contact = contacts.find((contact: Contact) => 
-      contact.avatar && 
-      (contact.email || []).includes(email)
-    );
-    
-    if (contact?.avatar) {
-      // Found in contacts, store in cache
-      avatarMap.set(email, contact.avatar);
-    } else {
-      // Not found in contacts, need to check public user data
-      setNeedPublicUserData(true);
-    }
-  }, [contacts, email, contactsLoading]);
+    // Only fetch public user data if we couldn't find an avatar in contacts
+    const {data: publicUserData, isLoading: publicUserLoading} = usePublicUser(email, {
+        enabled: needPublicUserData
+    });
 
-  /**
-   * Get avatar URL for an email address
-   * @returns The avatar URL if found, undefined otherwise
-   */
-  const getAvatarUrl = (): string | undefined => {    
-    if (!(email || '').trim()) return undefined;
+    // Check contacts for avatar when contacts data changes
+    useEffect(() => {
+        if (contactsLoading || !email) return;
 
-    // First check the cache
-    if (avatarMap.has(email)) {
-      return avatarMap.get(email);
-    }
+        // If we already have the avatar in cache, no need to check
+        if (avatarMap.has(email)) return;
 
-    // Then check contacts directly (as a fallback)
-    const contact = contacts.find((contact: Contact) => 
-      contact.avatar && 
-      (contact.email || []).includes(email)
-    );
-    
-    if (contact?.avatar) {
-      avatarMap.set(email, contact.avatar);
-      return contact.avatar;
-    }
-    
-    // Finally check public user data if available
-    if (publicUserData?.image) {
-      avatarMap.set(email, publicUserData.image);
-      return publicUserData.image;
-    }
-    
-    return undefined;
-  };
+        // Check if there's a contact with this email and an avatar
+        const contact = contacts.find((contact: Contact) =>
+            contact.avatar &&
+            (contact.email || []).includes(email)
+        );
 
-  return {
-    getAvatarUrl,
-    isLoading: contactsLoading || (needPublicUserData && publicUserLoading)
-  };
+        if (contact?.avatar) {
+            // Found in contacts, store in cache
+            avatarMap.set(email, contact.avatar);
+        } else {
+            // Not found in contacts, need to check public user data
+            setNeedPublicUserData(true);
+        }
+    }, [contacts, email, contactsLoading]);
+
+    /**
+     * Get avatar URL for an email address
+     * @returns The avatar URL if found, undefined otherwise
+     */
+    const getAvatarUrl = (): string | undefined => {
+        if (!(email || '').trim()) return undefined;
+
+        // First check the cache
+        if (avatarMap.has(email)) {
+            return avatarMap.get(email);
+        }
+
+        // Then check contacts directly (as a fallback)
+        const contact = contacts.find((contact: Contact) =>
+            contact.avatar &&
+            (contact.email || []).includes(email)
+        );
+
+        if (contact?.avatar) {
+            avatarMap.set(email, contact.avatar);
+            return contact.avatar;
+        }
+
+        // Finally check public user data if available
+        if (publicUserData?.image) {
+            avatarMap.set(email, publicUserData.image);
+            return publicUserData.image;
+        }
+
+        return undefined;
+    };
+
+    return {
+        getAvatarUrl,
+        isLoading: contactsLoading || (needPublicUserData && publicUserLoading)
+    };
 }
 
 export function invalidateAvatar(email: string) {
-  avatarMap.delete(email);
+    avatarMap.delete(email);
 }
 
 export function invalidateAllAvatars() {
-  avatarMap.clear();
+    avatarMap.clear();
 }

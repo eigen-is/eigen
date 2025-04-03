@@ -1,7 +1,7 @@
 import {useMutation, useQueryClient} from '@tanstack/react-query';
 import {mailApi} from '@workspace/lib/api';
 import {EmailDraft} from '@apps/api-server/types/mail';
-import { emailKeys } from './use-emails';
+import {emailKeys} from './use-emails';
 
 // Define interface for recipient
 export interface EmailRecipient {
@@ -54,7 +54,7 @@ export function createDraftEmail(params: CreateDraftParams): EmailDraft {
         mailbox: 'Drafts'
     };
 
-   return emailDraft as EmailDraft;
+    return emailDraft as EmailDraft;
 }
 
 /**
