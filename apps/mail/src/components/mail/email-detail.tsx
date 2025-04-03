@@ -20,6 +20,7 @@ interface EmailDetailProps {
     className?: string;
     onBackClick?: () => void;
     onDelete: (mail: Email) => void;
+    onMove: (mail: Email, mailbox: string) => void;
     toggleMailRead: (mail: Email, isRead: boolean) => void;
 }
 
@@ -29,6 +30,7 @@ export function EmailDetail({
                                 className,
                                 onBackClick,
                                 onDelete,
+                                onMove,
                                 toggleMailRead,
                                 ...props
                             }: EmailDetailProps) {
@@ -83,13 +85,15 @@ export function EmailDetail({
                     <TooltipButton
                         icon={Archive}
                         tooltipText="Archive"
-                        onClick={() => {/* TODO: Implement reply functionality */
+                        onClick={() => {
+                            onMove(email, 'archive');
                         }}
                     />
                     <TooltipButton
                         icon={ArchiveX}
                         tooltipText="Report Spam"
-                        onClick={() => {/* TODO: Implement reply functionality */
+                        onClick={() => {
+                            onMove(email, 'spam');
                         }}
                     />
                     <TooltipButton
