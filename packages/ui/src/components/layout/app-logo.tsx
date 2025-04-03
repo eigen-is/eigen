@@ -2,6 +2,7 @@ import {useEffect, useRef, useState} from "react";
 import {Link} from "@tanstack/react-router";
 import {cn} from "@workspace/ui/lib/utils";
 import {apps} from "@workspace/lib/apps.ts";
+import {useIsMobile} from "@workspace/ui/hooks/use-mobile";
 
 interface AppLogoProps {
     appName?: string;
@@ -12,6 +13,7 @@ interface AppLogoProps {
 export function AppLogo({appName = "Mail", className, linkable = true}: AppLogoProps) {
     const [expanded, setExpanded] = useState(false);
     const logoRef = useRef<HTMLDivElement>(null);
+    const isMobile = useIsMobile();
 
     // Handle clicks outside the logo to collapse it
     useEffect(() => {
@@ -74,7 +76,7 @@ export function AppLogo({appName = "Mail", className, linkable = true}: AppLogoP
             className={cn("text-xl flex items-center cursor-pointer select-none -mt-1", className)}
             onClick={handleLogoClick}
         >
-            {linkable ? (
+            {linkable && !isMobile ? (
                 <LogoContent/>
             ) : (
                 <Link
