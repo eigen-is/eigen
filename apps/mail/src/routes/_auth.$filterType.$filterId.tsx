@@ -21,21 +21,24 @@ import {useEffect} from 'react';
 export interface MailSearchParams {
     mailId?: string;
     mode?: string;
+    to?: string;
 }
 
 export const Route = createFileRoute('/_auth/$filterType/$filterId')({
     component: MailRoute,
     validateSearch: (search: Record<string, unknown>) => {
         const mailId = typeof search.mailId === 'string' ? search.mailId : undefined;
+        const to = typeof search.to === 'string' ? search.to.toLowerCase() : undefined;
         // Only set mode if mailId is not present
         const mode = (!mailId && typeof search.mode === 'string') ? search.mode : undefined;
+
         return {mailId, mode} as MailSearchParams;
     },
 });
 
 function MailRoute() {
     const {filterType, filterId} = Route.useParams();
-    const {mailId, mode} = Route.useSearch();
+    const {mailId, mode, to} = Route.useSearch();
     const navigate = useNavigate();
     const isMobile = useMediaQuery('(max-width: 768px)');
     const isTablet = useMediaQuery('(max-width: 1024px) and (min-width: 769px)');
@@ -124,6 +127,7 @@ function MailRoute() {
                         onDelete={handleDeleteEmail}
                         toggleMailRead={toggleMailRead}
                         sendDraft={handleSendEmail}
+                        to={to}
                         updateDraft={updateDraft.mutateAsync}
                     />
                 ) : (
@@ -186,6 +190,7 @@ function MailRoute() {
                                 onDelete={handleDeleteEmail}
                                 toggleMailRead={toggleMailRead}
                                 sendDraft={handleSendEmail}
+                                to={to}
                                 updateDraft={updateDraft.mutateAsync}
                             />
                         ) : (

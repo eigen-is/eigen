@@ -1,5 +1,5 @@
 import {useState} from 'react';
-import {ArrowLeft, Building, Calendar, Edit, Mail, MapPin, MoreVertical, Phone, Trash2} from 'lucide-react';
+import {ArrowLeft, Building, Calendar, Edit, Mail, MapPin, MoreVertical, Phone, Route, Trash2} from 'lucide-react';
 import {type Contact} from "@apps/api-server/types/contact";
 import {Button} from "@workspace/ui/components/button";
 import {
@@ -15,6 +15,7 @@ import {DeleteDialog} from "@workspace/ui/components/layout/delete/delete-dialog
 import {useLabels} from '@workspace/lib/contacts';
 import {TooltipButton, UserAvatar} from "@workspace/ui";
 import {EigenLoader} from '@workspace/ui/components/layout/eigen-loader';
+import {useOpenWriteEmailTo} from "@workspace/lib/mail";
 
 interface ContactDetailProps {
     contact: Contact;
@@ -73,6 +74,8 @@ export function ContactDetail({contact, onDelete, onBack, filterType, filterId, 
     const contactLabels = contact.labels
         ? labels.filter(label => contact.labels?.includes(label.id))
         : [];
+
+    const openWriteEmailTo = useOpenWriteEmailTo();
 
     return (
         <div className="h-full flex flex-col overflow-hidden">
@@ -187,9 +190,14 @@ export function ContactDetail({contact, onDelete, onBack, filterType, filterId, 
                                     </h4>
                                     {contact.email.map((email: string, index: number) => (
                                         <div key={index} className="pl-6">
-                                            <a href={`mailto:${email}`} className="text-blue-600 hover:underline">
+                                            <Link className="text-blue-600 hover:underline"
+                                                  to={''}
+                                                  onClick={(e) => {
+                                                      e.stopPropagation();
+                                                      openWriteEmailTo(email);
+                                                  }}>
                                                 {email}
-                                            </a>
+                                            </Link>
                                         </div>
                                     ))}
                                 </div>
