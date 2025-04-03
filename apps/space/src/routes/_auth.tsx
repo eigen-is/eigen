@@ -69,7 +69,7 @@ function AuthLayout() {
                     )}
 
                     {/* Main content area */}
-                    <main className="flex-1 flex flex-col h-full overflow-auto">
+                    <main className="flex-1 flex flex-col h-full  min-h-full overflow-auto">
                         <Outlet/>
                     </main>
                 </div>
