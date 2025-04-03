@@ -11,12 +11,12 @@ const apps = [
         href: import.meta.env.VITE_APP_MAIL_URL,
         icon: 'mail',
     },
-    {
-        name: 'Calendar',
-        className: 'text-blue-600',
-        href: import.meta.env.VITE_APP_CALENDAR_URL,
-        icon: 'calendar',
-    },
+    // {
+    //     name: 'Calendar',
+    //     className: 'text-blue-600',
+    //     href: import.meta.env.VITE_APP_CALENDAR_URL,
+    //     icon: 'calendar',
+    // },
     {
         name: 'Contacts',
         className: 'text-green-600',
