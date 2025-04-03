@@ -3,8 +3,7 @@
 import {HTMLAttributes} from "react"
 import {cn} from "@workspace/ui/lib/utils"
 import {Avatar, AvatarFallback, AvatarImage} from "@workspace/ui/components/avatar"
-import {spaceApi} from "@workspace/lib/api"
-import {useQuery} from "@tanstack/react-query"
+import {useAvatarUrl} from "@workspace/lib/media"
 
 export interface UserAvatarProps extends HTMLAttributes<HTMLDivElement> {
     name?: string
@@ -13,27 +12,6 @@ export interface UserAvatarProps extends HTMLAttributes<HTMLDivElement> {
     userId?: string
     className?: string
     size?: "sm" | "md" | "lg"
-}
-
-// Query keys for public user data
-const publicUserKeys = {
-    all: ['publicUser'] as const,
-    details: () => [...publicUserKeys.all, 'detail'] as const,
-    detail: (id: string) => [...publicUserKeys.details(), id] as const,
-};
-
-// Hook to fetch public user data
-export function usePublicUser(id: string | undefined) {
-    return useQuery({
-        queryKey: publicUserKeys.detail(id || ''),
-        queryFn: async () => {
-            if (!id) return null;
-            const res = await spaceApi.public[id].get();
-            return res.data;
-        },
-        enabled: !!id,
-        staleTime: 5 * 60 * 1000, // Consider data fresh for 5 minutes
-    });
 }
 
 export function UserAvatar({
@@ -48,16 +26,11 @@ export function UserAvatar({
     const displayName = (name || email || "");
     const firstChar = displayName.trim().charAt(0).toUpperCase();
 
-    // Use the ID for lookup (prefer userId if available, fall back to email)
-    const lookupId = userId || email;
-
     // Fetch public user data if we don't have an image URL
-    const {data: publicUserData} = usePublicUser(
-        imageUrl ? undefined : lookupId
-    );
+    const {getAvatarUrl} = useAvatarUrl(email || userId || '');
 
     // Determine the image to display
-    const avatarImage = imageUrl || publicUserData?.image || '';
+    const avatarImage = imageUrl || getAvatarUrl() || '';
 
     // Size classes
     const sizeClasses = {
