@@ -34,26 +34,27 @@ function HomeComponent() {
                 </div>
                 
                 {/* Apps Grid */}
-                <div className="max-w-4xl mx-auto">
+                <div className="max-w-4xl mx-auto w-full overflow-auto">
                     <h2 className="text-2xl font-semibold mb-6 text-center">Your Applications</h2>
-                    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+                    <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 gap-3 md:gap-4">
                         {apps.map((app: AppItem) => (
                             <Card key={app.name} className="overflow-hidden hover:shadow-md transition-shadow">
                                 <CardContent className="p-0">
-                                    <a href={app.href || '#'} className="block p-6">
-                                        <div className="flex items-center gap-3">
+                                    <a href={app.href || '#'} className="block p-3 md:p-6">
+                                        <div className="flex items-center gap-2 md:gap-3">
                                             <div className={`p-2 rounded-md ${app.className} bg-opacity-10`}>
                                                 <span className={`${app.className}`} aria-hidden="true">
                                                     <svg
                                                         xmlns="http://www.w3.org/2000/svg"
-                                                        width="24"
-                                                        height="24"
+                                                        width="20"
+                                                        height="20"
                                                         viewBox="0 0 24 24"
                                                         fill="none"
                                                         stroke="currentColor"
                                                         strokeWidth="2"
                                                         strokeLinecap="round"
                                                         strokeLinejoin="round"
+                                                        className="md:w-6 md:h-6"
                                                     >
                                                         <path d="m9 7-5 5 5 5"></path>
                                                         <path d="m15 7 5 5-5 5"></path>
@@ -61,8 +62,8 @@ function HomeComponent() {
                                                 </span>
                                             </div>
                                             <div>
-                                                <h3 className={`font-medium ${app.className}`}>{app.name}</h3>
-                                                <p className="text-sm text-gray-500">Access your {app.name.toLowerCase()}</p>
+                                                <h3 className={`font-medium ${app.className} text-sm md:text-base`}>{app.name}</h3>
+                                                <p className="text-xs text-gray-500 hidden md:block">Access your {app.name.toLowerCase()}</p>
                                             </div>
                                         </div>
                                     </a>
