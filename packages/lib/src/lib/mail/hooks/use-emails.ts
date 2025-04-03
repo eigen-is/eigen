@@ -1,6 +1,7 @@
 import {useQuery, useQueryClient} from '@tanstack/react-query';
 import {mailApi} from '@workspace/lib/api.ts';
 import {Email} from "@apps/api-server/types/mail";
+import {mailboxKeys} from "./use-mailboxes.ts";
 
 // Define query keys for reuse
 export const emailKeys = {
@@ -16,13 +17,14 @@ export function useEmails(mailboxPath: string) {
     return useQuery({
         queryKey: emailKeys.list(mailboxPath),
         queryFn: async () => {
+            mailboxPath = mailboxPath.toLowerCase();
             mailboxPath = mailboxPath === 'inbox' ? '' : mailboxPath;
             console.log(`Fetching emails for mailbox: ${mailboxPath}`);
             // @ts-ignore
             const response = await mailApi.mailbox[mailboxPath].get();
             return (response.data || []) as Email[];
         },
-        staleTime: 5 * 60 * 1000, // 5 minutes
+        staleTime: 1 * 60 * 1000, // 1 minute
     });
 }
 
@@ -52,7 +54,7 @@ export function useDeleteEmail() {
         }
         // invalidate mailbox cache
         await queryClient.invalidateQueries({queryKey: emailKeys.lists()});
-        await queryClient.invalidateQueries({queryKey: emailKeys.details()});
+        await queryClient.invalidateQueries({queryKey: emailKeys.detail(email.id)});
     }
 }
 
@@ -68,6 +70,23 @@ export function useToggleReadEmail() {
             messageId: email.id,
             read: isRead
         });
-        await queryClient.invalidateQueries({queryKey: emailKeys.details()});
+        await queryClient.invalidateQueries({queryKey: emailKeys.detail(email.id)});
+        await queryClient.invalidateQueries({queryKey: mailboxKeys.lists()});
+    }
+}
+
+export function useMoveEmail() {
+    const queryClient = useQueryClient();
+
+    return async (email: Email, mailbox: string) => {
+        const currentMailbox = email.mailbox;
+        await mailApi.message.move.put({
+            messageId: email.id,
+            targetMailbox: mailbox
+        });
+        await queryClient.invalidateQueries({queryKey: emailKeys.detail(email.id)});
+        await queryClient.invalidateQueries({queryKey: emailKeys.list(currentMailbox)});
+        await queryClient.invalidateQueries({queryKey: emailKeys.list(mailbox)});
+        await queryClient.invalidateQueries({queryKey: mailboxKeys.lists()});
     }
 }
