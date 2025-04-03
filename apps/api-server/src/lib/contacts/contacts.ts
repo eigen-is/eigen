@@ -110,7 +110,7 @@ export class Contacts {
                 company: '',
                 jobTitle: '',
                 address: [],
-                birthday: 0,
+                birthday: '',
                 notes: '',
                 avatar: '',
                 labels: []
@@ -128,7 +128,7 @@ export class Contacts {
                     company: '',
                     jobTitle: '',
                     address: [],
-                    birthday: 0,
+                    birthday: '',
                     notes: '',
                     avatar: '',
                     labels: []
