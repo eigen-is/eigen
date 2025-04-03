@@ -161,24 +161,14 @@ export async function messageCopy(user: User, messageId: string, targetMailbox: 
 }
 
 /**
- * Creates a new draft message
- * @param user User object
- * @returns New draft message
- */
-export async function messageCreateDraft(user: User, mail: any) {
-    const mailClient = await getMailClient(user);
-    return await mailClient.messageCreateDraft(mail);
-}
-
-/**
  * Updates a draft message
  * @param user User object
  * @param mail Draft message to update
  * @returns True if successful
  */
-export async function messageUpdateDraft(user: User, mail: any) {
+export async function messageHandleDraft(user: User, mail: any) {
     const mailClient = await getMailClient(user);
-    return await mailClient.messageUpdateDraft(mail);
+    return await mailClient.messageHandleDraft(mail);
 }
 
 /**

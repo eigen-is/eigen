@@ -7,6 +7,31 @@ import {Input} from "@workspace/ui/components/input";
 import {Textarea} from "@workspace/ui/components/textarea";
 import {useEffect, useRef, useState, useMemo} from "react";
 import {toast} from "sonner";
+import {createDraftEmail} from "@workspace/lib/mail";
+import {useAuth} from "@workspace/lib/auth/auth-context.tsx";
+
+/**
+ * Checks the status of an email draft
+ * @param draft The email draft to check
+ * @returns Object with sendable and saveable status
+ */
+export function getEmailDraftStatus(draft: EmailDraftType) {
+  // Check if draft is sendable (to field is not empty)
+  const isSendable = !!(draft.to && 
+    draft.to.text && 
+    draft.to.text.trim() !== '');
+  
+  // Check if draft is saveable (at least one of subject, to, cc, bcc, or text is not empty)
+  const isSaveable = !!(
+    (draft.subject && draft.subject.toString().trim() !== '') || 
+    (draft.to && draft.to.text && draft.to.text.trim() !== '') || 
+    (draft.cc && draft.cc.text && draft.cc.text.trim() !== '') || 
+    (draft.bcc && draft.bcc.text && draft.bcc.text.trim() !== '') || 
+    (draft.text && draft.text.trim() !== '')
+  );
+  
+  return { isSendable, isSaveable };
+}
 
 interface EmailDraftProps {
     email: EmailDraftType | null;
@@ -25,10 +50,7 @@ export function EmailDraft({
                                className,
                                onBackClick,
                                onDelete,
-                               toggleMailRead,
                                sendDraft,
-                               updateDraft,
-                               ...props
                            }: EmailDraftProps) {
     // Create refs for the input fields
     const toFieldRef = useRef<HTMLInputElement>(null);
@@ -39,24 +61,27 @@ export function EmailDraft({
     const [isSending, setIsSending] = useState(false);
 
     if (!email) {
-        console.log('No email provided to EmailDraft component');
-        return (
-            <div className="flex h-full items-center justify-center text-muted-foreground">
-                Email data not available
-            </div>
-        );
+      email = createDraftEmail({});
     }
+    const auth = useAuth();
 
     console.log('Rendering EmailDraft with email:', email);
 
-    // Get sender info
-    const from = email.from?.value?.[0] || {
-        name: '',
-        address: '',
+    // Get the draft status (sendable/saveable)
+    // const { isSendable } = getEmailDraftStatus(email);
+
+    // Set from email address
+    email.from = {
+        value: [{
+            name: auth.user.name || '',
+            address: auth.user.email || '',
+        }],
+        html: '',
+        text: '',
     };
 
-    const fromName = from.name || from.address;
-    const fromEmail = from.address;
+    const fromName = email.from?.value[0].name || email.from?.value[0].address;
+    const fromEmail = email.from?.value[0].address;
 
     // Set focus on the appropriate field based on priority
     useEffect(() => {
@@ -142,7 +167,7 @@ export function EmailDraft({
             await sendDraft(updatedDraft);
         } catch (error) {
             console.error("Failed to send email:", error);
-            toast.error("Failed to send email. Please try again.");
+            toast.error("Failed to send draft. Please try again.");
         } finally {
             setIsSending(false);
         }

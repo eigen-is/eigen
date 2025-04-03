@@ -8,7 +8,7 @@ import {
     mailboxExists,
     mailboxGet,
     messageCopy,
-    messageCreateDraft,
+    messageHandleDraft,
     messageDelete,
     messageGet,
     messageGetAttachment,
@@ -18,8 +18,7 @@ import {
     messageMoveToSpam,
     messageMoveToTrash,
     messageSend,
-    messageSetRead,
-    messageUpdateDraft
+    messageSetRead
 } from "../lib/mail/mail";
 import {type User} from "better-auth/types";
 
@@ -142,16 +141,8 @@ export const mailRouter = new Elysia({name: "mail"})
             targetMailbox: t.String()
         })
     })
-    .post("/mail/message/draft", async ({body, user}: { body: MessageDraftBody, user: User }) => {
-        return await messageCreateDraft(user, body['mail']);
-    }, {
-        auth: true,
-        body: t.Object({
-            mail: t.Any()
-        })
-    })
     .put("/mail/message/draft", async ({body, user}: { body: MessageDraftBody, user: User }) => {
-        return await messageUpdateDraft(user, body['mail']);
+        return await messageHandleDraft(user, body['mail']);
     }, {
         auth: true,
         body: t.Object({

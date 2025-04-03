@@ -103,7 +103,8 @@ export default class maildb {
 
     public async moveEmail(id: string, mailbox: string) {
         console.log('move email to mailbox:', mailbox);
-        return this.db.update(schema.emails).set({mailbox}).where(eq(schema.emails.id, id));
+        const isDraft = mailbox == 'drafts';
+        return this.db.update(schema.emails).set({mailbox, isDraft}).where(eq(schema.emails.id, id));
     }
 
     public async renameMailbox(mailbox: string, newMailbox: string) {

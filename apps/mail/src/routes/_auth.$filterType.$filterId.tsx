@@ -2,7 +2,6 @@ import {createFileRoute, useNavigate} from '@tanstack/react-router';
 import {EmailDetail} from "../components/mail/email-detail.tsx";
 import {EmailDraft} from "../components/mail/email-draft.tsx";
 import {
-    useCreateDraft,
     useDeleteEmail,
     useEmail,
     useEmails,
@@ -19,6 +18,7 @@ import {EmailDraft as EmailDraftType} from "@apps/api-server/types/mail";
 // Define search params type
 export interface MailSearchParams {
     mailId?: string;
+    mode?: string;
 }
 
 export const Route = createFileRoute('/_auth/$filterType/$filterId')({
@@ -31,13 +31,12 @@ export const Route = createFileRoute('/_auth/$filterType/$filterId')({
 
 function MailRoute() {
     const {filterType, filterId} = Route.useParams();
-    const {mailId} = Route.useSearch();
+    const {mailId, mode} = Route.useSearch();
     const navigate = useNavigate();
     const isMobile = useMediaQuery('(max-width: 768px)');
     const isTablet = useMediaQuery('(max-width: 1024px) and (min-width: 769px)');
     const deleteMail = useDeleteEmail();
     const toggleMailRead = useToggleReadEmail();
-    const createDraft = useCreateDraft();
     const updateDraft = useUpdateDraft();
     const sendDraft = useSendDraft();
 
@@ -85,9 +84,9 @@ function MailRoute() {
     }
     // On mobile: Show full-width email list / detail
     if (isMobile) {
-        return selectedEmail ? (
+        return selectedEmail  || mode === "compose" ? (
             <div className="flex-1 h-full w-full">
-                {selectedEmail.isDraft ? (
+                {mode === "compose" || selectedEmail?.isDraft ? (
                     <EmailDraft
                         email={selectedEmail as EmailDraftType}
                         isMobile={true}
@@ -147,9 +146,9 @@ function MailRoute() {
 
             {/* Email details column */}
             <div className="flex-1 h-full overflow-hidden">
-                {mailId && selectedEmail ? (
+                {selectedEmail  || mode === "compose" ? (
                     <div className="h-full">
-                        {selectedEmail.isDraft ? (
+                        {mode === "compose" || selectedEmail?.isDraft ? (
                             <EmailDraft
                                 email={selectedEmail as EmailDraftType}
                                 className="border-none h-full"

@@ -18,14 +18,10 @@ export interface CreateDraftParams {
     bcc?: EmailRecipient[];
 }
 
-/**
- * Creates an email draft with the specified parameters
- * @param params Draft creation parameters
- * @returns Promise with the created draft email ID
- */
-export async function createDraftEmail(params: CreateDraftParams): Promise<string> {
+export function createDraftEmail(params: CreateDraftParams): EmailDraft {
     // Create a properly formatted email object
     const emailDraft: Partial<EmailDraft> = {
+        id: undefined, // Will be set by the server
         subject: params.subject || '',
         text: params.text || '',
         // Format recipients in the structure expected by the API
@@ -58,13 +54,7 @@ export async function createDraftEmail(params: CreateDraftParams): Promise<strin
         mailbox: 'Drafts'
     };
 
-    // Send the draft to the server
-    const response = await mailApi.message.draft.post({
-        mail: emailDraft
-    });
-
-    // Return the ID of the created draft
-    return response.data?.id || '';
+   return emailDraft as EmailDraft;
 }
 
 /**
@@ -104,22 +94,6 @@ export async function sendDraftEmail(draft: EmailDraft): Promise<EmailDraft | nu
         console.error('Error sending draft:', error);
         return null;
     }
-}
-
-/**
- * Hook for creating email drafts
- * @returns Mutation function and status for creating drafts
- */
-export function useCreateDraft() {
-    const queryClient = useQueryClient();
-
-    return useMutation({
-        mutationFn: createDraftEmail,
-        onSuccess: () => {
-            // Invalidate relevant queries to refresh the drafts list
-            queryClient.invalidateQueries({queryKey: emailKeys.list('drafts')});
-        }
-    });
 }
 
 /**

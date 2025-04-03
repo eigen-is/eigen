@@ -379,7 +379,7 @@ export default class Maildir {
      * Creates a new draft message
      * @returns New draft message
      */
-    public async messageCreateDraft(email: EmailDraft, forcedMessageId: string | undefined = undefined): Promise<EmailDraft> {
+    public async messageHandleDraft(email: EmailDraft): Promise<EmailDraft> {
         try {
             // Check if Drafts mailbox exists
             let draftsMailbox = await this.mailboxExists('Drafts');
@@ -390,7 +390,8 @@ export default class Maildir {
             }
 
             // Create a unique message ID
-            const messageId = forcedMessageId || createUniqueMessageId();
+            const createNewDraft = (email.id || '').trim() == '';
+            const messageId = createNewDraft ? createUniqueMessageId() : email.id;
             const draftPath = await this.sanitizeDirName('Drafts', 'cur');
             const filename = messageId + '.eml';
             const filePath = this.home.fs.pathJoin(draftPath, filename);
@@ -459,41 +460,15 @@ export default class Maildir {
     }
 
     /**
-     * Updates a draft message
-     * @param mail Draft message to update
-     * @returns True if successful
-     */
-    public async messageUpdateDraft(mail: EmailDraft): Promise<EmailDraft | null> {
-        // check if message exists, if it is a draft and located in the Drafts mailbox
-        const message = await this.messageGet(mail.id);
-        if (!message) {
-            return null;
-        }
-        if (message.mailbox != 'drafts' || !message.isDraft) {
-            return null;
-        }
-        // update message
-        return this.messageCreateDraft(mail, mail.id);
-    }
-
-    /**
      * Sends a draft message
      * @param mail Draft message to send
      * @returns True if successful
      */
     // @ts-ignore - Ignore TypeScript errors in this method
-    public async messageSend(mail: EmailDraft): Promise<EmailDraft | null> {
-        // check if message exists, if it is a draft and located in the Drafts mailbox
-        const message = await this.messageGet(mail.id);
-        if (!message) {
-            return null;
-        }
-        if (message.mailbox !== 'drafts' || !message.isDraft) {
-            return null;
-        }
+    public async messageSend(mailToSend: EmailDraft): Promise<EmailDraft | null> {
         // update message
-        const newMail = await this.messageCreateDraft(mail, mail.id);
-        if (!newMail) {
+        const mail = await this.messageHandleDraft(mailToSend);
+        if (!mail) {
             return null;
         }
 
@@ -557,17 +532,16 @@ export default class Maildir {
                 const result = await transporter.sendMail(nodemailerMail);
             } catch (error) {
                 console.error('Error sending email:', error);
-                return null;
             }
 
             // move message to send directory
-            await this.messageMove(newMail.id, 'sent');
+            await this.messageMove(mail.id, 'sent');
         } catch (error) {
             console.error('Error sending email:', error);
             return null;
         }
 
-        return newMail;
+        return mail;
     }
 
     /**
