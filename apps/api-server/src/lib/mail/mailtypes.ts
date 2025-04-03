@@ -13,6 +13,7 @@ export type EmailSummary = {
     isDraft: boolean;
     hasAttachments: boolean;
     mailbox: string;
+    size: number;
 
     _isParsed: boolean;
 };

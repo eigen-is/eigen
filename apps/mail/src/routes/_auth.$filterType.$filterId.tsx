@@ -2,11 +2,11 @@ import {createFileRoute, useNavigate} from '@tanstack/react-router';
 import {EmailDetail} from "../components/mail/email-detail.tsx";
 import {EmailDraft} from "../components/mail/email-draft.tsx";
 import {
-    useCreateDraft,
     useDeleteEmail,
     useEmail,
     useEmails,
     useMediaQuery,
+    useMoveEmail,
     useSendDraft,
     useToggleReadEmail,
     useUpdateDraft
@@ -15,29 +15,33 @@ import {EmailList} from "@/components/mail/email-list.tsx";
 import {Email} from "@apps/api-server/types/mail";
 import {toast} from "sonner";
 import {EmailDraft as EmailDraftType} from "@apps/api-server/types/mail";
+import {useEffect} from 'react';
 
 // Define search params type
 export interface MailSearchParams {
     mailId?: string;
+    mode?: string;
 }
 
 export const Route = createFileRoute('/_auth/$filterType/$filterId')({
     component: MailRoute,
     validateSearch: (search: Record<string, unknown>) => {
         const mailId = typeof search.mailId === 'string' ? search.mailId : undefined;
-        return {mailId} as MailSearchParams;
+        // Only set mode if mailId is not present
+        const mode = (!mailId && typeof search.mode === 'string') ? search.mode : undefined;
+        return {mailId, mode} as MailSearchParams;
     },
 });
 
 function MailRoute() {
     const {filterType, filterId} = Route.useParams();
-    const {mailId} = Route.useSearch();
+    const {mailId, mode} = Route.useSearch();
     const navigate = useNavigate();
     const isMobile = useMediaQuery('(max-width: 768px)');
     const isTablet = useMediaQuery('(max-width: 1024px) and (min-width: 769px)');
     const deleteMail = useDeleteEmail();
+    const moveMail = useMoveEmail();
     const toggleMailRead = useToggleReadEmail();
-    const createDraft = useCreateDraft();
     const updateDraft = useUpdateDraft();
     const sendDraft = useSendDraft();
 
@@ -83,11 +87,36 @@ function MailRoute() {
             search: {},
         });
     }
+
+    const handleMoveEmail = async (mail: Email, mailbox: string) => {
+        await moveMail(mail, mailbox);
+        toast(`Email moved to ${mailbox}`);
+        navigate({
+            to: Route.fullPath,
+            params: {filterType, filterId},
+            search: {},
+        });
+    }
+
+    // Ensure that if mailId is set, mode is removed from URL
+    useEffect(() => {
+        if (mailId && mode) {
+            // Navigate to the same route but without the mode parameter
+            navigate({
+                to: `/_auth/${filterType}/${filterId}`,
+                search: {
+                    mailId
+                },
+                replace: true // Replace the current history entry
+            });
+        }
+    }, [mailId, mode, navigate, filterType, filterId]);
+
     // On mobile: Show full-width email list / detail
     if (isMobile) {
-        return selectedEmail ? (
+        return selectedEmail  || mode === "compose" ? (
             <div className="flex-1 h-full w-full">
-                {selectedEmail.isDraft ? (
+                {mode === "compose" || selectedEmail?.isDraft ? (
                     <EmailDraft
                         email={selectedEmail as EmailDraftType}
                         isMobile={true}
@@ -104,6 +133,7 @@ function MailRoute() {
                         onBackClick={handleBackToList}
                         onDelete={handleDeleteEmail}
                         toggleMailRead={toggleMailRead}
+                        onMove={handleMoveEmail}
                     />
                 )}
             </div>
@@ -147,9 +177,9 @@ function MailRoute() {
 
             {/* Email details column */}
             <div className="flex-1 h-full overflow-hidden">
-                {mailId && selectedEmail ? (
+                {selectedEmail  || mode === "compose" ? (
                     <div className="h-full">
-                        {selectedEmail.isDraft ? (
+                        {mode === "compose" || selectedEmail?.isDraft ? (
                             <EmailDraft
                                 email={selectedEmail as EmailDraftType}
                                 className="border-none h-full"
@@ -164,6 +194,7 @@ function MailRoute() {
                                 className="border-none h-full"
                                 onDelete={handleDeleteEmail}
                                 toggleMailRead={toggleMailRead}
+                                onMove={handleMoveEmail}
                             />
                         )}
                     </div>

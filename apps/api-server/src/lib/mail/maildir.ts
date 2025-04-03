@@ -379,7 +379,7 @@ export default class Maildir {
      * Creates a new draft message
      * @returns New draft message
      */
-    public async messageCreateDraft(email: EmailDraft, forcedMessageId: string | undefined = undefined): Promise<EmailDraft> {
+    public async messageHandleDraft(email: EmailDraft): Promise<EmailDraft> {
         try {
             // Check if Drafts mailbox exists
             let draftsMailbox = await this.mailboxExists('Drafts');
@@ -390,7 +390,8 @@ export default class Maildir {
             }
 
             // Create a unique message ID
-            const messageId = forcedMessageId || createUniqueMessageId();
+            const createNewDraft = (email.id || '').trim() == '';
+            const messageId = createNewDraft ? createUniqueMessageId() : email.id;
             const draftPath = await this.sanitizeDirName('Drafts', 'cur');
             const filename = messageId + '.eml';
             const filePath = this.home.fs.pathJoin(draftPath, filename);
@@ -426,6 +427,7 @@ export default class Maildir {
                 isRead: true,
                 isStarred: false,
                 isDraft: true,
+                size: 0,
                 hasAttachments: false,
                 mailbox: draftsMailbox.name,
                 _isParsed: false
@@ -459,41 +461,15 @@ export default class Maildir {
     }
 
     /**
-     * Updates a draft message
-     * @param mail Draft message to update
-     * @returns True if successful
-     */
-    public async messageUpdateDraft(mail: EmailDraft): Promise<EmailDraft | null> {
-        // check if message exists, if it is a draft and located in the Drafts mailbox
-        const message = await this.messageGet(mail.id);
-        if (!message) {
-            return null;
-        }
-        if (message.mailbox != 'drafts' || !message.isDraft) {
-            return null;
-        }
-        // update message
-        return this.messageCreateDraft(mail, mail.id);
-    }
-
-    /**
      * Sends a draft message
      * @param mail Draft message to send
      * @returns True if successful
      */
     // @ts-ignore - Ignore TypeScript errors in this method
-    public async messageSend(mail: EmailDraft): Promise<EmailDraft | null> {
-        // check if message exists, if it is a draft and located in the Drafts mailbox
-        const message = await this.messageGet(mail.id);
-        if (!message) {
-            return null;
-        }
-        if (message.mailbox !== 'drafts' || !message.isDraft) {
-            return null;
-        }
+    public async messageSend(mailToSend: EmailDraft): Promise<EmailDraft | null> {
         // update message
-        const newMail = await this.messageCreateDraft(mail, mail.id);
-        if (!newMail) {
+        const mail = await this.messageHandleDraft(mailToSend);
+        if (!mail) {
             return null;
         }
 
@@ -557,17 +533,16 @@ export default class Maildir {
                 const result = await transporter.sendMail(nodemailerMail);
             } catch (error) {
                 console.error('Error sending email:', error);
-                return null;
             }
 
             // move message to send directory
-            await this.messageMove(newMail.id, 'sent');
+            await this.messageMove(mail.id, 'sent');
         } catch (error) {
             console.error('Error sending email:', error);
             return null;
         }
 
-        return newMail;
+        return mail;
     }
 
     /**
@@ -699,18 +674,14 @@ export default class Maildir {
             if (!mailboxName && !attributes.includes('\\Inbox')) {
                 attributes.push('\\Inbox');
             }
-
-            // todo: get number of messages in mailbox - using db to speed up things
-
-
             // Create the mailbox object
             const mailbox: MaildirMailbox = {
                 path: mailboxName,
                 name: mailboxName ? mailboxName.split('.').pop() || mailboxName : 'INBOX',
                 delimiter: '.',
                 flags: attributes, // Use the attributes as flags
-                total: 0,
-                unread: 0
+                total: await this.db.getEmailsCount(mailboxName),
+                unread: await this.db.getEmailsCountUnread(mailboxName),
             };
 
             return mailbox;
@@ -740,8 +711,10 @@ export default class Maildir {
 
     private async parseMessage(messageId: string, mailbox: string): Promise<Email | null> {
         try {
+            mailbox = mailbox.toLowerCase();
             const filePath = this.getFullPath({id: messageId, mailbox: mailbox});
-            const fileContent = await this.home.fs.file(filePath).text();
+            const file = this.home.fs.file(filePath);
+            const fileContent = await file.text();
 
             // time to parse the message
             const start = Date.now();
@@ -756,6 +729,10 @@ export default class Maildir {
 
             parsedMail.isDraft = mailbox === 'drafts';
             parsedMail.isRead = parsedMail.isDraft;
+            parsedMail.isStarred = false;
+            parsedMail.isDeleted = mailbox === 'trash';
+            // @ts-ignore
+            parsedMail.size = file.size;
             
             // Create the Email object with the correct ID and path information
             return {
@@ -770,15 +747,6 @@ export default class Maildir {
             console.error(`Error parsing message ${messageId}:`, error);
             return null;
         }
-    }
-
-    /**
-     * Checks if a mailbox is a special mailbox that shouldn't be renamed or deleted
-     * @param mailbox Mailbox path
-     * @returns True if the mailbox is special
-     */
-    private async checkSpecialMailbox(mailbox: string): Promise<boolean> {
-        return isSpecialMailbox(await this.getMailboxAttributes(mailbox));
     }
 
     /**
