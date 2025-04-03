@@ -6,6 +6,7 @@ import {
     useEmail,
     useEmails,
     useMediaQuery,
+    useMoveEmail,
     useSendDraft,
     useToggleReadEmail,
     useUpdateDraft
@@ -39,6 +40,7 @@ function MailRoute() {
     const isMobile = useMediaQuery('(max-width: 768px)');
     const isTablet = useMediaQuery('(max-width: 1024px) and (min-width: 769px)');
     const deleteMail = useDeleteEmail();
+    const moveMail = useMoveEmail();
     const toggleMailRead = useToggleReadEmail();
     const updateDraft = useUpdateDraft();
     const sendDraft = useSendDraft();
@@ -86,6 +88,16 @@ function MailRoute() {
         });
     }
 
+    const handleMoveEmail = async (mail: Email, mailbox: string) => {
+        await moveMail(mail, mailbox);
+        toast(`Email moved to ${mailbox}`);
+        navigate({
+            to: Route.fullPath,
+            params: {filterType, filterId},
+            search: {},
+        });
+    }
+
     // Ensure that if mailId is set, mode is removed from URL
     useEffect(() => {
         if (mailId && mode) {
@@ -121,6 +133,7 @@ function MailRoute() {
                         onBackClick={handleBackToList}
                         onDelete={handleDeleteEmail}
                         toggleMailRead={toggleMailRead}
+                        onMove={handleMoveEmail}
                     />
                 )}
             </div>
@@ -181,6 +194,7 @@ function MailRoute() {
                                 className="border-none h-full"
                                 onDelete={handleDeleteEmail}
                                 toggleMailRead={toggleMailRead}
+                                onMove={handleMoveEmail}
                             />
                         )}
                     </div>
