@@ -103,7 +103,7 @@ export function DriveTable({
                             )}
                             onClick={() => onItemClick?.(item)}
                         >
-                            <TableCell className="font-medium">
+                            <TableCell>
                                 <div className="flex items-center max-w-full overflow-hidden">
                                     {getFileIcon && getFileIcon(
                                         item.mimeType,
