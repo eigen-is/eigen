@@ -21,14 +21,14 @@ const queryClient = new QueryClient();
 
 export function EigenApp({children}: EigenAppProps) {
     return (
-        <AuthProvider>
-            <QueryClientProvider client={queryClient}>
+        <QueryClientProvider client={queryClient}>
+            <AuthProvider>
                 <UploadProvider>
                     {children}
                     <Toaster/>
                 </UploadProvider>
                 <ReactQueryDevtools initialIsOpen={false}/>
-            </QueryClientProvider>
-        </AuthProvider>
+            </AuthProvider>
+        </QueryClientProvider>
     )
 }

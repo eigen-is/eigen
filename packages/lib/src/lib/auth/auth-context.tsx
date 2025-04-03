@@ -1,6 +1,7 @@
 import React, {createContext, ReactNode, useEffect, useState} from 'react';
 import {authClient} from "./hooks/use-auth-client.ts";
 import {LoadingScreen} from '@workspace/ui/components/layout/loading-screen';
+import {useQueryClient} from '@tanstack/react-query';
 
 export type AuthContextType = {
     isAuthenticated: boolean;
@@ -15,6 +16,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export function AuthProvider({children}: { children: ReactNode }): React.ReactElement {
     const [user, setUser] = useState<any | null>(null);
     const [isLoading, setIsLoading] = useState(true);
+    const queryClient = useQueryClient();
 
     useEffect(() => {
         // Check if user is already authenticated on mount
@@ -60,6 +62,7 @@ export function AuthProvider({children}: { children: ReactNode }): React.ReactEl
         try {
             await authClient.signOut();
             setUser(null);
+            queryClient.removeQueries();
         } catch (error) {
             console.error('Logout failed:', error);
         }
