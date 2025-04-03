@@ -674,18 +674,14 @@ export default class Maildir {
             if (!mailboxName && !attributes.includes('\\Inbox')) {
                 attributes.push('\\Inbox');
             }
-
-            // todo: get number of messages in mailbox - using db to speed up things
-
-
             // Create the mailbox object
             const mailbox: MaildirMailbox = {
                 path: mailboxName,
                 name: mailboxName ? mailboxName.split('.').pop() || mailboxName : 'INBOX',
                 delimiter: '.',
                 flags: attributes, // Use the attributes as flags
-                total: 0,
-                unread: 0
+                total: await this.db.getEmailsCount(mailboxName),
+                unread: await this.db.getEmailsCountUnread(mailboxName),
             };
 
             return mailbox;
