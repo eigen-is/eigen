@@ -4,6 +4,7 @@ import {ContactEdit, ContactFormValues} from '../components/contacts/contact-edi
 import {useAddContact, useContacts, useUpdateContact} from '@workspace/lib/contacts';
 import {type Contact} from "@apps/api-server/types/contact";
 import {toast} from "sonner";
+import {EigenLoader} from "@workspace/ui";
 
 // Define search params type with Zod schema
 const searchSchema = z.object({
@@ -106,7 +107,7 @@ function EditContactRoute() {
     if (contactsLoading) {
         return (
             <div className="h-full flex items-center justify-center">
-                <p className="text-muted-foreground">Loading contact information...</p>
+               <EigenLoader />
             </div>
         );
     }

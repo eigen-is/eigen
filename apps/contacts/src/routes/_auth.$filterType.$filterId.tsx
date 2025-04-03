@@ -4,6 +4,7 @@ import {ContactDetail} from '../components/contacts/contact-detail';
 import {useContacts, useDeleteContact, useLabels, useMediaQuery} from '@workspace/lib/contacts';
 import {toast} from "sonner";
 import {EigenLoader} from '@workspace/ui/components/layout/eigen-loader';
+import {LabelFilterHeader} from "@workspace/ui/components/layout/labels/label-filter-header";
 
 // Define search params type
 export interface ContactsSearchParams {
@@ -28,22 +29,6 @@ function ContactsRoute() {
     const {data: contacts = [], isLoading: contactsLoading} = useContacts();
     const {data: labels = []} = useLabels();
     const deleteMutation = useDeleteContact();
-
-    // Get title based on filter type and ID
-    let title = 'All Contacts';
-
-    if (filterType === 'label') {
-        const label = labels.find(label => label.id === filterId);
-        if (label) {
-            title = `${label.name} contacts`;
-        }
-    } else if (filterType === 'book') {
-        if (filterId === 'frequent') {
-            title = 'Frequent Contacts';
-        } else if (filterId === 'recent') {
-            title = 'Recent Contacts';
-        }
-    }
 
     // Handle contact deletion
     const handleDeleteContact = async (id: string) => {
@@ -117,29 +102,7 @@ function ContactsRoute() {
         w-full md:w-[350px] border-r h-full overflow-y-auto
       `}>
                 <div className="flex h-full flex-col">
-                    {filterType === 'label' && (
-                        <div className="h-12 px-4 flex items-center border-b">
-                            <h1 className="text-base font-medium flex items-center gap-2">
-                                {(() => {
-                                    if (filterType === 'label') {
-                                        const label = labels.find(l => l.id === filterId);
-                                        if (label) {
-                                            return (
-                                                <>
-                          <span
-                              className="h-3 w-3 rounded-full"
-                              style={{backgroundColor: label.color}}
-                          />
-                                                    {title}
-                                                </>
-                                            );
-                                        }
-                                    }
-                                    return title;
-                                })()}
-                            </h1>
-                        </div>
-                    )}
+                    {filterType === 'label' && (<LabelFilterHeader labels={labels} labelId={filterId} />)}
                     <ContactsList filterType={filterType} filterId={filterId}/>
                 </div>
             </div>
