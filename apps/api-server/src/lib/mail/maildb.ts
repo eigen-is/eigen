@@ -96,12 +96,12 @@ export default class maildb {
 
     public async getEmailsCount(mailbox: string) {
         mailbox = mailbox.toLowerCase();
-        return (await this.db.select({ count: count() }).from(schema.emails).where(eq(schema.emails.mailbox, mailbox)))[0].count;
+        return (await this.db.select({count: count()}).from(schema.emails).where(eq(schema.emails.mailbox, mailbox)))[0].count;
     }
 
     public async getEmailsCountUnread(mailbox: string) {
         mailbox = mailbox.toLowerCase();
-        return (await this.db.select({ count: count() }).from(schema.emails).where(
+        return (await this.db.select({count: count()}).from(schema.emails).where(
             and(
                 eq(schema.emails.mailbox, mailbox),
                 eq(schema.emails.isRead, false)

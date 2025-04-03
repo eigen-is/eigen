@@ -8,7 +8,7 @@ import DOMPurify from 'isomorphic-dompurify';
 import maildb from "./maildb.ts";
 import type {Home} from "../home/home.ts";
 import nodemailer from 'nodemailer';
-import type { EmailDraft } from "../../types/mail.ts";
+import type {EmailDraft} from "../../types/mail.ts";
 
 export default class Maildir {
     private basePath: string;
@@ -735,7 +735,7 @@ export default class Maildir {
             parsedMail.isDeleted = mailbox === 'trash';
             // @ts-ignore
             parsedMail.size = file.size;
-            
+
             // Create the Email object with the correct ID and path information
             return {
                 ...parsedMail,

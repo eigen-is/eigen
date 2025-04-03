@@ -1,5 +1,5 @@
 import {createAuthClient} from "better-auth/client";
-import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
+import {useQuery} from '@tanstack/react-query';
 
 console.log(import.meta.env.VITE_API_HOST);
 
