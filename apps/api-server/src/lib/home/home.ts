@@ -113,6 +113,17 @@ export class Home {
         return await (this.databases.get(file)!.get()) as Database;
     }
 
+    public async size() {
+        const [mail, contacts, drive] = await Promise.all([
+            this.mail.size(),
+            this.contacts.size(),
+            this.drive.size()
+        ]);
+        const maxMB = 50;
+        const max = maxMB * 1024 * 1024;
+        return {mail, contacts, drive, used: (mail + contacts + drive), max};
+    }
+
     private async destruct() {
         this.contacts = undefined!;
     }

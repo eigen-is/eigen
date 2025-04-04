@@ -1,10 +1,9 @@
-import {Users, X, User, CircleUser, BookUser, LockKeyholeIcon, KeySquare, Smartphone, CreditCard} from 'lucide-react';
+import {BookUser, CircleUser, LockKeyholeIcon, X} from 'lucide-react';
 import {Button} from "@workspace/ui/components/button";
 import {SidebarSection} from '@workspace/ui/components/layout/sidebar/sidebar-section';
 import {AppLogo} from '@workspace/ui/components/layout/app-logo';
 import {SidebarItem} from "@workspace/ui";
-import { Separator } from '@workspace/ui/components/separator';
-import { title } from 'process';
+import {Separator} from '@workspace/ui/components/separator';
 
 
 interface SpaceSidebarProps {
@@ -40,14 +39,14 @@ export function SpaceSidebar({
                     condensed={condensed}
                     to='/' params={{}}/>
                 <SidebarItem
-                        icon={<BookUser className="h-4 w-4"/>}
-                        label="Personal info"
+                    icon={<BookUser className="h-4 w-4"/>}
+                    label="Personal info"
                     condensed={condensed}
-                        to='/user' params={{}}/>
+                    to='/user' params={{}}/>
             </SidebarSection>
-            
+
             <Separator/>
-            
+
             <SidebarSection condensed={condensed}>
                 <SidebarItem
                     icon={<LockKeyholeIcon className="h-4 w-4"/>}
@@ -63,7 +62,7 @@ export function SpaceSidebar({
                     label="Recovery codes"
                     to='/security/recovery-codes' params={{}}/> */}
             </SidebarSection>
-            
+
             {/* <Separator/>
 
             <SidebarSection condensed={condensed}>

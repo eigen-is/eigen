@@ -139,6 +139,11 @@ export class Contacts {
         this.cleanupAvatarImages();
     }
 
+    public async size(): Promise<number> {
+        // get total size of mailbox
+        return (await this.home.fs.dirSize('eigen.contacts'));
+    }
+
     public async setContactLabels(contactId: string, labels: string[]) {
         // Delete existing labels
         await this.db.delete(schema.contactsToLabels).where(eq(schema.contactsToLabels.contactId, contactId));

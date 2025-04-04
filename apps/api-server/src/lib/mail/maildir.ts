@@ -33,6 +33,11 @@ export default class Maildir {
         await this.db.init();
     }
 
+    public async size(): Promise<number> {
+        // get total size of mailbox
+        return (await this.home.fs.dirSize('eigen.mail')) || this.db.size();
+    }
+
     /**
      * Lists all mailboxes in the Maildir structure
      * @returns Array of mailbox objects with hierarchy information

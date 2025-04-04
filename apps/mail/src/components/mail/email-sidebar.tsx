@@ -4,7 +4,7 @@ import {SidebarItem} from '@workspace/ui/components/layout/sidebar/sidebar-item'
 import {SidebarSection} from '@workspace/ui/components/layout/sidebar/sidebar-section';
 import {AppLogo} from '@workspace/ui/components/layout/app-logo';
 import React, {useMemo} from 'react';
-import {EigenLoader} from "@workspace/ui";
+import {EigenLoader, StorageUsage} from "@workspace/ui";
 import {EmailComposeButton} from "./email-compose-button";
 
 // Map of special mailbox flags to their icons and display names
@@ -206,6 +206,11 @@ export function EmailSidebar({
             {/*        {!condensed && "New Folder"}*/}
             {/*    </Button>*/}
             {/*</div>*/}
+
+            {/* Storage usage indicator at the bottom of sidebar */}
+            <StorageUsage
+                className="mt-auto"
+            />
         </div>
     );
 }

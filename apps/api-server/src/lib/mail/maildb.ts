@@ -1,6 +1,6 @@
 import type Database from "bun:sqlite";
 import {drizzle} from "drizzle-orm/bun-sqlite";
-import {and, count, eq} from "drizzle-orm";
+import {and, count, eq, sql} from "drizzle-orm";
 import * as schema from "./schema.ts";
 import type {EmailSummary} from "./mailtypes.ts";
 import {Home} from "../home/home.ts";
@@ -92,6 +92,10 @@ export default class maildb {
         } else {
             return this.db.insert(schema.emails).values(emailRecord);
         }
+    }
+
+    public size() {
+        return this.db.select({size: sql`SUM(size)`}).from(schema.emails).get()?.size as number || 0;
     }
 
     public async getEmailsCount(mailbox: string) {

@@ -111,6 +111,11 @@ export default class Drive {
         }
     }
 
+    public async size(): Promise<number> {
+        // get total size of mailbox
+        return (await this.home.fs.dirSize('eigen.drive')) || this.db.select({size: sql`SUM(${drivePaths.size})`}).from(drivePaths).where(eq(drivePaths.type, 'file')).get()?.size as number  || 0;
+    }
+
     public async getParentPaths(pathId: string): Promise<DrivePath[]> {
         const paths: DrivePath[] = [];
         let currentPathId: string | null = pathId;

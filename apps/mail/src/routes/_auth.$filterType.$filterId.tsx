@@ -12,9 +12,8 @@ import {
     useUpdateDraft
 } from '@workspace/lib/mail';
 import {EmailList} from "@/components/mail/email-list.tsx";
-import {Email} from "@apps/api-server/types/mail";
+import {Email, EmailDraft as EmailDraftType} from "@apps/api-server/types/mail";
 import {toast} from "sonner";
-import {EmailDraft as EmailDraftType} from "@apps/api-server/types/mail";
 import {useEffect} from 'react';
 
 // Define search params type
@@ -108,7 +107,7 @@ function MailRoute() {
             navigate({
                 to: Route.fullPath,
                 params: {filterType, filterId},
-                search: {mailId : draft.id},
+                search: {mailId: draft.id},
             });
         }
     }
@@ -129,7 +128,7 @@ function MailRoute() {
 
     // On mobile: Show full-width email list / detail
     if (isMobile) {
-        return selectedEmail  || mode === "compose" ? (
+        return selectedEmail || mode === "compose" ? (
             <div className="flex-1 h-full w-full">
                 {mode === "compose" || selectedEmail?.isDraft ? (
                     <EmailDraft
@@ -194,7 +193,7 @@ function MailRoute() {
 
             {/* Email details column */}
             <div className="flex-1 h-full overflow-hidden">
-                {selectedEmail  || mode === "compose" ? (
+                {selectedEmail || mode === "compose" ? (
                     <div className="h-full">
                         {mode === "compose" || selectedEmail?.isDraft ? (
                             <EmailDraft

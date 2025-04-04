@@ -166,6 +166,32 @@ export default class FileSystem {
         return this.makeAbsolutePath(path);
     }
 
+    public async dirSize(path: string): Promise<number> {
+        const systemPath = this.makeAbsolutePath(path);
+
+        // Detect if we're running on Linux
+        const isLinux = process.platform === 'linux';
+
+        if (isLinux) {
+            // Linux-specific implementation
+            // For example, you might use the `du` command with child_process
+            try {
+                const proc = Bun.spawn(["du", "-sb", systemPath]);
+                const stdout = await new Response(proc.stdout).text();
+                const sizeInBytes = parseInt(stdout.split('\t')[0], 10);
+                return sizeInBytes;
+            } catch (error) {
+                console.error("Error calculating size on Linux:", error);
+                return 0;
+            }
+        } else {
+            // Fallback for other platforms (Windows, macOS)
+            // Implement a recursive directory size calculation or other method
+            // This is a simplified example
+            return 0;
+        }
+    }
+
     private makeAbsolutePath(path: string) {
         // Make sure that path stays inside this.homeDir
         const normalizedPath = path.replace(/\.\.\//g, ''); // Remove any "../" to prevent directory traversal

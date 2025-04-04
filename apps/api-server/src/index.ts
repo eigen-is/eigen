@@ -7,6 +7,7 @@ import {contactsRouter} from "./routes/contacts";
 import {trustedOrigins} from "./lib/auth/auth";
 import {spaceRouter} from "./routes/space";
 import {driveRouter} from "./routes/drive.ts";
+import {homeRouter} from "./routes/home.ts";
 
 const app = new Elysia()
     .use(swagger())
@@ -23,6 +24,7 @@ const app = new Elysia()
     .use(contactsRouter)
     .use(spaceRouter)
     .use(driveRouter)
+    .use(homeRouter)
     .listen(8000);
 
 export type app = typeof app;

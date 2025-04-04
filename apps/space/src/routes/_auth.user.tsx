@@ -1,6 +1,6 @@
 import {createFileRoute} from '@tanstack/react-router'
-import { useAuth } from '@workspace/lib/auth/auth-context.js';
-import { useContacts } from '@workspace/lib/contacts';
+import {useAuth} from '@workspace/lib/auth/auth-context.js';
+import {useContacts} from '@workspace/lib/contacts';
 
 export const Route = createFileRoute('/_auth/user')({
     component: RouteComponent,
@@ -8,7 +8,7 @@ export const Route = createFileRoute('/_auth/user')({
 
 function RouteComponent() {
     const navigate = Route.useNavigate();
-    const { data: contacts = [], isLoading: contactsLoading } = useContacts();
+    const {data: contacts = [], isLoading: contactsLoading} = useContacts();
     const auth = useAuth();
 
     if (contacts) {
