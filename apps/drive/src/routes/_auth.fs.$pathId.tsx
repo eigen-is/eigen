@@ -124,52 +124,73 @@ function DriveRoute() {
         }
     };
 
-    // Function to process the selected file
+    // Function to process the selected files
     const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-
-        // Create upload tracking object with the methods returned by createUpload
-        const uploadHandler = upload.createUpload(file.name);
-
-        try {
-            // Create a FormData object to send the file
-            const formData = new FormData();
-            formData.append('file', file);
-
-            // Use the uploadWithProgress helper with authentication
-            await uploadWithProgress({
-                url: `${import.meta.env.VITE_API_HOST}/drive/file/${pathId}`,
-                formData,
-                headers: {
-                    'credentials': 'include'
-                },
-                onProgress: (progress: number) => {
-                    // Update the progress in the UI
-                    uploadHandler.updateProgress(progress);
-                },
-                onSuccess: async () => {
-                    // Mark upload as complete
-                    uploadHandler.complete();
-
-                    // Add file to the drive using the mutation
-                    await uploadFileMutation.mutateAsync({
-                        parentId: pathId,
-                        file
-                    });
-
-                    toast(`Uploaded ${file.name}`);
-                },
-                onError: (err) => {
-                    // Mark upload as failed
-                    uploadHandler.error();
-                }
-            });
-        } catch (err: any) {
-            uploadHandler.error();
+        const files = e.target.files;
+        if (!files || files.length === 0) return;
+        
+        // Create an array of upload promises
+        const uploadPromises = Array.from(files).map(async (file) => {
+            // Create upload tracking object for each file
+            const uploadHandler = upload.createUpload(file.name);
+            
+            try {
+                // Create a FormData object for this file
+                const formData = new FormData();
+                formData.append('file', file);
+                
+                // Use the uploadWithProgress helper with authentication
+                await uploadWithProgress({
+                    url: `${import.meta.env.VITE_API_HOST}/drive/file/${pathId}`,
+                    formData,
+                    headers: {
+                        'credentials': 'include'
+                    },
+                    onProgress: (progress: number) => {
+                        // Update the progress in the UI for this specific file
+                        uploadHandler.updateProgress(progress);
+                    },
+                    onSuccess: async () => {
+                        // Mark upload as complete
+                        uploadHandler.complete();
+                        
+                        // Add file to the drive using the mutation
+                        await uploadFileMutation.mutateAsync({
+                            parentId: pathId,
+                            file
+                        });
+                        
+                        return { success: true, fileName: file.name };
+                    },
+                    onError: (err) => {
+                        // Mark upload as failed
+                        uploadHandler.error();
+                        return { success: false, fileName: file.name, error: err };
+                    }
+                });
+            } catch (err: any) {
+                uploadHandler.error();
+                return { success: false, fileName: file.name, error: err };
+            }
+            
+            return { success: true, fileName: file.name };
+        });
+        
+        // Process all uploads in parallel
+        const results = await Promise.all(uploadPromises);
+        
+        // Provide feedback after all uploads complete
+        const successCount = results.filter(r => r.success).length;
+        
+        if (successCount === files.length) {
+            toast(`${successCount} bestand${successCount !== 1 ? 'en' : ''} geüpload`);
+        } else if (successCount > 0) {
+            toast.success(`${successCount} van ${files.length} bestanden geüpload`);
+        } else {
+            toast.error(`Uploaden mislukt`);
         }
-
-        // Clean up the file input value so the same file can be selected again if needed
+        
+        // Clean up the file input value so the same files can be selected again if needed
         e.target.value = '';
     };
 
@@ -312,6 +333,7 @@ function DriveRoute() {
                 <input
                     ref={fileInputRef}
                     type="file"
+                    multiple
                     className="hidden"
                     onChange={handleFileChange}
                 />
@@ -369,6 +391,7 @@ function DriveRoute() {
             <input
                 ref={fileInputRef}
                 type="file"
+                multiple
                 className="hidden"
                 onChange={handleFileChange}
             />
