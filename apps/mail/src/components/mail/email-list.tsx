@@ -166,7 +166,7 @@ export function EmailList({
                                         <div className="flex-1 min-w-0">
                                             <div className="flex justify-between items-baseline">
                                                 <div className={cn(
-                                                    "text-sm text-gray-900",
+                                                    "text-sm font-medium text-gray-900",
                                                     !email.isRead && "font-semibold"
                                                 )}>
                                                     {email.fromShort || 'Unknown'}
