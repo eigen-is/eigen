@@ -1,6 +1,7 @@
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {contactsApi} from '@workspace/lib/api.ts';
 import {type Contact} from '@apps/api-server/types/contact';
+import { invalidateHomeSize } from '../../home';
 
 // Query keys for contacts
 export const contactKeys = {
@@ -48,6 +49,7 @@ export function useAddContact() {
         onSuccess: () => {
             // Invalidate and refetch contacts list
             queryClient.invalidateQueries({queryKey: contactKeys.lists()});
+            invalidateHomeSize(queryClient);
         },
     });
 }
@@ -65,6 +67,7 @@ export function useUpdateContact() {
             // Invalidate and refetch the specific contact and the contact list
             queryClient.invalidateQueries({queryKey: contactKeys.detail(variables.id)});
             queryClient.invalidateQueries({queryKey: contactKeys.lists()});
+            invalidateHomeSize(queryClient);
         },
     });
 }
@@ -83,6 +86,7 @@ export function useDeleteContact() {
             queryClient.invalidateQueries({queryKey: contactKeys.lists()});
             // Remove the contact from the cache
             queryClient.removeQueries({queryKey: contactKeys.detail(id)});
+            invalidateHomeSize(queryClient);
         },
     });
 }
