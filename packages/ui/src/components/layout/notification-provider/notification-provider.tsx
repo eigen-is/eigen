@@ -1,46 +1,187 @@
 "use client"
 
-import React, {useEffect} from "react";
-import {mailApi} from "@workspace/lib/api.js";
-import {toast} from 'sonner';
-import {useQueryClient} from '@tanstack/react-query';
-import {emailKeys, mailboxKeys} from "@workspace/lib/mail";
+import React, {useEffect, useRef} from 'react';
+import {mailApi} from "@workspace/lib/api";
+import {toast} from "sonner";
+import {useQueryClient} from "@tanstack/react-query";
+import {emailKeys} from "@workspace/lib/mail";
+import {mailboxKeys} from "@workspace/lib/mail";
 import type {EigenNotification} from "@apps/api-server/types/notification";
 
-export function NotificationProvider({children}: { children: React.ReactNode }) {
+interface NotificationProviderProps {
+    children: React.ReactNode;
+}
+
+export function NotificationProvider({children}: NotificationProviderProps) {
     const queryClient = useQueryClient();
+    // Using any for WebSocket client since Eden WebSocket has a different interface
+    const watcherRef = useRef<any>(null);
+    const lastActivityRef = useRef<number>(Date.now());
+    const expectingPongRef = useRef<boolean>(false);
+    const reconnectAttemptsRef = useRef<number>(0);
+    const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-    useEffect(() => {
-        // Create watcher once on component mount
-        const watcher = mailApi.watch.subscribe();
-
-        watcher.subscribe((event) => {
-            const body = event.data as unknown as EigenNotification;
-            if (body?.type === 'mail') {
-                // Handle notifications here
-                toast(body?.title, {
-                    description: body?.description,
-                    action: {
-                        label: 'Open inbox',
-                        onClick: () => {
-                            document.location.href = `${import.meta.env.VITE_APP_MAIL_URL}/box/inbox`
+    // Create and set up the WebSocket connection
+    const setupWatcher = () => {
+        try {
+            console.log('Setting up notification watcher');
+            const watcher = mailApi.watch.subscribe();
+            watcherRef.current = watcher;
+            lastActivityRef.current = Date.now();
+            
+            watcher.subscribe((event) => {
+                lastActivityRef.current = Date.now();
+                reconnectAttemptsRef.current = 0; // Reset reconnect attempts on successful message
+                
+                // Handle pong message specifically
+                if (event.data === 'pong') {
+                    expectingPongRef.current = false;
+                    return;
+                }
+                
+                // Process notification
+                const body = event.data as unknown as EigenNotification;
+                if (body?.type === 'mail') {
+                    // Handle notifications here
+                    toast(body?.title, {
+                        description: body?.description,
+                        action: {
+                            label: 'Open inbox',
+                            onClick: () => {
+                                document.location.href = `${import.meta.env.VITE_APP_MAIL_URL}/box/inbox`
+                            }
                         }
-                    }
-                });
-                queryClient.invalidateQueries({queryKey: emailKeys.list('inbox')});
-                queryClient.invalidateQueries({queryKey: mailboxKeys.lists()});
+                    });
+                    queryClient.invalidateQueries({queryKey: emailKeys.list('inbox')});
+                    queryClient.invalidateQueries({queryKey: mailboxKeys.lists()});
+                }
+                
+                // Send pong response
+                try {
+                    watcher.send('pong');
+                } catch (e) {
+                    console.error('Failed to send pong', e);
+                    reconnectWatcher();
+                }
+            });
+
+            watcher.on('close', () => {
+                console.log('Watcher closed, reconnecting...');
+                reconnectWatcher();
+            });
+
+            watcher.on('error', (error) => {
+                console.error('WebSocket error:', error);
+                reconnectWatcher();
+            });
+            
+            return watcher;
+        } catch (error) {
+            console.error('Failed to setup watcher', error);
+            reconnectWatcher();
+            return null;
+        }
+    };
+
+    // Reconnect with exponential backoff
+    const reconnectWatcher = () => {
+        if (watcherRef.current) {
+            try {
+                watcherRef.current.close();
+            } catch (e) {
+                // Ignore close errors
             }
-            watcher.send('pong');
-        });
+            watcherRef.current = null;
+        }
+        
+        // Clear any existing reconnect timeout
+        if (reconnectTimeoutRef.current) {
+            clearTimeout(reconnectTimeoutRef.current);
+        }
+        
+        // Calculate backoff time (max 30 seconds)
+        const backoffTime = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current), 30000);
+        reconnectAttemptsRef.current++;
+        
+        console.log(`Reconnecting in ${backoffTime}ms (attempt ${reconnectAttemptsRef.current})`);
+        
+        reconnectTimeoutRef.current = setTimeout(() => {
+            setupWatcher();
+        }, backoffTime);
+    };
 
-        watcher.on('close', () => {
-            console.log('Watcher closed');
-        });
-
+    // Initial setup
+    useEffect(() => {
+        // Initialize the watcher
+        setupWatcher();
+        
+        // Periodic health check
+        const healthInterval = setInterval(() => {
+            // Skip checks if no watcher exists yet
+            if (!watcherRef.current) return;
+            
+            // Check if connection is stale (no activity for > 30 seconds)
+            const now = Date.now();
+            const inactiveTime = now - lastActivityRef.current;
+            
+            if (inactiveTime > 30000) { // 30 seconds threshold
+                if (watcherRef.current.readyState !== 1) { // Not OPEN
+                    console.log('Connection stale (not open), reconnecting...');
+                    reconnectWatcher();
+                } else {
+                    // Connection appears open but inactive, test with ping
+                    try {
+                        watcherRef.current.send('ping');
+                        expectingPongRef.current = true;
+                        
+                        // If no pong comes back in 5 seconds, force reconnect
+                        setTimeout(() => {
+                            if (expectingPongRef.current) {
+                                console.log('No pong response, reconnecting...');
+                                expectingPongRef.current = false;
+                                reconnectWatcher();
+                            }
+                        }, 5000);
+                    } catch (e) {
+                        // Send failed, reconnect
+                        console.error('Failed to send ping', e);
+                        reconnectWatcher();
+                    }
+                }
+            }
+        }, 15000); // Check every 15 seconds
+        
+        // Visibility change detection
+        const handleVisibilityChange = () => {
+            if (document.visibilityState === 'visible') {
+                // Page is now visible, verify connection health
+                const now = Date.now();
+                const inactiveTime = now - lastActivityRef.current;
+                
+                if (inactiveTime > 5000 || 
+                    !watcherRef.current || 
+                    watcherRef.current.readyState !== 1) {
+                    console.log('Tab visible again, checking connection...');
+                    reconnectWatcher();
+                }
+            }
+        };
+        
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        
         // Cleanup function that runs when component unmounts
         return () => {
+            clearInterval(healthInterval);
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+            
+            if (reconnectTimeoutRef.current) {
+                clearTimeout(reconnectTimeoutRef.current);
+            }
+            
             // Just calling close on the watcher should clean everything up
-            watcher.close?.();
+            if (watcherRef.current) {
+                watcherRef.current.close?.();
+            }
         };
     }, []); // Empty dependency array ensures this runs only once on mount
 
