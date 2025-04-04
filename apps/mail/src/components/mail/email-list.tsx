@@ -154,11 +154,11 @@ export function EmailList({
                                         className={cn(
                                             "flex items-start py-2 px-3 cursor-pointer bg-white select-none",
                                             // Not selected: hover color (matching sidebar buttons)
-                                            activeRowId !== email.id && "hover:bg-accent",
+                                            activeRowId !== email.id && "hover:bg-muted",
                                             // Selected: highlight background (matching sidebar active button)
-                                            activeRowId === email.id && "bg-accent text-accent-foreground",
+                                            activeRowId === email.id && "bg-primary/5 text-primary",
                                             // Unread emails get slightly darker background if not selected
-                                            !email.isRead && activeRowId !== email.id && "bg-blue-50/20"
+                                            !email.isRead && activeRowId !== email.id && "border-l-red-600 border-l-2 bg-red-600/5 text-primary"
                                         )}
                                         onClick={() => handleRowClick(email)}
                                     >
