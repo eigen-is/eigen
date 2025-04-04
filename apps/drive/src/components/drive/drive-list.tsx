@@ -4,6 +4,7 @@ import {EigenLoader} from "@workspace/ui";
 import {FolderPlus, Search, UploadIcon} from "lucide-react";
 import {Input} from "@workspace/ui/components/input";
 import {DrivePathItem, DriveTable, getFileIcon} from "@workspace/ui/components/layout/drive";
+import {cn} from "@workspace/ui/lib/utils";
 
 interface DriveListProps {
     items: DrivePathItem[];
@@ -13,6 +14,7 @@ interface DriveListProps {
     activeRowId?: string;
     onCreateFolder?: () => void;
     onUploadFile?: () => void;
+    onUploadFiles?: (files: File[]) => void; 
     currentPath?: DrivePathItem | null;
     onDelete?: (path: DrivePathItem) => void;
 }
@@ -25,10 +27,12 @@ export function DriveList({
                               activeRowId,
                               onCreateFolder,
                               onUploadFile,
+                              onUploadFiles,
                               onDelete,
                               currentPath,
                           }: DriveListProps) {
     const [searchTerm, setSearchTerm] = useState('');
+    const [isDragging, setIsDragging] = useState(false);
 
     // Filter items based on search term
     // Use useMemo to prevent unnecessary filtering on each render
@@ -37,6 +41,35 @@ export function DriveList({
             item.name.toLowerCase().includes(searchTerm.toLowerCase())
         );
     }, [items, searchTerm]);
+
+    // Drag and drop handlers
+    const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
+        e.preventDefault(); 
+        e.stopPropagation();
+    };
+
+    const handleDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDragging(true);
+    };
+
+    const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDragging(false);
+    };
+
+    const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+        e.preventDefault();
+        e.stopPropagation();
+        setIsDragging(false);
+        
+        const files = Array.from(e.dataTransfer.files);
+        if (files.length > 0 && onUploadFiles) {
+            onUploadFiles(files);
+        }
+    };
 
     // Handle showing empty, loading, and error states
     if (isLoading) {
@@ -57,7 +90,27 @@ export function DriveList({
     }
 
     return (
-        <div className="h-full flex flex-col">
+        <div 
+            className={cn(
+                "h-full flex flex-col relative",
+                isDragging && "bg-secondary/30"
+            )}
+            onDragOver={handleDragOver}
+            onDragEnter={handleDragEnter}
+            onDragLeave={handleDragLeave}
+            onDrop={handleDrop}
+        >
+            {/* Drag overlay */}
+            {isDragging && (
+                <div className="absolute inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center z-10 pointer-events-none">
+                    <div className="bg-card p-6 rounded-lg shadow-lg text-center">
+                        <UploadIcon className="h-12 w-12 mx-auto mb-4 text-primary animate-bounce" />
+                        <h3 className="text-xl font-medium mb-2">Drop files here</h3>
+                        <p className="text-muted-foreground">Release to upload</p>
+                    </div>
+                </div>
+            )}
+            
             {/* Search and actions toolbar */}
             <div className="h-12 flex items-center justify-between border-b px-2">
                 {/* Search - hidden on small screens */}

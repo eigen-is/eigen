@@ -124,13 +124,12 @@ function DriveRoute() {
         }
     };
 
-    // Function to process the selected files
-    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const files = e.target.files;
-        if (!files || files.length === 0) return;
+    // Common function to process uploads for multiple files
+    const processFiles = async (files: File[]) => {
+        if (files.length === 0) return;
         
         // Create an array of upload promises
-        const uploadPromises = Array.from(files).map(async (file) => {
+        const uploadPromises = files.map(async (file) => {
             // Create upload tracking object for each file
             const uploadHandler = upload.createUpload(file.name);
             
@@ -183,12 +182,21 @@ function DriveRoute() {
         const successCount = results.filter(r => r.success).length;
         
         if (successCount === files.length) {
-            toast(`${successCount} bestand${successCount !== 1 ? 'en' : ''} geüpload`);
+            toast(`${successCount} file${successCount !== 1 ? 's' : ''} uploaded`);
         } else if (successCount > 0) {
-            toast.success(`${successCount} van ${files.length} bestanden geüpload`);
+            toast.success(`${successCount} of ${files.length} files uploaded`);
         } else {
-            toast.error(`Uploaden mislukt`);
+            toast.error(`Upload failed`);
         }
+    };
+
+    // Function to process the selected files
+    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const files = e.target.files;
+        if (!files || files.length === 0) return;
+        
+        // Use the common processFiles function
+        await processFiles(Array.from(files));
         
         // Clean up the file input value so the same files can be selected again if needed
         e.target.value = '';
@@ -320,6 +328,7 @@ function DriveRoute() {
                             activeRowId={pid}
                             onCreateFolder={openCreateFolderDialog}
                             onUploadFile={handleFileUpload}
+                            onUploadFiles={processFiles}
                             onDelete={handleDeletePath}
                             currentPath={currentPath}
                         />
@@ -365,6 +374,7 @@ function DriveRoute() {
                         activeRowId={pid}
                         onCreateFolder={openCreateFolderDialog}
                         onUploadFile={handleFileUpload}
+                        onUploadFiles={processFiles}
                         currentPath={currentPath}
                         onDelete={handleDeletePath}
                     />
