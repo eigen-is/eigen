@@ -216,7 +216,7 @@ export default class Drive {
         const fileExists = await this.home.fs.file(filePath).exists();
 
         const buffer = await file.arrayBuffer();
-        await this.home.fs.file(filePath).write(buffer);
+        await this.home.fs.writeFile(filePath, buffer);
 
         const {file: bunFile, size, type: mimeType} = await this.home.fs.fileMeta(filePath);
         if (!bunFile) {

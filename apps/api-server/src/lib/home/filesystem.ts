@@ -91,6 +91,19 @@ export default class FileSystem {
         return Bun.file(absolutePath);
     }
 
+    public async writeFile(filePath: string, data: string | ArrayBuffer | SharedArrayBuffer | BunFile) {
+        // get size of data
+        // @ts-ignore
+        const size = typeof data === 'string' ? data.length : ((data as BunFile).size) || (data as ArrayBuffer).byteLength;
+        const stats = await this.home.size();
+        const sizeAvailable = stats.max - stats.used;
+        if (size < sizeAvailable ) {
+            return await this.file(filePath).write(data);
+        } else {
+            throw new Error('Not enough space');
+        }
+    }
+
     /**
      * Watches a directory or file for changes
      * @param path Path to watch
