@@ -322,9 +322,9 @@ export default class Drive {
 
         // Delete file in filesystem
         const filePath = path.join(await this.getFolderPath(parent.id), file.name);
-        await this.home.fs.unlink(filePath);
+        this.home.fs.unlink(filePath);
         // Delete thumbnail
-        await this.deleteThumbnail(file);
+        this.deleteThumbnail(file);
         // Delete file from database
         await this.db.delete(drivePaths).where(eq(drivePaths.id, pathId));
 
@@ -333,19 +333,23 @@ export default class Drive {
     }
 
     private async deleteThumbnail(file: DrivePath) {
-        if (!file || file.type !== "file") {
-            throw new Error("File not found");
-        }
+        try {
+            if (!file || file.type !== "file") {
+                throw new Error("File not found");
+            }
 
-        // Get parent to find file path
-        const parent = await this.getPath(file.parentId || "");
-        if (!parent) {
-            throw new Error("Parent folder not found");
-        }
+            // Get parent to find file path
+            const parent = await this.getPath(file.parentId || "");
+            if (!parent) {
+                throw new Error("Parent folder not found");
+            }
 
-        // Delete thumbnail
-        const thumbnailPath = this.home.fs.pathJoin(this.basePath, 'thumbs', file.thumbnail);
-        await this.home.fs.unlink(thumbnailPath);
+            // Delete thumbnail
+            const thumbnailPath = this.home.fs.pathJoin(this.basePath, 'thumbs', file.thumbnail);
+            await this.home.fs.unlink(thumbnailPath);
+        } catch (e) {
+            
+        }
     }
 
     public async getRootFolder(): Promise<DrivePath | null> {
