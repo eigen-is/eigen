@@ -1,6 +1,7 @@
 import Elysia, {t} from "elysia";
 import {getAvatar, getPublicInfo} from "../lib/space/public";
 import {waitlist} from "../lib/space/waitlist";
+import {auth} from "../lib/auth/auth.ts";
 
 export const spaceRouter = new Elysia({name: "space"})
     // .use(betterAuth)
