@@ -6,11 +6,10 @@ import {
     useCreateFolder,
     useDeleteFile,
     useDeleteFolder,
-    useFolderContent,
+    useFolderContent, useInvalidateFolder,
     useMediaQuery,
     usePathInfo,
-    useRootFolder,
-    useUploadFile
+    useRootFolder
 } from '@workspace/lib/drive';
 import {useEffect, useRef, useState} from "react";
 import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,} from "@workspace/ui/components/dialog";
@@ -58,7 +57,7 @@ function DriveRoute() {
     // const isTablet = useMediaQuery('(max-width: 1024px) and (min-width: 769px)');
     const deleteFileMutation = useDeleteFile();
     const deleteFolderMutation = useDeleteFolder();
-    const uploadFileMutation = useUploadFile();
+    const invalidateFolder = useInvalidateFolder();
     const upload = useUpload();
     const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -153,11 +152,8 @@ function DriveRoute() {
                         // Mark upload as complete
                         uploadHandler.complete();
                         
-                        // Add file to the drive using the mutation
-                        await uploadFileMutation.mutateAsync({
-                            parentId: pathId,
-                            file
-                        });
+                        // invalidate the folder contents query to refresh the list
+                        invalidateFolder(pathId);
                         
                         return { success: true, fileName: file.name };
                     },

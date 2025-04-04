@@ -93,6 +93,14 @@ export function useUploadFile() {
     });
 }
 
+export function useInvalidateFolder() {
+    const queryClient = useQueryClient();
+
+    return (pathId: string) => {
+        queryClient.invalidateQueries({queryKey: driveKeys.folder(pathId)});
+    };
+}
+
 // DELETE FOLDER
 export function useDeleteFolder() {
     const queryClient = useQueryClient();
