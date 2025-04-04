@@ -21,6 +21,8 @@ import {useUpload} from "@workspace/ui/components/layout/upload-provider/upload-
 import {uploadWithProgress} from "@workspace/ui/components/layout/upload-provider/upload-with-progress";
 import {DrivePath} from "@apps/api-server/types/drive";
 import {DeleteDialog} from "@workspace/ui/components/layout/delete/delete-dialog";
+import {invalidateHomeSize} from "@workspace/lib/home";
+import {useQueryClient} from "@tanstack/react-query";
 
 // Define search params type
 export interface DriveSearchParams {
@@ -72,6 +74,7 @@ function DriveRoute() {
 
     // Don't fetch data until we have the actual root folder ID (not "root")
     const skipDataFetch = pathId === 'root';
+    const queryClient = useQueryClient();
 
     const {
         data: folderContents = [],
@@ -154,6 +157,7 @@ function DriveRoute() {
                         
                         // invalidate the folder contents query to refresh the list
                         invalidateFolder(pathId);
+                        invalidateHomeSize(queryClient);
                         
                         return { success: true, fileName: file.name };
                     },
