@@ -88,7 +88,7 @@ function EditContactRoute() {
                 params: {filterType, filterId},
                 search: contactId ? {contactId} : {},
             });
-            toast.info('Contact saved');
+            toast.success('Contact saved');
         } catch (error) {
             console.error('Error saving contact:', error);
             // Hier zou je een foutmelding kunnen tonen

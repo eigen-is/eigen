@@ -8,7 +8,7 @@ import {Separator} from '@workspace/ui/components/separator';
 import {type Label} from "@apps/api-server/types/label";
 import {useAddLabel, useDeleteLabel, useLabels, useUpdateLabel} from '@workspace/lib/contacts';
 import {AppLogo} from '@workspace/ui/components/layout/app-logo';
-import {EigenLoader} from "@workspace/ui";
+import {EigenLoader, StorageUsage} from "@workspace/ui";
 
 interface ContactsSidebarProps {
     condensed?: boolean;
@@ -134,6 +134,11 @@ export function ContactsSidebar({condensed = false, onClose, isMobile = false}: 
                     />
                 )}
             </div>
+            
+            {/* Storage usage indicator at the bottom of sidebar */}
+            <StorageUsage
+                className="mt-auto"
+            />
         </div>
     );
 }

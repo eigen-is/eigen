@@ -1,8 +1,7 @@
 import {useState} from "react";
 import {Progress} from "@workspace/ui/components/progress";
-import {Button} from "@workspace/ui/components/button";
-import {ChevronDown, ChevronUp} from "lucide-react";
 import {useHomeSize} from "@workspace/lib/home";
+import {EigenLoader} from "@workspace/ui";
 
 // Type definition for storage data
 export interface StorageData {
@@ -34,13 +33,13 @@ export function StorageUsage({className = ""}: StorageUsageProps) {
     };
 
     return (
-        <div className={`p-3 border-t ${className}`}>
+        <div className={`p-3 ${className}`}>
             <div className="cursor-pointer" onClick={() => setShowDetails(!showDetails)}>
                 <div className="flex justify-between items-center mb-1">
                     <span className="text-xs font-medium text-muted-foreground">Storage</span>
                     <span className="text-xs text-muted-foreground">
             {storageLoading
-                ? "..."
+                ? <EigenLoader/>
                 : storageData
                     ? `${formatBytes(storageData.used)} / ${formatBytes(storageData.max)}`
                     : "Unknown"}
@@ -50,15 +49,6 @@ export function StorageUsage({className = ""}: StorageUsageProps) {
                     value={storageLoading || !storageData ? 0 : (storageData.used / storageData.max) * 100}
                     className="h-1.5"
                 />
-                <div className="flex justify-end mt-0.5">
-                    <Button variant="ghost" size="sm" className="h-5 w-5 p-0">
-                        {showDetails ? (
-                            <ChevronUp className="h-3 w-3"/>
-                        ) : (
-                            <ChevronDown className="h-3 w-3"/>
-                        )}
-                    </Button>
-                </div>
             </div>
 
             <div
