@@ -364,7 +364,7 @@ class MailParser extends Transform {
                 case 'reply-to':
                 case 'delivered-to':
                 case 'return-path':
-                case 'disposition-notification-to':
+                case 'disposition-notification.ts-to':
                     value = addressparser(value);
                     this.decodeAddresses(value);
                     value = {
@@ -410,7 +410,7 @@ class MailParser extends Transform {
             'content-description',
             'precedence',
             'errors-to',
-            'disposition-notification-to'
+            'disposition-notification.ts-to'
         ];
 
         headers.forEach((value, key) => {

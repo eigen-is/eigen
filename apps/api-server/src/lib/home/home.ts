@@ -6,6 +6,7 @@ import FileSystem from "./filesystem.ts";
 import {getUserById} from "../users/users.ts";
 import Drive from "../drive/drive.ts";
 import type {ServerWebSocket} from "bun";
+import type {EigenNotification} from "../../types/notification.ts";
 
 const city = new Map<string, Home>();
 
@@ -93,10 +94,10 @@ export class Home {
         this.notificationSockets.push(ws);
     }
 
-    private notify(message: string) {
+    private notify(event: EigenNotification) {
         this.notificationSockets = this.notificationSockets.filter(ws => {
             if (ws.readyState === 1) {
-                ws.send(message);
+                ws.send(JSON.stringify(event));
                 return true;
             }
         });

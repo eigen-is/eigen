@@ -202,6 +202,12 @@ export const mailRouter = new Elysia({name: "mail"})
                 return;
             }
             (await getHome(user)).subscribe(ws as any as ServerWebSocket);
+            // we should keep the connection open
+            setInterval(() => {
+                if (ws.readyState === 1) {
+                    ws.send('ping');
+                }
+            }, 15000);
         }
     })
 ;
