@@ -2,8 +2,8 @@ import {Folder, X} from 'lucide-react';
 import {Button} from "@workspace/ui/components/button";
 import {SidebarSection} from '@workspace/ui/components/layout/sidebar/sidebar-section';
 import {AppLogo} from '@workspace/ui/components/layout/app-logo';
-import {EigenLoader, SidebarItem} from "@workspace/ui";
-import React, {useMemo} from "react";
+import {EigenLoader, SidebarItem, StorageUsage} from "@workspace/ui";
+import {useMemo} from "react";
 
 // Define proper types for drive items
 interface DriveItem {
@@ -37,7 +37,6 @@ export function DriveSidebar({
         return folders.filter(item => item.type === 'folder');
     }, [folders]);
 
-    // @ts-ignore
     return (
         <div className="flex h-full min-h-[calc(100vh-3.5rem)] flex-col">
             {isMobile && (
@@ -91,6 +90,11 @@ export function DriveSidebar({
                     )
                 )}
             </SidebarSection>
+
+            {/* Storage usage indicator at the bottom of sidebar */}
+            <StorageUsage
+                className="mt-auto"
+            />
         </div>
     );
 }

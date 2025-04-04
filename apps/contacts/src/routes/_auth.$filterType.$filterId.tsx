@@ -101,7 +101,7 @@ function ContactsRoute() {
         w-full md:w-[350px] border-r h-full overflow-y-auto
       `}>
                 <div className="flex h-full flex-col">
-                    {filterType === 'label' && (<LabelFilterHeader labels={labels} labelId={filterId} />)}
+                    {filterType === 'label' && (<LabelFilterHeader labels={labels} labelId={filterId}/>)}
                     <ContactsList filterType={filterType} filterId={filterId}/>
                 </div>
             </div>

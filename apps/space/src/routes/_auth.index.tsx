@@ -17,13 +17,13 @@ interface AppItem {
 function HomeComponent() {
     return (
         <div className="flex flex-col flex-1 min-h-[calc(100vh-3.5rem)] h-full overflow-auto">
-            
+
             <div className="flex-grow flex flex-col items-center justify-center w-full px-4 py-8">
                 {/* Welcome Header */}
                 <div className="text-5xl mb-6">
                     <span className="font-bold text-teal-600">eigen</span>
                 </div>
-                
+
                 {/* Main tagline */}
                 <div className="text-xl text-center mb-10">
                     <p className="mb-4">
@@ -32,7 +32,7 @@ function HomeComponent() {
                         Simple and secure. You control your own data.
                     </p>
                 </div>
-                
+
                 {/* Apps Grid */}
                 <div className="max-w-4xl mx-auto w-full overflow-auto">
                     <h2 className="text-2xl font-semibold mb-6 text-center">Your Applications</h2>
@@ -63,7 +63,8 @@ function HomeComponent() {
                                             </div>
                                             <div>
                                                 <h3 className={`font-medium ${app.className} text-sm md:text-base`}>{app.name}</h3>
-                                                <p className="text-xs text-gray-500 hidden md:block">Access your {app.name.toLowerCase()}</p>
+                                                <p className="text-xs text-gray-500 hidden md:block">Access
+                                                    your {app.name.toLowerCase()}</p>
                                             </div>
                                         </div>
                                     </a>
@@ -73,15 +74,15 @@ function HomeComponent() {
                     </div>
                 </div>
             </div>
-            
+
             {/* Footer with European initiative */}
             <div className="text-center text-sm text-gray-500 py-4 border-t w-full bg-white">
                 <div className="flex items-center justify-center mb-2">
-                    <Shovel className="w-5 h-5 mr-2 text-yellow-600" aria-hidden="true" />
+                    <Shovel className="w-5 h-5 mr-2 text-yellow-600" aria-hidden="true"/>
                     <span className="font-medium">Under Construction</span>
                 </div>
                 <p>
-                    eigen is made and hosted in the European Union. 
+                    eigen is made and hosted in the European Union.
                     Our goal is to quickly deliver a Minimum Viable Product and scale up afterwards.
                 </p>
             </div>
