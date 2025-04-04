@@ -3,7 +3,7 @@ import * as path from "path";
 import * as fs from "node:fs/promises";
 import {watch} from "node:fs";
 import {Database} from "bun:sqlite";
-import Bun from 'bun';
+import Bun, { NullSubprocess, type BunFile } from 'bun';
 
 export default class FileSystem {
     private home: Home;
@@ -39,6 +39,15 @@ export default class FileSystem {
         return await fs.readdir(absolutePath, options);
     }
 
+    public async fileMeta(path: string): Promise<{file: BunFile | null, size: number, type: string}> {
+        const file = this.file(path);
+        if (file) {
+            // @ts-ignore
+            return {file, size: file.size, type: file.type};
+        } else {
+            return {file: null, size: 0, type: ''};
+        }
+    }
     /**
      * Gets file/directory information
      * @param path Path to get info for

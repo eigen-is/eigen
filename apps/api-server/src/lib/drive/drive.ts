@@ -218,9 +218,10 @@ export default class Drive {
         const buffer = await file.arrayBuffer();
         await this.home.fs.file(filePath).write(buffer);
 
-        const bunFile = this.home.fs.file(filePath);
-        const size = bunFile.size || 0;
-        const mimeType = bunFile.type || "application/octet-stream";
+        const {file: bunFile, size, type: mimeType} = await this.home.fs.fileMeta(filePath);
+        if (!bunFile) {
+            throw new Error("Failed to get file metadata");
+        }
 
         // Save file metadata in database
         if (!fileExists) {
@@ -322,12 +323,29 @@ export default class Drive {
         // Delete file in filesystem
         const filePath = path.join(await this.getFolderPath(parent.id), file.name);
         await this.home.fs.unlink(filePath);
-
+        // Delete thumbnail
+        await this.deleteThumbnail(file);
         // Delete file from database
         await this.db.delete(drivePaths).where(eq(drivePaths.id, pathId));
 
         // Update parent folder size
         await this.updateSizeOfFolder(parent.id);
+    }
+
+    private async deleteThumbnail(file: DrivePath) {
+        if (!file || file.type !== "file") {
+            throw new Error("File not found");
+        }
+
+        // Get parent to find file path
+        const parent = await this.getPath(file.parentId || "");
+        if (!parent) {
+            throw new Error("Parent folder not found");
+        }
+
+        // Delete thumbnail
+        const thumbnailPath = this.home.fs.pathJoin(this.basePath, 'thumbs', file.thumbnail);
+        await this.home.fs.unlink(thumbnailPath);
     }
 
     public async getRootFolder(): Promise<DrivePath | null> {
@@ -603,9 +621,9 @@ export default class Drive {
 
     private async generateThumbnail(id: string, mimeType: string, filePath: string): Promise<string | null> {
         console.log("Generating thumbnail for", id, mimeType, filePath);
-        if (!mimeType.includes('image')) {
-            return null;
-        }
+        // if (!mimeType.includes('image')) {
+        //     return null;
+        // }
         console.log("Probably an image, checking dimensions for thumbnail generation");
         console.log("Absolute path:", this.home.fs.absolutePath(filePath));
         try {
