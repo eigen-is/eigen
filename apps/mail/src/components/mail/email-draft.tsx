@@ -1,11 +1,11 @@
-import {ArrowLeft, Trash2, Send} from "lucide-react";
+import {ArrowLeft, Send, Trash2} from "lucide-react";
 import {cn} from "@workspace/ui/lib/utils";
 import {Button} from "@workspace/ui/components/button";
 import {EmailDraft as EmailDraftType} from "@apps/api-server/types/mail";
 import {TooltipButton} from "@workspace/ui";
 import {Input} from "@workspace/ui/components/input";
 import {Textarea} from "@workspace/ui/components/textarea";
-import {useEffect, useRef, useState, useMemo} from "react";
+import {useEffect, useMemo, useRef, useState} from "react";
 import {toast} from "sonner";
 import {createDraftEmail} from "@workspace/lib/mail";
 import {useAuth} from "@workspace/lib/auth/auth-context.tsx";

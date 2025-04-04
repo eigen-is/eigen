@@ -12,3 +12,4 @@ export const contactsApi = api.contacts;
 export const mailApi = api.mail;
 export const spaceApi = api.space;
 export const driveApi = api.drive;
+export const homeApi = api.home;

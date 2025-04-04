@@ -3,6 +3,7 @@ import {mailApi} from '@workspace/lib/api.ts';
 import {Email} from "@apps/api-server/types/mail";
 import {mailboxKeys} from "./use-mailboxes.ts";
 import {Route} from "@apps/space/src/routes/_auth.user.tsx";
+import {invalidateHomeSize} from "../../home";
 
 // Define query keys for reuse
 export const emailKeys = {
@@ -54,8 +55,9 @@ export function useDeleteEmail() {
             await mailApi.message.moveToTrash.put({messageId: email.id});
         }
         // invalidate mailbox cache
-        await queryClient.invalidateQueries({queryKey: emailKeys.lists()});
-        await queryClient.invalidateQueries({queryKey: emailKeys.detail(email.id)});
+        queryClient.invalidateQueries({queryKey: emailKeys.lists()});
+        queryClient.invalidateQueries({queryKey: emailKeys.detail(email.id)});
+        invalidateHomeSize(queryClient);
     }
 }
 
@@ -71,8 +73,8 @@ export function useToggleReadEmail() {
             messageId: email.id,
             read: isRead
         });
-        await queryClient.invalidateQueries({queryKey: emailKeys.detail(email.id)});
-        await queryClient.invalidateQueries({queryKey: mailboxKeys.lists()});
+        queryClient.invalidateQueries({queryKey: emailKeys.detail(email.id)});
+        queryClient.invalidateQueries({queryKey: mailboxKeys.lists()});
     }
 }
 
@@ -85,10 +87,10 @@ export function useMoveEmail() {
             messageId: email.id,
             targetMailbox: mailbox
         });
-        await queryClient.invalidateQueries({queryKey: emailKeys.detail(email.id)});
-        await queryClient.invalidateQueries({queryKey: emailKeys.list(currentMailbox)});
-        await queryClient.invalidateQueries({queryKey: emailKeys.list(mailbox)});
-        await queryClient.invalidateQueries({queryKey: mailboxKeys.lists()});
+        queryClient.invalidateQueries({queryKey: emailKeys.detail(email.id)});
+        queryClient.invalidateQueries({queryKey: emailKeys.list(currentMailbox)});
+        queryClient.invalidateQueries({queryKey: emailKeys.list(mailbox)});
+        queryClient.invalidateQueries({queryKey: mailboxKeys.lists()});
     }
 }
 

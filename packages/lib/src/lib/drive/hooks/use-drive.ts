@@ -1,6 +1,7 @@
 import {useMutation, useQuery, useQueryClient} from "@tanstack/react-query";
 import type {DriveACL} from "@apps/api-server/types/drive";
 import {driveApi} from "@workspace/lib/api";
+import {invalidateHomeSize} from "../../home";
 
 // Define query keys for reuse
 export const driveKeys = {
@@ -87,6 +88,7 @@ export function useUploadFile() {
         },
         onSuccess: (_, variables) => {
             queryClient.invalidateQueries({queryKey: driveKeys.folder(variables.parentId)});
+            invalidateHomeSize(queryClient);
         }
     });
 }
@@ -103,6 +105,7 @@ export function useDeleteFolder() {
         onSuccess: () => {
             // We don't know the parent ID here, so we invalidate all folders
             queryClient.invalidateQueries({queryKey: driveKeys.folders()});
+            invalidateHomeSize(queryClient);
         }
     });
 }
@@ -119,6 +122,7 @@ export function useDeleteFile() {
         onSuccess: () => {
             // We don't know the parent ID here, so we invalidate all folders
             queryClient.invalidateQueries({queryKey: driveKeys.folders()});
+            invalidateHomeSize(queryClient);
         }
     });
 }

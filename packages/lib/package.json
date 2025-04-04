@@ -51,6 +51,7 @@
     "./drive": "./src/lib/drive/index.ts",
     "./media": "./src/lib/media/index.ts",
     "./auth": "./src/lib/auth/index.ts",
+    "./home": "./src/lib/home/index.ts",
     "./auth/hooks": "./src/lib/auth/hooks/index.ts"
   }
 }

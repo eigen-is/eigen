@@ -2,6 +2,7 @@ import {useMutation, useQueryClient} from '@tanstack/react-query';
 import {mailApi} from '@workspace/lib/api';
 import {EmailDraft} from '@apps/api-server/types/mail';
 import {emailKeys} from './use-emails';
+import {invalidateHomeSize} from "../../home";
 
 // Define interface for recipient
 export interface EmailRecipient {
@@ -111,6 +112,7 @@ export function useUpdateDraft() {
                 queryClient.invalidateQueries({queryKey: emailKeys.list('drafts')});
                 // Also invalidate the specific email query if it exists
                 queryClient.invalidateQueries({queryKey: emailKeys.detail(data.id)});
+                invalidateHomeSize(queryClient);
             }
         }
     });
@@ -132,6 +134,7 @@ export function useSendDraft() {
                 queryClient.invalidateQueries({queryKey: emailKeys.list('sent')});
                 // Invalidate the specific email query if it exists
                 queryClient.invalidateQueries({queryKey: emailKeys.detail(data.id)});
+                invalidateHomeSize(queryClient);
             }
         }
     });
