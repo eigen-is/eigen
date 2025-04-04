@@ -1,4 +1,4 @@
-import {useMemo, useState} from 'react';
+import {useMemo, useState, useRef} from 'react';
 import {Button} from "@workspace/ui/components/button";
 import {EigenLoader} from "@workspace/ui";
 import {FolderPlus, Search, UploadIcon} from "lucide-react";
@@ -33,6 +33,7 @@ export function DriveList({
                           }: DriveListProps) {
     const [searchTerm, setSearchTerm] = useState('');
     const [isDragging, setIsDragging] = useState(false);
+    const dragCounter = useRef(0);
 
     // Filter items based on search term
     // Use useMemo to prevent unnecessary filtering on each render
@@ -44,25 +45,42 @@ export function DriveList({
 
     // Drag and drop handlers
     const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
-        e.preventDefault(); 
+        e.preventDefault(); // Necessary to allow drops
         e.stopPropagation();
     };
 
     const handleDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
         e.preventDefault();
         e.stopPropagation();
-        setIsDragging(true);
+        
+        // Increment counter when entering any element
+        dragCounter.current += 1;
+        
+        // Only set dragging state if this is first entrance
+        if (dragCounter.current === 1) {
+            setIsDragging(true);
+        }
     };
 
     const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
         e.preventDefault();
         e.stopPropagation();
-        setIsDragging(false);
+        
+        // Decrement counter when leaving any element
+        dragCounter.current -= 1;
+        
+        // Only set dragging state to false if we've left all elements
+        if (dragCounter.current === 0) {
+            setIsDragging(false);
+        }
     };
 
     const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
         e.preventDefault();
         e.stopPropagation();
+        
+        // Reset counter and dragging state
+        dragCounter.current = 0;
         setIsDragging(false);
         
         const files = Array.from(e.dataTransfer.files);

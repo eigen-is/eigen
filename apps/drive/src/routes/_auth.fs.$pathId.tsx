@@ -182,7 +182,7 @@ function DriveRoute() {
         const successCount = results.filter(r => r.success).length;
         
         if (successCount === files.length) {
-            toast(`${successCount} file${successCount !== 1 ? 's' : ''} uploaded`);
+            toast.success(`${successCount} file${successCount !== 1 ? 's' : ''} uploaded`);
         } else if (successCount > 0) {
             toast.success(`${successCount} of ${files.length} files uploaded`);
         } else {
