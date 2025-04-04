@@ -86,15 +86,8 @@ export function HomeComponent() {
                         showMore ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0'
                     }`}
                 >
-                    <div className="flex justify-center w-full">
-                        <div className="text-left">
-                            <p className="mb-2 text-center">Store your data where you want:</p>
-                            <ul className="list-disc pl-6 text-sm">
-                                <li>Host with eigen.is — simple and secure by default</li>
-                                <li>Connect your preferred cloud storage</li>
-                                <li>Self-host on your own infrastructure</li>
-                            </ul>
-                        </div>
+                    <div className="flex justify-center w-full text-gray-500">
+                            <p>Eigen is made and hosted in the European Union. Our goal is to quickly deliver a MVP and scale up afterwards.</p>
                     </div>
                 </div>
             </div>
