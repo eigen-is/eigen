@@ -4,6 +4,7 @@ import * as fs from "node:fs/promises";
 import {watch} from "node:fs";
 import {Database} from "bun:sqlite";
 import Bun, { NullSubprocess, type BunFile } from 'bun';
+import {sql} from "drizzle-orm";
 
 export default class FileSystem {
     private home: Home;
@@ -175,10 +176,15 @@ export default class FileSystem {
 
         const bunfile = Bun.file(absolutePath);
         if (await bunfile.exists()) {
-            return new Database(absolutePath);
+            const db =  new Database(absolutePath);
+            db.exec("PRAGMA journal_mode = WAL;");
+            db.exec("PRAGMA wal_checkpoint(TRUNCATE);");
+            return db;
         } else if (create) {
             const db = new Database(absolutePath, {create});
             await onCreate(db);
+            db.exec("PRAGMA journal_mode = WAL;");
+            db.exec("PRAGMA wal_checkpoint(TRUNCATE);");
             return db;
         }
         throw new Error(`Database not found: ${absolutePath}`);
