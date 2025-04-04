@@ -208,6 +208,11 @@ export const mailRouter = new Elysia({name: "mail"})
                     ws.send('ping');
                 }
             }, 15000);
+        },
+        message: async (ws, message) => {
+            if (message === 'ping') {
+                ws.send('pong');
+            }
         }
     })
 ;
