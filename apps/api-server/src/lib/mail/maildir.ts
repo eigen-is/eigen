@@ -15,11 +15,13 @@ export default class Maildir {
     private user: User;
     private home: Home;
     private db!: maildb;
+    private notifyCallback: (event: string) => void | undefined;
 
-    constructor(home: Home) {
+    constructor(home: Home, notifyCallback: (event: string) => void | undefined) {
         this.home = home;
         this.user = this.home.user;
         this.basePath = 'eigen.mail/Maildir';
+        this.notifyCallback = notifyCallback;
     }
 
     public async init() {
@@ -31,6 +33,18 @@ export default class Maildir {
         }
         this.db = new maildb(this.home);
         await this.db.init();
+
+        const inbox = '';
+        this.mailboxWatch(inbox, async (event, filename) => {
+            // Handle the event here
+            console.log(`Event: ${event}, Filename: ${filename}`);
+            // new file in new dir
+            await this.mailboxGet(inbox);
+            // let all subscribed websockets know
+            if (this.notifyCallback) {
+                this.notifyCallback('mailboxUpdate');
+            }
+        });
     }
 
     public async size(): Promise<number> {
@@ -124,28 +138,40 @@ export default class Maildir {
         return await this.getMailboxInfo(mailbox) || false;
     }
 
-    public async mailboxWatch($mailbox: string, $callback: (event: string, filename: string) => void) {
+    public async mailboxWatch(mailbox: string, callback: (event: string, filename: string) => void) {
         try {
             // Check if mailbox exists
-            const mailboxInfo = await this.mailboxExists($mailbox);
+            const mailboxInfo = await this.mailboxExists(mailbox);
             if (!mailboxInfo) {
-                console.error(`Cannot watch: mailbox ${$mailbox} does not exist`);
+                console.error(`Cannot watch: mailbox ${mailbox} does not exist`);
                 return false;
             }
 
             // Watch the new directory for changes
-            const newPath = await this.sanitizeDirName($mailbox, 'new');
+            const newPath = await this.sanitizeDirName(mailbox, 'new');
 
             // Using Node.js fs.watch instead of Bun.watch which is not available
             this.home.fs.watch(newPath, (eventType, filename) => {
-                if (filename) {
-                    $callback(eventType, filename);
+                // do debounce
+                if (eventType === 'rename') {
+                    // File added or removed
+                    console.log(`File ${filename} was added or removed`);
+                } else if (eventType === 'change') {
+                    // File changed
+                    console.log(`File ${filename} was changed`);
+                    if (filename) {
+                        callback(eventType, filename);
+                    }
+                } else {
+                    console.log(`File ${filename} was ${eventType}`);
                 }
             });
 
+            console.log(`Watching mailbox: ${mailbox} at ${newPath} for changes`);
+
             return true;
         } catch (error) {
-            console.error(`Error watching mailbox ${$mailbox}:`, error);
+            console.error(`Error watching mailbox ${mailbox}:`, error);
             return false;
         }
     }

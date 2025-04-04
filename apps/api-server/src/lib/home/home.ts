@@ -5,6 +5,7 @@ import Maildir from "../mail/maildir.ts";
 import FileSystem from "./filesystem.ts";
 import {getUserById} from "../users/users.ts";
 import Drive from "../drive/drive.ts";
+import type {ServerWebSocket} from "bun";
 
 const city = new Map<string, Home>();
 
@@ -52,13 +53,14 @@ export class Home {
     private timeout: Timer | undefined;
 
     private databases: Map<string, asyncCache<Database>> = new Map();
+    private notificationSockets:  ServerWebSocket[] = [];
 
     constructor(user: User) {
         this.user = user;
         this.fs = new FileSystem(this);
         this.drive = new Drive(this);
         this.contacts = new Contacts(this);
-        this.mail = new Maildir(this);
+        this.mail = new Maildir(this, this.notify.bind(this));
     }
 
     public async init() {
@@ -85,6 +87,19 @@ export class Home {
 
         this.initialized = true;
         return this;
+    }
+
+    public subscribe(ws:  ServerWebSocket) {
+        this.notificationSockets.push(ws);
+    }
+
+    private notify(message: string) {
+        this.notificationSockets = this.notificationSockets.filter(ws => {
+            if (ws.readyState === 1) {
+                ws.send(message);
+                return true;
+            }
+        });
     }
 
     public touch() {
