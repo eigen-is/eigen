@@ -180,4 +180,19 @@
         @apply text-purple-600;
     }
 
+    .eigen-list-item {
+        @apply bg-white cursor-pointer select-none;
+    }
+
+    .eigen-list-item:hover {
+        @apply bg-muted/50;
+    }
+
+    .eigen-list-item-active {
+        @apply bg-muted text-primary;
+    }
+    
+    .eigen-list-item-unread {
+        @apply border-l-red-600 border-l-2 bg-red-600/5 text-primary;
+    }
 }

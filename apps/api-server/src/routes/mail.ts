@@ -198,7 +198,7 @@ export const mailRouter = new Elysia({name: "mail"})
             // @ts-ignore
             const user = await ws.data.user;
             if (!user) {
-                 ws.close();
+                ws.close();
                 return;
             }
             (await getHome(user)).subscribe(ws as any as ServerWebSocket);

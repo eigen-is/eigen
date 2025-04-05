@@ -3,8 +3,7 @@ import * as path from "path";
 import * as fs from "node:fs/promises";
 import {watch} from "node:fs";
 import {Database} from "bun:sqlite";
-import Bun, { NullSubprocess, type BunFile } from 'bun';
-import {sql} from "drizzle-orm";
+import Bun, {type BunFile} from 'bun';
 
 export default class FileSystem {
     private home: Home;
@@ -40,7 +39,7 @@ export default class FileSystem {
         return await fs.readdir(absolutePath, options);
     }
 
-    public async fileMeta(path: string): Promise<{file: BunFile | null, size: number, type: string}> {
+    public async fileMeta(path: string): Promise<{ file: BunFile | null, size: number, type: string }> {
         const file = this.file(path);
         if (file) {
             // @ts-ignore
@@ -49,6 +48,7 @@ export default class FileSystem {
             return {file: null, size: 0, type: ''};
         }
     }
+
     /**
      * Gets file/directory information
      * @param path Path to get info for
@@ -98,7 +98,7 @@ export default class FileSystem {
         const size = typeof data === 'string' ? data.length : ((data as BunFile).size) || (data as ArrayBuffer).byteLength;
         const stats = await this.home.size();
         const sizeAvailable = stats.max - stats.used;
-        if (size < sizeAvailable ) {
+        if (size < sizeAvailable) {
             return await this.file(filePath).write(data);
         } else {
             throw new Error('Not enough space');
@@ -176,7 +176,7 @@ export default class FileSystem {
 
         const bunfile = Bun.file(absolutePath);
         if (await bunfile.exists()) {
-            const db =  new Database(absolutePath);
+            const db = new Database(absolutePath);
             db.exec("PRAGMA journal_mode = WAL;");
             db.exec("PRAGMA wal_checkpoint(TRUNCATE);");
             return db;

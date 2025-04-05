@@ -1,7 +1,7 @@
 import {betterAuth} from "better-auth";
 import {drizzle} from 'drizzle-orm/bun-sqlite';
 import {drizzleAdapter} from "better-auth/adapters/drizzle";
-import {twoFactor, admin, organization} from "better-auth/plugins"
+import {admin, organization, twoFactor} from "better-auth/plugins"
 import {account, session, user, verification} from '../../../auth-schema.ts';
 
 export const trustedOrigins = [

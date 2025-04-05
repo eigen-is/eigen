@@ -113,7 +113,7 @@ export default class Drive {
 
     public async size(): Promise<number> {
         // get total size of mailbox
-        return (await this.home.fs.dirSize('eigen.drive')) || this.db.select({size: sql`SUM(${drivePaths.size})`}).from(drivePaths).where(eq(drivePaths.type, 'file')).get()?.size as number  || 0;
+        return (await this.home.fs.dirSize('eigen.drive')) || this.db.select({size: sql`SUM(${drivePaths.size})`}).from(drivePaths).where(eq(drivePaths.type, 'file')).get()?.size as number || 0;
     }
 
     public async getParentPaths(pathId: string): Promise<DrivePath[]> {
@@ -263,6 +263,11 @@ export default class Drive {
         return fileId;
     }
 
+    public async uploadFiles(parentId: string, files: File[]): Promise<string[]> {
+        const uploadPromises = files.map(file => this.uploadFile(parentId, file));
+        return Promise.all(uploadPromises);
+    }
+
     /**
      * Delete a folder and all its contents
      * @param pathId ID of the folder to delete
@@ -348,7 +353,7 @@ export default class Drive {
             const thumbnailPath = this.home.fs.pathJoin(this.basePath, 'thumbs', file.thumbnail);
             await this.home.fs.unlink(thumbnailPath);
         } catch (e) {
-            
+
         }
     }
 

@@ -10,6 +10,10 @@ type CreateFolderBody = {
     folderName: string;
 }
 
+type UploadFilesBody = {
+    files: File[];
+}
+
 type UploadFileBody = {
     file: File;
 }
@@ -70,6 +74,22 @@ export const driveRouter = new Elysia({name: "drive"})
     })
 
     // Upload file
+    .post("/drive/files/:pathId", async ({params, body, user}: {
+        params: { pathId: string },
+        body: UploadFilesBody,
+        user: User
+    }) => {
+        const drive = await getDrive(user);
+        return await drive.uploadFiles(params.pathId, body.files);
+    }, {
+        auth: true,
+        body: t.Object({
+            files: t.Array(t.File({
+                maxSize: 10 * 1024 * 1024  // 5MB maximum file size
+            }))
+        })
+    })
+
     .post("/drive/file/:pathId", async ({params, body, user}: {
         params: { pathId: string },
         body: UploadFileBody,
@@ -81,7 +101,7 @@ export const driveRouter = new Elysia({name: "drive"})
         auth: true,
         body: t.Object({
             file: t.File({
-                maxSize: 5 * 1024 * 1024  // 5MB maximum file size
+                maxSize: 10 * 1024 * 1024  // 5MB maximum file size
             })
         })
     })

@@ -130,19 +130,28 @@ function DriveRoute() {
     const processFiles = async (files: File[]) => {
         if (files.length === 0) return;
         
-        // Create an array of upload promises
-        const uploadPromises = files.map(async (file) => {
-            // Create upload tracking object for each file
-            const uploadHandler = upload.createUpload(file.name);
-            
+        const multipleFiles = files.length > 1;
+        const url = multipleFiles ?
+            `${import.meta.env.VITE_API_HOST}/drive/files/${pathId}` :
+            `${import.meta.env.VITE_API_HOST}/drive/file/${pathId}`;
+
+            const name = multipleFiles ? ' multiple files' : files[0].name;
+            const uploadHandler = upload.createUpload(name);
+
             try {
                 // Create a FormData object for this file
                 const formData = new FormData();
-                formData.append('file', file);
+                if (multipleFiles) {
+                    for (const file of files) {
+                        formData.append('files', file);
+                    }
+                } else {
+                    formData.append('file', files[0]);
+                }
                 
                 // Use the uploadWithProgress helper with authentication
                 await uploadWithProgress({
-                    url: `${import.meta.env.VITE_API_HOST}/drive/file/${pathId}`,
+                    url,
                     formData,
                     headers: {
                         'credentials': 'include'
@@ -159,35 +168,18 @@ function DriveRoute() {
                         invalidateFolder(pathId);
                         invalidateHomeSize(queryClient);
                         
-                        return { success: true, fileName: file.name };
+                        return { success: true, fileName: name };
                     },
                     onError: (err) => {
                         // Mark upload as failed
                         uploadHandler.error();
-                        return { success: false, fileName: file.name, error: err };
+                        return { success: false, fileName: name, error: err };
                     }
                 });
             } catch (err: any) {
                 uploadHandler.error();
-                return { success: false, fileName: file.name, error: err };
+                return { success: false, fileName: name, error: err };
             }
-            
-            return { success: true, fileName: file.name };
-        });
-        
-        // Process all uploads in parallel
-        const results = await Promise.all(uploadPromises);
-        
-        // Provide feedback after all uploads complete
-        const successCount = results.filter(r => r.success).length;
-        
-        if (successCount === files.length) {
-            toast.success(`${successCount} file${successCount !== 1 ? 's' : ''} uploaded`);
-        } else if (successCount > 0) {
-            toast.success(`${successCount} of ${files.length} files uploaded`);
-        } else {
-            toast.error(`Upload failed`);
-        }
     };
 
     // Function to process the selected files
