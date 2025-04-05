@@ -98,8 +98,8 @@ export function DriveTable({
                         <TableRow
                             key={item.id}
                             className={cn(
-                                "cursor-pointer hover:bg-muted/50",
-                                activeItemId === item.id && "bg-muted"
+                                "eigen-list-item",
+                                activeItemId === item.id && "eigen-list-item-active"
                             )}
                             onClick={() => onItemClick?.(item)}
                         >

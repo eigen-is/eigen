@@ -93,6 +93,26 @@ export function useUploadFile() {
     });
 }
 
+
+// UPLOAD FILE
+export function useUploadFiles() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: async ({parentId, files}: { parentId: string, files: File[] }) => {
+            const response = await driveApi.files.post({
+                parentId,
+                files
+            });
+            return response.data;
+        },
+        onSuccess: (_, variables) => {
+            queryClient.invalidateQueries({queryKey: driveKeys.folder(variables.parentId)});
+            invalidateHomeSize(queryClient);
+        }
+    });
+}
+
 export function useInvalidateFolder() {
     const queryClient = useQueryClient();
 
