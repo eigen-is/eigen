@@ -178,9 +178,9 @@ export function ContactsList({filterType = 'filter', filterId = 'all'}: Contacts
                                             to="/$filterType/$filterId"
                                             params={{filterType, filterId}}
                                             search={{contactId: contact.id}}
-                                            className="flex items-center gap-3 px-6 py-3 hover:bg-muted transition-colors"
+                                            className="flex items-center gap-3 px-6 py-3 eigen-list-item"
                                             activeProps={{
-                                                className: "bg-primary/10",
+                                                className: "eigen-list-item-active",
                                             }}
                                         >
                                             <UserItem
