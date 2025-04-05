@@ -54,7 +54,7 @@ export class Home {
     private timeout: Timer | undefined;
 
     private databases: Map<string, asyncCache<Database>> = new Map();
-    private notificationSockets:  ServerWebSocket[] = [];
+    private notificationSockets: ServerWebSocket[] = [];
 
     constructor(user: User) {
         this.user = user;
@@ -90,7 +90,7 @@ export class Home {
         return this;
     }
 
-    public subscribe(ws:  ServerWebSocket) {
+    public subscribe(ws: ServerWebSocket) {
         this.notificationSockets.push(ws);
     }
 
