@@ -12,6 +12,42 @@ interface NotificationProviderProps {
     children: React.ReactNode;
 }
 
+function notify(title: string, body: string, tag: string, action?: {label: string, onClick: () => void}, onClick?: () => void) {
+    toast(title, {
+        description: body,
+        action: action ? {
+            label: action.label,
+            onClick: () => {
+                onClick?.();
+            }
+        } : undefined
+    });
+
+    if (!("Notification" in window)) {
+        return;
+    } else if (Notification.permission === 'granted') {
+        const n = new Notification(title, {
+            body: body,
+            tag: tag,
+        });
+        action && n.addEventListener('click', () => {
+            onClick?.();
+        });
+    } else if (Notification.permission !== 'denied') {
+        Notification.requestPermission().then((permission) => {
+            if (permission === 'granted') {
+                const n = new Notification(title, {
+                    body: body,
+                    tag: tag,
+                });
+                action && n.addEventListener('click', () => {
+                    onClick?.();
+                });
+            }
+        });
+    }
+}
+
 export function NotificationProvider({children}: NotificationProviderProps) {
     const queryClient = useQueryClient();
     // Using any for WebSocket client since Eden WebSocket has a different interface
@@ -43,13 +79,10 @@ export function NotificationProvider({children}: NotificationProviderProps) {
                 const body = event.data as unknown as EigenNotification;
                 if (body?.type === 'mail') {
                     // Handle notifications here
-                    toast(body?.title, {
-                        description: body?.description,
-                        action: {
-                            label: 'Open inbox',
-                            onClick: () => {
-                                document.location.href = `${import.meta.env.VITE_APP_MAIL_URL}/box/inbox`
-                            }
+                    notify(body?.title, body?.body, body?.tag, {
+                        label: 'Open inbox',
+                        onClick: () => {
+                            document.location.href = `${import.meta.env.VITE_APP_MAIL_URL}/box/inbox`
                         }
                     });
                     queryClient.invalidateQueries({queryKey: emailKeys.list('inbox')});
