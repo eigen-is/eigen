@@ -7,6 +7,7 @@ import {useQueryClient} from "@tanstack/react-query";
 import {emailKeys} from "@workspace/lib/mail";
 import {mailboxKeys} from "@workspace/lib/mail";
 import type {EigenNotification} from "@apps/api-server/types/notification";
+import {useAuth} from "@workspace/lib/auth/auth-context.tsx"; // Fixed import path
 
 interface NotificationProviderProps {
     children: React.ReactNode;
@@ -33,22 +34,25 @@ function notify(title: string, body: string, tag: string, action?: {label: strin
         action && n.addEventListener('click', () => {
             onClick?.();
         });
+    }
+}
+
+function askNotificationPermission() {
+    if (!("Notification" in window)) {
+        return;
+    } else if (Notification.permission === 'granted') {
+        return;
     } else if (Notification.permission !== 'denied') {
         Notification.requestPermission().then((permission) => {
             if (permission === 'granted') {
-                const n = new Notification(title, {
-                    body: body,
-                    tag: tag,
-                });
-                action && n.addEventListener('click', () => {
-                    onClick?.();
-                });
+                return;
             }
         });
     }
 }
 
 export function NotificationProvider({children}: NotificationProviderProps) {
+    const {isAuthenticated} = useAuth(); // Get authentication status
     const queryClient = useQueryClient();
     // Using any for WebSocket client since Eden WebSocket has a different interface
     const watcherRef = useRef<any>(null);
@@ -57,8 +61,20 @@ export function NotificationProvider({children}: NotificationProviderProps) {
     const reconnectAttemptsRef = useRef<number>(0);
     const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
+    // Only ask for notification permission if authenticated
+    useEffect(() => {
+        if (isAuthenticated) {
+            askNotificationPermission();
+        }
+    }, [isAuthenticated]);
+
     // Create and set up the WebSocket connection
     const setupWatcher = () => {
+        // Only proceed if authenticated
+        if (!isAuthenticated) {
+            return null;
+        }
+        
         try {
             console.log('Setting up notification watcher');
             const watcher = wsApi.notifications.subscribe();
@@ -118,6 +134,11 @@ export function NotificationProvider({children}: NotificationProviderProps) {
 
     // Reconnect with exponential backoff
     const reconnectWatcher = () => {
+        // Only proceed if authenticated
+        if (!isAuthenticated) {
+            return;
+        }
+        
         if (watcherRef.current) {
             try {
                 watcherRef.current.close();
@@ -145,13 +166,18 @@ export function NotificationProvider({children}: NotificationProviderProps) {
 
     // Initial setup
     useEffect(() => {
+        // Only set up the watcher if authenticated
+        if (!isAuthenticated) {
+            return () => {}; // Return empty cleanup function
+        }
+        
         // Initialize the watcher
         setupWatcher();
         
         // Periodic health check
         const healthInterval = setInterval(() => {
-            // Skip checks if no watcher exists yet
-            if (!watcherRef.current) return;
+            // Skip checks if not authenticated or no watcher exists
+            if (!isAuthenticated || !watcherRef.current) return;
             
             // Check if connection is stale (no activity for > 30 seconds)
             const now = Date.now();
@@ -186,6 +212,8 @@ export function NotificationProvider({children}: NotificationProviderProps) {
         
         // Visibility change detection
         const handleVisibilityChange = () => {
+            if (!isAuthenticated) return;
+            
             if (document.visibilityState === 'visible') {
                 // Page is now visible, verify connection health
                 const now = Date.now();
@@ -216,7 +244,7 @@ export function NotificationProvider({children}: NotificationProviderProps) {
                 watcherRef.current.close?.();
             }
         };
-    }, []); // Empty dependency array ensures this runs only once on mount
+    }, [isAuthenticated]); // Add isAuthenticated as a dependency
 
     return <>{children}</>;
 }
