@@ -1,12 +1,56 @@
+# Eigen Project Rules and Guidelines
+
+## Development Environment
 1. Please don't run terminal commands to install packages yourself. Ask me to do it (so output the command and instructions as text)
-2. I am creating a Google workspace like application
-3. I am using bun for server, and native react for client (also with bun)
-4. I am using tanstack query for data fetching and caching
-5. I am using tanstack router for routing
-6. I am using tailwindcss and shadcn ui for styling
-7. I am using drizzle for database
-8. I am using better-auth for authentication
-9. I am using typescript for type safety
-10. I am using elysia for server routes
-11. ALWAYS USE ENGLISH in all code and all texts you generate
-12. Prefer a simple and clean implementation. Keep code simple and html layout clean and simple. Use shadcn defaults.
+2. Use Bun as the JavaScript runtime for both server and client development
+3. All development should be done with TypeScript for type safety
+
+## Project Overview
+4. This is a Google Workspace-like application with multiple integrated apps (Mail, Drive, Docs, Calendar, Contacts, Space)
+5. The project follows a monorepo structure with:
+   - /apps: Contains all applications (frontend and API server)
+   - /packages: Shared libraries and UI components
+   - /packages/ui: Reusable UI components
+   - /packages/lib: Shared business logic
+   - /packages/config: Shared configuration
+
+## Technical Stack
+6. Backend: Bun + Elysia for server routes + Drizzle ORM for database
+7. Frontend: React (with Bun) + TypeScript
+8. Data Management: TanStack Query for data fetching and caching
+9. Routing: TanStack Router for type-safe routing
+10. UI: Tailwind CSS + shadcn/ui components
+11. Authentication: better-auth for user authentication and session management
+
+## Code Style & Conventions
+12. ALWAYS USE ENGLISH in all code and all texts you generate
+13. Prefer a simple and clean implementation. Keep code simple and HTML layout clean and simple
+14. Use shadcn defaults for UI components
+15. Follow established naming conventions:
+    - For routes: Use domain-based naming (e.g., mail, drive, contacts)
+    - For functions: Use camelCase and descriptive naming
+    - For components: Use PascalCase
+
+## Architecture Patterns
+16. API Routes: Group by domain in /apps/api-server/src/routes
+17. Frontend Apps: Place in separate directories under /apps
+18. Shared Logic: Extract to /packages/lib
+19. UI Components: Place reusable components in /packages/ui
+20. Authentication: All protected routes should include the auth: true property
+
+## Development Workflow
+21. Use bun scripts defined in root package.json for development:
+    - serve: Run all applications
+    - serve:[appname]: Run specific app with API server
+22. Always update types when changing database schemas
+23. Remember to invalidate queries when mutating data
+24. Create custom hooks for reusable data fetching logic
+
+## State Management
+25. Use TanStack Query for server state
+26. Use React state hooks for local UI state
+27. Use appropriate caching strategies for optimizing performance
+
+## Documentation
+28. Document complex business logic with clear comments
+29. Keep the README updated with setup instructions and project overview
