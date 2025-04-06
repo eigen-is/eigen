@@ -21,8 +21,6 @@ import {
     messageSetRead
 } from "../lib/mail/mail";
 import {type User} from "better-auth/types";
-import {getHome} from "../lib/home/home.ts";
-import type {ServerWebSocket} from "bun";
 
 // Define types for request bodies
 type CreateMailboxBody = {
@@ -190,29 +188,4 @@ export const mailRouter = new Elysia({name: "mail"})
             fileName: t.String()
         })
     })
-    .ws('/mail/watch', {
-        body: t.String(),
-        response: t.String(),
-        auth: true,
-        async open(ws) {
-            // @ts-ignore
-            const user = await ws.data.user;
-            if (!user) {
-                ws.close();
-                return;
-            }
-            (await getHome(user)).subscribe(ws as any as ServerWebSocket);
-            // we should keep the connection open
-            setInterval(() => {
-                if (ws.readyState === 1) {
-                    ws.send('ping');
-                }
-            }, 15000);
-        },
-        message: async (ws, message) => {
-            if (message === 'ping') {
-                ws.send('pong');
-            }
-        }
-    })
-;
+    ;
