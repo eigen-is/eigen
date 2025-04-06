@@ -52,5 +52,9 @@
 27. Use appropriate caching strategies for optimizing performance
 
 ## Documentation
-28. Document complex business logic with clear comments
+28. Keep code comments minimal - code should be self-documenting:
+    - DO NOT use JSDoc style comments
+    - Only add comments to explain complex business logic that isn't immediately clear
+    - Focus on making the code readable rather than relying on comments
+    - Use clear variable and function names instead of comments where possible
 29. Keep the README updated with setup instructions and project overview
