@@ -1,7 +1,7 @@
 "use client"
 
 import React, {useEffect, useRef} from 'react';
-import {mailApi} from "@workspace/lib/api";
+import {wsApi} from "@workspace/lib/api";
 import {toast} from "sonner";
 import {useQueryClient} from "@tanstack/react-query";
 import {emailKeys} from "@workspace/lib/mail";
@@ -25,7 +25,7 @@ export function NotificationProvider({children}: NotificationProviderProps) {
     const setupWatcher = () => {
         try {
             console.log('Setting up notification watcher');
-            const watcher = mailApi.watch.subscribe();
+            const watcher = wsApi.notifications.subscribe();
             watcherRef.current = watcher;
             lastActivityRef.current = Date.now();
             
