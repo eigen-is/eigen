@@ -1,5 +1,5 @@
 import Elysia from "elysia";
-import swagger from "@elysiajs/swagger";
+// import swagger from "@elysiajs/swagger";
 import cors from "@elysiajs/cors";
 import {betterAuth} from "./routes/auth";
 import {mailRouter} from "./routes/mail";
@@ -11,7 +11,7 @@ import {homeRouter} from "./routes/home.ts";
 import { wsRouter } from "./routes/ws.ts";
 
 const app = new Elysia()
-    .use(swagger())
+    // .use(swagger())
     .use(cors({
         origin: trustedOrigins,
         methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
