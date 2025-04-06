@@ -1,5 +1,6 @@
 export type EigenNotification = {
     type: string;
     title: string;
-    description: string;
+    body: string;
+    tag: string;
 }
