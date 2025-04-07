@@ -113,7 +113,7 @@ export function NotificationProvider({children}: NotificationProviderProps) {
                     reconnectWatcher();
                 }
             });
-
+            
             watcher.on('close', () => {
                 console.log('Watcher closed, reconnecting...');
                 reconnectWatcher();
