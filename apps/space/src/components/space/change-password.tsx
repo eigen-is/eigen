@@ -190,8 +190,6 @@ export function ChangePassword({onPasswordChange}: {
                         <InfoIcon className="h-4 w-4 mt-0.5 flex-shrink-0"/>
                         <p>
                             Choose a strong password and don't reuse it for other accounts.
-                            You may be signed out of your account on some devices. Learn more about where you'll stay
-                            signed in.
                         </p>
                     </div>
 
