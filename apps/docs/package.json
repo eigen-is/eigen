@@ -11,6 +11,7 @@
   },
   "dependencies": {
     "@slate-yjs/core": "^1.0.2",
+    "@slate-yjs/react": "^1.1.0",
     "@tanstack/match-sorter-utils": "^8.19.4",
     "@tanstack/react-router": "latest",
     "@tanstack/react-router-devtools": "latest",
