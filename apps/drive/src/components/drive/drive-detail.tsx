@@ -44,11 +44,10 @@ export function DriveDetail({
                     {/* Mobile back button when needed */}
                     {onBackClick && (
                         <>
-                            <Button variant="ghost" size="icon" className="h-8 w-8 mr-1" onClick={onBackClick}
-                                    title="Back">
-                                {isMobile ? <ArrowLeft className="h-4 w-4"/> : <X className="h-4 w-4"/>}
-                            </Button>
-                            <div className="h-6 w-[1px] bg-border mx-1"></div>
+                            <TooltipButton onClick={onBackClick}
+                                    tooltipText={isMobile ? "Back" : "Close"} 
+                                    icon={isMobile ? ArrowLeft : X}
+                                    />
                         </>
                     )}
                 </div>
@@ -97,7 +96,6 @@ export function DriveDetail({
                 <div className="text-sm text-muted-foreground mb-4">
                     <p>Type: {path.type}</p>
                     <p>Mime: {path.mimeType}</p>
-                    <p>ACLS: {JSON.stringify(path.acl || [])}</p>
                     {path.size && <p>Size: {path.size} bytes</p>}
                     {path.createdAt && <p>Created: {new Date(path.createdAt).toLocaleDateString()}</p>}
                 </div>
@@ -110,6 +108,7 @@ export function DriveDetail({
                         />
                     </div>
                 )}
+                <pre className="text-sm text-muted-foreground mt-4 whitespace-pre-wrap break-words overflow-hidden w-full">ACLS: {JSON.stringify(path.acl || [], null, 2)}</pre>
             </div>
         </div>
     );
