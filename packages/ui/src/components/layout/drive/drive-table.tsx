@@ -3,29 +3,14 @@ import {Table, TableBody, TableCell, TableHead, TableHeader, TableRow} from "@wo
 import {cn} from "@workspace/ui/lib/utils";
 import {ChevronLeft} from "lucide-react";
 import {formatDistanceToNow} from "date-fns";
-
-// Define the interface for a drive path item
-export interface DrivePathItem {
-    id: string;
-    name: string;
-    type: string;
-    parentId?: string;
-    ownerId: string;
-    labels: string[];
-    mimeType: string;
-    size: number;
-    thumbnail: string;
-    acl: any;
-    createdAt: Date | string;
-    updatedAt: Date | string;
-}
+import {DrivePath} from "@apps/api-server/types/drive";
 
 // Props for the DriveTable component
 export interface DriveTableProps {
-    items: DrivePathItem[];
-    currentPath?: DrivePathItem | null;
+    items: DrivePath[];
+    currentPath?: DrivePath | null;
     activeItemId?: string;
-    onItemClick?: (item: DrivePathItem) => void;
+    onItemClick?: (item: DrivePath) => void;
     getFileIcon?: (mimeType: string, type: string, props?: any) => React.ReactNode;
 }
 
