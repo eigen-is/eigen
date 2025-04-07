@@ -115,6 +115,7 @@
       "version": "0.0.1",
       "dependencies": {
         "@slate-yjs/core": "^1.0.2",
+        "@slate-yjs/react": "^1.1.0",
         "@tanstack/match-sorter-utils": "^8.19.4",
         "@tanstack/react-router": "latest",
         "@tanstack/react-router-devtools": "latest",
@@ -749,6 +750,8 @@
     "@sinclair/typebox": ["@sinclair/typebox@0.34.31", "", {}, "sha512-qQ71T9DsITbX3dVCrcBERbs11YuSMg3wZPnT472JhqhWGPdiLgyvihJXU8m+ADJtJvRdjATIiACJD22dEknBrQ=="],
 
     "@slate-yjs/core": ["@slate-yjs/core@1.0.2", "", { "dependencies": { "y-protocols": "^1.0.5" }, "peerDependencies": { "slate": ">=0.70.0", "yjs": "^13.5.29" } }, "sha512-X0hLFJbQu9c1ItWBaNuEn0pqcXYK76KCp8C4Gvy/VaTQVMo1VgAb2WiiJ0Je/AyuIYEPPSTNVOcyrGHwgA7e6Q=="],
+
+    "@slate-yjs/react": ["@slate-yjs/react@1.1.0", "", { "dependencies": { "use-sync-external-store": "^1.2.0", "y-protocols": "^1.0.5" }, "peerDependencies": { "@slate-yjs/core": "^1.0.0", "react": ">=16.8.0", "slate": ">=0.70.0", "slate-react": ">=0.70.0", "yjs": "^13.5.29" } }, "sha512-lGpEJLwThMPVZ+beqsoBowwBO2egu7K8ow+TOM4k2Liz9/dD1H9/ZNrdfZkPVSYT9NmgFm4dYc187t5GC4Wd6g=="],
 
     "@standard-schema/utils": ["@standard-schema/utils@0.3.0", "", {}, "sha512-e7Mew686owMaPJVNNLs55PUvgz371nKgwsc4vxE49zsODpJEnxgxRo2y/OKrqueavXgZNMDVj3DdHFlaSAeU8g=="],
 

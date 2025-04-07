@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { createEditor, Editor, Transforms } from 'slate'
 import { Editable, Slate, withReact } from 'slate-react'
-import { withYjs, YjsEditor } from '@slate-yjs/core'
+import { withCursors, withYjs, YjsEditor } from '@slate-yjs/core'
 import * as Y from 'yjs'
 import { WebsocketProvider } from 'y-websocket'
+import { Cursors } from './cursors'
+import { useAuth } from '@workspace/lib/auth/auth-context.js'
 
 const initialValue = [
     {
@@ -54,8 +56,16 @@ export const CollaborativeEditor = () => {
 }
 
 const SlateEditor = ({ sharedType, provider }: { sharedType: Y.XmlText | null; provider: WebsocketProvider | null }) => {
+  const auth = useAuth();
+
   const editor = useMemo(() => {
-    const e = withReact(withYjs(createEditor(), sharedType!))
+    const e = withReact(withCursors(withYjs(createEditor(), sharedType!), provider!.awareness, {
+      // The current user's name and color
+      data: {
+        name: auth.user?.name,
+        color: '#660044',
+      },
+    }));
 
     // Ensure editor always has at least 1 valid child
     const { normalizeNode } = e
@@ -79,7 +89,9 @@ const SlateEditor = ({ sharedType, provider }: { sharedType: Y.XmlText | null; p
 
   return (
     <Slate editor={editor} initialValue={initialValue}>
-      <Editable />
+      <Cursors>
+        <Editable />
+      </Cursors>
     </Slate>
   )
 }
