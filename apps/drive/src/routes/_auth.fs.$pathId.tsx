@@ -6,7 +6,8 @@ import {
     useCreateFolder,
     useDeleteFile,
     useDeleteFolder,
-    useFolderContent, useInvalidateFolder,
+    useFolderContent,
+    useInvalidateFolder,
     useMediaQuery,
     usePathInfo,
     useRootFolder
@@ -17,12 +18,11 @@ import {Input} from "@workspace/ui/components/input";
 import {Label} from "@workspace/ui/components/label";
 import {Button} from "@workspace/ui/components/button";
 import {EigenLoader} from "@workspace/ui";
-import {useUpload} from "@workspace/ui/components/layout/upload-provider/upload-provider";
-import {uploadWithProgress} from "@workspace/ui/components/layout/upload-provider/upload-with-progress";
 import {DrivePath} from "@apps/api-server/types/drive";
 import {DeleteDialog} from "@workspace/ui/components/layout/delete/delete-dialog";
 import {invalidateHomeSize} from "@workspace/lib/home";
 import {useQueryClient} from "@tanstack/react-query";
+import {useFileUpload} from "@workspace/ui/components/layout/drive/file-upload";
 
 // Define search params type
 export interface DriveSearchParams {
@@ -60,8 +60,23 @@ function DriveRoute() {
     const deleteFileMutation = useDeleteFile();
     const deleteFolderMutation = useDeleteFolder();
     const invalidateFolder = useInvalidateFolder();
-    const upload = useUpload();
-    const fileInputRef = useRef<HTMLInputElement>(null);
+    const queryClient = useQueryClient();
+
+    // Use the file upload hook
+    const { fileInputRef, handleFileUpload, processFiles, handleFileChange } = useFileUpload(
+        pathId,
+        {
+            onSuccess: (result) => {
+                // Invalidate queries after successful upload
+                invalidateFolder(pathId);
+                invalidateHomeSize(queryClient);
+                toast(`File "${result.fileName}" uploaded successfully`);
+            },
+            onError: (result) => {
+                toast.error(`Failed to upload "${result.fileName}"`);
+            }
+        }
+    );
 
     // Folder creation state and handlers
     const [createFolderOpen, setCreateFolderOpen] = useState(false);
@@ -74,7 +89,7 @@ function DriveRoute() {
 
     // Don't fetch data until we have the actual root folder ID (not "root")
     const skipDataFetch = pathId === 'root';
-    const queryClient = useQueryClient();
+    
 
     const {
         data: folderContents = [],
@@ -119,84 +134,8 @@ function DriveRoute() {
         setCreateFolderOpen(true);
     };
 
-    // Function to handle file upload
-    const handleFileUpload = () => {
-        if (fileInputRef.current) {
-            fileInputRef.current.click();
-        }
-    };
-
-    // Common function to process uploads for multiple files
-    const processFiles = async (files: File[]) => {
-        if (files.length === 0) return;
-        
-        const multipleFiles = files.length > 1;
-        const url = multipleFiles ?
-            `${import.meta.env.VITE_API_HOST}/drive/files/${pathId}` :
-            `${import.meta.env.VITE_API_HOST}/drive/file/${pathId}`;
-
-            const name = multipleFiles ? ' multiple files' : files[0].name;
-            const uploadHandler = upload.createUpload(name);
-
-            try {
-                // Create a FormData object for this file
-                const formData = new FormData();
-                if (multipleFiles) {
-                    for (const file of files) {
-                        formData.append('files', file);
-                    }
-                } else {
-                    formData.append('file', files[0]);
-                }
-                
-                // Use the uploadWithProgress helper with authentication
-                await uploadWithProgress({
-                    url,
-                    formData,
-                    headers: {
-                        'credentials': 'include'
-                    },
-                    onProgress: (progress: number) => {
-                        // Update the progress in the UI for this specific file
-                        uploadHandler.updateProgress(progress);
-                    },
-                    onSuccess: async () => {
-                        // Mark upload as complete
-                        uploadHandler.complete();
-                        
-                        // invalidate the folder contents query to refresh the list
-                        invalidateFolder(pathId);
-                        invalidateHomeSize(queryClient);
-                        
-                        return { success: true, fileName: name };
-                    },
-                    onError: (err) => {
-                        // Mark upload as failed
-                        uploadHandler.error();
-                        return { success: false, fileName: name, error: err };
-                    }
-                });
-            } catch (err: any) {
-                uploadHandler.error();
-                return { success: false, fileName: name, error: err };
-            }
-    };
-
-    // Function to process the selected files
-    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const files = e.target.files;
-        if (!files || files.length === 0) return;
-        
-        // Use the common processFiles function
-        await processFiles(Array.from(files));
-        
-        // Clean up the file input value so the same files can be selected again if needed
-        e.target.value = '';
-    };
-
     // Handle row click to show path details
     const handleRowClick = (path: DrivePath) => {
-        // navigateToPath(pathId, { pid: itemId });
         console.log(path.id);
         if (path.type === 'folder') {
             navigate({
@@ -297,11 +236,11 @@ function DriveRoute() {
         </DialogContent>
     </Dialog>;
 
-    // On mobile: Show full-width path list / detail
-    if (isMobile) {
-        return (
-            <>
-                {selectedPath ? (
+    // Desktop/Tablet: Two-column layout if detailpath is selected (sidebar already handled in _auth.tsx)
+    return (
+        <>
+            {isMobile ? (
+                selectedPath ? (
                     <div className="flex-1 h-full w-full">
                         <DriveDetail
                             path={selectedPath}
@@ -325,65 +264,39 @@ function DriveRoute() {
                             currentPath={currentPath}
                         />
                     </div>
-                )}
-
-                {/* Create Folder Dialog */}
-                {CreateFolderDialog()}
-
-                {/* Hidden file input element */}
-                <input
-                    ref={fileInputRef}
-                    type="file"
-                    multiple
-                    className="hidden"
-                    onChange={handleFileChange}
-                />
-
-                {/* Delete Confirmation Dialog */}
-                <DeleteDialog
-                    open={deleteDialogOpen}
-                    onOpenChange={setDeleteDialogOpen}
-                    title="Delete Item"
-                    description="Are you sure you want to delete"
-                    itemName={itemToDelete?.name}
-                    onDelete={confirmDelete}
-                />
-            </>
-        );
-    }
-
-    // Desktop/Tablet: Two-column layout if detailpath is selected (sidebar already handled in _auth.tsx)
-    return (
-        <>
-            <div className="flex h-full w-full">
-                {/* Path list column */}
-                <div className={`${selectedPath ? 'w-2/3' : 'w-full'} h-full overflow-hidden border-r`}>
-                    <DriveList
-                        items={folderContents}
-                        isLoading={isFolderContentLoading}
-                        error={isFolderContentLoadingError}
-                        onRowClick={handleRowClick}
-                        activeRowId={pid}
-                        onCreateFolder={openCreateFolderDialog}
-                        onUploadFile={handleFileUpload}
-                        onUploadFiles={processFiles}
-                        currentPath={currentPath}
-                        onDelete={handleDeletePath}
-                    />
-                </div>
-
-                {selectedPath && (
-                    <div className="flex-1 h-full overflow-hidden">
-                        <div className="h-full">
-                            <DriveDetail
-                                path={selectedPath}
-                                className="border-none h-full"
+                )
+            ) : (
+                <>
+                    <div className="flex h-full w-full">
+                        {/* Path list column */}
+                        <div className={`${pid ? 'w-2/3' : 'w-full'} h-full overflow-hidden border-r`}>
+                            <DriveList
+                                items={folderContents}
+                                isLoading={isFolderContentLoading}
+                                error={isFolderContentLoadingError}
+                                onRowClick={handleRowClick}
+                                activeRowId={pid}
+                                onCreateFolder={openCreateFolderDialog}
+                                onUploadFile={handleFileUpload}
+                                onUploadFiles={processFiles}
+                                currentPath={currentPath}
                                 onDelete={handleDeletePath}
                             />
                         </div>
+                        {pid && (
+                            <div className="flex-1 h-full overflow-hidden">
+                                <div className="h-full">
+                                    <DriveDetail
+                                        path={selectedPath}
+                                        className="border-none h-full"
+                                        onDelete={handleDeletePath}
+                                    />
+                                </div>
+                            </div>
+                        )}
                     </div>
-                )}
-            </div>
+                </>
+            )}
 
             {/* Create Folder Dialog */}
             {CreateFolderDialog()}
