@@ -384,6 +384,9 @@ export default class Drive {
             throw new Error("No read permission");
         }
 
+        // get permissions for folder
+        const parentACL = await this.getACL(pathId);
+
         // Get contents from database
         const results = await this.db.select().from(drivePaths)
             .where(eq(drivePaths.parentId, pathId))
@@ -400,7 +403,7 @@ export default class Drive {
             thumbnail: result.thumbnail || '',
             labels: [], // We would need to fetch labels separately
             mimeType: result.mimeType,
-            acl: result.acl ?? null,
+            acl: result.acl ?? parentACL,
             createdAt: new Date(result.createdAt || ''),
             updatedAt: new Date(result.updatedAt || '')
         }));
@@ -473,7 +476,7 @@ export default class Drive {
             mimeType: result.mimeType,
             size: result.size ?? 0,
             thumbnail: result.thumbnail || '',
-            acl: result.acl ?? null,
+            acl: result.acl ?? this.getACL(pathId),
             createdAt: new Date(result.createdAt || ''),
             updatedAt: new Date(result.updatedAt || '')
         };
@@ -503,6 +506,21 @@ export default class Drive {
                 updatedAt: new Date()
             })
             .where(eq(drivePaths.id, pathId));
+    }
+
+    public getACL(pathId: string): DriveACL[] | null {
+        const item = this.db.select().from(drivePaths)
+            .where(eq(drivePaths.id, pathId))
+            .get();
+        if (!item) {
+            return null;
+        }
+        return item.acl ?? (item.parentId ? this.getACL(item.parentId) : [{
+            userId: item.ownerId,
+            read: true,
+            write: true,
+            public: false
+        }]);
     }
 
     /**

@@ -1,0 +1,18 @@
+.cursors {
+  position: relative;
+}
+
+.caretMarker {
+  position: absolute;
+  width: 2px;
+}
+
+.caret {
+  position: absolute;
+}
+
+.selection {
+  position: absolute;
+  pointer-events: none;
+  opacity: 0.2;
+}

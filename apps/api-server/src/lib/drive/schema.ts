@@ -9,7 +9,7 @@ import type {DriveACL} from '../../types/drive';
 export const drivePaths = sqliteTable('drive_paths', {
     id: text('id').primaryKey(),
     name: text('name').notNull(),
-    type: text('type').notNull().$type<"folder" | "file" | "eigendocs">(),
+    type: text('type').notNull().$type<"folder" | "file" | "eigendocs" | "eigennotes">(),
     parentId: text('parentId'),  // We'll reference this in the relations
     ownerId: text('ownerId').notNull(),
     mimeType: text('mimeType').notNull(),
