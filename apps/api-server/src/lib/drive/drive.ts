@@ -639,7 +639,7 @@ export default class Drive {
             const image = sharp(this.home.fs.absolutePath(filePath));
             const {width, height} = await image.metadata();
             console.log("Image dimensions", width, height);
-            if (!width || !height || width > 6000 || height > 6000) {
+            if (!width || !height || width > 12000 || height >12000) {
                 return null;
             }
 

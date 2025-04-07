@@ -93,7 +93,7 @@ export function DriveDetail({
             </div>
 
             <div className="p-4 flex-1 overflow-auto">
-                <h2 className="text-xl font-medium mb-2">{path.name}</h2>
+                <h2 className="text-xl font-medium mb-2 truncate overflow-hidden">{path.name}</h2>
                 <div className="text-sm text-muted-foreground mb-4">
                     <p>Type: {path.type}</p>
                     <p>Mime: {path.mimeType}</p>
