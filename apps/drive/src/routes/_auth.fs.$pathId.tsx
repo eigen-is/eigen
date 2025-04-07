@@ -290,6 +290,7 @@ function DriveRoute() {
                                         path={selectedPath}
                                         className="border-none h-full"
                                         onDelete={handleDeletePath}
+                                        onBackClick={handleBackToList}
                                     />
                                 </div>
                             </div>

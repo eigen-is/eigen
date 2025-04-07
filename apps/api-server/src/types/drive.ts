@@ -8,7 +8,7 @@ export type DriveACL = {
 export type DrivePath = {
     id: string;
     name: string;
-    type: "folder" | "file" | "eigendocs";
+    type: "folder" | "file" | "eigendocs" | "eigennotes";
     parentId?: string;
     ownerId: string;
     labels: string[];
