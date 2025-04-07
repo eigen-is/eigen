@@ -1,6 +1,6 @@
-import {Session, User} from "better-auth/types";
+import {type Session, type User} from "better-auth/types";
 import {auth} from "../lib/auth/auth";
-import {Context} from "elysia";
+import {type Context} from "elysia";
 
 export const userMiddleware = async (c: Context) => {
     const session = await auth.api.getSession({headers: c.request.headers});

@@ -10,6 +10,7 @@
     "start": "vite"
   },
   "dependencies": {
+    "@slate-yjs/core": "^1.0.2",
     "@tanstack/match-sorter-utils": "^8.19.4",
     "@tanstack/react-router": "latest",
     "@tanstack/react-router-devtools": "latest",
@@ -20,8 +21,14 @@
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "shadcn-ui": "^0.9.5",
+    "slate": "^0.112.0",
+    "slate-history": "^0.110.3",
+    "slate-react": "^0.112.1",
+    "slate-yjs": "^3.2.0",
     "tailwind-merge": "^3.0.2",
-    "tailwindcss-animate": "^1.0.7"
+    "tailwindcss-animate": "^1.0.7",
+    "y-websocket": "^3.0.0",
+    "yjs": "^13.6.24"
   },
   "devDependencies": {
     "@workspace/config": "workspace:*",

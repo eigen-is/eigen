@@ -9,6 +9,7 @@ import {spaceRouter} from "./routes/space";
 import {driveRouter} from "./routes/drive.ts";
 import {homeRouter} from "./routes/home.ts";
 import { wsRouter } from "./routes/ws.ts";
+import {collabRouter} from "./routes/collab";
 
 const app = new Elysia()
     .use(swagger())
@@ -27,6 +28,7 @@ const app = new Elysia()
     .use(driveRouter)
     .use(homeRouter)
     .use(wsRouter)
+    .use(collabRouter)
     .listen(8000);
 
 export type app = typeof app;

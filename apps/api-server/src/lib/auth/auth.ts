@@ -11,6 +11,7 @@ export const trustedOrigins = [
     "http://localhost:3003",
     "http://localhost:3004",
     "http://localhost:3005",
+    "http://localhost:3006",
     "https://eigen.is"];
 
 export const auth = betterAuth({
