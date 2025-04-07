@@ -11,3 +11,5 @@ export * from './components/layout/app-logo';
 export * from './components/layout/user-item';
 export * from './components/layout/drive';
 export * from './components/layout/home/usage';
+export * from './components/layout/contacts';
+
