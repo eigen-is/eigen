@@ -8,6 +8,7 @@ import {
 } from "@workspace/ui/components/dropdown-menu";
 import {Button} from "@workspace/ui/components/button";
 import {TooltipButton} from "@workspace/ui";
+import {EigenLoader} from "@workspace/ui";
 
 interface DriveDetailProps {
     path: any | null;
@@ -25,11 +26,11 @@ export function DriveDetail({
                                 onDelete,
                                 ...props
                             }: DriveDetailProps) {
+
     if (!path) {
-        console.log('No email provided to EmailDetail component');
         return (
-            <div className="flex h-full items-center justify-center text-muted-foreground">
-                Path data not available
+            <div className="flex h-full items-center justify-center">
+                <EigenLoader />
             </div>
         );
     }

@@ -101,7 +101,7 @@ export const driveRouter = new Elysia({name: "drive"})
         auth: true,
         body: t.Object({
             file: t.File({
-                maxSize: 10 * 1024 * 1024  // 5MB maximum file size
+                maxSize: 35 * 1024 * 1024  // 35MB maximum file size
             })
         })
     })

@@ -328,40 +328,24 @@ function DriveRoute() {
                     </div>
                 )
             ) : (
-                !selectedPath ? (
-                    <div className="flex-1 h-full w-full">
-                        <DriveList
-                            items={folderContents}
-                            isLoading={isFolderContentLoading}
-                            error={isFolderContentLoadingError}
-                            onRowClick={handleRowClick}
-                            activeRowId={pid}
-                            onCreateFolder={openCreateFolderDialog}
-                            onUploadFile={handleFileUpload}
-                            onUploadFiles={processFiles}
-                            onDelete={handleDeletePath}
-                            currentPath={currentPath}
-                        />
-                    </div>
-                ) : (
-                    <>
-                        <div className="flex h-full w-full">
-                            {/* Path list column */}
-                            <div className={`${selectedPath ? 'w-2/3' : 'w-full'} h-full overflow-hidden border-r`}>
-                                <DriveList
-                                    items={folderContents}
-                                    isLoading={isFolderContentLoading}
-                                    error={isFolderContentLoadingError}
-                                    onRowClick={handleRowClick}
-                                    activeRowId={pid}
-                                    onCreateFolder={openCreateFolderDialog}
-                                    onUploadFile={handleFileUpload}
-                                    onUploadFiles={processFiles}
-                                    currentPath={currentPath}
-                                    onDelete={handleDeletePath}
-                                />
-                            </div>
-
+                <>
+                    <div className="flex h-full w-full">
+                        {/* Path list column */}
+                        <div className={`${pid ? 'w-2/3' : 'w-full'} h-full overflow-hidden border-r`}>
+                            <DriveList
+                                items={folderContents}
+                                isLoading={isFolderContentLoading}
+                                error={isFolderContentLoadingError}
+                                onRowClick={handleRowClick}
+                                activeRowId={pid}
+                                onCreateFolder={openCreateFolderDialog}
+                                onUploadFile={handleFileUpload}
+                                onUploadFiles={processFiles}
+                                currentPath={currentPath}
+                                onDelete={handleDeletePath}
+                            />
+                        </div>
+                        {pid && (
                             <div className="flex-1 h-full overflow-hidden">
                                 <div className="h-full">
                                     <DriveDetail
@@ -371,9 +355,9 @@ function DriveRoute() {
                                     />
                                 </div>
                             </div>
-                        </div>
-                    </>
-                )
+                        )}
+                    </div>
+                </>
             )}
 
             {/* Create Folder Dialog */}
