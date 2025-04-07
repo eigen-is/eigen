@@ -5,6 +5,7 @@ import {EmailDraft as EmailDraftType} from "@apps/api-server/types/mail";
 import {TooltipButton} from "@workspace/ui";
 import {Input} from "@workspace/ui/components/input";
 import {Textarea} from "@workspace/ui/components/textarea";
+import {ContactAutosuggest} from '@workspace/ui';
 import {useEffect, useMemo, useRef, useState} from "react";
 import {toast} from "sonner";
 import {createDraftEmail} from "@workspace/lib/mail";
@@ -227,12 +228,18 @@ export function EmailDraft({
                         {/* To field */}
                         <div className="flex items-center border-b">
                             <div className="w-16 text-sm text-muted-foreground py-2">To:</div>
-                            <Input
-                                id="to"
-                                ref={toFieldRef}
-                                defaultValue={email.to?.text || ""}
-                                className="bg-transparent border-none focus-visible:ring-0 py-2 px-0 h-auto"
+                            <ContactAutosuggest
+                                initialValue={email.to?.text || ""}
+                                onChange={() => {
+                                    // We halen de waarde op via de ref bij het verzenden
+                                }}
+                                appendMode={true}
+                                className="flex-1"
+                                inputClassName="bg-transparent border-none focus-visible:ring-0 py-2 px-0 h-auto"
+                                inputRef={toFieldRef}
                                 disabled={isSending}
+                                autoComplete="off"
+                                id="to"
                             />
                         </div>
 
