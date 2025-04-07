@@ -23,7 +23,7 @@ export const CollaborativeEditor = () => {
     const sharedDoc = yDoc.get('slate', Y.XmlText)
 
     // Build WebSocket URL
-    const wsUrl = `ws://localhost:8000/ws/collab/userid/`
+    const wsUrl = `${import.meta.env.VITE_API_HOST}/ws/collab/userid/`
     const documentId = 'foo'
 
     // Create WebSocket provider
