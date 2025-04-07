@@ -67,7 +67,7 @@ export function DriveTable({
                     {/* Parent folder navigation row */}
                     {currentPath?.parentId && (
                         <TableRow
-                            className="cursor-pointer hover:bg-muted/50"
+                            className="eigen-list-item"
                             onClick={() => onItemClick?.({
                                 id: currentPath.parentId || '',
                                 name: '..',

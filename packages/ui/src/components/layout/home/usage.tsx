@@ -2,6 +2,7 @@ import {useState} from "react";
 import {Progress} from "@workspace/ui/components/progress";
 import {useHomeSize} from "@workspace/lib/home";
 import {EigenLoader} from "@workspace/ui";
+import {cn} from "@workspace/ui/lib/utils";
 
 // Type definition for storage data
 export interface StorageData {
@@ -33,8 +34,8 @@ export function StorageUsage({className = ""}: StorageUsageProps) {
     };
 
     return (
-        <div className={`p-3 ${className}`}>
-            <div className="cursor-pointer" onClick={() => setShowDetails(!showDetails)}>
+        <div className={cn(`p-3 select-none cursor-pointer`, className)}  onClick={() => setShowDetails(!showDetails)}>
+            <div>
                 <div className="flex justify-between items-center mb-1">
                     <span className="text-xs font-medium text-muted-foreground">Storage</span>
                     <span className="text-xs text-muted-foreground">
