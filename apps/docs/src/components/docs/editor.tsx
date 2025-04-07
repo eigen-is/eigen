@@ -63,6 +63,7 @@ const SlateEditor = ({ sharedType, provider }: { sharedType: Y.XmlText | null; p
       // The current user's name and color
       data: {
         name: auth.user?.name,
+        email: auth.user?.email,
         color: '#660044',
       },
     }));
