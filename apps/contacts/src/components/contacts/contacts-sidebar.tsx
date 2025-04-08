@@ -138,6 +138,7 @@ export function ContactsSidebar({condensed = false, onClose, isMobile = false}: 
             {/* Storage usage indicator at the bottom of sidebar */}
             <StorageUsage
                 className="mt-auto"
+                condensed={condensed}
             />
         </div>
     );
