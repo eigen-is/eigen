@@ -56,7 +56,7 @@ export function SpaceSidebar({
                  <SidebarItem
                     icon={<KeySquare className="h-4 w-4"/>}
                     label="Two factor authentication"
-                    to='/security/fa2' params={{}}/>
+                    to='/security/2fa' params={{}}/>
                 {/*SidebarItem
                     icon={<Smartphone className="h-4 w-4"/>}
                     label="Recovery codes"
