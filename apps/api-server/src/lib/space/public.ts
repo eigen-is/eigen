@@ -1,21 +1,22 @@
+import type { PublicUser } from "../../types/public";
 import {getHome} from "../home/home";
 import {getUserByEmail, getUserById} from "../users/users";
 
-export async function getPublicInfo(mailOrId: string) {
+export async function getPublicInfo(mailOrId: string) : Promise<PublicUser | null>  {
     // detect if mail or id?
     const isMail = mailOrId.includes('@');
     const user = await (isMail ? getUserByEmail(mailOrId) : getUserById(mailOrId));
-    let image = user?.image || false;
-    if (user && image) {
+    let avatar = user?.image || false;
+    if (user && avatar) {
         // get filename from path
-        const filename = image.split('/').pop();
-        image = `space/avatar/${user.id}/${filename}`;
+        const filename = avatar.split('/').pop();
+        avatar = `space/avatar/${user.id}/${filename}`;
     }
-    return {
+    return user ? {
         name: user?.name,
         email: user?.email,
-        image: image || null,
-    };
+        avatar: avatar || undefined,
+    } : null;
 }
 
 export async function getAvatar(userId: string, filename: string) {

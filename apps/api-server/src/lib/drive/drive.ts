@@ -515,12 +515,7 @@ export default class Drive {
         if (!item) {
             return null;
         }
-        return item.acl ?? (item.parentId ? this.getACL(item.parentId) : [{
-            userId: item.ownerId,
-            read: true,
-            write: true,
-            public: false
-        }]);
+        return item.acl ?? (item.parentId ? this.getACL(item.parentId) : null);
     }
 
     /**
@@ -543,7 +538,7 @@ export default class Drive {
 
         // Check ACL
         if (item.acl && item.acl.length > 0) {
-            const userAcl = item.acl.find(a => a.userId === user.id);
+            const userAcl = item.acl.find(a => a.email === user.email);
             if (userAcl) {
                 return userAcl.read || userAcl.public;
             }
@@ -584,7 +579,7 @@ export default class Drive {
 
         // Check ACL
         if (item.acl && item.acl.length > 0) {
-            const userAcl = item.acl.find(a => a.userId === user.id);
+            const userAcl = item.acl.find(a => a.email === user.email);
             if (userAcl) {
                 return userAcl.write;
             }
