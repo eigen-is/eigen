@@ -11,8 +11,9 @@ import { InfoIcon } from "lucide-react"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@workspace/ui/components/card"
 import { authClient } from "@workspace/lib/auth"
 import { toast } from "sonner"
-import { useNavigate, useRouter } from "@tanstack/react-router"
+import { redirect, useNavigate, useRouter } from "@tanstack/react-router"
 import { Checkbox } from "@workspace/ui/components/checkbox"
+import { unescape } from "querystring"
 
 // Define form schema with validation
 const formSchema = z.object({
@@ -52,8 +53,8 @@ export function LoginFa2Form() {
         // Wait a short time before navigating to give the toast time to show
         await new Promise(resolve => setTimeout(resolve, 350))
         
-        await router.invalidate();
-
+        // TODO: Reinder, dit moet misschien anders
+        window.location.reload();
       } else {
         toast.error(result.error?.message || "Invalid verification code")
       }
@@ -62,7 +63,6 @@ export function LoginFa2Form() {
       toast.error(error?.message || "Verification failed")
     } finally {
       setIsLoading(false)
-      
     }
   }
 
@@ -158,7 +158,7 @@ export default function LoginFa2Page() {
             Your account is protected with two-factor authentication
           </p>
         </div>
-        <LoginFa2Form />
+        <LoginFa2Form  />
       </div>
     </div>
   );

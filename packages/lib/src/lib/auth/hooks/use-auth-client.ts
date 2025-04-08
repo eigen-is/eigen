@@ -21,7 +21,7 @@ export const authClient = createAuthClient({
             onTwoFactorRedirect() {
                 // TODO: Reinder: ik snap dit niet
                 // window.location.href = import.meta.env.VITE_APP_SPACE_URL + '/login-fa2' + location.search;
-                history.replaceState(null, '', import.meta.env.VITE_APP_SPACE_URL + '/login-fa2' + location.search);
+                history.replaceState(null, '', import.meta.env.VITE_APP_SPACE_URL + '/login-2fa' + location.search);
             }
         }),
         adminClient(),
