@@ -407,6 +407,8 @@ export default class Maildir {
                 subject: email.subject || '',
                 from: email.from || undefined,
                 to: email.to || undefined,
+                cc: email.cc || undefined,
+                bcc: email.bcc || undefined,
                 fromShort: (email.from?.value[0]?.name || email.from?.value[0]?.address || 'Unknown'),
                 textShort: email.text || '',
                 date: new Date(),
