@@ -90,7 +90,6 @@ function DriveRoute() {
     // Don't fetch data until we have the actual root folder ID (not "root")
     const skipDataFetch = pathId === 'root';
     
-
     const {
         data: folderContents = [],
         isLoading: isFolderContentLoading,
@@ -240,10 +239,10 @@ function DriveRoute() {
     return (
         <>
             {isMobile ? (
-                selectedPath ? (
+                (selectedPath || currentPath?.type !== 'folder') ? (
                     <div className="flex-1 h-full w-full">
                         <DriveDetail
-                            path={selectedPath}
+                            path={selectedPath || currentPath}
                             isMobile={true}
                             onBackClick={handleBackToList}
                             onDelete={handleDeletePath}
@@ -269,11 +268,12 @@ function DriveRoute() {
                 <>
                     <div className="flex h-full w-full">
                         {/* Path list column */}
-                        <div className={`${pid ? 'w-2/3' : 'w-full'} h-full overflow-hidden border-r`}>
-                            <DriveList
-                                items={folderContents}
-                                isLoading={isFolderContentLoading}
-                                error={isFolderContentLoadingError}
+                        {currentPath?.type === 'folder' && (
+                            <div className={`${pid ? 'w-2/3' : 'w-full'} h-full overflow-hidden border-r`}>
+                                <DriveList
+                                    items={folderContents}
+                                    isLoading={isFolderContentLoading}
+                                    error={isFolderContentLoadingError}
                                 onRowClick={handleRowClick}
                                 activeRowId={pid}
                                 onCreateFolder={openCreateFolderDialog}
@@ -282,12 +282,12 @@ function DriveRoute() {
                                 currentPath={currentPath}
                                 onDelete={handleDeletePath}
                             />
-                        </div>
-                        {pid && (
+                        </div>)}
+                        {(pid || currentPath?.type !== 'folder') && (
                             <div className="flex-1 h-full overflow-hidden">
                                 <div className="h-full">
                                     <DriveDetail
-                                        path={selectedPath}
+                                        path={selectedPath || currentPath}
                                         className="border-none h-full"
                                         onDelete={handleDeletePath}
                                         onBackClick={handleBackToList}
