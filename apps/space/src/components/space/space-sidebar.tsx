@@ -1,4 +1,4 @@
-import {BookUser, CircleUser, LockKeyholeIcon, X} from 'lucide-react';
+import {BookUser, KeySquare, CircleUser, LockKeyholeIcon, X} from 'lucide-react';
 import {Button} from "@workspace/ui/components/button";
 import {SidebarSection} from '@workspace/ui/components/layout/sidebar/sidebar-section';
 import {AppLogo} from '@workspace/ui/components/layout/app-logo';
@@ -53,11 +53,11 @@ export function SpaceSidebar({
                     label="Change password"
                     condensed={condensed}
                     to='/security/password' params={{}}/>
-                {/* <SidebarItem
+                 <SidebarItem
                     icon={<KeySquare className="h-4 w-4"/>}
                     label="Two factor authentication"
                     to='/security/fa2' params={{}}/>
-                <SidebarItem
+                {/*SidebarItem
                     icon={<Smartphone className="h-4 w-4"/>}
                     label="Recovery codes"
                     to='/security/recovery-codes' params={{}}/> */}
