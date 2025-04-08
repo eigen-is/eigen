@@ -18,12 +18,12 @@ export function DriveAccessDialog({
   acl,
 }: DriveAccessDialogProps) {
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const updateACL = useUpdateACL();
+  const updateACL = useUpdateACL(path!.ownerId);
 
   // Handler for when save is clicked in the access list edit component
   const handleSave = async (updatedAcl: DriveACL[]) => {
     setIsSubmitting(true)
-    await updateACL.mutateAsync({pathId: path!.id, acl: updatedAcl});
+    await updateACL.mutateAsync({pathId: path!.id, acl: updatedAcl, parentPathId: path!.parentId || null});
     onOpenChange(false);
     setIsSubmitting(false);
   }

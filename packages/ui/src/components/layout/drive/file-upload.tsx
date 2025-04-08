@@ -19,7 +19,7 @@ export interface FileUploadOptions {
 }
 
 // Custom hook for file upload functionality
-export function useFileUpload(folderId: string, options: FileUploadOptions = {}) {
+export function useFileUpload(ownerId: string, folderId: string, options: FileUploadOptions = {}) {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const upload = useUpload();
 
@@ -38,8 +38,8 @@ export function useFileUpload(folderId: string, options: FileUploadOptions = {})
     
     // Use custom URLs if provided, otherwise use default URLs
     const url = multipleFiles 
-      ? (options.multipleFilesUrl || `${import.meta.env.VITE_API_HOST}/drive/files/${folderId}`)
-      : (options.singleFileUrl || `${import.meta.env.VITE_API_HOST}/drive/file/${folderId}`);
+      ? (options.multipleFilesUrl || `${import.meta.env.VITE_API_HOST}/drive/files/${ownerId}/${folderId}`)
+      : (options.singleFileUrl || `${import.meta.env.VITE_API_HOST}/drive/file/${ownerId}/${folderId}`);
 
     const name = multipleFiles ? 'multiple files' : files[0].name;
     const uploadHandler = upload.createUpload(name);
