@@ -80,7 +80,7 @@ function MailRoute() {
     }
 
     const handleSendEmail = async (mail: EmailDraftType) => {
-        console.log('send email', mail.id)
+        console.log('send email', mail.id, mail)
         await sendDraft.mutateAsync(mail);
         toast.success("Email sent");
         navigate({
