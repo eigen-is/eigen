@@ -76,7 +76,7 @@ export function DriveDetail({
                         tooltipText="Download"
                         onClick={() => {
                             if (path && path.id) {
-                                const downloadUrl = `${import.meta.env.VITE_API_HOST}/drive/download/${path.id}`;
+                                const downloadUrl = `${import.meta.env.VITE_API_HOST}/drive/download/${path.ownerId}/${path.id}`;
                                 // Create a temporary anchor element to trigger the download
                                 const a = document.createElement('a');
                                 a.href = downloadUrl;
@@ -106,7 +106,6 @@ export function DriveDetail({
             <div className="p-4 flex-1 overflow-auto">
                 <h2 className="text-xl font-medium mb-2 truncate overflow-hidden">{path.name}</h2>
                 <div className="text-sm text-muted-foreground mb-4">
-                    <p>Type: {path.type}</p>
                     <p>Mime: {path.mimeType}</p>
                     {path.size && <p>Size: {path.size} bytes</p>}
                     {path.createdAt && <p>Created: {new Date(path.createdAt).toLocaleDateString()}</p>}
@@ -114,7 +113,7 @@ export function DriveDetail({
                 {path.thumbnail && (
                     <div className="mt-4">
                         <img
-                            src={`${import.meta.env.VITE_API_HOST}/drive/thumb/${path.thumbnail}`}
+                            src={`${import.meta.env.VITE_API_HOST}/drive/thumb/${path.ownerId}/${path.thumbnail}`}
                             alt={`Thumbnail for ${path.name}`}
                             className="max-w-full max-h-[25%] object-contain"
                         />

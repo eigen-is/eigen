@@ -67,13 +67,13 @@ export async function getDrive(user: User) {
 
 export default class Drive {
     private basePath: string;
-    private user: User;
+    private owner: User;
     private home: Home;
     private db!: BunSQLiteDatabase<typeof schema>;
 
     constructor(home: Home) {
         this.home = home;
-        this.user = this.home.user;
+        this.owner = this.home.user;
         this.basePath = 'eigen.drive/';
     }
 
@@ -91,7 +91,7 @@ export default class Drive {
         const rootFolder = this.db.select().from(drivePaths).where(and(
             isNull(drivePaths.parentId),
             eq(drivePaths.type, "folder"),
-            eq(drivePaths.ownerId, this.user.id)
+            eq(drivePaths.ownerId, this.owner.id)
         )).get();
 
         // Create root folder if not exists
@@ -102,7 +102,7 @@ export default class Drive {
                 name: "Drive",
                 type: "folder",
                 parentId: null,
-                ownerId: this.user.id,
+                ownerId: this.owner.id,
                 mimeType: "folder",
                 acl: null,
                 createdAt: new Date(),
@@ -144,7 +144,7 @@ export default class Drive {
         }
 
         // Check write permissions
-        if (!(await this.canWrite(parentId, this.user))) {
+        if (!(await this.canWrite(parentId, this.owner))) {
             throw new Error("No write permission");
         }
 
@@ -170,7 +170,7 @@ export default class Drive {
                     name: folderName,
                     type: "folder",
                     parentId: parentId,
-                    ownerId: this.user.id,
+                    ownerId: this.owner.id,
                     mimeType: "folder",
                     acl: null, // Will inherit from parent
                     createdAt: new Date(),
@@ -199,7 +199,7 @@ export default class Drive {
         }
 
         // Check write permissions
-        if (!(await this.canWrite(parentId, this.user))) {
+        if (!(await this.canWrite(parentId, this.owner))) {
             throw new Error("No write permission");
         }
 
@@ -232,7 +232,7 @@ export default class Drive {
                 name: file.name,
                 type: "file",
                 parentId: parent.id,
-                ownerId: this.user.id,
+                ownerId: this.owner.id,
                 mimeType: mimeType,
                 acl: null, // Will inherit from parent
                 size: size,
@@ -285,7 +285,7 @@ export default class Drive {
         }
 
         // Check write permissions
-        if (!(await this.canWrite(pathId, this.user))) {
+        if (!(await this.canWrite(pathId, this.owner))) {
             throw new Error("No write permission");
         }
 
@@ -315,7 +315,7 @@ export default class Drive {
         }
 
         // Check write permissions
-        if (!(await this.canWrite(pathId, this.user))) {
+        if (!(await this.canWrite(pathId, this.owner))) {
             throw new Error("No write permission");
         }
 
@@ -362,7 +362,7 @@ export default class Drive {
             .where(and(
                 isNull(drivePaths.parentId),
                 eq(drivePaths.type, "folder"),
-                eq(drivePaths.ownerId, this.user.id)
+                eq(drivePaths.ownerId, this.owner.id)
             ))
             .get() as DrivePath | null;
     }
@@ -380,7 +380,7 @@ export default class Drive {
         }
 
         // Check read permissions
-        if (!(await this.canRead(pathId, this.user))) {
+        if (!(await this.canRead(pathId, this.owner))) {
             throw new Error("No read permission");
         }
 
@@ -422,7 +422,7 @@ export default class Drive {
         }
 
         // Check write permissions
-        if (!(await this.canWrite(pathId, this.user))) {
+        if (!(await this.canWrite(pathId, this.owner))) {
             throw new Error("No write permission");
         }
 
@@ -495,7 +495,7 @@ export default class Drive {
         }
 
         // Check write permissions
-        if (!(await this.canWrite(pathId, this.user))) {
+        if (!(await this.canWrite(pathId, this.owner))) {
             throw new Error("No write permission");
         }
 

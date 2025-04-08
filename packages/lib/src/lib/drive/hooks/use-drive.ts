@@ -17,11 +17,12 @@ export const driveKeys = {
 };
 
 // GET ROOT FOLDER
-export function useRootFolder() {
+export function useRootFolder(ownerId: string) {
     return useQuery({
         queryKey: driveKeys.root(),
         queryFn: async () => {
-            const response = await driveApi.root.get();
+            const response = await driveApi.root[ownerId].get();
+            console.log(response.data);
             return response.data;
         },
         staleTime: Infinity
@@ -29,12 +30,12 @@ export function useRootFolder() {
 }
 
 // GET FOLDER CONTENTS
-export function useFolderContent(pathId: string) {
+export function useFolderContent(ownerId: string, pathId: string) {
     return useQuery({
         queryKey: driveKeys.folder(pathId),
         queryFn: async () => {
             if (!pathId) return [];
-            const response = await driveApi.folder[pathId].get();
+            const response = await driveApi.folder[ownerId][pathId].get();
             return response.data || [];
         },
         enabled: !!pathId,
@@ -43,12 +44,12 @@ export function useFolderContent(pathId: string) {
 }
 
 // GET PATH INFO
-export function usePathInfo(pathId: string | undefined) {
+export function usePathInfo(ownerId: string, pathId: string | undefined) {
     return useQuery({
         queryKey: driveKeys.path(pathId || ''),
         queryFn: async () => {
             if (!pathId) return null;
-            const response = await driveApi.path[pathId].get();
+            const response = await driveApi.path[ownerId][pathId].get();
             return response.data || null;
         },
         enabled: !!pathId,
@@ -57,12 +58,12 @@ export function usePathInfo(pathId: string | undefined) {
 }
 
 // CREATE FOLDER
-export function useCreateFolder() {
+export function useCreateFolder(ownerId: string) {
     const queryClient = useQueryClient();
 
     return useMutation({
         mutationFn: async ({parentId, folderName}: { parentId: string, folderName: string }) => {
-            const response = await driveApi.folder.post({
+            const response = await driveApi.folder[ownerId].post({
                 parentId,
                 folderName
             });
@@ -75,12 +76,12 @@ export function useCreateFolder() {
 }
 
 // UPLOAD FILE
-export function useUploadFile() {
+export function useUploadFile(ownerId: string) {
     const queryClient = useQueryClient();
 
     return useMutation({
         mutationFn: async ({parentId, file}: { parentId: string, file: File }) => {
-            const response = await driveApi.file.post({
+            const response = await driveApi.file[ownerId].post({
                 parentId,
                 file
             });
@@ -95,12 +96,12 @@ export function useUploadFile() {
 
 
 // UPLOAD FILE
-export function useUploadFiles() {
+export function useUploadFiles(ownerId: string) {
     const queryClient = useQueryClient();
 
     return useMutation({
         mutationFn: async ({parentId, files}: { parentId: string, files: File[] }) => {
-            const response = await driveApi.files.post({
+            const response = await driveApi.files[ownerId].post({
                 parentId,
                 files
             });
@@ -122,12 +123,12 @@ export function useInvalidateFolder() {
 }
 
 // DELETE FOLDER
-export function useDeleteFolder() {
+export function useDeleteFolder(ownerId: string) {
     const queryClient = useQueryClient();
 
     return useMutation({
         mutationFn: async (pathId: string) => {
-            const response = await driveApi.folder[pathId].delete();
+            const response = await driveApi.folder[ownerId][pathId].delete();
             return response.data;
         },
         onSuccess: () => {
@@ -139,12 +140,12 @@ export function useDeleteFolder() {
 }
 
 // DELETE FILE
-export function useDeleteFile() {
+export function useDeleteFile(ownerId: string) {
     const queryClient = useQueryClient();
 
     return useMutation({
         mutationFn: async (pathId: string) => {
-            const response = await driveApi.file[pathId].delete();
+            const response = await driveApi.file[ownerId][pathId].delete();
             return response.data;
         },
         onSuccess: () => {
@@ -156,13 +157,12 @@ export function useDeleteFile() {
 }
 
 // RENAME PATH (FILE OR FOLDER)
-export function useRenamePath() {
+export function useRenamePath(ownerId: string) {
     const queryClient = useQueryClient();
 
     return useMutation({
         mutationFn: async ({pathId, newName}: { pathId: string, newName: string }) => {
-            const response = await driveApi.path.rename.put({
-                pathId,
+            const response = await driveApi.path.rename[ownerId][pathId].put({
                 newName
             });
             return response.data;
@@ -174,14 +174,13 @@ export function useRenamePath() {
 }
 
 // UPDATE ACL
-export function useUpdateACL() {
+export function useUpdateACL(ownerId: string) {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: async ({pathId, acl}: { pathId: string, acl: DriveACL[], parentPathId:string |null }) => {
+        mutationFn: async ({pathId, acl, parentPathId}: { pathId: string, acl: DriveACL[], parentPathId:string |null }) => {
             console.log('put acls', pathId, acl);
-            const response = await driveApi.path.acl.put({
-                pathId,
+            const response = await driveApi.path.acl[ownerId][pathId].put({
                 acl
             });
             console.log(response.data);
@@ -198,12 +197,12 @@ export function useUpdateACL() {
 }
 
 // CHECK READ PERMISSION
-export function useCheckReadPermission(pathId: string | undefined) {
+export function useCheckReadPermission(ownerId: string, pathId: string | undefined) {
     return useQuery({
         queryKey: driveKeys.read(pathId || ''),
         queryFn: async () => {
             if (!pathId) return {canRead: false};
-            const response = await driveApi.permissions.read[pathId].get();
+            const response = await driveApi.permissions.read[ownerId][pathId].get();
             return response.data || {canRead: false};
         },
         enabled: !!pathId
@@ -211,12 +210,12 @@ export function useCheckReadPermission(pathId: string | undefined) {
 }
 
 // CHECK WRITE PERMISSION
-export function useCheckWritePermission(pathId: string | undefined) {
+export function useCheckWritePermission(ownerId: string, pathId: string | undefined) {
     return useQuery({
         queryKey: driveKeys.write(pathId || ''),
         queryFn: async () => {
             if (!pathId) return {canWrite: false};
-            const response = await driveApi.permissions.write[pathId].get();
+            const response = await driveApi.permissions.write[ownerId][pathId].get();
             return response.data || {canWrite: false};
         },
         enabled: !!pathId
