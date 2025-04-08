@@ -2,10 +2,11 @@
 import { UserPublicItem } from "../user-item"
 import type { DriveACL, DrivePath } from "@apps/api-server/types/drive"
 import { cn } from "@workspace/ui/lib/utils"
-import { useMemo, useState } from "react"
+import { useMemo } from "react"
 import { usePublicUser} from "@workspace/lib/public"   
 import { Lock, Unlock } from "lucide-react"
 import { AvatarIcon } from "@workspace/ui/components/avatar"
+import { Separator } from "@workspace/ui/components/separator"
 
 export interface DriveAccessListProps {
   acl: DriveACL[] | null
@@ -19,11 +20,11 @@ export function DriveAccessList({
   className,
 }: DriveAccessListProps) {
   const owner = usePublicUser(path.ownerId);
-  const [publicAccess, setPublicAccess] = useState(false);
 
   // Combine owner and ACL list, ensuring owner is first and not duplicated
-  const accessList = useMemo(() => {
-    if (!owner.data) return [];
+  // Also calculate publicAccess directly here instead of using setState
+  const [accessList, publicAccess] = useMemo(() => {
+    if (!owner.data) return [[], false];
     
     const ownerAccess = {
       email: owner.data.email || '',
@@ -34,12 +35,15 @@ export function DriveAccessList({
     }
 
     const accessList = [ownerAccess];
+    let hasPublicAccess = false;
+
+    console.log("Access list:", acl);
   
     if (acl && acl.length > 0) {
       // Add only non-owner users from ACL
       acl.forEach((access) => {
         if (access.public) {
-          setPublicAccess(true);
+          hasPublicAccess = true;
         } else if (access.email !== owner.data?.email) {
           accessList.push({
             email: access.email,
@@ -52,8 +56,8 @@ export function DriveAccessList({
       })
     }
 
-    return accessList;
-    }, [acl, owner]);
+    return [accessList, hasPublicAccess];
+  }, [acl, owner.data]);
 
   return (
     <div className={cn("space-y-4", className)}>
@@ -63,15 +67,15 @@ export function DriveAccessList({
         {accessList.map((access) => (
           <UserPublicItem          
             key={access.email}
-            email={access.email} // Using userId as email for now
+            email={access.email}
             label={access.owner ? "Owner" : (
               <AccessLabel access={access} />
             )}
           />
         ))}
       </div>
-
-      <div className="pt-2 border-t mt-4">
+      <Separator />
+      <div>
         <h4 className="text-sm font-medium mb-2">General access</h4>
         {!publicAccess ? (
           <div className="flex items-center">

@@ -1,5 +1,5 @@
 import {cn} from "@workspace/ui/lib/utils";
-import {ArrowLeft, Download, MoreVertical, Trash2, X} from "lucide-react";
+import {ArrowLeft, Download, Link, MoreVertical, Share, Share2, Trash2, X} from "lucide-react";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -10,6 +10,8 @@ import {Button} from "@workspace/ui/components/button";
 import {TooltipButton} from "@workspace/ui";
 import {EigenLoader} from "@workspace/ui";
 import {DriveAccessList} from "@workspace/ui/components/layout/drive";
+import {useState} from "react";
+import {DriveAccessDialog} from "./drive-access-dialog";
 
 interface DriveDetailProps {
     path: any | null;
@@ -27,6 +29,8 @@ export function DriveDetail({
                                 onDelete,
                                 ...props
                             }: DriveDetailProps) {
+
+    const [accessDialogOpen, setAccessDialogOpen] = useState(false);
 
     if (!path) {
         return (
@@ -59,6 +63,13 @@ export function DriveDetail({
                         icon={Trash2}
                         tooltipText="Delete"
                         onClick={() => onDelete(path)}
+                    />
+                    <TooltipButton
+                        icon={Link}
+                        tooltipText="Edit Access"
+                        onClick={() => {
+                            setAccessDialogOpen(true);
+                        }}
                     />
                     <TooltipButton
                         icon={Download}
@@ -116,6 +127,14 @@ export function DriveDetail({
                     />
                 </div>
             </div>
+            
+            {/* Access Control Edit Dialog */}
+            <DriveAccessDialog 
+                open={accessDialogOpen}
+                onOpenChange={setAccessDialogOpen}
+                path={path}
+                acl={path.acl}
+            />
         </div>
     );
 }
