@@ -47,11 +47,11 @@
     "./api": "./src/lib/api.ts",
     "./contacts": "./src/lib/contacts/index.ts",
     "./mail": "./src/lib/mail/index.ts",
-    "./mail/hooks": "./src/lib/mail/hooks/index.ts",
     "./drive": "./src/lib/drive/index.ts",
     "./media": "./src/lib/media/index.ts",
     "./auth": "./src/lib/auth/index.ts",
     "./home": "./src/lib/home/index.ts",
+    "./public": "./src/lib/public/index.ts",
     "./auth/hooks": "./src/lib/auth/hooks/index.ts"
   }
 }

@@ -1,5 +1,5 @@
 export type DriveACL = {
-    userId: string;
+    email: string;
     read: boolean;
     write: boolean;
     public: boolean;

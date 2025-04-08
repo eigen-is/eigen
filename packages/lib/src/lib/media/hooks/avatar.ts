@@ -1,37 +1,13 @@
 import {useContacts} from '../../contacts/hooks/use-contacts';
-import {useQuery} from '@tanstack/react-query';
-import {spaceApi} from '@workspace/lib/api';
 import {useEffect, useState} from 'react';
 import {Contact} from '@apps/api-server/types/contact';
+import { usePublicUser } from '../../public';
+import { type PublicUser} from '@apps/api-server/types/public';
 
 // In-memory cache for avatar URLs
-const avatarMap = new Map<string, string | undefined>();
+const avatarMap = new Map<string, PublicUser | undefined>();
 
-// Query keys for public user data
-const publicUserKeys = {
-    all: ['publicUser'] as const,
-    details: () => [...publicUserKeys.all, 'detail'] as const,
-    detail: (id: string) => [...publicUserKeys.details(), id] as const,
-};
-
-// Hook to fetch public user data
-export function usePublicUser(email: string | undefined, options: { enabled: boolean } = {enabled: true}) {
-    return useQuery({
-        queryKey: publicUserKeys.detail(email || ''),
-        queryFn: async () => {
-            if (!email) return null;
-            // Check if email is @eigen.is email
-            if (!email.endsWith('@eigen.is')) return null;
-
-            const res = await spaceApi.public[email].get();
-            return res.data;
-        },
-        enabled: !!email && options.enabled,
-        staleTime: 5 * 60 * 1000, // Consider data fresh for 5 minutes
-    });
-}
-
-export function useAvatarUrl(email: string, options: { enabled?: boolean } = {enabled: true}) {
+export function useAvatar(email: string, options: { enabled?: boolean } = {enabled: true}) {
     const [needPublicUserData, setNeedPublicUserData] = useState(false && options.enabled);
     const {data: contacts = [], isLoading: contactsLoading} = useContacts();
 
@@ -55,7 +31,11 @@ export function useAvatarUrl(email: string, options: { enabled?: boolean } = {en
 
         if (contact?.avatar) {
             // Found in contacts, store in cache
-            avatarMap.set(email, contact.avatar);
+            avatarMap.set(email, {
+                name: contact.firstName + ' ' + contact.lastName,
+                email: email,
+                avatar: contact.avatar
+            });
         } else {
             // Not found in contacts, need to check public user data
             setNeedPublicUserData(true);
@@ -66,7 +46,7 @@ export function useAvatarUrl(email: string, options: { enabled?: boolean } = {en
      * Get avatar URL for an email address
      * @returns The avatar URL if found, undefined otherwise
      */
-    const getAvatarUrl = (): string | undefined => {
+    const getAvatar = (): PublicUser | undefined => {
         if (!(email || '').trim()) return undefined;
 
         // First check the cache
@@ -81,21 +61,29 @@ export function useAvatarUrl(email: string, options: { enabled?: boolean } = {en
         );
 
         if (contact?.avatar) {
-            avatarMap.set(email, contact.avatar);
-            return contact.avatar;
+            avatarMap.set(email, {
+                name: contact.firstName + ' ' + contact.lastName,
+                email: email,
+                avatar: contact.avatar
+            });
+            return {
+                name: contact.firstName + ' ' + contact.lastName,
+                email: email,
+                avatar: contact.avatar
+            }
         }
 
         // Finally check public user data if available
-        if (publicUserData?.image) {
-            avatarMap.set(email, publicUserData.image);
-            return publicUserData.image;
+        if (publicUserData?.avatar) {
+            avatarMap.set(email, publicUserData);
+            return publicUserData;
         }
 
         return undefined;
     };
 
     return {
-        getAvatarUrl,
+        getAvatar,
         isLoading: contactsLoading || (needPublicUserData && publicUserLoading)
     };
 }
