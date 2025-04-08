@@ -154,7 +154,7 @@ export const driveRouter = new Elysia({name: "drive"})
             pathId: t.String(),
             acl: t.Array(
                 t.Object({
-                    userId: t.String(),
+                    email: t.String(),
                     read: t.Boolean(),
                     write: t.Boolean(),
                     public: t.Boolean()

@@ -1,9 +1,10 @@
 "use client"
 
-import {HTMLAttributes, ReactNode} from "react"
+import {HTMLAttributes, ReactNode, useMemo} from "react"
 import {cn} from "@workspace/ui/lib/utils"
 import {UserAvatar} from "./user-avatar"
 import {useAvatar} from "@workspace/lib/media"
+import { EigenLoader } from "./eigen-loader"
 
 export interface UserItemProps extends HTMLAttributes<HTMLDivElement> {
     name?: string
@@ -61,14 +62,13 @@ export function UserPublicItem({
     className,
     ...props
 }: UserPublicItemProps) {
-    const {getAvatar } = useAvatar(email || '', {enabled: true});
-    const data = getAvatar();
-
-        return data ? (
+    const {data, isLoading } = useAvatar(email || '', {enabled: true});
+    
+    return isLoading ? <EigenLoader /> : (
         <div className={cn("flex items-center", className)} {...props}>
             <UserAvatar
-                name={data?.name}
-                email={data?.email}
+                name={data?.name || email}
+                email={data?.email || email}
                 imageUrl={data?.avatar}
             />
 
@@ -84,5 +84,5 @@ export function UserPublicItem({
                 </div>
             </div>
         </div>
-    ) : null;
+    );
 }

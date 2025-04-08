@@ -24,6 +24,11 @@ export function useContacts() {
     });
 }
 
+export function invalidateAllContacts() {
+    const queryClient = useQueryClient();
+    queryClient.invalidateQueries({queryKey: contactKeys.lists()});
+}
+
 // Fetch a contact by ID
 export function useContact(id: string) {
     return useQuery({
