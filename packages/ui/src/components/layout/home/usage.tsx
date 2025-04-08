@@ -17,9 +17,10 @@ export interface StorageData {
 
 interface StorageUsageProps {
     className?: string;
+    condensed?: boolean;
 }
 
-export function StorageUsage({className = ""}: StorageUsageProps) {
+export function StorageUsage({className = "", condensed = false}: StorageUsageProps) {
     // Get storage usage data
     const {data: storageData, isLoading: storageLoading} = useHomeSize();
     const [showDetails, setShowDetails] = useState(false);
@@ -36,16 +37,16 @@ export function StorageUsage({className = ""}: StorageUsageProps) {
     return (
         <div className={cn(`p-3 select-none cursor-pointer`, className)}  onClick={() => setShowDetails(!showDetails)}>
             <div>
-                <div className="flex justify-between items-center mb-1">
+                {!condensed && <div className="flex justify-between items-center mb-1">
                     <span className="text-xs font-medium text-muted-foreground">Storage</span>
                     <span className="text-xs text-muted-foreground">
-            {storageLoading
-                ? <EigenLoader/>
-                : storageData
-                    ? `${formatBytes(storageData.used)} / ${formatBytes(storageData.max)}`
-                    : "Unknown"}
-          </span>
-                </div>
+                        {storageLoading
+                            ? <EigenLoader/>
+                            : storageData
+                                ? `${formatBytes(storageData.used)} / ${formatBytes(storageData.max)}`
+                                : "Unknown"}
+                    </span>
+                </div>}
                 <Progress
                     value={storageLoading || !storageData ? 0 : (storageData.used / storageData.max) * 100}
                     className="h-1.5"
@@ -54,7 +55,7 @@ export function StorageUsage({className = ""}: StorageUsageProps) {
 
             <div
                 className={`overflow-hidden transition-all duration-300 ease-in-out ${
-                    showDetails ? "max-h-36 opacity-100" : "max-h-0 opacity-0"
+                    (showDetails && !condensed) ? "max-h-36 opacity-100" : "max-h-0 opacity-0"
                 }`}
             >
                 <div className="space-y-2 mt-2 text-xs">
