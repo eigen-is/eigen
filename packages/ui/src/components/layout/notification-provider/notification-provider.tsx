@@ -13,13 +13,13 @@ interface NotificationProviderProps {
     children: React.ReactNode;
 }
 
-function notify(title: string, body: string, tag: string, action?: {label: string, onClick: () => void}, onClick?: () => void) {
+function notify(title: string, body: string, tag: string, action?: {label: string, onClick: () => void}) {
     toast(title, {
         description: body,
         action: action ? {
             label: action.label,
             onClick: () => {
-                onClick?.();
+                action.onClick?.();
             }
         } : undefined
     });
@@ -32,7 +32,7 @@ function notify(title: string, body: string, tag: string, action?: {label: strin
             tag: tag,
         });
         action && n.addEventListener('click', () => {
-            onClick?.();
+            action.onClick?.();
         });
     }
 }
