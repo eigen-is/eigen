@@ -29,12 +29,12 @@ export function UserAvatar({
     const firstChar = displayName.trim().charAt(0).toUpperCase();
 
     // Fetch public user data if we don't have an image URL
-    const {getAvatar} = useAvatar(email || userId || '', {
+    const {data} = useAvatar(email || userId || '', {
         enabled: !(imageUrl || '').trim() && !forceUseImageUrl
     });
 
     // Determine the image to display
-    const avatarImage = forceUseImageUrl ? imageUrl : (imageUrl || getAvatar()?.avatar || '');
+    const avatarImage = forceUseImageUrl ? imageUrl : (imageUrl || data?.avatar || '');
 
     // Size classes
     const sizeClasses = {
