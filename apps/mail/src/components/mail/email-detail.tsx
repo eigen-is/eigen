@@ -144,7 +144,7 @@ export function EmailDetail({
                             // @ts-ignore
                             const draft: EmailDraft = {
                                 subject: `FW: ${email.subject}`,
-                                text: `\n\n--\n\n${email.text}`,
+                                text: `\n\nOn ${format(new Date(email.date), "d MMM yyyy 'at' h:mm a")} ${email.from?.value[0]?.name} <${email.from?.value[0]?.address}> wrote:\n\n${email.text}`,
                             };
                             onNewDraft(draft);
                         }}
