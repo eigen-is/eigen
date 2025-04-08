@@ -178,16 +178,22 @@ export function useUpdateACL() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: async ({pathId, acl}: { pathId: string, acl: DriveACL[] }) => {
+        mutationFn: async ({pathId, acl}: { pathId: string, acl: DriveACL[], parentPathId:string |null }) => {
+            console.log('put acls', pathId, acl);
             const response = await driveApi.path.acl.put({
                 pathId,
                 acl
             });
+            console.log(response.data);
             return response.data;
         },
         onSuccess: (_, variables) => {
             queryClient.invalidateQueries({queryKey: driveKeys.path(variables.pathId)});
-        }
+            // todo invalidate correct parent folder query
+            if (variables.parentPathId) {
+                queryClient.invalidateQueries({queryKey: driveKeys.folder(variables.parentPathId)});
+            }
+        },
     });
 }
 

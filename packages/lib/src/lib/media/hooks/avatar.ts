@@ -1,97 +1,80 @@
-import {useContacts} from '../../contacts/hooks/use-contacts';
-import {useEffect, useState} from 'react';
-import {Contact} from '@apps/api-server/types/contact';
+import { invalidateAllContacts, useContacts } from '../../contacts/hooks/use-contacts';
+import { useMemo } from 'react';
+import { Contact } from '@apps/api-server/types/contact';
 import { usePublicUser } from '../../public';
-import { type PublicUser} from '@apps/api-server/types/public';
+import { type PublicUser } from '@apps/api-server/types/public';
 
-// In-memory cache for avatar URLs
-const avatarMap = new Map<string, PublicUser | undefined>();
-
-export function useAvatar(email: string, options: { enabled?: boolean } = {enabled: true}) {
-    const [needPublicUserData, setNeedPublicUserData] = useState(false && options.enabled);
-    const {data: contacts = [], isLoading: contactsLoading} = useContacts();
-
-    // Only fetch public user data if we couldn't find an avatar in contacts
-    const {data: publicUserData, isLoading: publicUserLoading} = usePublicUser(email, {
-        enabled: needPublicUserData
-    });
-
-    // Check contacts for avatar when contacts data changes
-    useEffect(() => {
-        if (contactsLoading || !email) return;
-
-        // If we already have the avatar in cache, no need to check
-        if (avatarMap.has(email)) return;
-
-        // Check if there's a contact with this email and an avatar
-        const contact = contacts.find((contact: Contact) =>
-            contact.avatar &&
-            (contact.email || []).includes(email)
-        );
-
-        if (contact?.avatar) {
-            // Found in contacts, store in cache
-            avatarMap.set(email, {
-                name: contact.firstName + ' ' + contact.lastName,
-                email: email,
-                avatar: contact.avatar
-            });
-        } else {
-            // Not found in contacts, need to check public user data
-            setNeedPublicUserData(true);
-        }
-    }, [contacts, email, contactsLoading]);
-
-    /**
-     * Get avatar URL for an email address
-     * @returns The avatar URL if found, undefined otherwise
-     */
-    const getAvatar = (): PublicUser | undefined => {
-        if (!(email || '').trim()) return undefined;
-
-        // First check the cache
-        if (avatarMap.has(email)) {
-            return avatarMap.get(email);
-        }
-
-        // Then check contacts directly (as a fallback)
-        const contact = contacts.find((contact: Contact) =>
-            contact.avatar &&
-            (contact.email || []).includes(email)
-        );
-
-        if (contact?.avatar) {
-            avatarMap.set(email, {
-                name: contact.firstName + ' ' + contact.lastName,
-                email: email,
-                avatar: contact.avatar
-            });
-            return {
-                name: contact.firstName + ' ' + contact.lastName,
-                email: email,
-                avatar: contact.avatar
-            }
-        }
-
-        // Finally check public user data if available
-        if (publicUserData?.avatar) {
-            avatarMap.set(email, publicUserData);
-            return publicUserData;
-        }
-
-        return undefined;
-    };
-
-    return {
-        getAvatar,
-        isLoading: contactsLoading || (needPublicUserData && publicUserLoading)
-    };
-}
-
-export function invalidateAvatar(email: string) {
-    avatarMap.delete(email);
+export function useAvatar(email: string, options: { enabled?: boolean } = { enabled: true }): {data: PublicUser | undefined, isLoading: boolean} {
+  const { data: contacts = [], isLoading: contactsLoading } = useContacts();
+  
+  // Find the contact matching this email
+  const matchingContact = useMemo(() => {
+    if (!email || !options.enabled) return null;
+    
+    return contacts.find((contact: Contact) => 
+      (contact.email || []).includes(email)
+    );
+  }, [contacts, email, options.enabled]);
+  
+  // Only fetch public user data if:
+  // 1. No matching contact found OR the contact doesn't have an avatar
+  // 2. The email is an eigen.is email
+  const shouldFetchPublicUser = useMemo(() => {
+    if (!email || !options.enabled) return false;
+    if (matchingContact?.avatar) return false; // Already have avatar from contact
+    return email.toLowerCase().endsWith('@eigen.is');
+  }, [email, matchingContact, options.enabled]);
+  
+  // Only fetch public data when needed
+  const { data: publicUserData, isLoading: publicUserLoading } = usePublicUser(email, {
+    enabled: shouldFetchPublicUser
+  });
+  
+  // Return combined data and loading state
+  const avatarData = useMemo(() => {
+    if (!email || !options.enabled) return undefined;
+    
+    // Case 1: We found a contact with an avatar
+    if (matchingContact?.avatar) {
+      return {
+        name: `${matchingContact.firstName} ${matchingContact.lastName}`.trim(),
+        email,
+        avatar: matchingContact.avatar
+      };
+    }
+    
+    // Case 2: We found a contact but no avatar, and we have public user data
+    if (matchingContact && publicUserData?.avatar) {
+      return {
+        name: `${matchingContact.firstName} ${matchingContact.lastName}`.trim(),
+        email,
+        avatar: publicUserData.avatar
+      };
+    }
+    
+    // Case 3: No contact, but we have public user data
+    if (publicUserData) {
+      return publicUserData;
+    }
+    
+    // Case 4: No data found, return basic info
+    if (matchingContact) {
+      return {
+        name: `${matchingContact.firstName} ${matchingContact.lastName}`.trim(),
+        email,
+        avatar: undefined
+      };
+    }
+    
+    return undefined;
+  }, [email, matchingContact, publicUserData, options.enabled]);
+  
+  return {
+    data: avatarData,
+    isLoading: contactsLoading || (shouldFetchPublicUser && publicUserLoading)
+  };
 }
 
 export function invalidateAllAvatars() {
-    avatarMap.clear();
+    invalidateAllContacts();
 }
