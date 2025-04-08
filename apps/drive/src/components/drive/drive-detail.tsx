@@ -9,6 +9,7 @@ import {
 import {Button} from "@workspace/ui/components/button";
 import {TooltipButton} from "@workspace/ui";
 import {EigenLoader} from "@workspace/ui";
+import {DriveAccessList} from "@workspace/ui/components/layout/drive";
 
 interface DriveDetailProps {
     path: any | null;
@@ -108,7 +109,12 @@ export function DriveDetail({
                         />
                     </div>
                 )}
-                <pre className="text-sm text-muted-foreground mt-4 whitespace-pre-wrap break-words overflow-hidden w-full">ACLS: {JSON.stringify(path.acl || [], null, 2)}</pre>
+                <div className="mt-4">
+                    <DriveAccessList 
+                        path={path}
+                        acl={path.acl}
+                    />
+                </div>
             </div>
         </div>
     );
