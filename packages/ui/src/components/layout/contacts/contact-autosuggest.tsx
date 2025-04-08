@@ -2,6 +2,7 @@ import { useState, useRef, useCallback, KeyboardEvent } from 'react';
 import { Input } from '@workspace/ui/components/input';
 import { useContactSuggestions } from './use-contact-suggestions';
 import { ContactAutosuggestProps, ContactSuggestion } from './types';
+import { UserItem } from '../user-item';
 
 export function ContactAutosuggest({
   initialValue = '',
@@ -13,7 +14,7 @@ export function ContactAutosuggest({
   className = '',
   suggestionsClassName = '',
   inputClassName = '',
-  placeholder = 'Type to search contacts...',
+  placeholder = '',
   disabled = false,
   autoComplete = 'off',
   id,
@@ -50,6 +51,7 @@ export function ContactAutosuggest({
     }
     
     setInternalValue(newValue);
+    setSelectedIndex(0);
     onChange?.(newValue);
     
     setIsOpen(appendMode);
@@ -149,8 +151,11 @@ export function ContactAutosuggest({
               role="option"
               aria-selected={index === selectedIndex}
             >
-              <div className="font-medium">{suggestion.displayName}</div>
-              <div className="text-sm text-slate-500">{suggestion.email}</div>
+                <UserItem
+                name={suggestion.displayName}
+                email={suggestion.email}
+                userId={suggestion.id}
+              />
             </li>
           ))}
         </ul>

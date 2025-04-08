@@ -246,25 +246,37 @@ export function EmailDraft({
                         {/* CC field */}
                         <div className="flex items-center border-b">
                             <div className="w-16 text-sm text-muted-foreground py-2">Cc:</div>
-                            <Input
-                                id="cc"
-                                ref={ccFieldRef}
-                                defaultValue={email.cc?.text || ""}
-                                className="bg-transparent border-none focus-visible:ring-0 py-2 px-0 h-auto"
+                            <ContactAutosuggest
+                                initialValue={email.cc?.text || ""}
+                                onChange={() => {
+                                    // We halen de waarde op via de ref bij het verzenden
+                                }}
+                                appendMode={true}
+                                className="flex-1"
+                                inputClassName="bg-transparent border-none focus-visible:ring-0 py-2 px-0 h-auto"
+                                inputRef={ccFieldRef}
                                 disabled={isSending}
+                                autoComplete="off"
+                                id="cc"
                             />
                         </div>
 
                         {/* BCC field */}
                         <div className="flex items-center border-b">
                             <div className="w-16 text-sm text-muted-foreground py-2">Bcc:</div>
-                            <Input
-                                id="bcc"
-                                ref={bccFieldRef}
-                                defaultValue={email.bcc?.text || ""}
-                                className="bg-transparent border-none focus-visible:ring-0 py-2 px-0 h-auto"
-                                disabled={isSending}
-                            />
+                                <ContactAutosuggest
+                                    initialValue={email.bcc?.text || ""}
+                                    onChange={() => {
+                                        // We halen de waarde op via de ref bij het verzenden
+                                    }}
+                                    appendMode={true}
+                                    className="flex-1"
+                                    inputClassName="bg-transparent border-none focus-visible:ring-0 py-2 px-0 h-auto"
+                                    inputRef={bccFieldRef}
+                                    disabled={isSending}
+                                    autoComplete="off"
+                                    id="bcc"
+                                />
                         </div>
 
                         {/* From field (non-editable) */}
@@ -303,6 +315,6 @@ export function EmailDraft({
                     </div>
                 </form>
             </div>
-        </div>
+        </div>      
     );
 }
