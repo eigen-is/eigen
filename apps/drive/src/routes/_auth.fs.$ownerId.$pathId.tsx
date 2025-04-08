@@ -29,7 +29,7 @@ export interface DriveSearchParams {
     pid?: string;
 }
 
-export const Route = createFileRoute('/_auth/fs/$pathId')({
+export const Route = createFileRoute('/_auth/fs/$ownerId/$pathId')({
     component: DriveRoute,
     validateSearch: (search: Record<string, unknown>) => {
         const pid = typeof search.pid === 'string' ? search.pid : undefined;
@@ -38,32 +38,33 @@ export const Route = createFileRoute('/_auth/fs/$pathId')({
 });
 
 function DriveRoute() {
-    const {pathId} = Route.useParams();
+    const {ownerId,pathId} = Route.useParams();
     const {pid} = Route.useSearch();
     const navigate = useNavigate();
 
     // Get the root folder ID to replace "root" pathId
-    const {data: rootFolder, isLoading: isRootLoading} = useRootFolder();
+    const {data: rootFolder, isLoading: isRootLoading} = useRootFolder(ownerId);
 
     // If pathId is "root", navigate to the actual root folder ID when available
     useEffect(() => {
         if (pathId === 'root' && rootFolder?.id) {
             navigate({
                 to: Route.fullPath,
-                params: {pathId: rootFolder.id}
+                params: {ownerId, pathId: rootFolder.id}
             });
         }
     }, [pathId, rootFolder, navigate]);
 
     const isMobile = useMediaQuery('(max-width: 768px)');
     // const isTablet = useMediaQuery('(max-width: 1024px) and (min-width: 769px)');
-    const deleteFileMutation = useDeleteFile();
-    const deleteFolderMutation = useDeleteFolder();
+    const deleteFileMutation = useDeleteFile(ownerId);
+    const deleteFolderMutation = useDeleteFolder(ownerId);
     const invalidateFolder = useInvalidateFolder();
     const queryClient = useQueryClient();
 
     // Use the file upload hook
     const { fileInputRef, handleFileUpload, processFiles, handleFileChange } = useFileUpload(
+        ownerId,
         pathId,
         {
             onSuccess: (result) => {
@@ -81,7 +82,7 @@ function DriveRoute() {
     // Folder creation state and handlers
     const [createFolderOpen, setCreateFolderOpen] = useState(false);
     const [newFolderName, setNewFolderName] = useState('');
-    const createFolderMutation = useCreateFolder();
+    const createFolderMutation = useCreateFolder(ownerId);
 
     // Delete confirmation dialog state
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -94,9 +95,9 @@ function DriveRoute() {
         data: folderContents = [],
         isLoading: isFolderContentLoading,
         error: isFolderContentLoadingError
-    } = useFolderContent(skipDataFetch ? '' : pathId);
-    const {data: selectedPath = null} = usePathInfo(pid);
-    const {data: currentPath = null} = usePathInfo(pathId);
+    } = useFolderContent(ownerId, skipDataFetch ? '' : pathId);
+    const {data: selectedPath = null} = usePathInfo(ownerId, pid);
+    const {data: currentPath = null} = usePathInfo(ownerId, pathId);
 
     // Show loading state while resolving root folder ID
     if ((pathId === 'root' && isRootLoading) || (isFolderContentLoading && !skipDataFetch)) {
@@ -139,13 +140,13 @@ function DriveRoute() {
         if (path.type === 'folder') {
             navigate({
                 to: Route.fullPath,
-                params: {pathId: path.id},
+                params: {ownerId, pathId: path.id},
                 search: {pid: undefined}
             });
         } else {
             navigate({
                 to: Route.fullPath,
-                params: {pathId: pathId},
+                params: {ownerId, pathId: pathId},
                 search: {pid: path.id}
             });
         }
@@ -155,7 +156,7 @@ function DriveRoute() {
     const handleBackToList = () => {
         navigate({
             to: Route.fullPath,
-            params: {pathId: pathId}
+            params: {ownerId, pathId}
         });
     };
 
@@ -185,7 +186,7 @@ function DriveRoute() {
             // Navigate back to the folder view
             navigate({
                 to: Route.fullPath,
-                params: {pathId: pathId},
+                params: {ownerId, pathId},
                 search: {pid: undefined}
             });
         } catch (error) {

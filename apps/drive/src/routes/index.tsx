@@ -1,4 +1,6 @@
 import {createFileRoute} from '@tanstack/react-router'
+import {useAuth} from '@workspace/lib/auth/auth-context.js';
+import { EigenLoader } from '@workspace/ui';
 
 export const Route = createFileRoute('/')({
     component: HomeComponent,
@@ -6,12 +8,21 @@ export const Route = createFileRoute('/')({
 
 function HomeComponent() {
     const navigate = Route.useNavigate();
-    navigate({
-        to: '/fs/$pathId',
-        params: {
-            pathId: 'root'
+    const {user} = useAuth();
+
+    if (!user || !user.id) {
+        navigate({
+            to: '/login'
+        });
+    } else {
+        navigate({
+            to: '/fs/$ownerId/$pathId',
+            params: {
+                ownerId: user.id,
+                pathId: 'root'
         }
     });
+    }
 
     return null;
 }

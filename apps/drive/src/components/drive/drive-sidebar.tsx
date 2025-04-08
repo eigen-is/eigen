@@ -4,20 +4,13 @@ import {SidebarSection} from '@workspace/ui/components/layout/sidebar/sidebar-se
 import {AppLogo} from '@workspace/ui/components/layout/app-logo';
 import {EigenLoader, SidebarItem, StorageUsage} from "@workspace/ui";
 import {useMemo} from "react";
-
-// Define proper types for drive items
-interface DriveItem {
-    id: string;
-    name: string;
-    type: 'folder' | 'file' | 'eigendocs';
-    parentId?: string;
-}
+import {DrivePath} from "@apps/api-server/types/drive";
 
 interface DriveSidebarProps {
     condensed?: boolean;
     onClose?: () => void;
     isMobile?: boolean;
-    folders?: DriveItem[];
+    folders?: DrivePath[];
     isLoading?: boolean;
     error?: any;
     onCreateFolder?: () => void;

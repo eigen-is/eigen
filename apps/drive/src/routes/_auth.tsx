@@ -4,6 +4,7 @@ import {SidebarContext} from './__root';
 import {useFolderContent, useMediaQuery, useRootFolder} from '@workspace/lib/drive';
 import {DriveSidebar} from "@/components/drive/drive-sidebar.tsx";
 import {EigenLoader} from '@workspace/ui';
+import { useAuth } from '@workspace/lib/auth/auth-context.js';
 
 // Create a drive context to share data with child routes
 export interface DriveContextType {
@@ -32,14 +33,15 @@ function AuthLayout() {
     const {sidebarOpen, setSidebarOpen} = useContext(SidebarContext);
     const isMobile = useMediaQuery('(max-width: 768px)');
     const isTablet = useMediaQuery('(min-width: 769px) and (max-width: 1024px)');
+    const {user} = useAuth();
     // const isDesktop = useMediaQuery('(min-width: 1025px)');
 
     // Get root folder information
-    const {data: rootFolder, isLoading: isRootLoading, error: rootError} = useRootFolder();
+    const {data: rootFolder, isLoading: isRootLoading, error: rootError} = useRootFolder(user.id);
     const rootPathId = rootFolder?.id;
 
     // Get contents of the root folder
-    const {data: folders = [], isLoading: isFoldersLoading, error: isFoldersError} = useFolderContent(rootPathId || '');
+    const {data: folders = [], isLoading: isFoldersLoading, error: isFoldersError} = useFolderContent(user.id, rootPathId || '');
 
     // Loading state
     const isLoading = isRootLoading || isFoldersLoading;
