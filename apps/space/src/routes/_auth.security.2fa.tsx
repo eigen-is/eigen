@@ -5,11 +5,11 @@ import { useState } from 'react';
 import {TwoFactorSetup} from '../components/space/fa2'
 import {authClient} from '@workspace/lib/auth';
 
-export const Route = createFileRoute('/_auth/security/fa2')({
-    component: Fa2Component,
+export const Route = createFileRoute('/_auth/security/2fa')({
+    component: TwoFaComponent,
 })
 
-function Fa2Component() {
+function TwoFaComponent() {
     const navigate = useNavigate();
     const [totpUri, setTotpUri] = useState<string | null>(null);
     const [secretKey, setSecretKey] = useState<string>("");

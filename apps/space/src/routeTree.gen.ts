@@ -11,19 +11,19 @@
 // Import Routes
 
 import { Route as rootRoute } from './routes/__root'
-import { Route as LoginFa2Import } from './routes/login-fa2'
+import { Route as Login2faImport } from './routes/login-2fa'
 import { Route as LoginImport } from './routes/login'
 import { Route as AuthImport } from './routes/_auth'
 import { Route as AuthIndexImport } from './routes/_auth.index'
 import { Route as AuthUserImport } from './routes/_auth.user'
 import { Route as AuthSecurityPasswordImport } from './routes/_auth.security.password'
-import { Route as AuthSecurityFa2Import } from './routes/_auth.security.fa2'
+import { Route as AuthSecurity2faImport } from './routes/_auth.security.2fa'
 
 // Create/Update Routes
 
-const LoginFa2Route = LoginFa2Import.update({
-  id: '/login-fa2',
-  path: '/login-fa2',
+const Login2faRoute = Login2faImport.update({
+  id: '/login-2fa',
+  path: '/login-2fa',
   getParentRoute: () => rootRoute,
 } as any)
 
@@ -56,9 +56,9 @@ const AuthSecurityPasswordRoute = AuthSecurityPasswordImport.update({
   getParentRoute: () => AuthRoute,
 } as any)
 
-const AuthSecurityFa2Route = AuthSecurityFa2Import.update({
-  id: '/security/fa2',
-  path: '/security/fa2',
+const AuthSecurity2faRoute = AuthSecurity2faImport.update({
+  id: '/security/2fa',
+  path: '/security/2fa',
   getParentRoute: () => AuthRoute,
 } as any)
 
@@ -80,11 +80,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LoginImport
       parentRoute: typeof rootRoute
     }
-    '/login-fa2': {
-      id: '/login-fa2'
-      path: '/login-fa2'
-      fullPath: '/login-fa2'
-      preLoaderRoute: typeof LoginFa2Import
+    '/login-2fa': {
+      id: '/login-2fa'
+      path: '/login-2fa'
+      fullPath: '/login-2fa'
+      preLoaderRoute: typeof Login2faImport
       parentRoute: typeof rootRoute
     }
     '/_auth/user': {
@@ -101,11 +101,11 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthIndexImport
       parentRoute: typeof AuthImport
     }
-    '/_auth/security/fa2': {
-      id: '/_auth/security/fa2'
-      path: '/security/fa2'
-      fullPath: '/security/fa2'
-      preLoaderRoute: typeof AuthSecurityFa2Import
+    '/_auth/security/2fa': {
+      id: '/_auth/security/2fa'
+      path: '/security/2fa'
+      fullPath: '/security/2fa'
+      preLoaderRoute: typeof AuthSecurity2faImport
       parentRoute: typeof AuthImport
     }
     '/_auth/security/password': {
@@ -123,14 +123,14 @@ declare module '@tanstack/react-router' {
 interface AuthRouteChildren {
   AuthUserRoute: typeof AuthUserRoute
   AuthIndexRoute: typeof AuthIndexRoute
-  AuthSecurityFa2Route: typeof AuthSecurityFa2Route
+  AuthSecurity2faRoute: typeof AuthSecurity2faRoute
   AuthSecurityPasswordRoute: typeof AuthSecurityPasswordRoute
 }
 
 const AuthRouteChildren: AuthRouteChildren = {
   AuthUserRoute: AuthUserRoute,
   AuthIndexRoute: AuthIndexRoute,
-  AuthSecurityFa2Route: AuthSecurityFa2Route,
+  AuthSecurity2faRoute: AuthSecurity2faRoute,
   AuthSecurityPasswordRoute: AuthSecurityPasswordRoute,
 }
 
@@ -139,19 +139,19 @@ const AuthRouteWithChildren = AuthRoute._addFileChildren(AuthRouteChildren)
 export interface FileRoutesByFullPath {
   '': typeof AuthRouteWithChildren
   '/login': typeof LoginRoute
-  '/login-fa2': typeof LoginFa2Route
+  '/login-2fa': typeof Login2faRoute
   '/user': typeof AuthUserRoute
   '/': typeof AuthIndexRoute
-  '/security/fa2': typeof AuthSecurityFa2Route
+  '/security/2fa': typeof AuthSecurity2faRoute
   '/security/password': typeof AuthSecurityPasswordRoute
 }
 
 export interface FileRoutesByTo {
   '/login': typeof LoginRoute
-  '/login-fa2': typeof LoginFa2Route
+  '/login-2fa': typeof Login2faRoute
   '/user': typeof AuthUserRoute
   '/': typeof AuthIndexRoute
-  '/security/fa2': typeof AuthSecurityFa2Route
+  '/security/2fa': typeof AuthSecurity2faRoute
   '/security/password': typeof AuthSecurityPasswordRoute
 }
 
@@ -159,10 +159,10 @@ export interface FileRoutesById {
   __root__: typeof rootRoute
   '/_auth': typeof AuthRouteWithChildren
   '/login': typeof LoginRoute
-  '/login-fa2': typeof LoginFa2Route
+  '/login-2fa': typeof Login2faRoute
   '/_auth/user': typeof AuthUserRoute
   '/_auth/': typeof AuthIndexRoute
-  '/_auth/security/fa2': typeof AuthSecurityFa2Route
+  '/_auth/security/2fa': typeof AuthSecurity2faRoute
   '/_auth/security/password': typeof AuthSecurityPasswordRoute
 }
 
@@ -171,27 +171,27 @@ export interface FileRouteTypes {
   fullPaths:
     | ''
     | '/login'
-    | '/login-fa2'
+    | '/login-2fa'
     | '/user'
     | '/'
-    | '/security/fa2'
+    | '/security/2fa'
     | '/security/password'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/login'
-    | '/login-fa2'
+    | '/login-2fa'
     | '/user'
     | '/'
-    | '/security/fa2'
+    | '/security/2fa'
     | '/security/password'
   id:
     | '__root__'
     | '/_auth'
     | '/login'
-    | '/login-fa2'
+    | '/login-2fa'
     | '/_auth/user'
     | '/_auth/'
-    | '/_auth/security/fa2'
+    | '/_auth/security/2fa'
     | '/_auth/security/password'
   fileRoutesById: FileRoutesById
 }
@@ -199,13 +199,13 @@ export interface FileRouteTypes {
 export interface RootRouteChildren {
   AuthRoute: typeof AuthRouteWithChildren
   LoginRoute: typeof LoginRoute
-  LoginFa2Route: typeof LoginFa2Route
+  Login2faRoute: typeof Login2faRoute
 }
 
 const rootRouteChildren: RootRouteChildren = {
   AuthRoute: AuthRouteWithChildren,
   LoginRoute: LoginRoute,
-  LoginFa2Route: LoginFa2Route,
+  Login2faRoute: Login2faRoute,
 }
 
 export const routeTree = rootRoute
@@ -220,7 +220,7 @@ export const routeTree = rootRoute
       "children": [
         "/_auth",
         "/login",
-        "/login-fa2"
+        "/login-2fa"
       ]
     },
     "/_auth": {
@@ -228,15 +228,15 @@ export const routeTree = rootRoute
       "children": [
         "/_auth/user",
         "/_auth/",
-        "/_auth/security/fa2",
+        "/_auth/security/2fa",
         "/_auth/security/password"
       ]
     },
     "/login": {
       "filePath": "login.tsx"
     },
-    "/login-fa2": {
-      "filePath": "login-fa2.tsx"
+    "/login-2fa": {
+      "filePath": "login-2fa.tsx"
     },
     "/_auth/user": {
       "filePath": "_auth.user.tsx",
@@ -246,8 +246,8 @@ export const routeTree = rootRoute
       "filePath": "_auth.index.tsx",
       "parent": "/_auth"
     },
-    "/_auth/security/fa2": {
-      "filePath": "_auth.security.fa2.tsx",
+    "/_auth/security/2fa": {
+      "filePath": "_auth.security.2fa.tsx",
       "parent": "/_auth"
     },
     "/_auth/security/password": {
