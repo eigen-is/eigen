@@ -2,7 +2,7 @@ import {BookUser, CircleUser, LockKeyholeIcon, X} from 'lucide-react';
 import {Button} from "@workspace/ui/components/button";
 import {SidebarSection} from '@workspace/ui/components/layout/sidebar/sidebar-section';
 import {AppLogo} from '@workspace/ui/components/layout/app-logo';
-import {SidebarItem} from "@workspace/ui";
+import {SidebarItem, StorageUsage} from "@workspace/ui";
 import {Separator} from '@workspace/ui/components/separator';
 
 
@@ -71,6 +71,12 @@ export function SpaceSidebar({
                         label="Payment and subscriptions"
                         to='/payment/payment-and-subscriptions' params={{}}/>
             </SidebarSection> */}
+
+            {/* Storage usage indicator at the bottom of sidebar */}
+            <StorageUsage
+                className="mt-auto"
+                condensed={condensed}
+            />
         </div>
     );
 }
