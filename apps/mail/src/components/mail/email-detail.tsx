@@ -119,7 +119,7 @@ export function EmailDetail({
                             const draft: EmailDraft = {
                                 to: email.from,
                                 subject: `RE: ${email.subject}`,
-                                text: `\n\n--\n\n${email.text}`,
+                                text: `\n\nOn ${format(new Date(email.date), "d MMM yyyy 'at' h:mm a")} ${email.from?.value[0]?.name} <${email.from?.value[0]?.address}> wrote:\n\n${email.text}`,
                             };
                             onNewDraft(draft);
                         }}
@@ -132,7 +132,7 @@ export function EmailDetail({
                                 // @ts-ignore
                                 to: {value: [...(email.from?.value || []), ...(email.cc?.value || [])]},
                                 subject: `FW: ${email.subject}`,
-                                text: `\n\n--\n\n${email.text}`,
+                                text: `\n\nOn ${format(new Date(email.date), "d MMM yyyy 'at' h:mm a")} ${email.from?.value[0]?.name} <${email.from?.value[0]?.address}> wrote:\n\n${email.text}`,
                             };
                             onNewDraft(draft);
                         }}
