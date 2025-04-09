@@ -1,35 +1,27 @@
-import {Folder, X} from 'lucide-react';
+import {Home, Plus, Share, FileText, Image, StickyNote, X, Link2, Link, Download} from 'lucide-react';
 import {Button} from "@workspace/ui/components/button";
 import {SidebarSection} from '@workspace/ui/components/layout/sidebar/sidebar-section';
 import {AppLogo} from '@workspace/ui/components/layout/app-logo';
-import {EigenLoader, SidebarItem, StorageUsage} from "@workspace/ui";
-import {useMemo} from "react";
-import {DrivePath} from "@apps/api-server/types/drive";
+import {SidebarItem, StorageUsage} from "@workspace/ui";
+import { Separator } from '@workspace/ui/components/separator';
 
 interface DriveSidebarProps {
     condensed?: boolean;
     onClose?: () => void;
     isMobile?: boolean;
-    folders?: DrivePath[];
-    isLoading?: boolean;
     error?: any;
     onCreateFolder?: () => void;
+    rootPath?: string;
 }
 
 export function DriveSidebar({
                                  condensed = false,
                                  onClose,
                                  isMobile = false,
-                                 folders = [],
-                                 isLoading = false,
                                  error = false,
                                  onCreateFolder,
+                                 rootPath = "/",
                              }: DriveSidebarProps) {
-    // Filter to show only folders in the sidebar using useMemo
-    const folderItems = useMemo(() => {
-        return folders.filter(item => item.type === 'folder');
-    }, [folders]);
-
     return (
         <div className="flex h-full min-h-[calc(100vh-3.5rem)] flex-col">
             {isMobile && (
@@ -43,45 +35,64 @@ export function DriveSidebar({
                 </div>
             )}
 
-
             <SidebarSection
                 condensed={condensed}
             >
+                {/* New button */}
+           
+                <Button
+                    size={condensed ? "icon" : "default"}
+                    className={`${condensed ? 'w-10 p-0' : 'w-full justify-start gap-3'}`}
+                    onClick={onCreateFolder}
+                >
+                    <Plus className="h-4 w-4 mr-2" />
+                    {!condensed && <span>New</span>}
+                </Button>
+     
+                </SidebarSection>
+            <SidebarSection>
+                    
+                    <SidebarItem
+                            icon={<Home className="h-4 w-4"/>}
+                            to={rootPath}
+                            label="Home"
+                            condensed={condensed}
+                        />
 
-                {isLoading ? (
-                    <div className="flex items-center justify-center py-4">
-                        <EigenLoader/>
-                    </div>
-                ) : error ? (
-                    <div className="text-sm text-destructive px-3 py-2">
-                        Failed to load folders
-                    </div>
-                ) : (
-                    (folderItems && folderItems.length === 0) ? (
-                        <div className="text-sm text-muted-foreground px-3 py-2">
-                            No folders
-                        </div>
-                    ) : (
-                        <>
-                            <SidebarItem
-                                icon={<Folder className="h-4 w-4"/>}
-                                key={folderItems[0].parentId}
-                                to={`/fs/${folderItems[0].parentId}`}
-                                label="/"
-                                condensed={condensed}
-                            />
-                            {folderItems.map((folder) => (
-                                <SidebarItem
-                                    icon={<Folder className="h-4 w-4"/>}
-                                    key={folder.id}
-                                    to={`/fs/${folder.id}`}
-                                    label={folder.name}
-                                    condensed={condensed}
-                                />
-                            ))}
-                        </>
-                    )
-                )}
+                        <SidebarItem
+                            icon={<Image className="h-4 w-4"/>}
+                            to="/"
+                            label="Images"
+                            condensed={condensed}
+                        />
+                        <SidebarItem
+                            icon={<FileText className="h-4 w-4"/>}
+                            to="/"
+                            label="Documents"
+                            condensed={condensed}
+                        />
+                        <SidebarItem
+                            icon={<StickyNote className="h-4 w-4"/>}
+                            to="/"
+                            label="Stickies"
+                            condensed={condensed}
+                        />
+                    
+            </SidebarSection>
+            <Separator/>
+            <SidebarSection>
+                        <SidebarItem
+                            icon={<Link className="h-4 w-4"/>}
+                            to="/"
+                            label="Shared by me"
+                            condensed={condensed}
+                        />
+                        <SidebarItem
+                            icon={<Download className="h-4 w-4"/>}
+                            to="/"
+                            label="Shared with me"
+                            condensed={condensed}
+                        />
             </SidebarSection>
 
             {/* Storage usage indicator at the bottom of sidebar */}
