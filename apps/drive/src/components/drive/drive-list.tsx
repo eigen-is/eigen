@@ -1,8 +1,7 @@
-import {useMemo, useState, useRef} from 'react';
+import {useState, useRef} from 'react';
 import {Button} from "@workspace/ui/components/button";
 import {EigenLoader} from "@workspace/ui";
-import {FolderPlus, Plus, Search, UploadIcon, FileText, StickyNote} from "lucide-react";
-import {Input} from "@workspace/ui/components/input";
+import {FolderPlus, Plus, UploadIcon, FileText, StickyNote} from "lucide-react";
 import {DriveTable, getFileIcon} from "@workspace/ui/components/layout/drive";
 import {type DrivePath} from "@apps/api-server/types/drive";
 import {cn} from "@workspace/ui/lib/utils";
@@ -44,17 +43,8 @@ export function DriveList({
                               onCreateDoc,
                               onCreateStickies,
                           }: DriveListProps) {
-    const [searchTerm, setSearchTerm] = useState('');
     const [isDragging, setIsDragging] = useState(false);
     const dragCounter = useRef(0);
-
-    // Filter items based on search term
-    // Use useMemo to prevent unnecessary filtering on each render
-    const filteredItems = useMemo(() => {
-        return items.filter(item =>
-            item.name.toLowerCase().includes(searchTerm.toLowerCase())
-        );
-    }, [items, searchTerm]);
 
     // Drag and drop handlers
     const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
@@ -142,31 +132,9 @@ export function DriveList({
                 </div>
             )}
             
-            {/* Search and actions toolbar */}
+            {/* Actions toolbar */}
             <div className="h-12 flex items-center justify-between border-b px-2">
-                {/* Search - hidden on small screens */}
-                <div className="relative flex-1 max-w-xs hidden sm:block">
-                    <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground"/>
-                    <Input
-                        type="search"
-                        placeholder="Search files..."
-                        className="pl-8 h-9"
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                    />
-                </div>
-
-                {/* Mobile search button */}
-                <div className="sm:hidden">
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-9 w-9"
-                        title="Search"
-                    >
-                        <Search className="h-4 w-4"/>
-                    </Button>
-                </div>
+                <div></div> {/* Empty div to maintain layout */}
                 <div className="flex gap-1">
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
@@ -210,7 +178,7 @@ export function DriveList({
 
             {/* Drive table */}
             <DriveTable
-                items={filteredItems}
+                items={items}
                 currentPath={currentPath}
                 activeItemId={activeRowId}
                 onItemClick={onRowClick}
@@ -218,7 +186,7 @@ export function DriveList({
                 getFileIcon={getFileIcon}
             />
 
-            {filteredItems.length === 0 && (
+            {items.length === 0 && (
                 <div className="flex-1 flex flex-col items-center justify-top text-center">
                     <p className="text-muted-foreground mb-4">This folder is empty</p>
                     <div className="flex gap-2">
