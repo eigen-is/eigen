@@ -1,5 +1,5 @@
 import {useMutation, useQuery, useQueryClient} from "@tanstack/react-query";
-import type {DriveACL} from "@apps/api-server/types/drive";
+import type {DriveACL, DrivePath} from "@apps/api-server/types/drive";
 import {driveApi} from "@workspace/lib/api";
 import {invalidateHomeSize} from "../../home";
 
@@ -177,19 +177,22 @@ export function useUpdateACL(ownerId: string) {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: async ({pathId, acl, parentPathId}: { pathId: string, acl: DriveACL[], parentPathId:string |null }) => {
-            console.log('put acls', pathId, acl);
-            const response = await driveApi.path.acl[ownerId][pathId].put({
+        mutationFn: async ({path, acl}: { path: DrivePath, acl: DriveACL[]}) => {
+            console.log('put acls', path.id, acl);
+            const response = await driveApi.path.acl[ownerId][path.id].put({
                 acl
             });
             console.log(response.data);
             return response.data;
         },
         onSuccess: (_, variables) => {
-            queryClient.invalidateQueries({queryKey: driveKeys.path(variables.pathId)});
+            queryClient.invalidateQueries({queryKey: driveKeys.path(variables.path.id)});
             // todo invalidate correct parent folder query
-            if (variables.parentPathId) {
-                queryClient.invalidateQueries({queryKey: driveKeys.folder(variables.parentPathId)});
+            if (variables.path.type === 'folder') {
+                // Invalidate all folder caches when a folder's ACL is updated
+                queryClient.invalidateQueries({queryKey: driveKeys.all});
+            } else if (variables.path.parentId) {
+                queryClient.invalidateQueries({queryKey: driveKeys.folder(variables.path.parentId)});
             }
         },
     });

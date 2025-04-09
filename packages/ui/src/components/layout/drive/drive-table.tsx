@@ -77,7 +77,7 @@ export function DriveTable({
                                     <span>..</span>
                                 </div>
                             </TableCell>
-                            <TableCell className="hidden sm:table-cell">Folder</TableCell>
+                            <TableCell className="hidden sm:table-cell"></TableCell>
                             <TableCell className="hidden sm:table-cell">-</TableCell>
                         </TableRow>
                     )}
