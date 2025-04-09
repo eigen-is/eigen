@@ -100,9 +100,10 @@ export default class SharedDrive extends Drive {
         }
         return null;    
     }
-    public async getThumbnail(pathId: string) {
+    public async getThumbnail(fileName: string) {
+        const pathId = fileName.split('.')[0];
         if (await this.canRead(pathId, this.user)) {
-            return this.sharedDrive.getThumbnail(pathId);
+            return this.sharedDrive.getThumbnail(fileName);
         }
         return null;    
     }   
