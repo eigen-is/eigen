@@ -63,8 +63,7 @@ export function useCreateFolder(ownerId: string) {
 
     return useMutation({
         mutationFn: async ({parentId, folderName}: { parentId: string, folderName: string }) => {
-            const response = await driveApi.folder[ownerId].post({
-                parentId,
+            const response = await driveApi.folder[ownerId][parentId].post({
                 folderName
             });
             return response.data;
