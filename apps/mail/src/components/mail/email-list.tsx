@@ -1,7 +1,7 @@
-import {FilterFn, getCoreRowModel, getSortedRowModel, SortingState, useReactTable} from "@tanstack/react-table";
+import {FilterFn, getCoreRowModel, getFilteredRowModel, getSortedRowModel, SortingState, useReactTable} from "@tanstack/react-table";
 import {rankItem} from "@tanstack/match-sorter-utils";
 import {Paperclip, Search} from "lucide-react";
-import {useMemo, useState} from "react";
+import {useMemo, useState, useRef, useEffect, KeyboardEvent} from "react";
 import {cn} from "@workspace/ui/lib/utils";
 import {Input} from "@workspace/ui/components/input";
 import {EigenLoader} from "@workspace/ui/components/layout/eigen-loader";
@@ -37,19 +37,36 @@ export function EmailList({
                               error,
                           }: EmailDataTableProps) {
 
+    // Ref voor de lijst container
+    const listContainerRef = useRef<HTMLDivElement>(null);
+    
+    // State om bij te houden of de lijst focus heeft
+    const [hasFocus, setHasFocus] = useState(false);
+    
+    // State voor het bijhouden van de huidige geselecteerde index
+    const [selectedIndex, setSelectedIndex] = useState<number>(-1);
+
     // Define columns with useMemo to prevent recreation on each render
     const columns = useMemo(() => [
         {
             header: 'Date',
             accessor: 'date',
+            id: 'date',
         },
         {
             header: 'From',
             accessor: 'from',
+            id: 'from',
         },
         {
             header: 'Subject',
             accessor: 'subject',
+            id: 'subject',
+        },
+        {
+            header: 'Content',
+            accessor: 'textShort',
+            id: 'textShort',
         }
     ], []);
 
@@ -72,6 +89,7 @@ export function EmailList({
         return [...emails].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()) || [];
     }, [emails]);
 
+    // Creëer de tabel
     const table = useReactTable({
         data: emailData,
         columns: columns,
@@ -82,12 +100,114 @@ export function EmailList({
         getCoreRowModel: getCoreRowModel(),
         getSortedRowModel: getSortedRowModel(),
         globalFilterFn: fuzzyFilter,
+        onGlobalFilterChange: setGlobalFilter,
+        getFilteredRowModel: getFilteredRowModel(),
         sortDescFirst: true,
         state: {
             sorting,
             globalFilter,
         },
     });
+
+    // Gefilterde e-mails voor gebruik met toetsenbord navigatie
+    const filteredEmails = useMemo(() => {
+        return table.getFilteredRowModel().rows.map(row => row.original as EmailSummary);
+    }, [emailData, globalFilter, table.getFilteredRowModel]);
+
+    // Effect om de lijst automatisch focus te geven bij het laden
+    useEffect(() => {
+        // Korte timeout om ervoor te zorgen dat de lijst eerst gerenderd is
+        const timer = setTimeout(() => {
+            if (listContainerRef.current) {
+                listContainerRef.current.focus();
+            }
+        }, 100);
+        
+        return () => clearTimeout(timer);
+    }, []);
+
+    // Effect om selectedIndex bij te werken wanneer activeRowId verandert
+    useEffect(() => {
+        if (activeRowId && filteredEmails.length > 0) {
+            const index = filteredEmails.findIndex(email => email.id === activeRowId);
+            if (index !== -1) {
+                setSelectedIndex(index);
+            }
+        } else {
+            setSelectedIndex(-1);
+        }
+    }, [activeRowId, filteredEmails]);
+
+    // Handel toetsenbord navigatie af
+    const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
+        if (!hasFocus || filteredEmails.length === 0) return;
+        
+        switch(e.key) {
+            case 'ArrowDown':
+                e.preventDefault();
+                setSelectedIndex(prev => {
+                    const newIndex = Math.min(prev + 1, filteredEmails.length - 1);
+                    if (newIndex >= 0) {
+                        // Item selecteren
+                        handleRowClick(filteredEmails[newIndex]);
+                        // Auto-scroll indien nodig
+                        scrollToEmail(newIndex);
+                    }
+                    return newIndex;
+                });
+                break;
+                
+            case 'ArrowUp':
+                e.preventDefault();
+                setSelectedIndex(prev => {
+                    const newIndex = Math.max(prev - 1, 0);
+                    if (newIndex >= 0) {
+                        // Item selecteren
+                        handleRowClick(filteredEmails[newIndex]);
+                        // Auto-scroll indien nodig
+                        scrollToEmail(newIndex);
+                    }
+                    return newIndex;
+                });
+                break;
+                
+            case 'Enter':
+                e.preventDefault();
+                if (selectedIndex >= 0 && selectedIndex < filteredEmails.length) {
+                    handleRowClick(filteredEmails[selectedIndex]);
+                }
+                break;
+                
+            case 'Home':
+                e.preventDefault();
+                if (filteredEmails.length > 0) {
+                    setSelectedIndex(0);
+                    handleRowClick(filteredEmails[0]);
+                    scrollToEmail(0);
+                }
+                break;
+                
+            case 'End':
+                e.preventDefault();
+                if (filteredEmails.length > 0) {
+                    const lastIndex = filteredEmails.length - 1;
+                    setSelectedIndex(lastIndex);
+                    handleRowClick(filteredEmails[lastIndex]);
+                    scrollToEmail(lastIndex);
+                }
+                break;
+        }
+    };
+
+    // Helper functie om naar een specifieke email te scrollen
+    const scrollToEmail = (index: number) => {
+        if (listContainerRef.current) {
+            const emailElements = listContainerRef.current.querySelectorAll('.eigen-list-item');
+            if (emailElements[index]) {
+                emailElements[index].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+            }
+        }
+    };
 
     // Render loading state
     if (isLoading || !emails) {
@@ -125,12 +245,18 @@ export function EmailList({
             </div>
 
             {/* Email list as single column with blocks */}
-            <div className="flex-1 overflow-y-auto">
+            <div 
+                className="flex-1 overflow-y-auto outline-none"
+                ref={listContainerRef}
+                tabIndex={0}
+                onFocus={() => setHasFocus(true)}
+                onBlur={() => setHasFocus(false)}
+                onKeyDown={handleKeyDown}
+            >
                 <div className="w-full">
-                    {table.getFilteredRowModel().rows.length > 0 ? (
+                    {filteredEmails.length > 0 ? (
                         <div className="divide-y divide-gray-100">
-                            {table.getFilteredRowModel().rows.map((row) => {
-                                const email = row.original as EmailSummary;
+                            {filteredEmails.map((email, index) => {
                                 let formattedDate = '';
                                 if (email.date) {
                                     const date = new Date(email.date);
@@ -150,13 +276,13 @@ export function EmailList({
 
                                 return (
                                     <div
-                                        key={row.id}
+                                        key={email.id}
                                         className={cn(
                                             "flex items-start py-2 px-3 eigen-list-item",
                                             // Selected: highlight background (matching sidebar active button)
-                                            activeRowId === email.id && "eigen-list-item-active",
+                                            (activeRowId === email.id || selectedIndex === index) && "eigen-list-item-active",
                                             // Unread emails get slightly darker background if not selected
-                                            !email.isRead && activeRowId !== email.id && "eigen-list-item-unread"
+                                            !email.isRead && activeRowId !== email.id && selectedIndex !== index && "eigen-list-item-unread"
                                         )}
                                         onClick={() => handleRowClick(email)}
                                     >
