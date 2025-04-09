@@ -2,9 +2,9 @@ import {createFileRoute, Outlet, redirect} from '@tanstack/react-router'
 import {createContext, useContext} from 'react';
 import {SidebarContext} from './__root';
 import {useFolderContent, useMediaQuery, useRootFolder} from '@workspace/lib/drive';
-import {DriveSidebar} from "@/components/drive/drive-sidebar.tsx";
 import {EigenLoader} from '@workspace/ui';
 import { useAuth } from '@workspace/lib/auth/auth-context.js';
+import { DriveSidebar } from '@/components/drive/drive-sidebar';
 
 // Create a drive context to share data with child routes
 export interface DriveContextType {
