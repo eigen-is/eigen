@@ -116,7 +116,7 @@ export default class Drive {
         return (await this.home.fs.dirSize('eigen.drive')) || this.db.select({size: sql`SUM(${drivePaths.size})`}).from(drivePaths).where(eq(drivePaths.type, 'file')).get()?.size as number || 0;
     }
 
-    public async getParentPaths(pathId: string): Promise<DrivePath[]> {
+    private async getParentPaths(pathId: string): Promise<DrivePath[]> {
         const paths: DrivePath[] = [];
         let currentPathId: string | null = pathId;
 
@@ -130,12 +130,6 @@ export default class Drive {
         return paths.reverse();
     }
 
-    /**
-     * Create a folder in the drive
-     * @param parentId ID of the parent folder
-     * @param folderName Name of the new folder
-     * @returns ID of the created folder
-     */
     public async createFolder(parentId: string, folderName: string): Promise<string | undefined> {
         // Get parent folder
         const parent = await this.getPath(parentId);
@@ -674,4 +668,13 @@ export default class Drive {
         }
     }
 
+    public async breadCrumb(pathId: string) {
+        let parent = await this.getPath(pathId);
+        const crumb:DrivePath[] = [];
+        while(parent) {
+            crumb.push(parent);
+            parent = (parent.parentId && await this.getPath(parent.parentId)) || null;
+        };
+        return crumb.reverse();
+    }
 }
