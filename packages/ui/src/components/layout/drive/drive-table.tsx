@@ -47,7 +47,7 @@ export function DriveTable({
                 <TableHeader>
                     <TableRow>
                         <TableHead className="w-[75%]">Name</TableHead>
-                        <TableHead className="w-[10%] hidden sm:table-cell">Shared</TableHead>
+                        <TableHead className="w-[10%] hidden sm:table-cell">Share</TableHead>
                         <TableHead className="w-[15%] hidden sm:table-cell">Modified</TableHead>
                     </TableRow>
                 </TableHeader>
