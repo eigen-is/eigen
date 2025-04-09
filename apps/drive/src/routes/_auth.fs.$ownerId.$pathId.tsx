@@ -140,7 +140,6 @@ function DriveRoute() {
 
     // Handle row click to show path details
     const handleRowClick = (path: DrivePath) => {
-        console.log(path.id);
         if (path.type === 'folder') {
             navigate({
                 to: Route.fullPath,
@@ -285,6 +284,8 @@ function DriveRoute() {
                             <div className={`${pid ? 'w-2/3' : 'w-full'} h-full overflow-hidden border-r`}>
                                 <DriveList
                                     items={folderContents}
+                                    isLoading={isFolderContentLoading}
+                                    error={isFolderContentLoadingError}
                                     onRowClick={handleRowClick}
                                     activeRowId={pid}
                                     onCreateFolder={openCreateFolderDialog}
@@ -293,7 +294,7 @@ function DriveRoute() {
                                     onDelete={handleDeletePath}
                                     onShareClick={handleShareClick}
                                     currentPath={currentPath}
-                                    rootPath={`fs/${ownerId}/root`}                                />
+                                />
                             </div>)}
                         {(pid || currentPath?.type !== 'folder') && (
                             <div className="flex-1 h-full overflow-hidden">

@@ -1,11 +1,17 @@
 import {useMemo, useState, useRef} from 'react';
 import {Button} from "@workspace/ui/components/button";
 import {EigenLoader} from "@workspace/ui";
-import {FolderPlus, Search, UploadIcon} from "lucide-react";
+import {FolderPlus, Plus, Search, UploadIcon, FileText, StickyNote} from "lucide-react";
 import {Input} from "@workspace/ui/components/input";
 import {DriveTable, getFileIcon} from "@workspace/ui/components/layout/drive";
 import {type DrivePath} from "@apps/api-server/types/drive";
 import {cn} from "@workspace/ui/lib/utils";
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger
+} from "@workspace/ui/components/dropdown-menu";
 
 interface DriveListProps {
     items: DrivePath[];
@@ -18,7 +24,9 @@ interface DriveListProps {
     onUploadFiles?: (files: File[]) => void; 
     currentPath?: DrivePath | null;
     onDelete?: (path: DrivePath) => void;
-    onShareClick?: (item: DrivePath) => void;   
+    onShareClick?: (item: DrivePath) => void;
+    onCreateDoc?: () => void;
+    onCreateStickies?: () => void;   
 }
 
 export function DriveList({
@@ -33,6 +41,8 @@ export function DriveList({
                               onDelete,
                               currentPath,
                               onShareClick,
+                              onCreateDoc,
+                              onCreateStickies,
                           }: DriveListProps) {
     const [searchTerm, setSearchTerm] = useState('');
     const [isDragging, setIsDragging] = useState(false);
@@ -157,30 +167,44 @@ export function DriveList({
                         <Search className="h-4 w-4"/>
                     </Button>
                 </div>
-
                 <div className="flex gap-1">
-                    {onCreateFolder && (
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            className="h-9"
-                            onClick={onCreateFolder}
-                        >
-                            <FolderPlus className="h-4 w-4 sm:mr-2"/>
-                            <span className="hidden sm:inline">New Folder</span>
-                        </Button>
-                    )}
-                    {onUploadFile && (
-                        <Button
-                            variant="default"
-                            size="sm"
-                            className="h-9"
-                            onClick={onUploadFile}
-                        >
-                            <UploadIcon className="h-4 w-4 sm:mr-2"/>
-                            <span className="hidden sm:inline">Upload</span>
-                        </Button>
-                    )}
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button
+                                size="default"
+                                className='h-9 w-32 justify-start'
+                            >
+                                <Plus className="h-4 w-4 sm:mr-2" />
+                                <span>New</span>
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                            {onCreateFolder && (
+                                <DropdownMenuItem onClick={onCreateFolder}>
+                                    <FolderPlus className="h-4 w-4 mr-2" />
+                                    Create folder
+                                </DropdownMenuItem>
+                            )}
+                            {onUploadFile && (
+                                <DropdownMenuItem onClick={onUploadFile}>
+                                    <UploadIcon className="h-4 w-4 mr-2" />
+                                    Upload file
+                                </DropdownMenuItem>
+                            )}
+                            {onCreateDoc && (
+                                <DropdownMenuItem onClick={onCreateDoc}>
+                                    <FileText className="h-4 w-4 mr-2" />
+                                    Create doc
+                                </DropdownMenuItem>
+                            )}
+                            {onCreateStickies && (
+                                <DropdownMenuItem onClick={onCreateStickies}>
+                                    <StickyNote className="h-4 w-4 mr-2" />
+                                    Create stickies
+                                </DropdownMenuItem>
+                            )}
+                        </DropdownMenuContent>
+                    </DropdownMenu>
                 </div>
             </div>
 
@@ -205,7 +229,7 @@ export function DriveList({
                                 className="h-9"
                                 onClick={onCreateFolder}
                             >
-                                <FolderPlus className="h-4 w-4 mr-2"/>
+                                <FolderPlus className="h-4 w-4 mr-2" />
                                 New Folder
                             </Button>
                         )}
@@ -216,7 +240,7 @@ export function DriveList({
                                 className="h-9"
                                 onClick={onUploadFile}
                             >
-                                <UploadIcon className="h-4 w-4 mr-2"/>
+                                <UploadIcon className="h-4 w-4 mr-2" />
                                 Upload
                             </Button>
                         )}
