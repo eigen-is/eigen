@@ -40,17 +40,6 @@ export function DriveSidebar({
             >
                 {/* New button */}
            
-                <Button
-                    size={condensed ? "icon" : "default"}
-                    className={`${condensed ? 'w-10 p-0' : 'w-full justify-start gap-3'}`}
-                    onClick={onCreateFolder}
-                >
-                    <Plus className="h-4 w-4 mr-2" />
-                    {!condensed && <span>New</span>}
-                </Button>
-     
-                </SidebarSection>
-            <SidebarSection>
                     
                     <SidebarItem
                             icon={<Home className="h-4 w-4"/>}
@@ -80,7 +69,9 @@ export function DriveSidebar({
                     
             </SidebarSection>
             <Separator/>
-            <SidebarSection>
+            <SidebarSection
+                condensed={condensed}
+            >
                         <SidebarItem
                             icon={<Link className="h-4 w-4"/>}
                             to="/"
