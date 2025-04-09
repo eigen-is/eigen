@@ -21,7 +21,8 @@
     "react-dom": "^19.0.0",
     "shadcn-ui": "^0.9.5",
     "tailwind-merge": "^3.0.2",
-    "tailwindcss-animate": "^1.0.7"
+    "tailwindcss-animate": "^1.0.7",
+    "react-qr-code": "^2.0.15"
   },
   "devDependencies": {
     "@workspace/config": "workspace:*",
