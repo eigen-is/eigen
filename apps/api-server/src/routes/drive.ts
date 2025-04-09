@@ -1,6 +1,5 @@
 import {Elysia, t} from "elysia";
 import {betterAuth} from "./auth";
-import {getDrive} from "../lib/drive/drive";
 import {type User} from "better-auth/types";
 import {type DriveACL} from "../types/drive";
 import { getSharedDrive } from "../lib/drive/sharedDrive";
