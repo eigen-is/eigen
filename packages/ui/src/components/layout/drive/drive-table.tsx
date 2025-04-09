@@ -4,6 +4,7 @@ import {cn} from "@workspace/ui/lib/utils";
 import {ChevronLeft} from "lucide-react";
 import {formatDistanceToNow} from "date-fns";
 import {DrivePath} from "@apps/api-server/types/drive";
+import {DriveShareSummary} from "./drive-share-summary";
 
 // Props for the DriveTable component
 export interface DriveTableProps {
@@ -12,6 +13,7 @@ export interface DriveTableProps {
     activeItemId?: string;
     onItemClick?: (item: DrivePath) => void;
     getFileIcon?: (mimeType: string, type: string, props?: any) => React.ReactNode;
+    onShareClick?: (item: DrivePath) => void;
 }
 
 export function DriveTable({
@@ -19,7 +21,8 @@ export function DriveTable({
                                currentPath,
                                activeItemId,
                                onItemClick,
-                               getFileIcon
+                               getFileIcon,
+                               onShareClick
                            }: DriveTableProps) {
 
     // Sort items: folders first, then sort alphabetically by name
@@ -104,8 +107,12 @@ export function DriveTable({
                                     <span className="truncate max-w-[calc(100%-1.5rem)]">{item.name}</span>
                                 </div>
                             </TableCell>
-                            <TableCell className="hidden sm:table-cell">
-                                {item.acl?.map((acl) => acl.email).join(', ')}
+                            <TableCell className="hidden sm:table-cell group">
+                                <DriveShareSummary 
+                                  acl={item.acl} 
+                                  onClick={() => onShareClick?.(item)} 
+                                  showIconOnHover={true}
+                                />
                             </TableCell>
                             <TableCell className="hidden sm:table-cell">
                                 {item.updatedAt ?
