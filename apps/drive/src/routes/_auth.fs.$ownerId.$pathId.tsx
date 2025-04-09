@@ -89,6 +89,10 @@ function DriveRoute() {
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
     const [itemToDelete, setItemToDelete] = useState<DrivePath | null>(null);
 
+    // Share dialog state
+    const [accessDialogOpen, setAccessDialogOpen] = useState(false);
+    const [itemToShare, setItemToShare] = useState<DrivePath | null>(null);
+
     // Don't fetch data until we have the actual root folder ID (not "root")
     const skipDataFetch = pathId === 'root';
     
@@ -109,10 +113,6 @@ function DriveRoute() {
         );
     }
 
-    const [accessDialogOpen, setAccessDialogOpen] = useState(false);
-    const [itemToShare, setItemToShare] = useState<DrivePath | null>(null);
-   
-    // Handle folder creation
     const handleCreateFolder = async () => {
         if (!newFolderName.trim()) return;
 
