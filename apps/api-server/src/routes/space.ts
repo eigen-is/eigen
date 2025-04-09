@@ -1,9 +1,10 @@
 import Elysia, {t} from "elysia";
 import {getAvatar, getPublicInfo} from "../lib/space/public";
 import {waitlist} from "../lib/space/waitlist";
+import {betterAuth} from "./auth";
 
 export const spaceRouter = new Elysia({name: "space"})
-    // .use(betterAuth)
+    .use(betterAuth)
     .get("/space/avatar/:id/:filename", async ({params, set}: {
         params: { id: string, filename: string },
         set: any
@@ -32,18 +33,3 @@ export const spaceRouter = new Elysia({name: "space"})
             notes: t.String()
         })
     })
-// .post("/space/nu", async ({body}: { body: { email: string, password: string, name: string } }) => {
-//     return await auth.api.signUpEmail({
-//         body: {
-//             email: body.email,
-//             password: body.password,
-//             name: body.name
-//         }
-//     });
-// }, {
-//     body: t.Object({
-//         email: t.String(),
-//         password: t.String(),
-//         name: t.String()
-//     })
-// })

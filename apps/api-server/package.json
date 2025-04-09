@@ -36,6 +36,10 @@
     "@workspace/config": "workspace:*",
     "bun-types": "latest"
   },
+  "optionalDependencies": {
+    "@img/sharp-win32-x64": "^0.34.1",
+    "@img/sharp-linux-x64": "^0.34.1"
+  },
   "module": "src/index.js",
   "exports": {
     ".": "./src/index.js",
