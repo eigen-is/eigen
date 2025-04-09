@@ -1,7 +1,7 @@
 import {useState, useRef} from 'react';
 import {Button} from "@workspace/ui/components/button";
 import {EigenLoader} from "@workspace/ui";
-import {FolderPlus, Plus, UploadIcon, FileText, StickyNote, Folder, FileIcon} from "lucide-react";
+import {FolderPlus, Plus, UploadIcon, FileText, StickyNote} from "lucide-react";
 import {DriveTable, getFileIcon} from "@workspace/ui/components/layout/drive";
 import {type DrivePath} from "@apps/api-server/types/drive";
 import {cn} from "@workspace/ui/lib/utils";
@@ -20,7 +20,6 @@ import {
     BreadcrumbSeparator
 } from "@workspace/ui/components/breadcrumb";
 import {useBreadcrumb} from "@workspace/lib/drive";
-import {Route as DriveRoute} from "@/routes/_auth.fs.$ownerId.$pathId";
 import {Fragment} from 'react';
 
 interface DriveListProps {
@@ -37,6 +36,8 @@ interface DriveListProps {
     onShareClick?: (item: DrivePath) => void;
     onCreateDoc?: () => void;
     onCreateStickies?: () => void;   
+    ownerId: string;
+    pathId: string;
 }
 
 export function DriveList({
@@ -53,10 +54,11 @@ export function DriveList({
                               onShareClick,
                               onCreateDoc,
                               onCreateStickies,
+                              ownerId,
+                              pathId
                           }: DriveListProps) {
     const [isDragging, setIsDragging] = useState(false);
     const dragCounter = useRef(0);
-    const {ownerId, pathId} = DriveRoute.useParams();
     const {data: breadcrumbPaths = []} = useBreadcrumb(ownerId, pathId);
 
     // Drag and drop handlers
