@@ -108,7 +108,7 @@ function UserDropdown({rootRoute, appName}: { rootRoute: TopbarProps['rootRoute'
                         );
                     })}
                     <DropdownMenuSeparator/>
-                    <DropdownMenuItem>
+                    <DropdownMenuItem >
                         <a href={`${import.meta.env.VITE_APP_SPACE_URL}/user`}
                            className={`flex items-center w-full`}>
                             Profile
@@ -116,7 +116,7 @@ function UserDropdown({rootRoute, appName}: { rootRoute: TopbarProps['rootRoute'
                     </DropdownMenuItem>
                     <DropdownMenuItem>
                         <a href={`${import.meta.env.VITE_APP_SPACE_URL}/security/password`}
-                           className={`flex items-center w-ful`}>
+                           className={`flex items-center w-full`}>
                             Settings
                         </a>
                     </DropdownMenuItem>
