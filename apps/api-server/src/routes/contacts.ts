@@ -69,7 +69,7 @@ export const contactsRouter = new Elysia({name: "contacts"})
         body: t.Object({
             file: t.File({
                 format: 'image/*',
-                maxSize: 5 * 1024 * 1024  // 5MB maximum file size
+                maxSize: 15 * 1024 * 1024  // 15MB maximum file size
             })
         }),
         auth: true
