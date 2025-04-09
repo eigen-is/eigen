@@ -7,6 +7,7 @@ import {AuthProvider} from "@workspace/lib/auth/auth-context.tsx"
 import {QueryClient, QueryClientProvider} from '@tanstack/react-query';
 import {ReactQueryDevtools} from '@tanstack/react-query-devtools';
 import {NotificationProvider} from "./notification-provider";
+import { TooltipProvider } from "@radix-ui/react-tooltip"
 
 interface EigenAppProps {
     children: React.ReactNode
@@ -22,16 +23,18 @@ const queryClient = new QueryClient();
 
 export function EigenApp({children}: EigenAppProps) {
     return (
-        <QueryClientProvider client={queryClient}>
-            <AuthProvider>
-                <NotificationProvider>
-                    <UploadProvider>
-                        {children}
-                        <Toaster/>
-                    </UploadProvider>
-                </NotificationProvider>
-                <ReactQueryDevtools initialIsOpen={false}/>
-            </AuthProvider>
-        </QueryClientProvider>
+        <TooltipProvider>
+            <QueryClientProvider client={queryClient}>
+                <AuthProvider>
+                    <NotificationProvider>
+                        <UploadProvider>
+                            {children}
+                            <Toaster/>
+                        </UploadProvider>
+                    </NotificationProvider>
+                    <ReactQueryDevtools initialIsOpen={false}/>
+                </AuthProvider>
+            </QueryClientProvider>
+        </TooltipProvider>
     )
 }
