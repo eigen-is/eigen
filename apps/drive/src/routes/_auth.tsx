@@ -83,8 +83,7 @@ function AuthLayout() {
                     condensed={isTablet}
                     isMobile={isMobile}
                     onClose={() => setSidebarOpen(false)}
-                    folders={folders}
-                    isLoading={isLoading}
+                    rootPath={`/fs/${rootFolder?.ownerId}/${rootFolder?.id}`}   
                     error={error}
                 />
             </div>
