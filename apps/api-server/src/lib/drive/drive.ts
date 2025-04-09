@@ -481,7 +481,7 @@ export default class Drive {
      * @param pathId ID of the path
      * @param acl New ACL
      */
-    public async updateACL(pathId: string, acl: DriveACL[]): Promise<void> {
+    public async updateACL(pathId: string, acl: DriveACL[] | null): Promise<void> {
         // Get path
         const item = await this.getPath(pathId);
         if (!item) {
@@ -491,6 +491,10 @@ export default class Drive {
         // Check write permissions
         if (!(await this.canWrite(pathId, this.owner))) {
             throw new Error("No write permission");
+        }
+
+        if (acl?.length === 0) {
+            acl = null;
         }
 
         // Update in database

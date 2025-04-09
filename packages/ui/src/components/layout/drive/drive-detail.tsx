@@ -54,12 +54,10 @@ export function DriveDetail({
                 <div className="flex items-center gap-1">
                     {/* Mobile back button when needed */}
                     {onBackClick && (
-                        <>
-                            <TooltipButton onClick={onBackClick}
-                                    tooltipText={isMobile ? "Back" : "Close"} 
-                                    icon={isMobile ? ArrowLeft : X}
-                                    />
-                        </>
+                    <TooltipButton onClick={onBackClick}
+                            tooltipText={isMobile ? "Back" : "Close"} 
+                            icon={isMobile ? ArrowLeft : X}
+                            />
                     )}
                 </div>
 
@@ -110,7 +108,9 @@ export function DriveDetail({
             </div>
 
             <div className="p-4 flex-1 overflow-auto">
-                <h2 className="text-xl font-medium mb-2 truncate overflow-hidden flex items-center">{getFileIcon(path.mimeType, path.type)} {path.name}</h2>
+            <h2 className="text-xl font-medium mb-2 flex items-center">
+  <span className="truncate overflow-hidden min-w-0 flex-1">{path.name}</span>
+</h2>
                 <Table className="text-sm text-muted-foreground mb-4">
                     <TableBody>
                         <TableRow>
