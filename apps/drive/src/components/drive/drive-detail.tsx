@@ -110,23 +110,23 @@ export function DriveDetail({
             </div>
 
             <div className="p-4 flex-1 overflow-auto">
-                <h2 className="text-xl font-medium mb-2 truncate overflow-hidden flex items-center gap-2">{getFileIcon(path.mimeType, path.type)} {path.name}</h2>
+                <h2 className="text-xl font-medium mb-2 truncate overflow-hidden flex items-center">{getFileIcon(path.mimeType, path.type)} {path.name}</h2>
                 <Table className="text-sm text-muted-foreground mb-4">
                     <TableBody>
                         <TableRow>
-                            <TableCell className="font-medium">Mime</TableCell>
-                            <TableCell>{path.mimeType}</TableCell>
+                            <TableCell className="font-medium px-0">Mime</TableCell>
+                            <TableCell className="px-0">{path.mimeType}</TableCell>
                         </TableRow>
                         {path.size && (
                             <TableRow>
-                                <TableCell className="font-medium">Size</TableCell>
-                                <TableCell>{formatFileSize(path.size)}</TableCell>
+                                <TableCell className="font-medium px-0">Size</TableCell>
+                                <TableCell className="px-0">{formatFileSize(path.size)}</TableCell>
                             </TableRow>
                         )}
                         {path.createdAt && (
                             <TableRow>
-                                <TableCell className="font-medium">Created</TableCell>
-                                <TableCell>{new Date(path.createdAt).toLocaleDateString()}</TableCell>
+                                <TableCell className="font-medium px-0">Created</TableCell>
+                                <TableCell className="px-0">{new Date(path.createdAt).toLocaleDateString()}</TableCell>
                             </TableRow>
                         )}
                     </TableBody>
