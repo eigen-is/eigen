@@ -3,6 +3,7 @@ import {Progress} from "@workspace/ui/components/progress";
 import {useHomeSize} from "@workspace/lib/home";
 import {EigenLoader} from "@workspace/ui";
 import {cn} from "@workspace/ui/lib/utils";
+import { formatFileSize } from "@workspace/ui/lib/formatFileSize";
 
 // Type definition for storage data
 export interface StorageData {
@@ -25,15 +26,6 @@ export function StorageUsage({className = "", condensed = false}: StorageUsagePr
     const {data: storageData, isLoading: storageLoading} = useHomeSize();
     const [showDetails, setShowDetails] = useState(false);
 
-    // Format bytes to human-readable format
-    const formatBytes = (bytes: number) => {
-        if (bytes === 0) return "0 Bytes";
-        const k = 1024;
-        const sizes = ["Bytes", "KB", "MB", "GB"];
-        const i = Math.floor(Math.log(bytes) / Math.log(k));
-        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i];
-    };
-
     return (
         <div className={cn(`p-3 select-none cursor-pointer`, className)}  onClick={() => setShowDetails(!showDetails)}>
             <div>
@@ -43,7 +35,7 @@ export function StorageUsage({className = "", condensed = false}: StorageUsagePr
                         {storageLoading
                             ? <EigenLoader/>
                             : storageData
-                                ? `${formatBytes(storageData.used)} / ${formatBytes(storageData.max)}`
+                                ? `${formatFileSize(storageData.used)} / ${formatFileSize(storageData.max)}`
                                 : "Unknown"}
                     </span>
                 </div>}
@@ -64,7 +56,7 @@ export function StorageUsage({className = "", condensed = false}: StorageUsagePr
                         .map(([key, value]) => (
                             <div key={key} className="flex justify-between">
                                 <span className="text-muted-foreground capitalize">{key}</span>
-                                <span>{formatBytes(value as number)}</span>
+                                <span>{formatFileSize(value as number)}</span>
                             </div>
                         ))}
                 </div>
