@@ -282,7 +282,6 @@ export function DriveAccessListEdit({
   }, [accessList, isPublicEnabled, publicAccessRights, onSave])
 
   useEffect(() => {
-    console.log('Access list updated:', accessList)
   }, [accessList])
 
   return (
@@ -290,9 +289,6 @@ export function DriveAccessListEdit({
      
       {/* Contact autosuggest to add new people */}
       <div>
-        <label htmlFor="new-contact" className="text-sm font-medium">
-          Add people, groups and calendar events
-        </label>
         <div className="flex mt-2">
           <div className="flex-1 relative">
             <ContactAutosuggest
@@ -332,7 +328,7 @@ export function DriveAccessListEdit({
                   defaultValue={access.write ? "editor" : "viewer"}
                   onValueChange={(value) => handlePermissionChange(access.email, value)}
                 >
-                  <SelectTrigger className="h-7 w-24">
+                  <SelectTrigger className="h-7 w-28">
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
