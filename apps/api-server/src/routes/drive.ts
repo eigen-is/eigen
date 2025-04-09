@@ -251,3 +251,14 @@ export const driveRouter = new Elysia({name: "drive"})
             pathId: t.String()
         })
     })
+
+    .get("/drive/breadcrumb/:ownerId/:pathId", async ({params, user}: { params: { ownerId: string, pathId: string }, user: User }) => {
+        const drive = await getSharedDrive(params.ownerId, user);
+        return await drive.breadCrumb(params.pathId);
+    }, {
+        auth: true,
+        params: t.Object({
+            ownerId: t.String(),
+            pathId: t.String()
+        })
+    })

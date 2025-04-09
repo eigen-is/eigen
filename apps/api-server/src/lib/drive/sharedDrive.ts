@@ -3,7 +3,7 @@ import { getDrive } from "./drive";
 import { getUserById } from "../users/users";
 import { getHome, Home } from "../home/home";
 import Drive from "./drive";
-import type { DriveACL } from "../../types/drive";
+import type { DriveACL, DrivePath } from "../../types/drive";
 
 export async function getSharedDrive(ownerId: string, user: User) {
     if (ownerId !== user.id) {
@@ -106,5 +106,18 @@ export default class SharedDrive extends Drive {
             return this.sharedDrive.getThumbnail(fileName);
         }
         return null;    
-    }   
+    } 
+    public async breadCrumb(pathId: string) {
+        const bread = (await this.sharedDrive.breadCrumb(pathId));
+        const crumb: DrivePath[] = [];
+        while(bread.length > 0) {
+            const path = bread.pop();
+            if (path && await this.canRead(path.id, this.user)) {
+                crumb.push(path);
+            } else {
+                break;
+            }
+        };
+        return crumb.reverse();
+    }  
 }
