@@ -15,9 +15,5 @@
   "workspaces": [
     "packages/*",
     "apps/*"
-  ],
-  "dependencies": {
-    "react-qr-code": "^2.0.15",
-    "sharp": "^0.34.1"
-  }
+  ]
 }
