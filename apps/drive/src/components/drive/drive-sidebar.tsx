@@ -44,7 +44,7 @@ export function DriveSidebar({
                     <SidebarItem
                             icon={<Home className="h-4 w-4"/>}
                             to={rootPath}
-                            label="Home"
+                            label="Drive"
                             condensed={condensed}
                         />
 

@@ -223,3 +223,16 @@ export function useCheckWritePermission(ownerId: string, pathId: string | undefi
         enabled: !!pathId
     });
 }
+
+// GET BREADCRUMB PATH
+export function useBreadcrumb(ownerId: string, pathId: string | undefined) {
+    return useQuery({
+        queryKey: [...driveKeys.path(pathId || ''), 'breadcrumb'],
+        queryFn: async () => {
+            if (!pathId) return [];
+            const response = await driveApi.breadcrumb[ownerId][pathId].get();
+            return response.data || [];
+        },
+        enabled: !!pathId
+    });
+}
