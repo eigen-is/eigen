@@ -23,6 +23,7 @@ import {DeleteDialog} from "@workspace/ui/components/layout/delete/delete-dialog
 import {invalidateHomeSize} from "@workspace/lib/home";
 import {useQueryClient} from "@tanstack/react-query";
 import {useFileUpload} from "@workspace/ui/components/layout/drive/file-upload";
+import {DriveAccessDialog} from "./../components/drive/drive-access-dialog";
 
 // Define search params type
 export interface DriveSearchParams {
@@ -108,6 +109,9 @@ function DriveRoute() {
         );
     }
 
+    const [accessDialogOpen, setAccessDialogOpen] = useState(false);
+    const [itemToShare, setItemToShare] = useState<DrivePath | null>(null);
+   
     // Handle folder creation
     const handleCreateFolder = async () => {
         if (!newFolderName.trim()) return;
@@ -164,6 +168,12 @@ function DriveRoute() {
         // Open the delete confirmation dialog and store the path to be deleted
         setItemToDelete(path);
         setDeleteDialogOpen(true);
+    };
+
+    // Handle share icon click
+    const handleShareClick = (path: DrivePath) => {
+        setItemToShare(path);
+        setAccessDialogOpen(true);
     };
 
     // Function to perform the actual delete after confirmation
@@ -247,6 +257,7 @@ function DriveRoute() {
                             isMobile={true}
                             onBackClick={handleBackToList}
                             onDelete={handleDeletePath}
+                            onShareClick={handleShareClick}
                         />
                     </div>
                 ) : (
@@ -261,6 +272,7 @@ function DriveRoute() {
                             onUploadFile={handleFileUpload}
                             onUploadFiles={processFiles}
                             onDelete={handleDeletePath}
+                            onShareClick={handleShareClick}
                             currentPath={currentPath}
                         />
                     </div>
@@ -275,15 +287,16 @@ function DriveRoute() {
                                     items={folderContents}
                                     isLoading={isFolderContentLoading}
                                     error={isFolderContentLoadingError}
-                                onRowClick={handleRowClick}
-                                activeRowId={pid}
-                                onCreateFolder={openCreateFolderDialog}
-                                onUploadFile={handleFileUpload}
-                                onUploadFiles={processFiles}
-                                currentPath={currentPath}
-                                onDelete={handleDeletePath}
-                            />
-                        </div>)}
+                                    onRowClick={handleRowClick}
+                                    activeRowId={pid}
+                                    onCreateFolder={openCreateFolderDialog}
+                                    onUploadFile={handleFileUpload}
+                                    onUploadFiles={processFiles}
+                                    onDelete={handleDeletePath}
+                                    onShareClick={handleShareClick}
+                                    currentPath={currentPath}
+                                />
+                            </div>)}
                         {(pid || currentPath?.type !== 'folder') && (
                             <div className="flex-1 h-full overflow-hidden">
                                 <div className="h-full">
@@ -292,6 +305,7 @@ function DriveRoute() {
                                         className="border-none h-full"
                                         onDelete={handleDeletePath}
                                         onBackClick={handleBackToList}
+                                        onShareClick={handleShareClick}
                                     />
                                 </div>
                             </div>
@@ -321,6 +335,14 @@ function DriveRoute() {
                 description="Are you sure you want to delete"
                 itemName={itemToDelete?.name}
                 onDelete={confirmDelete}
+            />
+            
+            {/* Access Control Edit Dialog */}
+            <DriveAccessDialog 
+                open={accessDialogOpen}
+                onOpenChange={setAccessDialogOpen}
+                path={itemToShare}
+                acl={itemToShare?.acl || null}
             />
         </>
     );

@@ -18,19 +18,21 @@ export function DriveAccessDialog({
   acl,
 }: DriveAccessDialogProps) {
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const updateACL = useUpdateACL(path!.ownerId);
-
-  // Handler for when save is clicked in the access list edit component
-  const handleSave = async (updatedAcl: DriveACL[]) => {
-    setIsSubmitting(true)
-    await updateACL.mutateAsync({pathId: path!.id, acl: updatedAcl, parentPathId: path!.parentId || null});
-    onOpenChange(false);
-    setIsSubmitting(false);
-  }
+  
+  // Always call hooks, even if path is null
+  const updateACL = useUpdateACL(path?.ownerId || '');
 
   // Don't render if no path is provided
   if (!path) {
     return null
+  }
+  
+  // Handler for when save is clicked in the access list edit component
+  const handleSave = async (updatedAcl: DriveACL[]) => {
+    setIsSubmitting(true)
+    await updateACL.mutateAsync({pathId: path.id, acl: updatedAcl, parentPathId: path.parentId || null});
+    onOpenChange(false);
+    setIsSubmitting(false);
   }
 
   return (

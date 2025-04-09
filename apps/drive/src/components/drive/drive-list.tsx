@@ -3,20 +3,22 @@ import {Button} from "@workspace/ui/components/button";
 import {EigenLoader} from "@workspace/ui";
 import {FolderPlus, Search, UploadIcon} from "lucide-react";
 import {Input} from "@workspace/ui/components/input";
-import {DrivePathItem, DriveTable, getFileIcon} from "@workspace/ui/components/layout/drive";
+import {DriveTable, getFileIcon} from "@workspace/ui/components/layout/drive";
+import {type DrivePath} from "@apps/api-server/types/drive";
 import {cn} from "@workspace/ui/lib/utils";
 
 interface DriveListProps {
-    items: DrivePathItem[];
+    items: DrivePath[];
     isLoading?: boolean;
     error?: Error | null;
-    onRowClick?: (path: DrivePathItem) => void;
+    onRowClick?: (path: DrivePath) => void;
     activeRowId?: string;
     onCreateFolder?: () => void;
     onUploadFile?: () => void;
     onUploadFiles?: (files: File[]) => void; 
-    currentPath?: DrivePathItem | null;
-    onDelete?: (path: DrivePathItem) => void;
+    currentPath?: DrivePath | null;
+    onDelete?: (path: DrivePath) => void;
+    onShareClick?: (item: DrivePath) => void;   
 }
 
 export function DriveList({
@@ -30,6 +32,7 @@ export function DriveList({
                               onUploadFiles,
                               onDelete,
                               currentPath,
+                              onShareClick,
                           }: DriveListProps) {
     const [searchTerm, setSearchTerm] = useState('');
     const [isDragging, setIsDragging] = useState(false);
@@ -187,6 +190,7 @@ export function DriveList({
                 currentPath={currentPath}
                 activeItemId={activeRowId}
                 onItemClick={onRowClick}
+                onShareClick={onShareClick}
                 getFileIcon={getFileIcon}
             />
 

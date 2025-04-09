@@ -10,8 +10,7 @@ import {Button} from "@workspace/ui/components/button";
 import {TooltipButton} from "@workspace/ui";
 import {EigenLoader} from "@workspace/ui";
 import {DriveAccessList} from "@workspace/ui/components/layout/drive";
-import {useState} from "react";
-import {DriveAccessDialog} from "./drive-access-dialog";
+import {type DrivePath} from "@apps/api-server/types/drive";
 
 interface DriveDetailProps {
     path: any | null;
@@ -19,6 +18,7 @@ interface DriveDetailProps {
     className?: string;
     onBackClick?: () => void;
     onDelete: (path: any) => void;
+    onShareClick?: (item: DrivePath) => void;   
 }
 
 export function DriveDetail({
@@ -27,10 +27,9 @@ export function DriveDetail({
                                 className,
                                 onBackClick,
                                 onDelete,
+                                onShareClick,
                                 ...props
                             }: DriveDetailProps) {
-
-    const [accessDialogOpen, setAccessDialogOpen] = useState(false);
 
     if (!path) {
         return (
@@ -68,7 +67,7 @@ export function DriveDetail({
                         icon={Link}
                         tooltipText="Edit Access"
                         onClick={() => {
-                            setAccessDialogOpen(true);
+                            onShareClick?.(path);
                         }}
                     />
                     <TooltipButton
@@ -126,14 +125,6 @@ export function DriveDetail({
                     />
                 </div>
             </div>
-            
-            {/* Access Control Edit Dialog */}
-            <DriveAccessDialog 
-                open={accessDialogOpen}
-                onOpenChange={setAccessDialogOpen}
-                path={path}
-                acl={path.acl}
-            />
         </div>
     );
 }

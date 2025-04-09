@@ -1,5 +1,5 @@
 import {Button} from "@workspace/ui/components/button";
-import {Tooltip, TooltipContent, TooltipProvider, TooltipTrigger,} from "@workspace/ui/components/tooltip";
+import {Tooltip, TooltipContent, TooltipTrigger,} from "@workspace/ui/components/tooltip";
 import {LucideIcon} from "lucide-react";
 
 export interface TooltipButtonProps {
@@ -53,21 +53,19 @@ export const TooltipButton = ({
                                   disabled = false,
                               }: TooltipButtonProps) => {
     return (
-        <TooltipProvider>
-            <Tooltip>
-                <TooltipTrigger asChild>
-                    <Button
-                        variant={variant}
-                        size={size}
-                        className={className}
-                        onClick={onClick}
-                        disabled={disabled}
-                    >
-                        <Icon className="h-4 w-4"/>
-                    </Button>
-                </TooltipTrigger>
-                <TooltipContent>{tooltipText}</TooltipContent>
-            </Tooltip>
-        </TooltipProvider>
+        <Tooltip>
+            <TooltipTrigger asChild>
+                <Button
+                    variant={variant}
+                    size={size}
+                    className={className}
+                    onClick={onClick}
+                    disabled={disabled}
+                >
+                    <Icon className="h-4 w-4"/>
+                </Button>
+            </TooltipTrigger>
+            <TooltipContent>{tooltipText}</TooltipContent>
+        </Tooltip>
     );
 };

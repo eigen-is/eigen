@@ -1,5 +1,6 @@
 import { Link } from "lucide-react";
 import { cn } from "@workspace/ui/lib/utils";
+import { UserPublicAvatar } from "../user-public-avatar";
 
 export interface Acl {
   email: string;
@@ -30,8 +31,23 @@ export function DriveShareSummary({
       }}
     >
       {isShared ? (
-        <div className="text-sm text-muted-foreground">
-          {acl.map((access) => access.email).join(", ")}
+        <div className="flex items-center gap-1">
+          {acl?.slice(0, 3).map((access, index) => (
+            <UserPublicAvatar
+              key={access.email}
+              email={access.email}
+              size="sm"
+              className={cn(
+                "border border-background",
+                index > 0 && "-ml-2" // Overlap avatars
+              )}
+            />
+          ))}
+          {acl && acl.length > 3 && (
+            <span className="text-xs text-muted-foreground ml-1">
+              +{acl.length - 3}
+            </span>
+          )}
         </div>
       ) : (
         showIconOnHover && (
