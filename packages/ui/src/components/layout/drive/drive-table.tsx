@@ -44,7 +44,7 @@ export function DriveTable({
                 <TableHeader>
                     <TableRow>
                         <TableHead className="w-[75%]">Name</TableHead>
-                        <TableHead className="w-[10%] hidden sm:table-cell">Type</TableHead>
+                        <TableHead className="w-[10%] hidden sm:table-cell">Shared</TableHead>
                         <TableHead className="w-[15%] hidden sm:table-cell">Modified</TableHead>
                     </TableRow>
                 </TableHeader>
@@ -105,8 +105,7 @@ export function DriveTable({
                                 </div>
                             </TableCell>
                             <TableCell className="hidden sm:table-cell">
-                                {item.type === 'folder' ? 'Folder' :
-                                    item.type === 'eigendocs' ? 'EigenDocs' : 'File'}
+                                {item.acl?.map((acl) => acl.email).join(', ')}
                             </TableCell>
                             <TableCell className="hidden sm:table-cell">
                                 {item.updatedAt ?
