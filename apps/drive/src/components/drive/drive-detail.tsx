@@ -9,7 +9,7 @@ import {
 import {Button} from "@workspace/ui/components/button";
 import {TooltipButton} from "@workspace/ui";
 import {EigenLoader} from "@workspace/ui";
-import {DriveAccessList} from "@workspace/ui/components/layout/drive";
+import {DriveAccessList, getFileIcon} from "@workspace/ui/components/layout/drive";
 import {type DrivePath} from "@apps/api-server/types/drive";
 import { formatFileSize } from "@workspace/ui/lib/formatFileSize";
 import {
@@ -110,7 +110,7 @@ export function DriveDetail({
             </div>
 
             <div className="p-4 flex-1 overflow-auto">
-                <h2 className="text-xl font-medium mb-2 truncate overflow-hidden">{path.name}</h2>
+                <h2 className="text-xl font-medium mb-2 truncate overflow-hidden flex items-center gap-2">{getFileIcon(path.mimeType, path.type)} {path.name}</h2>
                 <Table className="text-sm text-muted-foreground mb-4">
                     <TableBody>
                         <TableRow>
