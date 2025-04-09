@@ -12,11 +12,7 @@ import {
     usePathInfo,
     useRootFolder
 } from '@workspace/lib/drive';
-import {useEffect, useRef, useState} from "react";
-import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,} from "@workspace/ui/components/dialog";
-import {Input} from "@workspace/ui/components/input";
-import {Label} from "@workspace/ui/components/label";
-import {Button} from "@workspace/ui/components/button";
+import {useEffect, useState} from "react";
 import {EigenLoader} from "@workspace/ui";
 import {DrivePath} from "@apps/api-server/types/drive";
 import {DeleteDialog} from "@workspace/ui/components/layout/delete/delete-dialog";
@@ -24,6 +20,7 @@ import {invalidateHomeSize} from "@workspace/lib/home";
 import {useQueryClient} from "@tanstack/react-query";
 import {useFileUpload} from "@workspace/ui/components/layout/drive/file-upload";
 import {DriveAccessDialog} from "./../components/drive/drive-access-dialog";
+import {DriveCreateFolderDialog} from "@/components/drive/drive-create-folder-dialog";
 
 // Define search params type
 export interface DriveSearchParams {
@@ -57,7 +54,6 @@ function DriveRoute() {
     }, [pathId, rootFolder, navigate]);
 
     const isMobile = useMediaQuery('(max-width: 768px)');
-    // const isTablet = useMediaQuery('(max-width: 1024px) and (min-width: 769px)');
     const deleteFileMutation = useDeleteFile(ownerId);
     const deleteFolderMutation = useDeleteFolder(ownerId);
     const invalidateFolder = useInvalidateFolder();
@@ -82,7 +78,6 @@ function DriveRoute() {
 
     // Folder creation state and handlers
     const [createFolderOpen, setCreateFolderOpen] = useState(false);
-    const [newFolderName, setNewFolderName] = useState('');
     const createFolderMutation = useCreateFolder(ownerId);
 
     // Delete confirmation dialog state
@@ -112,26 +107,6 @@ function DriveRoute() {
             </div>
         );
     }
-
-    const handleCreateFolder = async () => {
-        if (!newFolderName.trim()) return;
-
-        const newFolderNameName = newFolderName.trim();
-        try {
-            await createFolderMutation.mutateAsync({
-                parentId: pathId,
-                folderName: newFolderNameName
-            });
-
-            // Reset state and show success message
-            setCreateFolderOpen(false);
-            toast(`Folder "${newFolderNameName}" created`);
-        } catch (error) {
-            console.error('Failed to create folder:', error);
-            toast.error(`Failed to create folder "${newFolderNameName}"`);
-        }
-        setNewFolderName('');
-    };
 
     // Function to open the create folder dialog
     const openCreateFolderDialog = () => {
@@ -176,76 +151,34 @@ function DriveRoute() {
     };
 
     // Function to perform the actual delete after confirmation
-    const confirmDelete = async () => {
+    const confirmDelete = () => {
         if (!itemToDelete) return;
 
-        try {
-            if (itemToDelete.type === 'file') {
-                await deleteFileMutation.mutateAsync(itemToDelete.id);
-                toast("File deleted");
-            } else if (itemToDelete.type === 'folder') {
-                await deleteFolderMutation.mutateAsync(itemToDelete.id);
-                toast("Folder deleted");
+        // Use the appropriate mutation based on item type
+        const mutation = itemToDelete.type === 'folder' ? deleteFolderMutation : deleteFileMutation;
+
+        mutation.mutate(itemToDelete.id, {
+            onSuccess: () => {
+                toast.success(`${itemToDelete.type === 'folder' ? 'Folder' : 'File'} deleted successfully`);
+                setDeleteDialogOpen(false);
+                setItemToDelete(null);
+                invalidateFolder(pathId);
+                invalidateHomeSize(queryClient);
+
+                // If the deleted item is currently selected, navigate back to folder view
+                if (pid === itemToDelete.id) {
+                    navigate({
+                        to: Route.fullPath,
+                        params: { ownerId, pathId }
+                    });
+                }
+            },
+            onError: () => {
+                toast.error(`Failed to delete ${itemToDelete.type}`);
             }
-
-            // Close the dialog and reset state
-            setDeleteDialogOpen(false);
-            setItemToDelete(null);
-
-            // Navigate back to the folder view
-            navigate({
-                to: Route.fullPath,
-                params: {ownerId, pathId},
-                search: {pid: undefined}
-            });
-        } catch (error) {
-            console.error('Failed to delete item:', error);
-            toast.error("Failed to delete item");
-            setDeleteDialogOpen(false);
-        }
+        });
     };
 
-    const CreateFolderDialog = () => <Dialog open={createFolderOpen} onOpenChange={setCreateFolderOpen}>
-        <DialogContent>
-            <DialogHeader>
-                <DialogTitle>New Folder</DialogTitle>
-            </DialogHeader>
-            <div className="py-4">
-                <Label htmlFor="folderName">Folder Name</Label>
-                <Input
-                    id="folderName"
-                    value={newFolderName}
-                    onChange={(e) => setNewFolderName(e.target.value)}
-                    placeholder="Enter folder name"
-                    className="mt-2"
-                    autoFocus
-                    onKeyDown={(e) => {
-                        console.log(e.key);
-                        if (e.key === 'Enter' && newFolderName.trim() && !createFolderMutation.isPending) {
-                            e.preventDefault();
-                            handleCreateFolder();
-                        }
-                    }}
-                />
-            </div>
-            <DialogFooter>
-                <Button variant="outline" onClick={() => {
-                    setCreateFolderOpen(false);
-                    setNewFolderName('');
-                }}>
-                    Cancel
-                </Button>
-                <Button
-                    onClick={handleCreateFolder}
-                    disabled={!newFolderName.trim() || createFolderMutation.isPending}
-                >
-                    {createFolderMutation.isPending ? "Creating..." : "Create"}
-                </Button>
-            </DialogFooter>
-        </DialogContent>
-    </Dialog>;
-
-    // Desktop/Tablet: Two-column layout if detailpath is selected (sidebar already handled in _auth.tsx)
     return (
         <>
             {isMobile ? (
@@ -314,8 +247,26 @@ function DriveRoute() {
             )}
 
             {/* Create Folder Dialog */}
-            {CreateFolderDialog()}
-
+            <DriveCreateFolderDialog 
+                open={createFolderOpen}
+                onOpenChange={setCreateFolderOpen}
+                onCreateFolder={(folderName) => {
+                    createFolderMutation.mutate({
+                        parentId: pathId,
+                        folderName: folderName
+                    }, {
+                        onSuccess: () => {
+                            toast.success(`Folder "${folderName}" created successfully`);
+                            setCreateFolderOpen(false);
+                            invalidateFolder(pathId);
+                        },
+                        onError: () => {
+                            toast.error("Failed to create folder");
+                        }
+                    });
+                }}
+                isPending={createFolderMutation.isPending}
+            />
 
             {/* Hidden file input element */}
             <input
