@@ -225,31 +225,48 @@ export function DriveList({
 
             {items.length === 0 && (
                 <div className="flex-1 flex flex-col items-center justify-top text-center">
-                    <p className="text-muted-foreground mb-4">This folder is empty</p>
+                    <p className="text-muted-foreground mb-4">Within this void, all possibilities are yet unobserved.</p>
+                    {(onCreateFolder || onUploadFile || onCreateDoc || onCreateStickies) && (
                     <div className="flex gap-2">
-                        {onCreateFolder && (
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
                             <Button
-                                variant="outline"
-                                size="sm"
-                                className="h-9"
-                                onClick={onCreateFolder}
+                                size="default"
+                                className='h-9 w-32 justify-start'
                             >
-                                <FolderPlus className="h-4 w-4 mr-2" />
-                                New Folder
+                                <Plus className="h-4 w-4 sm:mr-2" />
+                                <span>New</span>
                             </Button>
-                        )}
-                        {onUploadFile && (
-                            <Button
-                                variant="default"
-                                size="sm"
-                                className="h-9"
-                                onClick={onUploadFile}
-                            >
-                                <UploadIcon className="h-4 w-4 mr-2" />
-                                Upload
-                            </Button>
-                        )}
-                    </div>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                            {onCreateFolder && (
+                                <DropdownMenuItem onClick={onCreateFolder}>
+                                    <FolderPlus className="h-4 w-4 mr-2" />
+                                    Create folder
+                                </DropdownMenuItem>
+                            )}
+                            {onUploadFile && (
+                                <DropdownMenuItem onClick={onUploadFile}>
+                                    <UploadIcon className="h-4 w-4 mr-2" />
+                                    Upload file
+                                </DropdownMenuItem>
+                            )}
+                            {onCreateDoc && (
+                                <DropdownMenuItem onClick={onCreateDoc}>
+                                    <FileText className="h-4 w-4 mr-2" />
+                                    Create doc
+                                </DropdownMenuItem>
+                            )}
+                            {onCreateStickies && (
+                                <DropdownMenuItem onClick={onCreateStickies}>
+                                    <StickyNote className="h-4 w-4 mr-2" />
+                                    Create stickies
+                                </DropdownMenuItem>
+                            )}
+                        </DropdownMenuContent>
+                    </DropdownMenu> 
+                    </div>   
+                )}
                 </div>
             )}
         </div>

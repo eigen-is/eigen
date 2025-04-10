@@ -424,7 +424,7 @@ export default class Drive {
         return results.map(result => ({
             id: result.id,
             name: result.name,
-            type: result.type as "folder" | "file" | "eigendocs",
+            type: result.type as "folder" | "file" | "doc" | "stickies",
             parentId: result.parentId || undefined,
             ownerId: result.ownerId,
             size: result.size ?? 0,
@@ -497,7 +497,7 @@ export default class Drive {
         return {
             id: result.id,
             name: result.name,
-            type: result.type as "folder" | "file" | "eigendocs",
+            type: result.type as "folder" | "file" | "doc" | "stickies",
             parentId: result.parentId || undefined,
             ownerId: result.ownerId,
             labels: [], // We would need to fetch labels separately
