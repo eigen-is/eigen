@@ -178,6 +178,32 @@ export default class Drive {
         }
     }
 
+    public async createDoc(parentId: string, docName: string): Promise<string | undefined> {
+        const pathId = await this.createFolder(parentId, `${docName}.eigendoc`);
+        if (!pathId) {
+            throw new Error("Failed to create document");
+        }
+        // change file type to eigendoc
+        await this.db.update(drivePaths).set({
+            type: "doc"
+        }).where(eq(drivePaths.id, pathId));
+
+        return pathId;
+    }
+
+    public async createStickies(parentId: string, stickiesName: string): Promise<string | undefined> {
+        const pathId = await this.createFolder(parentId, `${stickiesName}.eigenstickies`);
+        if (!pathId) {
+            throw new Error("Failed to create stickies");
+        }
+        // change file type to eigenstickies
+        await this.db.update(drivePaths).set({
+            type: "stickies"
+        }).where(eq(drivePaths.id, pathId));
+
+        return pathId;
+    }
+
     /**
      * Upload a file to the drive
      * @param parentId ID of the parent folder

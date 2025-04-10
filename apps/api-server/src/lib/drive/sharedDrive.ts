@@ -120,4 +120,16 @@ export default class SharedDrive extends Drive {
         };
         return crumb.reverse();
     }  
+    public async createStickies(parentId: string, stickiesName: string): Promise<string | undefined> {
+        if (await this.canWrite(parentId, this.user)) {
+            return this.sharedDrive.createStickies(parentId, stickiesName);
+        }
+        return;
+    }
+    public async createDoc(parentId: string, docName: string): Promise<string | undefined> {
+        if (await this.canWrite(parentId, this.user)) {
+            return this.sharedDrive.createDoc(parentId, docName);
+        }
+        return;
+    }
 }

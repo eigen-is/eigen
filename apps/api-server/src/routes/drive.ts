@@ -10,6 +10,16 @@ type CreateFolderBody = {
     folderName: string;
 }
 
+type CreateDocBody = {
+    parentId: string;
+    fileName: string;
+}
+
+type CreateStickiesBody = {
+    parentId: string;
+    fileName: string;
+}
+
 type UploadFilesBody = {
     files: File[];
 }
@@ -260,5 +270,35 @@ export const driveRouter = new Elysia({name: "drive"})
         params: t.Object({
             ownerId: t.String(),
             pathId: t.String()
+        })
+    })
+
+    // Create doc
+    .post("/drive/doc/:ownerId/:pathId", async ({params, body, user}: { params: { ownerId: string, pathId: string }, body: CreateDocBody, user: User }) => {
+        const drive = await getSharedDrive(params.ownerId, user);
+        return await drive.createDoc(params.pathId, body.fileName);
+    }, {
+        auth: true,
+        params: t.Object({
+            ownerId: t.String(),
+            pathId: t.String()
+        }),
+        body: t.Object({
+            fileName: t.String()
+        })
+    })
+
+    // Create stickies
+    .post("/drive/stickies/:ownerId/:pathId", async ({params, body, user}: { params: { ownerId: string, pathId: string }, body: CreateStickiesBody, user: User }) => {
+        const drive = await getSharedDrive(params.ownerId, user);
+        return await drive.createStickies(params.pathId, body.fileName);
+    }, {
+        auth: true,
+        params: t.Object({
+            ownerId: t.String(),
+            pathId: t.String()
+        }),
+        body: t.Object({
+            fileName: t.String()
         })
     })
