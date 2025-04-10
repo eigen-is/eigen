@@ -24,7 +24,9 @@ import {
   Folder,
   Trash2,
   CheckSquare,
-  Type
+  Type,
+  Link,
+  Link2Off
 } from "lucide-react";
 import { TooltipButton } from "@workspace/ui";
 import { Button } from "@workspace/ui/components/button";
@@ -35,6 +37,17 @@ import {
   DropdownMenuTrigger,
 } from "@workspace/ui/components/dropdown-menu";
 import { Separator } from "@workspace/ui/components/separator";
+import {
+  Dialog,
+  DialogContent,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@workspace/ui/components/dialog";
+import { Input } from "@workspace/ui/components/input";
+import { Label } from "@workspace/ui/components/label";
+import { useState } from "react";
+import { Range } from "slate";
 
 // Define the types for custom elements and text
 type CustomElementType = 
@@ -61,6 +74,7 @@ interface CustomText {
   underline?: boolean;
   strikethrough?: boolean;
   code?: boolean;
+  link?: string;
 }
 
 // Define custom editor type
@@ -142,6 +156,18 @@ const toggleBlock = (editor: CustomEditor, format: CustomElementType) => {
   }
 };
 
+// Check if a link is active
+const isLinkActive = (editor: CustomEditor) => {
+  const marks = Editor.marks(editor);
+  return marks ? marks.link !== undefined : false;
+};
+
+// Get the current link URL if any
+const getLinkUrl = (editor: CustomEditor) => {
+  const marks = Editor.marks(editor);
+  return marks && marks.link ? marks.link : '';
+};
+
 // Mark Button Component
 interface MarkButtonProps {
   format: keyof Omit<CustomText, 'text'>;
@@ -179,6 +205,138 @@ const BlockButton = ({ format, icon, tooltipText }: BlockButtonProps) => {
       variant={isBlockActive(editor, format) ? "secondary" : "ghost"}
       onClick={() => toggleBlock(editor, format)}
     />
+  );
+};
+
+// Link button component
+const LinkButton = () => {
+  const editor = useSlate();
+  const [open, setOpen] = useState(false);
+  const [url, setUrl] = useState('');
+  const [text, setText] = useState('');
+  const [selectedText, setSelectedText] = useState('');
+  
+  const isActive = isLinkActive(editor as CustomEditor);
+  
+  const handleOpenDialog = () => {
+    // Get the selected text
+    const { selection } = editor;
+    if (selection && !Range.isCollapsed(selection)) {
+      const selectedText = Editor.string(editor, selection);
+      setSelectedText(selectedText);
+      setText(selectedText);
+    } else {
+      setSelectedText('');
+      setText('');
+    }
+    
+    // Get current link URL if any
+    setUrl(getLinkUrl(editor as CustomEditor));
+    setOpen(true);
+  };
+  
+  const handleCreateLink = () => {
+    const { selection } = editor;
+    
+    if (!url) {
+      // If URL is empty, remove the link
+      Editor.removeMark(editor, 'link');
+    } else if (selection && !Range.isCollapsed(selection)) {
+      // If there's a selection, apply link to it
+      if (text && text !== selectedText) {
+        // Replace the selected text with the new text
+        Transforms.delete(editor);
+        Transforms.insertText(editor, text);
+      }
+      Editor.addMark(editor, 'link', url);
+    } else if (text) {
+      // If there's no selection but text is provided, insert new linked text
+      Transforms.insertText(editor, text);
+      const end = editor.selection ? editor.selection.anchor.offset : 0;
+      const start = end - text.length;
+      
+      if (start >= 0) {
+        Transforms.select(editor, {
+          anchor: { path: editor.selection!.anchor.path, offset: start },
+          focus: { path: editor.selection!.focus.path, offset: end }
+        });
+        Editor.addMark(editor, 'link', url);
+        // Reset selection
+        Transforms.collapse(editor, { edge: 'end' });
+      }
+    }
+    
+    setOpen(false);
+  };
+
+  const handleRemoveLink = () => {
+    Editor.removeMark(editor, 'link');
+    setOpen(false);
+  };
+  
+  return (
+    <>
+      <TooltipButton
+        variant="ghost"
+        size="icon"
+        tooltipText="Link"
+        onClick={handleOpenDialog}
+        className={isActive ? 'bg-accent text-accent-foreground' : ''}
+        icon={Link}
+      />
+
+      {isActive && (
+        <TooltipButton
+          variant="ghost"
+          size="icon"
+          tooltipText="Remove Link"
+          onClick={handleRemoveLink}
+          icon={Link2Off}
+        />
+      )}
+      
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Create link</DialogTitle>
+          </DialogHeader>
+          <div className="grid gap-4 py-4">
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="link-text" className="text-right">
+                Text
+              </Label>
+              <Input
+                id="link-text"
+                value={text}
+                onChange={(e) => setText(e.target.value)}
+                className="col-span-3"
+              />
+            </div>
+            <div className="grid grid-cols-4 items-center gap-4">
+              <Label htmlFor="link-url" className="text-right">
+                URL
+              </Label>
+              <Input
+                id="link-url"
+                value={url}
+                onChange={(e) => setUrl(e.target.value)}
+                className="col-span-3"
+              />
+            </div>
+          </div>
+          <DialogFooter className="flex justify-between">
+            <div className="flex gap-2">
+              <Button type="button" variant="secondary" onClick={() => setOpen(false)}>
+                Cancel
+              </Button>
+              <Button type="button" onClick={handleCreateLink}>
+                Save
+              </Button>
+            </div>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
   );
 };
 
@@ -262,6 +420,12 @@ export const EditorToolbar = () => {
         {/* Separator */}
         <div className="h-6 w-[1px] bg-border mx-1"></div>
 
+        {/* Link button */}
+        <LinkButton />
+
+        {/* Separator */}
+        <div className="h-6 w-[1px] bg-border mx-1"></div>
+
         <TooltipButton
           icon={RemoveFormatting}
           tooltipText="Clear formatting"
@@ -272,6 +436,7 @@ export const EditorToolbar = () => {
             Editor.removeMark(editor, 'underline');
             Editor.removeMark(editor, 'strikethrough');
             Editor.removeMark(editor, 'code');
+            Editor.removeMark(editor, 'link');
             
             // Convert to paragraph
             Transforms.setNodes<CustomElement>(
