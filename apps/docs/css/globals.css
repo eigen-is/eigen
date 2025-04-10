@@ -5,3 +5,11 @@
 .text-app {
     color: var(--app-docs-color);
 }
+
+body {
+    background: #f0f0f0;
+}
+
+.bg-white {
+    background-color: #fff;
+}
