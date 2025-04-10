@@ -9,10 +9,12 @@ import { useAuth } from "@workspace/lib/auth/auth-context.js";
 import { Button } from "@workspace/ui/components/button";
 import {
   ArrowLeft,
+  ArrowUp,
   Bold,
   Copy,
   FileText,
   Folder,
+  FolderInput,
   Heading1,
   Heading2,
   Heading3,
@@ -23,11 +25,13 @@ import {
   ListCheck,
   ListOrdered,
   MoreVertical,
+  Move,
   Printer,
   Redo,
   RemoveFormatting,
   Search,
   SpellCheck,
+  Star,
   Strikethrough,
   TextQuote,
   Trash,
@@ -56,6 +60,7 @@ export const CollaborativeEditor = () => {
   const [sharedType, setSharedType] = useState<Y.XmlText | null>(null);
   const [provider, setProvider] = useState<WebsocketProvider | null>(null);
 
+  const documentId = "foo";
   // Connect to your Yjs provider and document
   useEffect(() => {
     const yDoc = new Y.Doc();
@@ -63,7 +68,6 @@ export const CollaborativeEditor = () => {
 
     // Build WebSocket URL
     const wsUrl = `${import.meta.env.VITE_API_HOST}/ws/collab/userid/`;
-    const documentId = "foo";
 
     // Create WebSocket provider
     const provider = new WebsocketProvider(wsUrl, documentId, yDoc, {
@@ -89,15 +93,17 @@ export const CollaborativeEditor = () => {
     return <div>Loading…</div>;
   }
 
-  return <SlateEditor sharedType={sharedType} provider={provider} />;
+  return <SlateEditor sharedType={sharedType} provider={provider} documentId={documentId} />;
 };
 
 const SlateEditor = ({
   sharedType,
   provider,
+  documentId,
 }: {
   sharedType: Y.XmlText | null;
   provider: WebsocketProvider | null;
+  documentId: string;
 }) => {
   const auth = useAuth();
 
@@ -178,7 +184,6 @@ const SlateEditor = ({
               <DropdownMenuItem>
                 <Redo /> Redo <small>({commandKey}+Y)</small>
               </DropdownMenuItem>
-              <Separator />
             </DropdownMenuContent>
           </DropdownMenu>
 
@@ -201,11 +206,36 @@ const SlateEditor = ({
               <DropdownMenuItem>
                 <Strikethrough /> Strikethrough <small>({commandKey}+T)</small>
               </DropdownMenuItem>
+              <Separator />
               <DropdownMenuItem>
                 <RemoveFormatting /> Clear formatting <small>({commandKey}+/)</small>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
+        </div>
+        
+        <div className="flex items-center gap-1">
+          {/* Right side icons */}
+
+          <span className="text-xs text-muted-foreground">../docs/{documentId}.doc</span>
+          <TooltipButton
+            icon={FolderInput}
+            tooltipText="Move to"
+            onClick={() => {
+              // TODO
+            }}
+          />
+          {/* Separator */}
+          <div className="h-6 w-[1px] bg-border mx-1"></div>
+
+
+          <TooltipButton
+            icon={Star}
+            tooltipText="Favorite"
+            onClick={() => {
+              // TODO
+            }}
+          />
         </div>
       </div>
       <div className="bg-white h-12 flex items-center justify-between px-4 border-b mb-4 no-print">
@@ -373,6 +403,13 @@ const SlateEditor = ({
           </Cursors>
         </Slate>
       </div>
+      <div className="fixed bottom-2 left-2">
+          {/** button with arrow up */}
+          <Button variant="ghost" className="bg-white" title="Move up" onClick={() => window.scrollTo(0, 0)}>
+              <ArrowUp className="h-4 w-4"/>
+          </Button>
+      </div>
+      <div className="min-h-16"><center className="text-muted-foreground text-xs mt-2">Last modified: {new Date().toLocaleString()}</center></div>
     </>
   );
 };
