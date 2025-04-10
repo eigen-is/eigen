@@ -9,9 +9,9 @@ export const spaceRouter = new Elysia({name: "space"})
         params: { id: string, filename: string },
         set: any
     }) => {
-        // Set caching headers for thumbnails (5 minutes)
-        set.headers['Cache-Control'] = 'public, max-age=300';
-        set.headers['Expires'] = new Date(Date.now() + 300000).toUTCString();
+        // Set caching headers for thumbnails (1 day)
+        set.headers['Cache-Control'] = 'public, max-age=86400';
+        set.headers['Expires'] = new Date(Date.now() + 86400000).toUTCString();
 
         return await getAvatar(params.id, params.filename);
     }, {
