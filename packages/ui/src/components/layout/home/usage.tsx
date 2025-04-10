@@ -21,6 +21,13 @@ interface StorageUsageProps {
     condensed?: boolean;
 }
 
+const getStorageUsageColor = (storageUsed: number): string => {
+    if (!storageUsed || isNaN(storageUsed) || storageUsed === Infinity) return "";
+    else if (storageUsed > 0.85) return "bg-red-500";
+    else if (storageUsed > 0.65) return "bg-yellow-500";
+    return "";
+};
+
 export function StorageUsage({className = "", condensed = false}: StorageUsageProps) {
     // Get storage usage data
     const {data: storageData, isLoading: storageLoading} = useHomeSize();
@@ -41,6 +48,7 @@ export function StorageUsage({className = "", condensed = false}: StorageUsagePr
                 </div>}
                 <Progress
                     value={storageLoading || !storageData ? 0 : (storageData.used / storageData.max) * 100}
+                    indicatorClassName={getStorageUsageColor(storageLoading || !storageData ? 0 : (storageData.used / storageData.max))}
                     className="h-1.5"
                 />
             </div>
