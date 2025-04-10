@@ -1,6 +1,6 @@
-import { useEffect, useMemo, useState } from "react";
-import { createEditor, Editor, Transforms } from "slate";
-import { Editable, Slate, withReact } from "slate-react";
+import { useCallback, useEffect, useMemo, useState } from "react";
+import { createEditor, Editor, Transforms, Node, NodeEntry } from "slate";
+import { Editable, Slate, withReact, ReactEditor, RenderElementProps, RenderLeafProps } from "slate-react";
 import { withCursors, withYjs, YjsEditor } from "@slate-yjs/core";
 import * as Y from "yjs";
 import { WebsocketProvider } from "y-websocket";
@@ -8,47 +8,40 @@ import { Cursors } from "./cursors";
 import { useAuth } from "@workspace/lib/auth/auth-context.js";
 import { Button } from "@workspace/ui/components/button";
 import {
-  ArrowLeft,
   ArrowUp,
-  Bold,
-  Copy,
-  FileText,
-  Folder,
-  FolderInput,
-  Heading1,
-  Heading2,
-  Heading3,
-  Heading4,
-  Heading5,
-  Italic,
-  List,
-  ListCheck,
-  ListOrdered,
-  MoreVertical,
-  Move,
-  Printer,
-  Redo,
-  RemoveFormatting,
-  Search,
-  SpellCheck,
-  Star,
-  Strikethrough,
-  TextQuote,
-  Trash,
-  Underline,
-  Undo,
 } from "lucide-react";
-import { TooltipButton } from "@workspace/ui";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@workspace/ui/components/dropdown-menu";
-import { Input } from "@workspace/ui/components/input";
-import { Separator } from "@workspace/ui/components/separator";
+import { withHistory } from "slate-history";
+import { EditorToolbar } from "./editor-toolbar";
 
-const initialValue = [
+// Define types for the editor
+type CustomElementType = 
+  | 'paragraph' 
+  | 'heading-one' 
+  | 'heading-two' 
+  | 'heading-three'
+  | 'block-quote'
+  | 'bulleted-list'
+  | 'numbered-list'
+  | 'list-item'
+  | 'check-list-item';
+
+interface CustomElement {
+  type: CustomElementType;
+  children: CustomText[];
+  checked?: boolean;
+}
+
+interface CustomText {
+  text: string;
+  bold?: boolean;
+  italic?: boolean;
+  underline?: boolean;
+  strikethrough?: boolean;
+  code?: boolean;
+}
+
+// Define the initial value with proper typing
+const initialValue: CustomElement[] = [
   {
     type: "paragraph",
     children: [{ text: "Type something..." }],
@@ -109,19 +102,21 @@ const SlateEditor = ({
 
   const editor = useMemo(() => {
     const e = withReact(
-      withCursors(withYjs(createEditor(), sharedType!), provider!.awareness, {
-        // The current user's name and color
-        data: {
-          name: auth.user?.name,
-          email: auth.user?.email,
-          color: "#660044",
-        },
-      })
+      withHistory(
+        withCursors(withYjs(createEditor(), sharedType!), provider!.awareness, {
+          // The current user's name and color
+          data: {
+            name: auth.user?.name,
+            email: auth.user?.email,
+            color: "#660044",
+          },
+        })
+      )
     );
 
     // Ensure editor always has at least 1 valid child
     const { normalizeNode } = e;
-    e.normalizeNode = (entry) => {
+    e.normalizeNode = (entry: NodeEntry<Node>) => {
       const [node] = entry;
 
       if (!Editor.isEditor(node) || node.children.length > 0) {
@@ -139,270 +134,126 @@ const SlateEditor = ({
     return () => YjsEditor.disconnect(editor);
   }, [editor]);
 
-  const commandKey = window.navigator.platform.includes('Mac') ? '⌘' : 'Ctrl';
+  // Define custom element renderer
+  const renderElement = useCallback((props: RenderElementProps) => {
+    const { attributes, children, element } = props;
+    const style = {};
+    const typedElement = element as CustomElement;
+    
+    switch (typedElement.type) {
+      case 'heading-one':
+        return <h1 className="text-4xl font-normal mb-3" style={style} {...attributes}>{children}</h1>;
+      case 'heading-two':
+        return <h2 className="text-3xl font-normal mb-3" style={style} {...attributes}>{children}</h2>;
+      case 'heading-three':
+        return <h3 className="text-2xl font-normal mb-3" style={style} {...attributes}>{children}</h3>;
+      case 'block-quote':
+        return <blockquote className="border-l-2 border-muted-foreground pl-2" style={style} {...attributes}>{children}</blockquote>;
+      case 'bulleted-list':
+        return <ul className="list-disc pl-4 pt-2"  style={style} {...attributes}>{children}</ul>;
+      case 'numbered-list':
+        return <ol className="list-decimal pl-4 pt-2" style={style} {...attributes}>{children}</ol>;
+      case 'list-item':
+        return <li className="my-1" style={style} {...attributes}>{children}</li>;
+      case 'check-list-item':
+        return (
+          <div 
+            {...attributes}
+            className="flex items-start gap-2"
+          >
+            <input
+              type="checkbox"
+              checked={typedElement.checked}
+              onChange={(event: React.ChangeEvent<HTMLInputElement>) => {
+                const path = ReactEditor.findPath(editor, typedElement);
+                Transforms.setNodes(
+                  editor,
+                  { checked: event.target.checked },
+                  { at: path }
+                );
+              }}
+              className="mt-1.5"
+            />
+            <span className="flex-1">{children}</span>
+          </div>
+        );
+      default:
+        return <p style={style} {...attributes}>{children}</p>;
+    }
+  }, [editor]);
+
+  // Define custom leaf renderer
+  const renderLeaf = useCallback((props: RenderLeafProps) => {
+    const { attributes, leaf } = props;
+    let { children } = props;
+    
+    if (leaf.bold) {
+      children = <strong>{children}</strong>;
+    }
+
+    if (leaf.italic) {
+      children = <em>{children}</em>;
+    }
+
+    if (leaf.underline) {
+      children = <u>{children}</u>;
+    }
+
+    if (leaf.strikethrough) {
+      children = <s>{children}</s>;
+    }
+
+    if (leaf.code) {
+      children = <code>{children}</code>;
+    }
+
+    return <span {...attributes}>{children}</span>;
+  }, []);
+
+  // Handle keyboard shortcuts
+  const handleKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
+    const { key, ctrlKey, metaKey } = event;
+    const isModKey = metaKey || ctrlKey;
+
+    // Handle keyboard shortcuts
+    if (isModKey) {
+      switch (key) {
+        case 'b': {
+          event.preventDefault();
+          Editor.addMark(editor, 'bold', true);
+          break;
+        }
+        case 'i': {
+          event.preventDefault();
+          Editor.addMark(editor, 'italic', true);
+          break;
+        }
+        case 'u': {
+          event.preventDefault();
+          Editor.addMark(editor, 'underline', true);
+          break;
+        }
+      }
+    }
+  }, [editor]);
+
   return (
     <>
-      <div className="bg-white h-12 flex items-center justify-between px-4 border-b mb-0 no-print">
-        <div className="flex items-center gap-1">
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" title="File">
-                File
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem>
-                <FileText /> New <small>({commandKey}+N)</small>
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                <Folder /> Open <small>({commandKey}+O)</small>
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                <Copy /> Make a Copy
-              </DropdownMenuItem>
-              <Separator />
-              <DropdownMenuItem onClick={() => window.print()}>
-                <Printer /> Print <small>({commandKey}+P)</small>
-              </DropdownMenuItem>
-              <Separator />
-              <DropdownMenuItem onClick={() => editor.delete()}>
-                <Trash /> Delete
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" title="Edit">
-                Edit
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem>
-                <Undo /> Undo <small>({commandKey}+Z)</small>
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                <Redo /> Redo <small>({commandKey}+Y)</small>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" title="Edit">
-                Format
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem>
-                <Bold /> Bold <small>({commandKey}+B)</small>
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                <Italic /> Italic <small>({commandKey}+I)</small>
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                <Underline /> Underline <small>({commandKey}+U)</small>
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                <Strikethrough /> Strikethrough <small>({commandKey}+T)</small>
-              </DropdownMenuItem>
-              <Separator />
-              <DropdownMenuItem>
-                <RemoveFormatting /> Clear formatting <small>({commandKey}+/)</small>
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-        
-        <div className="flex items-center gap-1">
-          {/* Right side icons */}
-
-          <span className="text-xs text-muted-foreground">../docs/{documentId}.doc</span>
-          <TooltipButton
-            icon={FolderInput}
-            tooltipText="Move to"
-            onClick={() => {
-              // TODO
-            }}
-          />
-          {/* Separator */}
-          <div className="h-6 w-[1px] bg-border mx-1"></div>
-
-
-          <TooltipButton
-            icon={Star}
-            tooltipText="Favorite"
-            onClick={() => {
-              // TODO
-            }}
-          />
-        </div>
-      </div>
-      <div className="bg-white h-12 flex items-center justify-between px-4 border-b mb-4 no-print">
-        <div className="flex items-center gap-1">
-          {/* Search */}
-          <div className="flex items-center h-12 px-4 border-b">
-            <div className="relative w-full">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-              <Input
-                placeholder="Search in document..."
-                className="pl-8 w-full h-9"
-              />
-            </div>
-          </div>
-
-          <TooltipButton
-            icon={Undo}
-            tooltipText="Undo"
-            onClick={() => {
-              // TODO
-            }}
-          />
-          <TooltipButton
-            icon={Redo}
-            tooltipText="Redo"
-            onClick={() => {
-              // TODO
-            }}
-          />
-
-          {/* Separator */}
-          <div className="h-6 w-[1px] bg-border mx-1"></div>
-
-          <TooltipButton
-            icon={Bold}
-            tooltipText="Bold"
-            onClick={() => {
-              // TODO
-            }}
-          />
-
-          <TooltipButton
-            icon={Italic}
-            tooltipText="Italic"
-            onClick={() => {
-              // TODO
-            }}
-          />
-
-          <TooltipButton
-            icon={Underline}
-            tooltipText="Underline"
-            onClick={() => {
-              // TODO
-            }}
-          />
-
-          <TooltipButton
-            icon={Strikethrough}
-            tooltipText="Strikethrough"
-            onClick={() => {
-              // TODO
-            }}
-          />
-
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" title="Headings">
-                Heading
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem>
-                <Heading1 /> Heading 1
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                <Heading2 /> Heading 2
-              </DropdownMenuItem>
-              <DropdownMenuItem>
-                <Heading3 /> Heading 3
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-
-          {/* Separator */}
-          <div className="h-6 w-[1px] bg-border mx-1"></div>
-
-          <TooltipButton
-            icon={TextQuote}
-            tooltipText="Blockquote"
-            onClick={() => {
-              // TODO
-            }}
-          />
-
-          <TooltipButton
-            icon={ListCheck}
-            tooltipText="Checklist"
-            onClick={() => {
-              // TODO
-            }}
-          />
-
-          <TooltipButton
-            icon={List}
-            tooltipText="Bulleted List"
-            onClick={() => {
-              // TODO
-            }}
-          />
-
-          <TooltipButton
-            icon={ListOrdered}
-            tooltipText="Numbered List"
-            onClick={() => {
-              // TODO
-            }}
-          />
-
-          {/* Separator */}
-          <div className="h-6 w-[1px] bg-border mx-1"></div>
-
-          <TooltipButton
-            icon={RemoveFormatting}
-            tooltipText="Clear formatting"
-            onClick={() => {
-              // TODO
-            }}
-          />
-        </div>
-
-        <div className="flex items-center gap-1">
-          {/* Right side icons */}
-          <TooltipButton
-            icon={Printer}
-            tooltipText="Print"
-            onClick={() => window.print()}
-          />
-
-          <div className="h-6 w-[1px] bg-border mx-1"></div>
-
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button variant="ghost" title="More actions">
-                <MoreVertical className="h-4 w-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem>
-                <SpellCheck className="h-4 w-4" /> Spell check
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => window.print()}>
-                <Printer className="h-4 w-4" /> Print
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </div>
-
-      <div className="p-[2cm] bg-white rounded-lg shadow-sm w-[210mm] min-h-fit min-h-[297mm] m-auto">
-        {/* Action toolbar */}
-        <Slate editor={editor} initialValue={initialValue}>
+      <Slate editor={editor} initialValue={initialValue}>
+        <EditorToolbar />
+        <div className="p-[2cm] bg-white rounded-lg shadow-sm w-[210mm] min-h-fit min-h-[297mm] m-auto">
           <Cursors>
-            <Editable spellCheck={false} autoFocus className="min-h-[250mm] outline-none" />
+            <Editable 
+              spellCheck={false} 
+              autoFocus 
+              className="min-h-[250mm] outline-none" 
+              renderElement={renderElement}
+              renderLeaf={renderLeaf}
+              onKeyDown={handleKeyDown}
+            />
           </Cursors>
-        </Slate>
-      </div>
+        </div>
+      </Slate>
       <div className="fixed bottom-2 left-2">
           {/** button with arrow up */}
           <Button variant="ghost" className="bg-white" title="Move up" onClick={() => window.scrollTo(0, 0)}>
