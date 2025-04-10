@@ -29,6 +29,7 @@ import {
   Search,
   SpellCheck,
   Strikethrough,
+  TextQuote,
   Trash,
   Underline,
   Undo,
@@ -291,6 +292,14 @@ const SlateEditor = ({
 
           {/* Separator */}
           <div className="h-6 w-[1px] bg-border mx-1"></div>
+
+          <TooltipButton
+            icon={TextQuote}
+            tooltipText="Blockquote"
+            onClick={() => {
+              // TODO
+            }}
+          />
 
           <TooltipButton
             icon={ListCheck}
