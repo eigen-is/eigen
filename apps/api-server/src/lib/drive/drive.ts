@@ -185,7 +185,8 @@ export default class Drive {
         }
         // change file type to eigendoc
         await this.db.update(drivePaths).set({
-            type: "doc"
+            type: "doc",
+            mimeType: "application/eigendoc"
         }).where(eq(drivePaths.id, pathId));
 
         return pathId;
@@ -198,7 +199,8 @@ export default class Drive {
         }
         // change file type to eigenstickies
         await this.db.update(drivePaths).set({
-            type: "stickies"
+            type: "stickies",
+            mimeType: "application/eigenstickies"
         }).where(eq(drivePaths.id, pathId));
 
         return pathId;
