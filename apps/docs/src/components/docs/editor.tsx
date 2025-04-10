@@ -38,6 +38,7 @@ interface CustomText {
   underline?: boolean;
   strikethrough?: boolean;
   code?: boolean;
+  link?: string;
 }
 
 // Define the initial value with proper typing
@@ -205,6 +206,19 @@ const SlateEditor = ({
 
     if (leaf.code) {
       children = <code>{children}</code>;
+    }
+
+    if (leaf.link) {
+      children = (
+        <a 
+          href={leaf.link as string} 
+          className="text-blue-600 underline"
+          target="_blank" 
+          rel="noopener noreferrer"
+        >
+          {children}
+        </a>
+      );
     }
 
     return <span {...attributes}>{children}</span>;
