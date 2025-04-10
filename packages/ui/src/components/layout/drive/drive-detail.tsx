@@ -47,7 +47,7 @@ export function DriveDetail({
     }
 
     const fullPath = `${import.meta.env.VITE_API_HOST}/drive/download/${path.ownerId}/${path.id}`;
-    const thumbnailPath = `${import.meta.env.VITE_API_HOST}/drive/thumb/${path.ownerId}/${path.id}`;
+    const thumbnailPath = `${import.meta.env.VITE_API_HOST}/drive/thumb/${path.ownerId}/${path.thumbnail}`;
 
     return (
 
