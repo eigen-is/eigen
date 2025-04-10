@@ -173,6 +173,7 @@ export function DriveList({
                     </BreadcrumbList>
                 </Breadcrumb>
                 <div className="flex gap-1">
+                    {items.length > 0 && (
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                             <Button size="default">
@@ -207,6 +208,7 @@ export function DriveList({
                             )}
                         </DropdownMenuContent>
                     </DropdownMenu>
+                    )}
                 </div>
             </div>
 
