@@ -7,8 +7,6 @@ export const Route = createFileRoute('/_auth/')({
 
 function CollaborativeTextEditor() {
   return (
-    <div className="container mx-auto p-4">
       <CollaborativeEditor />
-    </div>
   )
 }

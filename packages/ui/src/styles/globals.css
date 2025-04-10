@@ -197,3 +197,9 @@
         @apply border-l-red-600 border-l-2 bg-red-600/5 text-primary;
     }
 }
+
+@media print {    
+    .no-print{
+        display: none !important;
+    }
+}
