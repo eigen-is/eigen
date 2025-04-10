@@ -33,9 +33,11 @@ export function DriveTable({
     // State voor het bijhouden van de huidige geselecteerde index
     const [selectedIndex, setSelectedIndex] = useState<number>(-1);
 
+    // Bepaal of er een parent navigatie-item is
+    const hasParentItem = Boolean(currentPath?.parentId);
 
     // Sort items: folders first, then sort alphabetically by name
-    const allItems = useMemo(() => {
+    const sortedItems = useMemo(() => {
         return [...items].sort((a, b) => {
             // First sort by type (folders first)
             if (a.type === 'folder' && b.type !== 'folder') {
@@ -49,6 +51,31 @@ export function DriveTable({
             return a.name.localeCompare(b.name, undefined, {sensitivity: 'base'});
         });
     }, [items]);
+
+    // Create a combined item list including the parent folder
+    const allItems = useMemo(() => {
+        const result = [...sortedItems];
+        
+        // If there's a parent item, add a placeholder at the beginning
+        if (hasParentItem && currentPath?.parentId) {
+            result.unshift({
+                id: currentPath.parentId,
+                name: '..',
+                type: 'folder',
+                parentId: undefined,
+                ownerId: currentPath.ownerId || '',
+                labels: [],
+                mimeType: 'folder',
+                size: 0,
+                thumbnail: '',
+                acl: null,
+                createdAt: new Date(),
+                updatedAt: new Date()
+            });
+        }
+        
+        return result;
+    }, [sortedItems, hasParentItem, currentPath]);
 
     // Effect om de tabel automatisch focus te geven bij het laden
     useEffect(() => {
@@ -186,13 +213,49 @@ export function DriveTable({
                     </TableRow>
                 </TableHeader>
                 <TableBody>
-                    {allItems.map((item, index) => {
+                    {/* Parent folder navigation row */}
+                    {hasParentItem && (
+                        <TableRow
+                            className={cn(
+                                "eigen-list-item",
+                                (activeItemId === currentPath?.parentId || selectedIndex === 0) && "eigen-list-item-active"
+                            )}
+                            onClick={() => onItemClick?.({
+                                id: currentPath?.parentId || '',
+                                name: '..',
+                                type: 'folder',
+                                parentId: undefined,
+                                ownerId: currentPath?.ownerId || '',
+                                labels: [],
+                                mimeType: 'folder',
+                                size: 0,
+                                thumbnail: '',
+                                acl: null,
+                                createdAt: new Date(),
+                                updatedAt: new Date()
+                            })}
+                        >
+                            <TableCell className="font-medium">
+                                <div className="flex items-center">
+                                    <ChevronLeft className="h-4 w-4 mr-2 text-muted-foreground"/>
+                                    <span>..</span>
+                                </div>
+                            </TableCell>
+                            <TableCell className="hidden sm:table-cell"></TableCell>
+                            <TableCell className="hidden sm:table-cell">-</TableCell>
+                        </TableRow>
+                    )}
+
+                    {sortedItems.map((item, index) => {
+                        // Adjust index based on whether there's a parent item
+                        const adjustedIndex = hasParentItem ? index + 1 : index;
+                        
                         return (
                             <TableRow
                                 key={item.id}
                                 className={cn(
                                     "eigen-list-item",
-                                    (activeItemId === item.id || selectedIndex === index) && "eigen-list-item-active"
+                                    (activeItemId === item.id || selectedIndex === adjustedIndex) && "eigen-list-item-active"
                                 )}
                                 onClick={() => onItemClick?.(item)}
                             >
