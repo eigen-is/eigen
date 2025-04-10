@@ -132,6 +132,7 @@ const SlateEditor = ({
     return () => YjsEditor.disconnect(editor);
   }, [editor]);
 
+  const commandKey = window.navigator.platform.includes('Mac') ? '⌘' : 'Ctrl';
   return (
     <>
       <div className="bg-white h-12 flex items-center justify-between px-4 border-b mb-0 no-print">
@@ -144,17 +145,17 @@ const SlateEditor = ({
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem>
-                <FileText /> New
+                <FileText /> New <small>({commandKey}+N)</small>
               </DropdownMenuItem>
               <DropdownMenuItem>
-                <Folder /> Open
+                <Folder /> Open <small>({commandKey}+O)</small>
               </DropdownMenuItem>
               <DropdownMenuItem>
                 <Copy /> Make a Copy
               </DropdownMenuItem>
               <Separator />
               <DropdownMenuItem onClick={() => window.print()}>
-                <Printer /> Print
+                <Printer /> Print <small>({commandKey}+P)</small>
               </DropdownMenuItem>
               <Separator />
               <DropdownMenuItem onClick={() => editor.delete()}>
@@ -171,15 +172,12 @@ const SlateEditor = ({
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem>
-                <Undo /> Undo
+                <Undo /> Undo <small>({commandKey}+Z)</small>
               </DropdownMenuItem>
               <DropdownMenuItem>
-                <Redo /> Redo
+                <Redo /> Redo <small>({commandKey}+Y)</small>
               </DropdownMenuItem>
               <Separator />
-              <DropdownMenuItem>
-                <RemoveFormatting /> Clear formatting
-              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
 
@@ -191,16 +189,19 @@ const SlateEditor = ({
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
               <DropdownMenuItem>
-                <Bold /> Bold
+                <Bold /> Bold <small>({commandKey}+B)</small>
               </DropdownMenuItem>
               <DropdownMenuItem>
-                <Italic /> Italic
+                <Italic /> Italic <small>({commandKey}+I)</small>
               </DropdownMenuItem>
               <DropdownMenuItem>
-                <Underline /> Underline
+                <Underline /> Underline <small>({commandKey}+U)</small>
               </DropdownMenuItem>
               <DropdownMenuItem>
-                <Strikethrough /> Strikethrough
+                <Strikethrough /> Strikethrough <small>({commandKey}+T)</small>
+              </DropdownMenuItem>
+              <DropdownMenuItem>
+                <RemoveFormatting /> Clear formatting <small>({commandKey}+/)</small>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
