@@ -175,12 +175,9 @@ export function DriveList({
                 <div className="flex gap-1">
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                            <Button
-                                size="default"
-                                className='h-9 w-32 justify-start'
-                            >
-                                <Plus className="h-4 w-4 sm:mr-2" />
-                                <span>New</span>
+                            <Button size="default">
+                                <Plus />
+                                <span className="mr-2">New</span>
                             </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
@@ -230,12 +227,9 @@ export function DriveList({
                     <div className="flex gap-2">
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                            <Button
-                                size="default"
-                                className='h-9 w-32 justify-start'
-                            >
-                                <Plus className="h-4 w-4 sm:mr-2" />
-                                <span>New</span>
+                            <Button size="default">
+                                <Plus />
+                                <span className="mr-2">New</span>
                             </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
