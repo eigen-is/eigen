@@ -11,7 +11,8 @@ import {
     FileType,
     FileVideo,
     Folder,
-    Presentation
+    Presentation,
+    StickyNote
 } from 'lucide-react';
 
 type FileIconProps = React.ComponentProps<typeof File>;
@@ -26,6 +27,14 @@ export function getFileIcon(mimeType: string, type: string, props?: FileIconProp
     // Return folder icon for folders
     if (type === 'folder') {
         return <Folder {...props} />;
+    }
+    // Return folder icon for folders
+    if (type === 'doc') {
+        return <FileText {...props} />;
+    }
+    // Return folder icon for folders
+    if (type === 'stickies') {
+        return <StickyNote {...props} />;
     }
 
     // Handle different file types based on MIME type

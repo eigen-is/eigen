@@ -114,19 +114,17 @@ export function DriveDetail({
                 <Table className="text-sm text-muted-foreground mb-4">
                     <TableBody>
                         <TableRow>
-                            <TableCell className="font-medium px-0">Mime</TableCell>
-                            <TableCell className="px-0">{path.mimeType}</TableCell>
+                            <TableCell className="font-medium px-0 w-20">Mime</TableCell>
+                            <TableCell className="px truncate">{path.mimeType}</TableCell>
                         </TableRow>
-                        {path.size && (
-                            <TableRow>
-                                <TableCell className="font-medium px-0">Size</TableCell>
-                                <TableCell className="px-0">{formatFileSize(path.size)}</TableCell>
-                            </TableRow>
-                        )}
+                        <TableRow>
+                            <TableCell className="font-medium px-0">Size</TableCell>
+                            <TableCell className="px">{formatFileSize(path.size)}</TableCell>
+                        </TableRow>
                         {path.createdAt && (
                             <TableRow>
                                 <TableCell className="font-medium px-0">Created</TableCell>
-                                <TableCell className="px-0">{new Date(path.createdAt).toLocaleDateString()}</TableCell>
+                                <TableCell className="px">{new Date(path.createdAt).toLocaleDateString()}</TableCell>
                             </TableRow>
                         )}
                     </TableBody>
