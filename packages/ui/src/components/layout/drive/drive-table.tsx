@@ -1,7 +1,6 @@
 import React, {useMemo, useEffect, useRef, useState, KeyboardEvent} from "react";
 import {Table, TableBody, TableCell, TableHead, TableHeader, TableRow} from "@workspace/ui/components/table";
 import {cn} from "@workspace/ui/lib/utils";
-import {ChevronLeft} from "lucide-react";
 import {formatDistanceToNow} from "date-fns";
 import {DrivePath} from "@apps/api-server/types/drive";
 import {DriveShareSummary} from "./drive-share-summary";
@@ -208,13 +207,13 @@ export function DriveTable({
                                                     className: "h-4 w-4 mr-2 text-app flex-shrink-0",
                                                     fill: "var(--app-drive-light-color)"
                                                 } : {}),
-                                                ...(item.type === 'doc' ? {
+                                                ...(item.type === 'doc' || item.type === 'stickies' ? {
                                                     className: "h-4 w-4 mr-2 text-doc flex-shrink-0",
                                                     fill: "var(--app-doc-light-color)"
                                                 } : {})
                                             }
                                         )}
-                                        <span className="truncate max-w-[calc(100%-1.5rem)]">{item.name.replace(/\.eigendoc$/, "")}</span>
+                                        <span className="truncate max-w-[calc(100%-1.5rem)]">{item.name.replace(/\.eigen(doc|stickies)$/, "")}</span>
                                     </div>
                                 </TableCell>
                                 <TableCell className="hidden sm:table-cell group">
