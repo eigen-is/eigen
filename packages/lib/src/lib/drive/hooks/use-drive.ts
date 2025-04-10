@@ -36,9 +36,13 @@ export function useFolderContent(ownerId: string, pathId: string) {
         queryFn: async () => {
             if (!pathId) return [];
             const response = await driveApi.folder[ownerId][pathId].get();
+            if (response.error) {
+                throw new Error(response.error);
+            }
             return response.data || [];
         },
         enabled: !!pathId,
+        retry: 1,
         staleTime: 1000 * 60 * 5 // 5 minutes
     });
 }
