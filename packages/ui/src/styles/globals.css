@@ -155,6 +155,8 @@
         --app-docs-color: var(--color-purple-600);
         --app-doc-light-color: var(--color-purple-200);
         --app-calendar-color: var(--color-blue-600);
+        
+        scroll-behavior: smooth;
     }
 
     .text-teal-600 {
