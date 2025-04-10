@@ -7,7 +7,7 @@ import { invalidateHomeSize } from "@workspace/lib/home";
 import { useQueryClient } from "@tanstack/react-query";
 import { DriveList } from "./drive-list";
 import { DriveDetail } from "./drive-detail";
-import { DriveCreateFolderDialog } from "./drive-create-folder-dialog";
+import { DriveCreateItemDialog } from "./drive-create-folder-item";
 import { DeleteDialog } from "@workspace/ui/components/layout/delete/delete-dialog";
 import { DriveAccessDialog } from "./drive-access-dialog";
 import { useFileUpload } from "./file-upload";
@@ -336,31 +336,34 @@ export function DriveLayout({
 
       {/* Create Folder Dialog */}
       {allowCreateFolder && (
-        <DriveCreateFolderDialog 
+        <DriveCreateItemDialog 
           open={createFolderOpen}
           onOpenChange={setCreateFolderOpen}
-          onCreateFolder={handleCreateFolder}
+          onCreateItem={handleCreateFolder}
           isPending={createFolderMutation.isPending}
+          type="Folder"
         />
       )}
 
       {/* Create Doc Dialog */}
       {allowCreateDoc && (
-        <DriveCreateFolderDialog 
+        <DriveCreateItemDialog 
           open={createDocOpen}
           onOpenChange={setCreateDocOpen}
-          onCreateFolder={handleCreateDoc}
+          onCreateItem={handleCreateDoc}
           isPending={createDocMutation.isPending}
+          type="Doc"
         />
       )}
 
       {/* Create Stickies Dialog */}
       {allowCreateStickies && (
-        <DriveCreateFolderDialog 
+        <DriveCreateItemDialog 
           open={createStickiesOpen}
           onOpenChange={setCreateStickiesOpen}
-          onCreateFolder={handleCreateStickies}
+          onCreateItem={handleCreateStickies}
           isPending={createStickiesMutation.isPending}
+          type="Stickies"
         />
       )}
 
