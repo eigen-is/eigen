@@ -104,6 +104,14 @@ function DriveRoute() {
         );
     }
 
+    if (isFolderContentLoadingError) {
+        return (
+            <div className="flex items-center justify-center h-full w-full">
+                <p className="text-muted-foreground">Encountering the null vector: a rendezvous with nothing at all.</p>
+            </div>
+        );
+    }
+
     return (
         <DriveLayout
             ownerId={ownerId}

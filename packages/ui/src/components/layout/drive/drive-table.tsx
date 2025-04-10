@@ -4,6 +4,7 @@ import {cn} from "@workspace/ui/lib/utils";
 import {formatDistanceToNow} from "date-fns";
 import {DrivePath} from "@apps/api-server/types/drive";
 import {DriveShareSummary} from "./drive-share-summary";
+import { ChevronLeft } from "lucide-react";
 
 // Props for the DriveTable component
 export interface DriveTableProps {
