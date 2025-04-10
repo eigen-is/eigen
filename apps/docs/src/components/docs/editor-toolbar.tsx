@@ -345,7 +345,7 @@ export const EditorToolbar = () => {
   const commandKey = window.navigator.platform.includes('Mac') ? '⌘' : 'Ctrl';
   
   return (
-    <div className="bg-white h-12 flex items-center justify-between px-4 border-b mb-0 no-print">
+    <div className="sticky z-1 top-0 bg-white h-12 flex items-center justify-between px-4 border-b mb-2 no-print">
       <div className="flex items-center gap-1">
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
