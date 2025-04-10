@@ -236,3 +236,37 @@ export function useBreadcrumb(ownerId: string, pathId: string | undefined) {
         enabled: !!pathId
     });
 }
+
+// CREATE DOC
+export function useCreateDoc(ownerId: string) {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: async ({parentId, fileName}: { parentId: string, fileName: string }) => {
+            const response = await driveApi.doc[ownerId][parentId].post({
+                fileName
+            });
+            return response.data;
+        },
+        onSuccess: (_, variables) => {
+            queryClient.invalidateQueries({queryKey: driveKeys.folder(variables.parentId)});
+        }
+    });
+}
+
+// CREATE STICKIES
+export function useCreateStickies(ownerId: string) {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: async ({parentId, fileName}: { parentId: string, fileName: string }) => {
+            const response = await driveApi.stickies[ownerId][parentId].post({
+                fileName
+            });
+            return response.data;
+        },
+        onSuccess: (_, variables) => {
+            queryClient.invalidateQueries({queryKey: driveKeys.folder(variables.parentId)});
+        }
+    });
+}
