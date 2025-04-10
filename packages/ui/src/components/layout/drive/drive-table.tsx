@@ -207,10 +207,14 @@ export function DriveTable({
                                                 ...(item.type === 'folder' ? {
                                                     className: "h-4 w-4 mr-2 text-app flex-shrink-0",
                                                     fill: "var(--app-drive-light-color)"
+                                                } : {}),
+                                                ...(item.type === 'doc' ? {
+                                                    className: "h-4 w-4 mr-2 text-doc flex-shrink-0",
+                                                    fill: "var(--app-doc-light-color)"
                                                 } : {})
                                             }
                                         )}
-                                        <span className="truncate max-w-[calc(100%-1.5rem)]">{item.name}</span>
+                                        <span className="truncate max-w-[calc(100%-1.5rem)]">{item.name.replace(/\.eigendoc$/, "")}</span>
                                     </div>
                                 </TableCell>
                                 <TableCell className="hidden sm:table-cell group">

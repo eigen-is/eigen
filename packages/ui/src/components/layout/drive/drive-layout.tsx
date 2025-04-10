@@ -2,7 +2,7 @@ import { useState, useRef } from "react";
 import { toast } from "sonner";
 import { DrivePath } from "@apps/api-server/types/drive";
 import { EigenLoader } from "@workspace/ui";
-import { useCreateFolder, useDeleteFile, useDeleteFolder, useInvalidateFolder } from '@workspace/lib/drive';
+import { useCreateFolder, useDeleteFile, useDeleteFolder, useInvalidateFolder, useCreateDoc, useCreateStickies } from '@workspace/lib/drive';
 import { invalidateHomeSize } from "@workspace/lib/home";
 import { useQueryClient } from "@tanstack/react-query";
 import { DriveList } from "./drive-list";
@@ -34,6 +34,8 @@ export interface DriveLayoutProps {
   allowDelete?: boolean;
   allowShare?: boolean;
   allowUpload?: boolean;
+  allowCreateDoc?: boolean;
+  allowCreateStickies?: boolean;
   
   // UI options
   isMobile?: boolean;
@@ -54,6 +56,8 @@ export function DriveLayout({
   allowCreateFolder = true,
   allowDelete = true,
   allowShare = true,
+  allowCreateDoc = true,
+  allowCreateStickies = true,
   allowUpload = true,
   isMobile = false,
   pid
@@ -64,6 +68,14 @@ export function DriveLayout({
   // Folder creation state and handlers
   const [createFolderOpen, setCreateFolderOpen] = useState(false);
   const createFolderMutation = useCreateFolder(ownerId);
+  
+  // Doc creation state and handlers
+  const [createDocOpen, setCreateDocOpen] = useState(false);
+  const createDocMutation = useCreateDoc(ownerId);
+  
+  // Stickies creation state and handlers
+  const [createStickiesOpen, setCreateStickiesOpen] = useState(false);
+  const createStickiesMutation = useCreateStickies(ownerId);
   
   // Delete confirmation dialog state
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -133,7 +145,68 @@ export function DriveLayout({
       }
     });
   };
+
+  // Function to open the create doc dialog
+  const openCreateDocDialog = () => {
+    if (allowCreateDoc) {
+      setCreateDocOpen(true);
+    }
+  };
+
+  // Handler for doc creation
+  const handleCreateDoc = (fileName: string) => {
+    if (!allowCreateDoc) return;
+    
+    createDocMutation.mutate({
+      parentId: pathId,
+      fileName: fileName
+    }, {
+      onSuccess: () => {
+        toast.success(`Doc "${fileName}" created successfully`);
+        setCreateDocOpen(false);
+        invalidateFolder(pathId);
+        
+        if (onAfterAction) {
+          onAfterAction('create', { name: fileName });
+        }
+      },
+      onError: () => {
+        toast.error("Failed to create doc");
+      }
+    });
+  };
+
+  // Function to open the create stickies dialog
+  const openCreateStickiesDialog = () => {
+    if (allowCreateStickies) {
+      setCreateStickiesOpen(true);
+    }
+  };
   
+  // Handler for stickies creation
+  const handleCreateStickies = (fileName: string) => {
+    if (!allowCreateStickies) return;
+    
+    createStickiesMutation.mutate({
+      parentId: pathId,
+      fileName: fileName
+    }, {
+      onSuccess: () => {
+        toast.success(`Stickies "${fileName}" created successfully`);
+        setCreateStickiesOpen(false);
+        invalidateFolder(pathId);
+        
+        if (onAfterAction) {
+          onAfterAction('create', { name: fileName });
+        }
+      },
+      onError: () => {
+        toast.error("Failed to create stickies");
+      }
+    });
+  };
+
+
   // Handle delete path
   const handleDeletePath = (path: DrivePath) => {
     if (!allowDelete) return;
@@ -212,6 +285,8 @@ export function DriveLayout({
               onUploadFiles={allowUpload ? processFiles : undefined}
               onDelete={allowDelete ? handleDeletePath : () => {}}
               onShareClick={allowShare ? handleShareClick : () => {}}
+              onCreateDoc={allowCreateDoc ? openCreateDocDialog : undefined}
+              onCreateStickies={allowCreateStickies ? openCreateStickiesDialog : undefined}
               currentPath={currentPath}
               ownerId={ownerId}
               pathId={pathId}
@@ -235,6 +310,8 @@ export function DriveLayout({
                   onUploadFiles={allowUpload ? processFiles : undefined}
                   onDelete={allowDelete ? handleDeletePath : () => {}}
                   onShareClick={allowShare ? handleShareClick : () => {}}
+                  onCreateDoc={allowCreateDoc ? openCreateDocDialog : undefined}
+                  onCreateStickies={allowCreateStickies ? openCreateStickiesDialog : undefined}
                   currentPath={currentPath}
                   ownerId={ownerId}
                   pathId={pathId}
@@ -264,6 +341,26 @@ export function DriveLayout({
           onOpenChange={setCreateFolderOpen}
           onCreateFolder={handleCreateFolder}
           isPending={createFolderMutation.isPending}
+        />
+      )}
+
+      {/* Create Doc Dialog */}
+      {allowCreateDoc && (
+        <DriveCreateFolderDialog 
+          open={createDocOpen}
+          onOpenChange={setCreateDocOpen}
+          onCreateFolder={handleCreateDoc}
+          isPending={createDocMutation.isPending}
+        />
+      )}
+
+      {/* Create Stickies Dialog */}
+      {allowCreateStickies && (
+        <DriveCreateFolderDialog 
+          open={createStickiesOpen}
+          onOpenChange={setCreateStickiesOpen}
+          onCreateFolder={handleCreateStickies}
+          isPending={createStickiesMutation.isPending}
         />
       )}
 
