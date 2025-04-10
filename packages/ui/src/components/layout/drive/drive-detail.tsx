@@ -46,6 +46,8 @@ export function DriveDetail({
         );
     }
 
+    const fullPath = `${import.meta.env.VITE_API_HOST}/drive/download/${path.ownerId}/${path.id}`;
+
     return (
 
         <div className={cn("flex flex-col h-full bg-white", className)} {...props}>
@@ -80,7 +82,7 @@ export function DriveDetail({
                         tooltipText="Download"
                         onClick={() => {
                             if (path && path.id) {
-                                const downloadUrl = `${import.meta.env.VITE_API_HOST}/drive/download/${path.ownerId}/${path.id}`;
+                                const downloadUrl = fullPath;
                                 // Create a temporary anchor element to trigger the download
                                 const a = document.createElement('a');
                                 a.href = downloadUrl;
@@ -132,7 +134,7 @@ export function DriveDetail({
                 {path.thumbnail && (
                     <div>
                         <img
-                            src={`${import.meta.env.VITE_API_HOST}/drive/thumb/${path.ownerId}/${path.thumbnail}`}
+                            src={fullPath}
                             alt={`Thumbnail for ${path.name}`}
                             className="max-w-full max-h-[25%] object-contain"
                         />
@@ -141,7 +143,7 @@ export function DriveDetail({
                 {(path.mimeType === "video/mp4" || path.mimeType === "video/mpeg") && (
                     <div>
                         <video
-                            src={`${import.meta.env.VITE_API_HOST}/drive/download/${path.ownerId}/${path.id}`}
+                            src={fullPath}
                             className="w-full max-h-[25%] object-contain"
                             autoPlay={false}
                             controls
@@ -151,13 +153,14 @@ export function DriveDetail({
                 {(path.mimeType == "audio/mpeg" || path.mimeType == "audio/wav" || path.mimeType == "audio/ogg" || path.mimeType == "audio/vorbis" || path.mimeType == "audio/mp4") && (
                     <div>
                         <audio
-                            src={`${import.meta.env.VITE_API_HOST}/drive/download/${path.ownerId}/${path.id}`}
+                            src={fullPath}
                             className="w-full"
                             autoPlay={false}
                             controls
                         />
                     </div>
                 )}
+
                 
                 <div className="mt-4">
                     <DriveAccessList 
