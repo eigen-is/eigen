@@ -10,52 +10,54 @@ import { Input } from "@workspace/ui/components/input";
 import { Label } from "@workspace/ui/components/label";
 import { Button } from "@workspace/ui/components/button";
 
-interface DriveCreateFolderDialogProps {
+interface DriveCreateItemDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onCreateFolder: (folderName: string) => void;
+  onCreateItem: (itemName: string) => void;
   isPending?: boolean;
+  type: string;
 }
 
-export function DriveCreateFolderDialog({
+export function DriveCreateItemDialog({
   open,
   onOpenChange,
-  onCreateFolder,
+  onCreateItem,
   isPending = false,
-}: DriveCreateFolderDialogProps) {
-  const [folderName, setFolderName] = useState("");
+  type
+}: DriveCreateItemDialogProps) {
+  const [itemName, setItemName] = useState("");
 
-  const handleCreateFolder = () => {
-    if (folderName.trim() && !isPending) {
-      onCreateFolder(folderName);
-      setFolderName("");
+  const handleCreateItem = () => {
+    if (itemName.trim() && !isPending) {
+      onCreateItem(itemName);
+      setItemName("");
     }
   };
 
   const handleCancel = () => {
     onOpenChange(false);
-    setFolderName("");
+    setItemName("");
   };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle>New Folder</DialogTitle>
+          <DialogTitle>New {type.toLowerCase()}</DialogTitle>
         </DialogHeader>
         <div className="py-4">
-          <Label htmlFor="folderName">Folder Name</Label>
+          <Label htmlFor="itemName">{type} name</Label>
           <Input
-            id="folderName"
-            value={folderName}
-            onChange={(e) => setFolderName(e.target.value)}
-            placeholder="Enter folder name"
+            id="itemName"
+            value={itemName}
+            onChange={(e) => setItemName(e.target.value)}
+            placeholder={`Enter ${type.toLowerCase()} name`}
             className="mt-2"
             autoFocus
             onKeyDown={(e) => {
-              if (e.key === "Enter" && folderName.trim() && !isPending) {
+              if (e.key === "Enter" && itemName.trim() && !isPending) {
                 e.preventDefault();
-                handleCreateFolder();
+                handleCreateItem();
               }
             }}
           />
@@ -65,8 +67,8 @@ export function DriveCreateFolderDialog({
             Cancel
           </Button>
           <Button
-            onClick={handleCreateFolder}
-            disabled={!folderName.trim() || isPending}
+            onClick={handleCreateItem}
+            disabled={!itemName.trim() || isPending}
           >
             {isPending ? "Creating..." : "Create"}
           </Button>
