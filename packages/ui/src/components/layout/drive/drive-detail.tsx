@@ -130,7 +130,7 @@ export function DriveDetail({
                     </TableBody>
                 </Table>
                 {path.thumbnail && (
-                    <div className="mt-4">
+                    <div>
                         <img
                             src={`${import.meta.env.VITE_API_HOST}/drive/thumb/${path.ownerId}/${path.thumbnail}`}
                             alt={`Thumbnail for ${path.name}`}
@@ -138,6 +138,27 @@ export function DriveDetail({
                         />
                     </div>
                 )}
+                {(path.mimeType === "video/mp4" || path.mimeType === "video/mpeg") && (
+                    <div>
+                        <video
+                            src={`${import.meta.env.VITE_API_HOST}/drive/download/${path.ownerId}/${path.id}`}
+                            className="w-full max-h-[25%] object-contain"
+                            autoPlay={false}
+                            controls
+                        />
+                    </div>
+                )}
+                {(path.mimeType == "audio/mpeg" || path.mimeType == "audio/wav" || path.mimeType == "audio/ogg" || path.mimeType == "audio/vorbis" || path.mimeType == "audio/mp4") && (
+                    <div>
+                        <audio
+                            src={`${import.meta.env.VITE_API_HOST}/drive/download/${path.ownerId}/${path.id}`}
+                            className="w-full"
+                            autoPlay={false}
+                            controls
+                        />
+                    </div>
+                )}
+                
                 <div className="mt-4">
                     <DriveAccessList 
                         path={path}
