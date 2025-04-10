@@ -23,7 +23,8 @@ import {
   Files,
   Folder,
   Trash2,
-  CheckSquare
+  CheckSquare,
+  Type
 } from "lucide-react";
 import { TooltipButton } from "@workspace/ui";
 import { Button } from "@workspace/ui/components/button";
@@ -234,6 +235,10 @@ export const EditorToolbar = () => {
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="end">
+            <DropdownMenuItem onClick={() => toggleBlock(editor, 'paragraph')}>
+              <Type className="mr-2 h-4 w-4" /> Normal text
+            </DropdownMenuItem>
+            <Separator className="my-1" />
             <DropdownMenuItem onClick={() => toggleBlock(editor, 'heading-one')}>
               <Heading1 className="mr-2 h-4 w-4" /> Heading 1
             </DropdownMenuItem>
