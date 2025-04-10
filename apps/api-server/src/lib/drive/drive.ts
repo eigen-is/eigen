@@ -297,7 +297,7 @@ export default class Drive {
     public async deleteFolder(pathId: string): Promise<void> {
         // Get folder
         const folder = await this.getPath(pathId);
-        if (!folder || folder.type !== "folder") {
+        if (!folder || (folder.type !== "folder" && folder.type !== "doc" && folder.type !== "stickies")) {
             throw new Error("Folder not found");
         }
 
@@ -332,8 +332,14 @@ export default class Drive {
     public async deleteFile(pathId: string): Promise<void> {
         // Get file
         const file = await this.getPath(pathId);
-        if (!file || file.type !== "file") {
+        if (!file) {
             throw new Error("File not found");
+        }
+
+        if (file.type === "doc" || file.type === "stickies") {
+            // eigendocs and eigenstickies are folders, so delete folder
+            // TODO: close document first!!
+            return this.deleteFolder(pathId);
         }
 
         // Check write permissions
