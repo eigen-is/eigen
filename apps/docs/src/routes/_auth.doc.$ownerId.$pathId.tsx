@@ -6,9 +6,11 @@ export const Route = createFileRoute('/_auth/doc/$ownerId/$pathId')({
 })
 
 function CollaborativeTextEditor() {
+    const {ownerId, pathId} = Route.useParams();
+    
     return (
         <div className="bg-muted flex-1 overflow-hidden">
-            <CollaborativeEditor/>
+            <CollaborativeEditor ownerId={ownerId} pathId={pathId}/>
         </div>
     )
 }
