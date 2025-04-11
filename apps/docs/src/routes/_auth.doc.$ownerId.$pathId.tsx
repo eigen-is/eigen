@@ -7,7 +7,7 @@ export const Route = createFileRoute('/_auth/doc/$ownerId/$pathId')({
 
 function CollaborativeTextEditor() {
     return (
-        <div className="bg-muted">
+        <div className="bg-muted flex-1 overflow-hidden">
             <CollaborativeEditor/>
         </div>
     )
