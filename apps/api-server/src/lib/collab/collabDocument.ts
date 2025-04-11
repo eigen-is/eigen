@@ -21,6 +21,8 @@ class LoggingProvider {
         console.log(`[LoggingProvider] Created for document: ${docId}`);
 
         // Listen for document updates
+
+        // updateV2 ?
         doc.on('update', (update: Uint8Array) => {
             // console.log(`[LoggingProvider] Document ${docId} updated, update size: ${update.length} bytes`);
             // console.log(doc.toJSON());
