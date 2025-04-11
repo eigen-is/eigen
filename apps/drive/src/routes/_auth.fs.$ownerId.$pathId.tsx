@@ -4,6 +4,7 @@ import {useFolderContent, useInvalidateFolder, usePathInfo, useRootFolder} from 
 import {useEffect} from "react";
 import {DriveLayout} from "@workspace/ui/components/layout/drive/drive-layout";
 import {DrivePath} from "@apps/api-server/types/drive";
+import {useIsMobile} from "@workspace/lib/media";
 
 // Define search params type
 export interface DriveSearchParams {
@@ -23,6 +24,7 @@ function DriveRoute() {
     const {pid} = Route.useSearch();
     const navigate = useNavigate();
     const invalidateFolder = useInvalidateFolder();
+    const isMobile = useIsMobile();
 
     // Get the root folder ID to replace "root" pathId
     const {data: rootFolder, isLoading: isRootLoading} = useRootFolder(ownerId);
@@ -123,7 +125,7 @@ function DriveRoute() {
             allowDelete={true}
             allowShare={true}
             allowUpload={true}
-            isMobile={false}
+            isMobile={isMobile}
             showBreadcrumb={true}
             pid={pid}
         />

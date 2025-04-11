@@ -5,7 +5,6 @@ import {
     useDeleteEmail,
     useEmail,
     useEmails,
-    useMediaQuery,
     useMoveEmail,
     useSendDraft,
     useToggleReadEmail,
@@ -15,6 +14,7 @@ import {EmailList} from "@/components/mail/email-list.tsx";
 import {Email, EmailDraft as EmailDraftType} from "@apps/api-server/types/mail";
 import {toast} from "sonner";
 import {useEffect} from 'react';
+import {useIsMobile, useIsTablet} from "@workspace/lib/media";
 
 // Define search params type
 export interface MailSearchParams {
@@ -39,8 +39,8 @@ function MailRoute() {
     const {filterType, filterId} = Route.useParams();
     const {mailId, mode, to} = Route.useSearch();
     const navigate = useNavigate();
-    const isMobile = useMediaQuery('(max-width: 768px)');
-    const isTablet = useMediaQuery('(max-width: 1024px) and (min-width: 769px)');
+    const isMobile = useIsMobile();
+    const isTablet = useIsTablet();
     const deleteMail = useDeleteEmail();
     const moveMail = useMoveEmail();
     const toggleMailRead = useToggleReadEmail();

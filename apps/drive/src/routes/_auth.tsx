@@ -1,10 +1,11 @@
 import {createFileRoute, Outlet, redirect} from '@tanstack/react-router'
 import {createContext, useContext} from 'react';
 import {SidebarContext} from './__root';
-import {useMediaQuery, useRootFolder} from '@workspace/lib/drive';
+import {useRootFolder} from '@workspace/lib/drive';
 import {EigenLoader} from '@workspace/ui';
 import {useAuth} from '@workspace/lib/auth/auth-context.js';
 import {DriveSidebar} from '@/components/drive/drive-sidebar';
+import {useIsMobile, useIsTablet} from "@workspace/lib/media";
 
 // Create a drive context to share data with child routes
 export interface DriveContextType {
@@ -31,8 +32,8 @@ export const Route = createFileRoute('/_auth')({
 
 function AuthLayout() {
     const {sidebarOpen, setSidebarOpen} = useContext(SidebarContext);
-    const isMobile = useMediaQuery('(max-width: 768px)');
-    const isTablet = useMediaQuery('(min-width: 769px) and (max-width: 1024px)');
+    const isMobile = useIsMobile();
+    const isTablet = useIsTablet();
     const {user} = useAuth();
 
     // Get root folder information

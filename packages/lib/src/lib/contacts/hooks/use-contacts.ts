@@ -1,7 +1,7 @@
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {contactsApi} from '@workspace/lib/api.ts';
 import {type Contact} from '@apps/api-server/types/contact';
-import { invalidateHomeSize } from '../../home';
+import {invalidateHomeSize} from '../../home';
 
 // Query keys for contacts
 export const contactKeys = {

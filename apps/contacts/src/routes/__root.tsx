@@ -2,8 +2,8 @@ import {createRootRouteWithContext, Outlet} from '@tanstack/react-router'
 import {TanStackRouterDevtools} from '@tanstack/react-router-devtools'
 import {AuthContextType} from "@workspace/lib/auth/auth-context.tsx";
 import {Topbar} from "@workspace/ui/components/layout/topbar";
-import {useMediaQuery} from '@workspace/lib/contacts';
 import {createContext, useState} from 'react';
+import {useIsMobile} from '@workspace/lib/media/index.js';
 
 const appName = 'contacts';
 
@@ -27,7 +27,7 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
 
 function RootComponent() {
     const [sidebarOpen, setSidebarOpen] = useState(false);
-    const isMobile = useMediaQuery('(max-width: 768px)');
+    const isMobile = useIsMobile();
 
     return (
         <SidebarContext.Provider value={{sidebarOpen, setSidebarOpen}}>
