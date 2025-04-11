@@ -3,12 +3,13 @@ import {Elysia, t} from "elysia";
 import {betterAuth} from "./auth";
 import {getHome} from "../lib/home/home.ts";
 import type {ServerWebSocket} from "bun";
+import {keepWebSocketAlive} from "../utils/websockets.ts";
 
 export const wsRouter = new Elysia({name: "ws"})
     .use(betterAuth)
     .ws('/ws/notifications', {
         body: t.String(),
-        response: t.String(),
+        // response: t.String(),
         auth: true,
         async open(ws) {
             // @ts-ignore
@@ -17,16 +18,16 @@ export const wsRouter = new Elysia({name: "ws"})
                 ws.close();
                 return;
             }
+
+            ws.ping();
+
             (await getHome(user)).subscribe(ws as any as ServerWebSocket);
-            // we should keep the connection open
-            setInterval(() => {
-                if (ws.readyState === 1) {
-                    ws.send('ping');
-                }
-            }, 15000);
+            keepWebSocketAlive(ws as any as ServerWebSocket, async () => {
+                (await getHome(user)).unsubscribe(ws as any as ServerWebSocket);
+            });
         },
         message: async (ws, message) => {
-            if (message === 'ping') {
+            if (!message || message === 'ping') {
                 ws.send('pong');
             }
         }

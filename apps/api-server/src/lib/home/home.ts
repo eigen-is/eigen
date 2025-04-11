@@ -10,7 +10,7 @@ import type {EigenNotification} from "../../types/notification.ts";
 
 const city = new Map<string, Home>();
 
-class asyncCache<T> {
+export class asyncCache<T> {
     private value: T | undefined;
     private createPromise: () => Promise<T>;
     private initializationStarted: boolean = false;
@@ -92,6 +92,10 @@ export class Home {
 
     public subscribe(ws: ServerWebSocket) {
         this.notificationSockets.push(ws);
+    }
+
+    public unsubscribe(ws: ServerWebSocket) {
+        this.notificationSockets = this.notificationSockets.filter(socket => socket !== ws);
     }
 
     private notify(event: EigenNotification) {

@@ -1,4 +1,4 @@
-import type {Home} from "../home/home.ts";
+import {asyncCache, type Home} from "../home/home.ts";
 import {getHome} from "../home/home.ts";
 import type Database from "bun:sqlite";
 import {BunSQLiteDatabase, drizzle} from "drizzle-orm/bun-sqlite";
@@ -10,6 +10,7 @@ import type {DriveACL, DrivePath} from "../../types/drive.ts";
 import {randomUUID} from "crypto";
 import path from "path";
 import sharp from "sharp";
+import CollabDocument from "../collab/collabDocument.ts";
 
 async function getDriveDatabase(home: Home) {
     const db = await home.openSQLiteDatabase('eigen.drive/metadata.db', async (db: Database) => {
@@ -70,6 +71,7 @@ export default class Drive {
     private owner: User;
     private home: Home;
     private db!: BunSQLiteDatabase<typeof schema>;
+    private documents: Map<string, asyncCache<CollabDocument>> = new Map();
 
     constructor(home: Home) {
         this.home = home;
@@ -733,5 +735,28 @@ export default class Drive {
         }
 
         return crumb.reverse();
+    }
+
+    public async getCollabDocument(pathId: string): Promise<CollabDocument> {
+        if (this.documents.has(pathId)) {
+            return await (this.documents.get(pathId)!.get()) as CollabDocument;
+        }
+        this.documents.set(pathId, new asyncCache(async () => {
+            const path = await this.getPath(pathId);
+            if (!path || path.type !== "doc" && path.type !== "stickies") {
+                throw new Error("Document not found");
+            }
+            const document = new CollabDocument(this, path);
+            return (await document.init()) as CollabDocument;
+        }));
+        return await (this.documents.get(pathId)!.get()) as CollabDocument;
+    }
+
+    public async closeCollabDocument(pathId: string) {
+        const document = this.documents.get(pathId);
+        if (document) {
+            (await document.get()).destruct();
+            this.documents.delete(pathId);
+        }
     }
 }
