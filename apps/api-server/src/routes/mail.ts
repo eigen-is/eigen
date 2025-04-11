@@ -188,4 +188,4 @@ export const mailRouter = new Elysia({name: "mail"})
             fileName: t.String()
         })
     })
-    ;
+;

@@ -19,8 +19,8 @@ function HomeComponent() {
             params: {
                 ownerId: user.id,
                 pathId: 'root'
-        }
-    });
+            }
+        });
     }
 
     return null;

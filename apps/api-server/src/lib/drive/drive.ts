@@ -4,7 +4,7 @@ import type Database from "bun:sqlite";
 import {BunSQLiteDatabase, drizzle} from "drizzle-orm/bun-sqlite";
 import * as schema from "./schema.ts";
 import {drivePaths} from "./schema.ts";
-import {and, eq, isNull, sql} from "drizzle-orm";
+import {and, eq, isNull, like, sql} from "drizzle-orm";
 import type {User} from "better-auth/types";
 import type {DriveACL, DrivePath} from "../../types/drive.ts";
 import {randomUUID} from "crypto";
@@ -395,11 +395,29 @@ export default class Drive {
             .get() as DrivePath | null;
     }
 
-    /**
-     * Get contents of a folder
-     * @param pathId ID of the folder
-     * @returns Array of paths in the folder
-     */
+    public async getMimeTypeContents(mimeType: string): Promise<DrivePath[]> {
+        // Get contents from database
+        const results = await this.db.select().from(drivePaths)
+            .where(like(drivePaths.mimeType, `${mimeType}%`))
+            .all();
+
+        // Convert to DrivePath type
+        return results.map(result => ({
+            id: result.id,
+            name: result.name,
+            type: result.type as "folder" | "file" | "doc" | "stickies",
+            parentId: result.parentId || undefined,
+            ownerId: result.ownerId,
+            size: result.size ?? 0,
+            thumbnail: result.thumbnail || '',
+            labels: [], // We would need to fetch labels separately
+            mimeType: result.mimeType,
+            acl: result.acl ?? this.getACL(result.id),
+            createdAt: new Date(result.createdAt || ''),
+            updatedAt: new Date(result.updatedAt || '')
+        }));
+    }
+
     public async getFolderContents(pathId: string): Promise<DrivePath[]> {
         // Check if folder exists
         const folder = await this.getPath(pathId);
@@ -684,7 +702,7 @@ export default class Drive {
             const image = sharp(this.home.fs.absolutePath(filePath));
             const {width, height} = await image.metadata();
             console.log("Image dimensions", width, height);
-            if (!width || !height || width > 12000 || height >12000) {
+            if (!width || !height || width > 12000 || height > 12000) {
                 return null;
             }
 
@@ -708,11 +726,12 @@ export default class Drive {
 
     public async breadCrumb(pathId: string) {
         let parent = await this.getPath(pathId);
-        const crumb:DrivePath[] = [];
-        while(parent) {
+        const crumb: DrivePath[] = [];
+        while (parent) {
             crumb.push(parent);
             parent = (parent.parentId && await this.getPath(parent.parentId)) || null;
-        };
+        }
+
         return crumb.reverse();
     }
 }

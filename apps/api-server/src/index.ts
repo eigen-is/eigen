@@ -8,7 +8,7 @@ import {trustedOrigins} from "./lib/auth/auth";
 import {spaceRouter} from "./routes/space";
 import {driveRouter} from "./routes/drive.ts";
 import {homeRouter} from "./routes/home.ts";
-import { wsRouter } from "./routes/ws.ts";
+import {wsRouter} from "./routes/ws.ts";
 import {collabRouter} from "./routes/collab";
 
 const app = new Elysia()

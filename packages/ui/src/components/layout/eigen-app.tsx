@@ -7,7 +7,7 @@ import {AuthProvider} from "@workspace/lib/auth/auth-context.tsx"
 import {QueryClient, QueryClientProvider} from '@tanstack/react-query';
 import {ReactQueryDevtools} from '@tanstack/react-query-devtools';
 import {NotificationProvider} from "./notification-provider";
-import { TooltipProvider } from "@radix-ui/react-tooltip"
+import {TooltipProvider} from "@radix-ui/react-tooltip"
 
 interface EigenAppProps {
     children: React.ReactNode

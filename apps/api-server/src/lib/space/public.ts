@@ -1,8 +1,8 @@
-import type { PublicUser } from "../../types/public";
+import type {PublicUser} from "../../types/public";
 import {getHome} from "../home/home";
 import {getUserByEmail, getUserById} from "../users/users";
 
-export async function getPublicInfo(mailOrId: string) : Promise<PublicUser | null>  {
+export async function getPublicInfo(mailOrId: string): Promise<PublicUser | null> {
     // detect if mail or id?
     const isMail = mailOrId.includes('@');
     const user = await (isMail ? getUserByEmail(mailOrId) : getUserById(mailOrId));

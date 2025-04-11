@@ -2,7 +2,16 @@ import {betterAuth} from "better-auth";
 import {drizzle} from 'drizzle-orm/bun-sqlite';
 import {drizzleAdapter} from "better-auth/adapters/drizzle";
 import {admin, organization, twoFactor} from "better-auth/plugins"
-import {account as accountScheme, session as sessionScheme, user as userScheme, verification as verificationScheme, twoFactor as twoFactorScheme, organization as organizationScheme, member as memberScheme, invitation as invitationScheme} from '../../../auth-schema.ts';
+import {
+    account as accountScheme,
+    invitation as invitationScheme,
+    member as memberScheme,
+    organization as organizationScheme,
+    session as sessionScheme,
+    twoFactor as twoFactorScheme,
+    user as userScheme,
+    verification as verificationScheme
+} from '../../../auth-schema.ts';
 
 export const trustedOrigins = [
     "http://localhost:3000",
@@ -35,7 +44,7 @@ export const auth = betterAuth({
         twoFactor({
             issuer: "eigen",
             otpOptions: {
-                async sendOTP({ user, otp }, request) {
+                async sendOTP({user, otp}, request) {
                     // send otp to user (sms or something)
                     console.log('send otp', user, otp, request);
                 },

@@ -2,7 +2,7 @@ import {Elysia, t} from "elysia";
 import {betterAuth} from "./auth";
 import {type User} from "better-auth/types";
 import {type DriveACL} from "../types/drive";
-import { getSharedDrive } from "../lib/drive/sharedDrive";
+import {getSharedDrive} from "../lib/drive/sharedDrive";
 
 // Define types for request bodies
 type CreateFolderBody = {
@@ -53,7 +53,10 @@ export const driveRouter = new Elysia({name: "drive"})
     })
 
     // Get folder contents
-    .get("/drive/folder/:ownerId/:pathId", async ({params, user}: { params: { ownerId: string, pathId: string }, user: User }) => {
+    .get("/drive/folder/:ownerId/:pathId", async ({params, user}: {
+        params: { ownerId: string, pathId: string },
+        user: User
+    }) => {
         const drive = await getSharedDrive(params.ownerId, user);
         return await drive.getFolderContents(params.pathId);
     }, {
@@ -64,8 +67,25 @@ export const driveRouter = new Elysia({name: "drive"})
         })
     })
 
+    .get("/drive/mime/:ownerId/:mimeType", async ({params, user}: {
+        params: { ownerId: string, mimeType: string },
+        user: User
+    }) => {
+        const drive = await getSharedDrive(params.ownerId, user);
+        return await drive.getMimeTypeContents(params.mimeType.replace('-', '/'));
+    }, {
+        auth: true,
+        params: t.Object({
+            ownerId: t.String(),
+            mimeType: t.String()
+        })
+    })
+
     // Get path info
-    .get("/drive/path/:ownerId/:pathId", async ({params, user}: { params: { ownerId: string, pathId: string }, user: User }) => {
+    .get("/drive/path/:ownerId/:pathId", async ({params, user}: {
+        params: { ownerId: string, pathId: string },
+        user: User
+    }) => {
         const drive = await getSharedDrive(params.ownerId, user);
         return await drive.getPath(params.pathId);
     }, {
@@ -77,7 +97,11 @@ export const driveRouter = new Elysia({name: "drive"})
     })
 
     // Create folder
-    .post("/drive/folder/:ownerId/:pathId", async ({params, body, user}: { params: { ownerId: string, pathId: string }, body: CreateFolderBody, user: User }) => {
+    .post("/drive/folder/:ownerId/:pathId", async ({params, body, user}: {
+        params: { ownerId: string, pathId: string },
+        body: CreateFolderBody,
+        user: User
+    }) => {
         const drive = await getSharedDrive(params.ownerId, user);
         return await drive.createFolder(params.pathId, body.folderName);
     }, {
@@ -133,7 +157,10 @@ export const driveRouter = new Elysia({name: "drive"})
     })
 
     // Delete folder
-    .delete("/drive/folder/:ownerId/:pathId", async ({params, user}: { params: { ownerId: string, pathId: string }, user: User }) => {
+    .delete("/drive/folder/:ownerId/:pathId", async ({params, user}: {
+        params: { ownerId: string, pathId: string },
+        user: User
+    }) => {
         const drive = await getSharedDrive(params.ownerId, user);
         await drive.deleteFolder(params.pathId);
         return {success: true};
@@ -146,7 +173,10 @@ export const driveRouter = new Elysia({name: "drive"})
     })
 
     // Delete file
-    .delete("/drive/file/:ownerId/:pathId", async ({params, user}: { params: { ownerId: string, pathId: string }, user: User }) => {
+    .delete("/drive/file/:ownerId/:pathId", async ({params, user}: {
+        params: { ownerId: string, pathId: string },
+        user: User
+    }) => {
         const drive = await getSharedDrive(params.ownerId, user);
         await drive.deleteFile(params.pathId);
         return {success: true};
@@ -159,7 +189,11 @@ export const driveRouter = new Elysia({name: "drive"})
     })
 
     // Rename path (file or folder)
-    .put("/drive/path/rename/:ownerId/:pathId", async ({params, body, user}: { params: { ownerId: string, pathId: string }, body: RenamePathBody, user: User }) => {
+    .put("/drive/path/rename/:ownerId/:pathId", async ({params, body, user}: {
+        params: { ownerId: string, pathId: string },
+        body: RenamePathBody,
+        user: User
+    }) => {
         const drive = await getSharedDrive(params.ownerId, user);
         await drive.renamePath(params.pathId, body.newName);
         return {success: true};
@@ -175,14 +209,18 @@ export const driveRouter = new Elysia({name: "drive"})
     })
 
     // Update ACL
-    .put("/drive/path/acl/:ownerId/:pathId", async ({params, body, user}: { params: { ownerId: string, pathId: string }, body: UpdateACLBody, user: User }) => {
+    .put("/drive/path/acl/:ownerId/:pathId", async ({params, body, user}: {
+        params: { ownerId: string, pathId: string },
+        body: UpdateACLBody,
+        user: User
+    }) => {
         const drive = await getSharedDrive(params.ownerId, user);
         await drive.updateACL(params.pathId, body.acl);
         return {success: true};
     }, {
         auth: true,
         params: t.Object({
-            ownerId: t.String() ,
+            ownerId: t.String(),
             pathId: t.String()
         }),
         body: t.Object({
@@ -198,7 +236,10 @@ export const driveRouter = new Elysia({name: "drive"})
     })
 
     // Check read permission
-    .get("/drive/permissions/read/:ownerId/:pathId", async ({params, user}: { params: { ownerId: string, pathId: string }, user: User }) => {
+    .get("/drive/permissions/read/:ownerId/:pathId", async ({params, user}: {
+        params: { ownerId: string, pathId: string },
+        user: User
+    }) => {
         const drive = await getSharedDrive(params.ownerId, user);
         return {canRead: await drive.canRead(params.pathId, user)};
     }, {
@@ -210,19 +251,22 @@ export const driveRouter = new Elysia({name: "drive"})
     })
 
     // Check write permission
-    .get("/drive/permissions/write/:ownerId/:pathId", async ({params, user}: { params: { ownerId: string, pathId: string }, user: User }) => {
+    .get("/drive/permissions/write/:ownerId/:pathId", async ({params, user}: {
+        params: { ownerId: string, pathId: string },
+        user: User
+    }) => {
         const drive = await getSharedDrive(params.ownerId, user);
         return {canWrite: await drive.canWrite(params.pathId, user)};
     }, {
         auth: true,
-        params: t.Object({  
+        params: t.Object({
             ownerId: t.String(),
             pathId: t.String()
         })
     })
 
     .get("/drive/thumb/:ownerId/:fileName", async ({params, user, set}: {
-        params: { ownerId:string, fileName: string },
+        params: { ownerId: string, fileName: string },
         user: User,
         set: any
     }) => {
@@ -262,7 +306,10 @@ export const driveRouter = new Elysia({name: "drive"})
         })
     })
 
-    .get("/drive/breadcrumb/:ownerId/:pathId", async ({params, user}: { params: { ownerId: string, pathId: string }, user: User }) => {
+    .get("/drive/breadcrumb/:ownerId/:pathId", async ({params, user}: {
+        params: { ownerId: string, pathId: string },
+        user: User
+    }) => {
         const drive = await getSharedDrive(params.ownerId, user);
         return await drive.breadCrumb(params.pathId);
     }, {
@@ -274,7 +321,11 @@ export const driveRouter = new Elysia({name: "drive"})
     })
 
     // Create doc
-    .post("/drive/doc/:ownerId/:pathId", async ({params, body, user}: { params: { ownerId: string, pathId: string }, body: CreateDocBody, user: User }) => {
+    .post("/drive/doc/:ownerId/:pathId", async ({params, body, user}: {
+        params: { ownerId: string, pathId: string },
+        body: CreateDocBody,
+        user: User
+    }) => {
         const drive = await getSharedDrive(params.ownerId, user);
         return await drive.createDoc(params.pathId, body.fileName);
     }, {
@@ -289,7 +340,11 @@ export const driveRouter = new Elysia({name: "drive"})
     })
 
     // Create stickies
-    .post("/drive/stickies/:ownerId/:pathId", async ({params, body, user}: { params: { ownerId: string, pathId: string }, body: CreateStickiesBody, user: User }) => {
+    .post("/drive/stickies/:ownerId/:pathId", async ({params, body, user}: {
+        params: { ownerId: string, pathId: string },
+        body: CreateStickiesBody,
+        user: User
+    }) => {
         const drive = await getSharedDrive(params.ownerId, user);
         return await drive.createStickies(params.pathId, body.fileName);
     }, {
