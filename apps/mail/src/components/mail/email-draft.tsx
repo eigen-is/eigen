@@ -2,10 +2,9 @@ import {ArrowLeft, Send, Trash2} from "lucide-react";
 import {cn} from "@workspace/ui/lib/utils";
 import {Button} from "@workspace/ui/components/button";
 import {EmailDraft as EmailDraftType} from "@apps/api-server/types/mail";
-import {TooltipButton} from "@workspace/ui";
+import {ContactAutosuggest, TooltipButton} from "@workspace/ui";
 import {Input} from "@workspace/ui/components/input";
 import {Textarea} from "@workspace/ui/components/textarea";
-import {ContactAutosuggest} from '@workspace/ui';
 import {useEffect, useMemo, useRef, useState} from "react";
 import {toast} from "sonner";
 import {createDraftEmail} from "@workspace/lib/mail";
@@ -264,19 +263,19 @@ export function EmailDraft({
                         {/* BCC field */}
                         <div className="flex items-center border-b">
                             <div className="w-16 text-sm text-muted-foreground py-2">Bcc:</div>
-                                <ContactAutosuggest
-                                    initialValue={email.bcc?.text || ""}
-                                    onChange={() => {
-                                        // We halen de waarde op via de ref bij het verzenden
-                                    }}
-                                    appendMode={true}
-                                    className="flex-1"
-                                    inputClassName="bg-transparent border-none focus-visible:ring-0 py-2 px-0 h-auto"
-                                    inputRef={bccFieldRef}
-                                    disabled={isSending}
-                                    autoComplete="off"
-                                    id="bcc"
-                                />
+                            <ContactAutosuggest
+                                initialValue={email.bcc?.text || ""}
+                                onChange={() => {
+                                    // We halen de waarde op via de ref bij het verzenden
+                                }}
+                                appendMode={true}
+                                className="flex-1"
+                                inputClassName="bg-transparent border-none focus-visible:ring-0 py-2 px-0 h-auto"
+                                inputRef={bccFieldRef}
+                                disabled={isSending}
+                                autoComplete="off"
+                                id="bcc"
+                            />
                         </div>
 
                         {/* From field (non-editable) */}
@@ -315,6 +314,6 @@ export function EmailDraft({
                     </div>
                 </form>
             </div>
-        </div>      
+        </div>
     );
 }

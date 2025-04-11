@@ -1,9 +1,9 @@
-import {Home, Plus, Share, FileText, Image, StickyNote, X, Link2, Link, Download} from 'lucide-react';
+import {Download, FileText, Home, Image, Link, StickyNote, X} from 'lucide-react';
 import {Button} from "@workspace/ui/components/button";
 import {SidebarSection} from '@workspace/ui/components/layout/sidebar/sidebar-section';
 import {AppLogo} from '@workspace/ui/components/layout/app-logo';
 import {SidebarItem, StorageUsage} from "@workspace/ui";
-import { Separator } from '@workspace/ui/components/separator';
+import {Separator} from '@workspace/ui/components/separator';
 
 interface DriveSidebarProps {
     condensed?: boolean;
@@ -39,51 +39,51 @@ export function DriveSidebar({
                 condensed={condensed}
             >
                 {/* New button */}
-           
-                    
-                    <SidebarItem
-                            icon={<Home className="h-4 w-4"/>}
-                            to={rootPath}
-                            label="Drive"
-                            condensed={condensed}
-                        />
 
-                        <SidebarItem
-                            icon={<Image className="h-4 w-4"/>}
-                            to="/"
-                            label="Images"
-                            condensed={condensed}
-                        />
-                        <SidebarItem
-                            icon={<FileText className="h-4 w-4"/>}
-                            to="/"
-                            label="Documents"
-                            condensed={condensed}
-                        />
-                        <SidebarItem
-                            icon={<StickyNote className="h-4 w-4"/>}
-                            to="/"
-                            label="Stickies"
-                            condensed={condensed}
-                        />
-                    
+
+                <SidebarItem
+                    icon={<Home className="h-4 w-4"/>}
+                    to={rootPath}
+                    label="Drive"
+                    condensed={condensed}
+                />
+
+                <SidebarItem
+                    icon={<Image className="h-4 w-4"/>}
+                    to="/mime/image"
+                    label="Images"
+                    condensed={condensed}
+                />
+                <SidebarItem
+                    icon={<FileText className="h-4 w-4"/>}
+                    to="/mime/application-eigendoc"
+                    label="Documents"
+                    condensed={condensed}
+                />
+                <SidebarItem
+                    icon={<StickyNote className="h-4 w-4"/>}
+                    to="/mime/application-eigenstickies"
+                    label="Stickies"
+                    condensed={condensed}
+                />
+
             </SidebarSection>
             <Separator/>
             <SidebarSection
                 condensed={condensed}
             >
-                        <SidebarItem
-                            icon={<Link className="h-4 w-4"/>}
-                            to="/"
-                            label="Shared by me"
-                            condensed={condensed}
-                        />
-                        <SidebarItem
-                            icon={<Download className="h-4 w-4"/>}
-                            to="/"
-                            label="Shared with me"
-                            condensed={condensed}
-                        />
+                <SidebarItem
+                    icon={<Link className="h-4 w-4"/>}
+                    to="/"
+                    label="Shared by me"
+                    condensed={condensed}
+                />
+                <SidebarItem
+                    icon={<Download className="h-4 w-4"/>}
+                    to="/"
+                    label="Shared with me"
+                    condensed={condensed}
+                />
             </SidebarSection>
 
             {/* Storage usage indicator at the bottom of sidebar */}

@@ -1,10 +1,10 @@
 import {createFileRoute, Outlet, redirect} from '@tanstack/react-router'
 import {createContext, useContext} from 'react';
 import {SidebarContext} from './__root';
-import {useFolderContent, useMediaQuery, useRootFolder} from '@workspace/lib/drive';
+import {useMediaQuery, useRootFolder} from '@workspace/lib/drive';
 import {EigenLoader} from '@workspace/ui';
-import { useAuth } from '@workspace/lib/auth/auth-context.js';
-import { DriveSidebar } from '@/components/drive/drive-sidebar';
+import {useAuth} from '@workspace/lib/auth/auth-context.js';
+import {DriveSidebar} from '@/components/drive/drive-sidebar';
 
 // Create a drive context to share data with child routes
 export interface DriveContextType {
@@ -34,18 +34,14 @@ function AuthLayout() {
     const isMobile = useMediaQuery('(max-width: 768px)');
     const isTablet = useMediaQuery('(min-width: 769px) and (max-width: 1024px)');
     const {user} = useAuth();
-    // const isDesktop = useMediaQuery('(min-width: 1025px)');
 
     // Get root folder information
     const {data: rootFolder, isLoading: isRootLoading, error: rootError} = useRootFolder(user.id);
     const rootPathId = rootFolder?.id;
 
-    // Get contents of the root folder
-    const {data: folders = [], isLoading: isFoldersLoading, error: isFoldersError} = useFolderContent(user.id, rootPathId || '');
-
     // Loading state
-    const isLoading = isRootLoading || isFoldersLoading;
-    const error = rootError || isFoldersError;
+    const isLoading = isRootLoading;
+    const error = rootError;
 
     if (isLoading) {
         return (
@@ -83,7 +79,7 @@ function AuthLayout() {
                     condensed={isTablet}
                     isMobile={isMobile}
                     onClose={() => setSidebarOpen(false)}
-                    rootPath={`/fs/${rootFolder?.ownerId}/${rootFolder?.id}`}   
+                    rootPath={`/fs/${rootFolder?.ownerId}/${rootFolder?.id}`}
                     error={error}
                 />
             </div>

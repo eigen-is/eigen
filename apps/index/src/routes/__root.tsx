@@ -14,7 +14,8 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
             // Gebruik window.location voor externe redirects naar andere apps
             window.location.href = `${import.meta.env.VITE_APP_SPACE_URL}`;
             // Voorkom dat de huidige pagina laadt
-            return new Promise(() => {});
+            return new Promise(() => {
+            });
         }
     },
     component: () => (

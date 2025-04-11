@@ -1,10 +1,10 @@
-import React, {useMemo, useEffect, useRef, useState, KeyboardEvent} from "react";
+import React, {KeyboardEvent, useEffect, useMemo, useRef, useState} from "react";
 import {Table, TableBody, TableCell, TableHead, TableHeader, TableRow} from "@workspace/ui/components/table";
 import {cn} from "@workspace/ui/lib/utils";
 import {formatDistanceToNow} from "date-fns";
 import {DrivePath} from "@apps/api-server/types/drive";
 import {DriveShareSummary} from "./drive-share-summary";
-import { ChevronLeft } from "lucide-react";
+import {ChevronLeft} from "lucide-react";
 
 // Props for the DriveTable component
 export interface DriveTableProps {
@@ -27,10 +27,10 @@ export function DriveTable({
 
     // Ref voor de tabel element
     const tableRef = useRef<HTMLTableElement>(null);
-  
+
     // State om bij te houden of de tabel focus heeft
     const [hasFocus, setHasFocus] = useState(false);
-  
+
     // State voor het bijhouden van de huidige geselecteerde index
     const [selectedIndex, setSelectedIndex] = useState<number>(-1);
 
@@ -56,7 +56,7 @@ export function DriveTable({
     // Create a combined item list including the parent folder
     const allItems = useMemo(() => {
         const result = [...sortedItems];
-        
+
         // If there's a parent item, add a placeholder at the beginning
         if (hasParentItem && currentPath?.parentId) {
             result.unshift({
@@ -74,7 +74,7 @@ export function DriveTable({
                 updatedAt: new Date()
             });
         }
-        
+
         return result;
     }, [sortedItems, hasParentItem, currentPath]);
 
@@ -86,7 +86,7 @@ export function DriveTable({
                 tableRef.current.focus();
             }
         }, 100);
-        
+
         return () => clearTimeout(timer);
     }, []);
 
@@ -105,46 +105,46 @@ export function DriveTable({
     // Handel toetsenbord navigatie af
     const handleKeyDown = (e: KeyboardEvent<HTMLTableElement>) => {
         if (!hasFocus || allItems.length === 0) return;
-        
-        switch(e.key) {
+
+        switch (e.key) {
             case 'ArrowDown':
                 e.preventDefault();
                 setSelectedIndex(prev => {
                     const newIndex = Math.min(prev + 1, allItems.length - 1);
                     if (newIndex >= 0) {
                         const targetItem = allItems[newIndex];
-                        
+
                         // Alleen onItemClick uitvoeren als het GEEN folder is
                         if (targetItem.type !== 'folder') {
                             onItemClick?.(targetItem);
                         }
-                        
+
                         // Auto-scroll indien nodig
                         scrollToRow(newIndex);
                     }
                     return newIndex;
                 });
                 break;
-                
+
             case 'ArrowUp':
                 e.preventDefault();
                 setSelectedIndex(prev => {
                     const newIndex = Math.max(prev - 1, 0);
                     if (newIndex >= 0) {
                         const targetItem = allItems[newIndex];
-                        
+
                         // Alleen onItemClick uitvoeren als het GEEN folder is
                         if (targetItem.type !== 'folder') {
                             onItemClick?.(targetItem);
                         }
-                        
+
                         // Auto-scroll indien nodig
                         scrollToRow(newIndex);
                     }
                     return newIndex;
                 });
                 break;
-                
+
             case 'Enter':
                 e.preventDefault();
                 if (selectedIndex >= 0 && selectedIndex < allItems.length) {
@@ -152,34 +152,34 @@ export function DriveTable({
                     onItemClick?.(allItems[selectedIndex]);
                 }
                 break;
-                
+
             case 'Home':
                 e.preventDefault();
                 if (allItems.length > 0) {
                     setSelectedIndex(0);
-                    
+
                     const targetItem = allItems[0];
                     // Alleen onItemClick uitvoeren als het GEEN folder is
                     if (targetItem.type !== 'folder') {
                         onItemClick?.(targetItem);
                     }
-                    
+
                     scrollToRow(0);
                 }
                 break;
-                
+
             case 'End':
                 e.preventDefault();
                 if (allItems.length > 0) {
                     const lastIndex = allItems.length - 1;
                     setSelectedIndex(lastIndex);
-                    
+
                     const targetItem = allItems[lastIndex];
                     // Alleen onItemClick uitvoeren als het GEEN folder is
                     if (targetItem.type !== 'folder') {
                         onItemClick?.(targetItem);
                     }
-                    
+
                     scrollToRow(lastIndex);
                 }
                 break;
@@ -191,7 +191,7 @@ export function DriveTable({
         if (tableRef.current) {
             const rows = tableRef.current.querySelectorAll('tbody tr');
             if (rows[index]) {
-                rows[index].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                rows[index].scrollIntoView({behavior: 'smooth', block: 'nearest'});
             }
         }
     };
@@ -250,7 +250,7 @@ export function DriveTable({
                     {sortedItems.map((item, index) => {
                         // Adjust index based on whether there's a parent item
                         const adjustedIndex = hasParentItem ? index + 1 : index;
-                        
+
                         return (
                             <TableRow
                                 key={item.id}
@@ -277,14 +277,15 @@ export function DriveTable({
                                                 } : {})
                                             }
                                         )}
-                                        <span className="truncate max-w-[calc(100%-1.5rem)]">{item.name.replace(/\.eigen(doc|stickies)$/, "")}</span>
+                                        <span
+                                            className="truncate max-w-[calc(100%-1.5rem)]">{item.name.replace(/\.eigen(doc|stickies)$/, "")}</span>
                                     </div>
                                 </TableCell>
                                 <TableCell className="hidden sm:table-cell group">
-                                    <DriveShareSummary 
-                                      acl={item.acl} 
-                                      onClick={() => onShareClick?.(item)} 
-                                      showIconOnHover={true}
+                                    <DriveShareSummary
+                                        acl={item.acl}
+                                        onClick={() => onShareClick?.(item)}
+                                        showIconOnHover={true}
                                     />
                                 </TableCell>
                                 <TableCell className="hidden sm:table-cell">

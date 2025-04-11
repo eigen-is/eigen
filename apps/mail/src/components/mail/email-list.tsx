@@ -1,7 +1,14 @@
-import {FilterFn, getCoreRowModel, getFilteredRowModel, getSortedRowModel, SortingState, useReactTable} from "@tanstack/react-table";
+import {
+    FilterFn,
+    getCoreRowModel,
+    getFilteredRowModel,
+    getSortedRowModel,
+    SortingState,
+    useReactTable
+} from "@tanstack/react-table";
 import {rankItem} from "@tanstack/match-sorter-utils";
 import {Paperclip, Search} from "lucide-react";
-import {useMemo, useState, useRef, useEffect, KeyboardEvent} from "react";
+import {KeyboardEvent, useEffect, useMemo, useRef, useState} from "react";
 import {cn} from "@workspace/ui/lib/utils";
 import {Input} from "@workspace/ui/components/input";
 import {EigenLoader} from "@workspace/ui/components/layout/eigen-loader";
@@ -39,10 +46,10 @@ export function EmailList({
 
     // Ref voor de lijst container
     const listContainerRef = useRef<HTMLDivElement>(null);
-    
+
     // State om bij te houden of de lijst focus heeft
     const [hasFocus, setHasFocus] = useState(false);
-    
+
     // State voor het bijhouden van de huidige geselecteerde index
     const [selectedIndex, setSelectedIndex] = useState<number>(-1);
 
@@ -122,7 +129,7 @@ export function EmailList({
                 listContainerRef.current.focus();
             }
         }, 100);
-        
+
         return () => clearTimeout(timer);
     }, []);
 
@@ -141,8 +148,8 @@ export function EmailList({
     // Handel toetsenbord navigatie af
     const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
         if (!hasFocus || filteredEmails.length === 0) return;
-        
-        switch(e.key) {
+
+        switch (e.key) {
             case 'ArrowDown':
                 e.preventDefault();
                 setSelectedIndex(prev => {
@@ -156,7 +163,7 @@ export function EmailList({
                     return newIndex;
                 });
                 break;
-                
+
             case 'ArrowUp':
                 e.preventDefault();
                 setSelectedIndex(prev => {
@@ -170,14 +177,14 @@ export function EmailList({
                     return newIndex;
                 });
                 break;
-                
+
             case 'Enter':
                 e.preventDefault();
                 if (selectedIndex >= 0 && selectedIndex < filteredEmails.length) {
                     handleRowClick(filteredEmails[selectedIndex]);
                 }
                 break;
-                
+
             case 'Home':
                 e.preventDefault();
                 if (filteredEmails.length > 0) {
@@ -186,7 +193,7 @@ export function EmailList({
                     scrollToEmail(0);
                 }
                 break;
-                
+
             case 'End':
                 e.preventDefault();
                 if (filteredEmails.length > 0) {
@@ -204,7 +211,7 @@ export function EmailList({
         if (listContainerRef.current) {
             const emailElements = listContainerRef.current.querySelectorAll('.eigen-list-item');
             if (emailElements[index]) {
-                emailElements[index].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                emailElements[index].scrollIntoView({behavior: 'smooth', block: 'nearest'});
             }
         }
     };
@@ -245,7 +252,7 @@ export function EmailList({
             </div>
 
             {/* Email list as single column with blocks */}
-            <div 
+            <div
                 className="flex-1 overflow-y-auto outline-none"
                 ref={listContainerRef}
                 tabIndex={0}

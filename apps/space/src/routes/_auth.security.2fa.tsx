@@ -1,6 +1,6 @@
 import {createFileRoute, useNavigate} from '@tanstack/react-router'
 import {toast} from 'sonner';
-import { useState } from 'react';
+import {useState} from 'react';
 
 import {TwoFactorSetup} from '../components/space/fa2'
 import {authClient} from '@workspace/lib/auth';
@@ -14,7 +14,7 @@ function TwoFaComponent() {
     const [totpUri, setTotpUri] = useState<string | null>(null);
     const [secretKey, setSecretKey] = useState<string>("");
     const [setupStep, setSetupStep] = useState<"password" | "qrcode" | "verification">("password");
-    
+
     // Step 1: Initialize 2FA with password
     const handleInitialize2FA = async (password: string) => {
         try {
@@ -30,7 +30,7 @@ function TwoFaComponent() {
                 toast.success('Two-factor authentication initialized. Please scan the QR code.');
             } else {
                 console.log(result.error)
-                toast.error(result.error?.message ??  (result.error?.status  + " - " + result.error?.statusText));
+                toast.error(result.error?.message ?? (result.error?.status + " - " + result.error?.statusText));
             }
         } catch (error) {
             console.error('Error initializing 2FA:', error);
@@ -47,10 +47,10 @@ function TwoFaComponent() {
 
             if (result.data) {
                 toast.success('Two-factor authentication ' + (enableTwoFactor ? 'enabled' : 'disabled'));
-                
+
                 // Wait 350ms before navigating
                 await new Promise(resolve => setTimeout(resolve, 350));
-                
+
                 // Navigate back to the root
                 navigate({
                     to: '/',
@@ -63,7 +63,7 @@ function TwoFaComponent() {
             toast.error('Failed to verify verification code');
         }
     };
-    
+
     // Handle back button in the flow
     const handleBack = () => {
         if (setupStep === "verification") {
@@ -76,7 +76,7 @@ function TwoFaComponent() {
     return (
         <div className="flex flex-col items-center justify-center min-h-screen">
             <div className="w-full max-w-3xl">
-                <TwoFactorSetup 
+                <TwoFactorSetup
                     onInitialize2FA={handleInitialize2FA}
                     onVerifyTotp={handleVerifyTotp}
                     onBack={handleBack}
