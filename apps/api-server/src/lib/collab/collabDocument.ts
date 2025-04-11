@@ -119,8 +119,8 @@ export default class CollabDocument {
         });
 
         this.doc = new Y.Doc();
-        // this.provider = new LoggingProvider(this.doc, this.path.name);
-        this.provider = new DbProvider(this.doc, this.path.name, drizzle(db, { schema }));
+        this.provider = new LoggingProvider(this.doc, this.path.name);
+        // this.provider = new DbProvider(this.doc, this.path.name, drizzle(db, { schema }));
         this.awareness = new awarenessProtocol.Awareness(this.doc);
 
         return this;
