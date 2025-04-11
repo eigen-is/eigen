@@ -61,6 +61,7 @@ function DriveRoute() {
 
     // Callback die door DriveLayout wordt aangeroepen na acties
     const handleAfterAction = (actionType: string, data: any) => {
+                
     };
 
     if (isFolderContentLoadingError) {

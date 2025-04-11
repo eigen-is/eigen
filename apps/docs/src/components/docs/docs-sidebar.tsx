@@ -14,7 +14,7 @@ interface DriveSidebarProps {
     rootPath?: string;
 }
 
-export function DriveSidebar({
+export function DocsSidebar({
                                  condensed = false,
                                  onClose,
                                  isMobile = false,
@@ -44,26 +44,7 @@ export function DriveSidebar({
                 <SidebarItem
                     icon={<Home className="h-4 w-4"/>}
                     to={rootPath}
-                    label="Drive"
-                    condensed={condensed}
-                />
-
-                <SidebarItem
-                    icon={<Image className="h-4 w-4"/>}
-                    to="/mime/image"
-                    label="Images"
-                    condensed={condensed}
-                />
-                <SidebarItem
-                    icon={<FileText className="h-4 w-4"/>}
-                    to="/mime/application-eigendoc"
                     label="Docs"
-                    condensed={condensed}
-                />
-                <SidebarItem
-                    icon={<StickyNote className="h-4 w-4"/>}
-                    to="/mime/application-eigenstickies"
-                    label="Stickies"
                     condensed={condensed}
                 />
 
@@ -72,6 +53,14 @@ export function DriveSidebar({
             <SidebarSection
                 condensed={condensed}
             >
+                <SidebarItem
+                    icon={<FileText className="h-4 w-4"/>}
+                    to="/mime/application-eigendoc"
+                    label="Docs"
+                    condensed={condensed}
+                />
+
+
                 <SidebarItem
                     icon={<Link className="h-4 w-4"/>}
                     to="/"
