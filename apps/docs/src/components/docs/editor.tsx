@@ -11,6 +11,7 @@ import {ArrowUp,} from "lucide-react";
 import {withHistory} from "slate-history";
 import {EditorToolbar} from "./editor-toolbar";
 import {CustomElement} from "./editor.types";
+import { EigenLoader } from "@workspace/ui";
 
 // Define the initial value with proper typing
 const initialValue: CustomElement[] = [
@@ -56,7 +57,7 @@ export const CollaborativeEditor = ({ownerId, pathId}: {ownerId: string, pathId:
     }, []);
 
     if (!connected || !sharedType || !provider) {
-        return <div>Loading…</div>;
+        return  <div className="flex h-full items-center justify-center"><EigenLoader/></div>;
     }
 
     return <SlateEditor sharedType={sharedType} provider={provider}/>;
