@@ -13,14 +13,14 @@ interface CursorData {
 
 interface CursorsProps {
     children: ReactNode;
+    className?: string;
 }
 
-export function Cursors({children}: CursorsProps) {
+export function Cursors({children, className}: CursorsProps) {
     const containerRef = useRef<HTMLDivElement>(null);
-    const [cursors] = useRemoteCursorOverlayPositions({containerRef});
-
+    const [cursors] = useRemoteCursorOverlayPositions({containerRef: containerRef as React.RefObject<HTMLElement>});
     return (
-        <div className={styles.cursors} ref={containerRef}>
+        <div className={cn(styles.cursors, className)} ref={containerRef}>
             {children}
             {cursors.map((cursor) => (
                 <Selection key={cursor.clientId} {...cursor} />
@@ -32,7 +32,7 @@ export function Cursors({children}: CursorsProps) {
 interface SelectionProps {
     data?: Record<string, unknown>;
     selectionRects: Array<{ top: number; left: number; width: number; height: number }>;
-    caretPosition?: { top: number; left: number; height: number };
+    caretPosition?: { top: number; left: number; height: number } | null;
     clientId: string | number;
 }
 
