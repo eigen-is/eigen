@@ -1,9 +1,10 @@
 import type {User} from "better-auth";
 import Drive, {getDrive} from "./drive";
 import {getUserById} from "../users/users";
-import {getHome, Home} from "../home/home";
+import {asyncCache, getHome, Home} from "../home/home";
 import type {DriveACL, DrivePath} from "../../types/drive";
 import type Database from "bun:sqlite";
+import CollabDocument from "../collab/collabDocument.ts";
 
 export async function getSharedDrive(ownerId: string, user: User) {
     if (ownerId !== user.id) {
@@ -156,6 +157,17 @@ export default class SharedDrive extends Drive {
         return [];
     }
 
+    public async getCollabDocument(pathId: string): Promise<CollabDocument> {
+        if (await this.canRead(pathId, this.user)) {
+            return this.sharedDrive.getCollabDocument(pathId);
+        }
+    }
+
+    public async closeCollabDocument(pathId: string) {
+        if (await this.canRead(pathId, this.user)) {
+            return this.sharedDrive.closeCollabDocument(pathId);
+        }
+    }
 
     public async openSQLiteDatabase(parentPathId: string, file: string, onCreate: (db: Database) => Promise<void>) {
         return this.sharedDrive.openSQLiteDatabase(parentPathId, file, onCreate);
