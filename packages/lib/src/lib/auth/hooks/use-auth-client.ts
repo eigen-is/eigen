@@ -1,11 +1,11 @@
 import {createAuthClient} from "better-auth/client";
 import {useQuery} from '@tanstack/react-query';
-import { organizationClient, twoFactorClient, adminClient } from "better-auth/client/plugins";
-import { Route, useNavigate } from "@tanstack/react-router";
+import {adminClient, organizationClient, twoFactorClient} from "better-auth/client/plugins";
 
 console.log(import.meta.env.VITE_API_HOST);
 
-let f2aRedirect = () => {};
+let f2aRedirect = () => {
+};
 
 export const authClient = createAuthClient({
     // baseURL: `https://eigen.is:8000`, // the base url of your auth server
@@ -17,7 +17,7 @@ export const authClient = createAuthClient({
         }
     },
     plugins: [
-        twoFactorClient({ 
+        twoFactorClient({
             onTwoFactorRedirect() {
                 // TODO: Reinder: ik snap dit niet
                 // window.location.href = import.meta.env.VITE_APP_SPACE_URL + '/login-fa2' + location.search;

@@ -1,10 +1,11 @@
 import {createFileRoute, useNavigate} from '@tanstack/react-router';
 import {ContactsList} from '../components/contacts/contacts-list';
 import {ContactDetail} from '../components/contacts/contact-detail';
-import {useContacts, useDeleteContact, useLabels, useMediaQuery} from '@workspace/lib/contacts';
+import {useContacts, useDeleteContact, useLabels} from '@workspace/lib/contacts';
 import {toast} from "sonner";
 import {EigenLoader} from '@workspace/ui/components/layout/eigen-loader';
 import {LabelFilterHeader} from "@workspace/ui/components/layout/labels/label-filter-header";
+import {useIsMobile} from "@workspace/lib/media";
 
 // Define search params type
 export interface ContactsSearchParams {
@@ -23,7 +24,7 @@ function ContactsRoute() {
     const {filterType, filterId} = Route.useParams();
     const {contactId} = Route.useSearch();
     const navigate = useNavigate();
-    const isMobile = useMediaQuery('(max-width: 768px)');
+    const isMobile = useIsMobile();
 
     // Use TanStack Query hooks for contacts and labels
     const {data: contacts = [], isLoading: contactsLoading} = useContacts();
