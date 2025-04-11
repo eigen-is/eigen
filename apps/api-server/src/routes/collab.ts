@@ -1,13 +1,7 @@
 import {Elysia, t} from "elysia";
 import {betterAuth} from "./auth";
-import {getDrive} from "../lib/drive/drive";
 import {type User} from "better-auth/types";
-import * as Y from "yjs";
-import * as awarenessProtocol from "y-protocols/awareness";
-import * as syncProtocol from "y-protocols/sync";
 import {type ServerWebSocket} from "bun";
-import * as encoding from "lib0/encoding";
-import * as decoding from "lib0/decoding";
 import {getSharedDrive} from "../lib/drive/sharedDrive.ts";
 import {keepWebSocketAlive} from "../utils/websockets.ts";
 
@@ -20,7 +14,10 @@ export const collabRouter = new Elysia({
     .use(betterAuth)
 
     // Endpoint to check if user has access to document
-    .get("/collab/access/:ownerId/:pathId", async ({params, user}: { params: { ownerId: string, pathId: string }, user: User }) => {
+    .get("/collab/access/:ownerId/:pathId", async ({params, user}: {
+        params: { ownerId: string, pathId: string },
+        user: User
+    }) => {
         const drive = await getSharedDrive(params.ownerId, user);
         const canRead = await drive.canRead(params.pathId, user);
         const canWrite = await drive.canWrite(params.pathId, user);

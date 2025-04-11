@@ -4,7 +4,7 @@ import * as syncProtocol from "y-protocols/sync";
 import {type ServerWebSocket} from "bun";
 import * as encoding from "lib0/encoding";
 import * as decoding from "lib0/decoding";
-import type { DrivePath } from "../../types/drive";
+import type {DrivePath} from "../../types/drive";
 import type Drive from "../drive/drive";
 import {user} from "../../../auth-schema.ts";
 
@@ -46,7 +46,7 @@ export default class CollabDocument {
     private doc!: Y.Doc;
     private provider!: LoggingProvider;
     private awareness!: awarenessProtocol.Awareness;
-    private connections: Set<ServerWebSocket<any>> =  new Set();
+    private connections: Set<ServerWebSocket<any>> = new Set();
 
     constructor(drive: Drive, path: DrivePath) {
         this.drive = drive;
