@@ -16,7 +16,7 @@ import {CustomElement} from "./editor.types";
 const initialValue: CustomElement[] = [
     {
         type: "paragraph",
-        children: [{text: "Type something..."}],
+        children: [{text: ""}],
     },
 ];
 
