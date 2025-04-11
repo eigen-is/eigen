@@ -12,6 +12,7 @@ import {withHistory} from "slate-history";
 import {EditorToolbar} from "./editor-toolbar";
 import {CustomElement} from "./editor.types";
 import { EigenLoader } from "@workspace/ui";
+import { UserPublicAvatar } from "@workspace/ui/components/layout/user-public-avatar";
 
 // Define the initial value with proper typing
 const initialValue: CustomElement[] = [
@@ -23,45 +24,63 @@ const initialValue: CustomElement[] = [
 
 export const CollaborativeEditor = ({ownerId, pathId}: {ownerId: string, pathId: string}) => {
     const [connected, setConnected] = useState(false);
-    const [sharedType, setSharedType] = useState<Y.XmlText | null>(null);
-    const [provider, setProvider] = useState<WebsocketProvider | null>(null);
-
+    const [provider, setProvider] = useState<WebsocketProvider>();
+    const auth = useAuth();
     const slug = ``;
 
-    // Connect to your Yjs provider and document
+    const yDoc = useMemo(() => new Y.Doc(), []);
+    const sharedType = useMemo(() => yDoc.get('slate', Y.XmlText), [yDoc]);
+    const [users, setUsers] = useState<Map<string, any>>();
+    
     useEffect(() => {
-        const yDoc = new Y.Doc();
-        const sharedDoc = yDoc.get("slate", Y.XmlText);
+        const userMap = yDoc.getMap('users');
+        const observe = () => setUsers(new Map(userMap));
+        userMap.observe(observe);
+        return () => userMap.unobserve(observe);
+    }, [yDoc]);
 
+    useEffect(() => {
         // Build WebSocket URL
         const wsUrl = `${import.meta.env.VITE_API_HOST}/ws/collab/${ownerId}/${pathId}`;
-
+        
         // Create WebSocket provider
-        const provider = new WebsocketProvider(wsUrl, slug, yDoc, {
+        const yProvider = new WebsocketProvider(wsUrl, slug, yDoc, {
             resyncInterval: 5000,
             connect: true,
         });
-
-        // Set up your Yjs provider. This line of code is different for each provider.
-        const yProvider = provider;
-
         yProvider.on("sync", setConnected);
-        setSharedType(sharedDoc);
-        setProvider(provider);
+        /*yProvider.awareness.on('change', () => {
+            console.log(Array.from(yProvider.awareness.getStates().values()));
+        });*/
+
+        setProvider(yProvider);
+
+        yDoc.getMap('users').set(auth.user.email, {
+            name: auth.user.name,
+            color: '#660044'
+        });
 
         return () => {
-            yDoc?.destroy();
+            yDoc.getMap('users').delete(auth.user.email);
+
             yProvider?.off("sync", setConnected);
             yProvider?.destroy();
         };
-    }, []);
+    }, [yDoc, auth]);
 
     if (!connected || !sharedType || !provider) {
         return  <div className="flex h-full items-center justify-center"><EigenLoader/></div>;
     }
 
-    return <SlateEditor sharedType={sharedType} provider={provider}/>;
+    return <>
+        <div className="absolute top-26 right-6 flex items-center gap-1">
+            {Array.from(users || []).map(user => (<UserPublicAvatar key={user[0]} email={user[0]} color={user[1].color} className="-ml-2"/>))}
+        </div>
+        <SlateEditor sharedType={sharedType} provider={provider}/>
+    </>;
 };
+          
+
 
 const SlateEditor = ({
                          sharedType,
@@ -78,8 +97,8 @@ const SlateEditor = ({
                 withCursors(withYjs(createEditor(), sharedType!), provider!.awareness, {
                     // The current user's name and color
                     data: {
-                        name: auth.user?.name,
-                        email: auth.user?.email,
+                        name: auth.user.name,
+                        email: auth.user.email,
                         color: "#660044",
                     },
                 })
