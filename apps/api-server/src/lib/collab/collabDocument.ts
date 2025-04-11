@@ -46,10 +46,12 @@ class LoggingProvider {
 
 class DbProvider  {
     private db: ReturnType<typeof drizzle<typeof schema>>;
+    private doc: Y.Doc;
     private docId: string;
 
     constructor(doc: Y.Doc,docId:string, db: ReturnType<typeof drizzle<typeof schema>>) {
         this.db = db;
+        this.doc = doc;
         this.docId= docId;
 
         console.log(`[DbProvider] Created for document: ${docId}`);
@@ -60,7 +62,7 @@ class DbProvider  {
                 // Apply each update to the document
                 const data = update.updateData as Uint8Array;
                 console.log(`[DbProvider] Applying update for document ${this.docId}, size: ${data.length} bytes`);
-                Y.applyUpdateV2(doc, data);
+                Y.applyUpdate(doc, data);
             });
         }).catch((error) => {
             console.error(`[DbProvider] Error fetching updates for document ${this.docId}:`, error);
@@ -68,7 +70,7 @@ class DbProvider  {
 
         // updateV2 ?
         doc.on('updateV2', (update: Uint8Array) => {
-            this.storeUpdate(update);
+            // this.storeUpdate(update);
         });
     }
 
@@ -90,6 +92,11 @@ class DbProvider  {
     destroy(): void {
         console.log(`[DbProvider] Destroying provider for document ${this.docId}`);
         // In a real implementation, close database connection
+
+        const update = Y.encodeStateAsUpdate(this.doc);
+        this.storeUpdate(update);
+        this.db.delete(schema.docUpdates).run();
+        this.storeUpdate(update);
     }
 }
 
@@ -122,8 +129,9 @@ export default class CollabDocument {
         });
 
         this.doc = new Y.Doc();
-        this.provider = new LoggingProvider(this.doc, this.path.name);
-        // this.provider = new DbProvider(this.doc, this.path.name, drizzle(db, { schema }));
+        this.doc.gc = true;
+        // this.provider = new LoggingProvider(this.doc, this.path.name);
+        this.provider = new DbProvider(this.doc, this.path.name, drizzle(db, { schema }));
         this.awareness = new awarenessProtocol.Awareness(this.doc);
 
         return this;
