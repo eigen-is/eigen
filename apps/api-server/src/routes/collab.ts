@@ -20,14 +20,15 @@ export const collabRouter = new Elysia({
     .use(betterAuth)
 
     // Endpoint to check if user has access to document
-    .get("/collab/access/:userId/:pathId", async ({params, user}: { params: { pathId: string }, user: User }) => {
-        const drive = await getDrive(user);
+    .get("/collab/access/:ownerId/:pathId", async ({params, user}: { params: { ownerId: string, pathId: string }, user: User }) => {
+        const drive = await getSharedDrive(params.ownerId, user);
         const canRead = await drive.canRead(params.pathId, user);
         const canWrite = await drive.canWrite(params.pathId, user);
         return {canRead, canWrite};
     }, {
         auth: true,
         params: t.Object({
+            ownerId: t.String(),
             pathId: t.String(),
         })
     })
@@ -55,6 +56,10 @@ export const collabRouter = new Elysia({
             const pathId = ws.data.params.pathId;
 
             const drive = await getSharedDrive(ownerId, user);
+            if (!drive || !drive.canRead(pathId, user.id)) {
+                ws.close(1008, "Authentication failed");
+                return;
+            }
             const document = await drive.getCollabDocument(pathId);
 
             document.subscribe(ws as unknown as ServerWebSocket<any>);
@@ -90,8 +95,14 @@ export const collabRouter = new Elysia({
                 const update = message instanceof Uint8Array ? message : new Uint8Array(message as Buffer);
 
                 const drive = await getSharedDrive(ownerId, user);
-                const document = await drive.getCollabDocument(pathId);
-                document.handleMessage(ws as unknown as ServerWebSocket<any>, update);
+                if (!drive || !(await drive.canRead(pathId, user.id))) {
+                    ws.close(1008, "Authentication failed");
+                    return;
+                }
+                if (await drive.canWrite(pathId, user.id)) {
+                    const document = await drive.getCollabDocument(pathId);
+                    document.handleMessage(ws as unknown as ServerWebSocket<any>, update);
+                }
             } catch (err) {
                 console.error('Error processing message:', err);
             }
