@@ -54,33 +54,32 @@ class DbProvider  {
 
         console.log(`[DbProvider] Created for document: ${docId}`);
 
-        // updateV2 ?
-        doc.on('update', (update: Uint8Array) => {
-            this.storeUpdate(update);
-        });
-
         // apply all changes from database to document
         this.db.select().from(schema.docUpdates).then((updates) => {
             updates.forEach((update) => {
                 // Apply each update to the document
                 const data = update.updateData as Uint8Array;
                 console.log(`[DbProvider] Applying update for document ${this.docId}, size: ${data.length} bytes`);
-                Y.applyUpdate(doc, data);
+                Y.applyUpdateV2(doc, data);
             });
         }).catch((error) => {
             console.error(`[DbProvider] Error fetching updates for document ${this.docId}:`, error);
+        });
+
+        // updateV2 ?
+        doc.on('updateV2', (update: Uint8Array) => {
+            this.storeUpdate(update);
         });
     }
 
     // Method to store an update (would save to database in real implementation)
     storeUpdate(update: Uint8Array): void {
         console.log(`[DbProvider] Storing update for document ${this.docId}, size: ${update.length} bytes`);
-        
         // Store the update in the database
         try {
             this.db.insert(schema.docUpdates).values({
-                updateData: new Blob([update]),
-            });
+                updateData: Buffer.from(update)
+            }).run();
             console.log(`[DbProvider] Successfully stored update for document ${this.docId}`);
         } catch (error) {
             console.error(`[DbProvider] Error storing update for document ${this.docId}:`, error);
