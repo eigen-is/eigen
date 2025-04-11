@@ -80,7 +80,7 @@ const SlateEditor = ({
                     data: {
                         name: auth.user?.name,
                         email: auth.user?.email,
-                        color: "#660044",
+                        color: "#9810fa",
                     },
                 })
             )
