@@ -53,7 +53,7 @@ export const collabRouter = new Elysia({
             const pathId = ws.data.params.pathId;
 
             const drive = await getSharedDrive(ownerId, user);
-            if (!drive || !drive.canRead(pathId, user.id)) {
+            if (!drive || !drive.canRead(pathId, user)) {
                 ws.close(1008, "Authentication failed");
                 return;
             }
@@ -92,11 +92,13 @@ export const collabRouter = new Elysia({
                 const update = message instanceof Uint8Array ? message : new Uint8Array(message as Buffer);
 
                 const drive = await getSharedDrive(ownerId, user);
-                if (!drive || !(await drive.canRead(pathId, user.id))) {
+                if (!drive || !(await drive.canRead(pathId, user))) {
+                    console.error('canRead failed');
                     ws.close(1008, "Authentication failed");
                     return;
                 }
-                if (await drive.canWrite(pathId, user.id)) {
+                if (await drive.canWrite(pathId, user)) {
+                    console.error('canWrite failed');
                     const document = await drive.getCollabDocument(pathId);
                     document.handleMessage(ws as unknown as ServerWebSocket<any>, update);
                 }
