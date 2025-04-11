@@ -20,22 +20,23 @@ const initialValue: CustomElement[] = [
     },
 ];
 
-export const CollaborativeEditor = () => {
+export const CollaborativeEditor = ({ownerId, pathId}: {ownerId: string, pathId: string}) => {
     const [connected, setConnected] = useState(false);
     const [sharedType, setSharedType] = useState<Y.XmlText | null>(null);
     const [provider, setProvider] = useState<WebsocketProvider | null>(null);
 
-    const documentId = "foo";
+    const slug = ``;
+
     // Connect to your Yjs provider and document
     useEffect(() => {
         const yDoc = new Y.Doc();
         const sharedDoc = yDoc.get("slate", Y.XmlText);
 
         // Build WebSocket URL
-        const wsUrl = `${import.meta.env.VITE_API_HOST}/ws/collab/userid/`;
+        const wsUrl = `${import.meta.env.VITE_API_HOST}/ws/collab/${ownerId}/${pathId}`;
 
         // Create WebSocket provider
-        const provider = new WebsocketProvider(wsUrl, documentId, yDoc, {
+        const provider = new WebsocketProvider(wsUrl, slug, yDoc, {
             resyncInterval: 5000,
             connect: true,
         });
@@ -58,17 +59,15 @@ export const CollaborativeEditor = () => {
         return <div>Loading…</div>;
     }
 
-    return <SlateEditor sharedType={sharedType} provider={provider} documentId={documentId}/>;
+    return <SlateEditor sharedType={sharedType} provider={provider}/>;
 };
 
 const SlateEditor = ({
                          sharedType,
                          provider,
-                         documentId,
                      }: {
     sharedType: Y.XmlText | null;
     provider: WebsocketProvider | null;
-    documentId: string;
 }) => {
     const auth = useAuth();
 
