@@ -6,9 +6,9 @@ import * as encoding from "lib0/encoding";
 import * as decoding from "lib0/decoding";
 import type {DrivePath} from "../../types/drive";
 import type Drive from "../drive/drive";
-import {user} from "../../../auth-schema.ts";
 import {drizzle} from "drizzle-orm/bun-sqlite";
 import * as schema from "./schema.ts";
+import type {User} from "better-auth/types";
 
 // Define message types (matching y-websocket protocol)
 const MESSAGE_SYNC = 0;
@@ -58,6 +58,18 @@ class DbProvider  {
         doc.on('update', (update: Uint8Array) => {
             this.storeUpdate(update);
         });
+
+        // apply all changes from database to document
+        this.db.select().from(schema.docUpdates).then((updates) => {
+            updates.forEach((update) => {
+                // Apply each update to the document
+                const data = update.updateData as Uint8Array;
+                console.log(`[DbProvider] Applying update for document ${this.docId}, size: ${data.length} bytes`);
+                Y.applyUpdate(doc, data);
+            });
+        }).catch((error) => {
+            console.error(`[DbProvider] Error fetching updates for document ${this.docId}:`, error);
+        });
     }
 
     // Method to store an update (would save to database in real implementation)
@@ -67,8 +79,7 @@ class DbProvider  {
         // Store the update in the database
         try {
             this.db.insert(schema.docUpdates).values({
-                updateData: update,
-                userId: user?.id || 'unknown',
+                updateData: new Blob([update]),
             });
             console.log(`[DbProvider] Successfully stored update for document ${this.docId}`);
         } catch (error) {
@@ -102,8 +113,7 @@ export default class CollabDocument {
                 CREATE TABLE IF NOT EXISTS doc_updates (
                     id INTEGER PRIMARY KEY AUTOINCREMENT,
                     updateData BLOB NOT NULL,
-                    createdAt INTEGER DEFAULT (unixepoch()),
-                    userId TEXT NOT NULL
+                    createdAt INTEGER DEFAULT (unixepoch())
                 );
             `);
             console.log('create database');
@@ -123,13 +133,13 @@ export default class CollabDocument {
         this.doc.destroy();
     }
 
-    public subscribe(conn: ServerWebSocket<any>) {
+    public subscribe(user: User, conn: ServerWebSocket<any>) {
         this.connections.add(conn);
         this.sendSyncStep1(conn);
         console.log(`User ${user.id} connected to document ${this.path.name}`);
     }
 
-    public unsubscribe(conn: ServerWebSocket<any>) {
+    public unsubscribe(user: User, conn: ServerWebSocket<any>) {
         this.connections.delete(conn);
         console.log(`User ${user.id} disconnected from document ${this.path.name}`);
         this.connections.forEach((connection) => {

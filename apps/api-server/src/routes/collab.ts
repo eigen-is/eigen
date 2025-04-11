@@ -59,11 +59,11 @@ export const collabRouter = new Elysia({
             }
             const document = await drive.getCollabDocument(pathId);
 
-            document.subscribe(ws as unknown as ServerWebSocket<any>);
+            document.subscribe(user, ws as unknown as ServerWebSocket<any>);
 
-            keepWebSocketAlive(ws as unknown as ServerWebSocket<any>, async () => {
+            keepWebSocketAlive(user, ws as unknown as ServerWebSocket<any>, async () => {
                 try {
-                    document.unsubscribe(ws as unknown as ServerWebSocket<any>);
+                    document.unsubscribe(user, ws as unknown as ServerWebSocket<any>);
                 } catch (err) {
                     console.error('Error unsubscribing from document:', err);
                 }
@@ -123,7 +123,7 @@ export const collabRouter = new Elysia({
                 const drive = await getSharedDrive(ownerId, user);
                 const document = await drive.getCollabDocument(pathId);
 
-                document.unsubscribe(ws as unknown as ServerWebSocket<any>);
+                document.unsubscribe(user, ws as unknown as ServerWebSocket<any>);
             } catch (err) {
                 console.error('Error handling WebSocket close:', err);
             }

@@ -22,7 +22,7 @@ export const wsRouter = new Elysia({name: "ws"})
             ws.ping();
 
             (await getHome(user)).subscribe(ws as any as ServerWebSocket);
-            keepWebSocketAlive(ws as any as ServerWebSocket, async () => {
+            keepWebSocketAlive(user, ws as any as ServerWebSocket, async () => {
                 (await getHome(user)).unsubscribe(ws as any as ServerWebSocket);
             });
         },
