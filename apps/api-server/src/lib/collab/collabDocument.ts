@@ -7,6 +7,8 @@ import * as decoding from "lib0/decoding";
 import type {DrivePath} from "../../types/drive";
 import type Drive from "../drive/drive";
 import {user} from "../../../auth-schema.ts";
+import {drizzle} from "drizzle-orm/bun-sqlite";
+import * as schema from "./schema.ts";
 
 // Define message types (matching y-websocket protocol)
 const MESSAGE_SYNC = 0;
@@ -42,11 +44,50 @@ class LoggingProvider {
     }
 }
 
+class DbProvider  {
+    private db: ReturnType<typeof drizzle<typeof schema>>;
+    private docId: string;
+
+    constructor(doc: Y.Doc,docId:string, db: ReturnType<typeof drizzle<typeof schema>>) {
+        this.db = db;
+        this.docId= docId;
+
+        console.log(`[DbProvider] Created for document: ${docId}`);
+
+        // updateV2 ?
+        doc.on('update', (update: Uint8Array) => {
+            this.storeUpdate(update);
+        });
+    }
+
+    // Method to store an update (would save to database in real implementation)
+    storeUpdate(update: Uint8Array): void {
+        console.log(`[DbProvider] Storing update for document ${this.docId}, size: ${update.length} bytes`);
+        
+        // Store the update in the database
+        try {
+            this.db.insert(schema.docUpdates).values({
+                updateData: update,
+                userId: user?.id || 'unknown',
+            });
+            console.log(`[DbProvider] Successfully stored update for document ${this.docId}`);
+        } catch (error) {
+            console.error(`[DbProvider] Error storing update for document ${this.docId}:`, error);
+        }
+    }
+
+    // Cleanup resources
+    destroy(): void {
+        console.log(`[DbProvider] Destroying provider for document ${this.docId}`);
+        // In a real implementation, close database connection
+    }
+}
+
 export default class CollabDocument {
     private drive: Drive;
     private path: DrivePath;
     private doc!: Y.Doc;
-    private provider!: LoggingProvider;
+    private provider!: LoggingProvider | DbProvider;
     private awareness!: awarenessProtocol.Awareness;
     private connections: Set<ServerWebSocket<any>> = new Set();
 
@@ -56,8 +97,21 @@ export default class CollabDocument {
     }
 
     public async init() {
+        const db = await this.drive.openSQLiteDatabase(this.path.id, 'data.db', async (db) => {
+            db.exec(`
+                CREATE TABLE IF NOT EXISTS doc_updates (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    updateData BLOB NOT NULL,
+                    createdAt INTEGER DEFAULT (unixepoch()),
+                    userId TEXT NOT NULL
+                );
+            `);
+            console.log('create database');
+        });
+
         this.doc = new Y.Doc();
-        this.provider = new LoggingProvider(this.doc, this.path.name);
+        // this.provider = new LoggingProvider(this.doc, this.path.name);
+        this.provider = new DbProvider(this.doc, this.path.name, drizzle(db, { schema }));
         this.awareness = new awarenessProtocol.Awareness(this.doc);
 
         return this;
@@ -65,6 +119,8 @@ export default class CollabDocument {
 
     public destruct() {
         this.provider.destroy();
+        this.awareness.destroy();
+        this.doc.destroy();
     }
 
     public subscribe(conn: ServerWebSocket<any>) {

@@ -758,4 +758,13 @@ export default class Drive {
             this.documents.delete(pathId);
         }
     }
+
+    public async openSQLiteDatabase(parentPathId: string, file: string, onCreate: (db: Database) => Promise<void>) {
+        const databasePath = this.home.fs.pathJoin(await this.getFolderPath(parentPathId), file);
+        return this.home.openSQLiteDatabase(databasePath, onCreate);
+    }
+
+    public async closeSQLiteDatabase(db: Database) {
+        return this.home.closeSQLiteDatabase(db);
+    }
 }

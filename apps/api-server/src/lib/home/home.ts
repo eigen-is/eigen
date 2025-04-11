@@ -133,6 +133,16 @@ export class Home {
         return await (this.databases.get(file)!.get()) as Database;
     }
 
+    public async closeSQLiteDatabase(db: Database) {
+        Object.keys(this.databases).forEach(async (key) => {
+            const database = await(this.databases.get(key)!.get()) as Database;
+            if (database === db) {
+                database.close();
+                this.databases.delete(key);
+            }
+        });
+    }
+
     public async size() {
         const [mail, contacts, drive] = await Promise.all([
             this.mail.size(),
