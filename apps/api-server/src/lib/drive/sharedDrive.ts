@@ -3,6 +3,7 @@ import Drive, {getDrive} from "./drive";
 import {getUserById} from "../users/users";
 import {getHome, Home} from "../home/home";
 import type {DriveACL, DrivePath} from "../../types/drive";
+import type Database from "bun:sqlite";
 
 export async function getSharedDrive(ownerId: string, user: User) {
     if (ownerId !== user.id) {
@@ -153,5 +154,14 @@ export default class SharedDrive extends Drive {
 
     public async getMimeTypeContents(mimeType: string): Promise<DrivePath[]> {
         return [];
+    }
+
+
+    public async openSQLiteDatabase(parentPathId: string, file: string, onCreate: (db: Database) => Promise<void>) {
+        return this.sharedDrive.openSQLiteDatabase(parentPathId, file, onCreate);
+    }
+
+    public async closeSQLiteDatabase(db: Database) {
+        return this.sharedDrive.closeSQLiteDatabase(db);
     }
 }
