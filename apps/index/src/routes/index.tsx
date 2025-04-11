@@ -87,7 +87,8 @@ export function HomeComponent() {
                     }`}
                 >
                     <div className="flex justify-center w-full text-gray-500">
-                            <p>Eigen is made and hosted in the European Union. Our goal is to quickly deliver a MVP and scale up afterwards.</p>
+                        <p>Eigen is made and hosted in the European Union. Our goal is to quickly deliver a MVP and
+                            scale up afterwards.</p>
                     </div>
                 </div>
             </div>

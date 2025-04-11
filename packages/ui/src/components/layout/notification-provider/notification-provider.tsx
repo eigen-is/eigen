@@ -4,8 +4,7 @@ import React, {useEffect, useRef} from 'react';
 import {wsApi} from "@workspace/lib/api";
 import {toast} from "sonner";
 import {useQueryClient} from "@tanstack/react-query";
-import {emailKeys} from "@workspace/lib/mail";
-import {mailboxKeys} from "@workspace/lib/mail";
+import {emailKeys, mailboxKeys} from "@workspace/lib/mail";
 import type {EigenNotification} from "@apps/api-server/types/notification";
 import {useAuth} from "@workspace/lib/auth/auth-context.tsx"; // Fixed import path
 
@@ -13,7 +12,7 @@ interface NotificationProviderProps {
     children: React.ReactNode;
 }
 
-function notify(title: string, body: string, tag: string, action?: {label: string, onClick: () => void}) {
+function notify(title: string, body: string, tag: string, action?: { label: string, onClick: () => void }) {
     toast(title, {
         description: body,
         action: action ? {
@@ -74,23 +73,23 @@ export function NotificationProvider({children}: NotificationProviderProps) {
         if (!isAuthenticated) {
             return null;
         }
-        
+
         try {
             console.log('Setting up notification watcher');
             const watcher = wsApi.notifications.subscribe();
             watcherRef.current = watcher;
             lastActivityRef.current = Date.now();
-            
+
             watcher.subscribe((event) => {
                 lastActivityRef.current = Date.now();
                 reconnectAttemptsRef.current = 0; // Reset reconnect attempts on successful message
-                
+
                 // Handle pong message specifically
                 if (event.data === 'pong') {
                     expectingPongRef.current = false;
                     return;
                 }
-                
+
                 // Process notification
                 const body = event.data as unknown as EigenNotification;
                 if (body?.type === 'mail') {
@@ -104,7 +103,7 @@ export function NotificationProvider({children}: NotificationProviderProps) {
                     queryClient.invalidateQueries({queryKey: emailKeys.list('inbox')});
                     queryClient.invalidateQueries({queryKey: mailboxKeys.lists()});
                 }
-                
+
                 // Send pong response
                 try {
                     watcher.send('pong');
@@ -113,7 +112,7 @@ export function NotificationProvider({children}: NotificationProviderProps) {
                     reconnectWatcher();
                 }
             });
-            
+
             watcher.on('close', () => {
                 console.log('Watcher closed, reconnecting...');
                 reconnectWatcher();
@@ -123,7 +122,7 @@ export function NotificationProvider({children}: NotificationProviderProps) {
                 console.error('WebSocket error:', error);
                 reconnectWatcher();
             });
-            
+
             return watcher;
         } catch (error) {
             console.error('Failed to setup watcher', error);
@@ -138,7 +137,7 @@ export function NotificationProvider({children}: NotificationProviderProps) {
         if (!isAuthenticated) {
             return;
         }
-        
+
         if (watcherRef.current) {
             try {
                 watcherRef.current.close();
@@ -147,18 +146,18 @@ export function NotificationProvider({children}: NotificationProviderProps) {
             }
             watcherRef.current = null;
         }
-        
+
         // Clear any existing reconnect timeout
         if (reconnectTimeoutRef.current) {
             clearTimeout(reconnectTimeoutRef.current);
         }
-        
+
         // Calculate backoff time (max 30 seconds)
         const backoffTime = Math.min(1000 * Math.pow(2, reconnectAttemptsRef.current), 30000);
         reconnectAttemptsRef.current++;
-        
+
         console.log(`Reconnecting in ${backoffTime}ms (attempt ${reconnectAttemptsRef.current})`);
-        
+
         reconnectTimeoutRef.current = setTimeout(() => {
             setupWatcher();
         }, backoffTime);
@@ -168,21 +167,22 @@ export function NotificationProvider({children}: NotificationProviderProps) {
     useEffect(() => {
         // Only set up the watcher if authenticated
         if (!isAuthenticated) {
-            return () => {}; // Return empty cleanup function
+            return () => {
+            }; // Return empty cleanup function
         }
-        
+
         // Initialize the watcher
         setupWatcher();
-        
+
         // Periodic health check
         const healthInterval = setInterval(() => {
             // Skip checks if not authenticated or no watcher exists
             if (!isAuthenticated || !watcherRef.current) return;
-            
+
             // Check if connection is stale (no activity for > 30 seconds)
             const now = Date.now();
             const inactiveTime = now - lastActivityRef.current;
-            
+
             if (inactiveTime > 30000) { // 30 seconds threshold
                 if (watcherRef.current.readyState !== 1) { // Not OPEN
                     console.log('Connection stale (not open), reconnecting...');
@@ -192,7 +192,7 @@ export function NotificationProvider({children}: NotificationProviderProps) {
                     try {
                         watcherRef.current.send('ping');
                         expectingPongRef.current = true;
-                        
+
                         // If no pong comes back in 5 seconds, force reconnect
                         setTimeout(() => {
                             if (expectingPongRef.current) {
@@ -209,36 +209,36 @@ export function NotificationProvider({children}: NotificationProviderProps) {
                 }
             }
         }, 15000); // Check every 15 seconds
-        
+
         // Visibility change detection
         const handleVisibilityChange = () => {
             if (!isAuthenticated) return;
-            
+
             if (document.visibilityState === 'visible') {
                 // Page is now visible, verify connection health
                 const now = Date.now();
                 const inactiveTime = now - lastActivityRef.current;
-                
-                if (inactiveTime > 5000 || 
-                    !watcherRef.current || 
+
+                if (inactiveTime > 5000 ||
+                    !watcherRef.current ||
                     watcherRef.current.readyState !== 1) {
                     console.log('Tab visible again, checking connection...');
                     reconnectWatcher();
                 }
             }
         };
-        
+
         document.addEventListener('visibilitychange', handleVisibilityChange);
-        
+
         // Cleanup function that runs when component unmounts
         return () => {
             clearInterval(healthInterval);
             document.removeEventListener('visibilitychange', handleVisibilityChange);
-            
+
             if (reconnectTimeoutRef.current) {
                 clearTimeout(reconnectTimeoutRef.current);
             }
-            
+
             // Just calling close on the watcher should clean everything up
             if (watcherRef.current) {
                 watcherRef.current.close?.();

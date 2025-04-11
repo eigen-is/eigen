@@ -9,6 +9,8 @@ export const driveKeys = {
     root: () => [...driveKeys.all, 'root'] as const,
     folders: () => [...driveKeys.all, 'folder'] as const,
     folder: (pathId: string) => [...driveKeys.folders(), pathId] as const,
+    mimeTypes: () => [...driveKeys.all, 'mime'] as const,
+    mime: (mimeType: string) => [...driveKeys.mimeTypes(), mimeType] as const,
     paths: () => [...driveKeys.all, 'path'] as const,
     path: (pathId: string) => [...driveKeys.paths(), pathId] as const,
     permissions: () => [...driveKeys.all, 'permissions'] as const,
@@ -42,6 +44,23 @@ export function useFolderContent(ownerId: string, pathId: string) {
             return response.data || [];
         },
         enabled: !!pathId,
+        retry: 1,
+        staleTime: 1000 * 60 * 5 // 5 minutes
+    });
+}
+
+export function useMimeContent(ownerId: string, mimeType: string) {
+    return useQuery({
+        queryKey: driveKeys.mime(mimeType),
+        queryFn: async () => {
+            if (!mimeType) return [];
+            const response = await driveApi.mime[ownerId][mimeType].get();
+            if (response.error) {
+                throw new Error(response.error);
+            }
+            return response.data || [];
+        },
+        enabled: !!mimeType,
         retry: 1,
         staleTime: 1000 * 60 * 5 // 5 minutes
     });

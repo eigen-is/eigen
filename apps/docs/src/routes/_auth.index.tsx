@@ -1,12 +1,12 @@
-import { createFileRoute } from '@tanstack/react-router'
-import { CollaborativeEditor } from '@/components/docs/editor'
+import {createFileRoute} from '@tanstack/react-router'
+import {CollaborativeEditor} from '@/components/docs/editor'
 
 export const Route = createFileRoute('/_auth/')({
-  component: CollaborativeTextEditor,
+    component: CollaborativeTextEditor,
 })
 
 function CollaborativeTextEditor() {
-  return (
-      <CollaborativeEditor />
-  )
+    return (
+        <CollaborativeEditor/>
+    )
 }

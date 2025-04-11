@@ -1,10 +1,9 @@
 import ReactDOM from 'react-dom/client';
-import {createRouter} from '@tanstack/react-router';
+import {createRouter, RouterProvider} from '@tanstack/react-router';
 import {routeTree} from './routeTree.gen';
 import '@workspace/ui/globals.css';
 import {Toaster} from '@workspace/ui/components/sonner';
 import {AuthProvider, useAuth} from '@workspace/lib/auth/auth-context.tsx';
-import {RouterProvider} from '@tanstack/react-router';
 import {QueryClient, QueryClientProvider} from '@tanstack/react-query';
 
 // Set up a Router instance

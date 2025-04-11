@@ -3,7 +3,7 @@ import {Progress} from "@workspace/ui/components/progress";
 import {useHomeSize} from "@workspace/lib/home";
 import {EigenLoader} from "@workspace/ui";
 import {cn} from "@workspace/ui/lib/utils";
-import { formatFileSize } from "@workspace/ui/lib/formatFileSize";
+import {formatFileSize} from "@workspace/ui/lib/formatFileSize";
 
 // Type definition for storage data
 export interface StorageData {
@@ -34,7 +34,7 @@ export function StorageUsage({className = "", condensed = false}: StorageUsagePr
     const [showDetails, setShowDetails] = useState(false);
 
     return (
-        <div className={cn(`p-3 select-none cursor-pointer`, className)}  onClick={() => setShowDetails(!showDetails)}>
+        <div className={cn(`p-3 select-none cursor-pointer`, className)} onClick={() => setShowDetails(!showDetails)}>
             <div>
                 {!condensed && <div className="flex justify-between items-center mb-1">
                     <span className="text-xs font-medium text-muted-foreground">Storage</span>

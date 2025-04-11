@@ -1,11 +1,6 @@
 import {createFileRoute, useNavigate} from '@tanstack/react-router';
 import {EigenLoader} from "@workspace/ui";
-import {
-    useRootFolder,
-    useFolderContent,
-    usePathInfo,
-    useInvalidateFolder
-} from '@workspace/lib/drive';
+import {useFolderContent, useInvalidateFolder, usePathInfo, useRootFolder} from '@workspace/lib/drive';
 import {useEffect} from "react";
 import {DriveLayout} from "@workspace/ui/components/layout/drive/drive-layout";
 import {DrivePath} from "@apps/api-server/types/drive";
@@ -44,7 +39,7 @@ function DriveRoute() {
 
     // Don't fetch data until we have the actual root folder ID (not "root")
     const skipDataFetch = pathId === 'root';
-    
+
     // Fetch folder content and path information
     const {
         data: folderContents = [],
@@ -84,13 +79,13 @@ function DriveRoute() {
     const handleAfterAction = (actionType: string, data: any) => {
         // Invalidate data after mutations
         invalidateFolder(pathId);
-        
+
         // Alleen navigatie na verwijderen als het item dat geselecteerd was verwijderd is
         if (actionType === 'delete' && pid === data.id) {
             navigate({
                 to: Route.fullPath,
-                params: { ownerId, pathId },
-                search: { pid: undefined }
+                params: {ownerId, pathId},
+                search: {pid: undefined}
             });
         }
     };
@@ -129,6 +124,7 @@ function DriveRoute() {
             allowShare={true}
             allowUpload={true}
             isMobile={false}
+            showBreadcrumb={true}
             pid={pid}
         />
     );

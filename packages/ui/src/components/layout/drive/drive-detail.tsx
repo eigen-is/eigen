@@ -1,5 +1,5 @@
 import {cn} from "@workspace/ui/lib/utils";
-import {ArrowLeft, Download, Link, MoreVertical, Share, Share2, Trash2, X} from "lucide-react";
+import {ArrowLeft, Download, Link, MoreVertical, Trash2, X} from "lucide-react";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -7,17 +7,11 @@ import {
     DropdownMenuTrigger
 } from "@workspace/ui/components/dropdown-menu";
 import {Button} from "@workspace/ui/components/button";
-import {TooltipButton} from "@workspace/ui";
-import {EigenLoader} from "@workspace/ui";
-import {DriveAccessList, getFileIcon} from "@workspace/ui/components/layout/drive";
+import {EigenLoader, TooltipButton} from "@workspace/ui";
+import {DriveAccessList} from "@workspace/ui/components/layout/drive";
 import {type DrivePath} from "@apps/api-server/types/drive";
-import { formatFileSize } from "@workspace/ui/lib/formatFileSize";
-import {
-    Table,
-    TableBody,
-    TableCell,
-    TableRow
-} from "@workspace/ui/components/table";
+import {formatFileSize} from "@workspace/ui/lib/formatFileSize";
+import {Table, TableBody, TableCell, TableRow} from "@workspace/ui/components/table";
 
 interface DriveDetailProps {
     path: any | null;
@@ -25,7 +19,7 @@ interface DriveDetailProps {
     className?: string;
     onBackClick?: () => void;
     onDelete: (path: any) => void;
-    onShareClick?: (item: DrivePath) => void;   
+    onShareClick?: (item: DrivePath) => void;
 }
 
 export function DriveDetail({
@@ -41,7 +35,7 @@ export function DriveDetail({
     if (!path) {
         return (
             <div className="flex h-full items-center justify-center">
-                <EigenLoader />
+                <EigenLoader/>
             </div>
         );
     }
@@ -57,10 +51,10 @@ export function DriveDetail({
                 <div className="flex items-center gap-1">
                     {/* Mobile back button when needed */}
                     {onBackClick && (
-                    <TooltipButton onClick={onBackClick}
-                            tooltipText={isMobile ? "Back" : "Close"} 
-                            icon={isMobile ? ArrowLeft : X}
-                            />
+                        <TooltipButton onClick={onBackClick}
+                                       tooltipText={isMobile ? "Back" : "Close"}
+                                       icon={isMobile ? ArrowLeft : X}
+                        />
                     )}
                 </div>
 
@@ -111,9 +105,9 @@ export function DriveDetail({
             </div>
 
             <div className="p-4 flex-1 overflow-auto">
-            <h2 className="text-xl font-medium mb-2 flex items-center">
-  <span className="truncate overflow-hidden min-w-0 flex-1">{path.name}</span>
-</h2>
+                <h2 className="text-xl font-medium mb-2 flex items-center">
+                    <span className="truncate overflow-hidden min-w-0 flex-1">{path.name}</span>
+                </h2>
                 <Table className="text-sm text-muted-foreground mb-4">
                     <TableBody>
                         <TableRow>
@@ -162,9 +156,9 @@ export function DriveDetail({
                     </div>
                 )}
 
-                
+
                 <div className="mt-4">
-                    <DriveAccessList 
+                    <DriveAccessList
                         path={path}
                         acl={path.acl}
                     />
