@@ -39,7 +39,7 @@ export function useFolderContent(ownerId: string, pathId: string) {
             if (!pathId) return [];
             const response = await driveApi.folder[ownerId][pathId].get();
             if (response.error) {
-                throw new Error(response.error);
+                throw new Error(response.error.message);
             }
             return response.data || [];
         },
@@ -49,6 +49,7 @@ export function useFolderContent(ownerId: string, pathId: string) {
     });
 }
 
+// GET MIME CONTENTS
 export function useMimeContent(ownerId: string, mimeType: string) {
     return useQuery({
         queryKey: driveKeys.mime(mimeType),
@@ -56,7 +57,7 @@ export function useMimeContent(ownerId: string, mimeType: string) {
             if (!mimeType) return [];
             const response = await driveApi.mime[ownerId][mimeType].get();
             if (response.error) {
-                throw new Error(response.error);
+                throw new Error(response.error.message);
             }
             return response.data || [];
         },
@@ -200,7 +201,7 @@ export function useUpdateACL(ownerId: string) {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: async ({path, acl}: { path: DrivePath, acl: DriveACL[]}) => {
+        mutationFn: async ({path, acl}: { path: DrivePath, acl: DriveACL[] }) => {
             console.log('put acls', path.id, acl);
             const response = await driveApi.path.acl[ownerId][path.id].put({
                 acl

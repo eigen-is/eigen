@@ -3,6 +3,7 @@ import {useInvalidateFolder, useMimeContent, usePathInfo} from '@workspace/lib/d
 import {DriveLayout} from "@workspace/ui/components/layout/drive/drive-layout";
 import {DrivePath} from "@apps/api-server/types/drive";
 import {useAuth} from '@workspace/lib/auth/auth-context.js';
+import {useIsMobile} from "@workspace/lib/media";
 
 export interface DriveSearchParams {
     pid?: string;
@@ -24,6 +25,7 @@ function DriveRoute() {
     const auth = useAuth();
     const ownerId = auth?.user?.id;
     const {data: selectedPath = null} = usePathInfo(ownerId, pid);
+    const isMobile = useIsMobile();
 
     // Fetch folder content and path information
     const {
@@ -86,7 +88,7 @@ function DriveRoute() {
             allowUpload={false}
             allowCreateDoc={false}
             allowCreateStickies={false}
-            isMobile={false}
+            isMobile={isMobile}
             showBreadcrumb={false}
         />
     );

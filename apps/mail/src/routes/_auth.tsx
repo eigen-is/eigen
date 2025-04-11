@@ -2,7 +2,8 @@ import {createFileRoute, Outlet, redirect} from '@tanstack/react-router'
 import {EmailSidebar} from "../components/mail/email-sidebar.tsx";
 import {useContext} from 'react';
 import {SidebarContext} from './__root';
-import {useMailboxes, useMediaQuery} from '@workspace/lib/mail';
+import {useMailboxes} from '@workspace/lib/mail';
+import {useIsMobile, useIsTablet} from "@workspace/lib/media";
 
 
 export const Route = createFileRoute('/_auth')({
@@ -21,8 +22,8 @@ export const Route = createFileRoute('/_auth')({
 
 function AuthLayout() {
     const {sidebarOpen, setSidebarOpen} = useContext(SidebarContext);
-    const isMobile = useMediaQuery('(max-width: 768px)');
-    const isTablet = useMediaQuery('(min-width: 769px) and (max-width: 1024px)');
+    const isMobile = useIsMobile();
+    const isTablet = useIsTablet();
     // const isDesktop = useMediaQuery('(min-width: 1025px)');
 
     const {data: mailboxes = [], isLoading: isMailboxesLoading, error: isMailboxesError} = useMailboxes();

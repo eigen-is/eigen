@@ -155,7 +155,7 @@
         --app-docs-color: var(--color-purple-600);
         --app-doc-light-color: var(--color-purple-200);
         --app-calendar-color: var(--color-blue-600);
-        
+
         scroll-behavior: smooth;
     }
 
@@ -194,14 +194,14 @@
     .eigen-list-item-active {
         @apply bg-muted text-primary;
     }
-    
+
     .eigen-list-item-unread {
         @apply border-l-red-600 border-l-2 bg-red-600/5 text-primary;
     }
 }
 
-@media print {    
-    .no-print{
+@media print {
+    .no-print {
         display: none !important;
     }
 }
