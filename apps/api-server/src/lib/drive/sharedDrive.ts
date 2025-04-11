@@ -1,7 +1,7 @@
 import type {User} from "better-auth";
 import Drive, {getDrive} from "./drive";
 import {getUserById} from "../users/users";
-import {asyncCache, getHome, Home} from "../home/home";
+import {getHome, Home} from "../home/home";
 import type {DriveACL, DrivePath} from "../../types/drive";
 import type Database from "bun:sqlite";
 import CollabDocument from "../collab/collabDocument.ts";

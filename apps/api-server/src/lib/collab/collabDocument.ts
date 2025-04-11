@@ -104,9 +104,12 @@ export default class CollabDocument {
     constructor(drive: Drive, path: DrivePath) {
         this.drive = drive;
         this.path = path;
+
+        console.log(`[CollabDocument] Created for path: ${path.name}`);
     }
 
     public async init() {
+        console.log(`[CollabDocument] init for path: ${this.path.name}`);
         const db = await this.drive.openSQLiteDatabase(this.path.id, 'data.db', async (db) => {
             db.exec(`
                 CREATE TABLE IF NOT EXISTS doc_updates (

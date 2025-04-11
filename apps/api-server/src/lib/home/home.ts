@@ -21,7 +21,6 @@ export class asyncCache<T> {
 
     public async get(): Promise<T> {
         if (this.value) {
-            console.log('Database from cache');
             return this.value;
         }
         if (this.initializationStarted) {
@@ -29,7 +28,7 @@ export class asyncCache<T> {
             return new Promise((resolve) => {
                 const interval = setInterval(() => {
                     if (this.value) {
-                        console.log('Resolved, database is ready');
+                        console.log('Resolved, asyncCache is ready');
                         clearInterval(interval);
                         resolve(this.value);
                     }
