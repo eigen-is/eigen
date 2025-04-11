@@ -65,12 +65,13 @@ export async function getDrive(user: User) {
     return home.drive;
 }
 
+const documents: Map<string, asyncCache<CollabDocument>> = new Map();
+
 export default class Drive {
     private basePath: string;
     private owner: User;
     private home: Home;
     private db!: BunSQLiteDatabase<typeof schema>;
-    private documents: Map<string, asyncCache<CollabDocument>> = new Map();
 
     constructor(home: Home) {
         this.home = home;
@@ -737,10 +738,11 @@ export default class Drive {
     }
 
     public async getCollabDocument(pathId: string): Promise<CollabDocument> {
-        if (this.documents.has(pathId)) {
-            return await (this.documents.get(pathId)!.get()) as CollabDocument;
+        const key = `${this.owner.id}.${pathId}`;
+        if (documents.has(key)) {
+            return await (documents.get(key)!.get()) as CollabDocument;
         }
-        this.documents.set(pathId, new asyncCache(async () => {
+        documents.set(key, new asyncCache(async () => {
             const path = await this.getPath(pathId);
             if (!path || path.type !== "doc" && path.type !== "stickies") {
                 throw new Error("Document not found");
@@ -748,14 +750,15 @@ export default class Drive {
             const document = new CollabDocument(this, path);
             return (await document.init()) as CollabDocument;
         }));
-        return await (this.documents.get(pathId)!.get()) as CollabDocument;
+        return await (documents.get(key)!.get()) as CollabDocument;
     }
 
     public async closeCollabDocument(pathId: string) {
-        const document = this.documents.get(pathId);
+        const key = `${this.owner.id}.${pathId}`;
+        const document = documents.get(key);
         if (document) {
             (await document.get()).destruct();
-            this.documents.delete(pathId);
+            documents.delete(key);
         }
     }
 
