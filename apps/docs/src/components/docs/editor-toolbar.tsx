@@ -41,34 +41,7 @@ import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,} from "@
 import {Input} from "@workspace/ui/components/input";
 import {Label} from "@workspace/ui/components/label";
 import {useState} from "react";
-
-// Define the types for custom elements and text
-type CustomElementType =
-    | 'paragraph'
-    | 'heading-one'
-    | 'heading-two'
-    | 'heading-three'
-    | 'block-quote'
-    | 'bulleted-list'
-    | 'numbered-list'
-    | 'list-item'
-    | 'check-list-item';
-
-interface CustomElement {
-    type: CustomElementType;
-    children: CustomText[];
-    checked?: boolean;
-}
-
-interface CustomText {
-    text: string;
-    bold?: boolean;
-    italic?: boolean;
-    underline?: boolean;
-    strikethrough?: boolean;
-    code?: boolean;
-    link?: string;
-}
+import {CustomElement, CustomElementType, CustomText} from "./editor.types";
 
 // Define custom editor type
 type CustomEditor = BaseEditor & ReactEditor & HistoryEditor;
@@ -118,7 +91,7 @@ const isBlockActive = (editor: CustomEditor, format: CustomElementType) => {
 const toggleBlock = (editor: CustomEditor, format: CustomElementType) => {
     const isActive = isBlockActive(editor, format);
     const isList = ['numbered-list', 'bulleted-list'].includes(format);
-    const isCheckList = format === 'check-list-item';
+    const isCheckList = format === 'check-list';
 
     Transforms.unwrapNodes(editor, {
         match: n =>
@@ -132,7 +105,7 @@ const toggleBlock = (editor: CustomEditor, format: CustomElementType) => {
 
     if (isCheckList) {
         newProperties = {
-            type: isActive ? 'paragraph' : 'check-list-item',
+            type: isActive ? 'paragraph' : 'check-list',
             checked: false
         };
     } else {
@@ -338,7 +311,7 @@ export const EditorToolbar = () => {
     const commandKey = window.navigator.platform.includes('Mac') ? '⌘' : 'Ctrl';
 
     return (
-        <div className="sticky z-1 top-0 bg-white h-12 flex items-center justify-between px-4 border-b mb-2 no-print">
+        <div className="bg-white h-12 flex items-center justify-between px-4 border-b no-print">
             <div className="flex items-center gap-1">
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
@@ -408,7 +381,7 @@ export const EditorToolbar = () => {
                 <BlockButton format="block-quote" icon={TextQuote} tooltipText="Blockquote"/>
                 <BlockButton format="bulleted-list" icon={List} tooltipText="Bulleted List"/>
                 <BlockButton format="numbered-list" icon={ListOrdered} tooltipText="Numbered List"/>
-                <BlockButton format="check-list-item" icon={CheckSquare} tooltipText="Check List"/>
+                <BlockButton format="check-list" icon={CheckSquare} tooltipText="Check List"/>
 
                 {/* Separator */}
                 <div className="h-6 w-[1px] bg-border mx-1"></div>

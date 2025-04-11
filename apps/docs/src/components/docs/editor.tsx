@@ -10,34 +10,7 @@ import {Button} from "@workspace/ui/components/button";
 import {ArrowUp,} from "lucide-react";
 import {withHistory} from "slate-history";
 import {EditorToolbar} from "./editor-toolbar";
-
-// Define types for the editor
-type CustomElementType =
-    | 'paragraph'
-    | 'heading-one'
-    | 'heading-two'
-    | 'heading-three'
-    | 'block-quote'
-    | 'bulleted-list'
-    | 'numbered-list'
-    | 'list-item'
-    | 'check-list-item';
-
-interface CustomElement {
-    type: CustomElementType;
-    children: CustomText[];
-    checked?: boolean;
-}
-
-interface CustomText {
-    text: string;
-    bold?: boolean;
-    italic?: boolean;
-    underline?: boolean;
-    strikethrough?: boolean;
-    code?: boolean;
-    link?: string;
-}
+import {CustomElement} from "./editor.types";
 
 // Define the initial value with proper typing
 const initialValue: CustomElement[] = [
@@ -155,7 +128,7 @@ const SlateEditor = ({
                 return <ol className="list-decimal pl-4 pt-2" style={style} {...attributes}>{children}</ol>;
             case 'list-item':
                 return <li className="my-1" style={style} {...attributes}>{children}</li>;
-            case 'check-list-item':
+            case 'check-list':
                 return (
                     <div
                         {...attributes}
@@ -254,29 +227,28 @@ const SlateEditor = ({
         <>
             <Slate editor={editor} initialValue={initialValue}>
                 <EditorToolbar/>
-                <div className="p-[2cm] bg-white rounded-lg shadow-sm w-[210mm] min-h-fit min-h-[297mm] m-auto">
-                    <Cursors>
-                        <Editable
-                            spellCheck={false}
-                            autoFocus
-                            className="min-h-[250mm] outline-none"
-                            renderElement={renderElement}
-                            renderLeaf={renderLeaf}
-                            onKeyDown={handleKeyDown}
-                        />
-                    </Cursors>
+                <div className="h-full w-full overflow-y-scroll bg-gray-200 p-4">
+                    <div className="grid p-[2cm] bg-white rounded-lg shadow-sm min-h-full w-[210mm] m-auto">
+                        <Cursors className="h-full">
+                            <Editable
+                                spellCheck={false}
+                                autoFocus
+                                className="h-full outline-none"
+                                renderElement={renderElement}
+                                renderLeaf={renderLeaf}
+                                onKeyDown={handleKeyDown}
+                            />
+                        </Cursors>
+                    </div>
+                    
+                    <div className="fixed bottom-2 left-2">
+                        {/** button with arrow up */}
+                        <Button variant="ghost" className="bg-white" title="Move up" onClick={() => window.scrollTo(0, 0)}>
+                            <ArrowUp className="h-4 w-4"/>
+                        </Button>
+                    </div>
                 </div>
             </Slate>
-            <div className="fixed bottom-2 left-2">
-                {/** button with arrow up */}
-                <Button variant="ghost" className="bg-white" title="Move up" onClick={() => window.scrollTo(0, 0)}>
-                    <ArrowUp className="h-4 w-4"/>
-                </Button>
-            </div>
-            <div className="min-h-16">
-                <center className="text-muted-foreground text-xs mt-2">Last
-                    modified: {new Date().toLocaleString()}</center>
-            </div>
         </>
     );
 };
