@@ -10,110 +10,135 @@
 
 // Import Routes
 
-import {Route as rootRoute} from './routes/__root'
-import {Route as LoginImport} from './routes/login'
-import {Route as AuthImport} from './routes/_auth'
-import {Route as AuthIndexImport} from './routes/_auth.index'
+import { Route as rootRoute } from './routes/__root'
+import { Route as LoginImport } from './routes/login'
+import { Route as AuthImport } from './routes/_auth'
+import { Route as AuthFsOwnerIdPathIdImport } from './routes/_auth.fs.$ownerId.$pathId'
+import { Route as AuthDocOwnerIdPathIdImport } from './routes/_auth.doc.$ownerId.$pathId'
 
 // Create/Update Routes
 
 const LoginRoute = LoginImport.update({
-    id: '/login',
-    path: '/login',
-    getParentRoute: () => rootRoute,
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRoute,
 } as any)
 
 const AuthRoute = AuthImport.update({
-    id: '/_auth',
-    getParentRoute: () => rootRoute,
+  id: '/_auth',
+  getParentRoute: () => rootRoute,
 } as any)
 
-const AuthIndexRoute = AuthIndexImport.update({
-    id: '/',
-    path: '/',
-    getParentRoute: () => AuthRoute,
+const AuthFsOwnerIdPathIdRoute = AuthFsOwnerIdPathIdImport.update({
+  id: '/fs/$ownerId/$pathId',
+  path: '/fs/$ownerId/$pathId',
+  getParentRoute: () => AuthRoute,
+} as any)
+
+const AuthDocOwnerIdPathIdRoute = AuthDocOwnerIdPathIdImport.update({
+  id: '/doc/$ownerId/$pathId',
+  path: '/doc/$ownerId/$pathId',
+  getParentRoute: () => AuthRoute,
 } as any)
 
 // Populate the FileRoutesByPath interface
 
 declare module '@tanstack/react-router' {
-    interface FileRoutesByPath {
-        '/_auth': {
-            id: '/_auth'
-            path: ''
-            fullPath: ''
-            preLoaderRoute: typeof AuthImport
-            parentRoute: typeof rootRoute
-        }
-        '/login': {
-            id: '/login'
-            path: '/login'
-            fullPath: '/login'
-            preLoaderRoute: typeof LoginImport
-            parentRoute: typeof rootRoute
-        }
-        '/_auth/': {
-            id: '/_auth/'
-            path: '/'
-            fullPath: '/'
-            preLoaderRoute: typeof AuthIndexImport
-            parentRoute: typeof AuthImport
-        }
+  interface FileRoutesByPath {
+    '/_auth': {
+      id: '/_auth'
+      path: ''
+      fullPath: ''
+      preLoaderRoute: typeof AuthImport
+      parentRoute: typeof rootRoute
     }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginImport
+      parentRoute: typeof rootRoute
+    }
+    '/_auth/doc/$ownerId/$pathId': {
+      id: '/_auth/doc/$ownerId/$pathId'
+      path: '/doc/$ownerId/$pathId'
+      fullPath: '/doc/$ownerId/$pathId'
+      preLoaderRoute: typeof AuthDocOwnerIdPathIdImport
+      parentRoute: typeof AuthImport
+    }
+    '/_auth/fs/$ownerId/$pathId': {
+      id: '/_auth/fs/$ownerId/$pathId'
+      path: '/fs/$ownerId/$pathId'
+      fullPath: '/fs/$ownerId/$pathId'
+      preLoaderRoute: typeof AuthFsOwnerIdPathIdImport
+      parentRoute: typeof AuthImport
+    }
+  }
 }
 
 // Create and export the route tree
 
 interface AuthRouteChildren {
-    AuthIndexRoute: typeof AuthIndexRoute
+  AuthDocOwnerIdPathIdRoute: typeof AuthDocOwnerIdPathIdRoute
+  AuthFsOwnerIdPathIdRoute: typeof AuthFsOwnerIdPathIdRoute
 }
 
 const AuthRouteChildren: AuthRouteChildren = {
-    AuthIndexRoute: AuthIndexRoute,
+  AuthDocOwnerIdPathIdRoute: AuthDocOwnerIdPathIdRoute,
+  AuthFsOwnerIdPathIdRoute: AuthFsOwnerIdPathIdRoute,
 }
 
 const AuthRouteWithChildren = AuthRoute._addFileChildren(AuthRouteChildren)
 
 export interface FileRoutesByFullPath {
-    '': typeof AuthRouteWithChildren
-    '/login': typeof LoginRoute
-    '/': typeof AuthIndexRoute
+  '': typeof AuthRouteWithChildren
+  '/login': typeof LoginRoute
+  '/doc/$ownerId/$pathId': typeof AuthDocOwnerIdPathIdRoute
+  '/fs/$ownerId/$pathId': typeof AuthFsOwnerIdPathIdRoute
 }
 
 export interface FileRoutesByTo {
-    '/login': typeof LoginRoute
-    '/': typeof AuthIndexRoute
+  '': typeof AuthRouteWithChildren
+  '/login': typeof LoginRoute
+  '/doc/$ownerId/$pathId': typeof AuthDocOwnerIdPathIdRoute
+  '/fs/$ownerId/$pathId': typeof AuthFsOwnerIdPathIdRoute
 }
 
 export interface FileRoutesById {
-    __root__: typeof rootRoute
-    '/_auth': typeof AuthRouteWithChildren
-    '/login': typeof LoginRoute
-    '/_auth/': typeof AuthIndexRoute
+  __root__: typeof rootRoute
+  '/_auth': typeof AuthRouteWithChildren
+  '/login': typeof LoginRoute
+  '/_auth/doc/$ownerId/$pathId': typeof AuthDocOwnerIdPathIdRoute
+  '/_auth/fs/$ownerId/$pathId': typeof AuthFsOwnerIdPathIdRoute
 }
 
 export interface FileRouteTypes {
-    fileRoutesByFullPath: FileRoutesByFullPath
-    fullPaths: '' | '/login' | '/'
-    fileRoutesByTo: FileRoutesByTo
-    to: '/login' | '/'
-    id: '__root__' | '/_auth' | '/login' | '/_auth/'
-    fileRoutesById: FileRoutesById
+  fileRoutesByFullPath: FileRoutesByFullPath
+  fullPaths: '' | '/login' | '/doc/$ownerId/$pathId' | '/fs/$ownerId/$pathId'
+  fileRoutesByTo: FileRoutesByTo
+  to: '' | '/login' | '/doc/$ownerId/$pathId' | '/fs/$ownerId/$pathId'
+  id:
+    | '__root__'
+    | '/_auth'
+    | '/login'
+    | '/_auth/doc/$ownerId/$pathId'
+    | '/_auth/fs/$ownerId/$pathId'
+  fileRoutesById: FileRoutesById
 }
 
 export interface RootRouteChildren {
-    AuthRoute: typeof AuthRouteWithChildren
-    LoginRoute: typeof LoginRoute
+  AuthRoute: typeof AuthRouteWithChildren
+  LoginRoute: typeof LoginRoute
 }
 
 const rootRouteChildren: RootRouteChildren = {
-    AuthRoute: AuthRouteWithChildren,
-    LoginRoute: LoginRoute,
+  AuthRoute: AuthRouteWithChildren,
+  LoginRoute: LoginRoute,
 }
 
 export const routeTree = rootRoute
-    ._addFileChildren(rootRouteChildren)
-    ._addFileTypes<FileRouteTypes>()
+  ._addFileChildren(rootRouteChildren)
+  ._addFileTypes<FileRouteTypes>()
 
 /* ROUTE_MANIFEST_START
 {
@@ -128,14 +153,19 @@ export const routeTree = rootRoute
     "/_auth": {
       "filePath": "_auth.tsx",
       "children": [
-        "/_auth/"
+        "/_auth/doc/$ownerId/$pathId",
+        "/_auth/fs/$ownerId/$pathId"
       ]
     },
     "/login": {
       "filePath": "login.tsx"
     },
-    "/_auth/": {
-      "filePath": "_auth.index.tsx",
+    "/_auth/doc/$ownerId/$pathId": {
+      "filePath": "_auth.doc.$ownerId.$pathId.tsx",
+      "parent": "/_auth"
+    },
+    "/_auth/fs/$ownerId/$pathId": {
+      "filePath": "_auth.fs.$ownerId.$pathId.tsx",
       "parent": "/_auth"
     }
   }
