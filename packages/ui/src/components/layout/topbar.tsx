@@ -16,12 +16,12 @@ import {apps} from "@workspace/lib/apps.ts";
 import {UserItem} from "@workspace/ui/components/layout/user-item";
 import {AppLogo} from "./app-logo";
 import {UserAvatar} from "@workspace/ui";
+import {useApp} from "./app-context";
 
 // Meer generieke definitie voor de Route parameter
 type NavigateFunction = (...args: any[]) => any;
 
 interface TopbarProps {
-    appName: string;
     rootRoute: {
         useNavigate: () => NavigateFunction;
     };
@@ -30,10 +30,11 @@ interface TopbarProps {
     isMobile?: boolean;
 }
 
-function UserDropdown({rootRoute, appName}: { rootRoute: TopbarProps['rootRoute'], appName: string }) {
+function UserDropdown({rootRoute}: { rootRoute: TopbarProps['rootRoute'] }) {
     const router = useRouter();
     const navigate = rootRoute.useNavigate();
     const auth = useAuth();
+    const {appName} = useApp();
     const [logoutDialogOpen, setLogoutDialogOpen] = useState(false);
 
     const handleLogout = () => {
@@ -132,7 +133,9 @@ function UserDropdown({rootRoute, appName}: { rootRoute: TopbarProps['rootRoute'
         : null;
 }
 
-export function Topbar({appName, rootRoute, showMobileMenu, onMobileMenuClick, isMobile}: TopbarProps) {
+export function Topbar({rootRoute, showMobileMenu, onMobileMenuClick, isMobile}: TopbarProps) {
+    const {appName} = useApp();
+    
     return (
         <header className="bg-app">
             <div className="flex h-12 items-center px-4">
@@ -149,7 +152,7 @@ export function Topbar({appName, rootRoute, showMobileMenu, onMobileMenuClick, i
                 )}
                 <AppLogo appName={appName.toLowerCase()}/>
                 <div className="ml-auto flex items-center space-x-4">
-                    <UserDropdown rootRoute={rootRoute} appName={appName}/>
+                    <UserDropdown rootRoute={rootRoute}/>
                 </div>
             </div>
         </header>
