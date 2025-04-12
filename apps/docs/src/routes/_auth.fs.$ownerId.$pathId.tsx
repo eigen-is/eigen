@@ -6,19 +6,30 @@ import {DriveLayout} from "@workspace/ui/components/layout/drive/drive-layout";
 import {DrivePath} from "@apps/api-server/types/drive";
 import {useIsMobile} from "@workspace/lib/media";
 
+// Define search params type
+export interface DriveSearchParams {
+    pid?: string;
+}
 
 export const Route = createFileRoute('/_auth/fs/$ownerId/$pathId')({
-    component: DriveRoute
+    component: DriveRoute,
+    validateSearch: (search: Record<string, unknown>) => {
+        const pid = typeof search.pid === 'string' ? search.pid : undefined;
+        return {pid} as DriveSearchParams;
+    },
 });
 
 function DriveRoute() {
     const {ownerId, pathId} = Route.useParams();
+    const {pid} = Route.useSearch();
     const navigate = useNavigate();
     const invalidateFolder = useInvalidateFolder();
     const isMobile = useIsMobile();
 
     // Get the root folder ID to replace "root" pathId
     const {data: rootFolder, isLoading: isRootLoading} = useRootFolder(ownerId);
+    const {data: selectedPath = null} = usePathInfo(ownerId, pid);
+    const {data: currentPath = null} = usePathInfo(ownerId, pathId);
 
     // If pathId is "root", navigate to the actual root folder ID when available
     useEffect(() => {
@@ -39,22 +50,33 @@ function DriveRoute() {
         isLoading: isFolderContentLoading,
         error: isFolderContentLoadingError
     } = useFolderContent(ownerId, skipDataFetch ? '' : pathId);
-    const {data: currentPath = null} = usePathInfo(ownerId, pathId);
 
     const folderContents = unfilteredFolderContents.filter(path => (path.type === 'folder' || path.mimeType === 'application/eigendoc'));
 
+
     // Handle row click to show path details
-    const handleRowClick = (path: DrivePath) => {
+    const onRowSelect = (path: DrivePath) => {
+        navigate({
+            to: Route.fullPath,
+            params: {ownerId, pathId},
+            search: {pid: path.id}
+        });
+    };
+
+    const onRowActivate = (path: DrivePath) => {
         if (path.type === 'folder') {
             navigate({
                 to: Route.fullPath,
                 params: {ownerId, pathId: path.id},
+                search: {pid: undefined}
             });
-        } else {
+        } else if (path.type === 'doc') {
             navigate({
                 to: '/doc/$ownerId/$pathId',
                 params: {ownerId, pathId: path.id},
             });
+        } else {
+            // todo: for some types we could show a fullscreen preview
         }
     };
 
@@ -91,10 +113,11 @@ function DriveRoute() {
             folderContents={folderContents}
             isLoading={isFolderContentLoading}
             error={isFolderContentLoadingError}
-            selectedPath={null}
+            selectedPath={selectedPath}
             currentPath={currentPath}
-            onRowClick={handleRowClick}
-            onBackToList={() =>{}}
+            onRowSelect={onRowSelect}
+            onRowActivate={onRowActivate}
+            onBackToList={() => {}}
             onAfterAction={handleAfterAction}
             allowCreateFolder={true}
             allowDelete={true}
@@ -104,6 +127,7 @@ function DriveRoute() {
             allowCreateStickies={false}
             isMobile={isMobile}
             showBreadcrumb={true}
+            pid={pid}   
         />
     );
 }

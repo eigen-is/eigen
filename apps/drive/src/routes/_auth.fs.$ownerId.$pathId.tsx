@@ -51,19 +51,25 @@ function DriveRoute() {
     const {data: currentPath = null} = usePathInfo(ownerId, pathId);
 
     // Handle row click to show path details
-    const handleRowClick = (path: DrivePath) => {
+    const onRowSelect = (path: DrivePath) => {
+        navigate({
+            to: Route.fullPath,
+            params: {ownerId, pathId},
+            search: {pid: path.id}
+        });
+    };
+
+    const onRowActivate = (path: DrivePath) => {
         if (path.type === 'folder') {
             navigate({
                 to: Route.fullPath,
                 params: {ownerId, pathId: path.id},
                 search: {pid: undefined}
             });
+        } else if (path.type === 'doc') {
+            document.location.href = `${import.meta.env.VITE_APP_DOCS_URL}/doc/${ownerId}/${path.id}`;
         } else {
-            navigate({
-                to: Route.fullPath,
-                params: {ownerId, pathId},
-                search: {pid: path.id}
-            });
+            // todo: for some types we could show a fullscreen preview
         }
     };
 
@@ -117,7 +123,8 @@ function DriveRoute() {
             error={isFolderContentLoadingError}
             selectedPath={selectedPath}
             currentPath={currentPath}
-            onRowClick={handleRowClick}
+            onRowSelect={onRowSelect}
+            onRowActivate={onRowActivate}
             onBackToList={handleBackToList}
             onAfterAction={handleAfterAction}
             allowCreateFolder={true}

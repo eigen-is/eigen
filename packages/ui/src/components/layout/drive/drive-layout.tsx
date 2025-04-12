@@ -32,7 +32,8 @@ export interface DriveLayoutProps {
     currentPath?: DrivePath | null;
 
     // Navigation callbacks
-    onRowClick: (path: DrivePath) => void;
+    onRowSelect: (path: DrivePath) => void;
+    onRowActivate?: (path: DrivePath) => void;
     onBackToList: () => void;
     onAfterAction?: (actionType: string, data: any) => void;
 
@@ -55,7 +56,8 @@ export function DriveLayout({
                                 folderContents,
                                 isLoading,
                                 error,
-                                onRowClick,
+                                onRowSelect,
+                                onRowActivate,
                                 onBackToList,
                                 onAfterAction,
                                 pathId = 'unknown',
@@ -292,7 +294,8 @@ export function DriveLayout({
                             items={folderContents}
                             isLoading={isLoading}
                             error={error}
-                            onRowClick={onRowClick}
+                            onRowSelect={onRowSelect}
+                            onRowActivate={onRowActivate}
                             activeRowId={pid}
                             onCreateFolder={allowCreateFolder ? openCreateFolderDialog : undefined}
                             onUploadFile={allowUpload ? handleFileUpload : undefined}
@@ -320,7 +323,8 @@ export function DriveLayout({
                                     items={folderContents}
                                     isLoading={isLoading}
                                     error={error}
-                                    onRowClick={onRowClick}
+                                    onRowSelect={onRowSelect}
+                                    onRowActivate={onRowActivate}
                                     activeRowId={pid}
                                     onCreateFolder={allowCreateFolder ? openCreateFolderDialog : undefined}
                                     onUploadFile={allowUpload ? handleFileUpload : undefined}
