@@ -21,7 +21,10 @@ const initialValue: CustomElement[] = [
     },
 ];
 
-export const CollaborativeEditor = ({ownerId, pathId}: {ownerId: string, pathId: string}) => {
+export const CollaborativeEditor = ({ownerId, pathId, access}: {ownerId: string, pathId: string, access: {
+    canRead: boolean;
+    canWrite: boolean;
+}}) => {
     const [connected, setConnected] = useState(false);
     const [sharedType, setSharedType] = useState<Y.XmlText | null>(null);
     const [provider, setProvider] = useState<WebsocketProvider | null>(null);
@@ -60,15 +63,17 @@ export const CollaborativeEditor = ({ownerId, pathId}: {ownerId: string, pathId:
         return  <div className="flex h-full items-center justify-center"><EigenLoader/></div>;
     }
 
-    return <SlateEditor sharedType={sharedType} provider={provider}/>;
+    return <SlateEditor sharedType={sharedType} provider={provider} access={access}/>;
 };
 
 const SlateEditor = ({
                          sharedType,
                          provider,
+                         access
                      }: {
     sharedType: Y.XmlText | null;
     provider: WebsocketProvider | null;
+    access: {canRead: boolean, canWrite: boolean};
 }) => {
     const auth = useAuth();
 
@@ -231,6 +236,7 @@ const SlateEditor = ({
                     <div className="grid p-[2cm] bg-white rounded-lg shadow-sm min-h-full w-[210mm] m-auto">
                         <Cursors className="h-full">
                             <Editable
+                                readOnly={!access.canWrite}
                                 spellCheck={false}
                                 autoFocus
                                 className="h-full outline-none"
