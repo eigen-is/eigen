@@ -52,11 +52,21 @@ function DriveRoute() {
 
     // Handle row click to show path details
     const onRowSelect = (path: DrivePath) => {
-        navigate({
-            to: Route.fullPath,
-            params: {ownerId, pathId},
-            search: {pid: path.id}
-        });
+        if (isMobile && (path.type === 'folder' || path.type === 'doc')) {
+            onRowActivate(path);
+        } else if (currentPath?.parentId === path.id) {
+            navigate({
+                to: Route.fullPath,
+                params: {ownerId, pathId: path.id},
+                search: {pid: undefined}
+            });
+        } else {
+            navigate({
+                to: Route.fullPath,
+                params: {ownerId, pathId},
+                search: {pid: path.id}
+            });
+        }
     };
 
     const onRowActivate = (path: DrivePath) => {
