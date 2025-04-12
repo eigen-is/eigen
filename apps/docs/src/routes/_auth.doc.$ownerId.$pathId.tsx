@@ -44,7 +44,7 @@ function CollaborativeTextEditor() {
 
     return (
         <div className="bg-muted flex-1 overflow-hidden">
-            <CollaborativeEditor ownerId={ownerId} pathId={pathId}/>
+            <CollaborativeEditor ownerId={ownerId} pathId={pathId} access={access}/>
         </div>
     )
 }

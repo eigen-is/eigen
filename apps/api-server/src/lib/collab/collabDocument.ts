@@ -163,12 +163,18 @@ export default class CollabDocument {
         }
     }
 
-    public handleMessage(conn: ServerWebSocket<any>, update: Uint8Array) {
+    public handleMessage(conn: ServerWebSocket<any>, update: Uint8Array, canWrite: boolean) {
         // Create a decoder from the message
         const decoder = decoding.createDecoder(update);
         const messageType = decoding.readVarUint(decoder);
 
         if (messageType === MESSAGE_SYNC) {
+            // Check if the message is a read-only update
+            const updateType = decoding.peekUint8(decoder);
+            if (!canWrite && (updateType === 1 || updateType === 2)) {
+                return;
+            }
+
             // Create response encoder
             const encoder = encoding.createEncoder();
             encoding.writeVarUint(encoder, MESSAGE_SYNC);

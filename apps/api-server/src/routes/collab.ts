@@ -97,12 +97,8 @@ export const collabRouter = new Elysia({
                     ws.close(1008, "Authentication failed");
                     return;
                 }
-                if (await drive.canWrite(pathId, user)) {
-                    const document = await drive.getCollabDocument(pathId);
-                    document.handleMessage(ws as unknown as ServerWebSocket<any>, update);
-                } else {
-                    console.error('canWrite failed');
-                }
+                const document = await drive.getCollabDocument(pathId);
+                document.handleMessage(ws as unknown as ServerWebSocket<any>, update, await drive.canWrite(pathId, user));
             } catch (err) {
                 console.error('Error processing message:', err);
             }
