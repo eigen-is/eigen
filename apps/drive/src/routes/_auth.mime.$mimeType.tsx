@@ -37,11 +37,15 @@ function DriveRoute() {
 
     // Handle row click to show path details
     const onRowSelect = (path: DrivePath) => {
-        navigate({
-            to: Route.fullPath,
-            params: {mimeType},
-            search: {pid: path.id}
-        });
+        if (isMobile && (path.type === 'folder' || path.type === 'doc')) {
+            onRowActivate(path);
+        } else {
+            navigate({
+                to: Route.fullPath,
+                params: {mimeType},
+                search: {pid: path.id}
+            });
+        }
     };
 
     const onRowActivate = (path: DrivePath) => {
