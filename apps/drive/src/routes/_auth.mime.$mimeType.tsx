@@ -34,20 +34,27 @@ function DriveRoute() {
         error: isFolderContentLoadingError
     } = useMimeContent(ownerId, mimeType);
 
+
     // Handle row click to show path details
-    const handleRowClick = (path: DrivePath) => {
+    const onRowSelect = (path: DrivePath) => {
+        navigate({
+            to: Route.fullPath,
+            params: {mimeType},
+            search: {pid: path.id}
+        });
+    };
+
+    const onRowActivate = (path: DrivePath) => {
         if (path.type === 'folder') {
-            navigate({
-                to: '/fs/$ownerId/$pathId',
-                params: {ownerId: path.ownerId, pathId: path.id},
-                search: {pid: undefined}
-            });
-        } else {
             navigate({
                 to: Route.fullPath,
                 params: {mimeType},
-                search: {pid: path.id}
+                search: {pid: undefined}
             });
+        } else if (path.type === 'doc') {
+            document.location.href = `${import.meta.env.VITE_APP_DOCS_URL}/doc/${ownerId}/${path.id}`;
+        } else {
+            // todo: for some types we could show a fullscreen preview
         }
     };
 
@@ -80,7 +87,8 @@ function DriveRoute() {
             folderContents={folderContents}
             isLoading={isFolderContentLoading}
             error={isFolderContentLoadingError}
-            onRowClick={handleRowClick}
+            onRowSelect={onRowSelect}
+            onRowActivate={onRowActivate}
             onBackToList={handleBackToList}
             onAfterAction={handleAfterAction}
             allowDelete={true}
