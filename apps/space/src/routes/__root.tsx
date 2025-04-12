@@ -5,8 +5,6 @@ import {Topbar} from "@workspace/ui/components/layout/topbar";
 import {createContext, useState} from 'react';
 import {useIsMobile} from "@workspace/lib/media";
 
-const appName = 'space';
-
 // Create a context for sidebar state
 export const SidebarContext = createContext<{
     sidebarOpen: boolean;
@@ -33,7 +31,6 @@ function RootComponent() {
         <SidebarContext.Provider value={{sidebarOpen, setSidebarOpen}}>
             <div className="flex flex-col h-dvh">
                 <Topbar
-                    appName={appName}
                     rootRoute={Route}
                     showMobileMenu={true}
                     onMobileMenuClick={() => setSidebarOpen(true)}
