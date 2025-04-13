@@ -491,6 +491,8 @@ export default class Drive {
                 updatedAt: new Date()
             })
             .where(eq(drivePaths.id, pathId));
+
+        this.emitACLChange(item, item.acl, item.acl);
     }
 
     public async getPath(pathId: string): Promise<DrivePath | null> {
@@ -748,6 +750,7 @@ export default class Drive {
             if (path.parentId) {
                 this.updateSizeOfFolder(path.parentId);
             }
+            this.emitACLChange(path, path.acl, path.acl);
         }
     }
 
@@ -780,6 +783,10 @@ export default class Drive {
         } else if (this.sharedDb.select().from(sharedSchema.sharedPaths).where(eq(sharedSchema.sharedPaths.id, path.id)).get()) {
             this.sharedDb.update(sharedSchema.sharedPaths).set({
                 acl: newACL,
+                name: path.name,
+                size: path.size,
+                thumbnail: path.thumbnail,
+                parentId: path.parentId,
                 updatedAt: new Date()
             }).where(eq(sharedSchema.sharedPaths.id, path.id)).run();
         } else {
