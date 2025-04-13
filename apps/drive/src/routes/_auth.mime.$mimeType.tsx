@@ -1,5 +1,5 @@
 import {createFileRoute, useNavigate} from '@tanstack/react-router';
-import {useInvalidateFolder, useMimeContent, usePathInfo} from '@workspace/lib/drive';
+import {useMimeContent, usePathInfo} from '@workspace/lib/drive';
 import {DriveLayout} from "@workspace/ui/components/layout/drive/drive-layout";
 import {DrivePath} from "@apps/api-server/types/drive";
 import {useAuth} from '@workspace/lib/auth/auth-context.js';
@@ -21,7 +21,6 @@ function DriveRoute() {
     const {mimeType} = Route.useParams();
     const navigate = useNavigate();
     const {pid} = Route.useSearch();
-    const invalidateFolder = useInvalidateFolder();
     const auth = useAuth();
     const ownerId = auth?.user?.id;
     const {data: selectedPath = null} = usePathInfo(ownerId, pid);
@@ -70,11 +69,6 @@ function DriveRoute() {
         });
     };
 
-    // Callback die door DriveLayout wordt aangeroepen na acties
-    const handleAfterAction = (actionType: string, data: any) => {
-                
-    };
-
     if (isFolderContentLoadingError) {
         return (
             <div className="flex items-center justify-center h-full w-full">
@@ -94,7 +88,7 @@ function DriveRoute() {
             onRowSelect={onRowSelect}
             onRowActivate={onRowActivate}
             onBackToList={handleBackToList}
-            onAfterAction={handleAfterAction}
+            onAfterAction={()=>{}}
             allowDelete={true}
             allowShare={true}
             allowCreateFolder={false}
