@@ -55,7 +55,7 @@ function DriveRoute() {
                 params: {ownerId: path.ownerId, pathId: path.id}
             });
         } else if (path.type === 'doc') {
-            document.location.href = `${import.meta.env.VITE_APP_DOCS_URL}/doc/${ownerId}/${path.id}`;
+            document.location.href = `${import.meta.env.VITE_APP_DOCS_URL}/doc/${path.ownerId}/${path.id}`;
         } else {
             // todo: for some types we could show a fullscreen preview
         }
