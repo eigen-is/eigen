@@ -157,6 +157,7 @@ export function useDeleteFolder(ownerId: string) {
         onSuccess: () => {
             // We don't know the parent ID here, so we invalidate all folders
             queryClient.invalidateQueries({queryKey: driveKeys.folders()});
+            queryClient.invalidateQueries({queryKey: driveKeys.mimeTypes()});
             invalidateHomeSize(queryClient);
         }
     });
@@ -174,7 +175,11 @@ export function useDeleteFile(ownerId: string) {
         onSuccess: () => {
             // We don't know the parent ID here, so we invalidate all folders
             queryClient.invalidateQueries({queryKey: driveKeys.folders()});
+            queryClient.invalidateQueries({queryKey: driveKeys.mimeTypes()});
             invalidateHomeSize(queryClient);
+        },
+        onError: (error) => {
+            console.error('Error deleting file:', error);
         }
     });
 }
@@ -192,6 +197,7 @@ export function useRenamePath(ownerId: string) {
         },
         onSuccess: () => {
             queryClient.invalidateQueries({queryKey: driveKeys.all});
+            queryClient.invalidateQueries({queryKey: driveKeys.mimeTypes()});
         }
     });
 }
@@ -218,6 +224,7 @@ export function useUpdateACL(ownerId: string) {
             } else if (variables.path.parentId) {
                 queryClient.invalidateQueries({queryKey: driveKeys.folder(variables.path.parentId)});
             }
+            queryClient.invalidateQueries({queryKey: driveKeys.mimeTypes()});
         },
     });
 }
@@ -274,6 +281,7 @@ export function useCreateDoc(ownerId: string) {
         },
         onSuccess: (_, variables) => {
             queryClient.invalidateQueries({queryKey: driveKeys.folder(variables.parentId)});
+            queryClient.invalidateQueries({queryKey: driveKeys.mimeTypes()});
         }
     });
 }
@@ -291,6 +299,7 @@ export function useCreateStickies(ownerId: string) {
         },
         onSuccess: (_, variables) => {
             queryClient.invalidateQueries({queryKey: driveKeys.folder(variables.parentId)});
+            queryClient.invalidateQueries({queryKey: driveKeys.mimeTypes()});
         }
     });
 }
