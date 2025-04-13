@@ -755,10 +755,26 @@ export default class Drive {
 
     public async closeCollabDocument(pathId: string) {
         const key = `${this.owner.id}.${pathId}`;
+        console.log("Closing document", key);
         const document = documents.get(key);
         if (document) {
+            console.log("Destructing document", key);
             (await document.get()).destruct();
             documents.delete(key);
+        }
+
+        // update size of document
+        const path = await this.getPath(pathId);
+        if (path) {
+            const pathUrl = await this.getFolderPath(pathId);
+            const size = await this.home.fs.dirSize(pathUrl);
+            await this.db.update(drivePaths).set({
+                size: size || 0,
+                updatedAt: new Date()
+            }).where(eq(drivePaths.id, pathId));
+            if (path.parentId) {
+                this.updateSizeOfFolder(path.parentId);
+            }
         }
     }
 

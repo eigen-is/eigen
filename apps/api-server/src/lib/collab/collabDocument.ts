@@ -157,8 +157,9 @@ export default class CollabDocument {
                 this.connections.delete(connection);
             }
         });
+        console.log(`Remaining connections: ${this.connections.size}`);
         // check if this.connections is empty
-        if (this.connections.size === 0) {
+        if (this.connections.size <= 0) {
             this.drive.closeCollabDocument(this.path.id);
         }
     }
