@@ -74,13 +74,13 @@ export function DriveSidebar({
             >
                 <SidebarItem
                     icon={<Link className="h-4 w-4"/>}
-                    to="/"
+                    to="/shared/by-me"
                     label="Shared by me"
                     condensed={condensed}
                 />
                 <SidebarItem
                     icon={<Download className="h-4 w-4"/>}
-                    to="/"
+                    to="/shared/with-me"
                     label="Shared with me"
                     condensed={condensed}
                 />

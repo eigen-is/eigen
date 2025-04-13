@@ -161,6 +161,7 @@ export default class SharedDrive extends Drive {
         if (await this.canRead(pathId, this.user)) {
             return this.sharedDrive.getCollabDocument(pathId);
         }
+        throw new Error("No read permission");
     }
 
     public async closeCollabDocument(pathId: string) {

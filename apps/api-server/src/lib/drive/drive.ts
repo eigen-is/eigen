@@ -2,14 +2,17 @@ import {asyncCache, getHome, type Home} from "../home/home.ts";
 import type Database from "bun:sqlite";
 import {BunSQLiteDatabase, drizzle} from "drizzle-orm/bun-sqlite";
 import * as schema from "./schema.ts";
+import * as sharedSchema from "./sharedschema.ts";
 import {drivePaths} from "./schema.ts";
-import {and, eq, isNull, like, sql} from "drizzle-orm";
+import {and, eq, isNull, like, sql, isNotNull} from "drizzle-orm";
 import type {User} from "better-auth/types";
 import type {DriveACL, DrivePath} from "../../types/drive.ts";
 import {randomUUID} from "crypto";
 import path from "path";
 import sharp from "sharp";
 import CollabDocument from "../collab/collabDocument.ts";
+import {getSharedDatabase} from "./shared";
+import { getUserByEmail } from "../users/users.ts";
 
 async function getDriveDatabase(home: Home) {
     const db = await home.openSQLiteDatabase('eigen.drive/metadata.db', async (db: Database) => {
@@ -72,6 +75,7 @@ export default class Drive {
     private owner: User;
     private home: Home;
     private db!: BunSQLiteDatabase<typeof schema>;
+    private sharedDb!: BunSQLiteDatabase<typeof sharedSchema>;
 
     constructor(home: Home) {
         this.home = home;
@@ -83,6 +87,10 @@ export default class Drive {
         this.db = await getDriveDatabase(this.home);
         if (!this.db) {
             throw new Error("No drive database found");
+        }
+        this.sharedDb = await getSharedDatabase(this.home);
+        if (!this.sharedDb) {
+            throw new Error("No shared database found");
         }
 
         // Ensure the base drive directory exists
@@ -208,12 +216,6 @@ export default class Drive {
         return pathId;
     }
 
-    /**
-     * Upload a file to the drive
-     * @param parentId ID of the parent folder
-     * @param file File to upload
-     * @returns ID of the uploaded file
-     */
     public async uploadFile(parentId: string, file: File): Promise<string> {
         // Get parent folder
         const parent = await this.getPath(parentId);
@@ -292,10 +294,6 @@ export default class Drive {
         return Promise.all(uploadPromises);
     }
 
-    /**
-     * Delete a folder and all its contents
-     * @param pathId ID of the folder to delete
-     */
     public async deleteFolder(pathId: string): Promise<void> {
         // Get folder
         const folder = await this.getPath(pathId);
@@ -321,16 +319,14 @@ export default class Drive {
         // Delete folder and all children from database (cascade delete will handle this)
         await this.db.delete(drivePaths).where(eq(drivePaths.id, pathId));
 
+        this.emitACLChange(folder, folder.acl, null);
+
         // Update parent folder size
         if (parentId) {
             await this.updateSizeOfFolder(parentId);
         }
     }
 
-    /**
-     * Delete a file
-     * @param pathId ID of the file to delete
-     */
     public async deleteFile(pathId: string): Promise<void> {
         // Get file
         const file = await this.getPath(pathId);
@@ -365,6 +361,8 @@ export default class Drive {
 
         // Update parent folder size
         await this.updateSizeOfFolder(parent.id);
+
+        this.emitACLChange(file, file.acl, null);
     }
 
     private async deleteThumbnail(file: DrivePath) {
@@ -457,11 +455,6 @@ export default class Drive {
         }));
     }
 
-    /**
-     * Rename a file or folder
-     * @param pathId ID of the path to rename
-     * @param newName New name for the path
-     */
     public async renamePath(pathId: string, newName: string): Promise<void> {
         // Get path
         const item = await this.getPath(pathId);
@@ -500,11 +493,6 @@ export default class Drive {
             .where(eq(drivePaths.id, pathId));
     }
 
-    /**
-     * Get a file or folder by ID
-     * @param pathId ID of the path
-     * @returns Path object or null if not found
-     */
     public async getPath(pathId: string): Promise<DrivePath | null> {
         const result = await this.db.select().from(drivePaths)
             .where(eq(drivePaths.id, pathId))
@@ -530,11 +518,6 @@ export default class Drive {
         };
     }
 
-    /**
-     * Update the ACL for a path
-     * @param pathId ID of the path
-     * @param acl New ACL
-     */
     public async updateACL(pathId: string, acl: DriveACL[] | null): Promise<void> {
         // Get path
         const item = await this.getPath(pathId);
@@ -558,6 +541,8 @@ export default class Drive {
                 updatedAt: new Date()
             })
             .where(eq(drivePaths.id, pathId));
+
+        this.emitACLChange(item, item.acl, acl);
     }
 
     public getACL(pathId: string): DriveACL[] | null {
@@ -570,12 +555,6 @@ export default class Drive {
         return item.acl ?? (item.parentId ? this.getACL(item.parentId) : null);
     }
 
-    /**
-     * Check if a user has read permission for a path
-     * @param pathId ID of the path
-     * @param user User to check
-     * @returns true if user has read permission
-     */
     public async canRead(pathId: string, user: User): Promise<boolean> {
         // Get path
         const item = await this.getPath(pathId);
@@ -611,12 +590,6 @@ export default class Drive {
         return false;
     }
 
-    /**
-     * Check if a user has write permission for a path
-     * @param pathId ID of the path
-     * @param user User to check
-     * @returns true if user has write permission
-     */
     public async canWrite(pathId: string, user: User): Promise<boolean> {
         // Get path
         const item = await this.getPath(pathId);
@@ -785,5 +758,52 @@ export default class Drive {
 
     public async closeSQLiteDatabase(db: Database) {
         return this.home.closeSQLiteDatabase(db);
+    }
+
+    private async emitACLChange(path: DrivePath, oldACL: DriveACL[] | null, newACL: DriveACL[] | null) {
+        // get list of all unique users in oldACL and newACL
+        const users = new Set(oldACL?.map(acl => acl.email) || []);
+        newACL?.forEach(acl => users.add(acl.email));
+        users.forEach(email => {
+            // TODO, this could/should be done by calling API endpoints
+            getUserByEmail(email).then(user => {
+                if (user) {
+                    getHome(user as User).then(home => home.drive.recieveACLChange(path, newACL));
+                }
+            });
+        });
+    }
+
+    public async recieveACLChange(path: DrivePath, newACL: DriveACL[] | null) {
+        if (newACL === null) {
+            this.sharedDb.delete(sharedSchema.sharedPaths).where(eq(sharedSchema.sharedPaths.id, path.id)).run();
+        } else if (this.sharedDb.select().from(sharedSchema.sharedPaths).where(eq(sharedSchema.sharedPaths.id, path.id)).get()) {
+            this.sharedDb.update(sharedSchema.sharedPaths).set({
+                acl: newACL,
+                updatedAt: new Date()
+            }).where(eq(sharedSchema.sharedPaths.id, path.id)).run();
+        } else {
+            this.sharedDb.insert(sharedSchema.sharedPaths).values({
+                id: path.id,
+                name: path.name,
+                type: path.type,
+                parentId: path.parentId,
+                ownerId: path.ownerId,
+                mimeType: path.mimeType,
+                size: path.size,
+                thumbnail: path.thumbnail,
+                acl: newACL,
+                createdAt: new Date(),
+                updatedAt: new Date()
+            }).run();
+        }
+    }
+
+    public async getSharedPathsWithMe(): Promise<DrivePath[]> {
+        return await this.sharedDb.select().from(sharedSchema.sharedPaths) as DrivePath[];
+    }
+
+    public async getSharedPathsByMe(): Promise<DrivePath[]> {
+        return await this.db.select().from(drivePaths).where(isNotNull(drivePaths.acl)) as DrivePath[];
     }
 }
