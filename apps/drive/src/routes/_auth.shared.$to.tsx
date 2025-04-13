@@ -51,9 +51,8 @@ function DriveRoute() {
     const onRowActivate = (path: DrivePath) => {
         if (path.type === 'folder') {
             navigate({
-                to: Route.fullPath,
-                params: {to},
-                search: {pid: undefined}
+                to: '/fs/$ownerId/$pathId',
+                params: {ownerId: path.ownerId, pathId: path.id}
             });
         } else if (path.type === 'doc') {
             document.location.href = `${import.meta.env.VITE_APP_DOCS_URL}/doc/${ownerId}/${path.id}`;
