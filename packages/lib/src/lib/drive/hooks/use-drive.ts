@@ -16,6 +16,7 @@ export const driveKeys = {
     permissions: () => [...driveKeys.all, 'permissions'] as const,
     read: (pathId: string) => [...driveKeys.permissions(), 'read', pathId] as const,
     write: (pathId: string) => [...driveKeys.permissions(), 'write', pathId] as const,
+    shared: (to: 'by-me' | 'with-me') => [...driveKeys.all, 'shared', to] as const,
 };
 
 // GET ROOT FOLDER
@@ -225,6 +226,8 @@ export function useUpdateACL(ownerId: string) {
                 queryClient.invalidateQueries({queryKey: driveKeys.folder(variables.path.parentId)});
             }
             queryClient.invalidateQueries({queryKey: driveKeys.mimeTypes()});
+            queryClient.invalidateQueries({queryKey: driveKeys.shared('by-me')});
+            queryClient.invalidateQueries({queryKey: driveKeys.shared('with-me')});
         },
     });
 }
@@ -303,3 +306,14 @@ export function useCreateStickies(ownerId: string) {
         }
     });
 }
+
+export function useSharedPaths(to: 'by-me' | 'with-me') {
+    return useQuery({
+        queryKey: driveKeys.shared(to),
+        queryFn: async () => {
+            const response = await driveApi.shared[`${to}`].get();
+            return response.data;
+        }
+    });
+}
+
