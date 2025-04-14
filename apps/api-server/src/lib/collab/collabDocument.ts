@@ -44,15 +44,15 @@ class LoggingProvider {
     }
 }
 
-class DbProvider  {
+class DbProvider {
     private db: ReturnType<typeof drizzle<typeof schema>>;
     private doc: Y.Doc;
     private docId: string;
 
-    constructor(doc: Y.Doc,docId:string, db: ReturnType<typeof drizzle<typeof schema>>) {
+    constructor(doc: Y.Doc, docId: string, db: ReturnType<typeof drizzle<typeof schema>>) {
         this.db = db;
         this.doc = doc;
-        this.docId= docId;
+        this.docId = docId;
 
         console.log(`[DbProvider] Created for document: ${docId}`);
 
@@ -131,7 +131,7 @@ export default class CollabDocument {
         this.doc = new Y.Doc();
         this.doc.gc = true;
         // this.provider = new LoggingProvider(this.doc, this.path.name);
-        this.provider = new DbProvider(this.doc, this.path.name, drizzle(db, { schema }));
+        this.provider = new DbProvider(this.doc, this.path.name, drizzle(db, {schema}));
         this.awareness = new awarenessProtocol.Awareness(this.doc);
 
         return this;

@@ -2,9 +2,9 @@ import {asyncCache, getHome, type Home} from "../home/home.ts";
 import type Database from "bun:sqlite";
 import {BunSQLiteDatabase, drizzle} from "drizzle-orm/bun-sqlite";
 import * as schema from "./schema.ts";
-import * as sharedSchema from "./sharedschema.ts";
 import {drivePaths} from "./schema.ts";
-import {and, eq, isNull, like, sql, isNotNull} from "drizzle-orm";
+import * as sharedSchema from "./sharedschema.ts";
+import {and, eq, isNotNull, isNull, like, sql} from "drizzle-orm";
 import type {User} from "better-auth/types";
 import type {DriveACL, DrivePath} from "../../types/drive.ts";
 import {randomUUID} from "crypto";
@@ -12,7 +12,7 @@ import path from "path";
 import sharp from "sharp";
 import CollabDocument from "../collab/collabDocument.ts";
 import {getSharedDatabase} from "./shared";
-import { getUserByEmail } from "../users/users.ts";
+import {getUserByEmail} from "../users/users.ts";
 
 async function getDriveDatabase(home: Home) {
     const db = await home.openSQLiteDatabase('eigen.drive/metadata.db', async (db: Database) => {
@@ -124,20 +124,6 @@ export default class Drive {
     public async size(): Promise<number> {
         // get total size of mailbox
         return (await this.home.fs.dirSize('eigen.drive')) || this.db.select({size: sql`SUM(${drivePaths.size})`}).from(drivePaths).where(eq(drivePaths.type, 'file')).get()?.size as number || 0;
-    }
-
-    private async getParentPaths(pathId: string): Promise<DrivePath[]> {
-        const paths: DrivePath[] = [];
-        let currentPathId: string | null = pathId;
-
-        while (currentPathId) {
-            const path = await this.getPath(currentPathId);
-            if (!path) break;
-            paths.push(path);
-            currentPathId = path.parentId || null;
-        }
-
-        return paths.reverse();
     }
 
     public async createFolder(parentId: string, folderName: string): Promise<string | undefined> {
@@ -363,26 +349,6 @@ export default class Drive {
         await this.updateSizeOfFolder(parent.id);
 
         this.emitACLChange(file, file.acl, null);
-    }
-
-    private async deleteThumbnail(file: DrivePath) {
-        try {
-            if (!file || file.type !== "file") {
-                throw new Error("File not found");
-            }
-
-            // Get parent to find file path
-            const parent = await this.getPath(file.parentId || "");
-            if (!parent) {
-                throw new Error("Parent folder not found");
-            }
-
-            // Delete thumbnail
-            const thumbnailPath = this.home.fs.pathJoin(this.basePath, 'thumbs', file.thumbnail);
-            await this.home.fs.unlink(thumbnailPath);
-        } catch (e) {
-
-        }
     }
 
     public async getRootFolder(): Promise<DrivePath | null> {
@@ -643,64 +609,6 @@ export default class Drive {
         return file.arrayBuffer();
     }
 
-    private async getFolderPath(pathId: string): Promise<string> {
-        return path.join(this.basePath, ...(await this.getParentPaths(pathId)).map(a => a.name));
-    }
-
-    private async updateSizeOfFolder(pathId: string): Promise<void> {
-        const folder = await this.getPath(pathId);
-        if (!folder || folder.type !== "folder") {
-            throw new Error("Folder not found");
-        }
-
-        // Get folder size by adding size of all children in database
-        const size = await this.db.select({
-            totalSize: sql<number>`sum(${drivePaths.size})`
-        }).from(drivePaths).where(eq(drivePaths.parentId, folder.id)).get();
-
-        await this.db.update(drivePaths).set({
-            size: size?.totalSize || 0,
-            updatedAt: new Date()
-        }).where(eq(drivePaths.id, folder.id));
-        // update parent
-        if (folder.parentId) {
-            await this.updateSizeOfFolder(folder.parentId);
-        }
-    }
-
-    private async generateThumbnail(id: string, mimeType: string, filePath: string): Promise<string | null> {
-        console.log("Generating thumbnail for", id, mimeType, filePath);
-        // if (!mimeType.includes('image')) {
-        //     return null;
-        // }
-        console.log("Probably an image, checking dimensions for thumbnail generation");
-        console.log("Absolute path:", this.home.fs.absolutePath(filePath));
-        try {
-            const image = sharp(this.home.fs.absolutePath(filePath));
-            const {width, height} = await image.metadata();
-            console.log("Image dimensions", width, height);
-            if (!width || !height || width > 12000 || height > 12000) {
-                return null;
-            }
-
-            const thumbnail = await image
-                .webp({quality: 80})
-                .resize(512, 512, {
-                    fit: 'inside',
-                    withoutEnlargement: true
-                })
-                .toBuffer();
-
-            const url = this.home.fs.pathJoin(this.basePath, 'thumbs', `${id}.webp`);
-            this.home.fs.file(url).write(thumbnail);
-
-            return `${id}.webp`;
-        } catch (e) {
-            console.error("Failed to generate thumbnail", e);
-            return null;
-        }
-    }
-
     public async breadCrumb(pathId: string) {
         let parent = await this.getPath(pathId);
         const crumb: DrivePath[] = [];
@@ -763,20 +671,6 @@ export default class Drive {
         return this.home.closeSQLiteDatabase(db);
     }
 
-    private async emitACLChange(path: DrivePath, oldACL: DriveACL[] | null, newACL: DriveACL[] | null) {
-        // get list of all unique users in oldACL and newACL
-        const users = new Set(oldACL?.map(acl => acl.email) || []);
-        newACL?.forEach(acl => users.add(acl.email));
-        users.forEach(email => {
-            // TODO, this could/should be done by calling API endpoints
-            getUserByEmail(email).then(user => {
-                if (user) {
-                    getHome(user as User).then(home => home.drive.recieveACLChange(path, newACL));
-                }
-            });
-        });
-    }
-
     public async recieveACLChange(path: DrivePath, newACL: DriveACL[] | null) {
         if (newACL === null) {
             this.sharedDb.delete(sharedSchema.sharedPaths).where(eq(sharedSchema.sharedPaths.id, path.id)).run();
@@ -812,5 +706,111 @@ export default class Drive {
 
     public async getSharedPathsByMe(): Promise<DrivePath[]> {
         return await this.db.select().from(drivePaths).where(isNotNull(drivePaths.acl)) as DrivePath[];
+    }
+
+    private async getParentPaths(pathId: string): Promise<DrivePath[]> {
+        const paths: DrivePath[] = [];
+        let currentPathId: string | null = pathId;
+
+        while (currentPathId) {
+            const path = await this.getPath(currentPathId);
+            if (!path) break;
+            paths.push(path);
+            currentPathId = path.parentId || null;
+        }
+
+        return paths.reverse();
+    }
+
+    private async deleteThumbnail(file: DrivePath) {
+        try {
+            if (!file || file.type !== "file") {
+                throw new Error("File not found");
+            }
+
+            // Get parent to find file path
+            const parent = await this.getPath(file.parentId || "");
+            if (!parent) {
+                throw new Error("Parent folder not found");
+            }
+
+            // Delete thumbnail
+            const thumbnailPath = this.home.fs.pathJoin(this.basePath, 'thumbs', file.thumbnail);
+            await this.home.fs.unlink(thumbnailPath);
+        } catch (e) {
+
+        }
+    }
+
+    private async getFolderPath(pathId: string): Promise<string> {
+        return path.join(this.basePath, ...(await this.getParentPaths(pathId)).map(a => a.name));
+    }
+
+    private async updateSizeOfFolder(pathId: string): Promise<void> {
+        const folder = await this.getPath(pathId);
+        if (!folder || folder.type !== "folder") {
+            throw new Error("Folder not found");
+        }
+
+        // Get folder size by adding size of all children in database
+        const size = await this.db.select({
+            totalSize: sql<number>`sum(${drivePaths.size})`
+        }).from(drivePaths).where(eq(drivePaths.parentId, folder.id)).get();
+
+        await this.db.update(drivePaths).set({
+            size: size?.totalSize || 0,
+            updatedAt: new Date()
+        }).where(eq(drivePaths.id, folder.id));
+        // update parent
+        if (folder.parentId) {
+            await this.updateSizeOfFolder(folder.parentId);
+        }
+    }
+
+    private async generateThumbnail(id: string, mimeType: string, filePath: string): Promise<string | null> {
+        console.log("Generating thumbnail for", id, mimeType, filePath);
+        // if (!mimeType.includes('image')) {
+        //     return null;
+        // }
+        console.log("Probably an image, checking dimensions for thumbnail generation");
+        console.log("Absolute path:", this.home.fs.absolutePath(filePath));
+        try {
+            const image = sharp(this.home.fs.absolutePath(filePath));
+            const {width, height} = await image.metadata();
+            console.log("Image dimensions", width, height);
+            if (!width || !height || width > 12000 || height > 12000) {
+                return null;
+            }
+
+            const thumbnail = await image
+                .webp({quality: 80})
+                .resize(512, 512, {
+                    fit: 'inside',
+                    withoutEnlargement: true
+                })
+                .toBuffer();
+
+            const url = this.home.fs.pathJoin(this.basePath, 'thumbs', `${id}.webp`);
+            this.home.fs.file(url).write(thumbnail);
+
+            return `${id}.webp`;
+        } catch (e) {
+            console.error("Failed to generate thumbnail", e);
+            return null;
+        }
+    }
+
+    private async emitACLChange(path: DrivePath, oldACL: DriveACL[] | null, newACL: DriveACL[] | null) {
+        // get list of all unique users in oldACL and newACL
+        const users = new Set(oldACL?.map(acl => acl.email) || []);
+        newACL?.forEach(acl => users.add(acl.email));
+        users.forEach(email => {
+            // TODO, this could/should be done by calling API endpoints
+            getUserByEmail(email).then(user => {
+                if (user) {
+                    getHome(user as User).then(home => home.drive.recieveACLChange(path, newACL));
+                }
+            });
+        });
     }
 }

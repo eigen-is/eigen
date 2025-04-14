@@ -135,7 +135,7 @@ function UserDropdown({rootRoute}: { rootRoute: TopbarProps['rootRoute'] }) {
 
 export function Topbar({rootRoute, showMobileMenu, onMobileMenuClick, isMobile}: TopbarProps) {
     const {appName} = useApp();
-    
+
     return (
         <header className="bg-app">
             <div className="flex h-12 items-center px-4">

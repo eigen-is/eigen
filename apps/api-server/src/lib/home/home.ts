@@ -97,15 +97,6 @@ export class Home {
         this.notificationSockets = this.notificationSockets.filter(socket => socket !== ws);
     }
 
-    private notify(event: EigenNotification) {
-        this.notificationSockets = this.notificationSockets.filter(ws => {
-            if (ws.readyState === 1) {
-                ws.send(JSON.stringify(event));
-                return true;
-            }
-        });
-    }
-
     public touch() {
         // Reset the timeout
         if (this.timeout) {
@@ -134,7 +125,7 @@ export class Home {
 
     public async closeSQLiteDatabase(db: Database) {
         Object.keys(this.databases).forEach(async (key) => {
-            const database = await(this.databases.get(key)!.get()) as Database;
+            const database = await (this.databases.get(key)!.get()) as Database;
             if (database === db) {
                 database.close();
                 this.databases.delete(key);
@@ -151,6 +142,15 @@ export class Home {
         const maxMB = 50;
         const max = maxMB * 1024 * 1024;
         return {mail, contacts, drive, used: (mail + contacts + drive), max};
+    }
+
+    private notify(event: EigenNotification) {
+        this.notificationSockets = this.notificationSockets.filter(ws => {
+            if (ws.readyState === 1) {
+                ws.send(JSON.stringify(event));
+                return true;
+            }
+        });
     }
 
     private async destruct() {

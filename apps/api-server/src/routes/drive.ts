@@ -3,7 +3,7 @@ import {betterAuth} from "./auth";
 import {type User} from "better-auth/types";
 import {type DriveACL} from "../types/drive";
 import {getSharedDrive} from "../lib/drive/sharedDrive";
-import { getDrive } from "../lib/drive/drive";
+import {getDrive} from "../lib/drive/drive";
 
 // Define types for request bodies
 type CreateFolderBody = {
