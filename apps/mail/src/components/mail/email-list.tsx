@@ -7,51 +7,91 @@ import {
     useReactTable
 } from "@tanstack/react-table";
 import {rankItem} from "@tanstack/match-sorter-utils";
-import {Paperclip, Search} from "lucide-react";
-import {KeyboardEvent, useEffect, useMemo, useRef, useState} from "react";
-import {cn} from "@workspace/ui/lib/utils";
+import {
+    Archive, 
+    Forward, 
+    Paperclip, 
+    Reply, 
+    ReplyAll, 
+    Search, 
+    Trash2, 
+    AlertTriangle
+} from "lucide-react";
+import {KeyboardEvent, useEffect, useMemo, useState, useRef} from "react";
+import {cn, ucfirst} from "@workspace/ui/lib/utils";
 import {Input} from "@workspace/ui/components/input";
 import {EigenLoader} from "@workspace/ui/components/layout/eigen-loader";
 import {EmailSummary} from "@apps/api-server/types/mail";
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuSeparator,
+    DropdownMenuSub,
+    DropdownMenuSubContent,
+    DropdownMenuSubTrigger,
+    DropdownMenuTrigger,
+} from "@workspace/ui/components/dropdown-menu";
+import { MaildirMailbox } from "@apps/api-server/types/mail";
 
-// Define a fuzzy filter function
-const fuzzyFilter: FilterFn<any> = (row, columnId, value, addMeta) => {
-    // Rank the item
-    const itemRank = rankItem(row.getValue(columnId), value)
-
-    // Store the ranking info
-    addMeta({
-        itemRank,
-    })
-
-    // Return if the item should be filtered in/out
-    return itemRank.passed
-}
-
-interface EmailDataTableProps {
+interface EmailListProps {
     emails: EmailSummary[];
     onRowClick: (emailId: string) => void;
     activeRowId?: string;
     isLoading?: boolean;
     error?: any;
+    onReply?: (emailId: string) => void;
+    onReplyAll?: (emailId: string) => void;
+    onForward?: (emailId: string) => void;
+    onArchive?: (emailId: string) => void;
+    onReportSpam?: (emailId: string) => void;
+    onDelete?: (emailId: string) => void;
+    onMoveToFolder?: (emailId: string, folderId: string) => void;
+    mailboxes?: MaildirMailbox[];
+    currentFolderId?: string;
 }
 
 export function EmailList({
                               emails,
-                              onRowClick,
-                              activeRowId,
                               isLoading,
-                              error,
-                          }: EmailDataTableProps) {
-
-    // Ref voor de lijst container
-    const listContainerRef = useRef<HTMLDivElement>(null);
-
-    // State om bij te houden of de lijst focus heeft
-    const [hasFocus, setHasFocus] = useState(false);
-
+                              activeRowId,
+                              onRowClick,
+                              onReply,
+                              onReplyAll,
+                              onForward,
+                              onArchive,
+                              onReportSpam,
+                              onDelete,
+                              onMoveToFolder,
+                              mailboxes = [],
+                              currentFolderId = ""
+                          }: EmailListProps) {
+    // State for sorting
+    const [sorting, setSorting] = useState<SortingState>([]);
+    // State for filtering
+    const [globalFilter, setGlobalFilter] = useState("");
     // State voor het bijhouden van de huidige geselecteerde index
     const [selectedIndex, setSelectedIndex] = useState<number>(-1);
+    // State for the context menu
+    const [contextMenuEmail, setContextMenuEmail] = useState<EmailSummary | null>(null);
+    // State for the context menu position
+    const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
+    // Ref for the context menu
+    const contextMenuRef = useRef<HTMLDivElement>(null);
+
+    // Define a fuzzy filter function
+    const fuzzyFilter: FilterFn<any> = (row, columnId, value, addMeta) => {
+        // Rank the item
+        const itemRank = rankItem(row.getValue(columnId), value)
+
+        // Store the ranking info
+        addMeta({
+            itemRank,
+        })
+
+        // Return if the item should be filtered in/out
+        return itemRank.passed
+    }
 
     // Define columns with useMemo to prevent recreation on each render
     const columns = useMemo(() => [
@@ -76,19 +116,6 @@ export function EmailList({
             id: 'textShort',
         }
     ], []);
-
-    const [sorting, setSorting] = useState<SortingState>([
-        {
-            id: 'date',
-            desc: true
-        }
-    ]);
-    const [globalFilter, setGlobalFilter] = useState("");
-
-    const handleRowClick = (row: EmailSummary) => {
-        onRowClick(row.id);
-        row.isRead = true;
-    };
 
     // Using useMemo to prevent infinite rendering when emails array remains the same
     const emailData = useMemo(() => {
@@ -121,18 +148,6 @@ export function EmailList({
         return table.getFilteredRowModel().rows.map(row => row.original as EmailSummary);
     }, [emailData, globalFilter, table.getFilteredRowModel]);
 
-    // Effect om de lijst automatisch focus te geven bij het laden
-    useEffect(() => {
-        // Korte timeout om ervoor te zorgen dat de lijst eerst gerenderd is
-        const timer = setTimeout(() => {
-            if (listContainerRef.current) {
-                listContainerRef.current.focus();
-            }
-        }, 100);
-
-        return () => clearTimeout(timer);
-    }, []);
-
     // Effect om selectedIndex bij te werken wanneer activeRowId verandert
     useEffect(() => {
         if (activeRowId && filteredEmails.length > 0) {
@@ -147,7 +162,7 @@ export function EmailList({
 
     // Handel toetsenbord navigatie af
     const handleKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
-        if (!hasFocus || filteredEmails.length === 0) return;
+        if (filteredEmails.length === 0) return;
 
         switch (e.key) {
             case 'ArrowDown':
@@ -156,9 +171,7 @@ export function EmailList({
                     const newIndex = Math.min(prev + 1, filteredEmails.length - 1);
                     if (newIndex >= 0) {
                         // Item selecteren
-                        handleRowClick(filteredEmails[newIndex]);
-                        // Auto-scroll indien nodig
-                        scrollToEmail(newIndex);
+                        onRowClick(filteredEmails[newIndex].id);
                     }
                     return newIndex;
                 });
@@ -170,9 +183,7 @@ export function EmailList({
                     const newIndex = Math.max(prev - 1, 0);
                     if (newIndex >= 0) {
                         // Item selecteren
-                        handleRowClick(filteredEmails[newIndex]);
-                        // Auto-scroll indien nodig
-                        scrollToEmail(newIndex);
+                        onRowClick(filteredEmails[newIndex].id);
                     }
                     return newIndex;
                 });
@@ -181,7 +192,7 @@ export function EmailList({
             case 'Enter':
                 e.preventDefault();
                 if (selectedIndex >= 0 && selectedIndex < filteredEmails.length) {
-                    handleRowClick(filteredEmails[selectedIndex]);
+                    onRowClick(filteredEmails[selectedIndex].id);
                 }
                 break;
 
@@ -189,8 +200,7 @@ export function EmailList({
                 e.preventDefault();
                 if (filteredEmails.length > 0) {
                     setSelectedIndex(0);
-                    handleRowClick(filteredEmails[0]);
-                    scrollToEmail(0);
+                    onRowClick(filteredEmails[0].id);
                 }
                 break;
 
@@ -199,39 +209,41 @@ export function EmailList({
                 if (filteredEmails.length > 0) {
                     const lastIndex = filteredEmails.length - 1;
                     setSelectedIndex(lastIndex);
-                    handleRowClick(filteredEmails[lastIndex]);
-                    scrollToEmail(lastIndex);
+                    onRowClick(filteredEmails[lastIndex].id);
                 }
                 break;
         }
     };
 
-    // Helper functie om naar een specifieke email te scrollen
-    const scrollToEmail = (index: number) => {
-        if (listContainerRef.current) {
-            const emailElements = listContainerRef.current.querySelectorAll('.eigen-list-item');
-            if (emailElements[index]) {
-                emailElements[index].scrollIntoView({behavior: 'smooth', block: 'nearest'});
-            }
-        }
+    // Handle right-click on email
+    const handleContextMenu = (e: React.MouseEvent, email: EmailSummary) => {
+        e.preventDefault();
+        setContextMenuEmail(email);
+        setMenuPosition({ x: e.clientX, y: e.clientY });
     };
+
+    // Close context menu when clicking outside
+    useEffect(() => {
+        const handleClickOutside = (e: MouseEvent) => {
+            if (contextMenuRef.current && !contextMenuRef.current.contains(e.target as Node)) {
+                setContextMenuEmail(null);
+            }
+        };
+
+        if (contextMenuEmail) {
+            document.addEventListener('mousedown', handleClickOutside);
+        }
+
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, [contextMenuEmail]);
 
     // Render loading state
     if (isLoading || !emails) {
         return (
             <div className="flex h-full items-center justify-center">
                 <EigenLoader/>
-            </div>
-        );
-    }
-
-    // Render error state
-    if (error) {
-        return (
-            <div className="flex flex-col h-full items-center justify-center p-4">
-                <div className="text-red-500 mb-4">
-                    Error loading emails. Please try again.
-                </div>
             </div>
         );
     }
@@ -254,10 +266,7 @@ export function EmailList({
             {/* Email list as single column with blocks */}
             <div
                 className="flex-1 overflow-y-auto outline-none"
-                ref={listContainerRef}
                 tabIndex={0}
-                onFocus={() => setHasFocus(true)}
-                onBlur={() => setHasFocus(false)}
                 onKeyDown={handleKeyDown}
             >
                 <div className="w-full">
@@ -291,9 +300,9 @@ export function EmailList({
                                             // Unread emails get slightly darker background if not selected
                                             !email.isRead && activeRowId !== email.id && selectedIndex !== index && "eigen-list-item-unread"
                                         )}
-                                        onClick={() => handleRowClick(email)}
+                                        onClick={() => onRowClick(email.id)}
+                                        onContextMenu={(e) => handleContextMenu(e, email)}
                                     >
-                                        {/* Content layout */}
                                         <div className="flex-1 min-w-0">
                                             <div className="flex justify-between items-baseline">
                                                 <div className={cn(
@@ -330,6 +339,115 @@ export function EmailList({
                     )}
                 </div>
             </div>
+            
+            {/* Custom context menu using shadcn dropdown-menu */}
+            <DropdownMenu 
+                open={!!contextMenuEmail} 
+                onOpenChange={(open) => !open && setContextMenuEmail(null)}
+            >
+                <DropdownMenuTrigger className="hidden">
+                    {/* Hidden trigger */}
+                </DropdownMenuTrigger>
+                
+                <DropdownMenuContent
+                    style={{
+                        position: 'absolute',
+                        top: `${menuPosition.y}px`,
+                        left: `${menuPosition.x}px`,
+                    }}
+                    className="w-56"
+                >
+                    {/* Reply options */}
+                    <DropdownMenuItem 
+                        onClick={() => {
+                            onReply?.(contextMenuEmail?.id || '');
+                            setContextMenuEmail(null);
+                        }}
+                        className="flex items-center"
+                    >
+                        <Reply className="h-4 w-4 mr-2" />
+                        Reply
+                    </DropdownMenuItem>
+                    <DropdownMenuItem 
+                        onClick={() => {
+                            onReplyAll?.(contextMenuEmail?.id || '');
+                            setContextMenuEmail(null);
+                        }}
+                        className="flex items-center"
+                    >
+                        <ReplyAll className="h-4 w-4 mr-2" />
+                        Reply All
+                    </DropdownMenuItem>
+                    <DropdownMenuItem 
+                        onClick={() => {
+                            onForward?.(contextMenuEmail?.id || '');
+                            setContextMenuEmail(null);
+                        }}
+                        className="flex items-center"
+                    >
+                        <Forward className="h-4 w-4 mr-2" />
+                        Forward
+                    </DropdownMenuItem>
+                    
+                    <DropdownMenuSeparator />
+                    
+                    {/* Email actions */}
+                    <DropdownMenuItem 
+                        onClick={() => {
+                            onArchive?.(contextMenuEmail?.id || '');
+                            setContextMenuEmail(null);
+                        }}
+                        className="flex items-center"
+                    >
+                        <Archive className="h-4 w-4 mr-2" />
+                        Archive
+                    </DropdownMenuItem>
+                    <DropdownMenuItem 
+                        onClick={() => {
+                            onReportSpam?.(contextMenuEmail?.id || '');
+                            setContextMenuEmail(null);
+                        }}
+                        className="flex items-center"
+                    >
+                        <AlertTriangle className="h-4 w-4 mr-2" />
+                        Report Spam
+                    </DropdownMenuItem>
+                    <DropdownMenuItem 
+                        onClick={() => {
+                            onDelete?.(contextMenuEmail?.id || '');
+                            setContextMenuEmail(null);
+                        }}
+                        className="flex items-center"
+                    >
+                        <Trash2 className="h-4 w-4 mr-2" />
+                        Delete
+                    </DropdownMenuItem>
+                    
+                    <DropdownMenuSeparator />
+                    
+                    {/* Move to folder submenu */}
+                    <DropdownMenuSub>
+                        <DropdownMenuSubTrigger className="flex items-center">
+                            Move to folder
+                        </DropdownMenuSubTrigger>
+                        <DropdownMenuSubContent className="w-48">
+                            {mailboxes
+                                .filter(mailbox => mailbox.name !== currentFolderId)
+                                .map(mailbox => (
+                                    <DropdownMenuItem
+                                        key={ucfirst(mailbox.name)}
+                                        onClick={() => {
+                                            onMoveToFolder?.(contextMenuEmail?.id || '', mailbox.name === 'INBOX' ? '' : mailbox.name);
+                                            setContextMenuEmail(null);
+                                        }}
+                                    >
+                                        {ucfirst(mailbox.name)}
+                                    </DropdownMenuItem>
+                                ))}
+                        </DropdownMenuSubContent>
+                    </DropdownMenuSub>
+                </DropdownMenuContent>
+            </DropdownMenu>
         </div>
     );
 }

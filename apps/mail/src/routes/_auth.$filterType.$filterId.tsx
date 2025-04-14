@@ -8,13 +8,16 @@ import {
     useMoveEmail,
     useSendDraft,
     useToggleReadEmail,
-    useUpdateDraft
+    useUpdateDraft,
+    useEmailById,
+    useMailboxes
 } from '@workspace/lib/mail';
 import {EmailList} from "@/components/mail/email-list.tsx";
 import {Email, EmailDraft as EmailDraftType} from "@apps/api-server/types/mail";
 import {toast} from "sonner";
 import {useEffect} from 'react';
 import {useIsMobile, useIsTablet} from "@workspace/lib/media";
+import {format} from "date-fns";
 
 // Define search params type
 export interface MailSearchParams {
@@ -49,6 +52,98 @@ function MailRoute() {
 
     const {data: emails = [], isLoading: isEmailsLoading, error: isEmailsError} = useEmails(filterId);
     const {data: selectedEmail = null} = useEmail(mailId);
+    const getEmailById = useEmailById();
+    const {data: mailboxes = [], isLoading: isMailboxesLoading, error: isMailboxesError} = useMailboxes();
+
+
+    // Handler for replying to an email
+    const handleReplyEmail = async (emailId: string) => {
+        const email = await getEmailById(emailId);
+        if (!email) {
+            toast.error("Could not load email");
+            return;
+        }
+        
+        // Create a reply draft using the existing handleNewDraftEmail function
+        const draft: EmailDraftType = {
+            to: email.from,
+            subject: `RE: ${email.subject}`,
+            text: `\n\nOn ${format(new Date(email.date), "d MMM yyyy 'at' h:mm a")} ${email.from?.value[0]?.name} <${email.from?.value[0]?.address}> wrote:\n\n${email.text}`,
+        };
+        
+        handleNewDraftEmail(draft);
+    };
+
+    // Handler for replying to all recipients
+    const handleReplyAllEmail = async (emailId: string) => {
+        const email = await getEmailById(emailId);
+        if (!email) {
+            toast.error("Could not load email");
+            return;
+        }
+        
+        // Create a reply-all draft
+        const draft: EmailDraftType = {
+            to: {value: [...(email.from?.value || []), ...(email.cc?.value || [])]},
+            subject: `RE: ${email.subject}`,
+            text: `\n\nOn ${format(new Date(email.date), "d MMM yyyy 'at' h:mm a")} ${email.from?.value[0]?.name} <${email.from?.value[0]?.address}> wrote:\n\n${email.text}`,
+        };
+        
+        handleNewDraftEmail(draft);
+    };
+
+    // Handler for forwarding an email
+    const handleForwardEmail = async (emailId: string) => {
+        const email = await getEmailById(emailId);
+        if (!email) {
+            toast.error("Could not load email");
+            return;
+        }
+        
+        // Create a forward draft
+        const draft: EmailDraftType = {
+            subject: `FW: ${email.subject}`,
+            text: `\n\nOn ${format(new Date(email.date), "d MMM yyyy 'at' h:mm a")} ${email.from?.value[0]?.name} <${email.from?.value[0]?.address}> wrote:\n\n${email.text}`,
+        };
+        
+        handleNewDraftEmail(draft);
+    };
+
+    // Wrapper functions for the EmailList component that work with email IDs
+    const handleDeleteEmailById = async (emailId: string) => {
+        const email = await getEmailById(emailId);
+        if (email) {
+            handleDeleteEmail(email);
+        }
+    };
+
+    const handleMoveEmailById = (mailbox: string) => async (emailId: string) => {
+        const email = await getEmailById(emailId);
+        if (email) {
+            handleMoveEmail(email, mailbox);
+        }
+    };
+
+    const handleMoveEmailToFolderById = async (emailId: string, folderId: string) => {
+        const email = await getEmailById(emailId);
+        if (email) {
+            handleMoveEmail(email, folderId);
+        }
+    };
+
+    const handleArchiveEmailById = async (emailId: string) => {
+        const email = await getEmailById(emailId);
+        if (email) {
+            handleMoveEmail(email, 'archive');
+        }
+    };
+
+    const handleReportSpamById = async (emailId: string) => {
+        const email = await getEmailById(emailId);
+        if (email) {
+            handleMoveEmail(email, 'spam');
+        }
+    };
 
     // Handle row click to show email details
     const handleRowClick = (emailId: string) => {
@@ -146,10 +241,15 @@ function MailRoute() {
                         email={selectedEmail}
                         isMobile={true}
                         onBackClick={handleBackToList}
-                        onDelete={handleDeleteEmail}
                         toggleMailRead={toggleMailRead}
-                        onMove={handleMoveEmail}
-                        onNewDraft={handleNewDraftEmail}
+                        onDelete={handleDeleteEmailById}
+                        onArchive={handleArchiveEmailById}
+                        onReportSpam={handleReportSpamById}
+                        onMoveToFolder={handleMoveEmailToFolderById}
+                        onReply={handleReplyEmail}
+                        onReplyAll={handleReplyAllEmail}
+                        onForward={handleForwardEmail}
+                        mailboxes={mailboxes}
                     />
                 )}
             </div>
@@ -161,6 +261,14 @@ function MailRoute() {
                     error={isEmailsError}
                     onRowClick={handleRowClick}
                     activeRowId={mailId}
+                    mailboxes={mailboxes}
+                    onDelete={handleDeleteEmailById}
+                    onArchive={handleArchiveEmailById}
+                    onReportSpam={handleReportSpamById}
+                    onMoveToFolder={handleMoveEmailToFolderById}
+                    onReply={handleReplyEmail}
+                    onReplyAll={handleReplyAllEmail}
+                    onForward={handleForwardEmail}
                 />
             </div>
         );
@@ -188,6 +296,14 @@ function MailRoute() {
                     error={isEmailsError}
                     onRowClick={handleRowClick}
                     activeRowId={mailId}
+                    mailboxes={mailboxes}
+                    onDelete={handleDeleteEmailById}
+                    onArchive={handleArchiveEmailById}
+                    onReportSpam={handleReportSpamById}
+                    onMoveToFolder={handleMoveEmailToFolderById}
+                    onReply={handleReplyEmail}
+                    onReplyAll={handleReplyAllEmail}
+                    onForward={handleForwardEmail}
                 />
             </div>
 
@@ -209,10 +325,15 @@ function MailRoute() {
                             <EmailDetail
                                 email={selectedEmail}
                                 className="border-none h-full"
-                                onDelete={handleDeleteEmail}
                                 toggleMailRead={toggleMailRead}
-                                onMove={handleMoveEmail}
-                                onNewDraft={handleNewDraftEmail}
+                                onDelete={handleDeleteEmailById}
+                                onArchive={handleArchiveEmailById}
+                                onReportSpam={handleReportSpamById}
+                                onMoveToFolder={handleMoveEmailToFolderById}
+                                onReply={handleReplyEmail}
+                                onReplyAll={handleReplyAllEmail}
+                                onForward={handleForwardEmail}
+                                mailboxes={mailboxes}
                             />
                         )}
                     </div>
