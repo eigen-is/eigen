@@ -1,17 +1,18 @@
 import {createFileRoute, useNavigate} from '@tanstack/react-router';
 import {EigenLoader} from "@workspace/ui";
-import {useFolderContent, useInvalidateFolder, usePathInfo, useRootFolder} from '@workspace/lib/drive';
-import {useEffect} from "react";
+import {useFolderContent, useInvalidateFolder, usePathInfo} from '@workspace/lib/drive';
+import {useContext, useEffect} from "react";
 import {DriveLayout} from "@workspace/ui/components/layout/drive/drive-layout";
 import {DrivePath} from "@apps/api-server/types/drive";
 import {useIsMobile} from "@workspace/lib/media";
+import {DriveContext} from "./_auth._sidebar";
 
 // Define search params type
 export interface DriveSearchParams {
     pid?: string;
 }
 
-export const Route = createFileRoute('/_auth/fs/$ownerId/$pathId')({
+export const Route = createFileRoute('/_auth/_sidebar/fs/$ownerId/$pathId')({
     component: DriveRoute,
     validateSearch: (search: Record<string, unknown>) => {
         const pid = typeof search.pid === 'string' ? search.pid : undefined;
@@ -25,21 +26,17 @@ function DriveRoute() {
     const navigate = useNavigate();
     const invalidateFolder = useInvalidateFolder();
     const isMobile = useIsMobile();
-
-    // Get the root folder ID to replace "root" pathId
-    const {data: rootFolder, isLoading: isRootLoading} = useRootFolder(ownerId);
-    const {data: selectedPath = null} = usePathInfo(ownerId, pid);
-    const {data: currentPath = null} = usePathInfo(ownerId, pathId);
+    const {rootPathId} = useContext(DriveContext);
 
     // If pathId is "root", navigate to the actual root folder ID when available
     useEffect(() => {
-        if (pathId === 'root' && rootFolder?.id) {
+        if (pathId === 'root' && rootPathId) {
             navigate({
                 to: Route.fullPath,
-                params: {ownerId, pathId: rootFolder.id}
+                params: {ownerId, pathId: rootPathId}
             });
         }
-    }, [pathId, rootFolder, navigate]);
+    }, [pathId, rootPathId, navigate, ownerId]);
 
     // Don't fetch data until we have the actual root folder ID (not "root")
     const skipDataFetch = pathId === 'root';
@@ -50,14 +47,21 @@ function DriveRoute() {
         isLoading: isFolderContentLoading,
         error: isFolderContentLoadingError
     } = useFolderContent(ownerId, skipDataFetch ? '' : pathId);
+    const {data: selectedPath = null} = usePathInfo(ownerId, pid);
+    const {data: currentPath = null} = usePathInfo(ownerId, pathId);
 
-    const folderContents = unfilteredFolderContents.filter(path => (path.type === 'folder' || path.mimeType === 'application/eigendoc'));
-
+    const folderContents = unfilteredFolderContents.filter((path) => path.type === 'folder' || path.type === 'doc');
 
     // Handle row click to show path details
     const onRowSelect = (path: DrivePath) => {
         if (isMobile && (path.type === 'folder' || path.type === 'doc')) {
             onRowActivate(path);
+        } else if (currentPath?.parentId === path.id) {
+            navigate({
+                to: Route.fullPath,
+                params: {ownerId, pathId: path.id},
+                search: {pid: undefined}
+            });
         } else {
             navigate({
                 to: Route.fullPath,
@@ -77,22 +81,39 @@ function DriveRoute() {
         } else if (path.type === 'doc') {
             navigate({
                 to: '/doc/$ownerId/$pathId',
-                params: {ownerId, pathId: path.id},
+                params: {ownerId: path.ownerId, pathId: path.id}
             });
         } else {
             // todo: for some types we could show a fullscreen preview
         }
     };
 
+    // Handle back navigation (mainly for mobile)
+    const handleBackToList = () => {
+        navigate({
+            to: Route.fullPath,
+            params: {ownerId, pathId},
+            search: {pid: undefined}
+        });
+    };
+
     // Callback die door DriveLayout wordt aangeroepen na acties
     const handleAfterAction = (actionType: string, data: any) => {
         // Invalidate data after mutations
         invalidateFolder(pathId);
+
+        // Alleen navigatie na verwijderen als het item dat geselecteerd was verwijderd is
+        if (actionType === 'delete' && pid === data.id) {
+            navigate({
+                to: Route.fullPath,
+                params: {ownerId, pathId},
+                search: {pid: undefined}
+            });
+        }
     };
 
-
     // Show loading state while resolving root folder ID
-    if ((pathId === 'root' && isRootLoading)) {
+    if (pathId === 'root' && !rootPathId) {
         return (
             <div className="flex items-center justify-center h-full w-full">
                 <EigenLoader/>
@@ -119,15 +140,14 @@ function DriveRoute() {
             currentPath={currentPath}
             onRowSelect={onRowSelect}
             onRowActivate={onRowActivate}
-            onBackToList={() => {
-            }}
+            onBackToList={handleBackToList}
             onAfterAction={handleAfterAction}
             allowCreateFolder={true}
+            allowCreateDoc={true}
+            allowCreateStickies={false}
             allowDelete={true}
             allowShare={true}
             allowUpload={false}
-            allowCreateDoc={true}
-            allowCreateStickies={false}
             isMobile={isMobile}
             showBreadcrumb={true}
             pid={pid}
