@@ -16,11 +16,11 @@ import { AddTaskDialog } from './add-task-dialog';
 import { AddColumnDialog } from './add-column-dialog';
 import { Plus } from 'lucide-react';
 import { useIsMobile } from "@workspace/lib/media";
-import { useKanbanBoard } from './hooks/useKanbanBoard';
-import { useDragAndDrop } from './hooks/useDragAndDrop';
+import { useYjsKanbanBoard } from './hooks/useYjsKanbanBoard';
+import { useYjsDragAndDrop } from './hooks/useYjsDragAndDrop';
 
 export const KanbanBoard: React.FC<BoardProps> = ({ ownerId, pathId }) => {
-  // Core board state and operations
+  // Core board state and operations with Yjs integration
   const {
     board,
     setBoard,
@@ -32,16 +32,17 @@ export const KanbanBoard: React.FC<BoardProps> = ({ ownerId, pathId }) => {
     handleAddTaskClick,
     handleAddTask,
     handleAddColumn,
-  } = useKanbanBoard(ownerId, pathId);
+    yjsDoc
+  } = useYjsKanbanBoard(ownerId, pathId);
   
-  // Drag and drop functionality
+  // Drag and drop functionality with Yjs awareness
   const {
     dragState,
     collisionDetectionStrategy,
     handleDragStart,
     handleDragOver,
     handleDragEnd,
-  } = useDragAndDrop({ board, setBoard });
+  } = useYjsDragAndDrop({ board, setBoard, yjsDoc });
 
   // Refs and responsive hooks
   const boardRef = useRef<HTMLDivElement | null>(null);
