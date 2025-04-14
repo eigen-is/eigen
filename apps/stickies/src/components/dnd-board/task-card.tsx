@@ -5,9 +5,10 @@ import { TaskItem } from './types';
 
 interface TaskCardProps {
   task: TaskItem;
+  isMobile: boolean;
 }
 
-export const TaskCard: React.FC<TaskCardProps> = ({ task }) => {
+export const TaskCard: React.FC<TaskCardProps> = ({ task, isMobile }) => {
   const {
     attributes,
     listeners,
@@ -23,14 +24,17 @@ export const TaskCard: React.FC<TaskCardProps> = ({ task }) => {
     },
   });
 
+  // Use fixed widths on desktop, percentage width on mobile
+  const width = isMobile ? 'w-full' : 'w-[260px]';
+  
   return (
     <div
       ref={setNodeRef}
-      className={`mb-1.5 w-full border border-gray-200 shadow-sm bg-white ${isDragging ? 'opacity-50' : ''}`}
+      className={`mb-1.5 ${width} border border-gray-200 shadow-sm bg-white ${isDragging ? 'opacity-50' : ''}`}
       style={{
         transform: CSS.Transform.toString(transform),
         transition,
-        zIndex: isDragging ? 10 : 0
+        zIndex: isDragging ? 10 : 0,
       }}
       {...attributes}
       {...listeners}
