@@ -67,7 +67,7 @@ export function DriveList({
     const [isDragging, setIsDragging] = useState(false);
     const dragCounter = useRef(0);
     const {data: breadcrumbPaths = []} = showBreadcrumb ? useBreadcrumb(ownerId, pathId) : {data: []};
-
+console.log('render')
     // Handle row click with two different behaviors
     const handleRowClick = (path: DrivePath) => {
         if (path.id === activeRowId && onRowActivate) {
