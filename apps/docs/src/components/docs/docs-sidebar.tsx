@@ -44,17 +44,13 @@ export function DocsSidebar({
                     label="Drive"
                     condensed={condensed}
                 />
+
                 <SidebarItem
                     icon={<FileText className="h-4 w-4"/>}
                     to="/mime/application-eigendoc"
-                    label="Docs"
+                    label="All my docs"
                     condensed={condensed}
                 />
-            </SidebarSection>
-            <Separator/>
-            <SidebarSection
-                condensed={condensed}
-            >
                 <SidebarItem
                     icon={<Link className="h-4 w-4"/>}
                     to="/shared/by-me"
