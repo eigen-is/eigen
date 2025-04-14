@@ -1,0 +1,7 @@
+.bg-app {
+    background-color: var(--app-stickies-color);
+}
+
+.text-app {
+    color: var(--app-stickies-color);
+}
