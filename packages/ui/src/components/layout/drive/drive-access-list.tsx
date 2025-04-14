@@ -4,20 +4,23 @@ import type {DriveACL, DrivePath} from "@apps/api-server/types/drive"
 import {cn} from "@workspace/ui/lib/utils"
 import {useMemo} from "react"
 import {usePublicUser} from "@workspace/lib/public"
-import {Lock, Unlock} from "lucide-react"
+import {Lock, Unlock, UserRoundPlus} from "lucide-react"
 import {AvatarIcon} from "@workspace/ui/components/avatar"
 import {Separator} from "@workspace/ui/components/separator"
+import { TooltipButton } from "../tooltip-button"
 
 export interface DriveAccessListProps {
     acl: DriveACL[] | null
     path: DrivePath
     className?: string
+    onShareClick?: (path: DrivePath) => void
 }
 
 export function DriveAccessList({
                                     acl,
                                     path,
                                     className,
+                                    onShareClick
                                 }: DriveAccessListProps) {
     const owner = usePublicUser(path.ownerId);
 
@@ -61,7 +64,16 @@ export function DriveAccessList({
 
     return (
         <div className={cn("space-y-4", className)}>
-            <h3 className="text-base font-medium">People with access</h3>
+            <div className="flex items-center justify-between h-12 border-t border-b px-2">
+                <h3 className="text-base font-medium">People with access</h3>
+                <TooltipButton
+                    icon={UserRoundPlus}
+                    tooltipText="Edit Access"
+                    onClick={() => {
+                        onShareClick?.(path);
+                    }}
+                />
+            </div>
 
             <div className="space-y-2">
                 {accessList.map((access) => (

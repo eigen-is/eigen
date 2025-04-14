@@ -1,9 +1,8 @@
-import {Download, FileText, Home, Image, Link, StickyNote, X} from 'lucide-react';
+import {Download, FileText, Home, UsersRound, X} from 'lucide-react';
 import {Button} from "@workspace/ui/components/button";
 import {SidebarSection} from '@workspace/ui/components/layout/sidebar/sidebar-section';
 import {AppLogo} from '@workspace/ui/components/layout/app-logo';
 import {SidebarItem, StorageUsage} from "@workspace/ui";
-import {Separator} from '@workspace/ui/components/separator';
 
 interface DocsSidebarProps {
     condensed?: boolean;
@@ -52,7 +51,7 @@ export function DocsSidebar({
                     condensed={condensed}
                 />
                 <SidebarItem
-                    icon={<Link className="h-4 w-4"/>}
+                    icon={<UsersRound className="h-4 w-4"/>}
                     to="/shared/by-me"
                     label="Shared by me"
                     condensed={condensed}
