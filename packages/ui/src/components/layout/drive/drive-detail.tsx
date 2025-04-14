@@ -1,5 +1,5 @@
 import {cn} from "@workspace/ui/lib/utils";
-import {ArrowLeft, Download, Link, MoreVertical, Trash2, X} from "lucide-react";
+import {ArrowLeft, Download, Link, MoreVertical, Trash2, UserRoundPlus, X} from "lucide-react";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -66,13 +66,6 @@ export function DriveDetail({
                         onClick={() => onDelete(path)}
                     />
                     <TooltipButton
-                        icon={Link}
-                        tooltipText="Edit Access"
-                        onClick={() => {
-                            onShareClick?.(path);
-                        }}
-                    />
-                    <TooltipButton
                         icon={Download}
                         tooltipText="Download"
                         onClick={() => {
@@ -98,7 +91,10 @@ export function DriveDetail({
                             </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                            <DropdownMenuItem>Add label</DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => onShareClick?.(path)}>
+                                <UserRoundPlus className="h-4 w-4 mr-2" />
+                                Edit access
+                            </DropdownMenuItem>
                         </DropdownMenuContent>
                     </DropdownMenu>
                 </div>
@@ -161,6 +157,7 @@ export function DriveDetail({
                     <DriveAccessList
                         path={path}
                         acl={path.acl}
+                        onShareClick={onShareClick}
                     />
                 </div>
             </div>
