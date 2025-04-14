@@ -1,13 +1,4 @@
 import {
-    FilterFn,
-    getCoreRowModel,
-    getFilteredRowModel,
-    getSortedRowModel,
-    SortingState,
-    useReactTable
-} from "@tanstack/react-table";
-import {rankItem} from "@tanstack/match-sorter-utils";
-import {
     Paperclip, 
     Search
 } from "lucide-react";
@@ -55,8 +46,6 @@ export function EmailList({
                               mailboxes = [],
                               currentFolderId = ""
                           }: EmailListProps) {
-    // State for sorting
-    const [sorting, setSorting] = useState<SortingState>([]);
     // State for filtering
     const [globalFilter, setGlobalFilter] = useState("");
     // State voor het bijhouden van de huidige geselecteerde index
@@ -67,75 +56,27 @@ export function EmailList({
     const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
     // Ref for the context menu
     const contextMenuRef = useRef<HTMLDivElement>(null);
+    // Ref voor de tabel om naar geselecteerde rijen te kunnen scrollen
+    const tableRef = useRef<HTMLDivElement>(null);
 
-    // Define a fuzzy filter function
-    const fuzzyFilter: FilterFn<any> = (row, columnId, value, addMeta) => {
-        // Rank the item
-        const itemRank = rankItem(row.getValue(columnId), value)
-
-        // Store the ranking info
-        addMeta({
-            itemRank,
-        })
-
-        // Return if the item should be filtered in/out
-        return itemRank.passed
-    }
-
-    // Define columns with useMemo to prevent recreation on each render
-    const columns = useMemo(() => [
-        {
-            header: 'Date',
-            accessor: 'date',
-            id: 'date',
-        },
-        {
-            header: 'From',
-            accessor: 'from',
-            id: 'from',
-        },
-        {
-            header: 'Subject',
-            accessor: 'subject',
-            id: 'subject',
-        },
-        {
-            header: 'Content',
-            accessor: 'textShort',
-            id: 'textShort',
+    // Helper functie om naar een specifieke rij te scrollen
+    const scrollToRow = (index: number) => {
+        if (tableRef.current) {
+            const emailItems = tableRef.current.querySelectorAll('.eigen-list-item');
+            if (emailItems[index]) {
+                emailItems[index].scrollIntoView({
+                    behavior: 'smooth',
+                    block: 'nearest'
+                });
+            }
         }
-    ], []);
-
-    // Using useMemo to prevent infinite rendering when emails array remains the same
-    const emailData = useMemo(() => {
-        // Create a stable reference to avoid recreating the array on each render
-        return [...emails].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()) || [];
-    }, [emails]);
-
-    // Creëer de tabel
-    const table = useReactTable({
-        data: emailData,
-        columns: columns,
-        filterFns: {
-            fuzzy: fuzzyFilter,
-        },
-        onSortingChange: setSorting,
-        getCoreRowModel: getCoreRowModel(),
-        getSortedRowModel: getSortedRowModel(),
-        globalFilterFn: fuzzyFilter,
-        onGlobalFilterChange: setGlobalFilter,
-        getFilteredRowModel: getFilteredRowModel(),
-        sortDescFirst: true,
-        state: {
-            sorting,
-            globalFilter,
-        },
-    });
+    };
 
     // Gefilterde e-mails voor gebruik met toetsenbord navigatie
     const filteredEmails = useMemo(() => {
-        return table.getFilteredRowModel().rows.map(row => row.original as EmailSummary);
-    }, [emailData, globalFilter, table.getFilteredRowModel]);
+        const globalFilterLowerCase = globalFilter.toLowerCase();
+        return  [...emails].filter ( email => email.subject.toLowerCase().includes(globalFilterLowerCase) || email.fromShort.toLowerCase().includes(globalFilterLowerCase) || email.textShort.toLowerCase().includes(globalFilterLowerCase) ).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    }, [emails, globalFilter]);
 
     // Effect om selectedIndex bij te werken wanneer activeRowId verandert
     useEffect(() => {
@@ -161,6 +102,8 @@ export function EmailList({
                     if (newIndex >= 0) {
                         // Item selecteren
                         onRowClick(filteredEmails[newIndex].id);
+                        // Scroll naar de geselecteerde rij
+                        scrollToRow(newIndex);
                     }
                     return newIndex;
                 });
@@ -173,6 +116,8 @@ export function EmailList({
                     if (newIndex >= 0) {
                         // Item selecteren
                         onRowClick(filteredEmails[newIndex].id);
+                        // Scroll naar de geselecteerde rij
+                        scrollToRow(newIndex);
                     }
                     return newIndex;
                 });
@@ -182,6 +127,8 @@ export function EmailList({
                 e.preventDefault();
                 if (selectedIndex >= 0 && selectedIndex < filteredEmails.length) {
                     onRowClick(filteredEmails[selectedIndex].id);
+                    // Scroll naar de geselecteerde rij
+                    scrollToRow(selectedIndex);
                 }
                 break;
 
@@ -190,6 +137,8 @@ export function EmailList({
                 if (filteredEmails.length > 0) {
                     setSelectedIndex(0);
                     onRowClick(filteredEmails[0].id);
+                    // Scroll naar de eerste rij
+                    scrollToRow(0);
                 }
                 break;
 
@@ -199,6 +148,8 @@ export function EmailList({
                     const lastIndex = filteredEmails.length - 1;
                     setSelectedIndex(lastIndex);
                     onRowClick(filteredEmails[lastIndex].id);
+                    // Scroll naar de laatste rij
+                    scrollToRow(lastIndex);
                 }
                 break;
         }
@@ -257,6 +208,7 @@ export function EmailList({
                 className="flex-1 overflow-y-auto outline-none"
                 tabIndex={0}
                 onKeyDown={handleKeyDown}
+                ref={tableRef}
             >
                 <div className="w-full">
                     {filteredEmails.length > 0 ? (
