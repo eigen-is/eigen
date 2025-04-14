@@ -1,8 +1,9 @@
-import type {Email as EmailType, EmailSummary as EmailSummaryType} from "../lib/mail/mailtypes";
+import type {Email as EmailType, EmailSummary as EmailSummaryType, MaildirMailbox as MaildirMailboxType} from "../lib/mail/mailtypes";
 import type {AddressObject} from "../lib/mail/mail-parser";
 
 export type Email = EmailType;
 export type EmailSummary = EmailSummaryType;
+export type MaildirMailbox = MaildirMailboxType;
 
 /**
  * EmailDraft extends Email type with guaranteed AddressObject type for to, cc, bcc fields
