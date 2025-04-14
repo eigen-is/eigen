@@ -138,6 +138,8 @@ function DriveRoute() {
             onBackToList={handleBackToList}
             onAfterAction={handleAfterAction}
             allowCreateFolder={true}
+            allowCreateDoc={true}
+            allowCreateStickies={true}
             allowDelete={true}
             allowShare={true}
             allowUpload={true}
