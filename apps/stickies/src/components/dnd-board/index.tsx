@@ -19,12 +19,20 @@ import { Column } from './column';
 import { TaskCard } from './task-card';
 import { initialData } from './initial-data';
 import { BoardData, BoardProps, TaskItem, ColumnItem } from './types';
+import { AddTaskDialog } from './add-task-dialog';
+import { AddColumnDialog } from './add-column-dialog';
+import { Plus } from 'lucide-react';
 
 export const KanbanBoard: React.FC<BoardProps> = ({ ownerId, pathId }) => {
   const [board, setBoard] = useState<BoardData>(initialData);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [activeType, setActiveType] = useState<'task' | 'column' | null>(null);
   const [activeItem, setActiveItem] = useState<any>(null);
+  
+  // Dialog states
+  const [isAddTaskDialogOpen, setIsAddTaskDialogOpen] = useState(false);
+  const [isAddColumnDialogOpen, setIsAddColumnDialogOpen] = useState(false);
+  const [selectedColumnId, setSelectedColumnId] = useState<string | null>(null);
 
   // Sensors config - enables drag and drop functionality
   const sensors = useSensors(
@@ -223,10 +231,82 @@ export const KanbanBoard: React.FC<BoardProps> = ({ ownerId, pathId }) => {
       return <TaskCard task={activeItem as TaskItem} />;
     } else if (activeType === 'column') {
       const columnTasks = (activeItem as ColumnItem).taskIds.map(taskId => board.tasks[taskId]);
-      return <Column column={activeItem as ColumnItem} tasks={columnTasks} />;
+      return (
+        <Column 
+          column={activeItem as ColumnItem} 
+          tasks={columnTasks} 
+          onAddTask={handleAddTaskClick}
+        />
+      );
     }
     
     return null;
+  };
+
+  // Handle opening the add task dialog
+  const handleAddTaskClick = (columnId: string) => {
+    setSelectedColumnId(columnId);
+    setIsAddTaskDialogOpen(true);
+  };
+
+  // Handle creating a new task
+  const handleAddTask = (taskData: Omit<TaskItem, 'id' | 'comments'>) => {
+    if (!selectedColumnId) return;
+    
+    setBoard(prev => {
+      // Create a new task ID
+      const taskId = `task-${Date.now()}`;
+      
+      // Create the new task
+      const newTask: TaskItem = {
+        id: taskId,
+        ...taskData,
+        comments: []
+      };
+      
+      // Add to the column
+      const column = prev.columns[selectedColumnId];
+      const updatedTaskIds = [...column.taskIds, taskId];
+      
+      return {
+        ...prev,
+        tasks: {
+          ...prev.tasks,
+          [taskId]: newTask
+        },
+        columns: {
+          ...prev.columns,
+          [selectedColumnId]: {
+            ...column,
+            taskIds: updatedTaskIds
+          }
+        }
+      };
+    });
+  };
+
+  // Handle creating a new column
+  const handleAddColumn = (columnData: Omit<ColumnItem, 'id' | 'taskIds'>) => {
+    setBoard(prev => {
+      // Create a new column ID
+      const columnId = `column-${Date.now()}`;
+      
+      // Create the new column
+      const newColumn: ColumnItem = {
+        id: columnId,
+        ...columnData,
+        taskIds: []
+      };
+      
+      return {
+        ...prev,
+        columns: {
+          ...prev.columns,
+          [columnId]: newColumn
+        },
+        columnOrder: [...prev.columnOrder, columnId]
+      };
+    });
   };
 
   return (
@@ -253,16 +333,42 @@ export const KanbanBoard: React.FC<BoardProps> = ({ ownerId, pathId }) => {
                   column={column}
                   tasks={columnTasks}
                   isDropAnimating={activeType === 'task' && Boolean(activeId)}
+                  onAddTask={handleAddTaskClick}
                 />
               );
             })}
           </SortableContext>
+          
+          {/* Add Column Button */}
+          <div className="m-1.5 w-[270px] flex items-start">
+            <button 
+              onClick={() => setIsAddColumnDialogOpen(true)}
+              className="bg-gray-100 hover:bg-gray-200 border border-gray-200 rounded text-sm flex items-center gap-1 py-2 px-4 text-gray-700"
+            >
+              <Plus size={16} />
+              <span>Add another list</span>
+            </button>
+          </div>
         </div>
         
         <DragOverlay adjustScale={true}>
           {getActiveComponent()}
         </DragOverlay>
       </DndContext>
+      
+      {/* Dialogs */}
+      <AddTaskDialog 
+        isOpen={isAddTaskDialogOpen} 
+        onClose={() => setIsAddTaskDialogOpen(false)} 
+        onAddTask={handleAddTask} 
+        columnId={selectedColumnId}
+      />
+      
+      <AddColumnDialog 
+        isOpen={isAddColumnDialogOpen} 
+        onClose={() => setIsAddColumnDialogOpen(false)} 
+        onAddColumn={handleAddColumn}
+      />
     </div>
   );
 };
