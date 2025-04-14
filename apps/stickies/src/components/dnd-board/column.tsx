@@ -27,52 +27,30 @@ export const Column: React.FC<ColumnProps> = ({ column, tasks, isDropAnimating }
     },
   });
 
-  const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.5 : 1,
-    margin: '0 8px',
-    display: 'flex',
-    flexDirection: 'column',
-    backgroundColor: '#f9f9f9',
-    borderRadius: '4px',
-    border: '1px solid #e0e0e0',
-    width: '280px',
-    minHeight: '500px',
-    zIndex: isDragging ? 1 : 0,
-    touchAction: 'none',
-  } as React.CSSProperties;
-
-  const headerStyle = {
-    padding: '12px',
-    backgroundColor: isDragging ? '#e0f7fa' : '#f0f0f0',
-    borderBottom: '1px solid #e0e0e0',
-    fontWeight: 'bold',
-    cursor: 'grab',
-    touchAction: 'none',
-    borderTopLeftRadius: '3px', 
-    borderTopRightRadius: '3px',
-  } as React.CSSProperties;
-
-  const taskListStyle = {
-    padding: '12px',
-    flex: 1,
-    minHeight: '100px',
-    backgroundColor: isDropAnimating ? '#e6f7ff' : '#f9f9f9',
-    transition: 'background-color 0.2s ease',
-    borderBottomLeftRadius: '3px',
-    borderBottomRightRadius: '3px',
-  } as React.CSSProperties;
-
   // Get task IDs for SortableContext
   const taskIds = tasks.map(task => task.id);
 
   return (
-    <div ref={setNodeRef} style={style}>
-      <div style={headerStyle} {...attributes} {...listeners}>
+    <div
+      ref={setNodeRef}
+      className={`m-1.5 flex flex-col w-[270px] border border-gray-200 shadow-sm bg-white ${isDragging ? 'opacity-10' : ''}`}
+      style={{
+        transform: CSS.Transform.toString(transform),
+        transition
+      }}
+    >
+      <div
+        className="px-2 cursor-grab touch-none font-medium text-sm border-b bg-gray-50"
+        {...attributes}
+        {...listeners}
+      >
         {column.title}
       </div>
-      <div style={taskListStyle}>
+      <div 
+        className={`p-1.5 flex-grow min-h-[300px] ${
+          isDropAnimating ? 'bg-blue-50/10' : 'bg-white'
+        }`}
+      >
         <SortableContext items={taskIds} strategy={verticalListSortingStrategy}>
           {tasks.map((task) => (
             <TaskCard key={task.id} task={task} />
