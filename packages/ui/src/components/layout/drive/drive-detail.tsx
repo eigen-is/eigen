@@ -1,5 +1,5 @@
 import {cn} from "@workspace/ui/lib/utils";
-import {ArrowLeft, Download, Link, MoreVertical, Trash2, UserRoundPlus, X} from "lucide-react";
+import {ArrowLeft, MoreVertical, Trash2, X} from "lucide-react";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -65,22 +65,6 @@ export function DriveDetail({
                         tooltipText="Delete"
                         onClick={() => onDelete(path)}
                     />
-                    <TooltipButton
-                        icon={Download}
-                        tooltipText="Download"
-                        onClick={() => {
-                            if (path && path.id) {
-                                const downloadUrl = fullPath;
-                                // Create a temporary anchor element to trigger the download
-                                const a = document.createElement('a');
-                                a.href = downloadUrl;
-                                a.download = path.name || 'download'; // Use the file name or a default
-                                document.body.appendChild(a);
-                                a.click();
-                                document.body.removeChild(a);
-                            }
-                        }}
-                    />
 
                     <div className="h-6 w-[1px] bg-border mx-1"></div>
 
@@ -90,9 +74,22 @@ export function DriveDetail({
                                 <MoreVertical className="h-4 w-4"/>
                             </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
+                        <DropdownMenuContent>
+                            <DropdownMenuItem onClick={() => {
+                                if (path && path.id) {
+                                    const downloadUrl = fullPath;
+                                    // Create a temporary anchor element to trigger the download
+                                    const a = document.createElement('a');
+                                    a.href = downloadUrl;
+                                    a.download = path.name || 'download'; // Use the file name or a default
+                                    document.body.appendChild(a);
+                                    a.click();
+                                    document.body.removeChild(a);
+                                }
+                            }}>
+                                Download
+                            </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => onShareClick?.(path)}>
-                                <UserRoundPlus className="h-4 w-4 mr-2" />
                                 Edit access
                             </DropdownMenuItem>
                         </DropdownMenuContent>
