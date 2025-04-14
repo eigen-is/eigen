@@ -4,7 +4,14 @@ import {cn} from "@workspace/ui/lib/utils";
 import {formatDistanceToNow} from "date-fns";
 import {DrivePath} from "@apps/api-server/types/drive";
 import {DriveShareSummary} from "./drive-share-summary";
-import {ChevronLeft} from "lucide-react";
+import {ChevronLeft, Download, Trash2, UserRoundPlus} from "lucide-react";
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger
+} from "@workspace/ui/components/dropdown-menu";
 
 // Props for the DriveTable component   
 export interface DriveTableProps {
@@ -327,61 +334,66 @@ export function DriveTable({
                 </TableBody>
             </Table>
 
-            {/* Context Menu */}
-            {contextMenuPosition && contextMenuItem && (
-                <div 
-                    className="fixed bg-white shadow-md rounded-md py-1 z-50 min-w-[160px] border"
+            {/* Context Menu using shadcn dropdown-menu */}
+            <DropdownMenu 
+                open={!!contextMenuPosition} 
+                onOpenChange={(open) => !open && closeContextMenu()}
+            >
+                <DropdownMenuTrigger className="hidden">
+                    {/* Hidden trigger */}
+                </DropdownMenuTrigger>
+                
+                <DropdownMenuContent
                     style={{
-                        top: contextMenuPosition.y,
-                        left: contextMenuPosition.x,
+                        position: 'absolute',
+                        top: `${contextMenuPosition?.y || 0}px`,
+                        left: `${contextMenuPosition?.x || 0}px`,
                     }}
+                    className="w-48"
                 >
-                    {/* <div className="px-2 py-1.5 text-sm font-medium text-muted-foreground mb-1 border-b truncate max-w-[200px]">
-                        {contextMenuItem.name}
-                    </div> */}
-                    {allowDelete && (
-                        <button
-                            className="flex w-full items-center px-2 py-1.5 text-sm hover:bg-muted"
-                            onClick={() => {
-                                onDelete?.(contextMenuItem);
-                                closeContextMenu();
-                            }}
-                        >
-                            Delete
-                        </button>
-                    )}
-                    {onDownload && contextMenuItem.type === 'file' && (
-                        <button
-                            className="flex w-full items-center px-2 py-1.5 text-sm hover:bg-muted"
+                    {onDownload && contextMenuItem?.type === 'file' && (
+                        <DropdownMenuItem
                             onClick={() => {
                                 onDownload?.(contextMenuItem);
                                 closeContextMenu();
                             }}
+                            className="flex items-center"
                         >
+                            <Download className="h-4 w-4 mr-2" />
                             Download
-                        </button>
+                        </DropdownMenuItem>
                     )}
+                    
                     {onShareClick && (
-                    <button
-                        className="flex w-full items-center px-2 py-1.5 text-sm hover:bg-muted"
-                        onClick={() => {
-                            onShareClick?.(contextMenuItem);
-                            closeContextMenu();
-                        }}
-                    >
-                        Edit access
-                    </button>
+                        <DropdownMenuItem
+                            onClick={() => {
+                                onShareClick?.(contextMenuItem!);
+                                closeContextMenu();
+                            }}
+                            className="flex items-center"
+                        >
+                            <UserRoundPlus className="h-4 w-4 mr-2" />
+                            Edit access
+                        </DropdownMenuItem>
                     )}
-                </div>
-            )}
-
-            {/* Invisible overlay to capture clicks outside the context menu */}
-            {contextMenuPosition && (
-                <div 
-                    className="fixed inset-0 z-40" 
-                    onClick={closeContextMenu}
-                />
-            )}
+                    
+                    {allowDelete && (
+                        <>
+                            {(onDownload || onShareClick) && <DropdownMenuSeparator />}
+                            <DropdownMenuItem
+                                onClick={() => {
+                                    onDelete?.(contextMenuItem!);
+                                    closeContextMenu();
+                                }}
+                                className="flex items-center"
+                            >
+                                <Trash2 className="h-4 w-4 mr-2" />
+                                Delete
+                            </DropdownMenuItem>
+                        </>
+                    )}
+                </DropdownMenuContent>
+            </DropdownMenu>
         </div>
     );
 }
