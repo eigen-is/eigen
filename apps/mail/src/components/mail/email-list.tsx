@@ -8,31 +8,20 @@ import {
 } from "@tanstack/react-table";
 import {rankItem} from "@tanstack/match-sorter-utils";
 import {
-    Archive, 
-    Forward, 
     Paperclip, 
-    Reply, 
-    ReplyAll, 
-    Search, 
-    Trash2, 
-    AlertTriangle
+    Search
 } from "lucide-react";
 import {KeyboardEvent, useEffect, useMemo, useState, useRef} from "react";
-import {cn, ucfirst} from "@workspace/ui/lib/utils";
+import {cn} from "@workspace/ui/lib/utils";
 import {Input} from "@workspace/ui/components/input";
 import {EigenLoader} from "@workspace/ui/components/layout/eigen-loader";
 import {EmailSummary} from "@apps/api-server/types/mail";
 import {
     DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuSeparator,
-    DropdownMenuSub,
-    DropdownMenuSubContent,
-    DropdownMenuSubTrigger,
     DropdownMenuTrigger,
 } from "@workspace/ui/components/dropdown-menu";
 import { MaildirMailbox } from "@apps/api-server/types/mail";
+import { EmailContextMenu } from "./email-context-menu";
 
 interface EmailListProps {
     emails: EmailSummary[];
@@ -349,104 +338,24 @@ export function EmailList({
                     {/* Hidden trigger */}
                 </DropdownMenuTrigger>
                 
-                <DropdownMenuContent
+                <EmailContextMenu 
                     style={{
                         position: 'absolute',
                         top: `${menuPosition.y}px`,
                         left: `${menuPosition.x}px`,
                     }}
-                    className="w-56"
-                >
-                    {/* Reply options */}
-                    <DropdownMenuItem 
-                        onClick={() => {
-                            onReply?.(contextMenuEmail?.id || '');
-                            setContextMenuEmail(null);
-                        }}
-                        className="flex items-center"
-                    >
-                        <Reply className="h-4 w-4 mr-2" />
-                        Reply
-                    </DropdownMenuItem>
-                    <DropdownMenuItem 
-                        onClick={() => {
-                            onReplyAll?.(contextMenuEmail?.id || '');
-                            setContextMenuEmail(null);
-                        }}
-                        className="flex items-center"
-                    >
-                        <ReplyAll className="h-4 w-4 mr-2" />
-                        Reply All
-                    </DropdownMenuItem>
-                    <DropdownMenuItem 
-                        onClick={() => {
-                            onForward?.(contextMenuEmail?.id || '');
-                            setContextMenuEmail(null);
-                        }}
-                        className="flex items-center"
-                    >
-                        <Forward className="h-4 w-4 mr-2" />
-                        Forward
-                    </DropdownMenuItem>
-                    
-                    <DropdownMenuSeparator />
-                    
-                    {/* Email actions */}
-                    <DropdownMenuItem 
-                        onClick={() => {
-                            onArchive?.(contextMenuEmail?.id || '');
-                            setContextMenuEmail(null);
-                        }}
-                        className="flex items-center"
-                    >
-                        <Archive className="h-4 w-4 mr-2" />
-                        Archive
-                    </DropdownMenuItem>
-                    <DropdownMenuItem 
-                        onClick={() => {
-                            onReportSpam?.(contextMenuEmail?.id || '');
-                            setContextMenuEmail(null);
-                        }}
-                        className="flex items-center"
-                    >
-                        <AlertTriangle className="h-4 w-4 mr-2" />
-                        Report Spam
-                    </DropdownMenuItem>
-                    <DropdownMenuItem 
-                        onClick={() => {
-                            onDelete?.(contextMenuEmail?.id || '');
-                            setContextMenuEmail(null);
-                        }}
-                        className="flex items-center"
-                    >
-                        <Trash2 className="h-4 w-4 mr-2" />
-                        Delete
-                    </DropdownMenuItem>
-                    
-                    <DropdownMenuSeparator />
-                    
-                    {/* Move to folder submenu */}
-                    <DropdownMenuSub>
-                        <DropdownMenuSubTrigger className="flex items-center">
-                            Move to folder
-                        </DropdownMenuSubTrigger>
-                        <DropdownMenuSubContent className="w-48">
-                            {mailboxes
-                                .filter(mailbox => mailbox.name !== currentFolderId)
-                                .map(mailbox => (
-                                    <DropdownMenuItem
-                                        key={ucfirst(mailbox.name)}
-                                        onClick={() => {
-                                            onMoveToFolder?.(contextMenuEmail?.id || '', mailbox.name === 'INBOX' ? '' : mailbox.name);
-                                            setContextMenuEmail(null);
-                                        }}
-                                    >
-                                        {ucfirst(mailbox.name)}
-                                    </DropdownMenuItem>
-                                ))}
-                        </DropdownMenuSubContent>
-                    </DropdownMenuSub>
-                </DropdownMenuContent>
+                    messageId={contextMenuEmail?.id}
+                    mailboxes={mailboxes}
+                    currentMailboxId={currentFolderId}
+                    onReply={onReply}
+                    onReplyAll={onReplyAll}
+                    onForward={onForward}
+                    onArchive={onArchive}
+                    onReportSpam={onReportSpam}
+                    onDelete={onDelete}
+                    onMoveToFolder={onMoveToFolder}
+                    onClose={() => setContextMenuEmail(null)}
+                />
             </DropdownMenu>
         </div>
     );
