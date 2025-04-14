@@ -230,7 +230,7 @@ export const KanbanBoard: React.FC<BoardProps> = ({ ownerId, pathId }) => {
   };
 
   return (
-    <div style={{ padding: '20px', overflowX: 'auto' }}>      
+    <div className="p-3 overflow-x-auto">      
       <DndContext
         sensors={sensors}
         collisionDetection={closestCorners}
@@ -238,7 +238,7 @@ export const KanbanBoard: React.FC<BoardProps> = ({ ownerId, pathId }) => {
         onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
       >
-        <div style={{ display: 'flex', padding: '10px 0' }}>
+        <div className="flex gap-1">
           <SortableContext
             items={board.columnOrder}
             strategy={horizontalListSortingStrategy}
