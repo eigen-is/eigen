@@ -6,12 +6,10 @@ import * as Y from "yjs";
 import {WebsocketProvider} from "y-websocket";
 import {Cursors} from "./cursors";
 import {useAuth} from "@workspace/lib/auth/auth-context.js";
-import {Button} from "@workspace/ui/components/button";
-import {ArrowUp,} from "lucide-react";
 import {withHistory} from "slate-history";
 import {EditorToolbar} from "./editor-toolbar";
 import {CustomElement} from "./editor.types";
-import { EigenLoader } from "@workspace/ui";
+import {EigenLoader} from "@workspace/ui";
 
 // Define the initial value with proper typing
 const initialValue: CustomElement[] = [
@@ -21,10 +19,12 @@ const initialValue: CustomElement[] = [
     },
 ];
 
-export const CollaborativeEditor = ({ownerId, pathId, access}: {ownerId: string, pathId: string, access: {
-    canRead: boolean;
-    canWrite: boolean;
-}}) => {
+export const CollaborativeEditor = ({ownerId, pathId, access}: {
+    ownerId: string, pathId: string, access: {
+        canRead: boolean;
+        canWrite: boolean;
+    }
+}) => {
     const [connected, setConnected] = useState(false);
     const [sharedType, setSharedType] = useState<Y.XmlText | null>(null);
     const [provider, setProvider] = useState<WebsocketProvider | null>(null);
@@ -60,7 +60,7 @@ export const CollaborativeEditor = ({ownerId, pathId, access}: {ownerId: string,
     }, []);
 
     if (!connected || !sharedType || !provider) {
-        return  <div className="flex h-full items-center justify-center"><EigenLoader/></div>;
+        return <div className="flex h-full items-center justify-center"><EigenLoader/></div>;
     }
 
     return <SlateEditor sharedType={sharedType} provider={provider} access={access}/>;
@@ -73,7 +73,7 @@ const SlateEditor = ({
                      }: {
     sharedType: Y.XmlText | null;
     provider: WebsocketProvider | null;
-    access: {canRead: boolean, canWrite: boolean};
+    access: { canRead: boolean, canWrite: boolean };
 }) => {
     const auth = useAuth();
 
@@ -245,13 +245,6 @@ const SlateEditor = ({
                                 onKeyDown={handleKeyDown}
                             />
                         </Cursors>
-                    </div>
-                    
-                    <div className="fixed bottom-2 left-2">
-                        {/** button with arrow up */}
-                        <Button variant="ghost" className="bg-white" title="Move up" onClick={() => window.scrollTo(0, 0)}>
-                            <ArrowUp className="h-4 w-4"/>
-                        </Button>
                     </div>
                 </div>
             </Slate>

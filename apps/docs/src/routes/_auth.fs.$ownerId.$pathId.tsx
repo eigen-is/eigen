@@ -91,8 +91,6 @@ function DriveRoute() {
     };
 
 
-
-
     // Show loading state while resolving root folder ID
     if ((pathId === 'root' && isRootLoading)) {
         return (
@@ -121,7 +119,8 @@ function DriveRoute() {
             currentPath={currentPath}
             onRowSelect={onRowSelect}
             onRowActivate={onRowActivate}
-            onBackToList={() => {}}
+            onBackToList={() => {
+            }}
             onAfterAction={handleAfterAction}
             allowCreateFolder={true}
             allowDelete={true}
@@ -131,7 +130,7 @@ function DriveRoute() {
             allowCreateStickies={false}
             isMobile={isMobile}
             showBreadcrumb={true}
-            pid={pid}   
+            pid={pid}
         />
     );
 }

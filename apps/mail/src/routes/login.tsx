@@ -9,7 +9,7 @@ export const Route = createFileRoute('/login')({
     validateSearch: z.object({
         redirect: z.string().optional().catch(''),
     }),
-    beforeLoad: async ({context, search}) => {      
+    beforeLoad: async ({context, search}) => {
         if (context.auth.isAuthenticated) {
             throw redirect({to: search.redirect || fallback})
         }
