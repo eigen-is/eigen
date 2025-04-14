@@ -90,12 +90,14 @@ export function useToggleReadEmail() {
         if (isRead === email.isRead) {
             return;
         }
+        const currentMailbox = email.mailbox;
 
         await mailApi.message.read.put({
             messageId: email.id,
             read: isRead
         });
         queryClient.invalidateQueries({queryKey: emailKeys.detail(email.id)});
+        queryClient.invalidateQueries({queryKey: emailKeys.list(currentMailbox)});
         queryClient.invalidateQueries({queryKey: mailboxKeys.lists()});
     }
 }
@@ -110,7 +112,7 @@ export function useMoveEmail() {
             targetMailbox: mailbox
         });
         queryClient.invalidateQueries({queryKey: emailKeys.detail(email.id)});
-        queryClient.invalidateQueries({queryKey: emailKeys.lists()});
+        queryClient.invalidateQueries({queryKey: emailKeys.list(currentMailbox)});
         queryClient.invalidateQueries({queryKey: mailboxKeys.lists()});
     }
 }
