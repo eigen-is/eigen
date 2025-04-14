@@ -390,7 +390,14 @@ export const KanbanBoard: React.FC<BoardProps> = ({ ownerId, pathId }) => {
         onDragStart={handleDragStart}
         onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
-        autoScroll={false}
+        autoScroll={{
+          threshold: {
+            x: 0.2,
+            y: 0.2
+          },
+          acceleration: 10,
+          interval: 10
+        }}
       >
         <div className={`flex ${isMobile ? 'gap-0' : 'gap-3'} h-full`}>
           <SortableContext
