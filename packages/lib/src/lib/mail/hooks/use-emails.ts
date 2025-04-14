@@ -44,6 +44,28 @@ export function useEmail(messageId: string | undefined) {
     });
 }
 
+// Hook to fetch a specific email by ID
+export function useEmailById() {
+    const queryClient = useQueryClient();
+
+    // Return a function that uses queryClient.fetchQuery
+    return async (messageId: string): Promise<Email | null> => {
+        try {
+            return await queryClient.fetchQuery({
+                queryKey: emailKeys.detail(messageId),
+                queryFn: async () => {
+                    const response = await mailApi.message[messageId].get();
+                    return response.data || null;
+                },
+                staleTime: Infinity,
+            });
+        } catch (error) {
+            console.error("Error fetching email by ID:", error);
+            return null;
+        }
+    };
+}
+
 export function useDeleteEmail() {
     const queryClient = useQueryClient();
 
