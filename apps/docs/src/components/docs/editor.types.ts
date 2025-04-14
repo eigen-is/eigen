@@ -1,4 +1,3 @@
-
 // Define types for the editor
 export type CustomElementType =
     | 'paragraph'

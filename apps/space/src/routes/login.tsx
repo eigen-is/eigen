@@ -6,7 +6,7 @@ const fallback = '/';
 
 export const Route = createFileRoute('/login')({
     component: () => <LoginPage/>,
-    validateSearch: z.object({      
+    validateSearch: z.object({
         redirect: z.string().optional().catch(''),
     }),
     beforeLoad: async ({context, search}) => {

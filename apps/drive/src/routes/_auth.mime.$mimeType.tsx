@@ -88,7 +88,8 @@ function DriveRoute() {
             onRowSelect={onRowSelect}
             onRowActivate={onRowActivate}
             onBackToList={handleBackToList}
-            onAfterAction={()=>{}}
+            onAfterAction={() => {
+            }}
             allowDelete={true}
             allowShare={true}
             allowCreateFolder={false}

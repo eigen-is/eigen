@@ -1,4 +1,4 @@
-import {Download, FileText, Home, Image, Link, StickyNote, X} from 'lucide-react';
+import {Download, FileText, Home, Link, X} from 'lucide-react';
 import {Button} from "@workspace/ui/components/button";
 import {SidebarSection} from '@workspace/ui/components/layout/sidebar/sidebar-section';
 import {AppLogo} from '@workspace/ui/components/layout/app-logo';
@@ -15,13 +15,13 @@ interface DriveSidebarProps {
 }
 
 export function DocsSidebar({
-                                 condensed = false,
-                                 onClose,
-                                 isMobile = false,
-                                 error = false,
-                                 onCreateFolder,
-                                 rootPath = "/",
-                             }: DriveSidebarProps) {
+                                condensed = false,
+                                onClose,
+                                isMobile = false,
+                                error = false,
+                                onCreateFolder,
+                                rootPath = "/",
+                            }: DriveSidebarProps) {
     return (
         <div className="flex h-full min-h-[calc(100vh-3.5rem)] flex-col">
             {isMobile && (
