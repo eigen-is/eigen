@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   DndContext,
   DragOverlay,
   closestCorners,
+  pointerWithin,
   PointerSensor,
   useSensor,
   useSensors,
@@ -16,23 +17,47 @@ import {
   horizontalListSortingStrategy,
 } from '@dnd-kit/sortable';
 import { Column } from './column';
-import { TaskCard } from './task-card';
 import { initialData } from './initial-data';
 import { BoardData, BoardProps, TaskItem, ColumnItem } from './types';
 import { AddTaskDialog } from './add-task-dialog';
 import { AddColumnDialog } from './add-column-dialog';
 import { Plus } from 'lucide-react';
+import { useIsMobile } from "@workspace/lib/media";
 
 export const KanbanBoard: React.FC<BoardProps> = ({ ownerId, pathId }) => {
   const [board, setBoard] = useState<BoardData>(initialData);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [activeType, setActiveType] = useState<'task' | 'column' | null>(null);
   const [activeItem, setActiveItem] = useState<any>(null);
+  const boardRef = useRef<HTMLDivElement | null>(null);
+  const isMobile = useIsMobile();
   
   // Dialog states
   const [isAddTaskDialogOpen, setIsAddTaskDialogOpen] = useState(false);
   const [isAddColumnDialogOpen, setIsAddColumnDialogOpen] = useState(false);
   const [selectedColumnId, setSelectedColumnId] = useState<string | null>(null);
+
+  // Custom collision detection strategy - prioritize columns when dragging tasks
+  const collisionDetectionStrategy = (args: any) => {
+    // First, check for any collisions
+    const pointerCollisions = pointerWithin(args);
+    
+    // When dragging a task, check if we're over a column
+    if (activeType === 'task' && pointerCollisions.length > 0) {
+      // Try to find any column collision in all collisions
+      const columnCollision = pointerCollisions.find(collision => 
+        collision.id in board.columns
+      );
+      
+      // If we found a collision with a column, prioritize it
+      if (columnCollision) {
+        return [columnCollision];
+      }
+    }
+    
+    // If no column collision or not dragging a task, use default detection
+    return closestCorners(args);
+  };
 
   // Sensors config - enables drag and drop functionality
   const sensors = useSensors(
@@ -87,7 +112,7 @@ export const KanbanBoard: React.FC<BoardProps> = ({ ownerId, pathId }) => {
     const sourceColumnId = findColumnOfTask(activeId);
     const isOverColumn = overId in board.columns;
     
-    // If over column directly
+    // If over a column directly (crucial for empty columns)
     if (isOverColumn) {
       if (sourceColumnId === overId) return; // Same column, nothing to do
       
@@ -217,6 +242,35 @@ export const KanbanBoard: React.FC<BoardProps> = ({ ownerId, pathId }) => {
         });
       }
     }
+    // Make sure we handle task drops on empty columns
+    else if (activeType === 'task') {
+      const sourceColumnId = findColumnOfTask(activeId);
+      // Check if dropping directly on a column
+      if (overId in board.columns && sourceColumnId && sourceColumnId !== overId) {
+        setBoard(prev => {
+          const sourceColumn = prev.columns[sourceColumnId];
+          const destColumn = prev.columns[overId];
+          
+          const newSourceTaskIds = sourceColumn.taskIds.filter(id => id !== activeId);
+          const newDestTaskIds = [...destColumn.taskIds, activeId];
+          
+          return {
+            ...prev,
+            columns: {
+              ...prev.columns,
+              [sourceColumnId]: {
+                ...sourceColumn,
+                taskIds: newSourceTaskIds,
+              },
+              [overId]: {
+                ...destColumn,
+                taskIds: newDestTaskIds,
+              },
+            },
+          };
+        });
+      }
+    }
     
     setActiveId(null);
     setActiveType(null);
@@ -228,7 +282,17 @@ export const KanbanBoard: React.FC<BoardProps> = ({ ownerId, pathId }) => {
     if (!activeId || !activeType || !activeItem) return null;
     
     if (activeType === 'task') {
-      return <TaskCard task={activeItem as TaskItem} />;
+      // Return a direct div for tasks, not a sortable component
+      return (
+        <div className={`w-[260px] border border-gray-200 shadow-sm bg-white`}>
+          <div className="py-1.5 px-2 text-sm bg-blue-50">
+            {(activeItem as TaskItem).title}
+            {(activeItem as TaskItem).description && (
+              <p className="text-xs text-gray-500 mt-1 truncate">{(activeItem as TaskItem).description}</p>
+            )}
+          </div>
+        </div>
+      );
     } else if (activeType === 'column') {
       const columnTasks = (activeItem as ColumnItem).taskIds.map(taskId => board.tasks[taskId]);
       return (
@@ -236,6 +300,7 @@ export const KanbanBoard: React.FC<BoardProps> = ({ ownerId, pathId }) => {
           column={activeItem as ColumnItem} 
           tasks={columnTasks} 
           onAddTask={handleAddTaskClick}
+          isMobile={isMobile}
         />
       );
     }
@@ -310,15 +375,24 @@ export const KanbanBoard: React.FC<BoardProps> = ({ ownerId, pathId }) => {
   };
 
   return (
-    <div className="p-3 overflow-x-auto">      
+    <div 
+      ref={boardRef}
+      className="overflow-x-auto h-[calc(100vh-64px)]"
+      style={{ 
+        padding: isMobile ? 0 : '0.75rem',
+        scrollSnapType: 'x mandatory',
+        scrollBehavior: 'smooth',
+      }}
+    >      
       <DndContext
         sensors={sensors}
-        collisionDetection={closestCorners}
+        collisionDetection={collisionDetectionStrategy}
         onDragStart={handleDragStart}
         onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
+        autoScroll={false}
       >
-        <div className="flex gap-1">
+        <div className={`flex ${isMobile ? 'gap-0' : 'gap-3'} h-full`}>
           <SortableContext
             items={board.columnOrder}
             strategy={horizontalListSortingStrategy}
@@ -332,15 +406,21 @@ export const KanbanBoard: React.FC<BoardProps> = ({ ownerId, pathId }) => {
                   key={column.id}
                   column={column}
                   tasks={columnTasks}
-                  isDropAnimating={activeType === 'task' && Boolean(activeId)}
                   onAddTask={handleAddTaskClick}
+                  isMobile={isMobile}
                 />
               );
             })}
           </SortableContext>
           
           {/* Add Column Button */}
-          <div className="m-1.5 w-[270px] flex items-start">
+          <div 
+            className={`${isMobile ? 'mx-[4vw] min-w-[92vw]' : 'mx-1.5 min-w-[280px] w-[280px]'} flex items-start h-full`}
+            style={{
+              scrollSnapAlign: 'center',
+              scrollSnapStop: 'normal'
+            }}
+          >
             <button 
               onClick={() => setIsAddColumnDialogOpen(true)}
               className="bg-gray-100 hover:bg-gray-200 border border-gray-200 rounded text-sm flex items-center gap-1 py-2 px-4 text-gray-700"
@@ -351,7 +431,7 @@ export const KanbanBoard: React.FC<BoardProps> = ({ ownerId, pathId }) => {
           </div>
         </div>
         
-        <DragOverlay adjustScale={true}>
+        <DragOverlay adjustScale={false}>
           {getActiveComponent()}
         </DragOverlay>
       </DndContext>
