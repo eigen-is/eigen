@@ -11,12 +11,6 @@ const apps = [
         href: import.meta.env.VITE_APP_MAIL_URL,
         icon: 'mail',
     },
-    // {
-    //     name: 'Calendar',
-    //     className: 'text-blue-600',
-    //     href: import.meta.env.VITE_APP_CALENDAR_URL,
-    //     icon: 'calendar',
-    // },
     {
         name: 'Contacts',
         className: 'text-green-600',
@@ -35,6 +29,18 @@ const apps = [
         href: import.meta.env.VITE_APP_DOCS_URL,
         icon: 'file-text',
     },
+    {
+        name: 'Stickies',
+        className: 'text-yellow-600',
+        href: import.meta.env.VITE_APP_STICKIES_URL,
+        icon: 'sticky-note',
+    },
+    // {
+    //     name: 'Calendar',
+    //     className: 'text-blue-600',
+    //     href: import.meta.env.VITE_APP_CALENDAR_URL,
+    //     icon: 'calendar',
+    // },
 ];
 
 export {apps};

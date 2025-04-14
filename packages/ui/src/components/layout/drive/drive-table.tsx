@@ -6,7 +6,7 @@ import {DrivePath} from "@apps/api-server/types/drive";
 import {DriveShareSummary} from "./drive-share-summary";
 import {ChevronLeft} from "lucide-react";
 
-// Props for the DriveTable component
+// Props for the DriveTable component   
 export interface DriveTableProps {
     items: DrivePath[];
     currentPath?: DrivePath | null;
@@ -14,6 +14,9 @@ export interface DriveTableProps {
     onItemClick?: (item: DrivePath) => void;
     getFileIcon?: (mimeType: string, type: string, props?: any) => React.ReactNode;
     onShareClick?: (item: DrivePath) => void;
+    onDownload?: (item: DrivePath) => void;
+    onDelete?: (item: DrivePath) => void;
+    allowDelete?: boolean;
 }
 
 export function DriveTable({
@@ -22,7 +25,10 @@ export function DriveTable({
                                activeItemId,
                                onItemClick,
                                getFileIcon,
-                               onShareClick
+                               onShareClick,
+                               onDownload,
+                               onDelete,
+                               allowDelete = false,
                            }: DriveTableProps) {
 
     // Ref voor de tabel element
@@ -33,6 +39,10 @@ export function DriveTable({
 
     // State voor het bijhouden van de huidige geselecteerde index
     const [selectedIndex, setSelectedIndex] = useState<number>(-1);
+
+    // State for the context menu
+    const [contextMenuPosition, setContextMenuPosition] = useState<{ x: number, y: number } | null>(null);
+    const [contextMenuItem, setContextMenuItem] = useState<DrivePath | null>(null);
 
     // Bepaal of er een parent navigatie-item is
     const hasParentItem = Boolean(currentPath?.parentId);
@@ -196,6 +206,19 @@ export function DriveTable({
         }
     };
 
+    // Handle right-click on table row
+    const handleContextMenu = (e: React.MouseEvent, item: DrivePath) => {
+        e.preventDefault();
+        setContextMenuPosition({ x: e.clientX, y: e.clientY });
+        setContextMenuItem(item);
+    };
+
+    // Close context menu
+    const closeContextMenu = () => {
+        setContextMenuPosition(null);
+        setContextMenuItem(null);
+    };
+
     return (
         <div className="flex-1 overflow-auto">
             <Table
@@ -259,6 +282,7 @@ export function DriveTable({
                                     (activeItemId === item.id || selectedIndex === adjustedIndex) && "eigen-list-item-active"
                                 )}
                                 onClick={() => onItemClick?.(item)}
+                                onContextMenu={(e) => handleContextMenu(e, item)}
                             >
                                 <TableCell>
                                     <div className="flex items-center max-w-full overflow-hidden">
@@ -268,12 +292,16 @@ export function DriveTable({
                                             {
                                                 className: "h-4 w-4 mr-2 text-muted-foreground flex-shrink-0",
                                                 ...(item.type === 'folder' ? {
-                                                    className: "h-4 w-4 mr-2 text-app flex-shrink-0",
+                                                    className: "h-4 w-4 mr-2 text-drive flex-shrink-0",
                                                     fill: "var(--app-drive-light-color)"
                                                 } : {}),
-                                                ...(item.type === 'doc' || item.type === 'stickies' ? {
-                                                    className: "h-4 w-4 mr-2 text-doc flex-shrink-0",
+                                                ...(item.type === 'doc'  ? {
+                                                    className: "h-4 w-4 mr-2 text-docs flex-shrink-0",
                                                     fill: "var(--app-doc-light-color)"
+                                                } : {}),
+                                                ...(item.type === 'stickies' ? {
+                                                    className: "h-4 w-4 mr-2 text-stickies flex-shrink-0",
+                                                    fill: "var(--app-stickies-light-color)"
                                                 } : {})
                                             }
                                         )}
@@ -298,6 +326,62 @@ export function DriveTable({
                     })}
                 </TableBody>
             </Table>
+
+            {/* Context Menu */}
+            {contextMenuPosition && contextMenuItem && (
+                <div 
+                    className="fixed bg-white shadow-md rounded-md py-1 z-50 min-w-[160px] border"
+                    style={{
+                        top: contextMenuPosition.y,
+                        left: contextMenuPosition.x,
+                    }}
+                >
+                    <div className="px-2 py-1.5 text-sm font-medium text-muted-foreground mb-1 border-b truncate max-w-[200px]">
+                        {contextMenuItem.name}
+                    </div>
+                    {allowDelete && (
+                        <button
+                            className="flex w-full items-center px-2 py-1.5 text-sm hover:bg-muted"
+                            onClick={() => {
+                                onDelete?.(contextMenuItem);
+                                closeContextMenu();
+                            }}
+                        >
+                            Delete
+                        </button>
+                    )}
+                    {onDownload && contextMenuItem.type === 'file' && (
+                        <button
+                            className="flex w-full items-center px-2 py-1.5 text-sm hover:bg-muted"
+                            onClick={() => {
+                                onDownload?.(contextMenuItem);
+                                closeContextMenu();
+                            }}
+                        >
+                            Download
+                        </button>
+                    )}
+                    {onShareClick && (
+                    <button
+                        className="flex w-full items-center px-2 py-1.5 text-sm hover:bg-muted"
+                        onClick={() => {
+                            onShareClick?.(contextMenuItem);
+                            closeContextMenu();
+                        }}
+                    >
+                        Edit access
+                    </button>
+                    )}
+                </div>
+            )}
+
+            {/* Invisible overlay to capture clicks outside the context menu */}
+            {contextMenuPosition && (
+                <div 
+                    className="fixed inset-0 z-40" 
+                    onClick={closeContextMenu}
+                />
+            )}
         </div>
     );
 }

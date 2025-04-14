@@ -36,9 +36,11 @@ interface DriveListProps {
     onShareClick?: (item: DrivePath) => void;
     onCreateDoc?: () => void;
     onCreateStickies?: () => void;
+    onDownload?: (path: DrivePath) => void;
     ownerId: string;
     pathId: string;
     showBreadcrumb?: boolean;
+    allowDelete?: boolean;
 }
 
 export function DriveList({
@@ -56,9 +58,11 @@ export function DriveList({
                               onShareClick,
                               onCreateDoc,
                               onCreateStickies,
+                              onDownload,
                               ownerId,
                               pathId,
                               showBreadcrumb = true,
+                              allowDelete = false,
                           }: DriveListProps) {
     const [isDragging, setIsDragging] = useState(false);
     const dragCounter = useRef(0);
@@ -237,6 +241,9 @@ export function DriveList({
                 onItemClick={handleRowClick}
                 onShareClick={onShareClick}
                 getFileIcon={getFileIcon}
+                onDownload={onDownload}
+                onDelete={onDelete}
+                allowDelete={allowDelete}
             />
 
             {items.length === 0 && (
