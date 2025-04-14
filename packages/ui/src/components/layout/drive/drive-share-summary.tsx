@@ -1,4 +1,4 @@
-import {Link} from "lucide-react";
+import {UserRoundPlus} from "lucide-react";
 import {cn} from "@workspace/ui/lib/utils";
 import {UserPublicAvatar} from "../user-public-avatar";
 
@@ -52,7 +52,7 @@ export function DriveShareSummary({
             ) : (
                 showIconOnHover && (
                     <div className="invisible group-hover:visible">
-                        <Link className="h-4 w-4 text-muted-foreground"/>
+                        <UserRoundPlus className="h-4 w-4 text-muted-foreground"/>
                     </div>
                 )
             )}
