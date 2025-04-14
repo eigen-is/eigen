@@ -134,31 +134,95 @@ export function StickiesBoard({ ownerId, pathId }: StickiesBoardProps) {
 
         // Transaction for optimistic UI updates
         doc.transact(() => {
-            const yColumns = doc.getArray('columns');
+            try {
+                const yColumns = doc.getArray('columns');
 
-            if (type === 'column') {
-                // Move column
-                const column = yColumns.get(source.index);
-                yColumns.delete(source.index);
-                yColumns.insert(destination.index, [column]);
-            } else {
-                // Move card
-                const sourceColumn = yColumns.get(parseInt(source.droppableId));
-                const destColumn = yColumns.get(parseInt(destination.droppableId));
-
-                const yCards = sourceColumn.get('cards');
-                const card = yCards.get(source.index);
-
-                // Remove card from source column
-                yCards.delete(source.index);
-
-                // Add card to destination column
-                if (source.droppableId === destination.droppableId) {
-                    yCards.insert(destination.index, [card]);
+                if (type === 'column') {
+                    // Move column
+                    const column = yColumns.get(source.index);
+                    if (column) {
+                        yColumns.delete(source.index);
+                        yColumns.insert(destination.index, [column]);
+                    }
                 } else {
-                    const destCards = destColumn.get('cards');
-                    destCards.insert(destination.index, [card]);
+                    // Card dragging - use the columnId from the droppableId
+                    const sourceColumnId = source.droppableId;
+                    const destColumnId = destination.droppableId;
+                    
+                    // Find indices of columns by their IDs
+                    let sourceColumnIndex = -1;
+                    let destColumnIndex = -1;
+                    
+                    for (let i = 0; i < yColumns.length; i++) {
+                        const colId = yColumns.get(i).get('id');
+                        if (colId === sourceColumnId) sourceColumnIndex = i;
+                        if (colId === destColumnId) destColumnIndex = i;
+                    }
+                    
+                    if (sourceColumnIndex === -1) {
+                        console.error(`Source column with ID ${sourceColumnId} not found`);
+                        return;
+                    }
+                    
+                    if (destColumnIndex === -1) {
+                        console.error(`Destination column with ID ${destColumnId} not found`);
+                        return;
+                    }
+                    
+                    // Get the source and destination columns
+                    const sourceColumn = yColumns.get(sourceColumnIndex) as Y.Map<any>;
+                    const destColumn = yColumns.get(destColumnIndex) as Y.Map<any>;
+                    
+                    if (!sourceColumn) {
+                        console.error(`Source column at index ${sourceColumnIndex} not found`);
+                        return;
+                    }
+                    
+                    if (!destColumn) {
+                        console.error(`Destination column at index ${destColumnIndex} not found`);
+                        return;
+                    }
+                    
+                    // Get cards array from source column
+                    const yCards = sourceColumn.get('cards') as Y.Array<any>;
+                    if (!yCards) {
+                        console.error('Source column cards array not found');
+                        return;
+                    }
+                    
+                    // Get the card being moved
+                    const card = yCards.get(source.index);
+                    if (!card) {
+                        console.error(`Card at index ${source.index} not found in source column`);
+                        return;
+                    }
+                    
+                    // Clone the card to preserve all properties
+                    const cardClone = new Y.Map();
+                    // Copy all properties from the original card
+                    for (const [key, value] of card.entries()) {
+                        cardClone.set(key, value);
+                    }
+                    
+                    // Remove card from source column
+                    yCards.delete(source.index);
+                    
+                    // Add card to destination column
+                    if (sourceColumnId === destColumnId) {
+                        // Same column, just reinsert at the new position
+                        yCards.insert(destination.index, [cardClone]);
+                    } else {
+                        // Different column, get destination cards array
+                        const destCards = destColumn.get('cards') as Y.Array<any>;
+                        if (!destCards) {
+                            console.error('Destination column cards array not found');
+                            return;
+                        }
+                        destCards.insert(destination.index, [cardClone]);
+                    }
                 }
+            } catch (error) {
+                console.error('Error during drag and drop operation:', error);
             }
         });
     };
@@ -166,8 +230,11 @@ export function StickiesBoard({ ownerId, pathId }: StickiesBoardProps) {
     const handleAddCard = (columnIndex: number) => {
         doc.transact(() => {
             const yColumns = doc.getArray('columns');
-            const yColumn = yColumns.get(columnIndex);
-            const yCards = yColumn.get('cards');
+            const yColumn = yColumns.get(columnIndex) as Y.Map<any>;
+            if (!yColumn) return;
+            
+            const yCards = yColumn.get('cards') as Y.Array<any>;
+            if (!yCards) return;
             
             const newCard = new Y.Map();
             newCard.set('id', nanoid());
@@ -182,114 +249,118 @@ export function StickiesBoard({ ownerId, pathId }: StickiesBoardProps) {
         <div className="p-4 h-full">
             <h1 className="text-2xl font-bold mb-4">Stickies Board</h1>
             
-            <DragDropContext onDragEnd={handleDragEnd}>
-                <Droppable droppableId="board" type="column" direction="horizontal">
-                    {(provided) => (
-                        <div
-                            {...provided.droppableProps}
-                            ref={provided.innerRef}
-                            className="flex gap-4 overflow-x-auto p-4"
-                        >
-                            {columns.map((column, index) => (
-                                <ColumnComponent
-                                    key={column.id}
-                                    column={column}
-                                    index={index}
-                                    yColumn={doc.getArray('columns').get(index)}
-                                    onAddCard={() => handleAddCard(index)}
-                                />
-                            ))}
-                            {provided.placeholder}
-                        </div>
-                    )}
-                </Droppable>
-            </DragDropContext>
-        </div>
-    );
-}
-
-// Performance-optimized column component
-interface ColumnProps {
-    column: { id: string; title: string; cards: Array<any> };
-    index: number;
-    yColumn: Y.Map<any>;
-    onAddCard: () => void;
-}
-
-const ColumnComponent = React.memo(({ column, index, yColumn, onAddCard }: ColumnProps) => {
-    // UseRef for stable render identity
-    const cardsRef = useRef<Array<any>>([]);
-
-    useEffect(() => {
-        const yCards = yColumn.get('cards');
-
-        const observer = () => {
-            cardsRef.current = mapYjsToCards(yCards);
-            forceUpdate();
-        };
-
-        yCards.observe(observer);
-        observer(); // Initial render
-
-        return () => yCards.unobserve(observer);
-    }, [yColumn]);
-
-    // Used to force a render without updating the entire app
-    const [, forceUpdate] = useReducer(x => x + 1, 0);
-
-    const handleDeleteCard = (cardId: string) => {
-        const yCards = yColumn.get('cards');
-        yColumn.doc?.transact(() => {
-            const index = cardsRef.current.findIndex(card => card.id === cardId);
-            if (index !== -1) {
-                yCards.delete(index);
-            }
-        });
-    };
-
-    return (
-        <Draggable draggableId={column.id} index={index}>
-            {(provided) => (
-                <div
-                    {...provided.draggableProps}
-                    ref={provided.innerRef}
-                    className="flex flex-col w-72 bg-gray-50 rounded-md shadow"
-                >
-                    <div 
-                        {...provided.dragHandleProps} 
-                        className="font-bold p-3 border-b flex justify-between items-center"
+            {/* Disable the react-beautiful-dnd strict mode warnings in development */}
+            <div
+                style={{
+                    overflow: 'hidden',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    height: 'calc(100vh - 120px)',
+                }}
+            >
+                <DragDropContext onDragEnd={handleDragEnd}>
+                    <Droppable
+                        droppableId="board"
+                        type="column"
+                        direction="horizontal"
+                        isDropDisabled={false}
                     >
-                        <h2>{column.title}</h2>
-                        <button 
-                            onClick={onAddCard}
-                            className="text-sm bg-gray-200 hover:bg-gray-300 px-2 py-1 rounded"
-                        >
-                            + Add
-                        </button>
-                    </div>
-                    
-                    <Droppable droppableId={String(index)} type="card">
                         {(provided) => (
                             <div
-                                ref={provided.innerRef}
                                 {...provided.droppableProps}
-                                className="min-h-[200px] p-2 overflow-y-auto flex-grow"
+                                ref={provided.innerRef}
+                                className="flex gap-4 p-4 overflow-x-auto h-full"
+                                style={{ maxHeight: 'calc(100vh - 140px)' }}
                             >
-                                {cardsRef.current.map((card, cardIndex) => (
-                                    <CardComponent
-                                        key={card.id}
-                                        card={card}
-                                        index={cardIndex}
-                                        yCard={yColumn.get('cards').get(cardIndex)}
-                                        onDelete={handleDeleteCard}
-                                    />
+                                {columns.map((column, index) => (
+                                    <Draggable
+                                        key={column.id}
+                                        draggableId={column.id}
+                                        index={index}
+                                    >
+                                        {(provided) => (
+                                            <div
+                                                {...provided.draggableProps}
+                                                ref={provided.innerRef}
+                                                className="flex flex-col w-72 bg-gray-50 rounded-md shadow shrink-0"
+                                            >
+                                                <div 
+                                                    {...provided.dragHandleProps} 
+                                                    className="font-bold p-3 border-b flex justify-between items-center"
+                                                >
+                                                    <h2>{column.title}</h2>
+                                                    <button 
+                                                        onClick={() => handleAddCard(index)}
+                                                        className="text-sm bg-gray-200 hover:bg-gray-300 px-2 py-1 rounded"
+                                                    >
+                                                        + Add
+                                                    </button>
+                                                </div>
+                                                
+                                                <Droppable
+                                                    droppableId={column.id}
+                                                    type="card"
+                                                    isDropDisabled={false}
+                                                >
+                                                    {(provided) => (
+                                                        <div
+                                                            ref={provided.innerRef}
+                                                            {...provided.droppableProps}
+                                                            className="min-h-[200px] p-2 overflow-y-auto flex-grow"
+                                                            style={{ maxHeight: 'calc(100vh - 200px)' }}
+                                                        >
+                                                            {column.cards.map((card, cardIndex) => (
+                                                                <CardComponent
+                                                                    key={card.id}
+                                                                    card={card}
+                                                                    index={cardIndex}
+                                                                    yCard={(() => {
+                                                                        try {
+                                                                            const columnObj = doc.getArray('columns').get(index);
+                                                                            if (!columnObj) return undefined;
+                                                                            const cardsArray = columnObj.get('cards');
+                                                                            if (!cardsArray) return undefined;
+                                                                            return cardsArray.get(cardIndex);
+                                                                        } catch (error) {
+                                                                            console.error('Error getting yCard reference:', error);
+                                                                            return undefined;
+                                                                        }
+                                                                    })()}
+                                                                    onDelete={(cardId) => {
+                                                                        doc.transact(() => {
+                                                                            try {
+                                                                                const yColumns = doc.getArray('columns');
+                                                                                const yColumn = yColumns.get(index) as Y.Map<any>;
+                                                                                if (!yColumn) return;
+                                                                                
+                                                                                const yCards = yColumn.get('cards') as Y.Array<any>;
+                                                                                if (!yCards) return;
+                                                                                
+                                                                                const cardIndex = column.cards.findIndex(c => c.id === cardId);
+                                                                                if (cardIndex !== -1) {
+                                                                                    yCards.delete(cardIndex);
+                                                                                }
+                                                                            } catch (error) {
+                                                                                console.error('Error deleting card:', error);
+                                                                            }
+                                                                        });
+                                                                    }}
+                                                                />
+                                                            ))}
+                                                            {provided.placeholder}
+                                                        </div>
+                                                    )}
+                                                </Droppable>
+                                            </div>
+                                        )}
+                                    </Draggable>
                                 ))}
                                 {provided.placeholder}
                             </div>
                         )}
                     </Droppable>
-                </div>
-            )}
-        </Draggable>
+                </DragDropContext>
+            </div>
+        </div>
     );
-});
+}

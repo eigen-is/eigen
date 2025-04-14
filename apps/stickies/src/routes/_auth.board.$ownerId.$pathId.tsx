@@ -1,4 +1,4 @@
-import {StickiesBoard} from './../components/StickiesBoard'
+import {KanbanBoard} from './../components/dnd-board'
 import {createFileRoute} from '@tanstack/react-router'
 import {useDocumentAccess} from '@workspace/lib/docs'   
 import {usePathInfo} from '@workspace/lib/drive'
@@ -43,8 +43,8 @@ function StickiesRoute() {
     }
 
     return (
-        <div className="bg-muted flex-1 overflow-hidden">
-            <StickiesBoard ownerId={ownerId} pathId={pathId}/>
-        </div>
+    <div className="h-full w-full bg-muted ">
+      <KanbanBoard ownerId={ownerId} pathId={pathId} />
+    </div>
     )
 }
