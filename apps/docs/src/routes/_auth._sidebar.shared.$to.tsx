@@ -99,7 +99,7 @@ function DriveRoute() {
             onBackToList={handleBackToList}
             onAfterAction={() => {
             }}
-            allowDelete={true}
+            allowDelete={to === 'by-me'}
             allowShare={true}
             allowCreateFolder={false}
             allowUpload={false}

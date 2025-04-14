@@ -336,9 +336,9 @@ export function DriveTable({
                         left: contextMenuPosition.x,
                     }}
                 >
-                    <div className="px-2 py-1.5 text-sm font-medium text-muted-foreground mb-1 border-b truncate max-w-[200px]">
+                    {/* <div className="px-2 py-1.5 text-sm font-medium text-muted-foreground mb-1 border-b truncate max-w-[200px]">
                         {contextMenuItem.name}
-                    </div>
+                    </div> */}
                     {allowDelete && (
                         <button
                             className="flex w-full items-center px-2 py-1.5 text-sm hover:bg-muted"
