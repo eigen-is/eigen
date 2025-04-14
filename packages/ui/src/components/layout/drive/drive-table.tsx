@@ -128,14 +128,11 @@ export function DriveTable({
                 e.preventDefault();
                 setSelectedIndex(prev => {
                     const newIndex = Math.min(prev + 1, allItems.length - 1);
-                    if (newIndex >= 0) {
-                        const targetItem = allItems[newIndex];
-
-                        // Alleen onItemClick uitvoeren als het GEEN folder is
-                        if (targetItem.type !== 'folder') {
+                    if (newIndex >= 0 && newIndex !== prev) {
+                        if (!hasParentItem || newIndex > 0) {
+                            const targetItem = allItems[newIndex];
                             onItemClick?.(targetItem);
                         }
-
                         // Auto-scroll indien nodig
                         scrollToRow(newIndex);
                     }
@@ -147,14 +144,11 @@ export function DriveTable({
                 e.preventDefault();
                 setSelectedIndex(prev => {
                     const newIndex = Math.max(prev - 1, 0);
-                    if (newIndex >= 0) {
-                        const targetItem = allItems[newIndex];
-
-                        // Alleen onItemClick uitvoeren als het GEEN folder is
-                        if (targetItem.type !== 'folder') {
+                    if (newIndex >= 0 && newIndex !== prev) {
+                        if (!hasParentItem || newIndex > 0) {
+                            const targetItem = allItems[newIndex];
                             onItemClick?.(targetItem);
                         }
-
                         // Auto-scroll indien nodig
                         scrollToRow(newIndex);
                     }
@@ -174,13 +168,6 @@ export function DriveTable({
                 e.preventDefault();
                 if (allItems.length > 0) {
                     setSelectedIndex(0);
-
-                    const targetItem = allItems[0];
-                    // Alleen onItemClick uitvoeren als het GEEN folder is
-                    if (targetItem.type !== 'folder') {
-                        onItemClick?.(targetItem);
-                    }
-
                     scrollToRow(0);
                 }
                 break;
@@ -191,9 +178,8 @@ export function DriveTable({
                     const lastIndex = allItems.length - 1;
                     setSelectedIndex(lastIndex);
 
-                    const targetItem = allItems[lastIndex];
-                    // Alleen onItemClick uitvoeren als het GEEN folder is
-                    if (targetItem.type !== 'folder') {
+                    if (!hasParentItem || lastIndex > 0) {                       
+                        const targetItem = allItems[lastIndex];
                         onItemClick?.(targetItem);
                     }
 
