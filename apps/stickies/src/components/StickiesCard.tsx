@@ -28,7 +28,7 @@ const CardComponent = React.memo(({
                                   }: {
     card: { id: string; title: string; description: string; labels?: string[] };
     index: number;
-    yCard: Y.Map<any>;
+    yCard: Y.Map<any> | undefined;
     onDelete?: (cardId: string) => void;
 }) => {
     const [isEditing, setIsEditing] = useState(false);
@@ -37,6 +37,9 @@ const CardComponent = React.memo(({
 
     // Listen for changes to the card from Yjs
     useEffect(() => {
+        // Skip if yCard is undefined
+        if (!yCard) return;
+
         const observer = () => {
             setLocalTitle(yCard.get('title'));
             setLocalDescription(yCard.get('description'));
@@ -51,7 +54,9 @@ const CardComponent = React.memo(({
 
     // Apply card changes to Yjs
     const handleSaveCard = useCallback(() => {
-        yCard.doc?.transact(() => {
+        if (!yCard || !yCard.doc) return;
+        
+        yCard.doc.transact(() => {
             yCard.set('title', localTitle);
             yCard.set('description', localDescription);
         });
