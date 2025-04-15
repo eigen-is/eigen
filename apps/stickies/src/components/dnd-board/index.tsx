@@ -100,7 +100,7 @@ export const KanbanBoard: React.FC<BoardProps> = ({ ownerId, pathId }) => {
     >      
       <DndContext
         sensors={sensors}
-        collisionDetection={collisionDetectionStrategy}
+        // collisionDetection={collisionDetectionStrategy}
         onDragStart={handleDragStart}
         onDragOver={handleDragOver}
         onDragEnd={handleDragEnd}
