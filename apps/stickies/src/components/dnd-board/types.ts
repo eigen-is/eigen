@@ -1,5 +1,6 @@
-export interface Comment {
+export interface CommentItem {
     id: string;
+    taskId: string; // The task this comment belongs to
     text: string;
     author: string; // email address
     createdAt: number; // timestamp
@@ -11,7 +12,6 @@ export interface TaskItem {
     description: string;
     creator: string; // email address
     createdAt: number; // timestamp
-    comments: Comment[];
 }
 
 export interface ColumnItem {
@@ -26,6 +26,7 @@ export interface BoardData {
     tasks: Record<string, TaskItem>;
     columns: Record<string, ColumnItem>;
     columnOrder: string[];
+    comments: Record<string, CommentItem>;
 }
 
 export type BoardProps = {

@@ -14,7 +14,8 @@ export const useYjsKanbanBoard = (ownerId: string, pathId: string) => {
     const [board, setBoard] = useState<BoardData>({
         tasks: {},
         columns: {},
-        columnOrder: []
+        columnOrder: [],
+        comments: {},
     });
 
     // UI state for dialogs and selection
@@ -51,7 +52,8 @@ export const useYjsKanbanBoard = (ownerId: string, pathId: string) => {
             const newState: BoardData = {
                 tasks: {},
                 columns: {},
-                columnOrder: columnOrderArray.toArray() as string[]
+                columnOrder: columnOrderArray.toArray() as string[],
+                comments: {},
             };
             tasksMap.forEach((taskMapValue, taskId) => {
                 const taskMap = taskMapValue as Y.Map<any>;
@@ -61,14 +63,6 @@ export const useYjsKanbanBoard = (ownerId: string, pathId: string) => {
                     description: taskMap.get('description') || '',
                     creator: taskMap.get('creator') || '',
                     createdAt: taskMap.get('createdAt') || Date.now(),
-                    comments: Array.isArray(taskMap.get('comments'))
-                        ? taskMap.get('comments').map((comment: any) => ({
-                            id: comment.id,
-                            text: comment.text,
-                            author: comment.author,
-                            createdAt: comment.createdAt
-                        }))
-                        : []
                 };
             });
             columnsMap.forEach((columnMapValue, columnId) => {
@@ -81,6 +75,18 @@ export const useYjsKanbanBoard = (ownerId: string, pathId: string) => {
                     taskIds,
                     creator: columnMap.get('creator') || '',
                     createdAt: columnMap.get('createdAt') || Date.now()
+                };
+            });
+            // Map Yjs comments if present (future-proofing)
+            const commentsMap = doc.getMap('comments');
+            commentsMap.forEach((commentMapValue, commentId) => {
+                const commentMap = commentMapValue as Y.Map<any>;
+                newState.comments[commentId] = {
+                    id: commentId,
+                    taskId: commentMap.get('taskId') || '',
+                    text: commentMap.get('text') || '',
+                    author: commentMap.get('author') || '',
+                    createdAt: commentMap.get('createdAt') || Date.now(),
                 };
             });
             setBoard(newState);
@@ -118,7 +124,7 @@ export const useYjsKanbanBoard = (ownerId: string, pathId: string) => {
     };
 
     // Add new task (mutates Yjs only)
-    const handleAddTask = (taskData: Omit<TaskItem, 'id' | 'comments' | 'creator' | 'createdAt'>) => {
+    const handleAddTask = (taskData: Omit<TaskItem, 'id' | 'creator' | 'createdAt'>) => {
         if (!selectedColumnId || !docRef.current) return;
         const doc = docRef.current;
         doc.transact(() => {
@@ -132,7 +138,6 @@ export const useYjsKanbanBoard = (ownerId: string, pathId: string) => {
             newTaskMap.set('description', taskData.description || '');
             newTaskMap.set('creator', ownerId);
             newTaskMap.set('createdAt', now);
-            newTaskMap.set('comments', new Y.Array());
             tasksMap.set(taskId, newTaskMap);
             const columnMapValue = columnsMap.get(selectedColumnId);
             if (columnMapValue) {
