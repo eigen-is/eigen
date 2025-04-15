@@ -26,7 +26,7 @@ export default defineConfig({
         extensions: ['.tsx', '.ts', '.jsx', '.js']
     },
     build: {
-        outDir: './../../dist/docs',
+        outDir: './../../dist/stickies',
         emptyOutDir: true,
     }
 });
