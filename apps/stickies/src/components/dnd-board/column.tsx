@@ -55,7 +55,7 @@ export const Column: React.FC<ColumnProps> = ({
     return (
         <div
             ref={setNodeRef}
-            className={`${columnMargin} ${columnWidth} flex flex-col border border-gray-200 shadow-sm ${isDragging ? 'opacity-10' : ''} h-full`}
+            className={`${columnMargin} ${columnWidth} rounded-md flex flex-col border border-gray-200 shadow-sm ${isDragging ? 'opacity-10' : ''} h-full`}
             style={{
                 transform: CSS.Transform.toString(transform),
                 transition,
@@ -65,7 +65,7 @@ export const Column: React.FC<ColumnProps> = ({
         >
             {/* Column header */}
             <div
-                className="px-2 py-2 cursor-grab touch-none font-medium text-sm border-b bg-gray-50 flex-shrink-0 flex items-center justify-between"
+                className="h-10 px-2 cursor-grab touch-none font-medium text-sm border-b bg-gray-50 flex-shrink-0 flex items-center justify-between"
                 {...attributes}
                 {...listeners}
             >
