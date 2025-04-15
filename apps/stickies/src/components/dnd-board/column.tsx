@@ -92,7 +92,7 @@ export const Column: React.FC<ColumnProps> = ({
                     className="mt-2 flex items-center gap-1 text-sm text-gray-600 hover:bg-gray-100 px-2 py-1.5 rounded-sm w-full"
                 >
                     <Plus size={16}/>
-                    <span>Add a card</span>
+                    <span>Add a sticky</span>
                 </button>
             </div>
         </div>
