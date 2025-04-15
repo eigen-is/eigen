@@ -3,6 +3,7 @@ import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle} from "@w
 import {Button} from "@workspace/ui/components/button";
 import {Input} from "@workspace/ui/components/input";
 import {ColumnItem} from './types';
+import { useAuth } from "@workspace/lib/auth/auth-context.tsx";
 
 interface AddColumnDialogProps {
     isOpen: boolean;
@@ -16,6 +17,7 @@ export const AddColumnDialog: React.FC<AddColumnDialogProps> = ({
                                                                     onAddColumn
                                                                 }) => {
     const [title, setTitle] = useState('');
+    const { user } = useAuth();
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -24,7 +26,7 @@ export const AddColumnDialog: React.FC<AddColumnDialogProps> = ({
 
         onAddColumn({
             title: title.trim(),
-            creator: 'reinder@eigen.is', // In a real app, get this from user session
+            creator: user?.email || '', 
             createdAt: Date.now()
         });
 
