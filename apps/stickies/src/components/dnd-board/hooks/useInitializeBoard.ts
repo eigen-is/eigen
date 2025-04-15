@@ -13,7 +13,7 @@ const DEFAULT_BOARD_STRUCTURE = {
     tasks: [
         {
             id: '',
-            title: 'Your First eigen|sticky>',
+            title: 'Your first sticky',
             description: 'Drag this card to another column to get started. You can add more cards with the "Add a card" button.',
             comments: []
         }
