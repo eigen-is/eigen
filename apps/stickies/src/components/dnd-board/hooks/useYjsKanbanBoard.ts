@@ -4,6 +4,7 @@ import { WebsocketProvider } from 'y-websocket';
 import { BoardData, ColumnItem, TaskItem } from '../types';
 import { nanoid } from 'nanoid';
 import { useInitializeBoard } from './useInitializeBoard';
+import { normalizeBoard } from '../normalizeBoard';
 
 /**
  * Minimal Yjs-powered Kanban board hook for collaborative editing
@@ -45,6 +46,8 @@ export const useYjsKanbanBoard = (ownerId: string, pathId: string) => {
 
         // Map Yjs doc to React state
         const updateReactState = () => {
+            // Normalize board structure
+            normalizeBoard(doc);
             const newState: BoardData = {
                 tasks: {},
                 columns: {},

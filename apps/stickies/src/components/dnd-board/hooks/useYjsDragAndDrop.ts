@@ -2,6 +2,7 @@ import {useState} from 'react';
 import * as Y from 'yjs';
 import { DragEndEvent, DragStartEvent } from '@dnd-kit/core';
 import { BoardData, TaskItem, ColumnItem } from '../types';
+import { normalizeBoard } from '../normalizeBoard';
 
 type DragState = {
     activeId: string | null;
@@ -124,6 +125,8 @@ export const useYjsDragAndDrop = ({ board, yjsDoc }: UseYjsDragAndDropProps) => 
                     }
                 }
             }
+            // Always normalize after any DnD mutation
+            normalizeBoard(yjsDoc);
         });
         resetDragState();
     };
