@@ -37,7 +37,7 @@ function DriveRoute() {
 
     // Handle row click to show path details
     const onRowSelect = (path: DrivePath) => {
-        if (isMobile && (path.type === 'folder' || path.type === 'doc')) {
+        if (isMobile && (path.type === 'folder' || path.type === 'doc' || path.type === 'stickies')) {
             onRowActivate(path);
         } else {
             navigate({
@@ -56,6 +56,8 @@ function DriveRoute() {
             });
         } else if (path.type === 'doc') {
             document.location.href = `${import.meta.env.VITE_APP_DOCS_URL}/doc/${path.ownerId}/${path.id}`;
+        } else if (path.type === 'stickies') {
+            document.location.href = `${import.meta.env.VITE_APP_STICKIES_URL}/board/${ownerId}/${path.id}`;
         } else {
             // todo: for some types we could show a fullscreen preview
         }
