@@ -30,7 +30,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({task, isMobile}) => {
     return (
         <div
             ref={setNodeRef}
-            className={`mb-1.5 ${width} border border-gray-200 shadow-sm bg-white ${isDragging ? 'opacity-50' : ''}`}
+            className={`mb-1.5 ${width} border border-gray-200 shadow-sm bg-white select-none ${isDragging ? 'opacity-50' : ''}`}
             style={{
                 transform: CSS.Transform.toString(transform),
                 transition,
