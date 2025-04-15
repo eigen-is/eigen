@@ -35,7 +35,7 @@ function DriveRoute() {
         error: isFolderContentLoadingError
     } = useSharedPaths(to as 'by-me' | 'with-me');
 
-    const folderContents = unfilteredFolderContents?.filter((path) => path.type === 'folder' || path.type === 'stickies') || [];
+    const folderContents = unfilteredFolderContents?.filter((path) => path.type === 'stickies') || [];
 
     // Handle row click to show path details
     const onRowSelect = (path: DrivePath) => {
