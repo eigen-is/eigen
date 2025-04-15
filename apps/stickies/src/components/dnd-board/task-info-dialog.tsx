@@ -1,6 +1,5 @@
-import { useState, useEffect } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@workspace/ui/components/dialog";
-import { UserPublicItem } from "@workspace/ui/components/layout/user-item";
 import { TaskItem, CommentItem } from "./types";
 import { Button } from "@workspace/ui/components/button";
 import { Textarea } from "@workspace/ui/components/textarea";
@@ -9,6 +8,11 @@ import { nanoid } from "nanoid";
 import * as Y from "yjs";
 import { formatDistanceToNow } from "date-fns";
 import { useAuth } from "@workspace/lib/auth/auth-context.tsx";
+import { useAvatar } from "@workspace/lib/media";
+import { UserAvatar } from "@workspace/ui/components/layout/user-avatar";
+import { cn } from "@workspace/ui/lib/utils";
+import { Separator } from "@workspace/ui/components/separator";
+import React from "react";
 
 interface TaskInfoDialogProps {
   isOpen: boolean;
@@ -16,7 +20,6 @@ interface TaskInfoDialogProps {
   task: TaskItem | null;
   yjsDoc: Y.Doc | null;
   ownerId: string;
-  comments: Record<string, CommentItem>;
 }
 
 export function TaskInfoDialog({
@@ -25,9 +28,8 @@ export function TaskInfoDialog({
   task,
   yjsDoc,
   ownerId,
-  comments,
 }: TaskInfoDialogProps) {
-  const [newComment, setNewComment] = useState("");
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   const { user } = useAuth();
 
   // --- Yjs comments observer ---
@@ -70,36 +72,95 @@ export function TaskInfoDialog({
 
   if (!task) return null;
 
-  // Prefer Yjs comments if available, else fallback to props
-  const allComments = yjsDoc ? yjsComments : comments;
-
-  // Get comments for this task only
-  const taskComments = Object.values(allComments)
-    .filter((comment) => comment.taskId === task.id)
-    .sort((a, b) => b.createdAt - a.createdAt); // Sort by newest first
+  // Memoize taskComments to keep array reference stable for React.memo
+  const taskComments = useMemo(() => {
+    return Object.values(yjsComments)
+      .filter((c) => c.taskId === task?.id)
+      .sort((a, b) => b.createdAt - a.createdAt);
+  }, [yjsComments, task?.id]);
 
   const handleAddComment = () => {
-    if (!newComment.trim() || !yjsDoc || !task) return;
-    
+    const value = textareaRef.current?.value.trim() ?? "";
+    if (!value || !yjsDoc || !task) return;
     yjsDoc.transact(() => {
       const commentId = `comment-${nanoid(10)}`;
       const now = Date.now();
-      
-      // Add to comments map in Yjs
       const commentsMap = yjsDoc.getMap("comments");
       const newCommentMap = new Y.Map();
-      
       newCommentMap.set("id", commentId);
       newCommentMap.set("taskId", task.id);
-      newCommentMap.set("text", newComment);
+      newCommentMap.set("text", value);
       newCommentMap.set("author", user?.email || '');
       newCommentMap.set("createdAt", now);
-      
       commentsMap.set(commentId, newCommentMap);
     });
-    
-    setNewComment("");
+    if (textareaRef.current) textareaRef.current.value = "";
   };
+
+  const UserRow = React.memo(function UserRow({
+    email,
+    timeLabel,
+    leftLabel,
+    className,
+    children,
+  }: {
+    email: string,
+    timeLabel: string,
+    leftLabel?: string,
+    className?: string,
+    children?: React.ReactNode,
+  }) {
+    const { data } = useAvatar(email, { enabled: true });
+    return (
+      <div className={cn("flex items-top", className)}>
+        <UserAvatar name={data?.name || email} email={data?.email || email} imageUrl={data?.avatar} size="md" />
+        <div className="ml-3 flex-1">
+          <div className="flex justify-between items-baseline">
+            <p className="text-sm font-medium text-gray-900">
+              {leftLabel ? `${leftLabel} ` : ''}
+              {data?.name || email}
+            </p>
+            <span className="text-xs text-gray-500 whitespace-nowrap ml-4 mr-2">{timeLabel}</span>
+          </div>
+          {children && (
+            <div className="text-sm text-gray-700 whitespace-pre-line mt-0.5 mr-2">{children}</div>
+          )}
+        </div>
+      </div>
+    );
+  });
+
+  const CommentRow = React.memo(function CommentRow({ comment }: { comment: CommentItem }) {
+    return (
+      <UserRow
+        email={comment.author}
+        timeLabel={formatDistanceToNow(comment.createdAt, { addSuffix: true })}
+      >
+        {comment.text}
+      </UserRow>
+    );
+  });
+
+  const TaskCommentList = React.memo(function TaskCommentList({ taskComments, creator, createdAt }: { taskComments: CommentItem[], creator: string, createdAt: Date }) {
+    console.log('render');
+    return (
+      <ScrollArea className="h-128 rounded-md p-2">
+        <div className="space-y-4">
+          {taskComments.map((comment) => (
+            <React.Fragment key={comment.id}>
+              <CommentRow comment={comment} />
+              <Separator />
+            </React.Fragment>
+          ))}
+          <UserRow
+            email={creator}
+            timeLabel={formatDistanceToNow(createdAt, { addSuffix: true })}
+            leftLabel="Created by"
+          />
+        </div>
+      </ScrollArea>
+    );
+  });
 
   return (
     <Dialog open={isOpen} onOpenChange={(open: boolean) => !open && onClose()}>
@@ -107,69 +168,44 @@ export function TaskInfoDialog({
         <DialogHeader>
           <DialogTitle>{task.title}</DialogTitle>
         </DialogHeader>
-        
+
         {/* Task description */}
         {task.description && (
           <div className="mt-2 text-sm text-gray-700">
             <p className="whitespace-pre-line">{task.description}</p>
           </div>
         )}
-        
-        {/* Creator info */}
-        <div className="mt-4">
-          <h3 className="text-sm font-medium mb-1">Created by</h3>
-          <UserPublicItem 
-            email={task.creator} 
-            label={formatDistanceToNow(task.createdAt, { addSuffix: true })}
-          />
-        </div>
-        
+
         {/* Comments section */}
-        <div className="mt-6">
-          <h3 className="text-sm font-medium mb-3">Comments</h3>
-          
-          {/* New comment input */}
-          <div className="mb-4">
-            <Textarea
-              placeholder="Write a comment..."
-              value={newComment}
-              onChange={(e: React.ChangeEvent<HTMLTextAreaElement>) => setNewComment(e.target.value)}
-              className="min-h-20 mb-2"
+        <div>
+          {/* New comment input (avatar left, textarea, button) */}
+          <div className="mb-4 flex items-start gap-3">
+            <UserAvatar
+              name={user?.name || user?.email || ''}
+              email={user?.email || ''}
+              imageUrl={user?.avatar}
+              size="md"
+              className="mt-1"
             />
-            <div className="flex justify-end">
-              <Button 
-                onClick={handleAddComment} 
-                disabled={!newComment.trim()}
-                size="sm"
-              >
-                Add Comment
-              </Button>
+            <div className="flex-1">
+              <Textarea
+                placeholder="Write a comment..."
+                ref={textareaRef}
+                className="min-h-20 mb-2"
+              />
+              <div className="flex justify-end">
+                <Button
+                  onClick={handleAddComment}
+                  size="sm"
+                >
+                  Add Comment
+                </Button>
+              </div>
             </div>
           </div>
-          
-          {/* Comments list */}
-          <ScrollArea className="h-64 rounded-md border p-2">
-            {taskComments.length > 0 ? (
-              <div className="space-y-4">
-                {taskComments.map((comment) => (
-                  <div key={comment.id} className="border-b pb-3">
-                    <UserPublicItem
-                      email={comment.author}
-                      label={formatDistanceToNow(comment.createdAt, { addSuffix: true })}
-                      className="mb-1"
-                    />
-                    <p className="text-sm text-gray-700 ml-10 whitespace-pre-line">
-                      {comment.text}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="flex items-center justify-center h-full text-gray-500">
-                No comments yet
-              </div>
-            )}
-          </ScrollArea>
+
+          {/* Comments list (no border, compact) */}
+          <TaskCommentList taskComments={taskComments} creator={task.creator} createdAt={new Date(task.createdAt)} />
         </div>
       </DialogContent>
     </Dialog>

@@ -9,7 +9,7 @@ export function useAvatar(email: string, options: { enabled?: boolean } = {enabl
     isLoading: boolean
 } {
     const {data: contacts = [], isLoading: contactsLoading} = useContacts();
-console.log(email);
+
     // Find the contact matching this email
     const matchingContact = useMemo(() => {
         if (!email || !options.enabled) return null;
@@ -25,7 +25,12 @@ console.log(email);
     const shouldFetchPublicUser = useMemo(() => {
         if (!email || !options.enabled) return false;
         if (matchingContact?.avatar) return false; // Already have avatar from contact
-        return email.toLowerCase().endsWith('@eigen.is') || !email.includes('@');
+
+        // Check if email is an @eigen.is address, or an Eigen user ID (24+ chars, alphanumeric)
+        const isEigenEmail = email.toLowerCase().endsWith('@eigen.is');
+        // Eigen user IDs are typically 24+ chars, only letters/numbers (no @)
+        const isEigenUserId = /^[a-zA-Z0-9]{20,}$/.test(email);
+        return isEigenEmail || isEigenUserId;
     }, [email, matchingContact, options.enabled]);
 
     // Only fetch public data when needed
