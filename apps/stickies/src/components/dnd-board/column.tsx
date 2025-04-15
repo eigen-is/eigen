@@ -69,15 +69,21 @@ export const Column: React.FC<ColumnProps> = ({
                 {...attributes}
                 {...listeners}
             >
-                <span className="truncate">{column.title}</span>
-                <TooltipButton
-                    icon={Pencil}
-                    tooltipText="Edit Column"
-                    onClick={() => {
-                        onEditColumn(column.id);
-                    }}
-                    className="h-6 w-6 ml-1 opacity-50 hover:opacity-100"
-                />
+                <span className="truncate flex-1">{column.title}</span>
+                <div className="flex items-center">
+                    <TooltipButton
+                        icon={Plus}
+                        tooltipText="Add a sticky"
+                        onClick={() => onAddTask(column.id)}
+                        className="h-6 w-6 opacity-50 hover:opacity-100 mr-1"
+                    />
+                    <TooltipButton
+                        icon={Pencil}
+                        tooltipText="Edit Column"
+                        onClick={() => onEditColumn(column.id)}
+                        className="h-6 w-6 opacity-50 hover:opacity-100"
+                    />
+                </div>
             </div>
 
             {/* Column content area */}
