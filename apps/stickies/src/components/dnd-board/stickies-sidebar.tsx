@@ -4,7 +4,7 @@ import {SidebarSection} from '@workspace/ui/components/layout/sidebar/sidebar-se
 import {AppLogo} from '@workspace/ui/components/layout/app-logo';
 import {SidebarItem, StorageUsage} from "@workspace/ui";
 
-interface DocsSidebarProps {
+interface StickiesSidebarProps {
     condensed?: boolean;
     onClose?: () => void;
     isMobile?: boolean;
@@ -13,14 +13,12 @@ interface DocsSidebarProps {
     rootPath?: string;
 }
 
-export function DocsSidebar({
-                                 condensed = false,
-                                 onClose,
-                                 isMobile = false,
-                                 error = false,
-                                 onCreateFolder,
-                                 rootPath = "/",
-                             }: DocsSidebarProps) {
+export function StickiesSidebar({
+                                    condensed = false,
+                                    onClose,
+                                    isMobile = false,
+                                    rootPath = "/",
+                                }: StickiesSidebarProps) {
     return (
         <div className="flex h-full min-h-[calc(100vh-3.5rem)] flex-col">
             {isMobile && (
