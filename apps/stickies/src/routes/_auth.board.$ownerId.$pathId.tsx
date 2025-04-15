@@ -1,10 +1,10 @@
-import {KanbanBoard} from './../components/dnd-board'
 import {createFileRoute} from '@tanstack/react-router'
-import {useDocumentAccess} from '@workspace/lib/docs'   
+import {useDocumentAccess} from '@workspace/lib/docs'
 import {usePathInfo} from '@workspace/lib/drive'
 import {EigenLoader} from '@workspace/ui'
 import {useApp} from '@workspace/ui/components/layout/app-context'
 import {useEffect, useState} from 'react'
+import {StickiesBoard} from "@/components/dnd-board/board.tsx";
 
 export const Route = createFileRoute('/_auth/board/$ownerId/$pathId')({
     component: StickiesRoute,
@@ -43,8 +43,8 @@ function StickiesRoute() {
     }
 
     return (
-    <div className="h-full w-full bg-muted ">
-      <KanbanBoard ownerId={ownerId} pathId={pathId} />
-    </div>
+        <div className="h-full w-full bg-muted ">
+            <StickiesBoard ownerId={ownerId} pathId={pathId}/>
+        </div>
     )
 }
