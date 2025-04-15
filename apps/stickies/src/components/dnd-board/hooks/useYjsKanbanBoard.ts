@@ -3,6 +3,7 @@ import * as Y from 'yjs';
 import { WebsocketProvider } from 'y-websocket';
 import { BoardData, ColumnItem, TaskItem } from '../types';
 import { nanoid } from 'nanoid';
+import { useInitializeBoard } from './useInitializeBoard';
 
 /**
  * Minimal Yjs-powered Kanban board hook for collaborative editing
@@ -24,6 +25,9 @@ export const useYjsKanbanBoard = (ownerId: string, pathId: string) => {
     const docRef = useRef<Y.Doc | null>(null);
     const providerRef = useRef<WebsocketProvider | null>(null);
 
+    const { initializeDefaultBoard } = useInitializeBoard();
+
+    // Helper function to initialize board from JSON to Yjs data
     useEffect(() => {
         const doc = new Y.Doc();
         docRef.current = doc;
@@ -85,36 +89,14 @@ export const useYjsKanbanBoard = (ownerId: string, pathId: string) => {
         columnOrderArray.observe(updateReactState);
         updateReactState();
 
-        // Initialize default columns if doc is empty
-        doc.on('sync', (isSynced: boolean) => {
-            if (isSynced && columnOrderArray.length === 0) {
+        // Initialize default columns if doc is empty (as a backup mechanism)
+        wsProvider.on('sync', (isSynced: boolean) => {
+            console.log(isSynced)
+
+            if (isSynced && columnsMap.size === 0) {
+                console.log('Sync completed, board is still empty, initializing default structure');
                 doc.transact(() => {
-                    const now = Date.now();
-                    const todoId = `column-${nanoid(6)}`;
-                    const inProgressId = `column-${nanoid(6)}`;
-                    const doneId = `column-${nanoid(6)}`;
-                    const todoColumn = new Y.Map();
-                    todoColumn.set('id', todoId);
-                    todoColumn.set('title', 'To Do');
-                    todoColumn.set('taskIds', new Y.Array());
-                    todoColumn.set('creator', ownerId);
-                    todoColumn.set('createdAt', now);
-                    columnsMap.set(todoId, todoColumn);
-                    const inProgressColumn = new Y.Map();
-                    inProgressColumn.set('id', inProgressId);
-                    inProgressColumn.set('title', 'In Progress');
-                    inProgressColumn.set('taskIds', new Y.Array());
-                    inProgressColumn.set('creator', ownerId);
-                    inProgressColumn.set('createdAt', now);
-                    columnsMap.set(inProgressId, inProgressColumn);
-                    const doneColumn = new Y.Map();
-                    doneColumn.set('id', doneId);
-                    doneColumn.set('title', 'Done');
-                    doneColumn.set('taskIds', new Y.Array());
-                    doneColumn.set('creator', ownerId);
-                    doneColumn.set('createdAt', now);
-                    columnsMap.set(doneId, doneColumn);
-                    columnOrderArray.insert(0, [todoId, inProgressId, doneId]);
+                    initializeDefaultBoard(doc, ownerId);
                 });
             }
         });
@@ -124,7 +106,7 @@ export const useYjsKanbanBoard = (ownerId: string, pathId: string) => {
             if (providerRef.current) providerRef.current.disconnect();
             if (docRef.current) docRef.current.destroy();
         };
-    }, [ownerId, pathId]);
+    }, [ownerId, pathId, initializeDefaultBoard]);
 
     // Dialog handlers
     const handleAddTaskClick = (columnId: string) => {
