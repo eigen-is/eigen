@@ -4,6 +4,7 @@ import {Button} from "@workspace/ui/components/button";
 import {Input} from "@workspace/ui/components/input";
 import {Textarea} from "@workspace/ui/components/textarea";
 import {TaskItem} from './types';
+import { useAuth } from "@workspace/lib/auth/auth-context.tsx";
 
 interface AddTaskDialogProps {
     isOpen: boolean;
@@ -20,6 +21,7 @@ export const AddTaskDialog: React.FC<AddTaskDialogProps> = ({
                                                             }) => {
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
+    const { user } = useAuth();                                                                
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
@@ -29,7 +31,7 @@ export const AddTaskDialog: React.FC<AddTaskDialogProps> = ({
         onAddTask({
             title: title.trim(),
             description: description.trim(),
-            creator: 'reinder@eigen.is', // In a real app, get this from user session
+            creator: user?.email || '',
             createdAt: Date.now()
         });
 
