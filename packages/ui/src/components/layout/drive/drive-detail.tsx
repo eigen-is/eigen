@@ -1,5 +1,5 @@
 import {cn} from "@workspace/ui/lib/utils";
-import {ArrowLeft, Download, Link, MoreVertical, Trash2, X} from "lucide-react";
+import {ArrowLeft, MoreVertical, Trash2, X} from "lucide-react";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -20,6 +20,8 @@ interface DriveDetailProps {
     onBackClick?: () => void;
     onDelete: (path: any) => void;
     onShareClick?: (item: DrivePath) => void;
+    onDownload?: (path: DrivePath) => void;
+    allowDelete?: boolean;
 }
 
 export function DriveDetail({
@@ -29,6 +31,8 @@ export function DriveDetail({
                                 onBackClick,
                                 onDelete,
                                 onShareClick,
+                                onDownload,
+                                allowDelete,
                                 ...props
                             }: DriveDetailProps) {
 
@@ -65,29 +69,6 @@ export function DriveDetail({
                         tooltipText="Delete"
                         onClick={() => onDelete(path)}
                     />
-                    <TooltipButton
-                        icon={Link}
-                        tooltipText="Edit Access"
-                        onClick={() => {
-                            onShareClick?.(path);
-                        }}
-                    />
-                    <TooltipButton
-                        icon={Download}
-                        tooltipText="Download"
-                        onClick={() => {
-                            if (path && path.id) {
-                                const downloadUrl = fullPath;
-                                // Create a temporary anchor element to trigger the download
-                                const a = document.createElement('a');
-                                a.href = downloadUrl;
-                                a.download = path.name || 'download'; // Use the file name or a default
-                                document.body.appendChild(a);
-                                a.click();
-                                document.body.removeChild(a);
-                            }
-                        }}
-                    />
 
                     <div className="h-6 w-[1px] bg-border mx-1"></div>
 
@@ -97,8 +78,21 @@ export function DriveDetail({
                                 <MoreVertical className="h-4 w-4"/>
                             </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                            <DropdownMenuItem>Add label</DropdownMenuItem>
+
+                        <DropdownMenuContent>
+                            {allowDelete && (
+                            <DropdownMenuItem onClick={() => onDelete?.(path)}>
+                                Delete
+                            </DropdownMenuItem>
+                            )}
+                            {path.type === 'file' && (
+                                <DropdownMenuItem onClick={() => onDownload?.(path)}>
+                                    Download
+                                </DropdownMenuItem>
+                            )}
+                            <DropdownMenuItem onClick={() => onShareClick?.(path)}>
+                                Edit access
+                            </DropdownMenuItem>
                         </DropdownMenuContent>
                     </DropdownMenu>
                 </div>
@@ -161,6 +155,7 @@ export function DriveDetail({
                     <DriveAccessList
                         path={path}
                         acl={path.acl}
+                        onShareClick={onShareClick}
                     />
                 </div>
             </div>

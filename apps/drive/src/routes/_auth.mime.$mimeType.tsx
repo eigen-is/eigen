@@ -1,5 +1,5 @@
 import {createFileRoute, useNavigate} from '@tanstack/react-router';
-import {useInvalidateFolder, useMimeContent, usePathInfo} from '@workspace/lib/drive';
+import {useMimeContent, usePathInfo} from '@workspace/lib/drive';
 import {DriveLayout} from "@workspace/ui/components/layout/drive/drive-layout";
 import {DrivePath} from "@apps/api-server/types/drive";
 import {useAuth} from '@workspace/lib/auth/auth-context.js';
@@ -21,7 +21,6 @@ function DriveRoute() {
     const {mimeType} = Route.useParams();
     const navigate = useNavigate();
     const {pid} = Route.useSearch();
-    const invalidateFolder = useInvalidateFolder();
     const auth = useAuth();
     const ownerId = auth?.user?.id;
     const {data: selectedPath = null} = usePathInfo(ownerId, pid);
@@ -34,14 +33,11 @@ function DriveRoute() {
         error: isFolderContentLoadingError
     } = useMimeContent(ownerId, mimeType);
 
+
     // Handle row click to show path details
-    const handleRowClick = (path: DrivePath) => {
-        if (path.type === 'folder') {
-            navigate({
-                to: '/fs/$ownerId/$pathId',
-                params: {ownerId: path.ownerId, pathId: path.id},
-                search: {pid: undefined}
-            });
+    const onRowSelect = (path: DrivePath) => {
+        if (isMobile && (path.type === 'folder' || path.type === 'doc'  || path.type === 'stickies')) {
+            onRowActivate(path);
         } else {
             navigate({
                 to: Route.fullPath,
@@ -51,17 +47,28 @@ function DriveRoute() {
         }
     };
 
+    const onRowActivate = (path: DrivePath) => {
+        if (path.type === 'folder') {
+            navigate({
+                to: Route.fullPath,
+                params: {mimeType},
+                search: {pid: undefined}
+            });
+        } else if (path.type === 'doc') {
+            document.location.href = `${import.meta.env.VITE_APP_DOCS_URL}/doc/${ownerId}/${path.id}`;
+        } else if (path.type === 'stickies') {
+            document.location.href = `${import.meta.env.VITE_APP_STICKIES_URL}/board/${ownerId}/${path.id}`;
+        } else {
+            // todo: for some types we could show a fullscreen preview
+        }
+    };
+
     // Handle back navigation (mainly for mobile)
     const handleBackToList = () => {
         navigate({
             to: Route.fullPath,
             params: {mimeType}
         });
-    };
-
-    // Callback die door DriveLayout wordt aangeroepen na acties
-    const handleAfterAction = (actionType: string, data: any) => {
-                
     };
 
     if (isFolderContentLoadingError) {
@@ -80,9 +87,11 @@ function DriveRoute() {
             folderContents={folderContents}
             isLoading={isFolderContentLoading}
             error={isFolderContentLoadingError}
-            onRowClick={handleRowClick}
+            onRowSelect={onRowSelect}
+            onRowActivate={onRowActivate}
             onBackToList={handleBackToList}
-            onAfterAction={handleAfterAction}
+            onAfterAction={() => {
+            }}
             allowDelete={true}
             allowShare={true}
             allowCreateFolder={false}

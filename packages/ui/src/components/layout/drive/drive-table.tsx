@@ -4,9 +4,16 @@ import {cn} from "@workspace/ui/lib/utils";
 import {formatDistanceToNow} from "date-fns";
 import {DrivePath} from "@apps/api-server/types/drive";
 import {DriveShareSummary} from "./drive-share-summary";
-import {ChevronLeft} from "lucide-react";
+import {ChevronLeft, Download, Trash2, UserRoundPlus} from "lucide-react";
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger
+} from "@workspace/ui/components/dropdown-menu";
 
-// Props for the DriveTable component
+// Props for the DriveTable component   
 export interface DriveTableProps {
     items: DrivePath[];
     currentPath?: DrivePath | null;
@@ -14,6 +21,9 @@ export interface DriveTableProps {
     onItemClick?: (item: DrivePath) => void;
     getFileIcon?: (mimeType: string, type: string, props?: any) => React.ReactNode;
     onShareClick?: (item: DrivePath) => void;
+    onDownload?: (item: DrivePath) => void;
+    onDelete?: (item: DrivePath) => void;
+    allowDelete?: boolean;
 }
 
 export function DriveTable({
@@ -22,7 +32,10 @@ export function DriveTable({
                                activeItemId,
                                onItemClick,
                                getFileIcon,
-                               onShareClick
+                               onShareClick,
+                               onDownload,
+                               onDelete,
+                               allowDelete = false,
                            }: DriveTableProps) {
 
     // Ref voor de tabel element
@@ -33,6 +46,10 @@ export function DriveTable({
 
     // State voor het bijhouden van de huidige geselecteerde index
     const [selectedIndex, setSelectedIndex] = useState<number>(-1);
+
+    // State for the context menu
+    const [contextMenuPosition, setContextMenuPosition] = useState<{ x: number, y: number } | null>(null);
+    const [contextMenuItem, setContextMenuItem] = useState<DrivePath | null>(null);
 
     // Bepaal of er een parent navigatie-item is
     const hasParentItem = Boolean(currentPath?.parentId);
@@ -111,14 +128,11 @@ export function DriveTable({
                 e.preventDefault();
                 setSelectedIndex(prev => {
                     const newIndex = Math.min(prev + 1, allItems.length - 1);
-                    if (newIndex >= 0) {
-                        const targetItem = allItems[newIndex];
-
-                        // Alleen onItemClick uitvoeren als het GEEN folder is
-                        if (targetItem.type !== 'folder') {
+                    if (newIndex >= 0 && newIndex !== prev) {
+                        if (!hasParentItem || newIndex > 0) {
+                            const targetItem = allItems[newIndex];
                             onItemClick?.(targetItem);
                         }
-
                         // Auto-scroll indien nodig
                         scrollToRow(newIndex);
                     }
@@ -130,14 +144,11 @@ export function DriveTable({
                 e.preventDefault();
                 setSelectedIndex(prev => {
                     const newIndex = Math.max(prev - 1, 0);
-                    if (newIndex >= 0) {
-                        const targetItem = allItems[newIndex];
-
-                        // Alleen onItemClick uitvoeren als het GEEN folder is
-                        if (targetItem.type !== 'folder') {
+                    if (newIndex >= 0 && newIndex !== prev) {
+                        if (!hasParentItem || newIndex > 0) {
+                            const targetItem = allItems[newIndex];
                             onItemClick?.(targetItem);
                         }
-
                         // Auto-scroll indien nodig
                         scrollToRow(newIndex);
                     }
@@ -157,13 +168,6 @@ export function DriveTable({
                 e.preventDefault();
                 if (allItems.length > 0) {
                     setSelectedIndex(0);
-
-                    const targetItem = allItems[0];
-                    // Alleen onItemClick uitvoeren als het GEEN folder is
-                    if (targetItem.type !== 'folder') {
-                        onItemClick?.(targetItem);
-                    }
-
                     scrollToRow(0);
                 }
                 break;
@@ -174,9 +178,8 @@ export function DriveTable({
                     const lastIndex = allItems.length - 1;
                     setSelectedIndex(lastIndex);
 
-                    const targetItem = allItems[lastIndex];
-                    // Alleen onItemClick uitvoeren als het GEEN folder is
-                    if (targetItem.type !== 'folder') {
+                    if (!hasParentItem || lastIndex > 0) {                       
+                        const targetItem = allItems[lastIndex];
                         onItemClick?.(targetItem);
                     }
 
@@ -194,6 +197,19 @@ export function DriveTable({
                 rows[index].scrollIntoView({behavior: 'smooth', block: 'nearest'});
             }
         }
+    };
+
+    // Handle right-click on table row
+    const handleContextMenu = (e: React.MouseEvent, item: DrivePath) => {
+        e.preventDefault();
+        setContextMenuPosition({ x: e.clientX, y: e.clientY });
+        setContextMenuItem(item);
+    };
+
+    // Close context menu
+    const closeContextMenu = () => {
+        setContextMenuPosition(null);
+        setContextMenuItem(null);
     };
 
     return (
@@ -259,6 +275,7 @@ export function DriveTable({
                                     (activeItemId === item.id || selectedIndex === adjustedIndex) && "eigen-list-item-active"
                                 )}
                                 onClick={() => onItemClick?.(item)}
+                                onContextMenu={(e) => handleContextMenu(e, item)}
                             >
                                 <TableCell>
                                     <div className="flex items-center max-w-full overflow-hidden">
@@ -268,12 +285,16 @@ export function DriveTable({
                                             {
                                                 className: "h-4 w-4 mr-2 text-muted-foreground flex-shrink-0",
                                                 ...(item.type === 'folder' ? {
-                                                    className: "h-4 w-4 mr-2 text-app flex-shrink-0",
+                                                    className: "h-4 w-4 mr-2 text-drive flex-shrink-0",
                                                     fill: "var(--app-drive-light-color)"
                                                 } : {}),
-                                                ...(item.type === 'doc' || item.type === 'stickies' ? {
-                                                    className: "h-4 w-4 mr-2 text-doc flex-shrink-0",
+                                                ...(item.type === 'doc'  ? {
+                                                    className: "h-4 w-4 mr-2 text-docs flex-shrink-0",
                                                     fill: "var(--app-doc-light-color)"
+                                                } : {}),
+                                                ...(item.type === 'stickies' ? {
+                                                    className: "h-4 w-4 mr-2 text-stickies flex-shrink-0",
+                                                    fill: "var(--app-stickies-light-color)"
                                                 } : {})
                                             }
                                         )}
@@ -298,6 +319,67 @@ export function DriveTable({
                     })}
                 </TableBody>
             </Table>
+
+            {/* Context Menu using shadcn dropdown-menu */}
+            <DropdownMenu 
+                open={!!contextMenuPosition} 
+                onOpenChange={(open) => !open && closeContextMenu()}
+            >
+                <DropdownMenuTrigger className="hidden">
+                    {/* Hidden trigger */}
+                </DropdownMenuTrigger>
+                
+                <DropdownMenuContent
+                    style={{
+                        position: 'absolute',
+                        top: `${contextMenuPosition?.y || 0}px`,
+                        left: `${contextMenuPosition?.x || 0}px`,
+                    }}
+                    className="w-48"
+                >
+                    {onDownload && contextMenuItem?.type === 'file' && (
+                        <DropdownMenuItem
+                            onClick={() => {
+                                onDownload?.(contextMenuItem);
+                                closeContextMenu();
+                            }}
+                            className="flex items-center"
+                        >
+                            <Download className="h-4 w-4 mr-2" />
+                            Download
+                        </DropdownMenuItem>
+                    )}
+                    
+                    {onShareClick && (
+                        <DropdownMenuItem
+                            onClick={() => {
+                                onShareClick?.(contextMenuItem!);
+                                closeContextMenu();
+                            }}
+                            className="flex items-center"
+                        >
+                            <UserRoundPlus className="h-4 w-4 mr-2" />
+                            Edit access
+                        </DropdownMenuItem>
+                    )}
+                    
+                    {allowDelete && (
+                        <>
+                            {(onDownload || onShareClick) && <DropdownMenuSeparator />}
+                            <DropdownMenuItem
+                                onClick={() => {
+                                    onDelete?.(contextMenuItem!);
+                                    closeContextMenu();
+                                }}
+                                className="flex items-center"
+                            >
+                                <Trash2 className="h-4 w-4 mr-2" />
+                                Delete
+                            </DropdownMenuItem>
+                        </>
+                    )}
+                </DropdownMenuContent>
+            </DropdownMenu>
         </div>
     );
 }

@@ -32,7 +32,8 @@ export interface DriveLayoutProps {
     currentPath?: DrivePath | null;
 
     // Navigation callbacks
-    onRowClick: (path: DrivePath) => void;
+    onRowSelect: (path: DrivePath) => void;
+    onRowActivate?: (path: DrivePath) => void;
     onBackToList: () => void;
     onAfterAction?: (actionType: string, data: any) => void;
 
@@ -55,7 +56,8 @@ export function DriveLayout({
                                 folderContents,
                                 isLoading,
                                 error,
-                                onRowClick,
+                                onRowSelect,
+                                onRowActivate,
                                 onBackToList,
                                 onAfterAction,
                                 pathId = 'unknown',
@@ -228,6 +230,20 @@ export function DriveLayout({
         setDeleteDialogOpen(true);
     };
 
+    const handleDownloadPath = (path: DrivePath) => {
+        if (path && path.type === 'file' && path.id) {
+            const downloadUrl = `${import.meta.env.VITE_API_HOST}/drive/download/${path.ownerId}/${path.id}`;
+            // Create a temporary anchor element to trigger the download
+            const a = document.createElement('a');
+            a.href = downloadUrl;
+            a.download = path.name || 'download'; // Use the file name or a default
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+        }
+    }
+
+
     // Function to perform the actual delete after confirmation
     const confirmDelete = () => {
         if (!itemToDelete || !allowDelete) return;
@@ -284,6 +300,8 @@ export function DriveLayout({
                             }}
                             onShareClick={allowShare ? handleShareClick : () => {
                             }}
+                            onDownload={handleDownloadPath}
+                            allowDelete={allowDelete}
                         />
                     </div>
                 ) : (
@@ -292,7 +310,8 @@ export function DriveLayout({
                             items={folderContents}
                             isLoading={isLoading}
                             error={error}
-                            onRowClick={onRowClick}
+                            onRowSelect={onRowSelect}
+                            onRowActivate={onRowActivate}
                             activeRowId={pid}
                             onCreateFolder={allowCreateFolder ? openCreateFolderDialog : undefined}
                             onUploadFile={allowUpload ? handleFileUpload : undefined}
@@ -307,6 +326,8 @@ export function DriveLayout({
                             ownerId={ownerId}
                             pathId={pathId}
                             showBreadcrumb={showBreadcrumb}
+                            onDownload={handleDownloadPath}
+                            allowDelete={allowDelete}
                         />
                     </div>
                 )
@@ -320,7 +341,8 @@ export function DriveLayout({
                                     items={folderContents}
                                     isLoading={isLoading}
                                     error={error}
-                                    onRowClick={onRowClick}
+                                    onRowSelect={onRowSelect}
+                                    onRowActivate={onRowActivate}
                                     activeRowId={pid}
                                     onCreateFolder={allowCreateFolder ? openCreateFolderDialog : undefined}
                                     onUploadFile={allowUpload ? handleFileUpload : undefined}
@@ -335,6 +357,8 @@ export function DriveLayout({
                                     ownerId={ownerId}
                                     pathId={pathId}
                                     showBreadcrumb={showBreadcrumb}
+                                    onDownload={handleDownloadPath}
+                                    allowDelete={allowDelete}
                                 />
                             </div>)}
                         {(pid || currentPath?.type !== 'folder') && (
@@ -348,6 +372,8 @@ export function DriveLayout({
                                         onBackClick={onBackToList}
                                         onShareClick={allowShare ? handleShareClick : () => {
                                         }}
+                                        onDownload={handleDownloadPath}
+                                        allowDelete={allowDelete}
                                     />
                                 </div>
                             </div>

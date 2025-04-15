@@ -44,6 +44,28 @@ export function useEmail(messageId: string | undefined) {
     });
 }
 
+// Hook to fetch a specific email by ID
+export function useEmailById() {
+    const queryClient = useQueryClient();
+
+    // Return a function that uses queryClient.fetchQuery
+    return async (messageId: string): Promise<Email | null> => {
+        try {
+            return await queryClient.fetchQuery({
+                queryKey: emailKeys.detail(messageId),
+                queryFn: async () => {
+                    const response = await mailApi.message[messageId].get();
+                    return response.data || null;
+                },
+                staleTime: Infinity,
+            });
+        } catch (error) {
+            console.error("Error fetching email by ID:", error);
+            return null;
+        }
+    };
+}
+
 export function useDeleteEmail() {
     const queryClient = useQueryClient();
 
@@ -68,12 +90,14 @@ export function useToggleReadEmail() {
         if (isRead === email.isRead) {
             return;
         }
+        const currentMailbox = email.mailbox;
 
         await mailApi.message.read.put({
             messageId: email.id,
             read: isRead
         });
         queryClient.invalidateQueries({queryKey: emailKeys.detail(email.id)});
+        queryClient.invalidateQueries({queryKey: emailKeys.list(currentMailbox)});
         queryClient.invalidateQueries({queryKey: mailboxKeys.lists()});
     }
 }
@@ -88,7 +112,7 @@ export function useMoveEmail() {
             targetMailbox: mailbox
         });
         queryClient.invalidateQueries({queryKey: emailKeys.detail(email.id)});
-        queryClient.invalidateQueries({queryKey: emailKeys.lists()});
+        queryClient.invalidateQueries({queryKey: emailKeys.list(currentMailbox)});
         queryClient.invalidateQueries({queryKey: mailboxKeys.lists()});
     }
 }

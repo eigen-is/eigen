@@ -1,7 +1,7 @@
 import {createFileRoute, useNavigate} from '@tanstack/react-router';
 import {EigenLoader} from "@workspace/ui";
 import {useFolderContent, useInvalidateFolder, usePathInfo} from '@workspace/lib/drive';
-import {useEffect, useContext} from "react";
+import {useContext, useEffect} from "react";
 import {DriveLayout} from "@workspace/ui/components/layout/drive/drive-layout";
 import {DrivePath} from "@apps/api-server/types/drive";
 import {useIsMobile} from "@workspace/lib/media";
@@ -51,8 +51,10 @@ function DriveRoute() {
     const {data: currentPath = null} = usePathInfo(ownerId, pathId);
 
     // Handle row click to show path details
-    const handleRowClick = (path: DrivePath) => {
-        if (path.type === 'folder') {
+    const onRowSelect = (path: DrivePath) => {
+        if (isMobile && (path.type === 'folder' || path.type === 'doc' || parent.type === 'stickies')) {
+            onRowActivate(path);
+        } else if (currentPath?.parentId === path.id) {
             navigate({
                 to: Route.fullPath,
                 params: {ownerId, pathId: path.id},
@@ -64,6 +66,22 @@ function DriveRoute() {
                 params: {ownerId, pathId},
                 search: {pid: path.id}
             });
+        }
+    };
+
+    const onRowActivate = (path: DrivePath) => {
+        if (path.type === 'folder') {
+            navigate({
+                to: Route.fullPath,
+                params: {ownerId, pathId: path.id},
+                search: {pid: undefined}
+            });
+        } else if (path.type === 'doc') {
+            document.location.href = `${import.meta.env.VITE_APP_DOCS_URL}/doc/${ownerId}/${path.id}`;
+        } else if (path.type === 'stickies') {
+            document.location.href = `${import.meta.env.VITE_APP_STICKIES_URL}/board/${ownerId}/${path.id}`;
+        } else {
+            // todo: for some types we could show a fullscreen preview
         }
     };
 
@@ -117,10 +135,13 @@ function DriveRoute() {
             error={isFolderContentLoadingError}
             selectedPath={selectedPath}
             currentPath={currentPath}
-            onRowClick={handleRowClick}
+            onRowSelect={onRowSelect}
+            onRowActivate={onRowActivate}
             onBackToList={handleBackToList}
             onAfterAction={handleAfterAction}
             allowCreateFolder={true}
+            allowCreateDoc={true}
+            allowCreateStickies={true}
             allowDelete={true}
             allowShare={true}
             allowUpload={true}
