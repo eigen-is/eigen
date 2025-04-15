@@ -49,9 +49,11 @@ export const CollaborativeEditor = ({ownerId, pathId}: {ownerId: string, pathId:
             connect: true,
         });
         yProvider.on("sync", setConnected);
-        /*yProvider.awareness.on('change', () => {
+        /*
+        yProvider.awareness.on('change', () => {
             console.log(Array.from(yProvider.awareness.getStates().values()));
-        });*/
+        });
+        */
 
         setProvider(yProvider);
 
@@ -245,6 +247,7 @@ const SlateEditor = ({
     return (
         <>
             <Slate editor={editor} initialValue={initialValue}>
+                <div className="flex h-full w-full flex-col">
                 <EditorToolbar/>
                 <div className="h-full w-full overflow-y-scroll bg-gray-200 p-4">
                     <div className="grid p-[2cm] bg-white rounded-lg shadow-sm min-h-full w-[210mm] m-auto">
@@ -259,7 +262,7 @@ const SlateEditor = ({
                             />
                         </Cursors>
                     </div>
-                    
+                </div>
                     <div className="fixed bottom-2 left-2">
                         {/** button with arrow up */}
                         <Button variant="ghost" className="bg-white" title="Move up" onClick={() => window.scrollTo(0, 0)}>
