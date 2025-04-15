@@ -14,7 +14,7 @@ const DEFAULT_BOARD_STRUCTURE = {
         {
             id: '',
             title: 'Ready to project?',
-            description: 'Project this sticky onto the "In Progress" basis by dragging it. You can add more stickies with the "Add a sticky" button.',
+            description: 'Get started by dragging this sticky onto the "In Progress" column. You can add more stickies with the "Add a sticky" button.',
             comments: []
         }
     ]
