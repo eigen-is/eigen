@@ -32,7 +32,7 @@ function InnerApp() {
 
 function App() {
     return (
-        <EigenApp>
+        <EigenApp appName="contacts">
             <InnerApp/>
         </EigenApp>
     )
@@ -52,4 +52,3 @@ if (!rootElement.innerHTML) {
     const root = ReactDOM.createRoot(rootElement);
     root.render(<App/>);
 }
-

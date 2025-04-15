@@ -1,11 +1,10 @@
-import {Download, FileText, Home, Image, Link, StickyNote, X} from 'lucide-react';
+import {Download, FileText, Home, UsersRound, X} from 'lucide-react';
 import {Button} from "@workspace/ui/components/button";
 import {SidebarSection} from '@workspace/ui/components/layout/sidebar/sidebar-section';
 import {AppLogo} from '@workspace/ui/components/layout/app-logo';
 import {SidebarItem, StorageUsage} from "@workspace/ui";
-import {Separator} from '@workspace/ui/components/separator';
 
-interface DriveSidebarProps {
+interface DocsSidebarProps {
     condensed?: boolean;
     onClose?: () => void;
     isMobile?: boolean;
@@ -21,7 +20,7 @@ export function DocsSidebar({
                                  error = false,
                                  onCreateFolder,
                                  rootPath = "/",
-                             }: DriveSidebarProps) {
+                             }: DocsSidebarProps) {
     return (
         <div className="flex h-full min-h-[calc(100vh-3.5rem)] flex-col">
             {isMobile && (
@@ -38,38 +37,28 @@ export function DocsSidebar({
             <SidebarSection
                 condensed={condensed}
             >
-                {/* New button */}
-
-
                 <SidebarItem
                     icon={<Home className="h-4 w-4"/>}
                     to={rootPath}
-                    label="Docs"
+                    label="Drive"
                     condensed={condensed}
                 />
 
-            </SidebarSection>
-            <Separator/>
-            <SidebarSection
-                condensed={condensed}
-            >
                 <SidebarItem
                     icon={<FileText className="h-4 w-4"/>}
                     to="/mime/application-eigendoc"
-                    label="Docs"
+                    label="All my docs"
                     condensed={condensed}
                 />
-
-
                 <SidebarItem
-                    icon={<Link className="h-4 w-4"/>}
-                    to="/"
+                    icon={<UsersRound className="h-4 w-4"/>}
+                    to="/shared/by-me"
                     label="Shared by me"
                     condensed={condensed}
                 />
                 <SidebarItem
                     icon={<Download className="h-4 w-4"/>}
-                    to="/"
+                    to="/shared/with-me"
                     label="Shared with me"
                     condensed={condensed}
                 />

@@ -16,6 +16,7 @@ export const driveKeys = {
     permissions: () => [...driveKeys.all, 'permissions'] as const,
     read: (pathId: string) => [...driveKeys.permissions(), 'read', pathId] as const,
     write: (pathId: string) => [...driveKeys.permissions(), 'write', pathId] as const,
+    shared: (to: 'by-me' | 'with-me') => [...driveKeys.all, 'shared', to] as const,
 };
 
 // GET ROOT FOLDER
@@ -157,6 +158,7 @@ export function useDeleteFolder(ownerId: string) {
         onSuccess: () => {
             // We don't know the parent ID here, so we invalidate all folders
             queryClient.invalidateQueries({queryKey: driveKeys.folders()});
+            queryClient.invalidateQueries({queryKey: driveKeys.mimeTypes()});
             invalidateHomeSize(queryClient);
         }
     });
@@ -174,7 +176,11 @@ export function useDeleteFile(ownerId: string) {
         onSuccess: () => {
             // We don't know the parent ID here, so we invalidate all folders
             queryClient.invalidateQueries({queryKey: driveKeys.folders()});
+            queryClient.invalidateQueries({queryKey: driveKeys.mimeTypes()});
             invalidateHomeSize(queryClient);
+        },
+        onError: (error) => {
+            console.error('Error deleting file:', error);
         }
     });
 }
@@ -192,6 +198,7 @@ export function useRenamePath(ownerId: string) {
         },
         onSuccess: () => {
             queryClient.invalidateQueries({queryKey: driveKeys.all});
+            queryClient.invalidateQueries({queryKey: driveKeys.mimeTypes()});
         }
     });
 }
@@ -218,6 +225,9 @@ export function useUpdateACL(ownerId: string) {
             } else if (variables.path.parentId) {
                 queryClient.invalidateQueries({queryKey: driveKeys.folder(variables.path.parentId)});
             }
+            queryClient.invalidateQueries({queryKey: driveKeys.mimeTypes()});
+            queryClient.invalidateQueries({queryKey: driveKeys.shared('by-me')});
+            queryClient.invalidateQueries({queryKey: driveKeys.shared('with-me')});
         },
     });
 }
@@ -274,6 +284,7 @@ export function useCreateDoc(ownerId: string) {
         },
         onSuccess: (_, variables) => {
             queryClient.invalidateQueries({queryKey: driveKeys.folder(variables.parentId)});
+            queryClient.invalidateQueries({queryKey: driveKeys.mimeTypes()});
         }
     });
 }
@@ -291,6 +302,18 @@ export function useCreateStickies(ownerId: string) {
         },
         onSuccess: (_, variables) => {
             queryClient.invalidateQueries({queryKey: driveKeys.folder(variables.parentId)});
+            queryClient.invalidateQueries({queryKey: driveKeys.mimeTypes()});
         }
     });
 }
+
+export function useSharedPaths(to: 'by-me' | 'with-me') {
+    return useQuery({
+        queryKey: driveKeys.shared(to),
+        queryFn: async () => {
+            const response = await driveApi.shared[`${to}`].get();
+            return response.data;
+        }
+    });
+}
+

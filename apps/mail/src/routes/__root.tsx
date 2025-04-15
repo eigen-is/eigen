@@ -5,8 +5,6 @@ import {Topbar} from "@workspace/ui/components/layout/topbar";
 import {createContext, useState} from 'react';
 import {useIsMobile} from "@workspace/lib/media";
 
-const appName = 'mail';
-
 // Create sidebar context to manage sidebar visibility
 export const SidebarContext = createContext<{
     sidebarOpen: boolean;
@@ -32,7 +30,6 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
                 <SidebarContext.Provider value={{sidebarOpen, setSidebarOpen}}>
                     <div className="flex flex-col h-dvh">
                         <Topbar
-                            appName={appName}
                             rootRoute={Route}
                             showMobileMenu={isMobile}
                             onMobileMenuClick={() => setSidebarOpen(true)}

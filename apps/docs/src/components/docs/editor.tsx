@@ -6,13 +6,13 @@ import * as Y from "yjs";
 import {WebsocketProvider} from "y-websocket";
 import {Cursors} from "./cursors";
 import {useAuth} from "@workspace/lib/auth/auth-context.js";
-import {Button} from "@workspace/ui/components/button";
-import {ArrowUp,} from "lucide-react";
 import {withHistory} from "slate-history";
 import {EditorToolbar} from "./editor-toolbar";
 import {CustomElement} from "./editor.types";
-import { EigenLoader } from "@workspace/ui";
+import {EigenLoader} from "@workspace/ui";
 import { UserPublicAvatar } from "@workspace/ui/components/layout/user-public-avatar";
+import { Button } from "@workspace/ui/components/button";
+import { ArrowUp } from "lucide-react";
 
 // Define the initial value with proper typing
 const initialValue: CustomElement[] = [
@@ -22,7 +22,12 @@ const initialValue: CustomElement[] = [
     },
 ];
 
-export const CollaborativeEditor = ({ownerId, pathId}: {ownerId: string, pathId: string}) => {
+export const CollaborativeEditor = ({ownerId, pathId, access}: {
+    ownerId: string, pathId: string, access: {
+        canRead: boolean;
+        canWrite: boolean;
+    }
+}) => {
     const [connected, setConnected] = useState(false);
     const [provider, setProvider] = useState<WebsocketProvider>();
     const auth = useAuth();
@@ -71,14 +76,14 @@ export const CollaborativeEditor = ({ownerId, pathId}: {ownerId: string, pathId:
     }, [yDoc, auth]);
 
     if (!connected || !sharedType || !provider) {
-        return  <div className="flex h-full items-center justify-center"><EigenLoader/></div>;
+        return <div className="flex h-full items-center justify-center"><EigenLoader/></div>;
     }
 
     return <>
         <div className="absolute top-26 right-6 flex items-center gap-1">
             {Array.from(users || []).map(user => (<UserPublicAvatar key={user[0]} email={user[0]} color={user[1].color} className="-ml-2"/>))}
         </div>
-        <SlateEditor sharedType={sharedType} provider={provider}/>
+        <SlateEditor sharedType={sharedType} provider={provider} access={access}/>
     </>;
 };
           
@@ -87,9 +92,11 @@ export const CollaborativeEditor = ({ownerId, pathId}: {ownerId: string, pathId:
 const SlateEditor = ({
                          sharedType,
                          provider,
+                         access
                      }: {
     sharedType: Y.XmlText | null;
     provider: WebsocketProvider | null;
+    access: { canRead: boolean, canWrite: boolean };
 }) => {
     const auth = useAuth();
 
@@ -101,7 +108,7 @@ const SlateEditor = ({
                     data: {
                         name: auth.user.name,
                         email: auth.user.email,
-                        color: "#660044",
+                        color: "#9810fa",
                     },
                 })
             )
@@ -248,27 +255,28 @@ const SlateEditor = ({
         <>
             <Slate editor={editor} initialValue={initialValue}>
                 <div className="flex h-full w-full flex-col">
-                <EditorToolbar/>
-                <div className="h-full w-full overflow-y-scroll bg-gray-200 p-4">
-                    <div className="grid p-[2cm] bg-white rounded-lg shadow-sm min-h-full w-[210mm] m-auto">
-                        <Cursors className="h-full">
-                            <Editable
-                                spellCheck={false}
-                                autoFocus
-                                className="h-full outline-none"
-                                renderElement={renderElement}
-                                renderLeaf={renderLeaf}
-                                onKeyDown={handleKeyDown}
-                            />
-                        </Cursors>
+                    <EditorToolbar/>
+                    <div className="h-full w-full overflow-y-scroll bg-gray-200 p-4">
+                        <div className="grid p-[2cm] bg-white rounded-lg shadow-sm min-h-full w-[210mm] m-auto">
+                            <Cursors className="h-full">
+                                <Editable
+                                    readOnly={!access.canWrite}
+                                    spellCheck={false}
+                                    autoFocus
+                                    className="h-full outline-none"
+                                    renderElement={renderElement}
+                                    renderLeaf={renderLeaf}
+                                    onKeyDown={handleKeyDown}
+                                />
+                            </Cursors>
+                        </div>
                     </div>
                 </div>
-                    <div className="fixed bottom-2 left-2">
-                        {/** button with arrow up */}
-                        <Button variant="ghost" className="bg-white" title="Move up" onClick={() => window.scrollTo(0, 0)}>
-                            <ArrowUp className="h-4 w-4"/>
-                        </Button>
-                    </div>
+                <div className="fixed bottom-2 left-2">
+                    {/** button with arrow up */}
+                    <Button variant="ghost" className="bg-white" title="Move up" onClick={() => window.scrollTo(0, 0)}>
+                        <ArrowUp className="h-4 w-4"/>
+                    </Button>
                 </div>
             </Slate>
         </>

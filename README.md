@@ -18,12 +18,12 @@ Eigen is a comprehensive workspace platform that includes:
 This project follows a monorepo structure:
 
 - `/apps`: Contains all applications
-  - `/api-server`: Backend API server that powers all applications
-  - `/drive`, `/mail`, `/docs`, etc.: Frontend applications
+    - `/api-server`: Backend API server that powers all applications
+    - `/drive`, `/mail`, `/docs`, etc.: Frontend applications
 - `/packages`: Shared libraries and components
-  - `/ui`: Reusable UI components built with shadcn/ui
-  - `/lib`: Shared business logic and utilities
-  - `/config`: Shared configuration
+    - `/ui`: Reusable UI components built with shadcn/ui
+    - `/lib`: Shared business logic and utilities
+    - `/config`: Shared configuration
 
 ## Technology Stack
 
@@ -94,15 +94,18 @@ bun build
 
 ## Development
 
-The project uses TypeScript for type safety and follows a modular architecture. Each application in the `/apps` directory is self-contained but shares common components and utilities from the `/packages` directory.
+The project uses TypeScript for type safety and follows a modular architecture. Each application in the `/apps`
+directory is self-contained but shares common components and utilities from the `/packages` directory.
 
 ### Adding Components
 
-Components are built using shadcn/ui and Tailwind CSS. Shared components should be added to the `/packages/ui` directory.
+Components are built using shadcn/ui and Tailwind CSS. Shared components should be added to the `/packages/ui`
+directory.
 
 ### API Development
 
-API routes are organized by domain in the `/apps/api-server/src/routes` directory. Authentication is handled through better-auth.
+API routes are organized by domain in the `/apps/api-server/src/routes` directory. Authentication is handled through
+better-auth.
 
 ## License
 

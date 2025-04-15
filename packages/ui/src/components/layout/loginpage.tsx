@@ -8,6 +8,7 @@ import {Input} from "../input.tsx";
 import {Button} from "../button.tsx";
 import {Card, CardContent, CardDescription, CardHeader, CardTitle,} from "../card.tsx";
 import {Form, FormControl, FormField, FormItem, FormLabel, FormMessage,} from "../form.tsx";
+import {useApp} from "./app-context";
 
 // Define the login form schema with Zod
 const loginFormSchema = z.object({
@@ -18,9 +19,10 @@ const loginFormSchema = z.object({
 // Type for the form values
 type LoginFormValues = z.infer<typeof loginFormSchema>;
 
-export function LoginPage({appName = 'mail'}: { appName?: string }) {
+export function LoginPage() {
     const {login} = useAuth();
     const router = useRouter();
+    const {appName} = useApp();
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
 

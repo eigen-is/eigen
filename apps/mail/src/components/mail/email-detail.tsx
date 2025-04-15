@@ -1,28 +1,43 @@
-import {Archive, ArchiveX, ArrowLeft, Forward, MoreVertical, Paperclip, Reply, ReplyAll, Trash2} from "lucide-react";
+import {
+    ArrowLeft, 
+    MoreVertical, 
+    Paperclip,
+    Archive,
+    AlertTriangle,
+    Reply,
+    ReplyAll,
+    Forward,
+    Trash2
+} from "lucide-react";
 import {cn} from "@workspace/ui/lib/utils";
 import {Button} from "@workspace/ui/components/button";
 import {
     DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
     DropdownMenuTrigger
 } from "@workspace/ui/components/dropdown-menu";
 import {format} from "date-fns";
-import {Email, EmailDraft} from "@apps/api-server/types/mail";
-import {Separator} from "@workspace/ui/components/separator";
+import {Email} from "@apps/api-server/types/mail";
 import {ShadowContent} from "@workspace/ui/components/layout/shadow-content";
 import {UserItem} from "@workspace/ui/components/layout/user-item";
 import {TooltipButton} from "@workspace/ui";
+import {MaildirMailbox} from "@apps/api-server/types/mail";
+import {Separator} from "@workspace/ui/components/separator";
+import {EmailContextMenu} from "./email-context-menu";
 
 interface EmailDetailProps {
     email: Email | null;
     isMobile?: boolean;
     className?: string;
     onBackClick?: () => void;
-    onNewDraft: (draft: EmailDraft) => void;
-    onDelete: (mail: Email) => void;
-    onMove: (mail: Email, mailbox: string) => void;
     toggleMailRead: (mail: Email, isRead: boolean) => void;
+    onReply?: (emailId: string) => void;
+    onReplyAll?: (emailId: string) => void;
+    onForward?: (emailId: string) => void;
+    onArchive?: (emailId: string) => void;
+    onReportSpam?: (emailId: string) => void;
+    onDelete?: (emailId: string) => void;
+    onMoveToFolder?: (emailId: string, folderId: string) => void;
+    mailboxes?: MaildirMailbox[];
 }
 
 export function EmailDetail({
@@ -30,10 +45,15 @@ export function EmailDetail({
                                 isMobile,
                                 className,
                                 onBackClick,
-                                onDelete,
-                                onMove,
-                                onNewDraft,
                                 toggleMailRead,
+                                onReply,
+                                onReplyAll,
+                                onForward,
+                                onArchive,
+                                onReportSpam,
+                                onDelete,
+                                onMoveToFolder,
+                                mailboxes = [],
                                 ...props
                             }: EmailDetailProps) {
     if (!email) {
@@ -88,24 +108,20 @@ export function EmailDetail({
                         <TooltipButton
                             icon={Archive}
                             tooltipText="Archive"
-                            onClick={() => {
-                                onMove(email, 'archive');
-                            }}
+                            onClick={() => onArchive && onArchive(email.id)}
                         />
                     )}
                     {email.mailbox !== 'spam' && (
                         <TooltipButton
-                            icon={ArchiveX}
+                            icon={AlertTriangle}
                             tooltipText="Report Spam"
-                            onClick={() => {
-                                onMove(email, 'spam');
-                            }}
+                            onClick={() => onReportSpam && onReportSpam(email.id)}
                         />
                     )}
                     <TooltipButton
                         icon={Trash2}
                         tooltipText="Delete"
-                        onClick={() => onDelete(email)}
+                        onClick={() => onDelete && onDelete(email.id)}
                     />
                 </div>
 
@@ -114,40 +130,17 @@ export function EmailDetail({
                     <TooltipButton
                         icon={Reply}
                         tooltipText="Reply"
-                        onClick={() => {
-                            // @ts-ignore
-                            const draft: EmailDraft = {
-                                to: email.from,
-                                subject: `RE: ${email.subject}`,
-                                text: `\n\nOn ${format(new Date(email.date), "d MMM yyyy 'at' h:mm a")} ${email.from?.value[0]?.name} <${email.from?.value[0]?.address}> wrote:\n\n${email.text}`,
-                            };
-                            onNewDraft(draft);
-                        }}
+                        onClick={() => onReply && onReply(email.id)}
                     />
                     <TooltipButton
                         icon={ReplyAll}
                         tooltipText="Reply All"
-                        onClick={() => {
-                            const draft: EmailDraft = {
-                                // @ts-ignore
-                                to: {value: [...(email.from?.value || []), ...(email.cc?.value || [])]},
-                                subject: `FW: ${email.subject}`,
-                                text: `\n\nOn ${format(new Date(email.date), "d MMM yyyy 'at' h:mm a")} ${email.from?.value[0]?.name} <${email.from?.value[0]?.address}> wrote:\n\n${email.text}`,
-                            };
-                            onNewDraft(draft);
-                        }}
+                        onClick={() => onReplyAll && onReplyAll(email.id)}
                     />
                     <TooltipButton
                         icon={Forward}
                         tooltipText="Forward"
-                        onClick={() => {
-                            // @ts-ignore
-                            const draft: EmailDraft = {
-                                subject: `FW: ${email.subject}`,
-                                text: `\n\nOn ${format(new Date(email.date), "d MMM yyyy 'at' h:mm a")} ${email.from?.value[0]?.name} <${email.from?.value[0]?.address}> wrote:\n\n${email.text}`,
-                            };
-                            onNewDraft(draft);
-                        }}
+                        onClick={() => onForward && onForward(email.id)}
                     />
 
                     <div className="h-6 w-[1px] bg-border mx-1"></div>
@@ -158,12 +151,20 @@ export function EmailDetail({
                                 <MoreVertical className="h-4 w-4"/>
                             </Button>
                         </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                            <DropdownMenuItem>Mark as unread</DropdownMenuItem>
-                            <DropdownMenuItem>Move to folder</DropdownMenuItem>
-                            <DropdownMenuItem>Add label</DropdownMenuItem>
-                            <DropdownMenuItem>Print</DropdownMenuItem>
-                        </DropdownMenuContent>
+                        <EmailContextMenu 
+                            style={{}}
+                            messageId={email.id}
+                            mailboxes={mailboxes}
+                            currentMailboxId={email.mailbox}
+                            onReply={onReply}
+                            onReplyAll={onReplyAll}
+                            onForward={onForward}
+                            onArchive={onArchive}
+                            onReportSpam={onReportSpam}
+                            onDelete={onDelete}
+                            onMoveToFolder={onMoveToFolder}
+                            onClose={() => {}}
+                        />
                     </DropdownMenu>
                 </div>
             </div>
