@@ -98,10 +98,11 @@ export function ContactAutosuggest({
 
     const handleBlur = useCallback(() => {
         setTimeout(() => {
-            if (!suggestionsRef.current?.contains(document.activeElement)) {
-                setIsOpen(false);
+            if (!suggestionsRef.current?.contains(document.activeElement) && 
+                inputRef.current !== document.activeElement) {
+              setIsOpen(false);
             }
-        }, 150);
+          }, 300);
     }, []);
 
     return (
