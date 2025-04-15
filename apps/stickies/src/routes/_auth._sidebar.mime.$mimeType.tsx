@@ -54,9 +54,9 @@ function DriveRoute() {
                 params: {mimeType},
                 search: {pid: undefined}
             });
-        } else if (path.type === 'doc') {
+        } else if (path.type === 'stickies') {
             navigate({
-                to: '/doc/$ownerId/$pathId',
+                to: '/board/$ownerId/$pathId',
                 params: {ownerId: path.ownerId, pathId: path.id}
             });
         } else {
