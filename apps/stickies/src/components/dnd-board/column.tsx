@@ -3,14 +3,16 @@ import {SortableContext, useSortable, verticalListSortingStrategy} from '@dnd-ki
 import {CSS} from '@dnd-kit/utilities';
 import {TaskCard} from './task-card';
 import {ColumnItem, TaskItem, CommentItem} from './types';
-import {Plus} from 'lucide-react';
+import {Pencil, Plus} from 'lucide-react';
 import * as Y from 'yjs';
+import {TooltipButton} from '@workspace/ui/components/layout/tooltip-button/tooltip-button';
 
 interface ColumnProps {
     column: ColumnItem;
     tasks: TaskItem[];
     isDropAnimating?: boolean;
     onAddTask: (columnId: string) => void;
+    onEditColumn: (columnId: string) => void;
     isMobile: boolean;
     yjsDoc: Y.Doc | null;
     ownerId: string;
@@ -22,6 +24,7 @@ export const Column: React.FC<ColumnProps> = ({
                                                   tasks,
                                                   isDropAnimating,
                                                   onAddTask,
+                                                  onEditColumn,
                                                   isMobile,
                                                   yjsDoc,
                                                   ownerId,
@@ -62,11 +65,19 @@ export const Column: React.FC<ColumnProps> = ({
         >
             {/* Column header */}
             <div
-                className="px-2 py-2 cursor-grab touch-none font-medium text-sm border-b bg-gray-50 flex-shrink-0"
+                className="px-2 py-2 cursor-grab touch-none font-medium text-sm border-b bg-gray-50 flex-shrink-0 flex items-center justify-between"
                 {...attributes}
                 {...listeners}
             >
-                {column.title}
+                <span className="truncate">{column.title}</span>
+                <TooltipButton
+                    icon={Pencil}
+                    tooltipText="Edit Column"
+                    onClick={() => {
+                        onEditColumn(column.id);
+                    }}
+                    className="h-6 w-6 ml-1 opacity-50 hover:opacity-100"
+                />
             </div>
 
             {/* Column content area */}
