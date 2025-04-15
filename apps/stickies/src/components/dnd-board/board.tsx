@@ -1,6 +1,6 @@
 import React, {useRef} from 'react';
-import {DndContext, DragOverlay, PointerSensor, useSensor, useSensors,} from '@dnd-kit/core';
-import {horizontalListSortingStrategy, SortableContext,} from '@dnd-kit/sortable';
+import {DndContext, DragOverlay, PointerSensor, useSensor, useSensors} from '@dnd-kit/core';
+import {horizontalListSortingStrategy, SortableContext} from '@dnd-kit/sortable';
 import {Column} from './column';
 import {BoardProps, TaskItem} from './types';
 import {AddTaskDialog} from './add-task-dialog';
@@ -14,7 +14,6 @@ export const StickiesBoard: React.FC<BoardProps> = ({ownerId, pathId}) => {
     // Core board state and operations with Yjs integration
     const {
         board,
-        setBoard,
         selectedColumnId,
         isAddTaskDialogOpen,
         setIsAddTaskDialogOpen,
@@ -30,9 +29,8 @@ export const StickiesBoard: React.FC<BoardProps> = ({ownerId, pathId}) => {
     const {
         dragState,
         handleDragStart,
-        handleDragOver,
         handleDragEnd,
-    } = useYjsDragAndDrop({board, setBoard, yjsDoc});
+    } = useYjsDragAndDrop({board, yjsDoc});
 
     // Refs and responsive hooks
     const boardRef = useRef<HTMLDivElement | null>(null);
@@ -52,22 +50,23 @@ export const StickiesBoard: React.FC<BoardProps> = ({ownerId, pathId}) => {
         if (!dragState.activeId || !dragState.activeType || !dragState.activeItem) return null;
 
         if (dragState.activeType === 'task') {
-            // Return a direct div for tasks, not a sortable component
+            const task = dragState.activeItem as TaskItem;
             return (
                 <div className={`${isMobile ? 'w-full' : 'w-[260px]'} border border-gray-200 shadow-sm bg-white`}>
                     <div className="py-1.5 px-2 text-sm bg-blue-50">
-                        {(dragState.activeItem as TaskItem).title}
-                        {(dragState.activeItem as TaskItem).description && (
-                            <p className="text-xs text-gray-500 mt-1 truncate">{(dragState.activeItem as TaskItem).description}</p>
+                        {task.title}
+                        {task.description && (
+                            <p className="text-xs text-gray-500 mt-1 truncate">{task.description}</p>
                         )}
                     </div>
                 </div>
             );
         } else if (dragState.activeType === 'column') {
-            const columnTasks = dragState.activeItem.taskIds.map((taskId: string) => board.tasks[taskId]);
+            const column = dragState.activeItem as import('./types').ColumnItem;
+            const columnTasks = column.taskIds.map((taskId: string) => board.tasks[taskId]);
             return (
                 <Column
-                    column={dragState.activeItem}
+                    column={column}
                     tasks={columnTasks}
                     onAddTask={handleAddTaskClick}
                     isMobile={isMobile}
@@ -91,7 +90,6 @@ export const StickiesBoard: React.FC<BoardProps> = ({ownerId, pathId}) => {
             <DndContext
                 sensors={sensors}
                 onDragStart={handleDragStart}
-                onDragOver={handleDragOver}
                 onDragEnd={handleDragEnd}
                 autoScroll={{
                     threshold: {
