@@ -9,7 +9,7 @@ export function useAvatar(email: string, options: { enabled?: boolean } = {enabl
     isLoading: boolean
 } {
     const {data: contacts = [], isLoading: contactsLoading} = useContacts();
-
+console.log(email);
     // Find the contact matching this email
     const matchingContact = useMemo(() => {
         if (!email || !options.enabled) return null;
@@ -25,7 +25,7 @@ export function useAvatar(email: string, options: { enabled?: boolean } = {enabl
     const shouldFetchPublicUser = useMemo(() => {
         if (!email || !options.enabled) return false;
         if (matchingContact?.avatar) return false; // Already have avatar from contact
-        return email.toLowerCase().endsWith('@eigen.is');
+        return email.toLowerCase().endsWith('@eigen.is') || !email.includes('@');
     }, [email, matchingContact, options.enabled]);
 
     // Only fetch public data when needed

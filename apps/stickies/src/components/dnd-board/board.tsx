@@ -70,6 +70,9 @@ export const StickiesBoard: React.FC<BoardProps> = ({ownerId, pathId}) => {
                     tasks={columnTasks}
                     onAddTask={handleAddTaskClick}
                     isMobile={isMobile}
+                    yjsDoc={yjsDoc}
+                    ownerId={ownerId}
+                    comments={board.comments}
                 />
             );
         }
@@ -116,6 +119,9 @@ export const StickiesBoard: React.FC<BoardProps> = ({ownerId, pathId}) => {
                                     tasks={columnTasks}
                                     onAddTask={handleAddTaskClick}
                                     isMobile={isMobile}
+                                    yjsDoc={yjsDoc}
+                                    ownerId={ownerId}
+                                    comments={board.comments}
                                 />
                             );
                         })}
