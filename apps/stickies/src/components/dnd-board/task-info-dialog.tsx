@@ -144,7 +144,7 @@ export function TaskInfoDialog({
   const TaskCommentList = React.memo(function TaskCommentList({ taskComments, creator, createdAt }: { taskComments: CommentItem[], creator: string, createdAt: Date }) {
     console.log('render');
     return (
-      <ScrollArea className="h-128 rounded-md p-2">
+      <ScrollArea className="h-100 rounded-md p-2">
         <div className="space-y-4">
           {taskComments.map((comment) => (
             <React.Fragment key={comment.id}>
@@ -164,17 +164,17 @@ export function TaskInfoDialog({
 
   return (
     <Dialog open={isOpen} onOpenChange={(open: boolean) => !open && onClose()}>
-      <DialogContent className="max-w-lg">
+      <DialogContent>
         <DialogHeader>
           <DialogTitle>{task.title}</DialogTitle>
         </DialogHeader>
 
         {/* Task description */}
-        {task.description && (
-          <div className="mt-2 text-sm text-gray-700">
-            <p className="whitespace-pre-line">{task.description}</p>
-          </div>
-        )}
+        <div className="mt-2 text-sm text-gray-700">
+          <p className="whitespace-pre-line">{task.description ?? ''}</p>
+        </div>
+
+        <Separator/>
 
         {/* Comments section */}
         <div>
