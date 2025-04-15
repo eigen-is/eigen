@@ -10,6 +10,9 @@ import {withHistory} from "slate-history";
 import {EditorToolbar} from "./editor-toolbar";
 import {CustomElement} from "./editor.types";
 import {EigenLoader} from "@workspace/ui";
+import { UserPublicAvatar } from "@workspace/ui/components/layout/user-public-avatar";
+import { Button } from "@workspace/ui/components/button";
+import { ArrowUp } from "lucide-react";
 
 // Define the initial value with proper typing
 const initialValue: CustomElement[] = [
@@ -26,45 +29,65 @@ export const CollaborativeEditor = ({ownerId, pathId, access}: {
     }
 }) => {
     const [connected, setConnected] = useState(false);
-    const [sharedType, setSharedType] = useState<Y.XmlText | null>(null);
-    const [provider, setProvider] = useState<WebsocketProvider | null>(null);
-
+    const [provider, setProvider] = useState<WebsocketProvider>();
+    const auth = useAuth();
     const slug = ``;
 
-    // Connect to your Yjs provider and document
+    const yDoc = useMemo(() => new Y.Doc(), []);
+    const sharedType = useMemo(() => yDoc.get('slate', Y.XmlText), [yDoc]);
+    const [users, setUsers] = useState<Map<string, any>>();
+    
     useEffect(() => {
-        const yDoc = new Y.Doc();
-        const sharedDoc = yDoc.get("slate", Y.XmlText);
+        const userMap = yDoc.getMap('users');
+        const observe = () => setUsers(new Map(userMap));
+        userMap.observe(observe);
+        return () => userMap.unobserve(observe);
+    }, [yDoc]);
 
+    useEffect(() => {
         // Build WebSocket URL
         const wsUrl = `${import.meta.env.VITE_API_HOST}/ws/collab/${ownerId}/${pathId}`;
-
+        
         // Create WebSocket provider
-        const provider = new WebsocketProvider(wsUrl, slug, yDoc, {
+        const yProvider = new WebsocketProvider(wsUrl, slug, yDoc, {
             resyncInterval: 5000,
             connect: true,
         });
-
-        // Set up your Yjs provider. This line of code is different for each provider.
-        const yProvider = provider;
-
         yProvider.on("sync", setConnected);
-        setSharedType(sharedDoc);
-        setProvider(provider);
+        /*
+        yProvider.awareness.on('change', () => {
+            console.log(Array.from(yProvider.awareness.getStates().values()));
+        });
+        */
+
+        setProvider(yProvider);
+
+        yDoc.getMap('users').set(auth.user.email, {
+            name: auth.user.name,
+            color: '#660044'
+        });
 
         return () => {
-            yDoc?.destroy();
+            yDoc.getMap('users').delete(auth.user.email);
+
             yProvider?.off("sync", setConnected);
             yProvider?.destroy();
         };
-    }, []);
+    }, [yDoc, auth]);
 
     if (!connected || !sharedType || !provider) {
         return <div className="flex h-full items-center justify-center"><EigenLoader/></div>;
     }
 
-    return <SlateEditor sharedType={sharedType} provider={provider} access={access}/>;
+    return <>
+        <div className="absolute top-26 right-6 flex items-center gap-1">
+            {Array.from(users || []).map(user => (<UserPublicAvatar key={user[0]} email={user[0]} color={user[1].color} className="-ml-2"/>))}
+        </div>
+        <SlateEditor sharedType={sharedType} provider={provider} access={access}/>
+    </>;
 };
+          
+
 
 const SlateEditor = ({
                          sharedType,
@@ -83,8 +106,8 @@ const SlateEditor = ({
                 withCursors(withYjs(createEditor(), sharedType!), provider!.awareness, {
                     // The current user's name and color
                     data: {
-                        name: auth.user?.name,
-                        email: auth.user?.email,
+                        name: auth.user.name,
+                        email: auth.user.email,
                         color: "#9810fa",
                     },
                 })
@@ -231,21 +254,29 @@ const SlateEditor = ({
     return (
         <>
             <Slate editor={editor} initialValue={initialValue}>
-                <EditorToolbar/>
-                <div className="h-full w-full overflow-y-scroll bg-gray-200 p-4">
-                    <div className="grid p-[2cm] bg-white rounded-lg shadow-sm min-h-full w-[210mm] m-auto">
-                        <Cursors className="h-full">
-                            <Editable
-                                readOnly={!access.canWrite}
-                                spellCheck={false}
-                                autoFocus
-                                className="h-full outline-none"
-                                renderElement={renderElement}
-                                renderLeaf={renderLeaf}
-                                onKeyDown={handleKeyDown}
-                            />
-                        </Cursors>
+                <div className="flex h-full w-full flex-col">
+                    <EditorToolbar/>
+                    <div className="h-full w-full overflow-y-scroll bg-gray-200 p-4">
+                        <div className="grid p-[2cm] bg-white rounded-lg shadow-sm min-h-full w-[210mm] m-auto">
+                            <Cursors className="h-full">
+                                <Editable
+                                    readOnly={!access.canWrite}
+                                    spellCheck={false}
+                                    autoFocus
+                                    className="h-full outline-none"
+                                    renderElement={renderElement}
+                                    renderLeaf={renderLeaf}
+                                    onKeyDown={handleKeyDown}
+                                />
+                            </Cursors>
+                        </div>
                     </div>
+                </div>
+                <div className="fixed bottom-2 left-2">
+                    {/** button with arrow up */}
+                    <Button variant="ghost" className="bg-white" title="Move up" onClick={() => window.scrollTo(0, 0)}>
+                        <ArrowUp className="h-4 w-4"/>
+                    </Button>
                 </div>
             </Slate>
         </>
