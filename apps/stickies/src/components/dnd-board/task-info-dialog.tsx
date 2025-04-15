@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@workspace/ui/components/dialog";
 import { UserPublicItem } from "@workspace/ui/components/layout/user-item";
 import { TaskItem, CommentItem } from "./types";
@@ -30,10 +30,51 @@ export function TaskInfoDialog({
   const [newComment, setNewComment] = useState("");
   const { user } = useAuth();
 
+  // --- Yjs comments observer ---
+  const [yjsComments, setYjsComments] = useState<Record<string, CommentItem>>({});
+
+  useEffect(() => {
+    if (!yjsDoc) return;
+    const commentsMap = yjsDoc.getMap("comments");
+
+    // Helper to convert Y.Map to CommentItem
+    const mapToComment = (map: Y.Map<any>): CommentItem => ({
+      id: map.get("id"),
+      taskId: map.get("taskId"),
+      text: map.get("text"),
+      author: map.get("author"),
+      createdAt: map.get("createdAt"),
+    });
+
+    // Initial load
+    const loadComments = () => {
+      const result: Record<string, CommentItem> = {};
+      commentsMap.forEach((value, key) => {
+        if (value instanceof Y.Map) {
+          result[key] = mapToComment(value);
+        }
+      });
+      setYjsComments(result);
+    };
+    loadComments();
+
+    // Observer
+    const observer = () => {
+      loadComments();
+    };
+    commentsMap.observe(observer);
+    return () => {
+      commentsMap.unobserve(observer);
+    };
+  }, [yjsDoc]);
+
   if (!task) return null;
 
+  // Prefer Yjs comments if available, else fallback to props
+  const allComments = yjsDoc ? yjsComments : comments;
+
   // Get comments for this task only
-  const taskComments = Object.values(comments)
+  const taskComments = Object.values(allComments)
     .filter((comment) => comment.taskId === task.id)
     .sort((a, b) => b.createdAt - a.createdAt); // Sort by newest first
 
