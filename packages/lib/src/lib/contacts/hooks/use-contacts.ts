@@ -24,9 +24,13 @@ export function useContacts() {
     });
 }
 
-export function invalidateAllContacts() {
+// Hook to invalidate contacts cache
+export function useInvalidateAllContacts() {
     const queryClient = useQueryClient();
-    queryClient.invalidateQueries({queryKey: contactKeys.lists()});
+    
+    return () => {
+        queryClient.invalidateQueries({queryKey: contactKeys.lists()});
+    };
 }
 
 // Fetch a contact by ID

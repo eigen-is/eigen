@@ -2,15 +2,21 @@ import React from 'react';
 import {SortableContext, useSortable, verticalListSortingStrategy} from '@dnd-kit/sortable';
 import {CSS} from '@dnd-kit/utilities';
 import {TaskCard} from './task-card';
-import {ColumnItem, TaskItem} from './types';
-import {Plus} from 'lucide-react';
+import {ColumnItem, TaskItem, CommentItem} from './types';
+import {Pencil, Plus} from 'lucide-react';
+import * as Y from 'yjs';
+import {TooltipButton} from '@workspace/ui/components/layout/tooltip-button/tooltip-button';
 
 interface ColumnProps {
     column: ColumnItem;
     tasks: TaskItem[];
     isDropAnimating?: boolean;
     onAddTask: (columnId: string) => void;
+    onEditColumn: (columnId: string) => void;
     isMobile: boolean;
+    yjsDoc: Y.Doc | null;
+    ownerId: string;
+    comments: Record<string, CommentItem>;
 }
 
 export const Column: React.FC<ColumnProps> = ({
@@ -18,7 +24,11 @@ export const Column: React.FC<ColumnProps> = ({
                                                   tasks,
                                                   isDropAnimating,
                                                   onAddTask,
-                                                  isMobile
+                                                  onEditColumn,
+                                                  isMobile,
+                                                  yjsDoc,
+                                                  ownerId,
+                                                  comments
                                               }) => {
     const {
         attributes,
@@ -45,7 +55,7 @@ export const Column: React.FC<ColumnProps> = ({
     return (
         <div
             ref={setNodeRef}
-            className={`${columnMargin} ${columnWidth} flex flex-col border border-gray-200 shadow-sm ${isDragging ? 'opacity-10' : ''} h-full`}
+            className={`${columnMargin} ${columnWidth} rounded-md flex flex-col border border-gray-200 shadow-sm ${isDragging ? 'opacity-10' : ''} h-full`}
             style={{
                 transform: CSS.Transform.toString(transform),
                 transition,
@@ -55,11 +65,25 @@ export const Column: React.FC<ColumnProps> = ({
         >
             {/* Column header */}
             <div
-                className="px-2 py-2 cursor-grab touch-none font-medium text-sm border-b bg-gray-50 flex-shrink-0"
+                className="h-10 px-2 cursor-grab touch-none font-medium text-sm border-b bg-gray-50 flex-shrink-0 flex items-center justify-between"
                 {...attributes}
                 {...listeners}
             >
-                {column.title}
+                <span className="truncate flex-1">{column.title}</span>
+                <div className="flex items-center">
+                    <TooltipButton
+                        icon={Plus}
+                        tooltipText="Add a sticky"
+                        onClick={() => onAddTask(column.id)}
+                        className="h-6 w-6 opacity-50 hover:opacity-100 mr-1"
+                    />
+                    <TooltipButton
+                        icon={Pencil}
+                        tooltipText="Edit Column"
+                        onClick={() => onEditColumn(column.id)}
+                        className="h-6 w-6 opacity-50 hover:opacity-100"
+                    />
+                </div>
             </div>
 
             {/* Column content area */}
@@ -80,7 +104,14 @@ export const Column: React.FC<ColumnProps> = ({
                     <div className="flex-grow">
                         <SortableContext items={taskIds} strategy={verticalListSortingStrategy}>
                             {tasks.map((task) => (
-                                <TaskCard key={task.id} task={task} isMobile={isMobile}/>
+                                <TaskCard 
+                                    key={task.id} 
+                                    task={task} 
+                                    isMobile={isMobile}
+                                    yjsDoc={yjsDoc}
+                                    ownerId={ownerId}
+                                    comments={comments}
+                                />
                             ))}
                         </SortableContext>
                     </div>

@@ -1,10 +1,11 @@
-import React, {useRef} from 'react';
+import React, {useRef, useState} from 'react';
 import {DndContext, DragOverlay, PointerSensor, useSensor, useSensors} from '@dnd-kit/core';
 import {horizontalListSortingStrategy, SortableContext} from '@dnd-kit/sortable';
 import {Column} from './column';
 import {BoardProps, TaskItem} from './types';
 import {AddTaskDialog} from './add-task-dialog';
 import {AddColumnDialog} from './add-column-dialog';
+import {ColumnSettingsDialog} from './column-settings-dialog';
 import {Plus} from 'lucide-react';
 import {useIsMobile} from "@workspace/lib/media";
 import {useYjsKanbanBoard} from './hooks/useYjsKanbanBoard';
@@ -35,6 +36,16 @@ export const StickiesBoard: React.FC<BoardProps> = ({ownerId, pathId}) => {
     // Refs and responsive hooks
     const boardRef = useRef<HTMLDivElement | null>(null);
     const isMobile = useIsMobile();
+
+    // State for column editing
+    const [editColumnId, setEditColumnId] = useState<string | null>(null);
+    const [isColumnSettingsOpen, setIsColumnSettingsOpen] = useState(false);
+
+    // Handle column edit button click
+    const handleEditColumn = (columnId: string) => {
+        setEditColumnId(columnId);
+        setIsColumnSettingsOpen(true);
+    };
 
     // Sensors config - enables drag and drop functionality
     const sensors = useSensors(
@@ -69,7 +80,11 @@ export const StickiesBoard: React.FC<BoardProps> = ({ownerId, pathId}) => {
                     column={column}
                     tasks={columnTasks}
                     onAddTask={handleAddTaskClick}
+                    onEditColumn={handleEditColumn}
                     isMobile={isMobile}
+                    yjsDoc={yjsDoc}
+                    ownerId={ownerId}
+                    comments={board.comments}
                 />
             );
         }
@@ -115,7 +130,11 @@ export const StickiesBoard: React.FC<BoardProps> = ({ownerId, pathId}) => {
                                     column={column}
                                     tasks={columnTasks}
                                     onAddTask={handleAddTaskClick}
+                                    onEditColumn={handleEditColumn}
                                     isMobile={isMobile}
+                                    yjsDoc={yjsDoc}
+                                    ownerId={ownerId}
+                                    comments={board.comments}
                                 />
                             );
                         })}
@@ -157,6 +176,17 @@ export const StickiesBoard: React.FC<BoardProps> = ({ownerId, pathId}) => {
                 onClose={() => setIsAddColumnDialogOpen(false)}
                 onAddColumn={handleAddColumn}
             />
+
+            {/* Column settings dialog */}
+            {editColumnId && (
+                <ColumnSettingsDialog
+                    isOpen={isColumnSettingsOpen}
+                    onClose={() => setIsColumnSettingsOpen(false)}
+                    columnId={editColumnId}
+                    columnTitle={board.columns[editColumnId]?.title || ""}
+                    yjsDoc={yjsDoc}
+                />
+            )}
         </div>
     );
 };
