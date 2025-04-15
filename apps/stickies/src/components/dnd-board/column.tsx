@@ -2,8 +2,9 @@ import React from 'react';
 import {SortableContext, useSortable, verticalListSortingStrategy} from '@dnd-kit/sortable';
 import {CSS} from '@dnd-kit/utilities';
 import {TaskCard} from './task-card';
-import {ColumnItem, TaskItem} from './types';
+import {ColumnItem, TaskItem, CommentItem} from './types';
 import {Plus} from 'lucide-react';
+import * as Y from 'yjs';
 
 interface ColumnProps {
     column: ColumnItem;
@@ -11,6 +12,9 @@ interface ColumnProps {
     isDropAnimating?: boolean;
     onAddTask: (columnId: string) => void;
     isMobile: boolean;
+    yjsDoc: Y.Doc | null;
+    ownerId: string;
+    comments: Record<string, CommentItem>;
 }
 
 export const Column: React.FC<ColumnProps> = ({
@@ -18,7 +22,10 @@ export const Column: React.FC<ColumnProps> = ({
                                                   tasks,
                                                   isDropAnimating,
                                                   onAddTask,
-                                                  isMobile
+                                                  isMobile,
+                                                  yjsDoc,
+                                                  ownerId,
+                                                  comments
                                               }) => {
     const {
         attributes,
@@ -80,7 +87,14 @@ export const Column: React.FC<ColumnProps> = ({
                     <div className="flex-grow">
                         <SortableContext items={taskIds} strategy={verticalListSortingStrategy}>
                             {tasks.map((task) => (
-                                <TaskCard key={task.id} task={task} isMobile={isMobile}/>
+                                <TaskCard 
+                                    key={task.id} 
+                                    task={task} 
+                                    isMobile={isMobile}
+                                    yjsDoc={yjsDoc}
+                                    ownerId={ownerId}
+                                    comments={comments}
+                                />
                             ))}
                         </SortableContext>
                     </div>
