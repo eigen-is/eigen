@@ -1,4 +1,4 @@
-import {invalidateAllContacts, useContacts} from '../../contacts/hooks/use-contacts';
+import {useInvalidateAllContacts, useContacts} from '../../contacts/hooks/use-contacts';
 import {useMemo} from 'react';
 import {Contact} from '@apps/api-server/types/contact';
 import {usePublicUser} from '../../public';
@@ -25,7 +25,12 @@ export function useAvatar(email: string, options: { enabled?: boolean } = {enabl
     const shouldFetchPublicUser = useMemo(() => {
         if (!email || !options.enabled) return false;
         if (matchingContact?.avatar) return false; // Already have avatar from contact
-        return email.toLowerCase().endsWith('@eigen.is');
+
+        // Check if email is an @eigen.is address, or an Eigen user ID (24+ chars, alphanumeric)
+        const isEigenEmail = email.toLowerCase().endsWith('@eigen.is');
+        // Eigen user IDs are typically 24+ chars, only letters/numbers (no @)
+        const isEigenUserId = /^[a-zA-Z0-9]{20,}$/.test(email);
+        return isEigenEmail || isEigenUserId;
     }, [email, matchingContact, options.enabled]);
 
     // Only fetch public data when needed
@@ -78,6 +83,11 @@ export function useAvatar(email: string, options: { enabled?: boolean } = {enabl
     };
 }
 
-export function invalidateAllAvatars() {
-    invalidateAllContacts();
+// Hook to invalidate all avatars
+export function useInvalidateAllAvatars() {
+    const invalidateContacts = useInvalidateAllContacts();
+    
+    return () => {
+        invalidateContacts();
+    };
 }
