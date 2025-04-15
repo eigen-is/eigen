@@ -53,17 +53,18 @@ function UserDropdown({rootRoute}: { rootRoute: TopbarProps['rootRoute'] }) {
             <Dialog open={logoutDialogOpen} onOpenChange={setLogoutDialogOpen}>
                 <DialogContent>
                     <DialogHeader>
-                        <DialogTitle>Confirm Logout</DialogTitle>
+                        <DialogTitle>Log out?</DialogTitle>
                         <DialogDescription>
-                            Are you sure you want to logout?
+                            Logging out will end your current session. You will be logged out of your account and will need to log in again to continue.
+
                         </DialogDescription>
                     </DialogHeader>
                     <DialogFooter className="flex justify-end gap-2">
                         <Button variant="outline" onClick={() => setLogoutDialogOpen(false)} className="mr-2">
-                            Cancel
+                            Go Back
                         </Button>
                         <Button variant="default" onClick={handleLogout}>
-                            OK
+                            Log Out
                         </Button>
                     </DialogFooter>
                 </DialogContent>
