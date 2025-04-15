@@ -74,10 +74,6 @@ export const Column: React.FC<ColumnProps> = ({
                         className="flex-grow min-h-[150px] flex items-center justify-center"
                         data-column-id={column.id} // Add data attribute to help identify this element
                     >
-                        <div
-                            className="text-sm text-gray-400 border border-dashed border-gray-200 rounded p-4 w-full text-center">
-                            Drag cards here
-                        </div>
                     </div>
                 ) : (
                     /* Normal column with tasks */
