@@ -4,10 +4,10 @@ This directory contains a minimal, collaborative Kanban board implementation for
 
 ## Overview
 
-- **UI**: Minimal, Trello-like Kanban board with columns and cards.
+- **UI**: Minimal, Trello-like Kanban board with columns and stickies (tasks).
 - **Realtime Collaboration**: All board state is synchronized using Yjs and a websocket provider.
-- **Drag & Drop**: Uses `@dnd-kit` for smooth drag-and-drop of columns and cards.
-- **State Management**: Board state is stored in a Yjs document, which is mapped to React state for rendering and interaction.
+- **Drag & Drop**: Uses `@dnd-kit` for smooth drag-and-drop of columns and stickies.
+- **State Management**: Yjs document serves as the single source of truth, with React state derived from it.
 
 ---
 
@@ -15,7 +15,7 @@ This directory contains a minimal, collaborative Kanban board implementation for
 
 All board data is modeled as follows (see `types.ts`):
 
-- **TaskItem**: Represents a card (task) on the board.
+- **TaskItem**: Represents a sticky (task) on the board.
   - `id`, `title`, `description`, `creator`, `createdAt`, `comments`
 - **ColumnItem**: Represents a column (list) on the board.
   - `id`, `title`, `taskIds` (ordered array of task IDs), `creator`, `createdAt`
@@ -24,71 +24,71 @@ All board data is modeled as follows (see `types.ts`):
   - `columns`: Record of all columns by ID
   - `columnOrder`: Ordered array of column IDs
 
-Example (see `initial-data.ts`):
+---
 
-```ts
-{
-  tasks: { 'task-1': { ... }, ... },
-  columns: { 'column-1': { ... }, ... },
-  columnOrder: ['column-1', 'column-2']
-}
-```
+## Architecture
+
+The implementation follows a clean separation of concerns:
+
+1. **Yjs Document (Model)**: The single source of truth for all data, enabling real-time collaboration.
+2. **React State (View)**: Derived from the Yjs document, used only for rendering.
+3. **Hooks (Controller)**: Manage interactions between the UI and the Yjs document.
+
+This architecture ensures that:
+- All changes go through the Yjs document first
+- React state always reflects the Yjs document
+- Multiple users can collaborate in real-time
 
 ---
 
 ## Drag & Drop Implementation
 
-- Uses `@dnd-kit/core` and `@dnd-kit/sortable` for drag-and-drop.
-- **Columns** and **cards** are both sortable and draggable.
-- Drag state is managed in React (see `hooks/useYjsDragAndDrop.ts`):
-  - When a drag starts, the dragged item's info is stored in local drag state.
-  - During drag, the board's React state is updated for immediate visual feedback.
-  - On drag end, the changes are committed to the Yjs document, so all clients see the update.
+The drag and drop implementation uses a minimalist approach:
+
+- **@dnd-kit/core** and **@dnd-kit/sortable** handle the core drag-and-drop mechanics.
+- **Visual Feedback**: Ghost previews show where items will be placed during drag operations.
+- **Two-Phase Commits**:
+  1. During drag, only visual feedback is updated (no state mutation).
+  2. On drag end, changes are committed to the Yjs document.
+
+This approach prevents race conditions and ensures a smooth user experience, even with multiple users.
 
 ---
 
-## Yjs Document Structure
+## Board Initialization
 
-- The board state is stored in a Yjs document (`Y.Doc`), with the following shared types:
-  - `tasks`: `Y.Map` of task objects
-  - `columns`: `Y.Map` of column objects
-  - `columnOrder`: `Y.Array` of column IDs
-- Each task and column is itself a `Y.Map`. Task IDs within columns are stored as a `Y.Array`.
+A dedicated `useInitializeBoard` hook handles board initialization:
 
----
-
-## State Synchronization
-
-- The Yjs document is connected to a websocket provider (`y-websocket`), so all changes are propagated in real time to all clients.
-- The custom hook `useYjsKanbanBoard` manages:
-  - Initializing the Yjs document and provider
-  - Mapping Yjs data to React state (`BoardData`)
-  - Listening for changes and updating the React state accordingly
-  - Providing handlers for adding tasks/columns, which mutate the Yjs document
+- Creates default columns (To Do, In Progress, Done) when a new board is created.
+- Adds a welcome sticky in the first column.
+- Uses the current user's information for creator details.
+- Initializes the board only if it's empty.
 
 ---
 
-## Change Handling and Rendering
+## State Synchronization Flow
 
-- **Local changes** (e.g. drag-and-drop, add card/column) are first applied to the Yjs document.
-- **Yjs Observers** listen for changes to the shared types and update the React state, triggering a re-render.
-- **Remote changes** (from other clients) are received via the websocket provider, updating the Yjs doc and thus the React state.
+1. **Local Mutations**: All UI actions (drag-and-drop, add sticky/column) mutate the Yjs document directly.
+2. **Yjs → React**: Observers on the Yjs document update the React state when changes occur.
+3. **Remote Changes**: The websocket provider receives changes from other users and applies them to the local Yjs document.
+4. **React Rendering**: The UI updates to reflect the current state derived from the Yjs document.
+
+This flow ensures that all clients stay in sync while maintaining a responsive local experience.
 
 ---
 
 ## Key Files
 
-- `board.tsx` — Main Kanban board component; wires up drag-and-drop and dialogs.
-- `column.tsx`, `task-card.tsx` — UI for columns and cards, with sortable integration.
-- `hooks/useYjsKanbanBoard.ts` — Hook for Yjs document setup, state mapping, and board actions.
-- `hooks/useYjsDragAndDrop.ts` — Hook for drag-and-drop logic, including syncing with Yjs.
-- `types.ts` — TypeScript interfaces for board data.
-- `initial-data.ts` — Example initial board state.
+- `board.tsx` — Main Kanban board component with drag-and-drop setup.
+- `column.tsx` — Column component that renders and manages stickies within it.
+- `task-card.tsx` — Individual sticky card component with drag functionality.
+- `hooks/useYjsKanbanBoard.ts` — Core hook for Yjs document setup and state mapping.
+- `hooks/useYjsDragAndDrop.ts` — Hook for drag-and-drop logic and Yjs synchronization.
+- `hooks/useInitializeBoard.ts` — Hook for initializing a new board with default content.
+- `types.ts` — TypeScript interfaces for board data structures.
 
 ---
 
 ## Summary
 
-This Kanban board is a minimal, real-time collaborative board. All state is stored in a Yjs document, synchronized via websocket. Drag-and-drop is implemented with `@dnd-kit`, and all changes (local or remote) are reflected in the UI via React state updates.
-
----
+This Kanban board implementation provides a clean, minimal, real-time collaborative experience. By using Yjs as the single source of truth, it ensures data consistency across all clients while maintaining a smooth, responsive UI with optimized drag-and-drop interactions.
