@@ -1,13 +1,7 @@
 import {Elysia, t} from "elysia";
 import {betterAuth} from "./auth";
-import {getDrive} from "../lib/drive/drive";
 import {type User} from "better-auth/types";
-import * as Y from "yjs";
-import * as awarenessProtocol from "y-protocols/awareness";
-import * as syncProtocol from "y-protocols/sync";
 import {type ServerWebSocket} from "bun";
-import * as encoding from "lib0/encoding";
-import * as decoding from "lib0/decoding";
 import {getSharedDrive} from "../lib/drive/sharedDrive.ts";
 import {keepWebSocketAlive} from "../utils/websockets.ts";
 
@@ -20,14 +14,18 @@ export const collabRouter = new Elysia({
     .use(betterAuth)
 
     // Endpoint to check if user has access to document
-    .get("/collab/access/:userId/:pathId", async ({params, user}: { params: { pathId: string }, user: User }) => {
-        const drive = await getDrive(user);
+    .get("/collab/access/:ownerId/:pathId", async ({params, user}: {
+        params: { ownerId: string, pathId: string },
+        user: User
+    }) => {
+        const drive = await getSharedDrive(params.ownerId, user);
         const canRead = await drive.canRead(params.pathId, user);
         const canWrite = await drive.canWrite(params.pathId, user);
         return {canRead, canWrite};
     }, {
         auth: true,
         params: t.Object({
+            ownerId: t.String(),
             pathId: t.String(),
         })
     })
@@ -55,13 +53,17 @@ export const collabRouter = new Elysia({
             const pathId = ws.data.params.pathId;
 
             const drive = await getSharedDrive(ownerId, user);
+            if (!drive || !drive.canRead(pathId, user)) {
+                ws.close(1008, "Authentication failed");
+                return;
+            }
             const document = await drive.getCollabDocument(pathId);
 
-            document.subscribe(ws as unknown as ServerWebSocket<any>);
+            document.subscribe(user, ws as unknown as ServerWebSocket<any>);
 
-            keepWebSocketAlive(ws as unknown as ServerWebSocket<any>, async () => {
+            keepWebSocketAlive(user, ws as unknown as ServerWebSocket<any>, async () => {
                 try {
-                    document.unsubscribe(ws as unknown as ServerWebSocket<any>);
+                    document.unsubscribe(user, ws as unknown as ServerWebSocket<any>);
                 } catch (err) {
                     console.error('Error unsubscribing from document:', err);
                 }
@@ -90,8 +92,13 @@ export const collabRouter = new Elysia({
                 const update = message instanceof Uint8Array ? message : new Uint8Array(message as Buffer);
 
                 const drive = await getSharedDrive(ownerId, user);
+                if (!drive || !(await drive.canRead(pathId, user))) {
+                    console.error('canRead failed');
+                    ws.close(1008, "Authentication failed");
+                    return;
+                }
                 const document = await drive.getCollabDocument(pathId);
-                document.handleMessage(ws as unknown as ServerWebSocket<any>, update);
+                document.handleMessage(ws as unknown as ServerWebSocket<any>, update, await drive.canWrite(pathId, user));
             } catch (err) {
                 console.error('Error processing message:', err);
             }
@@ -112,7 +119,7 @@ export const collabRouter = new Elysia({
                 const drive = await getSharedDrive(ownerId, user);
                 const document = await drive.getCollabDocument(pathId);
 
-                document.unsubscribe(ws as unknown as ServerWebSocket<any>);
+                document.unsubscribe(user, ws as unknown as ServerWebSocket<any>);
             } catch (err) {
                 console.error('Error handling WebSocket close:', err);
             }

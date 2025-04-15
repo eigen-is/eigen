@@ -10,6 +10,7 @@
     "serve:contacts": "bun --filter './apps/api-server' --filter './apps/contacts' dev",
     "serve:drive": "bun --filter './apps/api-server' --filter './apps/drive' dev",
     "serve:docs": "bun --filter './apps/api-server' --filter './apps/docs' dev",
+    "serve:stickies": "bun --filter './apps/api-server' --filter './apps/stickies' dev",
     "build": "bun --filter '*' build"
   },
   "workspaces": [

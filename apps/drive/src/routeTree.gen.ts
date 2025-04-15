@@ -14,6 +14,7 @@ import {Route as rootRoute} from './routes/__root'
 import {Route as LoginImport} from './routes/login'
 import {Route as AuthImport} from './routes/_auth'
 import {Route as IndexImport} from './routes/index'
+import {Route as AuthSharedToImport} from './routes/_auth.shared.$to'
 import {Route as AuthMimeMimeTypeImport} from './routes/_auth.mime.$mimeType'
 import {Route as AuthFsOwnerIdPathIdImport} from './routes/_auth.fs.$ownerId.$pathId'
 
@@ -34,6 +35,12 @@ const IndexRoute = IndexImport.update({
     id: '/',
     path: '/',
     getParentRoute: () => rootRoute,
+} as any)
+
+const AuthSharedToRoute = AuthSharedToImport.update({
+    id: '/shared/$to',
+    path: '/shared/$to',
+    getParentRoute: () => AuthRoute,
 } as any)
 
 const AuthMimeMimeTypeRoute = AuthMimeMimeTypeImport.update({
@@ -80,6 +87,13 @@ declare module '@tanstack/react-router' {
             preLoaderRoute: typeof AuthMimeMimeTypeImport
             parentRoute: typeof AuthImport
         }
+        '/_auth/shared/$to': {
+            id: '/_auth/shared/$to'
+            path: '/shared/$to'
+            fullPath: '/shared/$to'
+            preLoaderRoute: typeof AuthSharedToImport
+            parentRoute: typeof AuthImport
+        }
         '/_auth/fs/$ownerId/$pathId': {
             id: '/_auth/fs/$ownerId/$pathId'
             path: '/fs/$ownerId/$pathId'
@@ -94,11 +108,13 @@ declare module '@tanstack/react-router' {
 
 interface AuthRouteChildren {
     AuthMimeMimeTypeRoute: typeof AuthMimeMimeTypeRoute
+    AuthSharedToRoute: typeof AuthSharedToRoute
     AuthFsOwnerIdPathIdRoute: typeof AuthFsOwnerIdPathIdRoute
 }
 
 const AuthRouteChildren: AuthRouteChildren = {
     AuthMimeMimeTypeRoute: AuthMimeMimeTypeRoute,
+    AuthSharedToRoute: AuthSharedToRoute,
     AuthFsOwnerIdPathIdRoute: AuthFsOwnerIdPathIdRoute,
 }
 
@@ -109,6 +125,7 @@ export interface FileRoutesByFullPath {
     '': typeof AuthRouteWithChildren
     '/login': typeof LoginRoute
     '/mime/$mimeType': typeof AuthMimeMimeTypeRoute
+    '/shared/$to': typeof AuthSharedToRoute
     '/fs/$ownerId/$pathId': typeof AuthFsOwnerIdPathIdRoute
 }
 
@@ -117,6 +134,7 @@ export interface FileRoutesByTo {
     '': typeof AuthRouteWithChildren
     '/login': typeof LoginRoute
     '/mime/$mimeType': typeof AuthMimeMimeTypeRoute
+    '/shared/$to': typeof AuthSharedToRoute
     '/fs/$ownerId/$pathId': typeof AuthFsOwnerIdPathIdRoute
 }
 
@@ -126,20 +144,34 @@ export interface FileRoutesById {
     '/_auth': typeof AuthRouteWithChildren
     '/login': typeof LoginRoute
     '/_auth/mime/$mimeType': typeof AuthMimeMimeTypeRoute
+    '/_auth/shared/$to': typeof AuthSharedToRoute
     '/_auth/fs/$ownerId/$pathId': typeof AuthFsOwnerIdPathIdRoute
 }
 
 export interface FileRouteTypes {
     fileRoutesByFullPath: FileRoutesByFullPath
-    fullPaths: '/' | '' | '/login' | '/mime/$mimeType' | '/fs/$ownerId/$pathId'
+    fullPaths:
+        | '/'
+        | ''
+        | '/login'
+        | '/mime/$mimeType'
+        | '/shared/$to'
+        | '/fs/$ownerId/$pathId'
     fileRoutesByTo: FileRoutesByTo
-    to: '/' | '' | '/login' | '/mime/$mimeType' | '/fs/$ownerId/$pathId'
+    to:
+        | '/'
+        | ''
+        | '/login'
+        | '/mime/$mimeType'
+        | '/shared/$to'
+        | '/fs/$ownerId/$pathId'
     id:
         | '__root__'
         | '/'
         | '/_auth'
         | '/login'
         | '/_auth/mime/$mimeType'
+        | '/_auth/shared/$to'
         | '/_auth/fs/$ownerId/$pathId'
     fileRoutesById: FileRoutesById
 }
@@ -178,6 +210,7 @@ export const routeTree = rootRoute
       "filePath": "_auth.tsx",
       "children": [
         "/_auth/mime/$mimeType",
+        "/_auth/shared/$to",
         "/_auth/fs/$ownerId/$pathId"
       ]
     },
@@ -186,6 +219,10 @@ export const routeTree = rootRoute
     },
     "/_auth/mime/$mimeType": {
       "filePath": "_auth.mime.$mimeType.tsx",
+      "parent": "/_auth"
+    },
+    "/_auth/shared/$to": {
+      "filePath": "_auth.shared.$to.tsx",
       "parent": "/_auth"
     },
     "/_auth/fs/$ownerId/$pathId": {

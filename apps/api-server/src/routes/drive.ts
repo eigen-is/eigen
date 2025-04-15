@@ -3,6 +3,7 @@ import {betterAuth} from "./auth";
 import {type User} from "better-auth/types";
 import {type DriveACL} from "../types/drive";
 import {getSharedDrive} from "../lib/drive/sharedDrive";
+import {getDrive} from "../lib/drive/drive";
 
 // Define types for request bodies
 type CreateFolderBody = {
@@ -50,6 +51,20 @@ export const driveRouter = new Elysia({name: "drive"})
         params: t.Object({
             ownerId: t.String()
         })
+    })
+
+    .get("/drive/shared/by-me", async ({user}: { user: User }) => {
+        const drive = await getDrive(user);
+        return await drive.getSharedPathsByMe();
+    }, {
+        auth: true
+    })
+
+    .get("/drive/shared/with-me", async ({user}: { user: User }) => {
+        const drive = await getDrive(user);
+        return await drive.getSharedPathsWithMe();
+    }, {
+        auth: true
     })
 
     // Get folder contents

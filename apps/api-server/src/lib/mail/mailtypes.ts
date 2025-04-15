@@ -20,7 +20,7 @@ export type EmailSummary = {
 
 export type Email = ParsedMail & EmailSummary;
 
-export interface MaildirMailbox {
+export type MaildirMailbox = {
     path: string;
     name: string;
     delimiter: string;

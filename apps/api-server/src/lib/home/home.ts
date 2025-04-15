@@ -21,7 +21,6 @@ export class asyncCache<T> {
 
     public async get(): Promise<T> {
         if (this.value) {
-            console.log('Database from cache');
             return this.value;
         }
         if (this.initializationStarted) {
@@ -29,7 +28,7 @@ export class asyncCache<T> {
             return new Promise((resolve) => {
                 const interval = setInterval(() => {
                     if (this.value) {
-                        console.log('Resolved, database is ready');
+                        console.log('Resolved, asyncCache is ready');
                         clearInterval(interval);
                         resolve(this.value);
                     }
@@ -98,15 +97,6 @@ export class Home {
         this.notificationSockets = this.notificationSockets.filter(socket => socket !== ws);
     }
 
-    private notify(event: EigenNotification) {
-        this.notificationSockets = this.notificationSockets.filter(ws => {
-            if (ws.readyState === 1) {
-                ws.send(JSON.stringify(event));
-                return true;
-            }
-        });
-    }
-
     public touch() {
         // Reset the timeout
         if (this.timeout) {
@@ -133,6 +123,16 @@ export class Home {
         return await (this.databases.get(file)!.get()) as Database;
     }
 
+    public async closeSQLiteDatabase(db: Database) {
+        Object.keys(this.databases).forEach(async (key) => {
+            const database = await (this.databases.get(key)!.get()) as Database;
+            if (database === db) {
+                database.close();
+                this.databases.delete(key);
+            }
+        });
+    }
+
     public async size() {
         const [mail, contacts, drive] = await Promise.all([
             this.mail.size(),
@@ -142,6 +142,15 @@ export class Home {
         const maxMB = 50;
         const max = maxMB * 1024 * 1024;
         return {mail, contacts, drive, used: (mail + contacts + drive), max};
+    }
+
+    private notify(event: EigenNotification) {
+        this.notificationSockets = this.notificationSockets.filter(ws => {
+            if (ws.readyState === 1) {
+                ws.send(JSON.stringify(event));
+                return true;
+            }
+        });
     }
 
     private async destruct() {

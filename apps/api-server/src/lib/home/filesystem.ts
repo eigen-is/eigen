@@ -199,6 +199,7 @@ export default class FileSystem {
 
         // Detect if we're running on Linux
         const isLinux = process.platform === 'linux';
+        console.log(`Checking size of ${systemPath} on ${isLinux ? 'Linux' : 'other'}`);
 
         if (isLinux) {
             // Linux-specific implementation
@@ -213,10 +214,21 @@ export default class FileSystem {
                 return 0;
             }
         } else {
-            // Fallback for other platforms (Windows, macOS)
-            // Implement a recursive directory size calculation or other method
-            // This is a simplified example
-            return 0;
+            const dirSize = async (dir: string): Promise<number> => {
+                const files = await fs.readdir(dir, {withFileTypes: true});
+
+                const paths = files.map(async file => {
+                    const path = this.pathJoin(dir, file.name);
+                    if (file.isDirectory()) return await dirSize(path);
+                    if (file.isFile()) {
+                        const {size} = await fs.stat(path);
+                        return size;
+                    }
+                    return 0;
+                });
+                return (await Promise.all(paths)).flat(Infinity).reduce((i, size) => i + size, 0);
+            }
+            return await dirSize(systemPath);
         }
     }
 

@@ -32,7 +32,7 @@ function InnerApp() {
 
 function App() {
     return (
-        <EigenApp>
+        <EigenApp appName="mail">
             <InnerApp/>
         </EigenApp>
     )

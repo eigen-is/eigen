@@ -25,7 +25,8 @@ interface DriveListProps {
     items: DrivePath[];
     isLoading?: boolean;
     error?: Error | null;
-    onRowClick?: (path: DrivePath) => void;
+    onRowSelect?: (path: DrivePath) => void;
+    onRowActivate?: (path: DrivePath) => void;
     activeRowId?: string;
     onCreateFolder?: () => void;
     onUploadFile?: () => void;
@@ -35,16 +36,19 @@ interface DriveListProps {
     onShareClick?: (item: DrivePath) => void;
     onCreateDoc?: () => void;
     onCreateStickies?: () => void;
+    onDownload?: (path: DrivePath) => void;
     ownerId: string;
     pathId: string;
     showBreadcrumb?: boolean;
+    allowDelete?: boolean;
 }
 
 export function DriveList({
                               items = [],
                               isLoading = false,
                               error = null,
-                              onRowClick,
+                              onRowSelect,
+                              onRowActivate,
                               activeRowId,
                               onCreateFolder,
                               onUploadFile,
@@ -54,13 +58,26 @@ export function DriveList({
                               onShareClick,
                               onCreateDoc,
                               onCreateStickies,
+                              onDownload,
                               ownerId,
                               pathId,
                               showBreadcrumb = true,
+                              allowDelete = false,
                           }: DriveListProps) {
     const [isDragging, setIsDragging] = useState(false);
     const dragCounter = useRef(0);
     const {data: breadcrumbPaths = []} = showBreadcrumb ? useBreadcrumb(ownerId, pathId) : {data: []};
+console.log('render')
+    // Handle row click with two different behaviors
+    const handleRowClick = (path: DrivePath) => {
+        if (path.id === activeRowId && onRowActivate) {
+            // If the item is already selected, activate it
+            onRowActivate(path);
+        } else if (onRowSelect) {
+            // Otherwise select it
+            onRowSelect(path);
+        }
+    };
 
     // Drag and drop handlers
     const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
@@ -200,7 +217,7 @@ export function DriveList({
                                         </BreadcrumbPage>
                                     ) : (
                                         <BreadcrumbLink
-                                            onClick={() => onRowClick?.(path)}
+                                            onClick={() => handleRowClick(path)}
                                             className="flex items-center cursor-pointer"
                                         >
                                             {path.name}
@@ -221,9 +238,12 @@ export function DriveList({
                 items={items}
                 currentPath={currentPath}
                 activeItemId={activeRowId}
-                onItemClick={onRowClick}
+                onItemClick={handleRowClick}
                 onShareClick={onShareClick}
                 getFileIcon={getFileIcon}
+                onDownload={onDownload}
+                onDelete={onDelete}
+                allowDelete={allowDelete}
             />
 
             {items.length === 0 && (

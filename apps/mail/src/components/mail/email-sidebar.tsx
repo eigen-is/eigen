@@ -1,4 +1,4 @@
-import {AlertOctagon, Archive, ArchiveX, File, Inbox, Send, Trash2, X} from 'lucide-react';
+import {AlertOctagon, Archive, AlertTriangle, File, Inbox, Send, Trash2, X} from 'lucide-react';
 import {Button} from "@workspace/ui/components/button";
 import {SidebarItem} from '@workspace/ui/components/layout/sidebar/sidebar-item';
 import {SidebarSection} from '@workspace/ui/components/layout/sidebar/sidebar-section';
@@ -46,7 +46,7 @@ const defaultMailboxes = [
     {
         path: "Spam",
         name: "Spam",
-        icon: <ArchiveX className="h-4 w-4"/>,
+        icon: <AlertTriangle className="h-4 w-4"/>,
         href: "/box/spam",
         unread: 0,
         flags: ['\\HasNoChildren', '\\Junk']

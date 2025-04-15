@@ -4,9 +4,11 @@ import * as syncProtocol from "y-protocols/sync";
 import {type ServerWebSocket} from "bun";
 import * as encoding from "lib0/encoding";
 import * as decoding from "lib0/decoding";
-import type { DrivePath } from "../../types/drive";
+import type {DrivePath} from "../../types/drive";
 import type Drive from "../drive/drive";
-import {user} from "../../../auth-schema.ts";
+import {drizzle} from "drizzle-orm/bun-sqlite";
+import * as schema from "./schema.ts";
+import type {User} from "better-auth/types";
 
 // Define message types (matching y-websocket protocol)
 const MESSAGE_SYNC = 0;
@@ -21,6 +23,8 @@ class LoggingProvider {
         console.log(`[LoggingProvider] Created for document: ${docId}`);
 
         // Listen for document updates
+
+        // updateV2 ?
         doc.on('update', (update: Uint8Array) => {
             // console.log(`[LoggingProvider] Document ${docId} updated, update size: ${update.length} bytes`);
             // console.log(doc.toJSON());
@@ -40,22 +44,94 @@ class LoggingProvider {
     }
 }
 
+class DbProvider {
+    private db: ReturnType<typeof drizzle<typeof schema>>;
+    private doc: Y.Doc;
+    private docId: string;
+
+    constructor(doc: Y.Doc, docId: string, db: ReturnType<typeof drizzle<typeof schema>>) {
+        this.db = db;
+        this.doc = doc;
+        this.docId = docId;
+
+        console.log(`[DbProvider] Created for document: ${docId}`);
+
+        // apply all changes from database to document
+        this.db.select().from(schema.docUpdates).then((updates) => {
+            updates.forEach((update) => {
+                // Apply each update to the document
+                const data = update.updateData as Uint8Array;
+                console.log(`[DbProvider] Applying update for document ${this.docId}, size: ${data.length} bytes`);
+                Y.applyUpdate(doc, data);
+            });
+        }).catch((error) => {
+            console.error(`[DbProvider] Error fetching updates for document ${this.docId}:`, error);
+        });
+
+        // updateV2 ?
+        doc.on('updateV2', (update: Uint8Array) => {
+            // this.storeUpdate(update);
+        });
+    }
+
+    // Method to store an update (would save to database in real implementation)
+    storeUpdate(update: Uint8Array): void {
+        console.log(`[DbProvider] Storing update for document ${this.docId}, size: ${update.length} bytes`);
+        // Store the update in the database
+        try {
+            this.db.insert(schema.docUpdates).values({
+                updateData: Buffer.from(update)
+            }).run();
+            console.log(`[DbProvider] Successfully stored update for document ${this.docId}`);
+        } catch (error) {
+            console.error(`[DbProvider] Error storing update for document ${this.docId}:`, error);
+        }
+    }
+
+    // Cleanup resources
+    destroy(): void {
+        console.log(`[DbProvider] Destroying provider for document ${this.docId}`);
+        // In a real implementation, close database connection
+
+        const update = Y.encodeStateAsUpdate(this.doc);
+        this.storeUpdate(update);
+        this.db.delete(schema.docUpdates).run();
+        this.storeUpdate(update);
+    }
+}
+
 export default class CollabDocument {
     private drive: Drive;
     private path: DrivePath;
     private doc!: Y.Doc;
-    private provider!: LoggingProvider;
+    private provider!: LoggingProvider | DbProvider;
     private awareness!: awarenessProtocol.Awareness;
-    private connections: Set<ServerWebSocket<any>> =  new Set();
+    private connections: Set<ServerWebSocket<any>> = new Set();
 
     constructor(drive: Drive, path: DrivePath) {
         this.drive = drive;
         this.path = path;
+
+        console.log(`[CollabDocument] Created for path: ${path.name}`);
     }
 
     public async init() {
+        console.log(`[CollabDocument] init for path: ${this.path.name}`);
+        const db = await this.drive.openSQLiteDatabase(this.path.id, 'data.db', async (db) => {
+            db.exec(`
+                CREATE TABLE IF NOT EXISTS doc_updates (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    updateData BLOB NOT NULL,
+                    createdAt INTEGER DEFAULT (unixepoch())
+                );
+            `);
+            console.log('create database');
+        });
+
         this.doc = new Y.Doc();
-        this.provider = new LoggingProvider(this.doc, this.path.name);
+        this.doc.gc = true;
+        // this.provider = new LoggingProvider(this.doc, this.path.name);
+        this.provider = new DbProvider(this.doc, this.path.name, drizzle(db, {schema}));
         this.awareness = new awarenessProtocol.Awareness(this.doc);
 
         return this;
@@ -63,15 +139,17 @@ export default class CollabDocument {
 
     public destruct() {
         this.provider.destroy();
+        this.awareness.destroy();
+        this.doc.destroy();
     }
 
-    public subscribe(conn: ServerWebSocket<any>) {
+    public subscribe(user: User, conn: ServerWebSocket<any>) {
         this.connections.add(conn);
         this.sendSyncStep1(conn);
         console.log(`User ${user.id} connected to document ${this.path.name}`);
     }
 
-    public unsubscribe(conn: ServerWebSocket<any>) {
+    public unsubscribe(user: User, conn: ServerWebSocket<any>) {
         this.connections.delete(conn);
         console.log(`User ${user.id} disconnected from document ${this.path.name}`);
         this.connections.forEach((connection) => {
@@ -79,18 +157,25 @@ export default class CollabDocument {
                 this.connections.delete(connection);
             }
         });
+        console.log(`Remaining connections: ${this.connections.size}`);
         // check if this.connections is empty
-        if (this.connections.size === 0) {
+        if (this.connections.size <= 0) {
             this.drive.closeCollabDocument(this.path.id);
         }
     }
 
-    public handleMessage(conn: ServerWebSocket<any>, update: Uint8Array) {
+    public handleMessage(conn: ServerWebSocket<any>, update: Uint8Array, canWrite: boolean) {
         // Create a decoder from the message
         const decoder = decoding.createDecoder(update);
         const messageType = decoding.readVarUint(decoder);
 
         if (messageType === MESSAGE_SYNC) {
+            // Check if the message is a read-only update
+            const updateType = decoding.peekUint8(decoder);
+            if (!canWrite && (updateType === 1 || updateType === 2)) {
+                return;
+            }
+
             // Create response encoder
             const encoder = encoding.createEncoder();
             encoding.writeVarUint(encoder, MESSAGE_SYNC);
