@@ -96,7 +96,7 @@ export const StickiesBoard: React.FC<BoardProps> = ({ownerId, pathId}) => {
                         x: 0.2,
                         y: 0.2
                     },
-                    acceleration: 10,
+                    acceleration: 1,
                     interval: 10
                 }}
             >
@@ -123,7 +123,7 @@ export const StickiesBoard: React.FC<BoardProps> = ({ownerId, pathId}) => {
 
                     {/* Add Column Button */}
                     <div
-                        className={`${isMobile ? 'mx-[4vw] min-w-[92vw]' : 'mx-1.5 min-w-[280px] w-[280px]'} flex items-start h-full`}
+                        className={`${isMobile ? 'mx-[4vw] min-w-[92vw] w-[92vw]' : 'mx-1.5 min-w-[280px] w-[280px]'} flex items-start h-full`}
                         style={{
                             scrollSnapAlign: 'center',
                             scrollSnapStop: 'normal'
@@ -131,7 +131,7 @@ export const StickiesBoard: React.FC<BoardProps> = ({ownerId, pathId}) => {
                     >
                         <button
                             onClick={() => setIsAddColumnDialogOpen(true)}
-                            className="bg-gray-100 hover:bg-gray-200 border border-gray-200 rounded text-sm flex items-center gap-1 py-2 px-4 text-gray-700"
+                            className="bg-gray-100 hover:bg-gray-200 border border-gray-200 rounded text-sm flex items-center gap-1 py-2 px-4 text-gray-700 w-full"
                         >
                             <Plus size={16}/>
                             <span>Add another list</span>
