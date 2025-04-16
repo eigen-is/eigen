@@ -14,11 +14,11 @@ interface AddTaskDialogProps {
 }
 
 export const AddTaskDialog: React.FC<AddTaskDialogProps> = ({
-                                                                isOpen,
-                                                                onClose,
-                                                                onAddTask,
-                                                                columnId
-                                                            }) => {
+        isOpen,
+        onClose,
+        onAddTask,
+        columnId
+    }) => {
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
     const { user } = useAuth();                                                                
@@ -34,6 +34,8 @@ export const AddTaskDialog: React.FC<AddTaskDialogProps> = ({
             creator: user?.email || '',
             createdAt: Date.now()
         });
+
+        console.log(user, user?.email);
 
         setTitle('');
         setDescription('');
