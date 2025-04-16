@@ -88,7 +88,7 @@ export const Column: React.FC<ColumnProps> = ({
 
             {/* Column content area */}
             <div
-                className={`flex-grow flex flex-col p-1.5 ${
+                className={`flex-grow overflow-y-auto overflow-x-hidden flex flex-col p-1.5 ${
                     isDropAnimating ? 'bg-blue-50/10' : 'bg-white'
                 }`}
             >
