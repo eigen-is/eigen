@@ -31,9 +31,6 @@ export const TaskCard: React.FC<TaskCardProps> = ({task, isMobile, yjsDoc, owner
         },
     });
 
-    // Use fixed widths on desktop, percentage width on mobile
-    const width = isMobile ? 'w-full' : 'w-[260px]';
-
     const handleCardClick = (e: React.MouseEvent) => {
         // Only open dialog if not dragging
         if (!isDragging) {
@@ -46,7 +43,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({task, isMobile, yjsDoc, owner
         <>
             <div
                 ref={setNodeRef}
-                className={`mb-1.5 ${width} border border-gray-200 shadow-sm bg-white select-none ${isDragging ? 'opacity-50' : ''}`}
+                className={`mb-1.5 w-full border border-gray-200 shadow-sm bg-white select-none ${isDragging ? 'opacity-50' : ''}`}
                 style={{
                     transform: CSS.Transform.toString(transform),
                     transition,
