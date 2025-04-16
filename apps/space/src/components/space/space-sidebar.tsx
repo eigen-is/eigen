@@ -62,21 +62,13 @@ export function SpaceSidebar({
                 <SidebarItem
                     icon={<KeySquare className="h-4 w-4"/>}
                     label="Two factor authentication"
+                    condensed={condensed}
                     to='/security/2fa' params={{}}/>
                 {/*SidebarItem
                     icon={<Smartphone className="h-4 w-4"/>}
                     label="Recovery codes"
                     to='/security/recovery-codes' params={{}}/> */}
             </SidebarSection>
-
-            {/* <Separator/>
-
-            <SidebarSection condensed={condensed}>
-                <SidebarItem
-                        icon={<CreditCard className="h-4 w-4"/>}
-                        label="Payment and subscriptions"
-                        to='/payment/payment-and-subscriptions' params={{}}/>
-            </SidebarSection> */}
 
             {/* Storage usage indicator at the bottom of sidebar */}
             <StorageUsage
