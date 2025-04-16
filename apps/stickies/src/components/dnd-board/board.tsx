@@ -111,8 +111,9 @@ export const StickiesBoard: React.FC<BoardProps> = ({ownerId, pathId}) => {
                         x: 0.2,
                         y: 0.2
                     },
-                    acceleration: 1,
-                    interval: 10
+                    acceleration: 10,
+                    interval: 10,
+                    layoutShiftCompensation: false,
                 }}
             >
                 <div className={`flex ${isMobile ? 'gap-0' : 'gap-3'} h-full`}>
