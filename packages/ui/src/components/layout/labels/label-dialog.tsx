@@ -99,31 +99,32 @@ export function LabelDialog({
                     </DialogHeader>
 
                     <Form {...form}>
-                        <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4">
-                            <FormField
-                                control={form.control}
-                                name="name"
-                                render={({field, fieldState}) => (
-                                    <FormItem>
-                                        <FormLabel>Name</FormLabel>
-                                        <FormControl>
-                                            <Input placeholder="Enter label name" {...field} />
-                                        </FormControl>
-                                        <FormMessage>
-                                            {fieldState.error?.message}
-                                        </FormMessage>
-                                    </FormItem>
-                                )}
-                            />
-
+                        <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4 ">
+                            <div className="flex gap-2">
+                                
                             <FormField
                                 control={form.control}
                                 name="color"
                                 render={({field, fieldState}) => (
                                     <FormItem>
-                                        <FormLabel>Color</FormLabel>
+                                        <FormLabel className="invisible">Color</FormLabel>
                                         <FormControl>
-                                            <Input type="color" {...field} />
+                                            <Input type="color" {...field} className="w-12" />
+                                        </FormControl>
+                                        <FormMessage>
+                                            {fieldState.error?.message}
+                                        </FormMessage>
+                                    </FormItem>
+                                )}
+                            />
+                            <FormField
+                                control={form.control}
+                                name="name"
+                                render={({field, fieldState}) => (
+                                    <FormItem  className="flex-1">
+                                        <FormLabel>Label Name</FormLabel>
+                                        <FormControl>
+                                            <Input placeholder="Enter label name" autoFocus {...field} />
                                         </FormControl>
                                         <FormMessage>
                                             {fieldState.error?.message}
@@ -132,6 +133,7 @@ export function LabelDialog({
                                 )}
                             />
 
+                            </div>
                             <DialogFooter className="flex justify-end">
                                 {isEditMode && (
                                     <Button

@@ -1,10 +1,10 @@
-import {useEffect, useRef, useState} from 'react';
-import {Pencil, PlusIcon} from 'lucide-react';
-import {Button} from "../../button";
+import {useRef, useState} from 'react';
+import {Pencil, PlusIcon, TagIcon} from 'lucide-react';
 import {cn} from "../../../lib/utils";
 import {LabelDialog} from './label-dialog';
 import {LabelManagerProps} from './types';
 import {SidebarItem} from '../sidebar';
+import {TooltipButton} from "@workspace/ui";
 import type {Label} from "@apps/api-server/types/label";
 
 export function LabelManager({
@@ -16,31 +16,9 @@ export function LabelManager({
                                  className,
                                  condensed = false,
                              }: LabelManagerProps) {
-    const [isEditMode, setIsEditMode] = useState(false);
     const [selectedLabel, setSelectedLabel] = useState<Label | null>(null);
     const [dialogOpen, setDialogOpen] = useState(false);
     const labelManagerRef = useRef<HTMLDivElement>(null);
-
-    // Handle clicks outside of the label manager to exit edit mode
-    useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => {
-            // Skip if we're not in edit mode or if the dialog is open
-            if (!isEditMode || dialogOpen) return;
-
-            // Check if the click was outside the label manager
-            if (labelManagerRef.current && !labelManagerRef.current.contains(event.target as Node)) {
-                setIsEditMode(false);
-            }
-        };
-
-        // Add event listener
-        document.addEventListener('mousedown', handleClickOutside);
-
-        // Clean up
-        return () => {
-            document.removeEventListener('mousedown', handleClickOutside);
-        };
-    }, [isEditMode, dialogOpen]);
 
     const handleAddLabel = () => {
         setSelectedLabel(null);
@@ -83,28 +61,13 @@ export function LabelManager({
                 "flex items-center mb-2",
                 condensed ? "justify-center" : "justify-between"
             )}>
-                {!condensed && <h3 className="text-xs font-semibold text-muted-foreground px-3">Labels</h3>}
+                {!condensed && <h3 className="text-sm font-semibold text-foreground px-3 select-none">Labels</h3>}
                 <div className="flex items-center gap-1">
-                    <Button
-                        variant="ghost"
-                        size="icon"
+                    <TooltipButton
+                        icon={PlusIcon}
+                        tooltipText="Add new label"
                         onClick={handleAddLabel}
-                        className="h-8 w-8"
-                    >
-                        <PlusIcon className="h-4 w-4"/>
-                        <span className="sr-only">Add new label</span>
-                    </Button>
-                    {!condensed && (
-                        <Button
-                            variant={isEditMode ? "secondary" : "ghost"}
-                            size="icon"
-                            className={cn("h-8 w-8", isEditMode && "border border-primary")}
-                            onClick={() => setIsEditMode(!isEditMode)}
-                        >
-                            <Pencil className={cn("h-4 w-4", isEditMode && "text-primary")}/>
-                            <span className="sr-only">Toggle edit mode</span>
-                        </Button>
-                    )}
+                    />
                 </div>
             </div>
 
@@ -117,22 +80,17 @@ export function LabelManager({
                         colorDot={label.color}
                         to={getLabelPath(label)}
                         condensed={condensed}
-                        className={isEditMode && !condensed ? "pr-8 relative" : ""}
+                        className={!condensed ? "pr-8 relative group" : ""}
                     >
-                        {isEditMode && !condensed && (
-                            <div className="absolute right-2">
-                                <Button
+                        {!condensed && (
+                            <div className="editButton absolute right-2 opacity-0 group-hover:opacity-80 hover:opacity-100">
+                                <TooltipButton
+                                    icon={Pencil}
+                                    tooltipText={`Edit label`}
                                     variant="ghost"
                                     size="icon"
-                                    className="h-6 w-6"
-                                    onClick={(e) => {
-                                        e.preventDefault();
-                                        e.stopPropagation();
-                                        handleEditClick(label);
-                                    }}
-                                >
-                                    <Pencil className="h-3 w-3"/>
-                                </Button>
+                                    onClick={() => handleEditClick(label)}
+                                />
                             </div>
                         )}
                     </SidebarItem>
