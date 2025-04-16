@@ -1,24 +1,22 @@
-import {useRef, useState} from 'react';
+import {useState} from 'react';
 import {Pencil} from 'lucide-react';
 import {Label} from '@apps/api-server/types/label';
 import {TooltipButton} from '@workspace/ui';
 import {LabelDialog} from './label-dialog';
+import {useLabels} from './label-provider';
 
 export interface LabelFilterHeaderProps {
     labels: Label[];
     labelId: string;
-    onEditLabel?: (label: Label) => void;
-    onDeleteLabel?: (labelId: string) => void;
 }
 
 export function LabelFilterHeader({
                                       labels,
                                       labelId,
-                                      onEditLabel,
-                                      onDeleteLabel,
                                   }: LabelFilterHeaderProps) {
     const [selectedLabel, setSelectedLabel] = useState<Label | null>(null);
     const [dialogOpen, setDialogOpen] = useState(false);
+    const {updateLabel, deleteLabel} = useLabels();
     
     const label = labels.find(l => l.id === labelId);
     
@@ -27,22 +25,32 @@ export function LabelFilterHeader({
         setDialogOpen(true);
     };
     
-    const handleSubmit = (data: { name: string; color: string }) => {
-        if (selectedLabel && onEditLabel) {
-            // Edit existing label
-            onEditLabel({
-                ...selectedLabel,
-                name: data.name,
-                color: data.color,
-            });
+    const handleSubmit = async (data: { name: string; color: string }) => {
+        try {
+            if (selectedLabel) {
+                // Edit existing label
+                await updateLabel({
+                    ...selectedLabel,
+                    name: data.name,
+                    color: data.color,
+                });
+            }
+            setDialogOpen(false);
+        } catch (error) {
+            console.error('Error updating label:', error);
+            // Keep dialog open on error so user can try again
         }
-        setDialogOpen(false);
     };
     
-    const handleDeleteLabel = () => {
-        if (selectedLabel && onDeleteLabel) {
-            onDeleteLabel(selectedLabel.id);
-            setDialogOpen(false);
+    const handleDeleteLabel = async () => {
+        try {
+            if (selectedLabel) {
+                await deleteLabel(selectedLabel.id);
+                setDialogOpen(false);
+            }
+        } catch (error) {
+            console.error('Error deleting label:', error);
+            // Keep dialog open on error so user can try again
         }
     };
 
@@ -56,27 +64,23 @@ export function LabelFilterHeader({
                     />
                     {label.name}
                 </h1>
-                {onEditLabel && (
-                    <TooltipButton
-                        icon={Pencil}
-                        tooltipText="Edit label"
-                        size="icon"
-                        variant="ghost"
-                        className="h-8 w-8"
-                        onClick={() => handleEditClick(label)}
-                    />
-                )}
+                <TooltipButton
+                    icon={Pencil}
+                    tooltipText="Edit label"
+                    size="icon"
+                    variant="ghost"
+                    className="h-8 w-8"
+                    onClick={() => handleEditClick(label)}
+                />
             </div>
             
-            {onEditLabel && (
-                <LabelDialog
-                    open={dialogOpen}
-                    onOpenChange={setDialogOpen}
-                    selectedLabel={selectedLabel}
-                    onSubmit={handleSubmit}
-                    onDelete={handleDeleteLabel}
-                />
-            )}
+            <LabelDialog
+                open={dialogOpen}
+                onOpenChange={setDialogOpen}
+                selectedLabel={selectedLabel}
+                onSubmit={handleSubmit}
+                onDelete={handleDeleteLabel}
+            />
         </>
     ) : null;
 }

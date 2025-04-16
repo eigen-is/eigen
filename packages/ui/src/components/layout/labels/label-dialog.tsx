@@ -36,7 +36,7 @@ interface LabelDialogProps {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     selectedLabel: Label | null;
-    onSubmit: (data: LabelFormValues) => void;
+    onSubmit: (data: LabelFormValues) => Promise<void>;
     onDelete: () => void;
 }
 
@@ -49,6 +49,7 @@ export function LabelDialog({
                             }: LabelDialogProps) {
     const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
     const isEditMode = !!selectedLabel;
+    const [isLoading, setIsLoading] = useState(false);
 
     // Initialize the form with default values or the selected label data
     const form = useForm<LabelFormValues>({
@@ -76,9 +77,16 @@ export function LabelDialog({
     }, [selectedLabel, form, open]);
 
     // Handle form submission
-    const handleSubmit = (data: LabelFormValues) => {
-        onSubmit(data);
-        form.reset();
+    const handleSubmit = async (data: LabelFormValues) => {
+        try {
+            setIsLoading(true);
+            await onSubmit(data);
+            form.reset();
+        } catch (error) {
+            console.error('Error submitting form:', error);
+        } finally {
+            setTimeout(() => setIsLoading(false), 350);
+        }
     };
 
     const handleDeleteClick = () => {
@@ -99,58 +107,76 @@ export function LabelDialog({
                     </DialogHeader>
 
                     <Form {...form}>
-                        <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4 ">
+                        <form onSubmit={form.handleSubmit(handleSubmit)} className="space-y-4" noValidate>
                             <div className="flex gap-2">
-                                
-                            <FormField
-                                control={form.control}
-                                name="color"
-                                render={({field, fieldState}) => (
-                                    <FormItem>
-                                        <FormLabel className="invisible">Color</FormLabel>
-                                        <FormControl>
-                                            <Input type="color" {...field} className="w-12" />
-                                        </FormControl>
-                                        <FormMessage>
-                                            {fieldState.error?.message}
-                                        </FormMessage>
-                                    </FormItem>
-                                )}
-                            />
-                            <FormField
-                                control={form.control}
-                                name="name"
-                                render={({field, fieldState}) => (
-                                    <FormItem  className="flex-1">
-                                        <FormLabel>Label Name</FormLabel>
-                                        <FormControl>
-                                            <Input placeholder="Enter label name" autoFocus {...field} />
-                                        </FormControl>
-                                        <FormMessage>
-                                            {fieldState.error?.message}
-                                        </FormMessage>
-                                    </FormItem>
-                                )}
-                            />
-
+                                <FormField
+                                    control={form.control}
+                                    name="color"
+                                    render={({field, fieldState}) => (
+                                        <FormItem>
+                                            <FormLabel className="invisible">Color</FormLabel>
+                                            <FormControl>
+                                                <Input 
+                                                    type="color"
+                                                    {...field} 
+                                                    className="w-12" 
+                                                    disabled={isLoading}
+                                                />
+                                            </FormControl>
+                                            <FormMessage>
+                                                {fieldState.error?.message}
+                                            </FormMessage>
+                                        </FormItem>
+                                    )}
+                                />
+                                <FormField
+                                    control={form.control}
+                                    name="name"
+                                    render={({field, fieldState}) => (
+                                        <FormItem  className="flex-1">
+                                            <FormLabel>Label Name</FormLabel>
+                                            <FormControl>
+                                                <Input 
+                                                    placeholder="Enter label name" 
+                                                    autoFocus 
+                                                    {...field} 
+                                                    disabled={isLoading}
+                                                />
+                                            </FormControl>
+                                            <FormMessage>
+                                                {fieldState.error?.message}
+                                            </FormMessage>
+                                        </FormItem>
+                                    )}
+                                />
                             </div>
                             <DialogFooter className="flex justify-end">
                                 {isEditMode && (
                                     <Button
                                         type="button"
-                                        variant="outline"
+                                        variant="destructive"
                                         onClick={handleDeleteClick}
-                                        className="mr-auto bg-destructive/10 text-destructive hover:bg-destructive/20 hover:text-destructive"
+                                        disabled={isLoading}
+                                        className="mr-auto"
                                     >
-                                        <Trash2 className="h-4 w-4 mr-2"/>
                                         Delete
                                     </Button>
                                 )}
-                                <Button type="button" variant="outline" onClick={() => onOpenChange(false)}
-                                        className="mr-2">
+                                <Button 
+                                    type="button" 
+                                    variant="outline" 
+                                    onClick={() => onOpenChange(false)}
+                                    className="mr-2" 
+                                    disabled={isLoading}
+                                >
                                     Cancel
                                 </Button>
-                                <Button type="submit">Save</Button>
+                                <Button 
+                                    type="submit" 
+                                    disabled={isLoading || form.formState.isSubmitting}
+                                >
+                                    {isLoading ? 'Saving...' : 'Save'}
+                                </Button>
                             </DialogFooter>
                         </form>
                     </Form>
