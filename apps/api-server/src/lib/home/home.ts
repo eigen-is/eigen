@@ -152,6 +152,10 @@ export class Home {
             }
         });
     }
+    
+    public async getZip() {
+        return await this.fs.getZip();
+    }
 
     private async destruct() {
         this.contacts = undefined!;

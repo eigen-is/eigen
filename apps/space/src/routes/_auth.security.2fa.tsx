@@ -74,8 +74,11 @@ function TwoFaComponent() {
     };
 
     return (
-        <div className="flex flex-col items-center justify-center min-h-screen">
-            <div className="w-full max-w-3xl">
+
+        <div className="flex flex-col min-h-screen">
+            <div className="w-full max-w-3xl m-8">
+                <h1 className="text-2xl font-semibold mb-6">Two-Factor Authentication</h1>
+
                 <TwoFactorSetup
                     onInitialize2FA={handleInitialize2FA}
                     onVerifyTotp={handleVerifyTotp}
