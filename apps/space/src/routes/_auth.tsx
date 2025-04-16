@@ -43,7 +43,6 @@ function AuthLayout() {
     return (
         <SidebarContext.Provider value={{sidebarOpen, setSidebarOpen}}>
 
-            <div className="flex-1 overflow-hidden">
                 <div className="flex flex-1 w-full h-full overflow-hidden">
                     {/* Sidebar: overlay on mobile, normal display on larger screens */}
                     <div
@@ -69,11 +68,10 @@ function AuthLayout() {
                     )}
 
                     {/* Main content area */}
-                    <main className="flex-1 flex flex-col h-full overflow-auto">
+                    <main className="flex-1 flex flex-col h-full overflow-hidden">
                         <Outlet/>
                     </main>
                 </div>
-            </div>
             <TanStackRouterDevtools position="bottom-right"/>
         </SidebarContext.Provider>
     );
