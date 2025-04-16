@@ -5,7 +5,7 @@ import { useState, useRef, useEffect } from 'react';
 import { Camera, InfoIcon } from 'lucide-react';
 import { Contact } from "@apps/api-server/types/contact";
 import { getMeContact, useUpdateContact } from '@workspace/lib/contacts';
-import { contactsApi } from '@workspace/lib/api';
+import { toast } from 'sonner';
 import { useUpload } from '@workspace/ui/components/layout/upload-provider/upload-provider';
 import { uploadWithProgress } from "@workspace/ui/components/layout/upload-provider/upload-with-progress";
 import { useInvalidateAllAvatars } from "@workspace/lib/media";
@@ -20,6 +20,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger
 } from "@workspace/ui/components/dropdown-menu";
+import { useNavigate } from '@tanstack/react-router';
 
 // Define the form schema - only include firstName, lastName
 const formSchema = z.object({
@@ -84,6 +85,8 @@ export function ProfileEditor() {
     }
   }, [contact, form]);
 
+  const navigate = useNavigate();
+
   // Handle form submission
   const handleSubmit = form.handleSubmit(async (data) => {
     if (!contact) return;
@@ -108,6 +111,11 @@ export function ProfileEditor() {
 
       setError(null);
       setIsLoading(false);
+      
+      toast.success('Profile updated successfully');
+
+      // redirect to profile page
+      navigate({to:'/'});
     } catch (err) {
       console.error('Error updating profile:', err);
       setError('Failed to update your profile. Please try again.');
