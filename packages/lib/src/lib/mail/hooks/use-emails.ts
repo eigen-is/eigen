@@ -77,8 +77,9 @@ export function useDeleteEmail() {
             await mailApi.message.moveToTrash.put({messageId: email.id});
         }
         // invalidate mailbox cache
-        queryClient.invalidateQueries({queryKey: emailKeys.lists()});
+        // queryClient.invalidateQueries({queryKey: emailKeys.lists()});
         queryClient.invalidateQueries({queryKey: emailKeys.detail(email.id)});
+        queryClient.invalidateQueries({queryKey: emailKeys.list(email.mailbox === '' ? 'inbox' : email.mailbox)});
         invalidateHomeSize(queryClient);
     }
 }
@@ -112,7 +113,8 @@ export function useMoveEmail() {
             targetMailbox: mailbox
         });
         queryClient.invalidateQueries({queryKey: emailKeys.detail(email.id)});
-        queryClient.invalidateQueries({queryKey: emailKeys.list(currentMailbox)});
+        queryClient.invalidateQueries({queryKey: emailKeys.list(currentMailbox  === '' ? 'inbox' : currentMailbox)});
+        queryClient.invalidateQueries({queryKey: emailKeys.list(mailbox === '' ? 'inbox' : mailbox)});
         queryClient.invalidateQueries({queryKey: mailboxKeys.lists()});
     }
 }
