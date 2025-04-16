@@ -99,24 +99,10 @@ export class Contacts {
         this.db = await getContactsDatabase(this.home);
         if (!(await this.getContacts()).length) {
             const user = this.home.user;
-            const nameParts = (user.name || '').split(' ');
+            
             // add the user to the contacts table
-            await this.addContact({
-                eigenId: user.id,
-                firstName: nameParts[0] || '',
-                lastName: [...nameParts.slice(1)].join(' ') || '',
-                email: [user.email],
-                phone: [],
-                company: '',
-                jobTitle: '',
-                address: [],
-                birthday: '',
-                notes: '',
-                avatar: '',
-                labels: []
-            });
-
-            // get reinder
+            await this.addYourself();
+            // add reinder, zodat het een beetje gezellig is
             const reinder = await getUserByEmail('reinder@eigen.is');
             if (reinder && reinder.id !== user.id) {
                 this.addContact({
@@ -393,6 +379,38 @@ export class Contacts {
             if (!contact) {
                 await this.home.fs.unlink(`${baseDir}${file}`);
             }
+        }
+    }
+
+    private async addYourself() {
+        const user = this.home.user;
+        const nameParts = (user.name || '').split(' ');
+        // add the user to the contacts table
+        await this.addContact({
+            eigenId: user.id,
+            firstName: nameParts[0] || '',
+            lastName: [...nameParts.slice(1)].join(' ') || '',
+            email: [user.email],
+            phone: [],
+            company: '',
+            jobTitle: '',
+            address: [],
+            birthday: '',
+            notes: '',
+            avatar: '',
+            labels: []
+        });
+        return user.id;
+    }
+
+    public async getMe() {
+        const user = this.home.user;
+        const found = this.db.select().from(schema.contacts).where(eq(schema.contacts.eigenId, user.id)).get();
+        if (found) {
+            return this.getContactById(found.id);
+        } else {
+            const addedId = await this.addYourself();
+            return this.getContactById(addedId);
         }
     }
 }

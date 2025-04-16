@@ -106,9 +106,8 @@ export function TwoFactorSetup({
     }
 
     return (
-        <div className="space-y-8 pb-20 m-4">
+        <div className="space-y-8 pb-20">
             <div className="space-y-2">
-                <h2 className="text-2xl font-bold">Two-Factor Authentication</h2>
                 <p className="text-muted-foreground">
                     Add an extra layer of security to your account by enabling two-factor authentication.
                 </p>
@@ -152,9 +151,11 @@ export function TwoFactorSetup({
                             )}
                         />
 
-                        <Button type="submit" className="w-full" disabled={isLoading}>
-                            {isLoading ? "Setting up..." : "Enable Two-Factor Authentication"}
-                        </Button>
+                        <div className="flex justify-end gap-3">
+                            <Button type="submit" disabled={isLoading}>
+                                {isLoading ? "Setting up..." : "Enable Two-Factor Authentication"}
+                            </Button>
+                        </div>
                     </form>
                 </Form>
             )}

@@ -80,3 +80,6 @@ export const contactsRouter = new Elysia({name: "contacts"})
     }) => await (await getContacts(user)).downloadAvatar(params.filename), {
         auth: true
     })
+    .get("/contacts/me", async ({user}) => await (await getContacts(user)).getMe(), {
+        auth: true
+    })
