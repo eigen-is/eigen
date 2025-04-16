@@ -24,7 +24,10 @@ import {
     Trash2,
     Type,
     Underline,
-    Undo
+    Undo,
+    AlignLeft,
+    AlignCenter,
+    AlignRight
 } from "lucide-react";
 import {TooltipButton} from "@workspace/ui";
 import {Button} from "@workspace/ui/components/button";
@@ -40,7 +43,7 @@ import {Input} from "@workspace/ui/components/input";
 import {Label} from "@workspace/ui/components/label";
 import {printElement} from "@workspace/ui/lib/printElement";
 import {useCallback, useState} from "react";
-import {CustomElement, CustomElementType, CustomText} from "./editor.types";
+import {CustomElement, CustomElementType, CustomText, TextAlignment} from "./editor.types";
 
 // Define custom editor type
 type CustomEditor = BaseEditor & ReactEditor & HistoryEditor;
@@ -127,6 +130,35 @@ const isLinkActive = (editor: CustomEditor) => {
     return marks ? marks.link !== undefined : false;
 };
 
+// Check if alignment is active
+const isAlignmentActive = (editor: CustomEditor, alignment: TextAlignment) => {
+    const {selection} = editor;
+    if (!selection) return false;
+
+    const [match] = Array.from(
+        Editor.nodes(editor, {
+            at: Editor.unhangRange(editor, selection),
+            match: n =>
+                !Editor.isEditor(n) &&
+                SlateElement.isElement(n) &&
+                (n as CustomElement).align === alignment,
+        })
+    );
+
+    return !!match;
+};
+
+// Toggle alignment
+const toggleAlignment = (editor: CustomEditor, alignment: TextAlignment) => {
+    const isActive = isAlignmentActive(editor, alignment);
+    
+    Transforms.setNodes(
+        editor,
+        { align: isActive ? undefined : alignment },
+        { match: n => SlateElement.isElement(n) && !Editor.isEditor(n) }
+    );
+};
+
 // Get the current link URL if any
 const getLinkUrl = (editor: CustomEditor) => {
     const marks = Editor.marks(editor);
@@ -160,15 +192,37 @@ interface BlockButtonProps {
     tooltipText: string;
 }
 
+// Alignment Button Component
+interface AlignmentButtonProps {
+    alignment: TextAlignment;
+    icon: LucideIcon;
+    tooltipText: string;
+}
+
 const BlockButton = ({format, icon, tooltipText}: BlockButtonProps) => {
-    const editor = useSlate() as CustomEditor;
+    const editor = useSlate();
+    const Icon = icon;
 
     return (
         <TooltipButton
-            icon={icon}
+            icon={Icon}
             tooltipText={tooltipText}
-            variant={isBlockActive(editor, format) ? "secondary" : "ghost"}
             onClick={() => toggleBlock(editor, format)}
+            variant={isBlockActive(editor, format) ? "default" : "ghost"}
+        />
+    );
+};
+
+const AlignmentButton = ({alignment, icon, tooltipText}: AlignmentButtonProps) => {
+    const editor = useSlate();
+    const Icon = icon;
+
+    return (
+        <TooltipButton
+            icon={Icon}
+            tooltipText={tooltipText}
+            onClick={() => toggleAlignment(editor, alignment)}
+            variant={isAlignmentActive(editor, alignment) ? "default" : "ghost"}
         />
     );
 };
@@ -309,6 +363,8 @@ export const EditorToolbar = () => {
     const editor = useSlate() as CustomEditor;
     const commandKey = window.navigator.platform.includes('Mac') ? '⌘' : 'Ctrl';
     const printDocument = useCallback(() => printElement(document.querySelector('[data-document]')!), []);
+
+    const ToolbarSeparator = () => (<div className="h-6 w-[1px] bg-border mx-1"></div>);
     return (
         <div className="bg-white h-12 flex items-center justify-between px-4 border-b no-print">
             <div className="flex items-center gap-1">
@@ -329,7 +385,7 @@ export const EditorToolbar = () => {
                     </DropdownMenuContent>
                 </DropdownMenu>
                 {/* Separator */}
-                <div className="h-6 w-[1px] bg-border mx-1"></div>
+                <ToolbarSeparator/>
 
                 <TooltipButton
                     icon={Undo}
@@ -345,7 +401,6 @@ export const EditorToolbar = () => {
 
             </div>
             <div className="flex items-center gap-1">
-
                 <MarkButton format="bold" icon={Bold} tooltipText={`Bold (${commandKey}+B)`}/>
                 <MarkButton format="italic" icon={Italic} tooltipText={`Italic (${commandKey}+I)`}/>
                 <MarkButton format="underline" icon={Underline} tooltipText={`Underline (${commandKey}+U)`}/>
@@ -374,22 +429,24 @@ export const EditorToolbar = () => {
                     </DropdownMenuContent>
                 </DropdownMenu>
 
-                {/* Separator */}
-                <div className="h-6 w-[1px] bg-border mx-1"></div>
+                <ToolbarSeparator/>
+                
+                <AlignmentButton alignment="left" icon={AlignLeft} tooltipText="Align Left"/>
+                <AlignmentButton alignment="center" icon={AlignCenter} tooltipText="Align Center"/>
+                <AlignmentButton alignment="right" icon={AlignRight} tooltipText="Align Right"/>
+                
+                <ToolbarSeparator/>
 
                 <BlockButton format="block-quote" icon={TextQuote} tooltipText="Blockquote"/>
                 <BlockButton format="bulleted-list" icon={List} tooltipText="Bulleted List"/>
                 <BlockButton format="numbered-list" icon={ListOrdered} tooltipText="Numbered List"/>
                 <BlockButton format="check-list" icon={CheckSquare} tooltipText="Check List"/>
 
-                {/* Separator */}
-                <div className="h-6 w-[1px] bg-border mx-1"></div>
+                <ToolbarSeparator/>
 
-                {/* Link button */}
                 <LinkButton/>
 
-                {/* Separator */}
-                <div className="h-6 w-[1px] bg-border mx-1"></div>
+                <ToolbarSeparator/>
 
                 <TooltipButton
                     icon={RemoveFormatting}
