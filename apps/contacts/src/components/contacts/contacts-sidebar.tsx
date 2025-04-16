@@ -6,10 +6,9 @@ import {SidebarItem} from '@workspace/ui/components/layout/sidebar/sidebar-item'
 import {SidebarSection} from '@workspace/ui/components/layout/sidebar/sidebar-section';
 import {Separator} from '@workspace/ui/components/separator';
 import {type Label} from "@apps/api-server/types/label";
-import {useAddLabel, useDeleteLabel, useLabels, useUpdateLabel} from '@workspace/lib/contacts';
+import {useLabels} from '@workspace/lib/contacts';
 import {AppLogo} from '@workspace/ui/components/layout/app-logo';
 import {EigenLoader, StorageUsage} from "@workspace/ui";
-import {toast} from "sonner";
 
 interface ContactsSidebarProps {
     condensed?: boolean;
@@ -25,41 +24,7 @@ export function ContactsSidebar({condensed = false, onClose, isMobile = false}: 
         error
     } = useLabels();
 
-    // Use the mutation hooks from TanStack Query
-    const addLabelMutation = useAddLabel();
-    const updateLabelMutation = useUpdateLabel();
-    const deleteLabelMutation = useDeleteLabel();
-
-    // Handle label operations
-    const handleAddLabel = async (labelData: Omit<Label, 'id'>) => {
-        try {
-            console.log('Adding label:', labelData);
-            await addLabelMutation.mutateAsync(labelData);
-            toast.success(`Label ${labelData.name} added`);
-        } catch (error) {
-            console.error('Failed to add label:', error);
-        }
-    };
-
-    const handleEditLabel = async (updatedLabel: Label) => {
-        try {
-            console.log('Editing label:', updatedLabel);
-            await updateLabelMutation.mutateAsync(updatedLabel);
-            toast.success('Label updated');
-        } catch (error) {
-            console.error('Failed to update label:', error);
-        }
-    };
-
-    const handleDeleteLabel = async (labelId: string) => {
-        try {
-            console.log('Deleting label with ID:', labelId);
-            await deleteLabelMutation.mutateAsync(labelId);
-            toast.success('Label deleted');
-        } catch (error) {
-            console.error('Failed to delete label:', error);
-        }
-    };
+    // Generate path for a label - this is still needed for routing
 
     // Generate path for a label
     const getLabelPath = (label: Label) => `/label/${label.id.toLowerCase()}`;
@@ -129,9 +94,6 @@ export function ContactsSidebar({condensed = false, onClose, isMobile = false}: 
                 ) : (
                     <LabelManager
                         labels={labels}
-                        onAddLabel={handleAddLabel}
-                        onEditLabel={handleEditLabel}
-                        onDeleteLabel={handleDeleteLabel}
                         getLabelPath={getLabelPath}
                         className="px-3"
                         condensed={condensed}

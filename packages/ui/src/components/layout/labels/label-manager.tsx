@@ -1,24 +1,22 @@
-import {useRef, useState} from 'react';
-import {Pencil, PlusIcon, TagIcon} from 'lucide-react';
+import {useState} from 'react';
+import {Pencil, PlusIcon} from 'lucide-react';
 import {cn} from "../../../lib/utils";
 import {LabelDialog} from './label-dialog';
 import {LabelManagerProps} from './types';
 import {SidebarItem} from '../sidebar';
 import {TooltipButton} from "@workspace/ui";
+import {useLabels} from './label-provider';
 import type {Label} from "@apps/api-server/types/label";
 
 export function LabelManager({
                                  labels,
-                                 onAddLabel,
-                                 onEditLabel,
-                                 onDeleteLabel,
                                  getLabelPath = (label) => `/label/${label.id.toLowerCase()}`,
                                  className,
                                  condensed = false,
                              }: LabelManagerProps) {
     const [selectedLabel, setSelectedLabel] = useState<Label | null>(null);
     const [dialogOpen, setDialogOpen] = useState(false);
-    const labelManagerRef = useRef<HTMLDivElement>(null);
+    const {addLabel, updateLabel, deleteLabel} = useLabels();
 
     const handleAddLabel = () => {
         setSelectedLabel(null);
@@ -30,33 +28,43 @@ export function LabelManager({
         setDialogOpen(true);
     };
 
-    const handleSubmit = (data: { name: string; color: string }) => {
-        if (selectedLabel) {
-            // Edit existing label
-            onEditLabel({
-                ...selectedLabel,
-                name: data.name,
-                color: data.color,
-            });
-        } else {
-            // Add new label
-            onAddLabel({
-                name: data.name,
-                color: data.color,
-            });
+    const handleSubmit = async (data: { name: string; color: string }) => {
+        try {
+            if (selectedLabel) {
+                // Edit existing label
+                await updateLabel({
+                    ...selectedLabel,
+                    name: data.name,
+                    color: data.color,
+                });
+            } else {
+                // Add new label
+                await addLabel({
+                    name: data.name,
+                    color: data.color,
+                });
+            }
+            setDialogOpen(false);
+        } catch (error) {
+            console.error('Error submitting label:', error);
+            // Keep dialog open on error so user can try again
         }
-        setDialogOpen(false);
     };
 
-    const handleDeleteLabel = () => {
-        if (selectedLabel) {
-            onDeleteLabel(selectedLabel.id);
-            setDialogOpen(false);
+    const handleDeleteLabel = async () => {
+        try {
+            if (selectedLabel) {
+                await deleteLabel(selectedLabel.id);
+                setDialogOpen(false);
+            }
+        } catch (error) {
+            console.error('Error deleting label:', error);
+            // Keep dialog open on error so user can try again
         }
     };
 
     return (
-        <div className={cn("py-2", className)} ref={labelManagerRef}>
+        <div className={cn("py-2", className)}>
             <div className={cn(
                 "flex items-center mb-2",
                 condensed ? "justify-center" : "justify-between"

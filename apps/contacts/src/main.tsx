@@ -3,9 +3,13 @@ import {createRouter, RouterProvider} from '@tanstack/react-router';
 import {routeTree} from './routeTree.gen';
 import {useAuth} from "@workspace/lib/auth/auth-context.tsx";
 import {EigenApp} from "@workspace/ui/components/layout/eigen-app";
+import {useAddLabel, useUpdateLabel, useDeleteLabel} from '@workspace/lib/contacts';
 
 import '@workspace/ui/globals.css';
 import './../css/globals.css';
+import { LabelProvider } from '@workspace/ui/components/layout/labels/label-provider';
+import { Label } from '@apps/api-server/types/label';
+import { useCallback } from 'react';
 
 // Set up a Router instance
 const router = createRouter({
@@ -26,8 +30,33 @@ declare module '@tanstack/react-router' {
 }
 
 function InnerApp() {
-    const auth = useAuth()
-    return <RouterProvider router={router} context={{auth}}/>
+    const auth = useAuth();
+
+    const addLabelMutation = useAddLabel();
+    const updateLabelMutation = useUpdateLabel();
+    const deleteLabelMutation = useDeleteLabel();
+
+    const onAddLabel = useCallback(async (labelData: Omit<Label, 'id'>) => {
+        await addLabelMutation.mutateAsync(labelData);
+    }, [addLabelMutation]);
+
+    const onUpdateLabel = useCallback(async (label: Label) => {
+        await updateLabelMutation.mutateAsync(label);
+    }, [updateLabelMutation]);
+
+    const onDeleteLabel = useCallback(async (labelId: string) => {
+        await deleteLabelMutation.mutateAsync(labelId);
+    }, [deleteLabelMutation]);
+
+    return (
+        <LabelProvider
+            onAddLabel={onAddLabel}
+            onUpdateLabel={onUpdateLabel}
+            onDeleteLabel={onDeleteLabel}
+        >
+            <RouterProvider router={router} context={{auth}}/>
+        </LabelProvider>
+    )
 }
 
 function App() {
