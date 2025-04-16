@@ -237,4 +237,69 @@ export default class FileSystem {
         const normalizedPath = path.replace(/\.\.\//g, ''); // Remove any "../" to prevent directory traversal
         return `${this.homeDir}${normalizedPath}`;
     }
+
+    private async createZip(): Promise<string> {
+        const zipPath = `/tmp/${this.home.user.id}.tar.gz`;
+        
+        try {
+            // Check if we need to create a new zip (if it doesn't exist or is older than 1 hour)
+            let needToCreate = true;
+            try {
+                const stats = await fs.stat(zipPath);
+                const fileAge = Date.now() - stats.mtime.getTime();
+                // If the file is less than 1 hour old, we don't need to create a new one
+                if (fileAge < 60 * 60 * 1000) {
+                    needToCreate = false;
+                }
+            } catch (err) {
+                // File doesn't exist, we need to create it
+            }
+
+            if (needToCreate) {
+                // Create a tar.gz of the home directory
+                // -C changes to the directory before zipping
+                // -c creates a new archive
+                // -z compresses with gzip
+                // -f specifies the output file
+                const cmd = `tar -czf ${zipPath} -C ${path.dirname(this.homeDir)} ${path.basename(this.homeDir)}`;
+                
+                // Execute the command using Bun
+                const proc = Bun.spawn(["sh", "-c", cmd]);
+                const exitCode = await proc.exited;
+                
+                if (exitCode !== 0) {
+                    throw new Error(`Failed to create zip file: exit code ${exitCode}`);
+                }
+            }
+            
+            return zipPath;
+        } catch (error) {
+            console.error('Error creating zip file:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Gets the gzip archive of the user's home directory
+     * Creates the archive if it doesn't exist or is outdated
+     * @returns An object containing the file path and a blob with the file contents
+     */
+    public async getZip() {
+        try {
+            // Create or get the cached zip file
+            const zipPath = await this.createZip();
+            
+            // Read the file contents
+            const fileContents = await Bun.file(zipPath).arrayBuffer();
+            
+            return {
+                fileName: `${this.home.user.id}-home.tar.gz`,
+                contentType: "application/gzip",
+                data: new Uint8Array(fileContents)
+            };
+        } catch (error) {
+            console.error('Error getting zip file:', error);
+            throw error;
+        }
+    }
 }
