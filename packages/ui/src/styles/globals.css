@@ -163,7 +163,7 @@
 
     .text-teal-600 {
         @apply text-teal-600;
-    }
+    } 
 
     .text-red-600 {
         @apply text-red-600;

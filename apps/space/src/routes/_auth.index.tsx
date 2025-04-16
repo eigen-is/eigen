@@ -36,7 +36,7 @@ function HomeComponent() {
                 {/* Apps Grid */}
                 <div className="max-w-4xl mx-auto w-full overflow-auto">
                     <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 gap-3 md:gap-4">
-                        {apps.map((app: AppItem) => (
+                        {apps.map((app: AppItem) => (app.name !== 'Space' &&
                             <Card key={app.name} className="overflow-hidden hover:shadow-md transition-shadow">
                                 <CardContent className="p-0">
                                     <a href={app.href || '#'} className="block p-3 md:p-6">

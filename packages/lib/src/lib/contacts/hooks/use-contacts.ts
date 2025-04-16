@@ -99,3 +99,9 @@ export function useDeleteContact() {
         },
     });
 }
+
+export async function getMeContact() {
+    const {data} = await contactsApi.me.get();
+    console.log(data);
+    return data;
+}
