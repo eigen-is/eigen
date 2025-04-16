@@ -13,7 +13,7 @@ const apps = [
     },
     {
         name: 'Contacts',
-        className: 'text-green-600',
+        className: 'text-sky-600',
         href: import.meta.env.VITE_APP_CONTACTS_URL,
         icon: 'users',
     },
@@ -31,7 +31,7 @@ const apps = [
     },
     {
         name: 'Stickies',
-        className: 'text-yellow-600',
+        className: 'text-emerald-600',
         href: import.meta.env.VITE_APP_STICKIES_URL,
         icon: 'sticky-note',
     },

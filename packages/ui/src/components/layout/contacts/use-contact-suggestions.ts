@@ -17,8 +17,6 @@ export function useContactSuggestions(
     const suggestions = useMemo(() => {
         if (!lowerQuery || !contacts || lowerQuery.length < 2) return [];
 
-        console.log(contacts, lowerQuery);
-
         const results: ContactSuggestion[] = [];
         // const addedIds = new Set<string>();
 

@@ -52,7 +52,7 @@ function DriveRoute() {
 
     // Handle row click to show path details
     const onRowSelect = (path: DrivePath) => {
-        if (isMobile && (path.type === 'folder' || path.type === 'doc' || parent.type === 'stickies')) {
+        if (isMobile && (path.type === 'folder' || path.type === 'doc' || path.type === 'stickies')) {
             onRowActivate(path);
         } else if (currentPath?.parentId === path.id) {
             navigate({
