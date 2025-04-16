@@ -33,6 +33,8 @@ function notify(title: string, body: string, tag: string, action?: { label: stri
         action && n.addEventListener('click', () => {
             action.onClick?.();
         });
+    } else {
+        askNotificationPermission();
     }
 }
 
@@ -59,13 +61,6 @@ export function NotificationProvider({children}: NotificationProviderProps) {
     const expectingPongRef = useRef<boolean>(false);
     const reconnectAttemptsRef = useRef<number>(0);
     const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
-
-    // Only ask for notification permission if authenticated
-    useEffect(() => {
-        if (isAuthenticated) {
-            askNotificationPermission();
-        }
-    }, [isAuthenticated]);
 
     // Create and set up the WebSocket connection
     const setupWatcher = () => {
