@@ -139,7 +139,10 @@ const SlateEditor = ({
     // Define custom element renderer
     const renderElement = useCallback((props: RenderElementProps) => {
         const {attributes, children, element} = props;
-        const style = {};
+        const style: React.CSSProperties = {
+            textAlign: element.align || 'left',
+        };
+
         const typedElement = element as CustomElement;
 
         switch (typedElement.type) {

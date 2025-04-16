@@ -10,10 +10,13 @@ export type CustomElementType =
     | 'list-item'
     | 'check-list';
 
+export type TextAlignment = 'left' | 'center' | 'right';
+
 export interface CustomElement {
     type: CustomElementType;
     children: CustomText[];
     checked?: boolean;
+    align?: TextAlignment;
 }
 
 export interface CustomText {
