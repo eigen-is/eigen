@@ -43,7 +43,7 @@ function StickiesRoute() {
     }
 
     return (
-        <div className="h-full w-full bg-gray-200">
+        <div className="h-full w-full flex bg-gray-200 overflow-hidden">
             <StickiesBoard ownerId={ownerId} pathId={pathId}/>
         </div>
     )

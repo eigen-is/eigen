@@ -151,7 +151,6 @@ export function TaskInfoDialog({
   });
 
   const TaskCommentList = React.memo(function TaskCommentList({ taskComments, creator, createdAt }: { taskComments: CommentItem[], creator: string, createdAt: Date }) {
-    console.log('render');
     return (
       <ScrollArea className="h-100 rounded-md p-2">
         <div className="space-y-4">

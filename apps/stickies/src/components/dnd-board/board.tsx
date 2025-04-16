@@ -95,11 +95,13 @@ export const StickiesBoard: React.FC<BoardProps> = ({ownerId, pathId}) => {
     return (
         <div
             ref={boardRef}
-            className="overflow-x-auto h-[calc(100vh-64px)]"
-            style={{
+            className="overflow-x-auto overflow-y-hidden flex-1"
+            style={board.columnOrder.length > 1 ? {
                 padding: isMobile ? 0 : '0.75rem',
                 scrollSnapType: 'x mandatory',
                 scrollBehavior: 'smooth',
+            } : {
+                visibility: 'hidden',
             }}
         >
             <DndContext
@@ -107,6 +109,7 @@ export const StickiesBoard: React.FC<BoardProps> = ({ownerId, pathId}) => {
                 onDragStart={handleDragStart}
                 onDragEnd={handleDragEnd}
                 autoScroll={{
+                    enabled:true,
                     threshold: {
                         x: 0.2,
                         y: 0.2
