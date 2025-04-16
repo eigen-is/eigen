@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { Download } from 'lucide-react';
 import { Button } from '@workspace/ui/components/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@workspace/ui/components/card';
 import { toast } from 'sonner';
 
 export function DownloadHome() {
