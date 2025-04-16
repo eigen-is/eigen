@@ -43,7 +43,7 @@ export function DownloadHome() {
         <div className="space-y-4">
           <p>Download a complete archive of all your data stored in eigen.</p>
           <p className="text-sm text-muted-foreground">
-            This archive includes all your files, documents, emails, and other data from your Eigen workspace.
+            This archive includes all your files, documents, emails, and other data from your eigen workspace.
             The download may take a few seconds to prepare depending on the size of your data.
           </p>
           
