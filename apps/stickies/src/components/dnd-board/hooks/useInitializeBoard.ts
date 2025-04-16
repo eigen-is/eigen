@@ -13,8 +13,8 @@ const DEFAULT_BOARD_STRUCTURE = {
     tasks: [
         {
             id: '',
-            title: 'Ready to project?',
-            description: 'Get started by dragging this sticky onto the "In Progress" column. You can add more stickies with the "Add a sticky" button.',
+            title: 'Welcome to stickies!',
+            description: 'Drag this sticky to another column to get started. You can add more stickies with the "Add a sticky" button.',
             comments: []
         }
     ]
