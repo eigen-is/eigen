@@ -214,4 +214,14 @@
     .no-print {
         display: none !important;
     }
+    body *:not(.printable, .printable *) {
+        /* hide everything but printable elements and their children */
+        display: none;
+    }
+}
+
+@media screen {
+    body .printable {
+        display: none;
+    }
 }
