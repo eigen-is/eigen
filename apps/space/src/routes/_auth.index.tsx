@@ -16,16 +16,16 @@ interface AppItem {
 
 function HomeComponent() {
     return (
-        <div className="flex flex-col flex-1 min-h-[calc(100vh-3.5rem)] h-full overflow-auto">
+        <div className="flex-1 overflow-y-auto">
 
             <div className="flex-grow flex flex-col items-center justify-center w-full px-4 py-8">
                 {/* Welcome Header */}
-                <div className="text-5xl mb-6">
+                <div className="text-4xl mb-6">
                     <span className="font-bold text-teal-600">eigen</span>
                 </div>
 
                 {/* Main tagline */}
-                <div className="text-xl text-center mb-10">
+                <div className="text-md text-center mb-10">
                     <p className="mb-4">
                         Your personal workspace in the cloud.
                         <br/>
@@ -75,15 +75,17 @@ function HomeComponent() {
             </div>
 
             {/* Footer with European initiative */}
-            <div className="text-center text-sm text-gray-500 py-4 border-t w-full bg-white">
-                <div className="flex items-center justify-center mb-2">
+            <div className="text-center text-sm text-gray-500 border-t w-full bg-white">
+                <div className="flex items-center justify-center m-2">
                     <Shovel className="w-5 h-5 mr-2 text-yellow-600" aria-hidden="true"/>
-                    <span className="font-medium">Under Construction</span>
+                    <span className="font-medium text-md">Under Construction</span>
                 </div>
-                <p>
-                    eigen is made and hosted in the European Union.
-                    Our goal is to quickly deliver a Minimum Viable Product and scale up afterwards.
-                </p>
+                <div className="m-2 text-xs">
+                    <p>
+                        eigen is made and hosted in the European Union.
+                        Our goal is to quickly deliver a Minimum Viable Product and scale up afterwards.
+                    </p>
+                </div>
             </div>
         </div>
     );
