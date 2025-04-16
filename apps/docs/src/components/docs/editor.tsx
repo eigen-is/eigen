@@ -36,7 +36,9 @@ export const CollaborativeEditor = ({ownerId, pathId, access}: {
     const yDoc = useMemo(() => new Y.Doc(), []);
     const sharedType = useMemo(() => yDoc.get('slate', Y.XmlText), [yDoc]);
     const [users, setUsers] = useState<Map<string, any>>();
-    
+
+    // TODO: wil je dit uit de awareness halen? Dit gaat mis als je hetzelfde document opent in meerdere tabs - of niet?
+    // en dan gelijk even toevoegen aan stickies :)
     useEffect(() => {
         const userMap = yDoc.getMap('users');
         const observe = () => setUsers(new Map(userMap));
