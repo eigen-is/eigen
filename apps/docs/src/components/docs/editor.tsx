@@ -259,7 +259,7 @@ const SlateEditor = ({
                 <div className="flex h-full w-full flex-col">
                     <EditorToolbar/>
                     <div className="h-full w-full overflow-y-scroll bg-gray-200 p-4">
-                        <div className="grid p-[2cm] bg-white rounded-lg shadow-sm min-h-full w-[210mm] m-auto">
+                        <div data-document className="grid p-[2cm] bg-white rounded-lg shadow-sm min-h-full w-[210mm] m-auto print:p-0" >
                             <Cursors className="h-full">
                                 <Editable
                                     readOnly={!access.canWrite}

@@ -40,7 +40,8 @@ import {Separator} from "@workspace/ui/components/separator";
 import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,} from "@workspace/ui/components/dialog";
 import {Input} from "@workspace/ui/components/input";
 import {Label} from "@workspace/ui/components/label";
-import {useState} from "react";
+import {printElement} from "@workspace/ui/lib/printElement";
+import {useCallback, useState} from "react";
 import {CustomElement, CustomElementType, CustomText} from "./editor.types";
 
 // Define custom editor type
@@ -309,7 +310,7 @@ const LinkButton = () => {
 export const EditorToolbar = () => {
     const editor = useSlate() as CustomEditor;
     const commandKey = window.navigator.platform.includes('Mac') ? '⌘' : 'Ctrl';
-
+    const printDocument = useCallback(() => printElement(document.querySelector('[data-document]')!), []);
     return (
         <div className="bg-white h-12 flex items-center justify-between px-4 border-b no-print">
             <div className="flex items-center gap-1">
@@ -324,7 +325,7 @@ export const EditorToolbar = () => {
                         <DropdownMenuItem><Folder/> Open</DropdownMenuItem>
                         <DropdownMenuItem><Files/> Make a copy</DropdownMenuItem>
                         <Separator/>
-                        <DropdownMenuItem onClick={() => window.print()}><Printer/> Print</DropdownMenuItem>
+                        <DropdownMenuItem onClick={printDocument}><Printer/> Print</DropdownMenuItem>
                         <Separator/>
                         <DropdownMenuItem><Trash2/> Delete</DropdownMenuItem>
                     </DropdownMenuContent>
@@ -415,15 +416,13 @@ export const EditorToolbar = () => {
             </div>
 
             <div className="flex items-center gap-1">
-                {/* Right side icons */}
+                {/* Right side icons 
                 <TooltipButton
                     icon={Printer}
                     tooltipText="Print"
-                    onClick={() => window.print()}
+                    onClick={printDocument}
                 />
-
                 <div className="h-6 w-[1px] bg-border mx-1"></div>
-
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                         <Button variant="ghost" title="More actions">
@@ -434,11 +433,12 @@ export const EditorToolbar = () => {
                         <DropdownMenuItem>
                             <SpellCheck className="h-4 w-4 mr-2"/> Spell check
                         </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => window.print()}>
+                        <DropdownMenuItem onClick={printDocument}>
                             <Printer className="h-4 w-4 mr-2"/> Print
                         </DropdownMenuItem>
                     </DropdownMenuContent>
                 </DropdownMenu>
+                */}
             </div>
         </div>
     );
