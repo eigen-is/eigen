@@ -1,11 +1,12 @@
 import {createFileRoute, useNavigate} from '@tanstack/react-router';
 import {ContactsList} from '../components/contacts/contacts-list';
 import {ContactDetail} from '../components/contacts/contact-detail';
-import {useContacts, useDeleteContact, useLabels} from '@workspace/lib/contacts';
+import {useContacts, useDeleteContact, useDeleteLabel, useLabels, useUpdateLabel} from '@workspace/lib/contacts';
 import {toast} from "sonner";
 import {EigenLoader} from '@workspace/ui/components/layout/eigen-loader';
 import {LabelFilterHeader} from "@workspace/ui/components/layout/labels/label-filter-header";
 import {useIsMobile} from "@workspace/lib/media";
+import { Label } from '@apps/api-server/types/label';
 
 // Define search params type
 export interface ContactsSearchParams {
@@ -93,6 +94,28 @@ function ContactsRoute() {
         );
     }
 
+    const updateLabelMutation = useUpdateLabel();
+    const deleteLabelMutation = useDeleteLabel();
+    const handleEditLabel = async (updatedLabel: Label) => {
+        try {
+            console.log('Editing label:', updatedLabel);
+            await updateLabelMutation.mutateAsync(updatedLabel);
+            toast.success('Label updated');
+        } catch (error) {
+            console.error('Failed to update label:', error);
+        }
+    };
+
+    const handleDeleteLabel = async (labelId: string) => {
+        try {
+            console.log('Deleting label with ID:', labelId);
+            await deleteLabelMutation.mutateAsync(labelId);
+            toast.success('Label deleted');
+        } catch (error) {
+            console.error('Failed to delete label:', error);
+        }
+    };
+
     // Desktop/Tablet: Three-column layout (sidebar already handled in _auth.tsx)
     return (
         <div className="flex h-full w-full">
@@ -102,7 +125,14 @@ function ContactsRoute() {
         w-full md:w-[350px] border-r h-full overflow-y-auto
       `}>
                 <div className="flex h-full flex-col">
-                    {filterType === 'label' && (<LabelFilterHeader labels={labels} labelId={filterId}/>)}
+                    {filterType === 'label' && (
+                        <LabelFilterHeader
+                            labels={labels}
+                            labelId={filterId}
+                            onEditLabel={handleEditLabel}
+                            onDeleteLabel={handleDeleteLabel}
+                        />
+                    )}
                     <ContactsList filterType={filterType} filterId={filterId}/>
                 </div>
             </div>

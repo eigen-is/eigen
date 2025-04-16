@@ -9,6 +9,7 @@ import {type Label} from "@apps/api-server/types/label";
 import {useAddLabel, useDeleteLabel, useLabels, useUpdateLabel} from '@workspace/lib/contacts';
 import {AppLogo} from '@workspace/ui/components/layout/app-logo';
 import {EigenLoader, StorageUsage} from "@workspace/ui";
+import {toast} from "sonner";
 
 interface ContactsSidebarProps {
     condensed?: boolean;
@@ -34,6 +35,7 @@ export function ContactsSidebar({condensed = false, onClose, isMobile = false}: 
         try {
             console.log('Adding label:', labelData);
             await addLabelMutation.mutateAsync(labelData);
+            toast.success(`Label ${labelData.name} added`);
         } catch (error) {
             console.error('Failed to add label:', error);
         }
@@ -43,6 +45,7 @@ export function ContactsSidebar({condensed = false, onClose, isMobile = false}: 
         try {
             console.log('Editing label:', updatedLabel);
             await updateLabelMutation.mutateAsync(updatedLabel);
+            toast.success('Label updated');
         } catch (error) {
             console.error('Failed to update label:', error);
         }
@@ -52,6 +55,7 @@ export function ContactsSidebar({condensed = false, onClose, isMobile = false}: 
         try {
             console.log('Deleting label with ID:', labelId);
             await deleteLabelMutation.mutateAsync(labelId);
+            toast.success('Label deleted');
         } catch (error) {
             console.error('Failed to delete label:', error);
         }
