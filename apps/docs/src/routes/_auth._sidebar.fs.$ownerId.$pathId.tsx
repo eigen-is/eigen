@@ -43,18 +43,16 @@ function DriveRoute() {
 
     // Fetch folder content and path information
     const {
-        data: unfilteredFolderContents = [],
+        data: folderContents = [],
         isLoading: isFolderContentLoading,
         error: isFolderContentLoadingError
     } = useFolderContent(ownerId, skipDataFetch ? '' : pathId);
     const {data: selectedPath = null} = usePathInfo(ownerId, pid);
     const {data: currentPath = null} = usePathInfo(ownerId, pathId);
 
-    const folderContents = unfilteredFolderContents.filter((path) => path.type === 'folder' || path.type === 'doc');
-
     // Handle row click to show path details
     const onRowSelect = (path: DrivePath) => {
-        if (isMobile && (path.type === 'folder' || path.type === 'doc')) {
+        if (isMobile && (path.type === 'folder' || path.type === 'doc' || path.type === 'stickies')) {
             onRowActivate(path);
         } else if (currentPath?.parentId === path.id) {
             navigate({
@@ -83,6 +81,8 @@ function DriveRoute() {
                 to: '/doc/$ownerId/$pathId',
                 params: {ownerId: path.ownerId, pathId: path.id}
             });
+        } else if (path.type === 'stickies') {
+            document.location.href = `${import.meta.env.VITE_APP_STICKIES_URL}/board/${ownerId}/${path.id}`;
         } else {
             // todo: for some types we could show a fullscreen preview
         }
