@@ -3,7 +3,8 @@ import {getAvatar, getPublicInfo} from "../lib/space/public";
 import {waitlist} from "../lib/space/waitlist";
 import {betterAuth} from "./auth";
 import {type User} from "better-auth/types";
-import { getHome } from "../lib/home/home";
+import {getHome} from "../lib/home/home";
+import {auth} from "../lib/auth/auth";
 
 export const spaceRouter = new Elysia({name: "space"})
     .use(betterAuth)
@@ -41,7 +42,7 @@ export const spaceRouter = new Elysia({name: "space"})
             notes: t.String()
         })
     })
-    .get("/space/zip", async ({user, set}: {user: User, set: any}) => {
+    .get("/space/zip", async ({user, set}: { user: User, set: any }) => {
         try {
             const home = await getHome(user);
             const data = await home.getZip();
@@ -51,11 +52,27 @@ export const spaceRouter = new Elysia({name: "space"})
             set.headers['Content-Type'] = data.contentType;
             set.headers['Content-Disposition'] = `attachment; filename="${data.fileName}"`;
             return data.data;
-        } catch(e) {
+        } catch (e) {
             // server error
             set.status = 500;
             return null;
         }
     }, {
+        auth: true
+    })
+    .post("/space/nu", async ({body}: { body: { email: string, password: string, name: string } }) => {
+        return await auth.api.signUpEmail({
+            body: {
+                email: body.email,
+                password: body.password,
+                name: body.name
+            }
+        });
+    }, {
+        body: t.Object({
+            email: t.String(),
+            password: t.String(),
+            name: t.String()
+        }),
         auth: true
     })
