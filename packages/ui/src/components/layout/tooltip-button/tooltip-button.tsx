@@ -41,6 +41,11 @@ export interface TooltipButtonProps {
      * @default false
      */
     disabled?: boolean;
+
+    /**
+     * The label to display in the tooltip
+     */
+    label?: string;
 }
 
 export const TooltipButton = ({
@@ -51,6 +56,7 @@ export const TooltipButton = ({
                                   variant = "ghost",
                                   className = "h-8 w-8",
                                   disabled = false,
+                                  label = undefined
                               }: TooltipButtonProps) => {
     return (
         <Tooltip>
@@ -63,6 +69,7 @@ export const TooltipButton = ({
                     disabled={disabled}
                 >
                     <Icon className="h-4 w-4"/>
+                    {label}
                 </Button>
             </TooltipTrigger>
             <TooltipContent>{tooltipText}</TooltipContent>
