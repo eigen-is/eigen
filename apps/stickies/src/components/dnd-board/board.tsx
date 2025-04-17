@@ -10,6 +10,7 @@ import {Plus} from 'lucide-react';
 import {useIsMobile} from "@workspace/lib/media";
 import {useYjsKanbanBoard} from './hooks/useYjsKanbanBoard';
 import {useYjsDragAndDrop} from './hooks/useYjsDragAndDrop';
+import { StickiesToolbar } from './stickies-toolbar';
 
 export const StickiesBoard: React.FC<BoardProps> = ({ownerId, pathId}) => {
     // Core board state and operations with Yjs integration
@@ -93,6 +94,7 @@ export const StickiesBoard: React.FC<BoardProps> = ({ownerId, pathId}) => {
     };
 
     return (
+        <>
         <div
             ref={boardRef}
             className="overflow-x-auto overflow-y-hidden flex-1"
@@ -192,5 +194,6 @@ export const StickiesBoard: React.FC<BoardProps> = ({ownerId, pathId}) => {
                 />
             )}
         </div>
+        </>
     );
 };

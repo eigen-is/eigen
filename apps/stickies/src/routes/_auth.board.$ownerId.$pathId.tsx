@@ -5,6 +5,7 @@ import {EigenLoader} from '@workspace/ui'
 import {useApp} from '@workspace/ui/components/layout/app-context'
 import {useEffect, useState} from 'react'
 import {StickiesBoard} from "@/components/dnd-board/board.tsx";
+import { StickiesToolbar } from '@/components/dnd-board/stickies-toolbar'
 
 export const Route = createFileRoute('/_auth/board/$ownerId/$pathId')({
     component: StickiesRoute,
@@ -43,8 +44,11 @@ function StickiesRoute() {
     }
 
     return (
-        <div className="h-full w-full flex bg-gray-200 overflow-hidden">
-            <StickiesBoard ownerId={ownerId} pathId={pathId}/>
-        </div>
+        <>
+            <StickiesToolbar canWrite={access.canWrite}/>
+            <div className="h-full w-full flex bg-gray-200 overflow-hidden">
+                <StickiesBoard ownerId={ownerId} pathId={pathId}/>
+            </div>
+        </>
     )
 }
