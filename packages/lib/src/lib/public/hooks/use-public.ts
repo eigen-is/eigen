@@ -23,6 +23,6 @@ export function usePublicUser(emailOrId: string | undefined, options: { enabled:
             return res.data;
         },
         enabled: !!emailOrId && options.enabled,
-        staleTime: 15 * 60 * 1000, // Consider data fresh for 15 minutes
+        staleTime: Infinity
     });
 }
