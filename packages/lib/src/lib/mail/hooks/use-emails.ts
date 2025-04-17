@@ -75,6 +75,8 @@ export function useDeleteEmail() {
             await mailApi.message[email.id].delete();
         } else {
             await mailApi.message.moveToTrash.put({messageId: email.id});
+            // invalidate mailbox cache
+            queryClient.invalidateQueries({queryKey: emailKeys.list('trash')});
         }
         // invalidate mailbox cache
         // queryClient.invalidateQueries({queryKey: emailKeys.lists()});
