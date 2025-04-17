@@ -120,17 +120,38 @@ export function ContactDetail({contact, onDelete, onBack, filterType, filterId, 
 
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <Button variant="ghost" className="w-full justify-start px-2 py-1.5">
                                 <MoreVertical className="h-4 w-4"/>
-                                <span className="sr-only">More</span>
                             </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                            <DropdownMenuItem>Send email</DropdownMenuItem>
-                            <DropdownMenuItem>Schedule meeting</DropdownMenuItem>
-                            <DropdownMenuSeparator/>
+                            {contact.email && contact.email.length > 0 && (
+                                <DropdownMenuItem
+                                    onClick={() => openWriteEmailTo(contact.email[0])}
+                                >
+                                    Send email
+                                </DropdownMenuItem>
+                            )}
                             <DropdownMenuItem>Print</DropdownMenuItem>
                             <DropdownMenuItem>Export as vCard</DropdownMenuItem>
+                            <DropdownMenuSeparator/>
+                            <DropdownMenuItem onClick={() => setDeleteDialogOpen(true)}>
+                                Delete
+                            </DropdownMenuItem>
+                            <DropdownMenuItem asChild>
+                                <Link
+                                    to="/edit/$filterType/$filterId"
+                                    params={{
+                                        filterType: filterType || 'filter',
+                                        filterId: filterId || 'all'
+                                    }}
+                                    search={{
+                                        contactId: contact.id
+                                    }}
+                                >
+                                    Edit
+                                </Link>
+                            </DropdownMenuItem>
                         </DropdownMenuContent>
                     </DropdownMenu>
                 </div>
