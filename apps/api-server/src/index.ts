@@ -12,6 +12,10 @@ import {wsRouter} from "./routes/ws.ts";
 import {collabRouter} from "./routes/collab";
 
 const app = new Elysia()
+    .onError(({ set }) => {
+        set.status = 400;
+        return 'Uncertain state: API request failed to resolve';
+    })
     .use(swagger())
     .use(cors({
         origin: trustedOrigins,
