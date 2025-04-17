@@ -13,6 +13,7 @@ import {EigenLoader} from "@workspace/ui";
 import { UserPublicAvatar } from "@workspace/ui/components/layout/user-public-avatar";
 import { Button } from "@workspace/ui/components/button";
 import { ArrowUp } from "lucide-react";
+import { DocumentEditMode } from "@workspace/ui/components/layout/toolbar/DocumentModeDropdown";
 
 // Define the initial value with proper typing
 const initialValue: CustomElement[] = [
@@ -256,11 +257,13 @@ const SlateEditor = ({
         }
     }, [editor]);
 
+    const [editMode, setEditMode] = useState<DocumentEditMode>(access.canWrite ? 'edit' : 'view');
+
     return (
         <>
             <Slate editor={editor} initialValue={initialValue}>
                 <div className="flex h-full w-full flex-col">
-                    <EditorToolbar/>
+                    <EditorToolbar editMode={editMode} onEditModeChange={setEditMode}/>
                     <div className="h-full w-full overflow-y-scroll bg-gray-200 p-4">
                         <div data-document className="grid p-[2cm] bg-white rounded-lg shadow-sm min-h-full w-[210mm] m-auto print:p-0" >
                             <Cursors className="h-full">
