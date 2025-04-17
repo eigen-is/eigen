@@ -1,8 +1,8 @@
-import React, {useRef, useState, forwardRef, useImperativeHandle} from 'react';
+import {useState} from 'react';
 import {DndContext, DragOverlay, PointerSensor, useSensor, useSensors} from '@dnd-kit/core';
 import {horizontalListSortingStrategy, SortableContext} from '@dnd-kit/sortable';
 import {Column} from './column';
-import {BoardProps, TaskItem} from './types';
+import {TaskItem} from './types';
 import {AddTaskDialog} from './add-task-dialog';
 import {AddColumnDialog} from './add-column-dialog';
 import {ColumnSettingsDialog} from './column-settings-dialog';
@@ -10,13 +10,15 @@ import {Plus} from 'lucide-react';
 import {useIsMobile} from "@workspace/lib/media";
 import {useYjsKanbanBoard} from './hooks/useYjsKanbanBoard';
 import {useYjsDragAndDrop} from './hooks/useYjsDragAndDrop';
+import { StickiesToolbar } from './stickies-toolbar';
 
-export interface StickiesBoardHandle {
-  undo: () => void;
-  redo: () => void;
+interface StickiesBoardProps {
+  ownerId: string;
+  pathId: string;
+  canWrite: boolean;
 }
 
-const StickiesBoard = forwardRef<StickiesBoardHandle, BoardProps>((props, ref) => {
+const StickiesBoard = ({ownerId, pathId, canWrite}: StickiesBoardProps) => {
     // Core board state and operations with Yjs integration
     const {
         board,
@@ -30,7 +32,7 @@ const StickiesBoard = forwardRef<StickiesBoardHandle, BoardProps>((props, ref) =
         handleAddColumn,
         yjsDoc,
         undoManager
-    } = useYjsKanbanBoard(props.ownerId, props.pathId);
+    } = useYjsKanbanBoard(ownerId, pathId);
 
     // Drag and drop functionality with Yjs awareness
     const {
@@ -40,7 +42,6 @@ const StickiesBoard = forwardRef<StickiesBoardHandle, BoardProps>((props, ref) =
     } = useYjsDragAndDrop({board, yjsDoc});
 
     // Refs and responsive hooks
-    const boardRef = useRef<HTMLDivElement | null>(null);
     const isMobile = useIsMobile();
 
     // State for column editing
@@ -89,7 +90,7 @@ const StickiesBoard = forwardRef<StickiesBoardHandle, BoardProps>((props, ref) =
                     onEditColumn={handleEditColumn}
                     isMobile={isMobile}
                     yjsDoc={yjsDoc}
-                    ownerId={props.ownerId}
+                    ownerId={ownerId}
                     comments={board.comments}
                 />
             );
@@ -98,27 +99,11 @@ const StickiesBoard = forwardRef<StickiesBoardHandle, BoardProps>((props, ref) =
         return null;
     };
 
-    // Implement undo/redo logic (replace with actual logic)
-    const undo = () => {
-        // TODO: implement undo
-        console.log('Undo called');
-        undoManager?.undo();
-    };
-    const redo = () => {
-        // TODO: implement redo
-        console.log('Redo called');
-        undoManager?.redo();
-    };
-
-    useImperativeHandle(ref, () => ({
-        undo,
-        redo,
-    }));
-
     return (
-        <>
+<>
+        <StickiesToolbar canWrite={canWrite} undoManager={undoManager} />
+        <div className="h-full w-full flex bg-gray-200 overflow-hidden">
         <div
-            ref={boardRef}
             className="overflow-x-auto overflow-y-hidden flex-1"
             style={board.columnOrder.length > 1 ? {
                 padding: isMobile ? 0 : '0.75rem',
@@ -161,7 +146,7 @@ const StickiesBoard = forwardRef<StickiesBoardHandle, BoardProps>((props, ref) =
                                     onEditColumn={handleEditColumn}
                                     isMobile={isMobile}
                                     yjsDoc={yjsDoc}
-                                    ownerId={props.ownerId}
+                                    ownerId={ownerId}
                                     comments={board.comments}
                                 />
                             );
@@ -216,8 +201,8 @@ const StickiesBoard = forwardRef<StickiesBoardHandle, BoardProps>((props, ref) =
                 />
             )}
         </div>
+        </div>
         </>
     );
-});
-
+}
 export { StickiesBoard };

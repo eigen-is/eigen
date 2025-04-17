@@ -3,9 +3,8 @@ import {useDocumentAccess} from '@workspace/lib/docs'
 import {usePathInfo} from '@workspace/lib/drive'
 import {EigenLoader} from '@workspace/ui'
 import {useApp} from '@workspace/ui/components/layout/app-context'
-import {useEffect, useState, useRef} from 'react'
-import {StickiesBoard, StickiesBoardHandle} from "@/components/dnd-board/board.tsx";
-import { StickiesToolbar } from '@/components/dnd-board/stickies-toolbar'
+import {useEffect, useState} from 'react'
+import {StickiesBoard} from "@/components/dnd-board/board.tsx";
 
 export const Route = createFileRoute('/_auth/board/$ownerId/$pathId')({
     component: StickiesRoute,
@@ -17,25 +16,13 @@ function StickiesRoute() {
     const {data: path, isLoading: pathLoading} = usePathInfo(ownerId, pathId);
     const {appName, setAppName} = useApp();
     const [originalAppName] = useState(appName);
-    const boardRef = useRef<StickiesBoardHandle>(null);
 
-    // Always call hooks at the top level, before any conditional logic
     useEffect(() => {
-        // Only change the app name if we have a valid path
-        if (path?.name) {
-            setAppName?.(path.name.replace('.eigenstickies', ''));
-        }
-
-        // Restore original app name when component unmounts
-        return () => {
-            setAppName?.(originalAppName);
-        };
+        if (path?.name) setAppName?.(path.name.replace('.eigenstickies', ''));
+        return () => setAppName?.(originalAppName);
     }, [path, originalAppName, setAppName]);
 
-    if (isLoading || pathLoading) {
-        return <EigenLoader/>
-    }
-
+    if (isLoading || pathLoading) return <EigenLoader />
     if (!access?.canRead || !path) {
         return (
             <div className="flex items-center justify-center h-full w-full">
@@ -44,17 +31,7 @@ function StickiesRoute() {
         );
     }
 
-
     return (
-        <>
-            <StickiesToolbar
-                canWrite={access.canWrite}
-                onUndo={() => boardRef.current?.undo()}
-                onRedo={() => boardRef.current?.redo()}
-            />
-            <div className="h-full w-full flex bg-gray-200 overflow-hidden">
-                <StickiesBoard ref={boardRef} ownerId={ownerId} pathId={pathId} />
-            </div>
-        </>
-    )
+        <StickiesBoard ownerId={ownerId} pathId={pathId} canWrite={access.canWrite} />
+    );
 }
