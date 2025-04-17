@@ -1,9 +1,10 @@
 import {cn} from "@workspace/ui/lib/utils";
-import {ArrowLeft, MoreVertical, Trash2, X} from "lucide-react";
+import {ArrowLeft, MoreVertical, Trash2, X, Download, Users, UserRoundPlus} from "lucide-react";
 import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
+    DropdownMenuSeparator,
     DropdownMenuTrigger
 } from "@workspace/ui/components/dropdown-menu";
 import {Button} from "@workspace/ui/components/button";
@@ -80,19 +81,23 @@ export function DriveDetail({
                         </DropdownMenuTrigger>
 
                         <DropdownMenuContent>
-                            {allowDelete && (
-                            <DropdownMenuItem onClick={() => onDelete?.(path)}>
-                                Delete
-                            </DropdownMenuItem>
-                            )}
                             {path.type === 'file' && (
-                                <DropdownMenuItem onClick={() => onDownload?.(path)}>
+                                <DropdownMenuItem onClick={() => onDownload?.(path)} className="flex items-center">
+                                    <Download className="h-4 w-4 mr-2" />
                                     Download
                                 </DropdownMenuItem>
                             )}
-                            <DropdownMenuItem onClick={() => onShareClick?.(path)}>
+                            <DropdownMenuItem onClick={() => onShareClick?.(path)} className="flex items-center">
+                                <UserRoundPlus className="h-4 w-4 mr-2" />
                                 Edit access
                             </DropdownMenuItem>
+                            <DropdownMenuSeparator/>    
+                            {allowDelete && (
+                                <DropdownMenuItem onClick={() => onDelete?.(path)} className="flex items-center">
+                                    <Trash2 className="h-4 w-4 mr-2" />
+                                    Delete
+                                </DropdownMenuItem>
+                            )}
                         </DropdownMenuContent>
                     </DropdownMenu>
                 </div>

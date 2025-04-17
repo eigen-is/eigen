@@ -1,5 +1,5 @@
 import {useState} from 'react';
-import {ArrowLeft, Building, Calendar, Edit, Mail, MapPin, MoreVertical, Phone, Trash2} from 'lucide-react';
+import {ArrowLeft, Building, Calendar, Edit, Mail, MapPin, MoreVertical, Phone, Trash2, Printer, Download} from 'lucide-react';
 import {type Contact} from "@apps/api-server/types/contact";
 import {Button} from "@workspace/ui/components/button";
 import {
@@ -120,17 +120,48 @@ export function ContactDetail({contact, onDelete, onBack, filterType, filterId, 
 
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <Button variant="ghost" className="w-full justify-start px-2 py-1.5">
                                 <MoreVertical className="h-4 w-4"/>
-                                <span className="sr-only">More</span>
                             </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="end">
-                            <DropdownMenuItem>Send email</DropdownMenuItem>
-                            <DropdownMenuItem>Schedule meeting</DropdownMenuItem>
+                            {contact.email && contact.email.length > 0 && (
+                                <DropdownMenuItem
+                                    onClick={() => openWriteEmailTo(contact.email[0])}
+                                    className="flex items-center"
+                                >
+                                    <Mail className="h-4 w-4 mr-2" />
+                                    Send email
+                                </DropdownMenuItem>
+                            )}
+                            <DropdownMenuItem className="flex items-center">
+                                <Printer className="h-4 w-4 mr-2" />
+                                Print
+                            </DropdownMenuItem>
+                            <DropdownMenuItem className="flex items-center">
+                                <Download className="h-4 w-4 mr-2" />
+                                Export as vCard
+                            </DropdownMenuItem>
                             <DropdownMenuSeparator/>
-                            <DropdownMenuItem>Print</DropdownMenuItem>
-                            <DropdownMenuItem>Export as vCard</DropdownMenuItem>
+                            <DropdownMenuItem asChild className="flex items-center">
+                                <Link
+                                    to="/edit/$filterType/$filterId"
+                                    params={{
+                                        filterType: filterType || 'filter',
+                                        filterId: filterId || 'all'
+                                    }}
+                                    search={{
+                                        contactId: contact.id
+                                    }}
+                                >
+                                    <Edit className="h-4 w-4 mr-2" />
+                                    Edit
+                                </Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => setDeleteDialogOpen(true)} className="flex items-center">
+                                <Trash2 className="h-4 w-4 mr-2" />
+                                Delete
+                            </DropdownMenuItem>
                         </DropdownMenuContent>
                     </DropdownMenu>
                 </div>
@@ -239,7 +270,7 @@ export function ContactDetail({contact, onDelete, onBack, filterType, filterId, 
                                         Birthday
                                     </h4>
                                     <div className="pl-6">
-                                        {formatDate(new Date(contact.birthday).toISOString())}
+                                        {formatDate(new Date(contact.birthday || '').toISOString())}
                                     </div>
                                 </div>
                             )}
