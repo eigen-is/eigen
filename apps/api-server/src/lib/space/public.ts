@@ -20,15 +20,19 @@ export async function getPublicInfo(mailOrId: string): Promise<PublicUser | null
 }
 
 export async function getAvatar(userId: string, filename: string) {
-    const user = await getUserById(userId);
-    if (!user) {
-        return null;
-    }
-    const home = await getHome(user);
-    const file = home.fs.file(`eigen.contacts/avatars/${filename}`);
-    if (await file.exists()) {
-        return file.arrayBuffer();
-    } else {
-        return null;
+    try {
+        const user = await getUserById(userId);
+        if (!user) {
+            throw new Error('User not found');
+        }
+        const home = await getHome(user);
+        const file = home.fs.file(`eigen.contacts/avatars/${filename}`);
+        if (await file.exists()) {
+            return file.arrayBuffer();
+        } else {
+            throw new Error('Avatar not found');
+        }
+    } catch (e) {
+        throw e;
     }
 }
