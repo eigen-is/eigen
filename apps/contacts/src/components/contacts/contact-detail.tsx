@@ -1,5 +1,5 @@
 import {useState} from 'react';
-import {ArrowLeft, Building, Calendar, Edit, Mail, MapPin, MoreVertical, Phone, Trash2} from 'lucide-react';
+import {ArrowLeft, Building, Calendar, Edit, Mail, MapPin, MoreVertical, Phone, Trash2, Printer, Download} from 'lucide-react';
 import {type Contact} from "@apps/api-server/types/contact";
 import {Button} from "@workspace/ui/components/button";
 import {
@@ -128,17 +128,22 @@ export function ContactDetail({contact, onDelete, onBack, filterType, filterId, 
                             {contact.email && contact.email.length > 0 && (
                                 <DropdownMenuItem
                                     onClick={() => openWriteEmailTo(contact.email[0])}
+                                    className="flex items-center"
                                 >
+                                    <Mail className="h-4 w-4 mr-2" />
                                     Send email
                                 </DropdownMenuItem>
                             )}
-                            <DropdownMenuItem>Print</DropdownMenuItem>
-                            <DropdownMenuItem>Export as vCard</DropdownMenuItem>
-                            <DropdownMenuSeparator/>
-                            <DropdownMenuItem onClick={() => setDeleteDialogOpen(true)}>
-                                Delete
+                            <DropdownMenuItem className="flex items-center">
+                                <Printer className="h-4 w-4 mr-2" />
+                                Print
                             </DropdownMenuItem>
-                            <DropdownMenuItem asChild>
+                            <DropdownMenuItem className="flex items-center">
+                                <Download className="h-4 w-4 mr-2" />
+                                Export as vCard
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator/>
+                            <DropdownMenuItem asChild className="flex items-center">
                                 <Link
                                     to="/edit/$filterType/$filterId"
                                     params={{
@@ -149,8 +154,13 @@ export function ContactDetail({contact, onDelete, onBack, filterType, filterId, 
                                         contactId: contact.id
                                     }}
                                 >
+                                    <Edit className="h-4 w-4 mr-2" />
                                     Edit
                                 </Link>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => setDeleteDialogOpen(true)} className="flex items-center">
+                                <Trash2 className="h-4 w-4 mr-2" />
+                                Delete
                             </DropdownMenuItem>
                         </DropdownMenuContent>
                     </DropdownMenu>
@@ -260,7 +270,7 @@ export function ContactDetail({contact, onDelete, onBack, filterType, filterId, 
                                         Birthday
                                     </h4>
                                     <div className="pl-6">
-                                        {formatDate(new Date(contact.birthday).toISOString())}
+                                        {formatDate(new Date(contact.birthday || '').toISOString())}
                                     </div>
                                 </div>
                             )}
