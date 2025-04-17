@@ -17,6 +17,7 @@ import {
 import { MaildirMailbox } from "@apps/api-server/types/mail";
 import { ucfirst } from "@workspace/ui/lib/utils";
 import { CSSProperties } from "react";
+import { Printer } from "lucide-react";
 
 interface EmailContextMenuProps {
     style: CSSProperties;
@@ -31,6 +32,7 @@ interface EmailContextMenuProps {
     onDelete?: (emailId: string) => void;
     onMoveToFolder?: (emailId: string, folderId: string) => void;
     onClose: () => void;
+    onPrint?: (emailId: string) => void;
 }
 
 export function EmailContextMenu({
@@ -45,13 +47,30 @@ export function EmailContextMenu({
     onReportSpam,
     onDelete,
     onMoveToFolder,
-    onClose
+    onClose,
+    onPrint
 }: EmailContextMenuProps) {
     return (
         <DropdownMenuContent
             style={style}
             className="w-56"
         >
+            {onPrint && (
+                <>
+                <DropdownMenuItem 
+                    onClick={() => {
+                        onPrint?.(messageId);
+                        onClose();
+                    }}
+                    className="flex items-center"
+                >
+                    <Printer className="h-4 w-4 mr-2" />
+                    Print
+                </DropdownMenuItem>
+                <DropdownMenuSeparator /> 
+                </>
+            )}
+
             {/* Reply options */}
             <DropdownMenuItem 
                 onClick={() => {
