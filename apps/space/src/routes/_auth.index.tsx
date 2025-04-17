@@ -16,9 +16,8 @@ interface AppItem {
 
 function HomeComponent() {
     return (
-        <div className="flex-1 overflow-y-auto">
-
-            <div className="flex-grow flex flex-col items-center justify-center w-full px-4 py-8">
+        <div className="flex flex-col h-full flex-1 overflow-y-auto">
+            <div className="flex-1 flex flex-col items-center justify-center w-full px-4 py-8">
                 {/* Welcome Header */}
                 <div className="text-4xl mb-6">
                     <span className="font-bold text-teal-600">eigen</span>
@@ -62,8 +61,7 @@ function HomeComponent() {
                                             </div>
                                             <div>
                                                 <h3 className={`font-medium ${app.className} text-sm md:text-base`}>{app.name}</h3>
-                                                <p className="text-xs text-gray-500 hidden md:block">Access
-                                                    your {app.name.toLowerCase()}</p>
+                                                <p className="text-xs text-gray-500 hidden md:block">Access your {app.name.toLowerCase()}</p>
                                             </div>
                                         </div>
                                     </a>

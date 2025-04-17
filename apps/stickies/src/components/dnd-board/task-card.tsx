@@ -43,7 +43,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({task, isMobile, yjsDoc, owner
         <>
             <div
                 ref={setNodeRef}
-                className={`mb-1.5 w-full border border-gray-200 shadow-sm bg-white select-none ${isDragging ? 'opacity-50' : ''}`}
+                className={`mb-2 w-full border border-gray-200 shadow-sm bg-white select-none ${isDragging ? 'opacity-50' : ''}`}
                 style={{
                     transform: CSS.Transform.toString(transform),
                     transition,
@@ -53,7 +53,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({task, isMobile, yjsDoc, owner
                 {...listeners}
                 onClick={handleCardClick}
             >
-                <div className={`py-1.5 px-2 cursor-grab touch-none text-sm ${isDragging ? 'bg-blue-50' : 'bg-white'}`}>
+                <div className={`p-2 cursor-grab touch-none text-sm ${isDragging ? 'bg-blue-50' : 'bg-white'}`}>
                     {task.title}
                     {task.description && (
                         <p className="text-xs text-gray-500 mt-1 truncate">{task.description}</p>
