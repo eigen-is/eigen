@@ -28,7 +28,7 @@ export function StickiesSidebar({
                         <X className="h-5 w-5"/>
                         <span className="sr-only">Close menu</span>
                     </Button>
-                    <AppLogo appName="drive"/>
+                    <AppLogo appName="stickies"/>
                 </div>
             )}
 

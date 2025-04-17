@@ -11,11 +11,17 @@ export const spaceRouter = new Elysia({name: "space"})
         params: { id: string, filename: string },
         set: any
     }) => {
-        // Set caching headers for thumbnails (1 day)
-        set.headers['Cache-Control'] = 'public, max-age=86400';
-        set.headers['Expires'] = new Date(Date.now() + 86400000).toUTCString();
+        try {
+            // Set caching headers for thumbnails (1 day)
+            set.headers['Cache-Control'] = 'public, max-age=86400';
+            set.headers['Expires'] = new Date(Date.now() + 86400000).toUTCString();
+            set.headers['Content-Type'] = 'image/webp';
 
-        return await getAvatar(params.id, params.filename);
+            return await getAvatar(params.id, params.filename);
+        } catch (e) {
+            set.status = 404;
+            return null;
+        }
     }, {
         params: t.Object({
             id: t.String(),
