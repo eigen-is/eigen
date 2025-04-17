@@ -18,6 +18,8 @@ import {toast} from "sonner";
 import {useEffect} from 'react';
 import {useIsMobile, useIsTablet} from "@workspace/lib/media";
 import {format} from "date-fns";
+import {DeleteDialog} from "@workspace/ui/components/layout/delete/delete-dialog";
+import {useState} from "react";
 
 // Define search params type
 export interface MailSearchParams {
@@ -163,16 +165,38 @@ function MailRoute() {
         });
     };
 
+    // State for DeleteDialog
+    const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+    const [pendingDeleteMail, setPendingDeleteMail] = useState<Email | null>(null);
+
     const handleDeleteEmail = async (mail: Email) => {
-        console.log('delete email', mail.id)
-        await deleteMail(mail);
-        toast("Email deleted");
-        navigate({
-            to: Route.fullPath,
-            params: {filterType, filterId},
-            search: {},
-        });
-    }
+        if (mail.mailbox === 'trash') {
+            setPendingDeleteMail(mail);
+            setDeleteDialogOpen(true);
+        } else {
+            await deleteMail(mail);
+            toast("Email deleted");
+            navigate({
+                to: Route.fullPath,
+                params: {filterType, filterId},
+                search: {},
+            });
+        }
+    };
+
+    const confirmDeleteEmail = async () => {
+        if (pendingDeleteMail) {
+            await deleteMail(pendingDeleteMail);
+            toast("Email deleted");
+            setDeleteDialogOpen(false);
+            setPendingDeleteMail(null);
+            navigate({
+                to: Route.fullPath,
+                params: {filterType, filterId},
+                search: {},
+            });
+        }
+    };
 
     const handleSendEmail = async (mail: EmailDraftType) => {
         console.log('send email', mail.id, mail)
@@ -223,53 +247,68 @@ function MailRoute() {
 
     // On mobile: Show full-width email list / detail
     if (isMobile) {
-        return selectedEmail || mode === "compose" ? (
+        return (
             <div className="flex-1 h-full w-full">
-                {mode === "compose" || selectedEmail?.isDraft ? (
-                    <EmailDraft
-                        email={selectedEmail as EmailDraftType}
-                        isMobile={true}
-                        onBackClick={handleBackToList}
-                        onDelete={handleDeleteEmail}
-                        toggleMailRead={toggleMailRead}
-                        sendDraft={handleSendEmail}
-                        to={to}
-                        updateDraft={updateDraft.mutateAsync}
-                    />
-                ) : (
-                    <EmailDetail
-                        email={selectedEmail}
-                        isMobile={true}
-                        onBackClick={handleBackToList}
-                        toggleMailRead={toggleMailRead}
-                        onDelete={handleDeleteEmailById}
-                        onArchive={handleArchiveEmailById}
-                        onReportSpam={handleReportSpamById}
-                        onMoveToFolder={handleMoveEmailToFolderById}
-                        onReply={handleReplyEmail}
-                        onReplyAll={handleReplyAllEmail}
-                        onForward={handleForwardEmail}
-                        mailboxes={mailboxes}
-                    />
-                )}
-            </div>
-        ) : (
-            <div className="flex-1 h-full w-full">
-                <EmailList
-                    emails={emails}
-                    isLoading={isEmailsLoading}
-                    error={isEmailsError}
-                    onRowClick={handleRowClick}
-                    activeRowId={mailId}
-                    mailboxes={mailboxes}
-                    onDelete={handleDeleteEmailById}
-                    onArchive={handleArchiveEmailById}
-                    onReportSpam={handleReportSpamById}
-                    onMoveToFolder={handleMoveEmailToFolderById}
-                    onReply={handleReplyEmail}
-                    onReplyAll={handleReplyAllEmail}
-                    onForward={handleForwardEmail}
+                <DeleteDialog
+                    open={deleteDialogOpen}
+                    onOpenChange={(open) => {
+                        setDeleteDialogOpen(open);
+                        if (!open) setPendingDeleteMail(null);
+                    }}
+                    title="Delete Email"
+                    description="Are you sure you want to permanently delete this email"
+                    itemName={pendingDeleteMail?.subject || undefined}
+                    onDelete={confirmDeleteEmail}
                 />
+                {selectedEmail || mode === "compose" ? (
+                    <div className="flex-1 h-full w-full">
+                        {mode === "compose" || selectedEmail?.isDraft ? (
+                            <EmailDraft
+                                email={selectedEmail as EmailDraftType}
+                                isMobile={true}
+                                onBackClick={handleBackToList}
+                                onDelete={handleDeleteEmail}
+                                toggleMailRead={toggleMailRead}
+                                sendDraft={handleSendEmail}
+                                to={to}
+                                updateDraft={updateDraft.mutateAsync}
+                            />
+                        ) : (
+                            <EmailDetail
+                                email={selectedEmail}
+                                isMobile={true}
+                                onBackClick={handleBackToList}
+                                toggleMailRead={toggleMailRead}
+                                onDelete={handleDeleteEmailById}
+                                onArchive={handleArchiveEmailById}
+                                onReportSpam={handleReportSpamById}
+                                onMoveToFolder={handleMoveEmailToFolderById}
+                                onReply={handleReplyEmail}
+                                onReplyAll={handleReplyAllEmail}
+                                onForward={handleForwardEmail}
+                                mailboxes={mailboxes}
+                            />
+                        )}
+                    </div>
+                ) : (
+                    <div className="flex-1 h-full w-full">
+                        <EmailList
+                            emails={emails}
+                            isLoading={isEmailsLoading}
+                            error={isEmailsError}
+                            onRowClick={handleRowClick}
+                            activeRowId={mailId}
+                            mailboxes={mailboxes}
+                            onDelete={handleDeleteEmailById}
+                            onArchive={handleArchiveEmailById}
+                            onReportSpam={handleReportSpamById}
+                            onMoveToFolder={handleMoveEmailToFolderById}
+                            onReply={handleReplyEmail}
+                            onReplyAll={handleReplyAllEmail}
+                            onForward={handleForwardEmail}
+                        />
+                    </div>
+                )}
             </div>
         );
     }
@@ -286,6 +325,17 @@ function MailRoute() {
     // Desktop/Tablet: Two-column layout (sidebar already handled in _auth.tsx)
     return (
         <div className="flex h-full w-full">
+            <DeleteDialog
+                open={deleteDialogOpen}
+                onOpenChange={(open) => {
+                    setDeleteDialogOpen(open);
+                    if (!open) setPendingDeleteMail(null);
+                }}
+                title="Delete Email"
+                description="Are you sure you want to permanently delete this email"
+                itemName={pendingDeleteMail?.subject || undefined}
+                onDelete={confirmDeleteEmail}
+            />
             {/* Email list column */}
             <div className={`
         flex flex-col ${getListWidthClass()} border-r h-full overflow-hidden
