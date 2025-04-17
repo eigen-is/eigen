@@ -27,7 +27,11 @@ import {
     Undo,
     AlignLeft,
     AlignCenter,
-    AlignRight
+    AlignRight,
+    Pencil,
+    EyeClosedIcon,
+    EyeOffIcon,
+    Eye
 } from "lucide-react";
 import {TooltipButton} from "@workspace/ui";
 import {Button} from "@workspace/ui/components/button";
@@ -44,6 +48,7 @@ import {Label} from "@workspace/ui/components/label";
 import {printElement} from "@workspace/ui/lib/printElement";
 import {useCallback, useState} from "react";
 import {CustomElement, CustomElementType, CustomText, TextAlignment} from "./editor.types";
+import {DocumentEditMode, DocumentModeDropdown} from "@workspace/ui/components/layout/toolbar/DocumentModeDropdown";
 
 // Define custom editor type
 type CustomEditor = BaseEditor & ReactEditor & HistoryEditor;
@@ -229,7 +234,7 @@ const AlignmentButton = ({alignment, icon, tooltipText}: AlignmentButtonProps) =
 
 // Link button component
 const LinkButton = () => {
-    const editor = useSlate();
+    const editor = useSlate() as CustomEditor;
     const [open, setOpen] = useState(false);
     const [url, setUrl] = useState('');
     const [text, setText] = useState('');
@@ -359,7 +364,12 @@ const LinkButton = () => {
     );
 };
 
-export const EditorToolbar = () => {
+interface EditorToolbarProps {
+    editMode?: DocumentEditMode;
+    onEditModeChange?: (mode: DocumentEditMode) => void;
+}
+
+export const EditorToolbar = ({ editMode = 'edit', onEditModeChange }: EditorToolbarProps) => {
     const editor = useSlate() as CustomEditor;
     const commandKey = window.navigator.platform.includes('Mac') ? '⌘' : 'Ctrl';
     const printDocument = useCallback(() => printElement(document.querySelector('[data-document]')!), []);
@@ -470,30 +480,13 @@ export const EditorToolbar = () => {
                 />
             </div>
 
-            <div className="flex items-center gap-1">
-                {/* Right side icons 
-                <TooltipButton
-                    icon={Printer}
-                    tooltipText="Print"
-                    onClick={printDocument}
-                />
-                <div className="h-6 w-[1px] bg-border mx-1"></div>
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" title="More actions">
-                            <MoreVertical className="h-4 w-4"/>
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                        <DropdownMenuItem>
-                            <SpellCheck className="h-4 w-4 mr-2"/> Spell check
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={printDocument}>
-                            <Printer className="h-4 w-4 mr-2"/> Print
-                        </DropdownMenuItem>
-                    </DropdownMenuContent>
-                </DropdownMenu>
-                */}
+            <div className="flex items-center gap-1 min-w-32">
+                {onEditModeChange && (
+                    <DocumentModeDropdown 
+                        editMode={editMode} 
+                        onEditModeChange={onEditModeChange} 
+                    />
+                )}
             </div>
         </div>
     );
