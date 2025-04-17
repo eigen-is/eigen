@@ -26,6 +26,7 @@ export const useYjsKanbanBoard = (ownerId: string, pathId: string) => {
     // Yjs doc/provider refs
     const docRef = useRef<Y.Doc | null>(null);
     const providerRef = useRef<WebsocketProvider | null>(null);
+    const undoManager = useRef<Y.UndoManager | null>(null);
 
     const { initializeDefaultBoard } = useInitializeBoard();
 
@@ -33,6 +34,8 @@ export const useYjsKanbanBoard = (ownerId: string, pathId: string) => {
     useEffect(() => {
         const doc = new Y.Doc();
         docRef.current = doc;
+        undoManager.current = new Y.UndoManager(doc);
+
         const columnsMap = doc.getMap('columns');
         const tasksMap = doc.getMap('tasks');
         const columnOrderArray = doc.getArray('columnOrder');
@@ -182,5 +185,6 @@ export const useYjsKanbanBoard = (ownerId: string, pathId: string) => {
         handleAddColumn,
         yjsDoc: docRef.current,
         provider: providerRef.current,
+        undoManager: undoManager.current,
     };
 };
