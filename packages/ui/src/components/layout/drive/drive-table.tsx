@@ -304,6 +304,7 @@ export function DriveTable({
                                 </TableCell>
                                 <TableCell className="hidden sm:table-cell group">
                                     <DriveShareSummary
+                                        path={item}
                                         acl={item.acl}
                                         onClick={() => onShareClick?.(item)}
                                         showIconOnHover={true}
