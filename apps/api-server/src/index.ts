@@ -12,10 +12,6 @@ import {wsRouter} from "./routes/ws.ts";
 import {collabRouter} from "./routes/collab";
 
 const app = new Elysia()
-    .onError(({ set }) => {
-        set.status = 400;
-        return 'Uncertain state: API request failed to resolve';
-    })
     .use(swagger())
     .use(cors({
         origin: trustedOrigins,
@@ -24,6 +20,10 @@ const app = new Elysia()
         allowedHeaders: ["Content-Type", "Authorization"],
     }))
     .use(betterAuth)
+    .onError(({ set }) => {
+        set.status = 400;
+        return 'Uncertain state: API request failed to resolve';
+    })
     .get("/", () => "eigen|api>")
     .get("/health", () => "OK")
     .use(mailRouter)

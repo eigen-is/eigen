@@ -1,4 +1,4 @@
-import React, {useRef, useState} from 'react';
+import React, {useRef, useState, forwardRef, useImperativeHandle} from 'react';
 import {DndContext, DragOverlay, PointerSensor, useSensor, useSensors} from '@dnd-kit/core';
 import {horizontalListSortingStrategy, SortableContext} from '@dnd-kit/sortable';
 import {Column} from './column';
@@ -11,7 +11,12 @@ import {useIsMobile} from "@workspace/lib/media";
 import {useYjsKanbanBoard} from './hooks/useYjsKanbanBoard';
 import {useYjsDragAndDrop} from './hooks/useYjsDragAndDrop';
 
-export const StickiesBoard: React.FC<BoardProps> = ({ownerId, pathId}) => {
+export interface StickiesBoardHandle {
+  undo: () => void;
+  redo: () => void;
+}
+
+const StickiesBoard = forwardRef<StickiesBoardHandle, BoardProps>((props, ref) => {
     // Core board state and operations with Yjs integration
     const {
         board,
@@ -23,8 +28,9 @@ export const StickiesBoard: React.FC<BoardProps> = ({ownerId, pathId}) => {
         handleAddTaskClick,
         handleAddTask,
         handleAddColumn,
-        yjsDoc
-    } = useYjsKanbanBoard(ownerId, pathId);
+        yjsDoc,
+        undoManager
+    } = useYjsKanbanBoard(props.ownerId, props.pathId);
 
     // Drag and drop functionality with Yjs awareness
     const {
@@ -83,7 +89,7 @@ export const StickiesBoard: React.FC<BoardProps> = ({ownerId, pathId}) => {
                     onEditColumn={handleEditColumn}
                     isMobile={isMobile}
                     yjsDoc={yjsDoc}
-                    ownerId={ownerId}
+                    ownerId={props.ownerId}
                     comments={board.comments}
                 />
             );
@@ -91,6 +97,23 @@ export const StickiesBoard: React.FC<BoardProps> = ({ownerId, pathId}) => {
 
         return null;
     };
+
+    // Implement undo/redo logic (replace with actual logic)
+    const undo = () => {
+        // TODO: implement undo
+        console.log('Undo called');
+        undoManager?.undo();
+    };
+    const redo = () => {
+        // TODO: implement redo
+        console.log('Redo called');
+        undoManager?.redo();
+    };
+
+    useImperativeHandle(ref, () => ({
+        undo,
+        redo,
+    }));
 
     return (
         <>
@@ -138,7 +161,7 @@ export const StickiesBoard: React.FC<BoardProps> = ({ownerId, pathId}) => {
                                     onEditColumn={handleEditColumn}
                                     isMobile={isMobile}
                                     yjsDoc={yjsDoc}
-                                    ownerId={ownerId}
+                                    ownerId={props.ownerId}
                                     comments={board.comments}
                                 />
                             );
@@ -195,4 +218,6 @@ export const StickiesBoard: React.FC<BoardProps> = ({ownerId, pathId}) => {
         </div>
         </>
     );
-};
+});
+
+export { StickiesBoard };

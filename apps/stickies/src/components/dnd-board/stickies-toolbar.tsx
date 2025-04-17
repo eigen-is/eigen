@@ -23,12 +23,14 @@ import { printElement } from '@workspace/ui/lib/printElement';
 
 interface StickiesToolbarProps {
   canWrite: boolean;
+  onUndo?: () => void;
+  onRedo?: () => void;
 }
 
 /**
  * Toolbar component for the Stickies application
  */
-export const StickiesToolbar = ({ canWrite }: StickiesToolbarProps) => {
+export const StickiesToolbar = ({ canWrite, onUndo, onRedo }: StickiesToolbarProps) => {
   const commandKey = window.navigator.platform.includes('Mac') ? '⌘' : 'Ctrl';
   const printDocument = useCallback(() => printElement(document.querySelector('[data-stickies-board]')!), []);
 
@@ -66,13 +68,13 @@ export const StickiesToolbar = ({ canWrite }: StickiesToolbarProps) => {
             <TooltipButton
               icon={Undo}
               tooltipText={`Undo (${commandKey}+Z)`}
-              onClick={() => console.log('Undo action')}
+              onClick={onUndo}
             />
 
             <TooltipButton
               icon={Redo}
               tooltipText={`Redo (${commandKey}+Y)`}
-              onClick={() => console.log('Redo action')}
+              onClick={onRedo}
             />
           </>
         )}  

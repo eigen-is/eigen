@@ -3,8 +3,8 @@ import {useDocumentAccess} from '@workspace/lib/docs'
 import {usePathInfo} from '@workspace/lib/drive'
 import {EigenLoader} from '@workspace/ui'
 import {useApp} from '@workspace/ui/components/layout/app-context'
-import {useEffect, useState} from 'react'
-import {StickiesBoard} from "@/components/dnd-board/board.tsx";
+import {useEffect, useState, useRef} from 'react'
+import {StickiesBoard, StickiesBoardHandle} from "@/components/dnd-board/board.tsx";
 import { StickiesToolbar } from '@/components/dnd-board/stickies-toolbar'
 
 export const Route = createFileRoute('/_auth/board/$ownerId/$pathId')({
@@ -17,6 +17,7 @@ function StickiesRoute() {
     const {data: path, isLoading: pathLoading} = usePathInfo(ownerId, pathId);
     const {appName, setAppName} = useApp();
     const [originalAppName] = useState(appName);
+    const boardRef = useRef<StickiesBoardHandle>(null);
 
     // Always call hooks at the top level, before any conditional logic
     useEffect(() => {
@@ -43,11 +44,16 @@ function StickiesRoute() {
         );
     }
 
+
     return (
         <>
-            <StickiesToolbar canWrite={access.canWrite}/>
+            <StickiesToolbar
+                canWrite={access.canWrite}
+                onUndo={() => boardRef.current?.undo()}
+                onRedo={() => boardRef.current?.redo()}
+            />
             <div className="h-full w-full flex bg-gray-200 overflow-hidden">
-                <StickiesBoard ownerId={ownerId} pathId={pathId}/>
+                <StickiesBoard ref={boardRef} ownerId={ownerId} pathId={pathId} />
             </div>
         </>
     )
