@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   FileText,
   Folder,
@@ -20,19 +20,42 @@ import { Separator } from '@workspace/ui/components/separator';
 import { TooltipButton } from '@workspace/ui';
 import { DocumentModeButton } from '@workspace/ui/components/layout/toolbar/DocumentModeButton';
 import { printElement } from '@workspace/ui/lib/printElement';
+import * as Y from 'yjs';
 
 interface StickiesToolbarProps {
   canWrite: boolean;
-  onUndo?: () => void;
-  onRedo?: () => void;
+  undoManager: Y.UndoManager | null;
 }
 
 /**
  * Toolbar component for the Stickies application
  */
-export const StickiesToolbar = ({ canWrite, onUndo, onRedo }: StickiesToolbarProps) => {
+export const StickiesToolbar = ({ canWrite, undoManager }: StickiesToolbarProps) => {
   const commandKey = window.navigator.platform.includes('Mac') ? '⌘' : 'Ctrl';
+  const [canUndo, setCanUndo] = useState(false);
+  const [canRedo, setCanRedo] = useState(false);
   const printDocument = useCallback(() => printElement(document.querySelector('[data-stickies-board]')!), []);
+
+  useEffect(() => {
+    if (!undoManager || !undoManager.undoStack || !canWrite) {
+      setCanUndo(false);
+      setCanRedo(false);
+      return;
+    }
+    const update = () => {
+      setCanUndo(undoManager.undoStack.length > 1);
+      setCanRedo(undoManager.redoStack.length > 0);
+    };
+    update(); // Initial state
+    undoManager.on('stack-item-added', update);
+    undoManager.on('stack-item-popped', update);
+    undoManager.on('stack-item-updated', update);
+    return () => {
+      undoManager.off('stack-item-added', update);
+      undoManager.off('stack-item-popped', update);
+      undoManager.off('stack-item-updated', update);
+    };
+  }, [undoManager, canWrite]);
 
   // Helper component for toolbar separator
   const ToolbarSeparator = () => <div className="h-4 w-px bg-gray-200 mx-1" />;
@@ -68,13 +91,15 @@ export const StickiesToolbar = ({ canWrite, onUndo, onRedo }: StickiesToolbarPro
             <TooltipButton
               icon={Undo}
               tooltipText={`Undo (${commandKey}+Z)`}
-              onClick={onUndo}
+              onClick={() => undoManager?.undo?.()}
+              disabled={!canUndo}
             />
 
             <TooltipButton
               icon={Redo}
               tooltipText={`Redo (${commandKey}+Y)`}
-              onClick={onRedo}
+              onClick={() => undoManager?.redo?.()}
+              disabled={!canRedo}
             />
           </>
         )}  
