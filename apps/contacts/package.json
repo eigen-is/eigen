@@ -29,8 +29,7 @@
     "react-dom": "^19.0.0",
     "shadcn-ui": "^0.9.5",
     "tailwind-merge": "^3.0.2",
-    "tailwindcss-animate": "^1.0.7",
-    "terser": "^5.39.0"
+    "tailwindcss-animate": "^1.0.7"
   },
   "devDependencies": {
     "@workspace/config": "workspace:*",
