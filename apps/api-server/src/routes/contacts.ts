@@ -74,10 +74,23 @@ export const contactsRouter = new Elysia({name: "contacts"})
         }),
         auth: true
     })
-    .get("/contacts/avatar/:filename", async ({params, user}: {
+    .get("/contacts/avatar/:filename", async ({params, user, set}: {
         params: { filename: string },
-        user: User
-    }) => await (await getContacts(user)).downloadAvatar(params.filename), {
+        user: User,
+        set: any
+    }) => {
+        try {
+        const data = await (await getContacts(user)).downloadAvatar(params.filename);
+        // Set caching headers for thumbnails (15 minutes)
+        set.headers['Cache-Control'] = 'public, max-age=900';
+        set.headers['Expires'] = new Date(Date.now() + 900000).toUTCString();
+        set.headers['Content-Type'] = 'image/webp';
+        return new Response(data);
+        } catch (e) {
+            set.status = 404;
+            return null;
+        }
+    }, {
         auth: true
     })
     .get("/contacts/me", async ({user}) => await (await getContacts(user)).getMe(), {
