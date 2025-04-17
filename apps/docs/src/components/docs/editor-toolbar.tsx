@@ -31,7 +31,9 @@ import {
     Pencil,
     EyeClosedIcon,
     EyeOffIcon,
-    Eye
+    Eye,
+    Share,
+    UserPlus
 } from "lucide-react";
 import {TooltipButton} from "@workspace/ui";
 import {Button} from "@workspace/ui/components/button";
@@ -48,7 +50,7 @@ import {Label} from "@workspace/ui/components/label";
 import {printElement} from "@workspace/ui/lib/printElement";
 import {useCallback, useState} from "react";
 import {CustomElement, CustomElementType, CustomText, TextAlignment} from "./editor.types";
-import {DocumentEditMode, DocumentModeDropdown} from "@workspace/ui/components/layout/toolbar/DocumentModeDropdown";
+import {DocumentModeButton} from "@workspace/ui/components/layout/toolbar/DocumentModeButton";
 
 // Define custom editor type
 type CustomEditor = BaseEditor & ReactEditor & HistoryEditor;
@@ -365,11 +367,10 @@ const LinkButton = () => {
 };
 
 interface EditorToolbarProps {
-    editMode?: DocumentEditMode;
-    onEditModeChange?: (mode: DocumentEditMode) => void;
+    canWrite: boolean;
 }
 
-export const EditorToolbar = ({ editMode = 'edit', onEditModeChange }: EditorToolbarProps) => {
+export const EditorToolbar = ({ canWrite }: EditorToolbarProps) => {
     const editor = useSlate() as CustomEditor;
     const commandKey = window.navigator.platform.includes('Mac') ? '⌘' : 'Ctrl';
     const printDocument = useCallback(() => printElement(document.querySelector('[data-document]')!), []);
@@ -390,102 +391,115 @@ export const EditorToolbar = ({ editMode = 'edit', onEditModeChange }: EditorToo
                         <DropdownMenuItem><Files/> Make a copy</DropdownMenuItem>
                         <Separator/>
                         <DropdownMenuItem onClick={printDocument}><Printer/> Print</DropdownMenuItem>
-                        <Separator/>
-                        <DropdownMenuItem><Trash2/> Delete</DropdownMenuItem>
+                        {canWrite && (
+                            <>
+                                <Separator/>
+                                <DropdownMenuItem><Trash2/> Delete</DropdownMenuItem>
+                            </>
+                        )}
                     </DropdownMenuContent>
                 </DropdownMenu>
-                {/* Separator */}
-                <ToolbarSeparator/>
+                {canWrite && (
+                    <>
+                        {/* Separator */}
+                        <ToolbarSeparator/>
 
-                <TooltipButton
-                    icon={Undo}
-                    tooltipText={`Undo (${commandKey}+Z)`}
-                    onClick={() => HistoryEditor.undo(editor)}
-                />
+                        <TooltipButton
+                            icon={Undo}
+                            tooltipText={`Undo (${commandKey}+Z)`}
+                            onClick={() => HistoryEditor.undo(editor)}
+                        />
 
-                <TooltipButton
-                    icon={Redo}
-                    tooltipText={`Redo (${commandKey}+Y)`}
-                    onClick={() => HistoryEditor.redo(editor)}
-                />
-
+                        <TooltipButton
+                            icon={Redo}
+                            tooltipText={`Redo (${commandKey}+Y)`}
+                            onClick={() => HistoryEditor.redo(editor)}
+                        />
+                    </>
+                )}  
             </div>
             <div className="flex items-center gap-1">
-                <MarkButton format="bold" icon={Bold} tooltipText={`Bold (${commandKey}+B)`}/>
-                <MarkButton format="italic" icon={Italic} tooltipText={`Italic (${commandKey}+I)`}/>
-                <MarkButton format="underline" icon={Underline} tooltipText={`Underline (${commandKey}+U)`}/>
-                <MarkButton format="strikethrough" icon={Strikethrough} tooltipText="Strikethrough"/>
+            {canWrite && (
+                <>
+                    <MarkButton format="bold" icon={Bold} tooltipText={`Bold (${commandKey}+B)`}/>
+                    <MarkButton format="italic" icon={Italic} tooltipText={`Italic (${commandKey}+I)`}/>
+                    <MarkButton format="underline" icon={Underline} tooltipText={`Underline (${commandKey}+U)`}/>
+                    <MarkButton format="strikethrough" icon={Strikethrough} tooltipText="Strikethrough"/>
 
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" title="Headings">
-                            Heading
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                        <DropdownMenuItem onClick={() => toggleBlock(editor, 'paragraph')}>
-                            <Type className="mr-2 h-4 w-4"/> Normal text
-                        </DropdownMenuItem>
-                        <Separator className="my-1"/>
-                        <DropdownMenuItem onClick={() => toggleBlock(editor, 'heading-one')}>
-                            <Heading1 className="mr-2 h-4 w-4"/> Heading 1
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => toggleBlock(editor, 'heading-two')}>
-                            <Heading2 className="mr-2 h-4 w-4"/> Heading 2
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => toggleBlock(editor, 'heading-three')}>
-                            <Heading3 className="mr-2 h-4 w-4"/> Heading 3
-                        </DropdownMenuItem>
-                    </DropdownMenuContent>
-                </DropdownMenu>
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button variant="ghost" title="Headings">
+                                Heading
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end">
+                            <DropdownMenuItem onClick={() => toggleBlock(editor, 'paragraph')}>
+                                <Type className="mr-2 h-4 w-4"/> Normal text
+                            </DropdownMenuItem>
+                            <Separator className="my-1"/>
+                            <DropdownMenuItem onClick={() => toggleBlock(editor, 'heading-one')}>
+                                <Heading1 className="mr-2 h-4 w-4"/> Heading 1
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => toggleBlock(editor, 'heading-two')}>
+                                <Heading2 className="mr-2 h-4 w-4"/> Heading 2
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => toggleBlock(editor, 'heading-three')}>
+                                <Heading3 className="mr-2 h-4 w-4"/> Heading 3
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
 
-                <ToolbarSeparator/>
-                
-                <AlignmentButton alignment="left" icon={AlignLeft} tooltipText="Align Left"/>
-                <AlignmentButton alignment="center" icon={AlignCenter} tooltipText="Align Center"/>
-                <AlignmentButton alignment="right" icon={AlignRight} tooltipText="Align Right"/>
-                
-                <ToolbarSeparator/>
+                    <ToolbarSeparator/>
+                    
+                    <AlignmentButton alignment="left" icon={AlignLeft} tooltipText="Align Left"/>
+                    <AlignmentButton alignment="center" icon={AlignCenter} tooltipText="Align Center"/>
+                    <AlignmentButton alignment="right" icon={AlignRight} tooltipText="Align Right"/>
+                    
+                    <ToolbarSeparator/>
 
-                <BlockButton format="block-quote" icon={TextQuote} tooltipText="Blockquote"/>
-                <BlockButton format="bulleted-list" icon={List} tooltipText="Bulleted List"/>
-                <BlockButton format="numbered-list" icon={ListOrdered} tooltipText="Numbered List"/>
-                <BlockButton format="check-list" icon={CheckSquare} tooltipText="Check List"/>
+                    <BlockButton format="block-quote" icon={TextQuote} tooltipText="Blockquote"/>
+                    <BlockButton format="bulleted-list" icon={List} tooltipText="Bulleted List"/>
+                    <BlockButton format="numbered-list" icon={ListOrdered} tooltipText="Numbered List"/>
+                    <BlockButton format="check-list" icon={CheckSquare} tooltipText="Check List"/>
 
-                <ToolbarSeparator/>
+                    <ToolbarSeparator/>
 
-                <LinkButton/>
+                    <LinkButton/>
 
-                <ToolbarSeparator/>
+                    <ToolbarSeparator/>
 
-                <TooltipButton
-                    icon={RemoveFormatting}
-                    tooltipText="Clear formatting"
-                    onClick={() => {
-                        // Remove all marks
-                        Editor.removeMark(editor, 'bold');
-                        Editor.removeMark(editor, 'italic');
-                        Editor.removeMark(editor, 'underline');
-                        Editor.removeMark(editor, 'strikethrough');
-                        Editor.removeMark(editor, 'code');
-                        Editor.removeMark(editor, 'link');
+                    <TooltipButton
+                        icon={RemoveFormatting}
+                        tooltipText="Clear formatting"
+                        onClick={() => {
+                            // Remove all marks
+                            Editor.removeMark(editor, 'bold');
+                            Editor.removeMark(editor, 'italic');
+                            Editor.removeMark(editor, 'underline');
+                            Editor.removeMark(editor, 'strikethrough');
+                            Editor.removeMark(editor, 'code');
+                            Editor.removeMark(editor, 'link');
 
-                        // Convert to paragraph
-                        Transforms.setNodes<CustomElement>(
-                            editor,
-                            {type: 'paragraph'},
-                            {match: n => SlateElement.isElement(n) && !Editor.isEditor(n)}
-                        );
-                    }}
-                />
+                            // Convert to paragraph
+                            Transforms.setNodes<CustomElement>(
+                                editor,
+                                {type: 'paragraph'},
+                                {match: n => SlateElement.isElement(n) && !Editor.isEditor(n)}
+                            );
+                        }}
+                    />
+                </>
+                )}
             </div>
 
-            <div className="flex items-center gap-1 min-w-32">
-                {onEditModeChange && (
-                    <DocumentModeDropdown 
-                        editMode={editMode} 
-                        onEditModeChange={onEditModeChange} 
+            <div className="flex items-center gap-1">
+                {canWrite ? (
+                    <TooltipButton
+                        icon={UserPlus}
+                        tooltipText="Share"
                     />
+                ) : (
+                    <DocumentModeButton canWrite={canWrite} />
                 )}
             </div>
         </div>
