@@ -164,6 +164,9 @@ export function EmailDetail({
                             onDelete={onDelete}
                             onMoveToFolder={onMoveToFolder}
                             onClose={() => {}}
+                            onPrint={(emailId) => {
+                                console.log('Printing email:', emailId);
+                            }}
                         />
                     </DropdownMenu>
                 </div>
