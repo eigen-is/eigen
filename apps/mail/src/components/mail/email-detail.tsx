@@ -173,7 +173,7 @@ export function EmailDetail({
             </div>
 
             {/* Email content */}
-            <div className="p-4 flex-1 overflow-auto">
+            <div className="p-4 flex-1 overflow-auto" data-document>
                 {/* Email header */}
                 <div className="space-y-4 mb-6">
                     <div>

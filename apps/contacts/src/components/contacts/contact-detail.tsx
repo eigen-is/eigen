@@ -78,8 +78,8 @@ export function ContactDetail({contact, onDelete, onBack, filterType, filterId, 
     const openWriteEmailTo = useOpenWriteEmailTo();
 
     return (
-        <div className="h-full flex flex-col overflow-hidden">
-            <div className="flex items-center justify-between h-12 px-4 border-b">
+        <div className="h-full flex flex-col overflow-hidden" data-document>
+            <div className="flex items-center justify-between h-12 px-4 border-b no-print">
                 <div className="flex items-center">
                     {isMobile && onBack && (
                         <>
@@ -91,6 +91,7 @@ export function ContactDetail({contact, onDelete, onBack, filterType, filterId, 
                         </>
                     )}
                 </div>
+
                 <div className="flex items-center">
                     <div className="flex items-center gap-1 mr-2">
                         <Link

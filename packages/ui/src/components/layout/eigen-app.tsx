@@ -9,6 +9,7 @@ import {ReactQueryDevtools} from '@tanstack/react-query-devtools';
 import {NotificationProvider} from "./notification-provider";
 import {TooltipProvider} from "@radix-ui/react-tooltip"
 import {AppContext} from "./app-context"
+import { usePrintDocument } from "@workspace/ui/hooks/use-print-document"
 
 interface EigenAppProps {
     children: React.ReactNode;
@@ -25,7 +26,8 @@ const queryClient = new QueryClient();
 
 export function EigenApp({children, appName = ''}: EigenAppProps) {
     const [currentAppName, setCurrentAppName] = useState(appName);
-
+    usePrintDocument();
+    
     return (
         <TooltipProvider>
             <QueryClientProvider client={queryClient}>
