@@ -1,5 +1,5 @@
 import {cn} from "@workspace/ui/lib/utils";
-import {ArrowLeft, MoreVertical, Trash2, X, Download, Users, UserRoundPlus} from "lucide-react";
+import {ArrowLeft, MoreVertical, Trash2, X, Download, Users, UserRoundPlus, ArrowRight} from "lucide-react";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -22,6 +22,7 @@ interface DriveDetailProps {
     onDelete: (path: any) => void;
     onShareClick?: (item: DrivePath) => void;
     onDownload?: (path: DrivePath) => void;
+    onItemOpen?: (item: DrivePath) => void;
     allowDelete?: boolean;
 }
 
@@ -33,6 +34,7 @@ export function DriveDetail({
                                 onDelete,
                                 onShareClick,
                                 onDownload,
+                                onItemOpen,
                                 allowDelete,
                                 ...props
                             }: DriveDetailProps) {
@@ -79,8 +81,11 @@ export function DriveDetail({
                                 <MoreVertical className="h-4 w-4"/>
                             </Button>
                         </DropdownMenuTrigger>
-
                         <DropdownMenuContent>
+                            <DropdownMenuItem onClick={() => onItemOpen?.(path)} className="flex items-center">
+                                <ArrowRight className="h-4 w-4 mr-2"/>
+                                Open
+                            </DropdownMenuItem>
                             {path.type === 'file' && (
                                 <DropdownMenuItem onClick={() => onDownload?.(path)} className="flex items-center">
                                     <Download className="h-4 w-4 mr-2" />
@@ -91,7 +96,7 @@ export function DriveDetail({
                                 <UserRoundPlus className="h-4 w-4 mr-2" />
                                 Edit access
                             </DropdownMenuItem>
-                            <DropdownMenuSeparator/>    
+                            <DropdownMenuSeparator/>
                             {allowDelete && (
                                 <DropdownMenuItem onClick={() => onDelete?.(path)} className="flex items-center">
                                     <Trash2 className="h-4 w-4 mr-2" />
@@ -106,6 +111,13 @@ export function DriveDetail({
             <div className="p-4 flex-1 overflow-auto">
                 <h2 className="text-xl font-medium mb-2 flex items-center">
                     <span className="truncate overflow-hidden min-w-0 flex-1">{path.name}</span>
+                    {onItemOpen && path && path.type !== 'file' && (
+                        <TooltipButton
+                            onClick={() => onItemOpen(path)}
+                            tooltipText="Open"
+                            icon={ArrowRight}
+                        />
+                    )}
                 </h2>
                 <Table className="text-sm text-muted-foreground mb-4">
                     <TableBody>
@@ -159,7 +171,6 @@ export function DriveDetail({
                 <div className="mt-4">
                     <DriveAccessList
                         path={path}
-                        acl={path.acl}
                         onShareClick={onShareClick}
                     />
                 </div>

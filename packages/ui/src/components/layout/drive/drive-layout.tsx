@@ -301,6 +301,7 @@ export function DriveLayout({
                             onShareClick={allowShare ? handleShareClick : () => {
                             }}
                             onDownload={handleDownloadPath}
+                            onItemOpen={onRowActivate}
                             allowDelete={allowDelete}
                         />
                     </div>
@@ -373,6 +374,7 @@ export function DriveLayout({
                                         onShareClick={allowShare ? handleShareClick : () => {
                                         }}
                                         onDownload={handleDownloadPath}
+                                        onItemOpen={onRowActivate}
                                         allowDelete={allowDelete}
                                     />
                                 </div>
@@ -444,7 +446,6 @@ export function DriveLayout({
                     open={accessDialogOpen}
                     onOpenChange={setAccessDialogOpen}
                     path={itemToShare}
-                    acl={itemToShare?.acl || null}
                 />
             )}
         </>

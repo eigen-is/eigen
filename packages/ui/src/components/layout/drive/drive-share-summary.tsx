@@ -1,22 +1,20 @@
 import {UserRoundPlus} from "lucide-react";
 import {cn} from "@workspace/ui/lib/utils";
 import {UserPublicAvatar} from "../user-public-avatar";
-import {type DriveACL, type DrivePath} from "@apps/api-server/types/drive";
+import {type DrivePath} from "@apps/api-server/types/drive";
 
 export interface DriveShareSummaryProps {
     path: DrivePath;
-    acl?: DriveACL[] | null;
     onClick?: () => void;
     showIconOnHover?: boolean;
 }
 
 export function DriveShareSummary({
     path,
-    acl,
     onClick,
     showIconOnHover = true,
 }: DriveShareSummaryProps) {
-    const isShared = acl && acl.length > 0;
+    const isShared = path.acl && path.acl.length > 0;
 
     return (
         <div
@@ -34,16 +32,16 @@ export function DriveShareSummary({
                         email={path.ownerId}
                         size="sm"
                     />
-                    {acl?.slice(0, 3).map((access) => (
+                    {path.acl?.slice(0, 3).map((access) => (
                         <UserPublicAvatar
                             email={access.email}
                             size="sm"
                             className="-ml-4"
                         />
                     ))}
-                    {acl && acl.length > 3 && (
+                    {path.acl && path.acl.length > 3 && (
                         <span className="text-xs text-muted-foreground ml-1">
-              +{acl.length - 3}
+              +{path.acl.length - 3}
             </span>
                     )}
                 </div>

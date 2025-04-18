@@ -14,7 +14,6 @@ import {ContactAutosuggest} from "../contacts/contact-autosuggest"
 import {ContactSuggestion} from "../contacts/types"
 
 export interface DriveAccessListEditProps {
-    acl: DriveACL[] | null
     path: DrivePath
     onSave: (updatedAcl: DriveACL[]) => void
     onCancel?: () => void
@@ -32,7 +31,6 @@ type UserAccessItem = {
 }
 
 export function DriveAccessListEdit({
-                                        acl,
                                         path,
                                         onSave,
                                         onCancel,
@@ -73,8 +71,8 @@ export function DriveAccessListEdit({
         const newAccessList = [ownerAccess]
 
         // Add non-owner users from ACL
-        if (acl && acl.length > 0) {
-            acl.forEach((access) => {
+        if (path.acl && path.acl.length > 0) {
+            path.acl.forEach((access) => {
                 if (access.public) {
                     setIsPublicEnabled(true)
                     setPublicAccessRights({
@@ -94,7 +92,7 @@ export function DriveAccessListEdit({
         }
 
         setAccessList(newAccessList)
-    }, [acl, owner.data])
+    }, [path, owner.data])
 
     // Handle adding a new user
     const handleAddUser = useCallback((suggestion: ContactSuggestion) => {
