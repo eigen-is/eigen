@@ -41,6 +41,7 @@ interface DriveListProps {
     pathId: string;
     showBreadcrumb?: boolean;
     allowDelete?: boolean;
+    allowDownload?: boolean;
 }
 
 export function DriveList({
@@ -63,6 +64,7 @@ export function DriveList({
                               pathId,
                               showBreadcrumb = true,
                               allowDelete = false,
+                              allowDownload = false,
                           }: DriveListProps) {
     const [isDragging, setIsDragging] = useState(false);
     const dragCounter = useRef(0);
@@ -192,7 +194,7 @@ export function DriveList({
             onDrop={handleDrop}
         >
             {/* Drag overlay */}
-            {isDragging && (
+            {allowDownload && isDragging && (
                 <div
                     className="absolute inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center z-10 pointer-events-none">
                     <div className="bg-card p-6 rounded-lg shadow-lg text-center">
@@ -243,6 +245,7 @@ export function DriveList({
                 onShareClick={onShareClick}
                 getFileIcon={getFileIcon}
                 onDownload={onDownload}
+                allowDownload={allowDownload}
                 onDelete={onDelete}
                 allowDelete={allowDelete}
             />
