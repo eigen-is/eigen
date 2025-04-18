@@ -4,7 +4,8 @@ import {useDocumentAccess} from '@workspace/lib/docs'
 import {usePathInfo} from '@workspace/lib/drive'
 import {EigenLoader} from '@workspace/ui'
 import {useApp} from '@workspace/ui/components/layout/app-context'
-import {useEffect, useState} from 'react'
+import {useCallback, useEffect, useState} from 'react'
+import { DriveAccessDialog } from '@workspace/ui/components/layout/drive/drive-access-dialog'
 
 export const Route = createFileRoute('/_auth/doc/$ownerId/$pathId')({
     component: CollaborativeTextEditor,
@@ -16,6 +17,7 @@ function CollaborativeTextEditor() {
     const {data: path, isLoading: pathLoading} = usePathInfo(ownerId, pathId);
     const {appName, setAppName} = useApp();
     const [originalAppName] = useState(appName);
+    const [accessDialogOpen, setAccessDialogOpen] = useState(false);
 
     // Always call hooks at the top level, before any conditional logic
     useEffect(() => {
@@ -30,6 +32,10 @@ function CollaborativeTextEditor() {
         };
     }, [path, originalAppName, setAppName]);
 
+    const handleAccessDialogOpen = useCallback(() => {
+        setAccessDialogOpen(true);
+    }, [setAccessDialogOpen]);
+
     if (isLoading || pathLoading) {
         return <EigenLoader/>
     }
@@ -43,8 +49,15 @@ function CollaborativeTextEditor() {
     }
 
     return (
-        <div className="bg-muted flex-1 overflow-hidden">
-            <CollaborativeEditor ownerId={ownerId} pathId={pathId} access={access}/>
-        </div>
+        <>
+            <div className="bg-muted flex-1 overflow-hidden">
+                <CollaborativeEditor ownerId={ownerId} pathId={pathId} access={access} onAccessDialogOpen={handleAccessDialogOpen}/>
+            </div>
+            <DriveAccessDialog
+                open={accessDialogOpen}
+                onOpenChange={setAccessDialogOpen}
+                path={path}
+            />
+        </>
     )
 }

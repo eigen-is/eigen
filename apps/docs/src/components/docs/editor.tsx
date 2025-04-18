@@ -13,7 +13,6 @@ import {EigenLoader} from "@workspace/ui";
 import { UserPublicAvatar } from "@workspace/ui/components/layout/user-public-avatar";
 import { Button } from "@workspace/ui/components/button";
 import { ArrowUp } from "lucide-react";
-import { DocumentEditMode } from "@workspace/ui/components/layout/toolbar/DocumentModeDropdown";
 
 // Define the initial value with proper typing
 const initialValue: CustomElement[] = [
@@ -23,11 +22,11 @@ const initialValue: CustomElement[] = [
     },
 ];
 
-export const CollaborativeEditor = ({ownerId, pathId, access}: {
+export const CollaborativeEditor = ({ownerId, pathId, access, onAccessDialogOpen}: {
     ownerId: string, pathId: string, access: {
         canRead: boolean;
         canWrite: boolean;
-    }
+    }, onAccessDialogOpen: () => void
 }) => {
     const [connected, setConnected] = useState(false);
     const [provider, setProvider] = useState<WebsocketProvider>();
@@ -86,7 +85,7 @@ export const CollaborativeEditor = ({ownerId, pathId, access}: {
         <div className="absolute top-26 right-6 flex items-center gap-1">
             {Array.from(users || []).map(user => (<UserPublicAvatar key={user[0]} email={user[0]} color={user[1].color} className="-ml-2"/>))}
         </div>
-        <SlateEditor sharedType={sharedType} provider={provider} access={access}/>
+        <SlateEditor sharedType={sharedType} provider={provider} access={access} onAccessDialogOpen={onAccessDialogOpen}/>
     </>;
 };
           
@@ -95,11 +94,13 @@ export const CollaborativeEditor = ({ownerId, pathId, access}: {
 const SlateEditor = ({
                          sharedType,
                          provider,
-                         access
+                         access ,
+                         onAccessDialogOpen,
                      }: {
     sharedType: Y.XmlText | null;
     provider: WebsocketProvider | null;
     access: { canRead: boolean, canWrite: boolean };
+    onAccessDialogOpen: () => void;
 }) => {
     const auth = useAuth();
 
@@ -261,7 +262,7 @@ const SlateEditor = ({
         <>
             <Slate editor={editor} initialValue={initialValue}>
                 <div className="flex h-full w-full flex-col">
-                    <EditorToolbar canWrite={access.canWrite}/>
+                    <EditorToolbar canWrite={access.canWrite} onAccessDialogOpen={onAccessDialogOpen}/>
                     <div className="h-full w-full overflow-y-scroll bg-gray-200 p-4">
                         <div data-document className="grid p-[2cm] bg-white rounded-lg shadow-sm min-h-full w-[210mm] m-auto print:p-0" >
                             <Cursors className="h-full">

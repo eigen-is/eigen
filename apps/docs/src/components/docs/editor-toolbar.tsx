@@ -28,12 +28,7 @@ import {
     AlignLeft,
     AlignCenter,
     AlignRight,
-    Pencil,
-    EyeClosedIcon,
-    EyeOffIcon,
-    Eye,
-    Share,
-    UserPlus
+    UserRoundPlus
 } from "lucide-react";
 import {TooltipButton} from "@workspace/ui";
 import {Button} from "@workspace/ui/components/button";
@@ -368,9 +363,10 @@ const LinkButton = () => {
 
 interface EditorToolbarProps {
     canWrite: boolean;
+    onAccessDialogOpen: () => void;
 }
 
-export const EditorToolbar = ({ canWrite }: EditorToolbarProps) => {
+export const EditorToolbar = ({ canWrite, onAccessDialogOpen }: EditorToolbarProps) => {
     const editor = useSlate() as CustomEditor;
     const commandKey = window.navigator.platform.includes('Mac') ? '⌘' : 'Ctrl';
     const printDocument = useCallback(() => printElement(document.querySelector('[data-document]')!), []);
@@ -388,8 +384,8 @@ export const EditorToolbar = ({ canWrite }: EditorToolbarProps) => {
                     <DropdownMenuContent align="start">
                         <DropdownMenuItem><FileText/> New document</DropdownMenuItem>
                         <DropdownMenuItem><Folder/> Open</DropdownMenuItem>
-                        <DropdownMenuItem><Files/> Make a copy</DropdownMenuItem>
                         <Separator/>
+                        <DropdownMenuItem onClick={onAccessDialogOpen}><UserRoundPlus/> Edit access</DropdownMenuItem>
                         <DropdownMenuItem onClick={printDocument}><Printer/> Print</DropdownMenuItem>
                         {canWrite && (
                             <>
@@ -495,8 +491,9 @@ export const EditorToolbar = ({ canWrite }: EditorToolbarProps) => {
             <div className="flex items-center gap-1">
                 {canWrite ? (
                     <TooltipButton
-                        icon={UserPlus}
+                        icon={UserRoundPlus}
                         tooltipText="Share"
+                        onClick={() => onAccessDialogOpen()}
                     />
                 ) : (
                     <DocumentModeButton canWrite={canWrite} />

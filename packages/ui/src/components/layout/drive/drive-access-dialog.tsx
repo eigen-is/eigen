@@ -25,8 +25,6 @@ export function DriveAccessDialog({
         return null
     }
 
-    const acl = path?.acl || [];
-
     // Handler for when save is clicked in the access list edit component
     const handleSave = async (updatedAcl: DriveACL[]) => {
         setIsSubmitting(true)
@@ -39,13 +37,10 @@ export function DriveAccessDialog({
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="sm:max-w-[700px] overflow-y-scroll">
                 <DialogHeader>
-                    <div className="sm:max-w-[600px]">
-                        <DialogTitle className="truncate" title={path.name}>Share '{path.name}'</DialogTitle>
-                    </div>
+                    <div className="sm:max-w-[600px]"><DialogTitle className="truncate overflow-visible" title={path.name}>Share '{path.name}'</DialogTitle>                    </div>
                 </DialogHeader>
 
                 <DriveAccessListEdit
-                    acl={acl}
                     path={path}
                     onSave={handleSave}
                     onCancel={!isSubmitting ? () => onOpenChange(false) : undefined}
