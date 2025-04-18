@@ -44,7 +44,7 @@ export const StickiesToolbar = ({ canWrite, undoManager, onAccessDialogOpen }: S
       return;
     }
     const update = () => {
-      setCanUndo(undoManager.undoStack.length > 1);
+      setCanUndo(undoManager.undoStack.length > 0);
       setCanRedo(undoManager.redoStack.length > 0);
     };
     update(); // Initial state
