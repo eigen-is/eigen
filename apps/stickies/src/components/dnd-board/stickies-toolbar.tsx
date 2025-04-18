@@ -90,7 +90,6 @@ export const StickiesToolbar = ({ canWrite, undoManager, onAccessDialogOpen, pat
               </DropdownMenuItem>
               <Separator/>
               <DropdownMenuItem onClick={onAccessDialogOpen}><UserRoundPlus/> Edit access</DropdownMenuItem>
-              <DropdownMenuItem onClick={printDocument}><Printer/> Print</DropdownMenuItem>
               {canWrite && (
                   <>
                       <Separator/>
