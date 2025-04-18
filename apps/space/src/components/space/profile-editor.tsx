@@ -284,7 +284,6 @@ export function ProfileEditor() {
                                     <p className="text-sm">
                                         Your profile picture and name are public information visible to other users.
                                         These details may appear in shared workspaces, messages, and documents throughout eigen.
-                                        Please ensure any information you provide is appropriate for a professional environment.
                                     </p>
                                 </div>
                             </div>
