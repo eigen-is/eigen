@@ -352,7 +352,7 @@ export function DriveAccessListEdit({
                             </p>
                             <p className="text-xs text-gray-500">
                                 {isPublicEnabled
-                                    ? "Anyone with the link can access"
+                                    ? "Any logged-in eigen user with the link can access"
                                     : "Only people with access can open with the link"}
                             </p>
                         </div>
