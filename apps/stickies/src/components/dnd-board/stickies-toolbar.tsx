@@ -72,7 +72,7 @@ export const StickiesToolbar = ({ canWrite, undoManager, onAccessDialogOpen }: S
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start">
-              <DropdownMenuItem><FileText/> New document</DropdownMenuItem>
+              <DropdownMenuItem><FileText/> New stickies</DropdownMenuItem>
               <DropdownMenuItem><Folder/> Open</DropdownMenuItem>
               <Separator/>
               <DropdownMenuItem onClick={onAccessDialogOpen}><UserRoundPlus/> Edit access</DropdownMenuItem>
