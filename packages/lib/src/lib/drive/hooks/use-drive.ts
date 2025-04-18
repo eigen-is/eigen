@@ -25,7 +25,6 @@ export function useRootFolder(ownerId: string) {
         queryKey: driveKeys.root(),
         queryFn: async () => {
             const response = await driveApi.root[ownerId].get();
-            console.log(response.data);
             return response.data;
         },
         staleTime: Infinity

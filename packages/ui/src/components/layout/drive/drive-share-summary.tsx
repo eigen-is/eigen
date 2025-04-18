@@ -33,7 +33,7 @@ export function DriveShareSummary({
                     <UserPublicAvatar
                         email={path.ownerId}
                         size="sm"
-                        className="position-relative"
+                        className="position-relative z-0"
                     />
                     {path.acl?.slice(0, 3).map((access, index) => (
                         access.public ? (
@@ -41,7 +41,7 @@ export function DriveShareSummary({
                                 <TooltipTrigger asChild>
                                     <span 
                                         key={`public-${access.email}`}
-                                        className={`-ml-4 h-6 w-6 rounded-full flex items-center justify-center bg-gray-100 position-relative z-${index}`}
+                                        className={`-ml-4 h-6 w-6 rounded-full flex items-center justify-center bg-gray-100 position-relative z-${index+1}`}
                                     >
                                         <Unlock className="h-3 w-3 text-primary" />
                                     </span>
@@ -53,7 +53,7 @@ export function DriveShareSummary({
                                 key={access.email}
                                 email={access.email}
                                 size="sm"
-                                className={`-ml-4 position-relative z-${index}`}
+                                className={`-ml-4 position-relative z-${index+1}`}
                             />
                         )
                     ))}

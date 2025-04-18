@@ -46,6 +46,9 @@ import {printDocument} from "@workspace/ui/lib/printElement";
 import {useState} from "react";
 import {CustomElement, CustomElementType, CustomText, TextAlignment} from "./editor.types";
 import {DocumentModeButton} from "@workspace/ui/components/layout/toolbar/DocumentModeButton";
+import {DriveCreateDoc} from "@workspace/ui/components/layout/drive/drive-create-doc";
+import {useRootFolder} from "@workspace/lib/drive";
+import { useAuth } from "@workspace/lib/auth/auth-context.js";
 
 // Define custom editor type
 type CustomEditor = BaseEditor & ReactEditor & HistoryEditor;
@@ -369,6 +372,9 @@ interface EditorToolbarProps {
 export const EditorToolbar = ({ canWrite, onAccessDialogOpen }: EditorToolbarProps) => {
     const editor = useSlate() as CustomEditor;
     const commandKey = window.navigator.platform.includes('Mac') ? '⌘' : 'Ctrl';
+    const [createDocOpen, setCreateDocOpen] = useState(false);
+    const {user} = useAuth();
+    const {data: rootFolder} = useRootFolder(user?.id || '');
 
     const ToolbarSeparator = () => (<div className="h-6 w-[1px] bg-border mx-1"></div>);
     return (
@@ -381,7 +387,11 @@ export const EditorToolbar = ({ canWrite, onAccessDialogOpen }: EditorToolbarPro
                         </Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="start">
-                        <DropdownMenuItem><FileText/> New document</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => {
+                            rootFolder && setCreateDocOpen(true);
+                        }}>
+                            <FileText/> New document
+                        </DropdownMenuItem>
                         <DropdownMenuItem><Folder/> Open</DropdownMenuItem>
                         <Separator/>
                         <DropdownMenuItem onClick={onAccessDialogOpen}><UserRoundPlus/> Edit access</DropdownMenuItem>
@@ -498,6 +508,16 @@ export const EditorToolbar = ({ canWrite, onAccessDialogOpen }: EditorToolbarPro
                     <DocumentModeButton canWrite={canWrite} />
                 )}
             </div>
+
+            {/* Document Creation Dialog */}
+            {/* Debug: {createDocOpen ? 'Dialog should be open' : 'Dialog closed'}, rootFolder exists: {!!rootFolder} */}
+            {rootFolder && (
+                <DriveCreateDoc
+                    path={rootFolder}
+                    open={createDocOpen}
+                    onOpenChange={setCreateDocOpen}
+                />
+            )}
         </div>
     );
 };
