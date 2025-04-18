@@ -34,11 +34,12 @@ export const useYjsKanbanBoard = (ownerId: string, pathId: string) => {
     useEffect(() => {
         const doc = new Y.Doc();
         docRef.current = doc;
-        undoManager.current = new Y.UndoManager(doc);
 
-        const columnsMap = doc.getMap('columns');
-        const tasksMap = doc.getMap('tasks');
-        const columnOrderArray = doc.getArray('columnOrder');
+        const columnsMap = doc.getMap("columns");
+        const tasksMap = doc.getMap("tasks");
+        const columnOrderArray = doc.getArray("columnOrder");
+
+        undoManager.current = new Y.UndoManager([columnsMap, tasksMap, columnOrderArray]);
 
         // Connect to WebSocket provider
         const wsUrl = `${import.meta.env.VITE_API_HOST}/ws/collab/${ownerId}/${pathId}`;
