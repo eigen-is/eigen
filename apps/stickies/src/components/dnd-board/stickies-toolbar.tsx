@@ -20,7 +20,7 @@ import {
 import { Separator } from '@workspace/ui/components/separator';
 import { TooltipButton } from '@workspace/ui';
 import { DocumentModeButton } from '@workspace/ui/components/layout/toolbar/DocumentModeButton';
-import { printElement } from '@workspace/ui/lib/printElement';
+import { printDocument } from '@workspace/ui/lib/printElement';
 import * as Y from 'yjs';
 
 interface StickiesToolbarProps {
@@ -36,7 +36,6 @@ export const StickiesToolbar = ({ canWrite, undoManager, onAccessDialogOpen }: S
   const commandKey = window.navigator.platform.includes('Mac') ? '⌘' : 'Ctrl';
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
-  const printDocument = useCallback(() => printElement(document.querySelector('[data-stickies-board]')!), []);
 
   useEffect(() => {
     if (!undoManager || !undoManager.undoStack || !canWrite) {

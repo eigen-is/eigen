@@ -42,8 +42,8 @@ import {Separator} from "@workspace/ui/components/separator";
 import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,} from "@workspace/ui/components/dialog";
 import {Input} from "@workspace/ui/components/input";
 import {Label} from "@workspace/ui/components/label";
-import {printElement} from "@workspace/ui/lib/printElement";
-import {useCallback, useState} from "react";
+import {printDocument} from "@workspace/ui/lib/printElement";
+import {useState} from "react";
 import {CustomElement, CustomElementType, CustomText, TextAlignment} from "./editor.types";
 import {DocumentModeButton} from "@workspace/ui/components/layout/toolbar/DocumentModeButton";
 
@@ -369,7 +369,6 @@ interface EditorToolbarProps {
 export const EditorToolbar = ({ canWrite, onAccessDialogOpen }: EditorToolbarProps) => {
     const editor = useSlate() as CustomEditor;
     const commandKey = window.navigator.platform.includes('Mac') ? '⌘' : 'Ctrl';
-    const printDocument = useCallback(() => printElement(document.querySelector('[data-document]')!), []);
 
     const ToolbarSeparator = () => (<div className="h-6 w-[1px] bg-border mx-1"></div>);
     return (
