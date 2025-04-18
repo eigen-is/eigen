@@ -35,13 +35,13 @@ export function DriveShareSummary({
                         size="sm"
                         className="position-relative"
                     />
-                    {path.acl?.slice(0, 3).map((access) => (
+                    {path.acl?.slice(0, 3).map((access, index) => (
                         access.public ? (
                             <Tooltip delayDuration={300}>
                                 <TooltipTrigger asChild>
                                     <span 
                                         key={`public-${access.email}`}
-                                        className="-ml-4 h-6 w-6 rounded-full flex items-center justify-center bg-gray-100 position-relative"
+                                        className={`-ml-4 h-6 w-6 rounded-full flex items-center justify-center bg-gray-100 position-relative z-${index}`}
                                     >
                                         <Unlock className="h-3 w-3 text-primary" />
                                     </span>
@@ -53,7 +53,7 @@ export function DriveShareSummary({
                                 key={access.email}
                                 email={access.email}
                                 size="sm"
-                                className="-ml-4 position-relative"
+                                className={`-ml-4 position-relative z-${index}`}
                             />
                         )
                     ))}
