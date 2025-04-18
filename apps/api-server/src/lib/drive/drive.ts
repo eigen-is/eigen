@@ -297,8 +297,25 @@ export default class Drive {
             throw new Error("No write permission");
         }
 
-        // Delete folder in filesystem (recursive)
-        const parentId = (await this.getPath(pathId))?.parentId;
+        // get all files from folder
+        const content = await this.getFolderContents(pathId);
+        // first try to delete all files in folder
+        try {
+            await Promise.all(
+                content.filter(f => f.type === 'file').map(f => 
+                    this.deleteFile(f.id)
+                )
+            );
+            // and delete all subfolders
+            await Promise.all(
+                content.filter(f => f.type === 'folder').map(f => 
+                    this.deleteFolder(f.id)
+                )
+            );
+        } catch (e) {
+            throw new Error("Failed to delete folder");
+        }
+
         const folderPath = await this.getFolderPath(pathId);
         await this.home.fs.rm(folderPath, {recursive: true, force: true});
 
@@ -308,8 +325,8 @@ export default class Drive {
         this.emitACLChange(folder, folder.acl, null);
 
         // Update parent folder size
-        if (parentId) {
-            await this.updateSizeOfFolder(parentId);
+        if (folder.parentId) {
+            await this.updateSizeOfFolder(folder.parentId);
         }
     }
 
@@ -338,19 +355,20 @@ export default class Drive {
         }
 
         // Delete file in filesystem
-        const filePath = path.join(await this.getFolderPath(parent.id), file.name);
-        this.home.fs.unlink(filePath);
-        // Delete thumbnail
-        this.deleteThumbnail(file);
-        // Delete file from database
-        await this.db.delete(drivePaths).where(eq(drivePaths.id, pathId));
-
-        // Update parent folder size
-        await this.updateSizeOfFolder(parent.id);
-
-        this.emitACLChange(file, file.acl, null);
+        try {
+            const filePath = path.join(await this.getFolderPath(parent.id), file.name);
+            await this.home.fs.file(filePath).delete();
+            // Delete thumbnail
+            await this.deleteThumbnail(file);
+            // Delete file from database
+            await this.db.delete(drivePaths).where(eq(drivePaths.id, pathId));
+            // Update parent folder size
+            await this.updateSizeOfFolder(parent.id);
+        } catch (e) {
+            throw new Error("Failed to delete file");
+        }
     }
-
+    
     public async getRootFolder(): Promise<DrivePath | null> {
         return await this.db.select().from(drivePaths)
             .where(and(
@@ -374,10 +392,10 @@ export default class Drive {
             type: result.type as "folder" | "file" | "doc" | "stickies",
             parentId: result.parentId || undefined,
             ownerId: result.ownerId,
-            size: result.size ?? 0,
-            thumbnail: result.thumbnail || '',
             labels: [], // We would need to fetch labels separately
             mimeType: result.mimeType,
+            size: result.size ?? 0,
+            thumbnail: result.thumbnail || '',
             acl: result.acl ?? this.getACL(result.id),
             createdAt: new Date(result.createdAt || ''),
             updatedAt: new Date(result.updatedAt || '')
@@ -480,7 +498,7 @@ export default class Drive {
             mimeType: result.mimeType,
             size: result.size ?? 0,
             thumbnail: result.thumbnail || '',
-            acl: result.acl ?? this.getACL(pathId),
+            acl: result.acl ?? this.getACL(result.id),
             createdAt: new Date(result.createdAt || ''),
             updatedAt: new Date(result.updatedAt || '')
         };
