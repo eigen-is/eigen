@@ -51,7 +51,7 @@ function CollaborativeTextEditor() {
     return (
         <>
             <div className="bg-muted flex-1 overflow-hidden">
-                <CollaborativeEditor ownerId={ownerId} pathId={pathId} access={access} onAccessDialogOpen={handleAccessDialogOpen}/>
+                <CollaborativeEditor ownerId={ownerId} path={path} access={access} onAccessDialogOpen={handleAccessDialogOpen}/>
             </div>
             <DriveAccessDialog
                 open={accessDialogOpen}
