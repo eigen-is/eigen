@@ -297,10 +297,11 @@ export default class Drive {
             throw new Error("No write permission");
         }
 
-        // get all files from folder
-        const content = await this.getFolderContents(pathId);
         // first try to delete all files in folder
         try {
+            // get all files from folder
+            const content = await this.getFolderContents(pathId);
+            
             // TODO: dit moet niet recursive en zal geoptimaliseerd moeten worden
             await Promise.all(
                 content.filter(f => f.type === 'file').map(f => 
@@ -406,7 +407,7 @@ export default class Drive {
     public async getFolderContents(pathId: string): Promise<DrivePath[]> {
         // Check if folder exists
         const folder = await this.getPath(pathId);
-        if (!folder || folder.type !== "folder") {
+        if (!folder || (folder.type !== "folder" && folder.type !== "doc" && folder.type !== "stickies")) {
             throw new Error("Folder not found");
         }
 
