@@ -4,7 +4,7 @@ import {cn} from "@workspace/ui/lib/utils";
 import {formatDistanceToNow} from "date-fns";
 import {DrivePath} from "@apps/api-server/types/drive";
 import {DriveShareSummary} from "./drive-share-summary";
-import {ChevronLeft, Download, Trash2, UserRoundPlus} from "lucide-react";
+import {ChevronLeft, Download, Trash2, UserRoundPlus, ArrowRight} from "lucide-react";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -19,6 +19,7 @@ export interface DriveTableProps {
     currentPath?: DrivePath | null;
     activeItemId?: string;
     onItemClick?: (item: DrivePath) => void;
+    onItemOpen?: (item: DrivePath) => void;
     getFileIcon?: (mimeType: string, type: string, props?: any) => React.ReactNode;
     onShareClick?: (item: DrivePath) => void;
     onDownload?: (item: DrivePath) => void;
@@ -31,6 +32,7 @@ export function DriveTable({
                                currentPath,
                                activeItemId,
                                onItemClick,
+                               onItemOpen,
                                getFileIcon,
                                onShareClick,
                                onDownload,
@@ -305,7 +307,6 @@ export function DriveTable({
                                 <TableCell className="hidden sm:table-cell group">
                                     <DriveShareSummary
                                         path={item}
-                                        acl={item.acl}
                                         onClick={() => onShareClick?.(item)}
                                         showIconOnHover={true}
                                     />
@@ -333,11 +334,23 @@ export function DriveTable({
                 <DropdownMenuContent
                     style={{
                         position: 'absolute',
-                        top: `${contextMenuPosition?.y || 0}px`,
-                        left: `${contextMenuPosition?.x || 0}px`,
+                        top: `${contextMenuPosition?.y || -1000}px`,
+                        left: `${contextMenuPosition?.x || -1000}px`,
                     }}
                     className="w-48"
                 >
+                    {contextMenuItem && contextMenuItem.type !== 'file' && onItemOpen && (
+                        <DropdownMenuItem
+                            onClick={() => {
+                                onItemOpen?.(contextMenuItem!);
+                                closeContextMenu();
+                            }}
+                            className="flex items-center"
+                        >
+                            <ArrowRight className="h-4 w-4 mr-2" />
+                            Open
+                        </DropdownMenuItem>
+                    )}
                     {onDownload && contextMenuItem?.type === 'file' && (
                         <DropdownMenuItem
                             onClick={() => {

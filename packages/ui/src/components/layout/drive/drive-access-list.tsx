@@ -10,18 +10,16 @@ import {Separator} from "@workspace/ui/components/separator"
 import { TooltipButton } from "../tooltip-button"
 
 export interface DriveAccessListProps {
-    acl: DriveACL[] | null
     path: DrivePath
     className?: string
     onShareClick?: (path: DrivePath) => void
 }
 
 export function DriveAccessList({
-                                    acl,
-                                    path,
-                                    className,
-                                    onShareClick
-                                }: DriveAccessListProps) {
+    path,
+    className,
+    onShareClick
+}: DriveAccessListProps) {
     const owner = usePublicUser(path.ownerId);
 
     // Combine owner and ACL list, ensuring owner is first and not duplicated
@@ -40,11 +38,9 @@ export function DriveAccessList({
         const accessList = [ownerAccess];
         let hasPublicAccess = false;
 
-        console.log("Access list:", acl);
-
-        if (acl && acl.length > 0) {
+        if (path.acl && path.acl.length > 0) {
             // Add only non-owner users from ACL
-            acl.forEach((access) => {
+            path.acl.forEach((access) => {
                 if (access.public) {
                     hasPublicAccess = true;
                 } else if (access.email !== owner.data?.email) {
@@ -60,11 +56,11 @@ export function DriveAccessList({
         }
 
         return [accessList, hasPublicAccess];
-    }, [acl, owner.data]);
+    }, [path, owner.data]);
 
     return (
         <div className={cn("space-y-4", className)}>
-            <div className="flex items-center justify-between h-12 border-t border-b px-2">
+            <div className="flex items-center justify-between h-12 border-t border-b">
                 <h3 className="text-base font-medium">People with access</h3>
                 <TooltipButton
                     icon={UserRoundPlus}

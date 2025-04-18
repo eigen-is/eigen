@@ -8,14 +8,12 @@ export interface DriveAccessDialogProps {
     open: boolean
     onOpenChange: (open: boolean) => void
     path: DrivePath | null
-    acl: DriveACL[] | null
 }
 
 export function DriveAccessDialog({
                                       open,
                                       onOpenChange,
-                                      path,
-                                      acl,
+                                      path
                                   }: DriveAccessDialogProps) {
     const [isSubmitting, setIsSubmitting] = useState(false)
 
@@ -26,6 +24,8 @@ export function DriveAccessDialog({
     if (!path) {
         return null
     }
+
+    const acl = path?.acl || [];
 
     // Handler for when save is clicked in the access list edit component
     const handleSave = async (updatedAcl: DriveACL[]) => {
