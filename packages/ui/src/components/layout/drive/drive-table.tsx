@@ -25,6 +25,7 @@ export interface DriveTableProps {
     onDownload?: (item: DrivePath) => void;
     onDelete?: (item: DrivePath) => void;
     allowDelete?: boolean;
+    allowDownload?: boolean;
 }
 
 export function DriveTable({

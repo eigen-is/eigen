@@ -121,7 +121,7 @@ export function ContactsList({filterType = 'filter', filterId = 'all'}: Contacts
     }
 
     return (
-        <div className="w-full h-full flex flex-col">
+        <div className="w-full flex flex-col flex-1 overflow-hidden">
             <div className="flex items-center justify-between h-12 px-4 border-b">
                 <div className="relative w-full max-w-sm">
                     <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"/>
@@ -153,7 +153,7 @@ export function ContactsList({filterType = 'filter', filterId = 'all'}: Contacts
                 </div>
             </div>
 
-            <div className="flex-1 overflow-auto">
+            <div className="flex-1  overflow-y-auto">
                 {isLoading ? (
                     <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
                         <EigenLoader/>

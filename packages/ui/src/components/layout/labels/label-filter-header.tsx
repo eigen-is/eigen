@@ -56,7 +56,7 @@ export function LabelFilterHeader({
 
     return label ? (
         <>
-            <div className="h-12 px-4 flex items-center justify-between border-b">
+            <div className="flex items-center justify-between h-12 px-4 border-b">
                 <h1 className="text-base font-medium flex items-center gap-2">
                     <span
                         className="h-3 w-3 rounded-full"
