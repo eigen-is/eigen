@@ -39,7 +39,7 @@ function StickiesRoute() {
 
     return (
         <>
-            <StickiesBoard ownerId={ownerId} pathId={pathId} canWrite={access.canWrite} onAccessDialogOpen={handleAccessDialogOpen}/>
+            <StickiesBoard ownerId={ownerId} path={path} canWrite={access.canWrite} onAccessDialogOpen={handleAccessDialogOpen}/>
             <DriveAccessDialog
                 open={accessDialogOpen}
                 onOpenChange={setAccessDialogOpen}

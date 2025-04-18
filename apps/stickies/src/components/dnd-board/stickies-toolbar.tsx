@@ -1,8 +1,7 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   FileText,
   Folder,
-  Files,
   Printer,
   Trash2,
   Undo,
@@ -22,20 +21,32 @@ import { TooltipButton } from '@workspace/ui';
 import { DocumentModeButton } from '@workspace/ui/components/layout/toolbar/DocumentModeButton';
 import { printDocument } from '@workspace/ui/lib/printElement';
 import * as Y from 'yjs';
+import { useNavigate } from '@tanstack/react-router';
+import { useAuth } from '@workspace/lib/auth/auth-context.js';
+import { useRootFolder } from '@workspace/lib/drive';
+import { DriveCreateStickies } from '@workspace/ui/components/layout/drive/drive-create-stickies';
+import { DriveDeleteItem } from '@workspace/ui/components/layout/drive/drive-delete-item';
+import { DrivePath } from '@apps/api-server/types/drive';
 
 interface StickiesToolbarProps {
   canWrite: boolean;
   undoManager: Y.UndoManager | null;
   onAccessDialogOpen: () => void;
+  path: DrivePath;
 }
 
 /**
  * Toolbar component for the Stickies application
  */
-export const StickiesToolbar = ({ canWrite, undoManager, onAccessDialogOpen }: StickiesToolbarProps) => {
+export const StickiesToolbar = ({ canWrite, undoManager, onAccessDialogOpen, path }: StickiesToolbarProps) => {
   const commandKey = window.navigator.platform.includes('Mac') ? '⌘' : 'Ctrl';
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
+  const [createStickiesOpen, setCreateStickiesOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const {user} = useAuth();
+  const {data: rootFolder} = useRootFolder(user?.id || '');
+  const navigate = useNavigate();
 
   useEffect(() => {
     if (!undoManager || !undoManager.undoStack || !canWrite) {
@@ -71,15 +82,21 @@ export const StickiesToolbar = ({ canWrite, undoManager, onAccessDialogOpen }: S
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start">
-              <DropdownMenuItem><FileText/> New stickies</DropdownMenuItem>
-              <DropdownMenuItem><Folder/> Open</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => rootFolder && setCreateStickiesOpen(true)}>
+                <FileText/> New stickies
+              </DropdownMenuItem>
+              <DropdownMenuItem onClick={() => navigate({to: `/`})}>
+                <Folder/> Open
+              </DropdownMenuItem>
               <Separator/>
               <DropdownMenuItem onClick={onAccessDialogOpen}><UserRoundPlus/> Edit access</DropdownMenuItem>
               <DropdownMenuItem onClick={printDocument}><Printer/> Print</DropdownMenuItem>
               {canWrite && (
                   <>
                       <Separator/>
-                      <DropdownMenuItem><Trash2/> Delete</DropdownMenuItem>
+                      <DropdownMenuItem onClick={() => path && setDeleteDialogOpen(true)}>
+                          <Trash2/> Delete
+                      </DropdownMenuItem>
                   </>
               )}
           </DropdownMenuContent>
@@ -117,6 +134,29 @@ export const StickiesToolbar = ({ canWrite, undoManager, onAccessDialogOpen }: S
           <DocumentModeButton canWrite={canWrite} />
         )}
       </div>
+      
+      {/* Stickies Creation Dialog */}
+      {rootFolder && (
+          <DriveCreateStickies
+              path={rootFolder}
+              open={createStickiesOpen}
+              onOpenChange={setCreateStickiesOpen}
+          />
+      )}
+      
+      {/* Stickies Delete Dialog */}
+      {path && (
+          <DriveDeleteItem
+              path={path}
+              open={deleteDialogOpen}
+              onOpenChange={setDeleteDialogOpen}
+              onAfterAction={(actionType) => {
+                  if (actionType === 'delete') {
+                      navigate({to: `/`});
+                  }
+              }}
+          />
+      )}
     </div>
   );
 };
