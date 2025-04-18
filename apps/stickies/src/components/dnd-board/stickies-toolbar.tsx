@@ -7,7 +7,8 @@ import {
   Trash2,
   Undo,
   Redo,
-  UserPlus
+  UserPlus,
+  UserRoundPlus
 } from 'lucide-react';
 import { Button } from '@workspace/ui/components/button';
 import {
@@ -25,12 +26,13 @@ import * as Y from 'yjs';
 interface StickiesToolbarProps {
   canWrite: boolean;
   undoManager: Y.UndoManager | null;
+  onAccessDialogOpen: () => void;
 }
 
 /**
  * Toolbar component for the Stickies application
  */
-export const StickiesToolbar = ({ canWrite, undoManager }: StickiesToolbarProps) => {
+export const StickiesToolbar = ({ canWrite, undoManager, onAccessDialogOpen }: StickiesToolbarProps) => {
   const commandKey = window.navigator.platform.includes('Mac') ? '⌘' : 'Ctrl';
   const [canUndo, setCanUndo] = useState(false);
   const [canRedo, setCanRedo] = useState(false);
@@ -70,17 +72,17 @@ export const StickiesToolbar = ({ canWrite, undoManager }: StickiesToolbarProps)
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start">
-            <DropdownMenuItem><FileText/> New stickie</DropdownMenuItem>
-            <DropdownMenuItem><Folder/> Open</DropdownMenuItem>
-            <DropdownMenuItem><Files/> Make a copy</DropdownMenuItem>
-            <Separator/>
-            <DropdownMenuItem onClick={printDocument}><Printer/> Print</DropdownMenuItem>
-            {canWrite && (
-              <>
-                <Separator/>
-                <DropdownMenuItem><Trash2/> Delete</DropdownMenuItem>
-              </>
-            )}
+              <DropdownMenuItem><FileText/> New document</DropdownMenuItem>
+              <DropdownMenuItem><Folder/> Open</DropdownMenuItem>
+              <Separator/>
+              <DropdownMenuItem onClick={onAccessDialogOpen}><UserRoundPlus/> Edit access</DropdownMenuItem>
+              <DropdownMenuItem onClick={printDocument}><Printer/> Print</DropdownMenuItem>
+              {canWrite && (
+                  <>
+                      <Separator/>
+                      <DropdownMenuItem><Trash2/> Delete</DropdownMenuItem>
+                  </>
+              )}
           </DropdownMenuContent>
         </DropdownMenu>
         {canWrite && (
@@ -110,6 +112,7 @@ export const StickiesToolbar = ({ canWrite, undoManager }: StickiesToolbarProps)
           <TooltipButton
             icon={UserPlus}
             tooltipText="Share"
+            onClick={onAccessDialogOpen}
           />
         ) : (
           <DocumentModeButton canWrite={canWrite} />

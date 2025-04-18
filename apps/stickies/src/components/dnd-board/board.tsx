@@ -13,12 +13,13 @@ import {useYjsDragAndDrop} from './hooks/useYjsDragAndDrop';
 import { StickiesToolbar } from './stickies-toolbar';
 
 interface StickiesBoardProps {
-  ownerId: string;
-  pathId: string;
-  canWrite: boolean;
+    ownerId: string;
+    pathId: string;
+    canWrite: boolean;
+    onAccessDialogOpen: () => void;
 }
 
-const StickiesBoard = ({ownerId, pathId, canWrite}: StickiesBoardProps) => {
+const StickiesBoard = ({ownerId, pathId, canWrite, onAccessDialogOpen}: StickiesBoardProps) => {
     // Core board state and operations with Yjs integration
     const {
         board,
@@ -101,7 +102,7 @@ const StickiesBoard = ({ownerId, pathId, canWrite}: StickiesBoardProps) => {
 
     return (
 <>
-        <StickiesToolbar canWrite={canWrite} undoManager={undoManager} />
+        <StickiesToolbar canWrite={canWrite} undoManager={undoManager} onAccessDialogOpen={onAccessDialogOpen} />
         <div className="h-full w-full flex bg-gray-200 overflow-hidden">
         <div
             className="overflow-x-auto overflow-y-hidden flex-1"
