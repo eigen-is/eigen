@@ -4,7 +4,6 @@ import {HistoryEditor} from "slate-history";
 import {
     Bold,
     CheckSquare,
-    Files,
     FileText,
     Folder,
     Heading1,
@@ -49,6 +48,9 @@ import {DocumentModeButton} from "@workspace/ui/components/layout/toolbar/Docume
 import {DriveCreateDoc} from "@workspace/ui/components/layout/drive/drive-create-doc";
 import {useRootFolder} from "@workspace/lib/drive";
 import { useAuth } from "@workspace/lib/auth/auth-context.js";
+import {DriveDeleteItem} from "@workspace/ui/components/layout/drive/drive-delete-item";
+import { DrivePath } from "@apps/api-server/types/drive";
+import { useNavigate } from '@tanstack/react-router';
 
 // Define custom editor type
 type CustomEditor = BaseEditor & ReactEditor & HistoryEditor;
@@ -367,14 +369,17 @@ const LinkButton = () => {
 interface EditorToolbarProps {
     canWrite: boolean;
     onAccessDialogOpen: () => void;
+    path: DrivePath;
 }
 
-export const EditorToolbar = ({ canWrite, onAccessDialogOpen }: EditorToolbarProps) => {
+export const EditorToolbar = ({ canWrite, onAccessDialogOpen, path }: EditorToolbarProps) => {
     const editor = useSlate() as CustomEditor;
     const commandKey = window.navigator.platform.includes('Mac') ? '⌘' : 'Ctrl';
     const [createDocOpen, setCreateDocOpen] = useState(false);
+    const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
     const {user} = useAuth();
     const {data: rootFolder} = useRootFolder(user?.id || '');
+    const navigate = useNavigate();
 
     const ToolbarSeparator = () => (<div className="h-6 w-[1px] bg-border mx-1"></div>);
     return (
@@ -392,14 +397,18 @@ export const EditorToolbar = ({ canWrite, onAccessDialogOpen }: EditorToolbarPro
                         }}>
                             <FileText/> New document
                         </DropdownMenuItem>
-                        <DropdownMenuItem><Folder/> Open</DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => navigate({to: `/`})}>
+                            <Folder/> Open
+                        </DropdownMenuItem>
                         <Separator/>
                         <DropdownMenuItem onClick={onAccessDialogOpen}><UserRoundPlus/> Edit access</DropdownMenuItem>
                         <DropdownMenuItem onClick={printDocument}><Printer/> Print</DropdownMenuItem>
                         {canWrite && (
                             <>
                                 <Separator/>
-                                <DropdownMenuItem><Trash2/> Delete</DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => path && setDeleteDialogOpen(true)}>
+                                    <Trash2/> Delete
+                                </DropdownMenuItem>
                             </>
                         )}
                     </DropdownMenuContent>
@@ -516,6 +525,19 @@ export const EditorToolbar = ({ canWrite, onAccessDialogOpen }: EditorToolbarPro
                     path={rootFolder}
                     open={createDocOpen}
                     onOpenChange={setCreateDocOpen}
+                />
+            )}
+            {/* Document Delete Dialog */}
+            {path && (
+                <DriveDeleteItem
+                    path={path}
+                    open={deleteDialogOpen}
+                    onOpenChange={setDeleteDialogOpen}
+                    onAfterAction={(actionType) => {
+                        if (actionType === 'delete') {
+                            navigate({to: `/`});
+                        }
+                    }}
                 />
             )}
         </div>
