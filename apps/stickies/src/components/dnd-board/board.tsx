@@ -11,15 +11,16 @@ import {useIsMobile} from "@workspace/lib/media";
 import {useYjsKanbanBoard} from './hooks/useYjsKanbanBoard';
 import {useYjsDragAndDrop} from './hooks/useYjsDragAndDrop';
 import { StickiesToolbar } from './stickies-toolbar';
+import { DrivePath } from '@apps/api-server/types/drive';
 
 interface StickiesBoardProps {
     ownerId: string;
-    pathId: string;
+    path: DrivePath;
     canWrite: boolean;
     onAccessDialogOpen: () => void;
 }
 
-const StickiesBoard = ({ownerId, pathId, canWrite, onAccessDialogOpen}: StickiesBoardProps) => {
+const StickiesBoard = ({ownerId, path, canWrite, onAccessDialogOpen}: StickiesBoardProps) => {
     // Core board state and operations with Yjs integration
     const {
         board,
@@ -33,7 +34,7 @@ const StickiesBoard = ({ownerId, pathId, canWrite, onAccessDialogOpen}: Stickies
         handleAddColumn,
         yjsDoc,
         undoManager
-    } = useYjsKanbanBoard(ownerId, pathId);
+    } = useYjsKanbanBoard(ownerId, path.id);
 
     // Drag and drop functionality with Yjs awareness
     const {
@@ -102,7 +103,7 @@ const StickiesBoard = ({ownerId, pathId, canWrite, onAccessDialogOpen}: Stickies
 
     return (
 <>
-        <StickiesToolbar canWrite={canWrite} undoManager={undoManager} onAccessDialogOpen={onAccessDialogOpen} />
+        <StickiesToolbar path={path} canWrite={canWrite} undoManager={undoManager} onAccessDialogOpen={onAccessDialogOpen} />
         <div className="h-full w-full flex bg-gray-200 overflow-hidden">
         <div
             className="overflow-x-auto overflow-y-hidden flex-1"
