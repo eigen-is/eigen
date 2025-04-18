@@ -1,7 +1,9 @@
 import {UserRoundPlus} from "lucide-react";
+import {Unlock} from "lucide-react";
 import {cn} from "@workspace/ui/lib/utils";
 import {UserPublicAvatar} from "../user-public-avatar";
 import {type DrivePath} from "@apps/api-server/types/drive";
+import {Tooltip, TooltipContent, TooltipTrigger} from "@workspace/ui/components/tooltip";
 
 export interface DriveShareSummaryProps {
     path: DrivePath;
@@ -31,13 +33,29 @@ export function DriveShareSummary({
                     <UserPublicAvatar
                         email={path.ownerId}
                         size="sm"
+                        className="position-relative"
                     />
                     {path.acl?.slice(0, 3).map((access) => (
-                        <UserPublicAvatar
-                            email={access.email}
-                            size="sm"
-                            className="-ml-4"
-                        />
+                        access.public ? (
+                            <Tooltip delayDuration={300}>
+                                <TooltipTrigger asChild>
+                                    <span 
+                                        key={`public-${access.email}`}
+                                        className="-ml-4 h-6 w-6 rounded-full flex items-center justify-center bg-gray-100 position-relative"
+                                    >
+                                        <Unlock className="h-3 w-3 text-primary" />
+                                    </span>
+                                </TooltipTrigger>
+                                <TooltipContent>Any logged-in eigen user with the link can access</TooltipContent>
+                            </Tooltip>
+                        ) : (
+                            <UserPublicAvatar
+                                key={access.email}
+                                email={access.email}
+                                size="sm"
+                                className="-ml-4 position-relative"
+                            />
+                        )
                     ))}
                     {path.acl && path.acl.length > 3 && (
                         <span className="text-xs text-muted-foreground ml-1">
