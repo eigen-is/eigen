@@ -102,7 +102,7 @@ export function DriveAccessList({
                         ><Unlock/></AvatarIcon>
                         <div>
                             <p className="text-sm font-medium">Unrestricted</p>
-                            <p className="text-xs text-gray-500">Anyone with the link can view and edit</p>
+                            <p className="text-xs text-gray-500">Any logged-in eigen user with the link can access</p>
                         </div>
                     </div>
                 )}
