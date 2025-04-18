@@ -301,6 +301,7 @@ export default class Drive {
         const content = await this.getFolderContents(pathId);
         // first try to delete all files in folder
         try {
+            // TODO: dit moet niet recursive en zal geoptimaliseerd moeten worden
             await Promise.all(
                 content.filter(f => f.type === 'file').map(f => 
                     this.deleteFile(f.id)
@@ -368,7 +369,7 @@ export default class Drive {
             throw new Error("Failed to delete file");
         }
     }
-    
+
     public async getRootFolder(): Promise<DrivePath | null> {
         return await this.db.select().from(drivePaths)
             .where(and(
