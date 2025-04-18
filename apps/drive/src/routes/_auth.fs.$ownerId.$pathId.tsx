@@ -77,11 +77,14 @@ function DriveRoute() {
                 search: {pid: undefined}
             });
         } else if (path.type === 'doc') {
-            document.location.href = `${import.meta.env.VITE_APP_DOCS_URL}/doc/${ownerId}/${path.id}`;
+            const url = `${import.meta.env.VITE_APP_DOCS_URL}/doc/${path.ownerId}/${path.id}`;
+            window.open(url, '_blank');
         } else if (path.type === 'stickies') {
-            document.location.href = `${import.meta.env.VITE_APP_STICKIES_URL}/board/${ownerId}/${path.id}`;
+            const url = `${import.meta.env.VITE_APP_STICKIES_URL}/board/${path.ownerId}/${path.id}`;
+            window.open(url, '_blank');
         } else {
-            // todo: for some types we could show a fullscreen preview
+            const url = `${import.meta.env.VITE_API_HOST}/drive/download/${path.ownerId}/${path.id}`
+            window.open(url, '_blank');
         }
     };
 

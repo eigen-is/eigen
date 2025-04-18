@@ -175,7 +175,7 @@ export function DriveLayout({
             parentId: pathId,
             fileName: fileName
         }, {
-            onSuccess: () => {
+            onSuccess: (newPathId) => {
                 toast.success(`Doc "${fileName}" created successfully`);
                 setCreateDocOpen(false);
                 invalidateFolder(pathId);
@@ -183,6 +183,8 @@ export function DriveLayout({
                 if (onAfterAction) {
                     onAfterAction('create', {name: fileName});
                 }
+                const url =  `${import.meta.env.VITE_APP_DOCS_URL}/doc/${ownerId}/${newPathId}`;
+                window.open(url, '_blank');
             },
             onError: () => {
                 toast.error("Failed to create doc");
@@ -205,7 +207,7 @@ export function DriveLayout({
             parentId: pathId,
             fileName: fileName
         }, {
-            onSuccess: () => {
+            onSuccess: (newPathId) => {
                 toast.success(`Stickies "${fileName}" created successfully`);
                 setCreateStickiesOpen(false);
                 invalidateFolder(pathId);
@@ -213,6 +215,8 @@ export function DriveLayout({
                 if (onAfterAction) {
                     onAfterAction('create', {name: fileName});
                 }
+                const url = `${import.meta.env.VITE_APP_STICKIES_URL}/board/${ownerId}/${newPathId}`;
+                window.open(url, '_blank');
             },
             onError: () => {
                 toast.error("Failed to create stickies");
