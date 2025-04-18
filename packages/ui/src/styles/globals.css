@@ -208,6 +208,7 @@
     .eigen-list-item-unread {
         @apply border-l-red-600 border-l-2 bg-red-600/5 text-primary;
     }
+
 }
 
 @media print {
@@ -217,6 +218,10 @@
     body *:not(.printable, .printable *) {
         /* hide everything but printable elements and their children */
         display: none;
+    }
+    .print-exact {
+        print-color-adjust: exact; 
+        -webkit-print-color-adjust: exact;
     }
 }
 
