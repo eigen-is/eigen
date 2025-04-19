@@ -5,6 +5,8 @@ import {DrivePath} from "@apps/api-server/types/drive";
 import {useAuth} from '@workspace/lib/auth/auth-context.js';
 import {useIsMobile} from "@workspace/lib/media";
 import {EigenLoader} from '@workspace/ui';
+import {useContext} from 'react';
+import {DriveContext} from './_auth._sidebar';
 
 export interface DriveSearchParams {
     pid?: string;
@@ -27,6 +29,7 @@ function DriveRoute() {
     const ownerId = auth?.user?.id;
     const {data: selectedPath = null} = usePathInfo(uid || '', pid || '');
     const isMobile = useIsMobile();
+    const {rootPath} = useContext(DriveContext);
 
     // Fetch folder content and path information
     const {
@@ -51,18 +54,11 @@ function DriveRoute() {
     };
 
     const onRowActivate = (path: DrivePath) => {
-        if (path.type === 'folder') {
-            navigate({
-                to: '/fs/$ownerId/$pathId',
-                params: {ownerId: path.ownerId, pathId: path.id}
-            });
-        } else if (path.type === 'stickies') {
+       if (path.type === 'stickies') {
             navigate({
                 to: '/board/$ownerId/$pathId',
                 params: {ownerId: path.ownerId, pathId: path.id}
             });
-        } else {
-            // todo: for some types we could show a fullscreen preview
         }
     };
 
@@ -98,15 +94,20 @@ function DriveRoute() {
             onRowActivate={onRowActivate}
             onBackToList={handleBackToList}
             onAfterAction={() => {
+                navigate({
+                    to: '/mime/$mimeType',
+                    params: {mimeType: 'application-eigenstickies'}
+                });
             }}
             allowDelete={to === 'by-me'}
             allowShare={true}
             allowCreateFolder={false}
             allowUpload={false}
             allowCreateDoc={false}
-            allowCreateStickies={false}
+            allowCreateStickies={true}
             isMobile={isMobile}
             showBreadcrumb={false}
+            currentPath={rootPath}
         />
     );
 }
