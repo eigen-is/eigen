@@ -173,7 +173,7 @@ export function DriveList({
                 {onCreateDoc && (
                     <DropdownMenuItem onClick={onCreateDoc}>
                         <FileText className="h-4 w-4 mr-2"/>
-                        Create doc
+                        Create document
                     </DropdownMenuItem>
                 )}
                 {onCreateStickies && (
