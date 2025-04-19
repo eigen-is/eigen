@@ -209,7 +209,7 @@ export function DriveList({
 
             {/* Actions toolbar */}
             <div className="h-12 flex items-center justify-between border-b px-2">
-                <Breadcrumb className="overflow-hidden">
+                {showBreadcrumb && <Breadcrumb className="overflow-hidden">
                     <BreadcrumbList>
                         {breadcrumbPaths.map((path, index) => (
                             <Fragment key={path.id}>
@@ -231,7 +231,7 @@ export function DriveList({
                             </Fragment>
                         ))}
                     </BreadcrumbList>
-                </Breadcrumb>
+                </Breadcrumb>}
                 <div className="flex gap-1">
                     {items.length > 0 && newItemButton}
                 </div>

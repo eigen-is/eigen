@@ -3,6 +3,8 @@ import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,} from "@
 import {Input} from "@workspace/ui/components/input";
 import {Label} from "@workspace/ui/components/label";
 import {Button} from "@workspace/ui/components/button";
+import { useBreadcrumb } from "@workspace/lib/drive";
+import { DrivePath } from "@apps/api-server/types/drive";
 
 interface DriveCreateItemDialogProps {
     open: boolean;
@@ -10,6 +12,7 @@ interface DriveCreateItemDialogProps {
     onCreateItem: (itemName: string) => void;
     isPending?: boolean;
     type: string;
+    path: DrivePath;
 }
 
 export function DriveCreateItemDialog({
@@ -17,9 +20,11 @@ export function DriveCreateItemDialog({
                                           onOpenChange,
                                           onCreateItem,
                                           isPending = false,
-                                          type
+                                          type,
+                                         path
                                       }: DriveCreateItemDialogProps) {
     const [itemName, setItemName] = useState("");
+    const {data: breadcrumbPaths = []} = useBreadcrumb(path.ownerId, path.id);
 
     const handleCreateItem = () => {
         if (itemName.trim() && !isPending) {
@@ -40,7 +45,7 @@ export function DriveCreateItemDialog({
                     <DialogTitle>New {type.toLowerCase()}</DialogTitle>
                 </DialogHeader>
                 <div className="py-4">
-                    <Label htmlFor="itemName">{type} name</Label>
+                    <Label htmlFor="itemName" className="mb-3">{type} name</Label>
                     <Input
                         id="itemName"
                         value={itemName}
@@ -55,6 +60,14 @@ export function DriveCreateItemDialog({
                             }
                         }}
                     />
+                    <div className="mt-4 mb-4">
+                        <Label className="mb-1">Location</Label>
+                        <span className="text-sm text-muted-foreground truncate block">
+                           {breadcrumbPaths.map((path) =>
+                            path.name || "Drive"
+                          ).join(' > ')}
+                        </span>
+                    </div>
                 </div>
                 <DialogFooter>
                     <Button variant="outline" onClick={handleCancel}>

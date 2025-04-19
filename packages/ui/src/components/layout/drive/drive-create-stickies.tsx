@@ -64,6 +64,7 @@ export function DriveCreateStickies({
             onCreateItem={handleCreateStickies}
             isPending={createStickiesMutation.isPending}
             type="Stickies"
+            path={path}
         />
     );
 }
