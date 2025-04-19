@@ -159,6 +159,14 @@ export function DriveTable({
                 });
                 break;
 
+            case ' ':
+                e.preventDefault();
+                if (selectedIndex >= 0 && selectedIndex < allItems.length) {
+                    // Bij Enter altijd onItemClick uitvoeren, ook voor folders
+                    onItemClick?.(allItems[selectedIndex]);
+                }
+                break;
+
             case 'Enter':
                 e.preventDefault();
                 if (selectedIndex >= 0 && selectedIndex < allItems.length) {
