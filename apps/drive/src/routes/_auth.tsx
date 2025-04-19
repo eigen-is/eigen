@@ -6,14 +6,15 @@ import {EigenLoader} from '@workspace/ui';
 import {useAuth} from '@workspace/lib/auth/auth-context.js';
 import {DriveSidebar} from '@/components/drive/drive-sidebar';
 import {useIsMobile, useIsTablet} from "@workspace/lib/media";
+import { DrivePath } from '@apps/api-server/types/drive';
 
 // Create a drive context to share data with child routes
 export interface DriveContextType {
-    rootPathId: string | undefined;
+    rootPath: DrivePath | null;
 }
 
 export const DriveContext = createContext<DriveContextType>({
-    rootPathId: undefined
+    rootPath: null
 });
 
 export const Route = createFileRoute('/_auth')({
@@ -37,9 +38,9 @@ function AuthLayout() {
     const {user} = useAuth();
 
     // Get root folder information
-    const {data: rootFolder, isLoading: isRootLoading, error: rootError} = useRootFolder(user.id);
-    const rootPathId = rootFolder?.id;
-
+    const {data: root, isLoading: isRootLoading, error: rootError} = useRootFolder(user.id);
+    const rootPath = root || null;
+    
     // Loading state
     const isLoading = isRootLoading;
     const error = rootError;
@@ -63,7 +64,7 @@ function AuthLayout() {
 
     // Create context value to pass to child routes
     const driveContextValue: DriveContextType = {
-        rootPathId
+        rootPath
     };
 
     return (
@@ -80,8 +81,7 @@ function AuthLayout() {
                     condensed={isTablet}
                     isMobile={isMobile}
                     onClose={() => setSidebarOpen(false)}
-                    rootPath={`/fs/${rootFolder?.ownerId}/${rootFolder?.id}`}
-                    error={error}
+                    rootPath={rootPath}
                 />
             </div>
 
