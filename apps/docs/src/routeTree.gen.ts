@@ -18,7 +18,6 @@ import { Route as AuthSidebarImport } from './routes/_auth._sidebar'
 import { Route as AuthDocOwnerIdPathIdImport } from './routes/_auth.doc.$ownerId.$pathId'
 import { Route as AuthSidebarSharedToImport } from './routes/_auth._sidebar.shared.$to'
 import { Route as AuthSidebarMimeMimeTypeImport } from './routes/_auth._sidebar.mime.$mimeType'
-import { Route as AuthSidebarFsOwnerIdPathIdImport } from './routes/_auth._sidebar.fs.$ownerId.$pathId'
 
 // Create/Update Routes
 
@@ -61,14 +60,6 @@ const AuthSidebarMimeMimeTypeRoute = AuthSidebarMimeMimeTypeImport.update({
   path: '/mime/$mimeType',
   getParentRoute: () => AuthSidebarRoute,
 } as any)
-
-const AuthSidebarFsOwnerIdPathIdRoute = AuthSidebarFsOwnerIdPathIdImport.update(
-  {
-    id: '/fs/$ownerId/$pathId',
-    path: '/fs/$ownerId/$pathId',
-    getParentRoute: () => AuthSidebarRoute,
-  } as any,
-)
 
 // Populate the FileRoutesByPath interface
 
@@ -123,13 +114,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthDocOwnerIdPathIdImport
       parentRoute: typeof AuthImport
     }
-    '/_auth/_sidebar/fs/$ownerId/$pathId': {
-      id: '/_auth/_sidebar/fs/$ownerId/$pathId'
-      path: '/fs/$ownerId/$pathId'
-      fullPath: '/fs/$ownerId/$pathId'
-      preLoaderRoute: typeof AuthSidebarFsOwnerIdPathIdImport
-      parentRoute: typeof AuthSidebarImport
-    }
   }
 }
 
@@ -138,13 +122,11 @@ declare module '@tanstack/react-router' {
 interface AuthSidebarRouteChildren {
   AuthSidebarMimeMimeTypeRoute: typeof AuthSidebarMimeMimeTypeRoute
   AuthSidebarSharedToRoute: typeof AuthSidebarSharedToRoute
-  AuthSidebarFsOwnerIdPathIdRoute: typeof AuthSidebarFsOwnerIdPathIdRoute
 }
 
 const AuthSidebarRouteChildren: AuthSidebarRouteChildren = {
   AuthSidebarMimeMimeTypeRoute: AuthSidebarMimeMimeTypeRoute,
   AuthSidebarSharedToRoute: AuthSidebarSharedToRoute,
-  AuthSidebarFsOwnerIdPathIdRoute: AuthSidebarFsOwnerIdPathIdRoute,
 }
 
 const AuthSidebarRouteWithChildren = AuthSidebarRoute._addFileChildren(
@@ -170,7 +152,6 @@ export interface FileRoutesByFullPath {
   '/mime/$mimeType': typeof AuthSidebarMimeMimeTypeRoute
   '/shared/$to': typeof AuthSidebarSharedToRoute
   '/doc/$ownerId/$pathId': typeof AuthDocOwnerIdPathIdRoute
-  '/fs/$ownerId/$pathId': typeof AuthSidebarFsOwnerIdPathIdRoute
 }
 
 export interface FileRoutesByTo {
@@ -180,7 +161,6 @@ export interface FileRoutesByTo {
   '/mime/$mimeType': typeof AuthSidebarMimeMimeTypeRoute
   '/shared/$to': typeof AuthSidebarSharedToRoute
   '/doc/$ownerId/$pathId': typeof AuthDocOwnerIdPathIdRoute
-  '/fs/$ownerId/$pathId': typeof AuthSidebarFsOwnerIdPathIdRoute
 }
 
 export interface FileRoutesById {
@@ -192,7 +172,6 @@ export interface FileRoutesById {
   '/_auth/_sidebar/mime/$mimeType': typeof AuthSidebarMimeMimeTypeRoute
   '/_auth/_sidebar/shared/$to': typeof AuthSidebarSharedToRoute
   '/_auth/doc/$ownerId/$pathId': typeof AuthDocOwnerIdPathIdRoute
-  '/_auth/_sidebar/fs/$ownerId/$pathId': typeof AuthSidebarFsOwnerIdPathIdRoute
 }
 
 export interface FileRouteTypes {
@@ -204,7 +183,6 @@ export interface FileRouteTypes {
     | '/mime/$mimeType'
     | '/shared/$to'
     | '/doc/$ownerId/$pathId'
-    | '/fs/$ownerId/$pathId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -213,7 +191,6 @@ export interface FileRouteTypes {
     | '/mime/$mimeType'
     | '/shared/$to'
     | '/doc/$ownerId/$pathId'
-    | '/fs/$ownerId/$pathId'
   id:
     | '__root__'
     | '/'
@@ -223,7 +200,6 @@ export interface FileRouteTypes {
     | '/_auth/_sidebar/mime/$mimeType'
     | '/_auth/_sidebar/shared/$to'
     | '/_auth/doc/$ownerId/$pathId'
-    | '/_auth/_sidebar/fs/$ownerId/$pathId'
   fileRoutesById: FileRoutesById
 }
 
@@ -272,8 +248,7 @@ export const routeTree = rootRoute
       "parent": "/_auth",
       "children": [
         "/_auth/_sidebar/mime/$mimeType",
-        "/_auth/_sidebar/shared/$to",
-        "/_auth/_sidebar/fs/$ownerId/$pathId"
+        "/_auth/_sidebar/shared/$to"
       ]
     },
     "/_auth/_sidebar/mime/$mimeType": {
@@ -287,10 +262,6 @@ export const routeTree = rootRoute
     "/_auth/doc/$ownerId/$pathId": {
       "filePath": "_auth.doc.$ownerId.$pathId.tsx",
       "parent": "/_auth"
-    },
-    "/_auth/_sidebar/fs/$ownerId/$pathId": {
-      "filePath": "_auth._sidebar.fs.$ownerId.$pathId.tsx",
-      "parent": "/_auth/_sidebar"
     }
   }
 }
