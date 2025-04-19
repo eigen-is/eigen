@@ -1,29 +1,88 @@
-import {Download, FileText, Home, Image, UsersRound, StickyNote, X} from 'lucide-react';
+import {Download, FileText, Home, Image, UsersRound, StickyNote, X, Plus, FolderPlus, Upload as UploadIcon} from 'lucide-react';
 import {Button} from "@workspace/ui/components/button";
 import {SidebarSection} from '@workspace/ui/components/layout/sidebar/sidebar-section';
 import {AppLogo} from '@workspace/ui/components/layout/app-logo';
 import {SidebarItem, StorageUsage} from "@workspace/ui";
 import {Separator} from '@workspace/ui/components/separator';
+import { DrivePath } from '@apps/api-server/types/drive';
+import { useState } from 'react';
+import { useMatch, useNavigate } from '@tanstack/react-router';
+import { usePathInfo } from '@workspace/lib/drive';
+import { 
+    DropdownMenu,
+    DropdownMenuTrigger,
+    DropdownMenuContent,
+    DropdownMenuItem
+} from '@workspace/ui/components/dropdown-menu';
+
+// Import these directly from their files instead of from the index
+import { DriveCreateFolder } from '@workspace/ui/components/layout/drive/drive-create-folder';
+import { DriveCreateDoc } from '@workspace/ui/components/layout/drive/drive-create-doc';
+import { DriveCreateStickies } from '@workspace/ui/components/layout/drive/drive-create-stickies';
+import { DriveUploadFiles } from '@workspace/ui/components/layout/drive/drive-upload-files';
 
 interface DriveSidebarProps {
     condensed?: boolean;
     onClose?: () => void;
     isMobile?: boolean;
-    error?: any;
-    onCreateFolder?: () => void;
-    rootPath?: string;
+    rootPath: DrivePath | null;
 }
 
 export function DriveSidebar({
                                  condensed = false,
                                  onClose,
                                  isMobile = false,
-                                 error = false,
-                                 onCreateFolder,
-                                 rootPath = "/",
+                                 rootPath,
                              }: DriveSidebarProps) {
+    // Dialog open states
+    const [createFolderOpen, setCreateFolderOpen] = useState(false);
+    const [createDocOpen, setCreateDocOpen] = useState(false);
+    const [createStickiesOpen, setCreateStickiesOpen] = useState(false);
+    const [uploadOpen, setUploadOpen] = useState(false);
+    const [uploadFiles, setUploadFiles] = useState<File[]>([]);
+    const navigate = useNavigate();
+
+    // Check if we're in a filesystem route and get current path from URL
+    const routeMatch = useMatch({
+        from: '/_auth/fs/$ownerId/$pathId',
+        shouldThrow: false,
+    });
+    
+    // Extract the parameters if we have a match
+    const currentPathId = routeMatch?.params?.pathId;
+    const currentOwnerId = routeMatch?.params?.ownerId;
+    
+    // Get path info for the current path
+    const { data: currentPath } = usePathInfo(
+        currentOwnerId || (rootPath?.ownerId || ''), 
+        currentPathId || (rootPath?.id || '')
+    );
+    
+    // Determine which path to use for operations (current or root)
+    const targetPath = currentPath || rootPath;
+
+    // Handle file input change
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files.length > 0) {
+            setUploadFiles(Array.from(e.target.files));
+            setUploadOpen(true);
+        }
+    };
+
+    // Define afterAction callback to refresh the content
+    const handleAfterAction = () => {
+        navigate({
+            to: '/fs/$ownerId/$pathId',
+            params: {
+                ownerId: targetPath?.ownerId || '',
+                pathId: targetPath?.id  || '',
+            }
+        });
+    };
+
     return (
         <div className="flex h-full min-h-[calc(100vh-3.5rem)] flex-col">
+            {/* Mobile header with close button */}
             {isMobile && (
                 <div className="flex items-center h-12 bg-app px-4">
                     <Button variant="ghost" size="icon" onClick={onClose}
@@ -35,15 +94,51 @@ export function DriveSidebar({
                 </div>
             )}
 
+            {/* New button dropdown */}
+            <div className="px-3 py-2">
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button
+                            variant="default"
+                            size={condensed ? "icon" : "default"}
+                            className={`${condensed ? 'w-10 p-0' : 'w-full justify-start gap-3'}`}
+                        >
+                            <Plus className="h-4 w-4"/>
+                            {!condensed && <span>New</span>}
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align={condensed ? "center" : "start"}>
+                        <DropdownMenuItem onClick={() => setCreateFolderOpen(true)}>
+                            <FolderPlus className="h-4 w-4 mr-2"/>
+                            Create folder
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setCreateDocOpen(true)}>
+                            <FileText className="h-4 w-4 mr-2"/>
+                            Create doc
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setCreateStickiesOpen(true)}>
+                            <StickyNote className="h-4 w-4 mr-2"/>
+                            Create stickies
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setUploadOpen(true)}>
+                            <UploadIcon className="h-4 w-4 mr-2"/>
+                            Upload file
+                            <input 
+                                type="file" 
+                                className="hidden" 
+                                onChange={handleFileChange}
+                            />
+                        </DropdownMenuItem>
+                    </DropdownMenuContent>
+                </DropdownMenu>
+            </div>
+
             <SidebarSection
                 condensed={condensed}
             >
-                {/* New button */}
-
-
                 <SidebarItem
                     icon={<Home className="h-4 w-4"/>}
-                    to={rootPath}
+                    to={rootPath ? `/fs/${rootPath.ownerId}/${rootPath.id}` : '/'}
                     label="Drive"
                     condensed={condensed}
                 />
@@ -91,6 +186,54 @@ export function DriveSidebar({
                 className="mt-auto"
                 condensed={condensed}
             />
+
+            {/* Create Folder Dialog */}
+            {targetPath && (
+                <DriveCreateFolder
+                    path={targetPath}
+                    open={createFolderOpen}
+                    onOpenChange={setCreateFolderOpen}
+                    onSave={() => {}}
+                    onCancel={() => setCreateFolderOpen(false)}
+                    onAfterAction={handleAfterAction}
+                />
+            )}
+
+            {/* Create Doc Dialog */}
+            {targetPath && (
+                <DriveCreateDoc
+                    path={targetPath}
+                    open={createDocOpen}
+                    onOpenChange={setCreateDocOpen}
+                    onSave={() => {}}
+                    onCancel={() => setCreateDocOpen(false)}
+                    onAfterAction={handleAfterAction}
+                />
+            )}
+
+            {/* Create Stickies Dialog */}
+            {targetPath && (
+                <DriveCreateStickies
+                    path={targetPath}
+                    open={createStickiesOpen}
+                    onOpenChange={setCreateStickiesOpen}
+                    onSave={() => {}}
+                    onCancel={() => setCreateStickiesOpen(false)}
+                    onAfterAction={handleAfterAction}
+                />
+            )}
+
+            {/* File Upload Dialog */}
+            {targetPath && (
+                <DriveUploadFiles
+                    path={targetPath}
+                    open={uploadOpen}
+                    onOpenChange={setUploadOpen}
+                    initialFiles={uploadFiles}
+                    onAfterUpload={() => setUploadFiles([])}
+                    onAfterAction={handleAfterAction}
+                />
+            )}
         </div>
     );
 }
