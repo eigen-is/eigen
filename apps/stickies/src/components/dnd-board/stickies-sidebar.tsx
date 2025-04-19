@@ -69,12 +69,6 @@ export function StickiesSidebar({
             <SidebarSection
                 condensed={condensed}
             >
-                <SidebarItem
-                    icon={<Home className="h-4 w-4"/>}
-                    to={rootPath ? `/fs/${rootPath.ownerId}/${rootPath.id}` : '/'}
-                    label="Drive"
-                    condensed={condensed}
-                />
 
                 <SidebarItem
                     icon={<FileText className="h-4 w-4"/>}
