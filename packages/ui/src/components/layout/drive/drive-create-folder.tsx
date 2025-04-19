@@ -58,6 +58,7 @@ export function DriveCreateFolder({
       onCreateItem={handleCreateFolder}
       isPending={createFolderMutation.isPending}
       type="Folder"
+      path={path}
     />
   );
 }
