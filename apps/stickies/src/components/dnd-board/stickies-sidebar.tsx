@@ -1,24 +1,45 @@
-import {Download, FileText, Home, UsersRound, X} from 'lucide-react';
+import {Download, FileText, Home, UsersRound, X, Plus} from 'lucide-react';
 import {Button} from "@workspace/ui/components/button";
 import {SidebarSection} from '@workspace/ui/components/layout/sidebar/sidebar-section';
 import {AppLogo} from '@workspace/ui/components/layout/app-logo';
 import {SidebarItem, StorageUsage} from "@workspace/ui";
+import { DrivePath } from '@apps/api-server/types/drive';
+import { useState } from 'react';
+import { useNavigate } from '@tanstack/react-router';
+
+// Import the create stickies component
+import { DriveCreateStickies } from '@workspace/ui/components/layout/drive/drive-create-stickies';
 
 interface StickiesSidebarProps {
     condensed?: boolean;
     onClose?: () => void;
     isMobile?: boolean;
-    error?: any;
-    onCreateFolder?: () => void;
-    rootPath?: string;
+    rootPath?: DrivePath | null;
 }
 
 export function StickiesSidebar({
                                     condensed = false,
                                     onClose,
                                     isMobile = false,
-                                    rootPath = "/",
+                                    rootPath = null,
                                 }: StickiesSidebarProps) {
+    const navigate = useNavigate();
+    // Add state for tracking dialog open state
+    const [createStickiesOpen, setCreateStickiesOpen] = useState(false);
+    
+    // Determine the target path for stickies creation
+    const targetPath = rootPath;
+
+    // Define afterAction callback to redirect to stickies mime type
+    const handleAfterAction = () => {
+        navigate({
+            to: '/mime/$mimeType',
+            params: {
+                mimeType: 'application-eigenstickies'
+            }
+        });
+    };
+
     return (
         <div className="flex h-full min-h-[calc(100vh-3.5rem)] flex-col">
             {isMobile && (
@@ -32,12 +53,25 @@ export function StickiesSidebar({
                 </div>
             )}
 
+
+            <div className="px-3 py-2">
+                <Button
+                    variant="default"
+                    size={condensed ? "icon" : "default"}
+                    className={`${condensed ? 'w-10 p-0' : 'w-full justify-start gap-3'}`}
+                    onClick={() => setCreateStickiesOpen(true)}
+                >
+                    <Plus className="h-4 w-4"/>
+                    {!condensed && <span>New stickies</span>}
+                </Button>
+            </div>
+
             <SidebarSection
                 condensed={condensed}
             >
                 <SidebarItem
                     icon={<Home className="h-4 w-4"/>}
-                    to={rootPath}
+                    to={rootPath ? `/fs/${rootPath.ownerId}/${rootPath.id}` : '/'}
                     label="Drive"
                     condensed={condensed}
                 />
@@ -67,6 +101,18 @@ export function StickiesSidebar({
                 className="mt-auto"
                 condensed={condensed}
             />
+
+            {/* Create Stickies Dialog */}
+            {targetPath && (
+                <DriveCreateStickies
+                    path={targetPath}
+                    open={createStickiesOpen}
+                    onOpenChange={setCreateStickiesOpen}
+                    onSave={() => {}}
+                    onCancel={() => setCreateStickiesOpen(false)}
+                    onAfterAction={handleAfterAction}
+                />
+            )}
         </div>
     );
 }

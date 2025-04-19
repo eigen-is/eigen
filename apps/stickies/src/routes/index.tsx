@@ -15,10 +15,9 @@ function HomeComponent() {
         });
     } else {
         navigate({
-            to: '/fs/$ownerId/$pathId',
+            to: '/mime/$mimeType',
             params: {
-                ownerId: user.id,
-                pathId: 'root'
+                mimeType: 'application-eigenstickies'
             }
         });
     }
