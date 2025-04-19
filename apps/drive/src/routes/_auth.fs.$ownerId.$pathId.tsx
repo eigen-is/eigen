@@ -27,18 +27,18 @@ function DriveRoute() {
     const navigate = useNavigate();
     const invalidateFolder = useInvalidateFolder();
     const isMobile = useIsMobile();
-    const {rootPathId} = useContext(DriveContext);
+    const {rootPath} = useContext(DriveContext);
     const [preview, setPreview] = useState<{ url: string; mimeType: string } | null>(null);
 
     // If pathId is "root", navigate to the actual root folder ID when available
     useEffect(() => {
-        if (pathId === 'root' && rootPathId) {
+        if (pathId === 'root' && rootPath) {
             navigate({
                 to: Route.fullPath,
-                params: {ownerId, pathId: rootPathId}
+                params: {ownerId: rootPath.ownerId, pathId: rootPath.id}
             });
         }
-    }, [pathId, rootPathId, navigate, ownerId]);
+    }, [pathId, rootPath, navigate, ownerId]);
 
     // Don't fetch data until we have the actual root folder ID (not "root")
     const skipDataFetch = pathId === 'root';
@@ -134,7 +134,7 @@ function DriveRoute() {
     };
 
     // Show loading state while resolving root folder ID
-    if (pathId === 'root' && !rootPathId) {
+    if (pathId === 'root' && !rootPath) {
         return (
             <div className="flex items-center justify-center h-full w-full">
                 <EigenLoader/>
