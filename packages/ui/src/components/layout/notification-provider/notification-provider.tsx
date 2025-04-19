@@ -12,13 +12,14 @@ interface NotificationProviderProps {
     children: React.ReactNode;
 }
 
-function notify(title: string, body: string, tag: string, action?: { label: string, onClick: () => void }) {
-    toast(title, {
-        description: body,
-        action: action ? {
-            label: action.label,
-            onClick: () => {
-                action.onClick?.();
+function notify(notification: EigenNotification) {
+    toast(notification.title, {
+        description: notification.body,
+        action: notification.link ? {
+            label: 'Open',
+            onClick: (event) => {
+                event.preventDefault(); // prevent the browser from focusing the Notification's tab
+                window.open(notification.link, "_blank");
             }
         } : undefined
     });
@@ -26,12 +27,13 @@ function notify(title: string, body: string, tag: string, action?: { label: stri
     if (!("Notification" in window)) {
         return;
     } else if (Notification.permission === 'granted') {
-        const n = new Notification(title, {
-            body: body,
-            tag: tag,
+        const n = new Notification(notification.title, {
+            body: notification.body,
+            tag: notification.tag,
         });
-        action && n.addEventListener('click', () => {
-            action.onClick?.();
+        notification.link && n.addEventListener('click', (event) => {
+            event.preventDefault(); // prevent the browser from focusing the Notification's tab
+            window.open(notification.link, "_blank");
         });
     } else {
         askNotificationPermission();
@@ -87,14 +89,10 @@ export function NotificationProvider({children}: NotificationProviderProps) {
 
                 // Process notification
                 const body = event.data as unknown as EigenNotification;
+                // Handle notifications here
+                notify(body);
+                
                 if (body?.type === 'mail') {
-                    // Handle notifications here
-                    notify(body?.title, body?.body, body?.tag, {
-                        label: 'Open inbox',
-                        onClick: () => {
-                            document.location.href = `${import.meta.env.VITE_APP_MAIL_URL}/box/inbox`
-                        }
-                    });
                     queryClient.invalidateQueries({queryKey: emailKeys.list('inbox')});
                     queryClient.invalidateQueries({queryKey: mailboxKeys.lists()});
                 }
