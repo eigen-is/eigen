@@ -1,5 +1,5 @@
 import {cn} from "@workspace/ui/lib/utils";
-import {ArrowLeft, MoreVertical, Trash2, X, Download, Users, UserRoundPlus, ArrowRight} from "lucide-react";
+import {ArrowLeft, MoreVertical, Trash2, X, Download, UserRoundPlus, ArrowRight} from "lucide-react";
 import {
     DropdownMenu,
     DropdownMenuContent,
