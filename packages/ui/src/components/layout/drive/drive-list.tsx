@@ -20,6 +20,7 @@ import {
     BreadcrumbSeparator
 } from "@workspace/ui/components/breadcrumb";
 import {useBreadcrumb} from "@workspace/lib/drive";
+import { useIsMobile } from '@workspace/lib/media/index.js';
 
 interface DriveListProps {
     items: DrivePath[];
@@ -71,6 +72,7 @@ export function DriveList({
     const [isDragging, setIsDragging] = useState(false);
     const dragCounter = useRef(0);
     const {data: breadcrumbPaths = []} = showBreadcrumb ? useBreadcrumb(ownerId, pathId) : {data: []};
+    const isMobile = useIsMobile();
 
     // Handle row click with two different behaviors
     const handleRowClick = (path: DrivePath) => {
@@ -233,7 +235,7 @@ export function DriveList({
                     </BreadcrumbList>
                 </Breadcrumb>}
                 <div className="flex gap-1">
-                    {items.length > 0 && newItemButton}
+                    {isMobile && newItemButton}
                 </div>
             </div>
 
