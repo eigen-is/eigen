@@ -99,7 +99,7 @@ export class Contacts {
         this.db = await getContactsDatabase(this.home);
         if (!(await this.getContacts()).length) {
             const user = this.home.user;
-            
+
             // add the user to the contacts table
             await this.addYourself();
             // add reinder, zodat het een beetje gezellig is

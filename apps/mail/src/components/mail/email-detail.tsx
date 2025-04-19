@@ -1,26 +1,22 @@
 import {
-    ArrowLeft, 
-    MoreVertical, 
-    Paperclip,
-    Archive,
     AlertTriangle,
+    Archive,
+    ArrowLeft,
+    Forward,
+    MoreVertical,
+    Paperclip,
     Reply,
     ReplyAll,
-    Forward,
     Trash2
 } from "lucide-react";
 import {cn} from "@workspace/ui/lib/utils";
 import {Button} from "@workspace/ui/components/button";
-import {
-    DropdownMenu,
-    DropdownMenuTrigger
-} from "@workspace/ui/components/dropdown-menu";
+import {DropdownMenu, DropdownMenuTrigger} from "@workspace/ui/components/dropdown-menu";
 import {format} from "date-fns";
-import {Email} from "@apps/api-server/types/mail";
+import {Email, MaildirMailbox} from "@apps/api-server/types/mail";
 import {ShadowContent} from "@workspace/ui/components/layout/shadow-content";
 import {UserItem} from "@workspace/ui/components/layout/user-item";
 import {TooltipButton} from "@workspace/ui";
-import {MaildirMailbox} from "@apps/api-server/types/mail";
 import {Separator} from "@workspace/ui/components/separator";
 import {EmailContextMenu} from "./email-context-menu";
 
@@ -151,7 +147,7 @@ export function EmailDetail({
                                 <MoreVertical className="h-4 w-4"/>
                             </Button>
                         </DropdownMenuTrigger>
-                        <EmailContextMenu 
+                        <EmailContextMenu
                             style={{}}
                             messageId={email.id}
                             mailboxes={mailboxes}
@@ -163,7 +159,8 @@ export function EmailDetail({
                             onReportSpam={onReportSpam}
                             onDelete={onDelete}
                             onMoveToFolder={onMoveToFolder}
-                            onClose={() => {}}
+                            onClose={() => {
+                            }}
                             onPrint={(emailId) => {
                                 console.log('Printing email:', emailId);
                             }}

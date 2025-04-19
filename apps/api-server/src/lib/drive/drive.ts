@@ -301,16 +301,16 @@ export default class Drive {
         try {
             // get all files from folder
             const content = await this.getFolderContents(pathId);
-            
+
             // TODO: dit moet niet recursive en zal geoptimaliseerd moeten worden
             await Promise.all(
-                content.filter(f => f.type === 'file').map(f => 
+                content.filter(f => f.type === 'file').map(f =>
                     this.deleteFile(f.id)
                 )
             );
             // and delete all subfolders
             await Promise.all(
-                content.filter(f => f.type === 'folder').map(f => 
+                content.filter(f => f.type === 'folder').map(f =>
                     this.deleteFolder(f.id)
                 )
             );

@@ -1,5 +1,5 @@
 import {cn} from "@workspace/ui/lib/utils";
-import {ArrowLeft, MoreVertical, Trash2, X, Download, UserRoundPlus, ArrowRight} from "lucide-react";
+import {ArrowLeft, ArrowRight, Download, MoreVertical, Trash2, UserRoundPlus, X} from "lucide-react";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -88,18 +88,18 @@ export function DriveDetail({
                             </DropdownMenuItem>
                             {path.type === 'file' && (
                                 <DropdownMenuItem onClick={() => onDownload?.(path)} className="flex items-center">
-                                    <Download className="h-4 w-4 mr-2" />
+                                    <Download className="h-4 w-4 mr-2"/>
                                     Download
                                 </DropdownMenuItem>
                             )}
                             <DropdownMenuItem onClick={() => onShareClick?.(path)} className="flex items-center">
-                                <UserRoundPlus className="h-4 w-4 mr-2" />
+                                <UserRoundPlus className="h-4 w-4 mr-2"/>
                                 Edit access
                             </DropdownMenuItem>
                             <DropdownMenuSeparator/>
                             {allowDelete && (
                                 <DropdownMenuItem onClick={() => onDelete?.(path)} className="flex items-center">
-                                    <Trash2 className="h-4 w-4 mr-2" />
+                                    <Trash2 className="h-4 w-4 mr-2"/>
                                     Delete
                                 </DropdownMenuItem>
                             )}

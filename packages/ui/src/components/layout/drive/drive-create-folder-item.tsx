@@ -3,8 +3,8 @@ import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,} from "@
 import {Input} from "@workspace/ui/components/input";
 import {Label} from "@workspace/ui/components/label";
 import {Button} from "@workspace/ui/components/button";
-import { useBreadcrumb } from "@workspace/lib/drive";
-import { DrivePath } from "@apps/api-server/types/drive";
+import {useBreadcrumb} from "@workspace/lib/drive";
+import {DrivePath} from "@apps/api-server/types/drive";
 
 interface DriveCreateItemDialogProps {
     open: boolean;
@@ -21,7 +21,7 @@ export function DriveCreateItemDialog({
                                           onCreateItem,
                                           isPending = false,
                                           type,
-                                         path
+                                          path
                                       }: DriveCreateItemDialogProps) {
     const [itemName, setItemName] = useState("");
     const {data: breadcrumbPaths = []} = useBreadcrumb(path.ownerId, path.id);
@@ -64,8 +64,8 @@ export function DriveCreateItemDialog({
                         <Label className="mb-1">Location</Label>
                         <span className="text-sm text-muted-foreground truncate block">
                            {breadcrumbPaths.map((path) =>
-                            path.name || "Drive"
-                          ).join(' > ')}
+                               path.name || "Drive"
+                           ).join(' > ')}
                         </span>
                     </div>
                 </div>

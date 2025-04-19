@@ -240,7 +240,7 @@ export default class FileSystem {
 
     private async createZip(): Promise<string> {
         const zipPath = `/tmp/${this.home.user.id}.tar.gz`;
-        
+
         try {
             // Check if we need to create a new zip (if it doesn't exist or is older than 1 hour)
             let needToCreate = true;
@@ -262,16 +262,16 @@ export default class FileSystem {
                 // -z compresses with gzip
                 // -f specifies the output file
                 const cmd = `tar -czf ${zipPath} -C ${path.dirname(this.homeDir)} ${path.basename(this.homeDir)}`;
-                
+
                 // Execute the command using Bun
                 const proc = Bun.spawn(["sh", "-c", cmd]);
                 const exitCode = await proc.exited;
-                
+
                 if (exitCode !== 0) {
                     throw new Error(`Failed to create zip file: exit code ${exitCode}`);
                 }
             }
-            
+
             return zipPath;
         } catch (error) {
             console.error('Error creating zip file:', error);
@@ -288,10 +288,10 @@ export default class FileSystem {
         try {
             // Create or get the cached zip file
             const zipPath = await this.createZip();
-            
+
             // Read the file contents
             const fileContents = await Bun.file(zipPath).arrayBuffer();
-            
+
             return {
                 fileName: `${this.home.user.id}-home.tar.gz`,
                 contentType: "application/gzip",

@@ -7,7 +7,7 @@ import {usePublicUser} from "@workspace/lib/public"
 import {Lock, Unlock, UserRoundPlus} from "lucide-react"
 import {AvatarIcon} from "@workspace/ui/components/avatar"
 import {Separator} from "@workspace/ui/components/separator"
-import { TooltipButton } from "../tooltip-button"
+import {TooltipButton} from "../tooltip-button"
 
 export interface DriveAccessListProps {
     path: DrivePath
@@ -16,10 +16,10 @@ export interface DriveAccessListProps {
 }
 
 export function DriveAccessList({
-    path,
-    className,
-    onShareClick
-}: DriveAccessListProps) {
+                                    path,
+                                    className,
+                                    onShareClick
+                                }: DriveAccessListProps) {
     const owner = usePublicUser(path.ownerId);
 
     // Combine owner and ACL list, ensuring owner is first and not duplicated

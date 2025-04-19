@@ -4,7 +4,7 @@ import {cn} from "@workspace/ui/lib/utils";
 import {formatDistanceToNow} from "date-fns";
 import {DrivePath} from "@apps/api-server/types/drive";
 import {DriveShareSummary} from "./drive-share-summary";
-import {ChevronLeft, Download, Trash2, UserRoundPlus, ArrowRight} from "lucide-react";
+import {ArrowRight, ChevronLeft, Download, Trash2, UserRoundPlus} from "lucide-react";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -189,7 +189,7 @@ export function DriveTable({
                     const lastIndex = allItems.length - 1;
                     setSelectedIndex(lastIndex);
 
-                    if (!hasParentItem || lastIndex > 0) {                       
+                    if (!hasParentItem || lastIndex > 0) {
                         const targetItem = allItems[lastIndex];
                         onItemClick?.(targetItem);
                     }
@@ -213,7 +213,7 @@ export function DriveTable({
     // Handle right-click on table row
     const handleContextMenu = (e: React.MouseEvent, item: DrivePath) => {
         e.preventDefault();
-        setContextMenuPosition({ x: e.clientX, y: e.clientY });
+        setContextMenuPosition({x: e.clientX, y: e.clientY});
         setContextMenuItem(item);
     };
 
@@ -299,7 +299,7 @@ export function DriveTable({
                                                     className: "h-4 w-4 mr-2 text-drive flex-shrink-0",
                                                     fill: "var(--app-drive-light-color)"
                                                 } : {}),
-                                                ...(item.type === 'doc'  ? {
+                                                ...(item.type === 'doc' ? {
                                                     className: "h-4 w-4 mr-2 text-docs flex-shrink-0",
                                                     fill: "var(--app-doc-light-color)"
                                                 } : {}),
@@ -332,14 +332,14 @@ export function DriveTable({
             </Table>
 
             {/* Context Menu using shadcn dropdown-menu */}
-            <DropdownMenu 
-                open={!!contextMenuPosition} 
+            <DropdownMenu
+                open={!!contextMenuPosition}
                 onOpenChange={(open) => !open && closeContextMenu()}
             >
                 <DropdownMenuTrigger className="hidden">
                     {/* Hidden trigger */}
                 </DropdownMenuTrigger>
-                
+
                 <DropdownMenuContent
                     style={{
                         position: 'absolute',
@@ -356,7 +356,7 @@ export function DriveTable({
                             }}
                             className="flex items-center"
                         >
-                            <ArrowRight className="h-4 w-4 mr-2" />
+                            <ArrowRight className="h-4 w-4 mr-2"/>
                             Open
                         </DropdownMenuItem>
                     )}
@@ -368,11 +368,11 @@ export function DriveTable({
                             }}
                             className="flex items-center"
                         >
-                            <Download className="h-4 w-4 mr-2" />
+                            <Download className="h-4 w-4 mr-2"/>
                             Download
                         </DropdownMenuItem>
                     )}
-                    
+
                     {onShareClick && (
                         <DropdownMenuItem
                             onClick={() => {
@@ -381,14 +381,14 @@ export function DriveTable({
                             }}
                             className="flex items-center"
                         >
-                            <UserRoundPlus className="h-4 w-4 mr-2" />
+                            <UserRoundPlus className="h-4 w-4 mr-2"/>
                             Edit access
                         </DropdownMenuItem>
                     )}
-                    
+
                     {allowDelete && (
                         <>
-                            {(onDownload || onShareClick) && <DropdownMenuSeparator />}
+                            {(onDownload || onShareClick) && <DropdownMenuSeparator/>}
                             <DropdownMenuItem
                                 onClick={() => {
                                     onDelete?.(contextMenuItem!);
@@ -396,7 +396,7 @@ export function DriveTable({
                                 }}
                                 className="flex items-center"
                             >
-                                <Trash2 className="h-4 w-4 mr-2" />
+                                <Trash2 className="h-4 w-4 mr-2"/>
                                 Delete
                             </DropdownMenuItem>
                         </>

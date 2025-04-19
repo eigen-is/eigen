@@ -1,5 +1,4 @@
-import {UserRoundPlus} from "lucide-react";
-import {Unlock} from "lucide-react";
+import {Unlock, UserRoundPlus} from "lucide-react";
 import {cn} from "@workspace/ui/lib/utils";
 import {UserPublicAvatar} from "../user-public-avatar";
 import {type DrivePath} from "@apps/api-server/types/drive";
@@ -12,10 +11,10 @@ export interface DriveShareSummaryProps {
 }
 
 export function DriveShareSummary({
-    path,
-    onClick,
-    showIconOnHover = true,
-}: DriveShareSummaryProps) {
+                                      path,
+                                      onClick,
+                                      showIconOnHover = true,
+                                  }: DriveShareSummaryProps) {
     const isShared = path.acl && path.acl.length > 0;
 
     return (
@@ -39,11 +38,11 @@ export function DriveShareSummary({
                         access.public ? (
                             <Tooltip delayDuration={300}>
                                 <TooltipTrigger asChild>
-                                    <span 
+                                    <span
                                         key={`public-${access.email}`}
-                                        className={`-ml-4 h-6 w-6 rounded-full flex items-center justify-center bg-gray-100 position-relative z-${index+1}`}
+                                        className={`-ml-4 h-6 w-6 rounded-full flex items-center justify-center bg-gray-100 position-relative z-${index + 1}`}
                                     >
-                                        <Unlock className="h-3 w-3 text-primary" />
+                                        <Unlock className="h-3 w-3 text-primary"/>
                                     </span>
                                 </TooltipTrigger>
                                 <TooltipContent>Any logged-in eigen user with the link can access</TooltipContent>
@@ -53,7 +52,7 @@ export function DriveShareSummary({
                                 key={access.email}
                                 email={access.email}
                                 size="sm"
-                                className={`-ml-4 position-relative z-${index+1}`}
+                                className={`-ml-4 position-relative z-${index + 1}`}
                             />
                         )
                     ))}

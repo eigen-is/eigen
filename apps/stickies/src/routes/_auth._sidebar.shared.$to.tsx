@@ -54,7 +54,7 @@ function DriveRoute() {
     };
 
     const onRowActivate = (path: DrivePath) => {
-       if (path.type === 'stickies') {
+        if (path.type === 'stickies') {
             navigate({
                 to: '/board/$ownerId/$pathId',
                 params: {ownerId: path.ownerId, pathId: path.id}

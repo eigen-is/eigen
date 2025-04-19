@@ -1,14 +1,14 @@
-import {FileText, X, Plus, UsersRound, Download} from 'lucide-react';
+import {Download, FileText, Plus, UsersRound, X} from 'lucide-react';
 import {Button} from "@workspace/ui/components/button";
 import {SidebarSection} from '@workspace/ui/components/layout/sidebar/sidebar-section';
 import {AppLogo} from '@workspace/ui/components/layout/app-logo';
 import {SidebarItem, StorageUsage} from "@workspace/ui";
 import {DrivePath} from "@apps/api-server/types/drive";
-import { useState } from 'react';
-import { useNavigate } from '@tanstack/react-router';
+import {useState} from 'react';
+import {useNavigate} from '@tanstack/react-router';
 
 // Import the doc creation component directly
-import { DriveCreateDoc } from '@workspace/ui/components/layout/drive/drive-create-doc';
+import {DriveCreateDoc} from '@workspace/ui/components/layout/drive/drive-create-doc';
 
 interface DocsSidebarProps {
     condensed?: boolean;
@@ -18,15 +18,15 @@ interface DocsSidebarProps {
 }
 
 export function DocsSidebar({
-                                 condensed = false,
-                                 onClose,
-                                 isMobile = false,
-                                 rootPath = null,
-                             }: DocsSidebarProps) {
+                                condensed = false,
+                                onClose,
+                                isMobile = false,
+                                rootPath = null,
+                            }: DocsSidebarProps) {
     // Dialog open state
     const [createDocOpen, setCreateDocOpen] = useState(false);
     const navigate = useNavigate();
-    
+
     // Determine the target path for document creation
     const targetPath = rootPath;
 
@@ -100,7 +100,8 @@ export function DocsSidebar({
                     path={targetPath}
                     open={createDocOpen}
                     onOpenChange={setCreateDocOpen}
-                    onSave={() => {}}
+                    onSave={() => {
+                    }}
                     onCancel={() => setCreateDocOpen(false)}
                     onAfterAction={handleAfterAction}
                 />

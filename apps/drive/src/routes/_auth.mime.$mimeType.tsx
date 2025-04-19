@@ -5,7 +5,7 @@ import {DrivePath} from "@apps/api-server/types/drive";
 import {useAuth} from '@workspace/lib/auth/auth-context.js';
 import {useIsMobile} from "@workspace/lib/media";
 import {useState} from "react";
-import { FilePreview } from '../components/drive/file-preview';
+import {FilePreview} from '../components/drive/file-preview';
 
 export interface DriveSearchParams {
     pid?: string;
@@ -45,14 +45,14 @@ function DriveRoute() {
             if (fileMimeType.startsWith("image/") || fileMimeType.startsWith("video/")) {
                 // Update the preview if new selection is also previewable
                 const url = `${import.meta.env.VITE_API_HOST}/drive/embed/${path.ownerId}/${path.id}/${path.name}`;
-                setPreview({ url, mimeType: fileMimeType });
+                setPreview({url, mimeType: fileMimeType});
             } else {
                 // Close the preview if the new selection isn't previewable
                 setPreview(null);
             }
         }
 
-        if (isMobile && (path.type === 'folder' || path.type === 'doc'  || path.type === 'stickies')) {
+        if (isMobile && (path.type === 'folder' || path.type === 'doc' || path.type === 'stickies')) {
             onRowActivate(path);
         } else {
             navigate({
@@ -65,7 +65,7 @@ function DriveRoute() {
 
     const onRowActivate = (path: DrivePath) => {
         const fileMimeType = path.mimeType || "";
-        
+
         if (path.type === 'folder') {
             navigate({
                 to: Route.fullPath,
@@ -80,7 +80,7 @@ function DriveRoute() {
             window.open(url, '_blank');
         } else if (fileMimeType.startsWith("image/") || fileMimeType.startsWith("video/")) {
             const url = `${import.meta.env.VITE_API_HOST}/drive/embed/${path.ownerId}/${path.id}/${path.name}`;
-            setPreview({url, mimeType: fileMimeType });
+            setPreview({url, mimeType: fileMimeType});
         } else {
             const url = `${import.meta.env.VITE_API_HOST}/drive/download/${path.ownerId}/${path.id}`;
             window.open(url, "_blank");
@@ -105,11 +105,11 @@ function DriveRoute() {
 
     return (
         <>
-            <FilePreview 
-                url={preview?.url || ''} 
-                mimeType={preview?.mimeType || ''} 
-                onClose={() => setPreview(null)} 
-                open={preview !== null} 
+            <FilePreview
+                url={preview?.url || ''}
+                mimeType={preview?.mimeType || ''}
+                onClose={() => setPreview(null)}
+                open={preview !== null}
             />
             <DriveLayout
                 pid={pid}

@@ -1,4 +1,4 @@
-import {AlertOctagon, Archive, AlertTriangle, File, Inbox, Send, Trash2, X} from 'lucide-react';
+import {AlertOctagon, AlertTriangle, Archive, File, Inbox, Send, Trash2, X} from 'lucide-react';
 import {Button} from "@workspace/ui/components/button";
 import {SidebarItem} from '@workspace/ui/components/layout/sidebar/sidebar-item';
 import {SidebarSection} from '@workspace/ui/components/layout/sidebar/sidebar-section';

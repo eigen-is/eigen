@@ -10,130 +10,130 @@
 
 // Import Routes
 
-import { Route as rootRoute } from './routes/__root'
-import { Route as LoginImport } from './routes/login'
-import { Route as AuthImport } from './routes/_auth'
-import { Route as IndexImport } from './routes/index'
-import { Route as AuthFilterTypeFilterIdImport } from './routes/_auth.$filterType.$filterId'
+import {Route as rootRoute} from './routes/__root'
+import {Route as LoginImport} from './routes/login'
+import {Route as AuthImport} from './routes/_auth'
+import {Route as IndexImport} from './routes/index'
+import {Route as AuthFilterTypeFilterIdImport} from './routes/_auth.$filterType.$filterId'
 
 // Create/Update Routes
 
 const LoginRoute = LoginImport.update({
-  id: '/login',
-  path: '/login',
-  getParentRoute: () => rootRoute,
+    id: '/login',
+    path: '/login',
+    getParentRoute: () => rootRoute,
 } as any)
 
 const AuthRoute = AuthImport.update({
-  id: '/_auth',
-  getParentRoute: () => rootRoute,
+    id: '/_auth',
+    getParentRoute: () => rootRoute,
 } as any)
 
 const IndexRoute = IndexImport.update({
-  id: '/',
-  path: '/',
-  getParentRoute: () => rootRoute,
+    id: '/',
+    path: '/',
+    getParentRoute: () => rootRoute,
 } as any)
 
 const AuthFilterTypeFilterIdRoute = AuthFilterTypeFilterIdImport.update({
-  id: '/$filterType/$filterId',
-  path: '/$filterType/$filterId',
-  getParentRoute: () => AuthRoute,
+    id: '/$filterType/$filterId',
+    path: '/$filterType/$filterId',
+    getParentRoute: () => AuthRoute,
 } as any)
 
 // Populate the FileRoutesByPath interface
 
 declare module '@tanstack/react-router' {
-  interface FileRoutesByPath {
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexImport
-      parentRoute: typeof rootRoute
+    interface FileRoutesByPath {
+        '/': {
+            id: '/'
+            path: '/'
+            fullPath: '/'
+            preLoaderRoute: typeof IndexImport
+            parentRoute: typeof rootRoute
+        }
+        '/_auth': {
+            id: '/_auth'
+            path: ''
+            fullPath: ''
+            preLoaderRoute: typeof AuthImport
+            parentRoute: typeof rootRoute
+        }
+        '/login': {
+            id: '/login'
+            path: '/login'
+            fullPath: '/login'
+            preLoaderRoute: typeof LoginImport
+            parentRoute: typeof rootRoute
+        }
+        '/_auth/$filterType/$filterId': {
+            id: '/_auth/$filterType/$filterId'
+            path: '/$filterType/$filterId'
+            fullPath: '/$filterType/$filterId'
+            preLoaderRoute: typeof AuthFilterTypeFilterIdImport
+            parentRoute: typeof AuthImport
+        }
     }
-    '/_auth': {
-      id: '/_auth'
-      path: ''
-      fullPath: ''
-      preLoaderRoute: typeof AuthImport
-      parentRoute: typeof rootRoute
-    }
-    '/login': {
-      id: '/login'
-      path: '/login'
-      fullPath: '/login'
-      preLoaderRoute: typeof LoginImport
-      parentRoute: typeof rootRoute
-    }
-    '/_auth/$filterType/$filterId': {
-      id: '/_auth/$filterType/$filterId'
-      path: '/$filterType/$filterId'
-      fullPath: '/$filterType/$filterId'
-      preLoaderRoute: typeof AuthFilterTypeFilterIdImport
-      parentRoute: typeof AuthImport
-    }
-  }
 }
 
 // Create and export the route tree
 
 interface AuthRouteChildren {
-  AuthFilterTypeFilterIdRoute: typeof AuthFilterTypeFilterIdRoute
+    AuthFilterTypeFilterIdRoute: typeof AuthFilterTypeFilterIdRoute
 }
 
 const AuthRouteChildren: AuthRouteChildren = {
-  AuthFilterTypeFilterIdRoute: AuthFilterTypeFilterIdRoute,
+    AuthFilterTypeFilterIdRoute: AuthFilterTypeFilterIdRoute,
 }
 
 const AuthRouteWithChildren = AuthRoute._addFileChildren(AuthRouteChildren)
 
 export interface FileRoutesByFullPath {
-  '/': typeof IndexRoute
-  '': typeof AuthRouteWithChildren
-  '/login': typeof LoginRoute
-  '/$filterType/$filterId': typeof AuthFilterTypeFilterIdRoute
+    '/': typeof IndexRoute
+    '': typeof AuthRouteWithChildren
+    '/login': typeof LoginRoute
+    '/$filterType/$filterId': typeof AuthFilterTypeFilterIdRoute
 }
 
 export interface FileRoutesByTo {
-  '/': typeof IndexRoute
-  '': typeof AuthRouteWithChildren
-  '/login': typeof LoginRoute
-  '/$filterType/$filterId': typeof AuthFilterTypeFilterIdRoute
+    '/': typeof IndexRoute
+    '': typeof AuthRouteWithChildren
+    '/login': typeof LoginRoute
+    '/$filterType/$filterId': typeof AuthFilterTypeFilterIdRoute
 }
 
 export interface FileRoutesById {
-  __root__: typeof rootRoute
-  '/': typeof IndexRoute
-  '/_auth': typeof AuthRouteWithChildren
-  '/login': typeof LoginRoute
-  '/_auth/$filterType/$filterId': typeof AuthFilterTypeFilterIdRoute
+    __root__: typeof rootRoute
+    '/': typeof IndexRoute
+    '/_auth': typeof AuthRouteWithChildren
+    '/login': typeof LoginRoute
+    '/_auth/$filterType/$filterId': typeof AuthFilterTypeFilterIdRoute
 }
 
 export interface FileRouteTypes {
-  fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '' | '/login' | '/$filterType/$filterId'
-  fileRoutesByTo: FileRoutesByTo
-  to: '/' | '' | '/login' | '/$filterType/$filterId'
-  id: '__root__' | '/' | '/_auth' | '/login' | '/_auth/$filterType/$filterId'
-  fileRoutesById: FileRoutesById
+    fileRoutesByFullPath: FileRoutesByFullPath
+    fullPaths: '/' | '' | '/login' | '/$filterType/$filterId'
+    fileRoutesByTo: FileRoutesByTo
+    to: '/' | '' | '/login' | '/$filterType/$filterId'
+    id: '__root__' | '/' | '/_auth' | '/login' | '/_auth/$filterType/$filterId'
+    fileRoutesById: FileRoutesById
 }
 
 export interface RootRouteChildren {
-  IndexRoute: typeof IndexRoute
-  AuthRoute: typeof AuthRouteWithChildren
-  LoginRoute: typeof LoginRoute
+    IndexRoute: typeof IndexRoute
+    AuthRoute: typeof AuthRouteWithChildren
+    LoginRoute: typeof LoginRoute
 }
 
 const rootRouteChildren: RootRouteChildren = {
-  IndexRoute: IndexRoute,
-  AuthRoute: AuthRouteWithChildren,
-  LoginRoute: LoginRoute,
+    IndexRoute: IndexRoute,
+    AuthRoute: AuthRouteWithChildren,
+    LoginRoute: LoginRoute,
 }
 
 export const routeTree = rootRoute
-  ._addFileChildren(rootRouteChildren)
-  ._addFileTypes<FileRouteTypes>()
+    ._addFileChildren(rootRouteChildren)
+    ._addFileTypes<FileRouteTypes>()
 
 /* ROUTE_MANIFEST_START
 {

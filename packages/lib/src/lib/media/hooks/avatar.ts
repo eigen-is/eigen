@@ -1,4 +1,4 @@
-import {useInvalidateAllContacts, useContacts} from '../../contacts/hooks/use-contacts';
+import {useContacts, useInvalidateAllContacts} from '../../contacts/hooks/use-contacts';
 import {useMemo} from 'react';
 import {Contact} from '@apps/api-server/types/contact';
 import {usePublicUser} from '../../public';
@@ -86,7 +86,7 @@ export function useAvatar(email: string, options: { enabled?: boolean } = {enabl
 // Hook to invalidate all avatars
 export function useInvalidateAllAvatars() {
     const invalidateContacts = useInvalidateAllContacts();
-    
+
     return () => {
         invalidateContacts();
     };

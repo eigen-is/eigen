@@ -17,14 +17,14 @@ export function LabelFilterHeader({
     const [selectedLabel, setSelectedLabel] = useState<Label | null>(null);
     const [dialogOpen, setDialogOpen] = useState(false);
     const {updateLabel, deleteLabel} = useLabels();
-    
+
     const label = labels.find(l => l.id === labelId);
-    
+
     const handleEditClick = (label: Label) => {
         setSelectedLabel(label);
         setDialogOpen(true);
     };
-    
+
     const handleSubmit = async (data: { name: string; color: string }) => {
         try {
             if (selectedLabel) {
@@ -41,7 +41,7 @@ export function LabelFilterHeader({
             // Keep dialog open on error so user can try again
         }
     };
-    
+
     const handleDeleteLabel = async () => {
         try {
             if (selectedLabel) {
@@ -73,7 +73,7 @@ export function LabelFilterHeader({
                     onClick={() => handleEditClick(label)}
                 />
             </div>
-            
+
             <LabelDialog
                 open={dialogOpen}
                 onOpenChange={setDialogOpen}

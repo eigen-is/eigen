@@ -3,9 +3,9 @@ import {useDocumentAccess} from '@workspace/lib/docs'
 import {usePathInfo} from '@workspace/lib/drive'
 import {EigenLoader} from '@workspace/ui'
 import {useApp} from '@workspace/ui/components/layout/app-context'
-import {useEffect, useState, useCallback} from 'react'
+import {useCallback, useEffect, useState} from 'react'
 import {StickiesBoard} from "@/components/dnd-board/board.tsx";
-import { DriveAccessDialog } from '@workspace/ui/components/layout/drive/drive-access-dialog'
+import {DriveAccessDialog} from '@workspace/ui/components/layout/drive/drive-access-dialog'
 
 export const Route = createFileRoute('/_auth/board/$ownerId/$pathId')({
     component: StickiesRoute,
@@ -27,8 +27,8 @@ function StickiesRoute() {
     const handleAccessDialogOpen = useCallback(() => {
         setAccessDialogOpen(true);
     }, [setAccessDialogOpen]);
-    
-    if (isLoading || pathLoading) return <EigenLoader />
+
+    if (isLoading || pathLoading) return <EigenLoader/>
     if (!access?.canRead || !path) {
         return (
             <div className="flex items-center justify-center h-full w-full">
@@ -39,7 +39,8 @@ function StickiesRoute() {
 
     return (
         <>
-            <StickiesBoard ownerId={ownerId} path={path} canWrite={access.canWrite} onAccessDialogOpen={handleAccessDialogOpen}/>
+            <StickiesBoard ownerId={ownerId} path={path} canWrite={access.canWrite}
+                           onAccessDialogOpen={handleAccessDialogOpen}/>
             <DriveAccessDialog
                 open={accessDialogOpen}
                 onOpenChange={setAccessDialogOpen}

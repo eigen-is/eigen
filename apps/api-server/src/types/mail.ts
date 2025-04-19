@@ -1,4 +1,8 @@
-import type {Email as EmailType, EmailSummary as EmailSummaryType, MaildirMailbox as MaildirMailboxType} from "../lib/mail/mailtypes";
+import type {
+    Email as EmailType,
+    EmailSummary as EmailSummaryType,
+    MaildirMailbox as MaildirMailboxType
+} from "../lib/mail/mailtypes";
 import type {AddressObject} from "../lib/mail/mail-parser";
 
 export type Email = EmailType;

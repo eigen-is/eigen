@@ -20,7 +20,7 @@ const app = new Elysia()
         allowedHeaders: ["Content-Type", "Authorization"],
     }))
     .use(betterAuth)
-    .onError(({ set }) => {
+    .onError(({set}) => {
         set.status = 400;
         return 'Uncertain state: API request failed to resolve';
     })

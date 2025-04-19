@@ -266,7 +266,8 @@ export function DriveLayout({
                     path={currentPath}
                     open={createFolderOpen}
                     onOpenChange={setCreateFolderOpen}
-                    onSave={() => {}}
+                    onSave={() => {
+                    }}
                     onCancel={() => setCreateFolderOpen(false)}
                     onAfterAction={onAfterAction}
                 />
@@ -278,7 +279,8 @@ export function DriveLayout({
                     path={currentPath}
                     open={createDocOpen}
                     onOpenChange={setCreateDocOpen}
-                    onSave={() => {}}
+                    onSave={() => {
+                    }}
                     onCancel={() => setCreateDocOpen(false)}
                     onAfterAction={onAfterAction}
                 />
@@ -290,7 +292,8 @@ export function DriveLayout({
                     path={currentPath}
                     open={createStickiesOpen}
                     onOpenChange={setCreateStickiesOpen}
-                    onSave={() => {}}
+                    onSave={() => {
+                    }}
                     onCancel={() => setCreateStickiesOpen(false)}
                     onAfterAction={onAfterAction}
                 />

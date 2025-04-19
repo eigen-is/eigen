@@ -152,7 +152,7 @@ export class Home {
             }
         });
     }
-    
+
     public async getZip() {
         return await this.fs.getZip();
     }

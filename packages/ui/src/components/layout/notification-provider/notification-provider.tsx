@@ -91,7 +91,7 @@ export function NotificationProvider({children}: NotificationProviderProps) {
                 const body = event.data as unknown as EigenNotification;
                 // Handle notifications here
                 notify(body);
-                
+
                 if (body?.type === 'mail') {
                     queryClient.invalidateQueries({queryKey: emailKeys.list('inbox')});
                     queryClient.invalidateQueries({queryKey: mailboxKeys.lists()});

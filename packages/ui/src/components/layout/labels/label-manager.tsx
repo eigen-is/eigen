@@ -91,7 +91,8 @@ export function LabelManager({
                         className={!condensed ? "pr-8 relative group" : ""}
                     >
                         {!condensed && (
-                            <div className="editButton absolute right-2 opacity-0 group-hover:opacity-80 hover:opacity-100">
+                            <div
+                                className="editButton absolute right-2 opacity-0 group-hover:opacity-80 hover:opacity-100">
                                 <TooltipButton
                                     icon={Pencil}
                                     tooltipText={`Edit label`}

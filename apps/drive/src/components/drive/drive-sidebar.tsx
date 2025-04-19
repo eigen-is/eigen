@@ -1,25 +1,36 @@
-import {Download, FileText, Home, Image, UsersRound, StickyNote, X, Plus, FolderPlus, Upload as UploadIcon} from 'lucide-react';
+import {
+    Download,
+    FileText,
+    FolderPlus,
+    Home,
+    Image,
+    Plus,
+    StickyNote,
+    Upload as UploadIcon,
+    UsersRound,
+    X
+} from 'lucide-react';
 import {Button} from "@workspace/ui/components/button";
 import {SidebarSection} from '@workspace/ui/components/layout/sidebar/sidebar-section';
 import {AppLogo} from '@workspace/ui/components/layout/app-logo';
 import {SidebarItem, StorageUsage} from "@workspace/ui";
 import {Separator} from '@workspace/ui/components/separator';
-import { DrivePath } from '@apps/api-server/types/drive';
-import { useState } from 'react';
-import { useMatch, useNavigate } from '@tanstack/react-router';
-import { usePathInfo } from '@workspace/lib/drive';
-import { 
+import {DrivePath} from '@apps/api-server/types/drive';
+import {useState} from 'react';
+import {useMatch, useNavigate} from '@tanstack/react-router';
+import {usePathInfo} from '@workspace/lib/drive';
+import {
     DropdownMenu,
-    DropdownMenuTrigger,
     DropdownMenuContent,
-    DropdownMenuItem
+    DropdownMenuItem,
+    DropdownMenuTrigger
 } from '@workspace/ui/components/dropdown-menu';
 
 // Import these directly from their files instead of from the index
-import { DriveCreateFolder } from '@workspace/ui/components/layout/drive/drive-create-folder';
-import { DriveCreateDoc } from '@workspace/ui/components/layout/drive/drive-create-doc';
-import { DriveCreateStickies } from '@workspace/ui/components/layout/drive/drive-create-stickies';
-import { DriveUploadFiles } from '@workspace/ui/components/layout/drive/drive-upload-files';
+import {DriveCreateFolder} from '@workspace/ui/components/layout/drive/drive-create-folder';
+import {DriveCreateDoc} from '@workspace/ui/components/layout/drive/drive-create-doc';
+import {DriveCreateStickies} from '@workspace/ui/components/layout/drive/drive-create-stickies';
+import {DriveUploadFiles} from '@workspace/ui/components/layout/drive/drive-upload-files';
 
 interface DriveSidebarProps {
     condensed?: boolean;
@@ -47,17 +58,17 @@ export function DriveSidebar({
         from: '/_auth/fs/$ownerId/$pathId',
         shouldThrow: false,
     });
-    
+
     // Extract the parameters if we have a match
     const currentPathId = routeMatch?.params?.pathId;
     const currentOwnerId = routeMatch?.params?.ownerId;
-    
+
     // Get path info for the current path
-    const { data: currentPath } = usePathInfo(
-        currentOwnerId || (rootPath?.ownerId || ''), 
+    const {data: currentPath} = usePathInfo(
+        currentOwnerId || (rootPath?.ownerId || ''),
         currentPathId || (rootPath?.id || '')
     );
-    
+
     // Determine which path to use for operations (current or root)
     const targetPath = currentPath || rootPath;
 
@@ -75,7 +86,7 @@ export function DriveSidebar({
             to: '/fs/$ownerId/$pathId',
             params: {
                 ownerId: targetPath?.ownerId || '',
-                pathId: targetPath?.id  || '',
+                pathId: targetPath?.id || '',
             }
         });
     };
@@ -123,9 +134,9 @@ export function DriveSidebar({
                         <DropdownMenuItem onClick={() => setUploadOpen(true)}>
                             <UploadIcon className="h-4 w-4 mr-2"/>
                             Upload file
-                            <input 
-                                type="file" 
-                                className="hidden" 
+                            <input
+                                type="file"
+                                className="hidden"
                                 onChange={handleFileChange}
                             />
                         </DropdownMenuItem>
@@ -193,7 +204,8 @@ export function DriveSidebar({
                     path={targetPath}
                     open={createFolderOpen}
                     onOpenChange={setCreateFolderOpen}
-                    onSave={() => {}}
+                    onSave={() => {
+                    }}
                     onCancel={() => setCreateFolderOpen(false)}
                     onAfterAction={handleAfterAction}
                 />
@@ -205,7 +217,8 @@ export function DriveSidebar({
                     path={targetPath}
                     open={createDocOpen}
                     onOpenChange={setCreateDocOpen}
-                    onSave={() => {}}
+                    onSave={() => {
+                    }}
                     onCancel={() => setCreateDocOpen(false)}
                     onAfterAction={handleAfterAction}
                 />
@@ -217,7 +230,8 @@ export function DriveSidebar({
                     path={targetPath}
                     open={createStickiesOpen}
                     onOpenChange={setCreateStickiesOpen}
-                    onSave={() => {}}
+                    onSave={() => {
+                    }}
                     onCancel={() => setCreateStickiesOpen(false)}
                     onAfterAction={handleAfterAction}
                 />
