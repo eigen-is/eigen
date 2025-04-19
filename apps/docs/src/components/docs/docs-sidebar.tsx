@@ -6,12 +6,6 @@ import {SidebarItem, StorageUsage} from "@workspace/ui";
 import {DrivePath} from "@apps/api-server/types/drive";
 import { useState } from 'react';
 import { useNavigate } from '@tanstack/react-router';
-import { 
-    DropdownMenu,
-    DropdownMenuTrigger,
-    DropdownMenuContent,
-    DropdownMenuItem
-} from '@workspace/ui/components/dropdown-menu';
 
 // Import the doc creation component directly
 import { DriveCreateDoc } from '@workspace/ui/components/layout/drive/drive-create-doc';
@@ -59,7 +53,6 @@ export function DocsSidebar({
                 </div>
             )}
 
-            {/* New button dropdown */}
             <div className="px-3 py-2">
                 <Button
                     variant="default"
@@ -68,7 +61,7 @@ export function DocsSidebar({
                     onClick={() => setCreateDocOpen(true)}
                 >
                     <Plus className="h-4 w-4"/>
-                    {!condensed && <span>New</span>}
+                    {!condensed && <span>New document</span>}
                 </Button>
             </div>
 
