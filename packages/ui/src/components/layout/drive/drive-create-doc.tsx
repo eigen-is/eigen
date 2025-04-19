@@ -13,13 +13,13 @@ export interface DriveCreateDocProps {
 }
 
 export function DriveCreateDoc({
-    path,
-    open,
-    onOpenChange,
-    onSave,
-    onCancel,
-    onAfterAction,
-}: DriveCreateDocProps) {
+                                   path,
+                                   open,
+                                   onOpenChange,
+                                   onSave,
+                                   onCancel,
+                                   onAfterAction,
+                               }: DriveCreateDocProps) {
     const createDocMutation = useCreateDoc(path.ownerId);
     const invalidateFolder = useInvalidateFolder();
 
@@ -36,21 +36,21 @@ export function DriveCreateDoc({
             });
             toast.success(`Doc "${fileName}" created successfully`);
             onOpenChange(false);
-            
+
             // Invalidate folder to refresh the folder contents
             invalidateFolder(path.id);
-            
+
             // Call onAfterAction if provided
             if (onAfterAction) {
                 onAfterAction('create', {name: fileName});
             }
-            
+
             // Open the document in a new window
             if (newPath) {
                 const url = `${import.meta.env.VITE_APP_DOCS_URL}/doc/${path.ownerId}/${newPath}`;
                 window.open(url, '_blank');
             }
-            
+
             if (onSave) onSave(newPath || '');
         } catch (error: any) {
             toast.error(error?.message || "Failed to create document");

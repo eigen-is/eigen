@@ -1,5 +1,5 @@
-import { useEffect } from "react";
-import { printDocument } from "../lib/printElement";
+import {useEffect} from "react";
+import {printDocument} from "../lib/printElement";
 
 export function usePrintDocument() {
     useEffect(() => {

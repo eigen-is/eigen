@@ -1,14 +1,14 @@
-import { useCallback } from 'react';
+import {useCallback} from 'react';
 import * as Y from 'yjs';
-import { nanoid } from 'nanoid';
-import { useAuth } from '@workspace/lib/auth/auth-context.tsx';
+import {nanoid} from 'nanoid';
+import {useAuth} from '@workspace/lib/auth/auth-context.tsx';
 
 // Default board structure with predefined columns and an example task
 const DEFAULT_BOARD_STRUCTURE = {
     columns: [
-        { id: '', title: 'To Do', taskIds: [] },
-        { id: '', title: 'In Progress', taskIds: [] },
-        { id: '', title: 'Done', taskIds: [] }
+        {id: '', title: 'To Do', taskIds: []},
+        {id: '', title: 'In Progress', taskIds: []},
+        {id: '', title: 'Done', taskIds: []}
     ],
     tasks: [
         {
@@ -24,7 +24,7 @@ const DEFAULT_BOARD_STRUCTURE = {
  * Custom hook for initializing a Yjs Kanban board with default structure
  */
 export const useInitializeBoard = () => {
-    const { user } = useAuth();
+    const {user} = useAuth();
 
     const initializeDefaultBoard = useCallback(
         (
@@ -45,12 +45,12 @@ export const useInitializeBoard = () => {
             const now = Date.now();
             const columnIds: string[] = [];
             let firstTaskId = '';
-            
+
             try {
                 // Create task first
                 const taskId = `task-${nanoid(6)}`;
                 firstTaskId = taskId;
-                
+
                 const taskYMap = new Y.Map();
                 taskYMap.set('id', taskId);
                 taskYMap.set('title', DEFAULT_BOARD_STRUCTURE.tasks[0].title);
@@ -58,34 +58,34 @@ export const useInitializeBoard = () => {
                 taskYMap.set('creator', userEmail);
                 taskYMap.set('createdAt', now);
                 taskYMap.set('comments', new Y.Array());
-                
+
                 tasksMap.set(taskId, taskYMap);
-                
+
                 // Create columns
                 DEFAULT_BOARD_STRUCTURE.columns.forEach((column, index) => {
                     const columnId = `column-${nanoid(6)}`;
                     columnIds.push(columnId);
-                    
+
                     const columnYMap = new Y.Map();
                     columnYMap.set('id', columnId);
                     columnYMap.set('title', column.title);
-                    
+
                     // Create taskIds array - add the example task to the first column
                     const taskIds = new Y.Array();
                     if (index === 0) {
                         taskIds.push([firstTaskId]);
                     }
                     columnYMap.set('taskIds', taskIds);
-                    
+
                     columnYMap.set('creator', userEmail);
                     columnYMap.set('createdAt', now);
-                    
+
                     columnsMap.set(columnId, columnYMap);
                 });
-                
+
                 // Add column order array
                 columnOrderArray.insert(0, columnIds);
-                
+
                 console.log('Default board initialized with columns:', columnIds);
                 console.log('Added example task:', firstTaskId);
                 return true;

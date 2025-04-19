@@ -1,8 +1,8 @@
 import {useState} from 'react';
 import * as Y from 'yjs';
-import { DragEndEvent, DragStartEvent } from '@dnd-kit/core';
-import { BoardData, TaskItem, ColumnItem } from '../types';
-import { normalizeBoard } from '../normalizeBoard';
+import {DragEndEvent, DragStartEvent} from '@dnd-kit/core';
+import {BoardData, ColumnItem, TaskItem} from '../types';
+import {normalizeBoard} from '../normalizeBoard';
 
 type DragState = {
     activeId: string | null;
@@ -15,7 +15,7 @@ type UseYjsDragAndDropProps = {
     yjsDoc: Y.Doc | null;
 };
 
-export const useYjsDragAndDrop = ({ board, yjsDoc }: UseYjsDragAndDropProps) => {
+export const useYjsDragAndDrop = ({board, yjsDoc}: UseYjsDragAndDropProps) => {
     const [dragState, setDragState] = useState<DragState>({
         activeId: null,
         activeType: null,
@@ -34,12 +34,12 @@ export const useYjsDragAndDrop = ({ board, yjsDoc }: UseYjsDragAndDropProps) => 
     };
 
     // Reset drag state utility
-    const resetDragState = () => setDragState({ activeId: null, activeType: null, activeItem: null });
+    const resetDragState = () => setDragState({activeId: null, activeType: null, activeItem: null});
 
     // Handle drag start event
     const handleDragStart = (event: DragStartEvent) => {
-        const { active } = event;
-        const { id } = active;
+        const {active} = event;
+        const {id} = active;
         const activeId = id as string;
         if (activeId in board.tasks) {
             setDragState({
@@ -58,7 +58,7 @@ export const useYjsDragAndDrop = ({ board, yjsDoc }: UseYjsDragAndDropProps) => 
 
     // Only update Yjs state on drag end (no more React state updates for preview)
     const handleDragEnd = (event: DragEndEvent) => {
-        const { active, over } = event;
+        const {active, over} = event;
         if (!over || !yjsDoc) {
             resetDragState();
             return;

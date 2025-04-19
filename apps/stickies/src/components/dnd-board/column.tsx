@@ -2,7 +2,7 @@ import React from 'react';
 import {SortableContext, useSortable, verticalListSortingStrategy} from '@dnd-kit/sortable';
 import {CSS} from '@dnd-kit/utilities';
 import {TaskCard} from './task-card';
-import {ColumnItem, TaskItem, CommentItem} from './types';
+import {ColumnItem, CommentItem, TaskItem} from './types';
 import {Pencil, Plus} from 'lucide-react';
 import * as Y from 'yjs';
 import {TooltipButton} from '@workspace/ui/components/layout/tooltip-button/tooltip-button';
@@ -104,9 +104,9 @@ export const Column: React.FC<ColumnProps> = ({
                     <div className="flex-grow">
                         <SortableContext items={taskIds} strategy={verticalListSortingStrategy}>
                             {tasks.map((task) => (
-                                <TaskCard 
-                                    key={task.id} 
-                                    task={task} 
+                                <TaskCard
+                                    key={task.id}
+                                    task={task}
                                     isMobile={isMobile}
                                     yjsDoc={yjsDoc}
                                     ownerId={ownerId}

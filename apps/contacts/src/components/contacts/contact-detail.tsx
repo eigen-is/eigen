@@ -1,5 +1,17 @@
 import {useState} from 'react';
-import {ArrowLeft, Building, Calendar, Edit, Mail, MapPin, MoreVertical, Phone, Trash2, Printer, Download} from 'lucide-react';
+import {
+    ArrowLeft,
+    Building,
+    Calendar,
+    Download,
+    Edit,
+    Mail,
+    MapPin,
+    MoreVertical,
+    Phone,
+    Printer,
+    Trash2
+} from 'lucide-react';
 import {type Contact} from "@apps/api-server/types/contact";
 import {Button} from "@workspace/ui/components/button";
 import {
@@ -131,16 +143,16 @@ export function ContactDetail({contact, onDelete, onBack, filterType, filterId, 
                                     onClick={() => openWriteEmailTo(contact.email[0])}
                                     className="flex items-center"
                                 >
-                                    <Mail className="h-4 w-4 mr-2" />
+                                    <Mail className="h-4 w-4 mr-2"/>
                                     Send email
                                 </DropdownMenuItem>
                             )}
                             <DropdownMenuItem className="flex items-center">
-                                <Printer className="h-4 w-4 mr-2" />
+                                <Printer className="h-4 w-4 mr-2"/>
                                 Print
                             </DropdownMenuItem>
                             <DropdownMenuItem className="flex items-center">
-                                <Download className="h-4 w-4 mr-2" />
+                                <Download className="h-4 w-4 mr-2"/>
                                 Export as vCard
                             </DropdownMenuItem>
                             <DropdownMenuSeparator/>
@@ -155,12 +167,12 @@ export function ContactDetail({contact, onDelete, onBack, filterType, filterId, 
                                         contactId: contact.id
                                     }}
                                 >
-                                    <Edit className="h-4 w-4 mr-2" />
+                                    <Edit className="h-4 w-4 mr-2"/>
                                     Edit
                                 </Link>
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => setDeleteDialogOpen(true)} className="flex items-center">
-                                <Trash2 className="h-4 w-4 mr-2" />
+                                <Trash2 className="h-4 w-4 mr-2"/>
                                 Delete
                             </DropdownMenuItem>
                         </DropdownMenuContent>

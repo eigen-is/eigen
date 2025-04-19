@@ -1,8 +1,8 @@
-import React, { useState } from 'react';
+import React, {useState} from 'react';
 import {useSortable} from '@dnd-kit/sortable';
 import {CSS} from '@dnd-kit/utilities';
-import {TaskItem, CommentItem} from './types';
-import { TaskInfoDialog } from './task-info-dialog';
+import {CommentItem, TaskItem} from './types';
+import {TaskInfoDialog} from './task-info-dialog';
 import * as Y from 'yjs';
 
 interface TaskCardProps {
@@ -15,7 +15,7 @@ interface TaskCardProps {
 
 export const TaskCard: React.FC<TaskCardProps> = ({task, isMobile, yjsDoc, ownerId, comments}) => {
     const [isInfoDialogOpen, setIsInfoDialogOpen] = useState(false);
-    
+
     const {
         attributes,
         listeners,

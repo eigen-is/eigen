@@ -115,7 +115,7 @@ export function useMoveEmail() {
             targetMailbox: mailbox
         });
         queryClient.invalidateQueries({queryKey: emailKeys.detail(email.id)});
-        queryClient.invalidateQueries({queryKey: emailKeys.list(currentMailbox  === '' ? 'inbox' : currentMailbox)});
+        queryClient.invalidateQueries({queryKey: emailKeys.list(currentMailbox === '' ? 'inbox' : currentMailbox)});
         queryClient.invalidateQueries({queryKey: emailKeys.list(mailbox === '' ? 'inbox' : mailbox)});
         queryClient.invalidateQueries({queryKey: mailboxKeys.lists()});
     }

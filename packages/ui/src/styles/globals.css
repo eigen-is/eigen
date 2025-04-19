@@ -163,7 +163,7 @@
 
     .text-teal-600 {
         @apply text-teal-600;
-    } 
+    }
 
     .text-red-600 {
         @apply text-red-600;
@@ -215,12 +215,14 @@
     .no-print {
         display: none !important;
     }
+
     body *:not(.printable, .printable *) {
         /* hide everything but printable elements and their children */
         display: none;
     }
+
     .print-exact {
-        print-color-adjust: exact; 
+        print-color-adjust: exact;
         -webkit-print-color-adjust: exact;
     }
 }

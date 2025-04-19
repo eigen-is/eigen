@@ -1,161 +1,151 @@
-import { useEffect, useState } from 'react';
+import {useEffect, useState} from 'react';
+import {FileText, Folder, Redo, Trash2, Undo, UserPlus, UserRoundPlus} from 'lucide-react';
+import {Button} from '@workspace/ui/components/button';
 import {
-  FileText,
-  Folder,
-  Printer,
-  Trash2,
-  Undo,
-  Redo,
-  UserPlus,
-  UserRoundPlus
-} from 'lucide-react';
-import { Button } from '@workspace/ui/components/button';
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
-import { Separator } from '@workspace/ui/components/separator';
-import { TooltipButton } from '@workspace/ui';
-import { DocumentModeButton } from '@workspace/ui/components/layout/toolbar/DocumentModeButton';
-import { printDocument } from '@workspace/ui/lib/printElement';
+import {Separator} from '@workspace/ui/components/separator';
+import {TooltipButton} from '@workspace/ui';
+import {DocumentModeButton} from '@workspace/ui/components/layout/toolbar/DocumentModeButton';
 import * as Y from 'yjs';
-import { useNavigate } from '@tanstack/react-router';
-import { useAuth } from '@workspace/lib/auth/auth-context.js';
-import { useRootFolder } from '@workspace/lib/drive';
-import { DriveCreateStickies } from '@workspace/ui/components/layout/drive/drive-create-stickies';
-import { DriveDeleteItem } from '@workspace/ui/components/layout/drive/drive-delete-item';
-import { DrivePath } from '@apps/api-server/types/drive';
+import {useNavigate} from '@tanstack/react-router';
+import {useAuth} from '@workspace/lib/auth/auth-context.js';
+import {useRootFolder} from '@workspace/lib/drive';
+import {DriveCreateStickies} from '@workspace/ui/components/layout/drive/drive-create-stickies';
+import {DriveDeleteItem} from '@workspace/ui/components/layout/drive/drive-delete-item';
+import {DrivePath} from '@apps/api-server/types/drive';
 
 interface StickiesToolbarProps {
-  canWrite: boolean;
-  undoManager: Y.UndoManager | null;
-  onAccessDialogOpen: () => void;
-  path: DrivePath;
+    canWrite: boolean;
+    undoManager: Y.UndoManager | null;
+    onAccessDialogOpen: () => void;
+    path: DrivePath;
 }
 
 /**
  * Toolbar component for the Stickies application
  */
-export const StickiesToolbar = ({ canWrite, undoManager, onAccessDialogOpen, path }: StickiesToolbarProps) => {
-  const commandKey = window.navigator.platform.includes('Mac') ? '⌘' : 'Ctrl';
-  const [canUndo, setCanUndo] = useState(false);
-  const [canRedo, setCanRedo] = useState(false);
-  const [createStickiesOpen, setCreateStickiesOpen] = useState(false);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const {user} = useAuth();
-  const {data: rootFolder} = useRootFolder(user?.id || '');
-  const navigate = useNavigate();
+export const StickiesToolbar = ({canWrite, undoManager, onAccessDialogOpen, path}: StickiesToolbarProps) => {
+    const commandKey = window.navigator.platform.includes('Mac') ? '⌘' : 'Ctrl';
+    const [canUndo, setCanUndo] = useState(false);
+    const [canRedo, setCanRedo] = useState(false);
+    const [createStickiesOpen, setCreateStickiesOpen] = useState(false);
+    const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+    const {user} = useAuth();
+    const {data: rootFolder} = useRootFolder(user?.id || '');
+    const navigate = useNavigate();
 
-  useEffect(() => {
-    if (!undoManager || !undoManager.undoStack || !canWrite) {
-      setCanUndo(false);
-      setCanRedo(false);
-      return;
-    }
-    const update = () => {
-      setCanUndo(undoManager.undoStack.length > 0);
-      setCanRedo(undoManager.redoStack.length > 0);
-    };
-    update(); // Initial state
-    undoManager.on('stack-item-added', update);
-    undoManager.on('stack-item-popped', update);
-    undoManager.on('stack-item-updated', update);
-    return () => {
-      undoManager.off('stack-item-added', update);
-      undoManager.off('stack-item-popped', update);
-      undoManager.off('stack-item-updated', update);
-    };
-  }, [undoManager, canWrite]);
+    useEffect(() => {
+        if (!undoManager || !undoManager.undoStack || !canWrite) {
+            setCanUndo(false);
+            setCanRedo(false);
+            return;
+        }
+        const update = () => {
+            setCanUndo(undoManager.undoStack.length > 0);
+            setCanRedo(undoManager.redoStack.length > 0);
+        };
+        update(); // Initial state
+        undoManager.on('stack-item-added', update);
+        undoManager.on('stack-item-popped', update);
+        undoManager.on('stack-item-updated', update);
+        return () => {
+            undoManager.off('stack-item-added', update);
+            undoManager.off('stack-item-popped', update);
+            undoManager.off('stack-item-updated', update);
+        };
+    }, [undoManager, canWrite]);
 
-  // Helper component for toolbar separator
-  const ToolbarSeparator = () => <div className="h-4 w-px bg-gray-200 mx-1" />;
+    // Helper component for toolbar separator
+    const ToolbarSeparator = () => <div className="h-4 w-px bg-gray-200 mx-1"/>;
 
-  return (
-    <div className="bg-white h-12 flex items-center justify-between px-4 border-b no-print">
-      <div className="flex items-center gap-1">
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="ghost" title="File">
-              File
-            </Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start">
-              <DropdownMenuItem onClick={() => rootFolder && setCreateStickiesOpen(true)}>
-                <FileText/> New stickies
-              </DropdownMenuItem>
-              <DropdownMenuItem onClick={() => navigate({to: `/`})}>
-                <Folder/> Open
-              </DropdownMenuItem>
-              <Separator/>
-              <DropdownMenuItem onClick={onAccessDialogOpen}><UserRoundPlus/> Edit access</DropdownMenuItem>
-              {canWrite && (
-                  <>
-                      <Separator/>
-                      <DropdownMenuItem onClick={() => path && setDeleteDialogOpen(true)}>
-                          <Trash2/> Delete
-                      </DropdownMenuItem>
-                  </>
-              )}
-          </DropdownMenuContent>
-        </DropdownMenu>
-        {canWrite && (
-          <>
-            {/* Separator */}
-            <ToolbarSeparator/>
+    return (
+        <div className="bg-white h-12 flex items-center justify-between px-4 border-b no-print">
+            <div className="flex items-center gap-1">
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" title="File">
+                            File
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="start">
+                        <DropdownMenuItem onClick={() => rootFolder && setCreateStickiesOpen(true)}>
+                            <FileText/> New stickies
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => navigate({to: `/`})}>
+                            <Folder/> Open
+                        </DropdownMenuItem>
+                        <Separator/>
+                        <DropdownMenuItem onClick={onAccessDialogOpen}><UserRoundPlus/> Edit access</DropdownMenuItem>
+                        {canWrite && (
+                            <>
+                                <Separator/>
+                                <DropdownMenuItem onClick={() => path && setDeleteDialogOpen(true)}>
+                                    <Trash2/> Delete
+                                </DropdownMenuItem>
+                            </>
+                        )}
+                    </DropdownMenuContent>
+                </DropdownMenu>
+                {canWrite && (
+                    <>
+                        {/* Separator */}
+                        <ToolbarSeparator/>
 
-            <TooltipButton
-              icon={Undo}
-              tooltipText={`Undo (${commandKey}+Z)`}
-              onClick={() => undoManager?.undo?.()}
-              disabled={!canUndo}
-            />
+                        <TooltipButton
+                            icon={Undo}
+                            tooltipText={`Undo (${commandKey}+Z)`}
+                            onClick={() => undoManager?.undo?.()}
+                            disabled={!canUndo}
+                        />
 
-            <TooltipButton
-              icon={Redo}
-              tooltipText={`Redo (${commandKey}+Y)`}
-              onClick={() => undoManager?.redo?.()}
-              disabled={!canRedo}
-            />
-          </>
-        )}  
-      </div>
+                        <TooltipButton
+                            icon={Redo}
+                            tooltipText={`Redo (${commandKey}+Y)`}
+                            onClick={() => undoManager?.redo?.()}
+                            disabled={!canRedo}
+                        />
+                    </>
+                )}
+            </div>
 
-      <div className="flex items-center gap-1">
-        {canWrite ? (
-          <TooltipButton
-            icon={UserPlus}
-            tooltipText="Share"
-            onClick={onAccessDialogOpen}
-          />
-        ) : (
-          <DocumentModeButton canWrite={canWrite} />
-        )}
-      </div>
-      
-      {/* Stickies Creation Dialog */}
-      {rootFolder && (
-          <DriveCreateStickies
-              path={rootFolder}
-              open={createStickiesOpen}
-              onOpenChange={setCreateStickiesOpen}
-          />
-      )}
-      
-      {/* Stickies Delete Dialog */}
-      {path && (
-          <DriveDeleteItem
-              path={path}
-              open={deleteDialogOpen}
-              onOpenChange={setDeleteDialogOpen}
-              onAfterAction={(actionType) => {
-                  if (actionType === 'delete') {
-                      navigate({to: `/`});
-                  }
-              }}
-          />
-      )}
-    </div>
-  );
+            <div className="flex items-center gap-1">
+                {canWrite ? (
+                    <TooltipButton
+                        icon={UserPlus}
+                        tooltipText="Share"
+                        onClick={onAccessDialogOpen}
+                    />
+                ) : (
+                    <DocumentModeButton canWrite={canWrite}/>
+                )}
+            </div>
+
+            {/* Stickies Creation Dialog */}
+            {rootFolder && (
+                <DriveCreateStickies
+                    path={rootFolder}
+                    open={createStickiesOpen}
+                    onOpenChange={setCreateStickiesOpen}
+                />
+            )}
+
+            {/* Stickies Delete Dialog */}
+            {path && (
+                <DriveDeleteItem
+                    path={path}
+                    open={deleteDialogOpen}
+                    onOpenChange={setDeleteDialogOpen}
+                    onAfterAction={(actionType) => {
+                        if (actionType === 'delete') {
+                            navigate({to: `/`});
+                        }
+                    }}
+                />
+            )}
+        </div>
+    );
 };

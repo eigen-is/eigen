@@ -1,10 +1,10 @@
-import { useEffect, useRef, useState } from 'react';
+import {useEffect, useRef, useState} from 'react';
 import * as Y from 'yjs';
-import { WebsocketProvider } from 'y-websocket';
-import { BoardData, ColumnItem, TaskItem } from '../types';
-import { nanoid } from 'nanoid';
-import { useInitializeBoard } from './useInitializeBoard';
-import { normalizeBoard } from '../normalizeBoard';
+import {WebsocketProvider} from 'y-websocket';
+import {BoardData, ColumnItem, TaskItem} from '../types';
+import {nanoid} from 'nanoid';
+import {useInitializeBoard} from './useInitializeBoard';
+import {normalizeBoard} from '../normalizeBoard';
 
 /**
  * Minimal Yjs-powered Kanban board hook for collaborative editing
@@ -28,7 +28,7 @@ export const useYjsKanbanBoard = (ownerId: string, pathId: string) => {
     const providerRef = useRef<WebsocketProvider | null>(null);
     const undoManager = useRef<Y.UndoManager | null>(null);
 
-    const { initializeDefaultBoard } = useInitializeBoard();
+    const {initializeDefaultBoard} = useInitializeBoard();
 
     // Helper function to initialize board from JSON to Yjs data
     useEffect(() => {

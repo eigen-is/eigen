@@ -37,7 +37,9 @@ export function DriveAccessDialog({
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent className="sm:max-w-[700px] overflow-y-scroll">
                 <DialogHeader>
-                    <div className="sm:max-w-[600px]"><DialogTitle className="truncate overflow-visible" title={path.name}>Share '{path.name}'</DialogTitle>                    </div>
+                    <div className="sm:max-w-[600px]"><DialogTitle className="truncate overflow-visible"
+                                                                   title={path.name}>Share '{path.name}'</DialogTitle>
+                    </div>
                 </DialogHeader>
 
                 <DriveAccessListEdit

@@ -10,8 +10,8 @@ import {Plus} from 'lucide-react';
 import {useIsMobile} from "@workspace/lib/media";
 import {useYjsKanbanBoard} from './hooks/useYjsKanbanBoard';
 import {useYjsDragAndDrop} from './hooks/useYjsDragAndDrop';
-import { StickiesToolbar } from './stickies-toolbar';
-import { DrivePath } from '@apps/api-server/types/drive';
+import {StickiesToolbar} from './stickies-toolbar';
+import {DrivePath} from '@apps/api-server/types/drive';
 
 interface StickiesBoardProps {
     ownerId: string;
@@ -102,109 +102,110 @@ const StickiesBoard = ({ownerId, path, canWrite, onAccessDialogOpen}: StickiesBo
     };
 
     return (
-<>
-        <StickiesToolbar path={path} canWrite={canWrite} undoManager={undoManager} onAccessDialogOpen={onAccessDialogOpen} />
-        <div className="h-full w-full flex bg-gray-200 overflow-hidden">
-        <div
-            className="overflow-x-auto overflow-y-hidden flex-1"
-            style={board.columnOrder.length > 1 ? {
-                padding: isMobile ? 0 : '0.75rem',
-                scrollSnapType: 'x mandatory',
-                scrollBehavior: 'smooth',
-            } : {
-                visibility: 'hidden',
-            }}
-        >
-            <DndContext
-                sensors={sensors}
-                onDragStart={handleDragStart}
-                onDragEnd={handleDragEnd}
-                autoScroll={{
-                    enabled:true,
-                    threshold: {
-                        x: 0.2,
-                        y: 0.2
-                    },
-                    acceleration: 10,
-                    interval: 10,
-                    layoutShiftCompensation: false,
-                }}
-            >
-                <div className={`flex ${isMobile ? 'gap-0' : 'gap-3'} h-full`}>
-                    <SortableContext
-                        items={board.columnOrder}
-                        strategy={horizontalListSortingStrategy}
-                    >
-                        {board.columnOrder.map((columnId) => {
-                            const column = board.columns[columnId];
-                            const columnTasks = column.taskIds.map((taskId) => board.tasks[taskId]);
-
-                            return (
-                                <Column
-                                    key={column.id}
-                                    column={column}
-                                    tasks={columnTasks}
-                                    onAddTask={handleAddTaskClick}
-                                    onEditColumn={handleEditColumn}
-                                    isMobile={isMobile}
-                                    yjsDoc={yjsDoc}
-                                    ownerId={ownerId}
-                                    comments={board.comments}
-                                />
-                            );
-                        })}
-                    </SortableContext>
-
-                    {/* Add Column Button */}
-                    <div
-                        className={`${isMobile ? 'mx-[4vw] min-w-[92vw] w-[92vw]' : 'mx-1.5 min-w-[280px] w-[280px]'} flex items-start h-full`}
-                        style={{
-                            scrollSnapAlign: 'center',
-                            scrollSnapStop: 'normal'
+        <>
+            <StickiesToolbar path={path} canWrite={canWrite} undoManager={undoManager}
+                             onAccessDialogOpen={onAccessDialogOpen}/>
+            <div className="h-full w-full flex bg-gray-200 overflow-hidden">
+                <div
+                    className="overflow-x-auto overflow-y-hidden flex-1"
+                    style={board.columnOrder.length > 1 ? {
+                        padding: isMobile ? 0 : '0.75rem',
+                        scrollSnapType: 'x mandatory',
+                        scrollBehavior: 'smooth',
+                    } : {
+                        visibility: 'hidden',
+                    }}
+                >
+                    <DndContext
+                        sensors={sensors}
+                        onDragStart={handleDragStart}
+                        onDragEnd={handleDragEnd}
+                        autoScroll={{
+                            enabled: true,
+                            threshold: {
+                                x: 0.2,
+                                y: 0.2
+                            },
+                            acceleration: 10,
+                            interval: 10,
+                            layoutShiftCompensation: false,
                         }}
                     >
-                        <button
-                            onClick={() => setIsAddColumnDialogOpen(true)}
-                            className="bg-gray-100 hover:bg-gray-200 border border-gray-200 rounded text-sm flex items-center gap-1 py-2 px-4 text-gray-700 w-full"
-                        >
-                            <Plus size={16}/>
-                            <span>Add another list</span>
-                        </button>
-                    </div>
+                        <div className={`flex ${isMobile ? 'gap-0' : 'gap-3'} h-full`}>
+                            <SortableContext
+                                items={board.columnOrder}
+                                strategy={horizontalListSortingStrategy}
+                            >
+                                {board.columnOrder.map((columnId) => {
+                                    const column = board.columns[columnId];
+                                    const columnTasks = column.taskIds.map((taskId) => board.tasks[taskId]);
+
+                                    return (
+                                        <Column
+                                            key={column.id}
+                                            column={column}
+                                            tasks={columnTasks}
+                                            onAddTask={handleAddTaskClick}
+                                            onEditColumn={handleEditColumn}
+                                            isMobile={isMobile}
+                                            yjsDoc={yjsDoc}
+                                            ownerId={ownerId}
+                                            comments={board.comments}
+                                        />
+                                    );
+                                })}
+                            </SortableContext>
+
+                            {/* Add Column Button */}
+                            <div
+                                className={`${isMobile ? 'mx-[4vw] min-w-[92vw] w-[92vw]' : 'mx-1.5 min-w-[280px] w-[280px]'} flex items-start h-full`}
+                                style={{
+                                    scrollSnapAlign: 'center',
+                                    scrollSnapStop: 'normal'
+                                }}
+                            >
+                                <button
+                                    onClick={() => setIsAddColumnDialogOpen(true)}
+                                    className="bg-gray-100 hover:bg-gray-200 border border-gray-200 rounded text-sm flex items-center gap-1 py-2 px-4 text-gray-700 w-full"
+                                >
+                                    <Plus size={16}/>
+                                    <span>Add another list</span>
+                                </button>
+                            </div>
+                        </div>
+
+                        <DragOverlay adjustScale={false}>
+                            {getActiveComponent()}
+                        </DragOverlay>
+                    </DndContext>
+
+                    {/* Dialogs */}
+                    <AddTaskDialog
+                        isOpen={isAddTaskDialogOpen}
+                        onClose={() => setIsAddTaskDialogOpen(false)}
+                        onAddTask={handleAddTask}
+                        columnId={selectedColumnId}
+                    />
+
+                    <AddColumnDialog
+                        isOpen={isAddColumnDialogOpen}
+                        onClose={() => setIsAddColumnDialogOpen(false)}
+                        onAddColumn={handleAddColumn}
+                    />
+
+                    {/* Column settings dialog */}
+                    {editColumnId && (
+                        <ColumnSettingsDialog
+                            isOpen={isColumnSettingsOpen}
+                            onClose={() => setIsColumnSettingsOpen(false)}
+                            columnId={editColumnId}
+                            columnTitle={board.columns[editColumnId]?.title || ""}
+                            yjsDoc={yjsDoc}
+                        />
+                    )}
                 </div>
-
-                <DragOverlay adjustScale={false}>
-                    {getActiveComponent()}
-                </DragOverlay>
-            </DndContext>
-
-            {/* Dialogs */}
-            <AddTaskDialog
-                isOpen={isAddTaskDialogOpen}
-                onClose={() => setIsAddTaskDialogOpen(false)}
-                onAddTask={handleAddTask}
-                columnId={selectedColumnId}
-            />
-
-            <AddColumnDialog
-                isOpen={isAddColumnDialogOpen}
-                onClose={() => setIsAddColumnDialogOpen(false)}
-                onAddColumn={handleAddColumn}
-            />
-
-            {/* Column settings dialog */}
-            {editColumnId && (
-                <ColumnSettingsDialog
-                    isOpen={isColumnSettingsOpen}
-                    onClose={() => setIsColumnSettingsOpen(false)}
-                    columnId={editColumnId}
-                    columnTitle={board.columns[editColumnId]?.title || ""}
-                    yjsDoc={yjsDoc}
-                />
-            )}
-        </div>
-        </div>
+            </div>
         </>
     );
 }
-export { StickiesBoard };
+export {StickiesBoard};

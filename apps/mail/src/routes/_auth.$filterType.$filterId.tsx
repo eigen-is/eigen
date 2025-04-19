@@ -4,22 +4,21 @@ import {EmailDraft} from "../components/mail/email-draft.tsx";
 import {
     useDeleteEmail,
     useEmail,
+    useEmailById,
     useEmails,
+    useMailboxes,
     useMoveEmail,
     useSendDraft,
     useToggleReadEmail,
-    useUpdateDraft,
-    useEmailById,
-    useMailboxes
+    useUpdateDraft
 } from '@workspace/lib/mail';
 import {EmailList} from "@/components/mail/email-list.tsx";
 import {Email, EmailDraft as EmailDraftType} from "@apps/api-server/types/mail";
 import {toast} from "sonner";
-import {useEffect} from 'react';
+import {useEffect, useState} from 'react';
 import {useIsMobile, useIsTablet} from "@workspace/lib/media";
 import {format} from "date-fns";
 import {DeleteDialog} from "@workspace/ui/components/layout/delete/delete-dialog";
-import {useState} from "react";
 
 // Define search params type
 export interface MailSearchParams {
@@ -65,14 +64,14 @@ function MailRoute() {
             toast.error("Could not load email");
             return;
         }
-        
+
         // Create a reply draft using the existing handleNewDraftEmail function
         const draft: EmailDraftType = {
             to: email.from,
             subject: `RE: ${email.subject}`,
             text: `\n\nOn ${format(new Date(email.date), "d MMM yyyy 'at' h:mm a")} ${email.from?.value[0]?.name} <${email.from?.value[0]?.address}> wrote:\n\n${email.text}`,
         };
-        
+
         handleNewDraftEmail(draft);
     };
 
@@ -83,14 +82,14 @@ function MailRoute() {
             toast.error("Could not load email");
             return;
         }
-        
+
         // Create a reply-all draft
         const draft: EmailDraftType = {
             to: {value: [...(email.from?.value || []), ...(email.cc?.value || [])]},
             subject: `RE: ${email.subject}`,
             text: `\n\nOn ${format(new Date(email.date), "d MMM yyyy 'at' h:mm a")} ${email.from?.value[0]?.name} <${email.from?.value[0]?.address}> wrote:\n\n${email.text}`,
         };
-        
+
         handleNewDraftEmail(draft);
     };
 
@@ -101,13 +100,13 @@ function MailRoute() {
             toast.error("Could not load email");
             return;
         }
-        
+
         // Create a forward draft
         const draft: EmailDraftType = {
             subject: `FW: ${email.subject}`,
             text: `\n\nOn ${format(new Date(email.date), "d MMM yyyy 'at' h:mm a")} ${email.from?.value[0]?.name} <${email.from?.value[0]?.address}> wrote:\n\n${email.text}`,
         };
-        
+
         handleNewDraftEmail(draft);
     };
 

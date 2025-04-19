@@ -1,11 +1,4 @@
-import {
-    Archive,
-    Forward,
-    Reply,
-    ReplyAll,
-    Trash2,
-    AlertTriangle
-} from "lucide-react";
+import {AlertTriangle, Archive, Forward, Printer, Reply, ReplyAll, Trash2} from "lucide-react";
 import {
     DropdownMenuContent,
     DropdownMenuItem,
@@ -14,10 +7,9 @@ import {
     DropdownMenuSubContent,
     DropdownMenuSubTrigger
 } from "@workspace/ui/components/dropdown-menu";
-import { MaildirMailbox } from "@apps/api-server/types/mail";
-import { ucfirst } from "@workspace/ui/lib/utils";
-import { CSSProperties } from "react";
-import { Printer } from "lucide-react";
+import {MaildirMailbox} from "@apps/api-server/types/mail";
+import {ucfirst} from "@workspace/ui/lib/utils";
+import {CSSProperties} from "react";
 
 interface EmailContextMenuProps {
     style: CSSProperties;
@@ -36,20 +28,20 @@ interface EmailContextMenuProps {
 }
 
 export function EmailContextMenu({
-    style,
-    messageId = '',
-    mailboxes = [],
-    currentMailboxId = '',
-    onReply,
-    onReplyAll,
-    onForward,
-    onArchive,
-    onReportSpam,
-    onDelete,
-    onMoveToFolder,
-    onClose,
-    onPrint
-}: EmailContextMenuProps) {
+                                     style,
+                                     messageId = '',
+                                     mailboxes = [],
+                                     currentMailboxId = '',
+                                     onReply,
+                                     onReplyAll,
+                                     onForward,
+                                     onArchive,
+                                     onReportSpam,
+                                     onDelete,
+                                     onMoveToFolder,
+                                     onClose,
+                                     onPrint
+                                 }: EmailContextMenuProps) {
     return (
         <DropdownMenuContent
             style={style}
@@ -57,88 +49,88 @@ export function EmailContextMenu({
         >
             {onPrint && (
                 <>
-                <DropdownMenuItem 
-                    onClick={() => {
-                        onPrint?.(messageId);
-                        onClose();
-                    }}
-                    className="flex items-center"
-                >
-                    <Printer className="h-4 w-4 mr-2" />
-                    Print
-                </DropdownMenuItem>
-                <DropdownMenuSeparator /> 
+                    <DropdownMenuItem
+                        onClick={() => {
+                            onPrint?.(messageId);
+                            onClose();
+                        }}
+                        className="flex items-center"
+                    >
+                        <Printer className="h-4 w-4 mr-2"/>
+                        Print
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator/>
                 </>
             )}
 
             {/* Reply options */}
-            <DropdownMenuItem 
+            <DropdownMenuItem
                 onClick={() => {
                     onReply?.(messageId);
                     onClose();
                 }}
                 className="flex items-center"
             >
-                <Reply className="h-4 w-4 mr-2" />
+                <Reply className="h-4 w-4 mr-2"/>
                 Reply
             </DropdownMenuItem>
-            <DropdownMenuItem 
+            <DropdownMenuItem
                 onClick={() => {
                     onReplyAll?.(messageId);
                     onClose();
                 }}
                 className="flex items-center"
             >
-                <ReplyAll className="h-4 w-4 mr-2" />
+                <ReplyAll className="h-4 w-4 mr-2"/>
                 Reply All
             </DropdownMenuItem>
-            <DropdownMenuItem 
+            <DropdownMenuItem
                 onClick={() => {
                     onForward?.(messageId);
                     onClose();
                 }}
                 className="flex items-center"
             >
-                <Forward className="h-4 w-4 mr-2" />
+                <Forward className="h-4 w-4 mr-2"/>
                 Forward
             </DropdownMenuItem>
-            
-            <DropdownMenuSeparator />
-            
+
+            <DropdownMenuSeparator/>
+
             {/* Email actions */}
-            <DropdownMenuItem 
+            <DropdownMenuItem
                 onClick={() => {
                     onArchive?.(messageId);
                     onClose();
                 }}
                 className="flex items-center"
             >
-                <Archive className="h-4 w-4 mr-2" />
+                <Archive className="h-4 w-4 mr-2"/>
                 Archive
             </DropdownMenuItem>
-            <DropdownMenuItem 
+            <DropdownMenuItem
                 onClick={() => {
                     onReportSpam?.(messageId);
                     onClose();
                 }}
                 className="flex items-center"
             >
-                <AlertTriangle className="h-4 w-4 mr-2" />
+                <AlertTriangle className="h-4 w-4 mr-2"/>
                 Report Spam
             </DropdownMenuItem>
-            <DropdownMenuItem 
+            <DropdownMenuItem
                 onClick={() => {
                     onDelete?.(messageId);
                     onClose();
                 }}
                 className="flex items-center"
             >
-                <Trash2 className="h-4 w-4 mr-2" />
+                <Trash2 className="h-4 w-4 mr-2"/>
                 Delete
             </DropdownMenuItem>
-            
-            <DropdownMenuSeparator />
-            
+
+            <DropdownMenuSeparator/>
+
             {/* Move to folder submenu */}
             <DropdownMenuSub>
                 <DropdownMenuSubTrigger className="flex items-center">

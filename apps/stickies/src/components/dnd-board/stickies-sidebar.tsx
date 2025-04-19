@@ -1,14 +1,14 @@
-import {Download, FileText, Home, UsersRound, X, Plus} from 'lucide-react';
+import {Download, FileText, Plus, UsersRound, X} from 'lucide-react';
 import {Button} from "@workspace/ui/components/button";
 import {SidebarSection} from '@workspace/ui/components/layout/sidebar/sidebar-section';
 import {AppLogo} from '@workspace/ui/components/layout/app-logo';
 import {SidebarItem, StorageUsage} from "@workspace/ui";
-import { DrivePath } from '@apps/api-server/types/drive';
-import { useState } from 'react';
-import { useNavigate } from '@tanstack/react-router';
+import {DrivePath} from '@apps/api-server/types/drive';
+import {useState} from 'react';
+import {useNavigate} from '@tanstack/react-router';
 
 // Import the create stickies component
-import { DriveCreateStickies } from '@workspace/ui/components/layout/drive/drive-create-stickies';
+import {DriveCreateStickies} from '@workspace/ui/components/layout/drive/drive-create-stickies';
 
 interface StickiesSidebarProps {
     condensed?: boolean;
@@ -26,7 +26,7 @@ export function StickiesSidebar({
     const navigate = useNavigate();
     // Add state for tracking dialog open state
     const [createStickiesOpen, setCreateStickiesOpen] = useState(false);
-    
+
     // Determine the target path for stickies creation
     const targetPath = rootPath;
 
@@ -102,7 +102,8 @@ export function StickiesSidebar({
                     path={targetPath}
                     open={createStickiesOpen}
                     onOpenChange={setCreateStickiesOpen}
-                    onSave={() => {}}
+                    onSave={() => {
+                    }}
                     onCancel={() => setCreateStickiesOpen(false)}
                     onAfterAction={handleAfterAction}
                 />

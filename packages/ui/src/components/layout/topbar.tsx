@@ -55,7 +55,8 @@ function UserDropdown({rootRoute}: { rootRoute: TopbarProps['rootRoute'] }) {
                     <DialogHeader>
                         <DialogTitle>Log out?</DialogTitle>
                         <DialogDescription>
-                            Logging out will end your current session. You will be logged out of your account and will need to log in again to continue.
+                            Logging out will end your current session. You will be logged out of your account and will
+                            need to log in again to continue.
 
                         </DialogDescription>
                     </DialogHeader>
