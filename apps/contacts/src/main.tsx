@@ -3,13 +3,13 @@ import {createRouter, RouterProvider} from '@tanstack/react-router';
 import {routeTree} from './routeTree.gen';
 import {useAuth} from "@workspace/lib/auth/auth-context.tsx";
 import {EigenApp} from "@workspace/ui/components/layout/eigen-app";
-import {useAddLabel, useUpdateLabel, useDeleteLabel} from '@workspace/lib/contacts';
+import {useAddLabel, useDeleteLabel, useUpdateLabel} from '@workspace/lib/contacts';
 
 import '@workspace/ui/globals.css';
 import './../css/globals.css';
-import { LabelProvider } from '@workspace/ui/components/layout/labels/label-provider';
-import { Label } from '@apps/api-server/types/label';
-import { useCallback } from 'react';
+import {LabelProvider} from '@workspace/ui/components/layout/labels/label-provider';
+import {Label} from '@apps/api-server/types/label';
+import {useCallback} from 'react';
 
 // Set up a Router instance
 const router = createRouter({

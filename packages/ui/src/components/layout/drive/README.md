@@ -1,10 +1,13 @@
 # Shared Drive UI Components
 
-This directory provides a comprehensive, modular set of React components and helpers for building Google Drive-like file management experiences in Eigen apps. All components are written in TypeScript, use Tailwind CSS and shadcn/ui for styling, and are designed to work seamlessly with Bun, TanStack Query, and the Eigen monorepo architecture.
+This directory provides a comprehensive, modular set of React components and helpers for building Google Drive-like file
+management experiences in Eigen apps. All components are written in TypeScript, use Tailwind CSS and shadcn/ui for
+styling, and are designed to work seamlessly with Bun, TanStack Query, and the Eigen monorepo architecture.
 
 ## Overview
 
 The components here allow apps to:
+
 - Render lists and tables of files/folders
 - Show file/folder details and sharing info
 - Create, upload, and delete files/folders
@@ -16,7 +19,9 @@ The components here allow apps to:
 ## Key Components
 
 ### 1. `DriveLayout`
-The main orchestrator for a file manager UI. Handles state for selection, dialogs, uploads, and delegates to subcomponents.
+
+The main orchestrator for a file manager UI. Handles state for selection, dialogs, uploads, and delegates to
+subcomponents.
 
 ```tsx
 import { DriveLayout } from "@workspace/ui/components/layout/drive";
@@ -40,6 +45,7 @@ import { DriveLayout } from "@workspace/ui/components/layout/drive";
 ```
 
 ### 2. `DriveList` & `DriveTable`
+
 - `DriveList`: Renders a list/table of files/folders with toolbar, breadcrumbs, and actions (create, upload, etc.).
 - `DriveTable`: Low-level table with keyboard navigation, context menu, and row click handlers.
 
@@ -56,6 +62,7 @@ import { DriveLayout } from "@workspace/ui/components/layout/drive";
 ```
 
 ### 3. `DriveDetail`
+
 Shows details of a selected file/folder, including metadata, preview, and sharing info.
 
 ```tsx
@@ -69,7 +76,9 @@ Shows details of a selected file/folder, including metadata, preview, and sharin
 ```
 
 ### 4. Creation Dialogs
-- `DriveCreateFolder`, `DriveCreateDoc`, `DriveCreateStickies`: Dialogs for creating folders, documents, or stickies boards.
+
+- `DriveCreateFolder`, `DriveCreateDoc`, `DriveCreateStickies`: Dialogs for creating folders, documents, or stickies
+  boards.
 - All use `DriveCreateItemDialog` for consistent UI.
 
 ```tsx
@@ -82,6 +91,7 @@ Shows details of a selected file/folder, including metadata, preview, and sharin
 ```
 
 ### 5. Sharing & Access Control
+
 - `DriveAccessDialog`: Modal for editing sharing settings.
 - `DriveAccessListEdit`: Inline editor for ACLs.
 - `DriveAccessList`: Read-only view of who has access.
@@ -96,11 +106,13 @@ Shows details of a selected file/folder, including metadata, preview, and sharin
 ```
 
 ### 6. Upload & File Helpers
+
 - `DriveUploadFiles`: Handles file uploads (drag-and-drop or dialog).
 - `file-icon-helper.tsx`: Function to get the right icon for a file/folder.
 - `file-upload.tsx`: Hook for custom upload flows.
 
 ## Example: Integrating in an App
+
 ```tsx
 import {
   DriveLayout,
@@ -115,6 +127,7 @@ import {
 ```
 
 ## File Index
+
 - `drive-layout.tsx`: Main orchestrator, manages state and renders subcomponents
 - `drive-list.tsx`: File/folder list/table with toolbar
 - `drive-table.tsx`: Table view with context menu, sorting, keyboard nav
@@ -132,6 +145,7 @@ import {
 - `index.ts`: Barrel export
 
 ## Best Practices
+
 - Use the provided dialogs/components for all create/delete/share flows
 - Use TanStack Query for data fetching and mutation
 - Use the `onAfterAction` prop to refresh data after mutations
@@ -140,4 +154,5 @@ import {
 
 ---
 
-For more details, see the code and prop types in each file. All components are designed for composability and can be extended as needed.
+For more details, see the code and prop types in each file. All components are designed for composability and can be
+extended as needed.

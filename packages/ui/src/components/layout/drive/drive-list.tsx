@@ -20,7 +20,7 @@ import {
     BreadcrumbSeparator
 } from "@workspace/ui/components/breadcrumb";
 import {useBreadcrumb} from "@workspace/lib/drive";
-import { useIsMobile } from '@workspace/lib/media/index.js';
+import {useIsMobile} from '@workspace/lib/media/index.js';
 
 interface DriveListProps {
     items: DrivePath[];
@@ -149,54 +149,54 @@ export function DriveList({
         );
     }
 
-    const numberOfDropDownItems = (onCreateFolder ? 1 : 0 ) + (onUploadFile ? 1:0) + (onCreateDoc?1:0) + (onCreateStickies?1:0);
+    const numberOfDropDownItems = (onCreateFolder ? 1 : 0) + (onUploadFile ? 1 : 0) + (onCreateDoc ? 1 : 0) + (onCreateStickies ? 1 : 0);
 
     const newItemButton = (onCreateFolder || onUploadFile || onCreateDoc || onCreateStickies) ? (
         (numberOfDropDownItems === 1 ? (
-            onCreateDoc ? <Button size="default"  onClick={onCreateDoc}>
-            <Plus/>
-            <span className="mr-2">New document</span>
-        </Button> : onCreateStickies ?
-        <Button size="default"  onClick={onCreateStickies}>
-        <Plus/>
-        <span className="mr-2">New stickies</span>
-    </Button> : null
-        ) :
-        <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-                <Button size="default">
-                    <Plus/>
-                    <span className="mr-2">New</span>
-                </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-                {onCreateFolder && (
-                    <DropdownMenuItem onClick={onCreateFolder}>
-                        <FolderPlus className="h-4 w-4 mr-2"/>
-                        Create folder
-                    </DropdownMenuItem>
-                )}
-                {onUploadFile && (
-                    <DropdownMenuItem onClick={onUploadFile}>
-                        <UploadIcon className="h-4 w-4 mr-2"/>
-                        Upload file
-                    </DropdownMenuItem>
-                )}
-                {onCreateDoc && (
-                    <DropdownMenuItem onClick={onCreateDoc}>
-                        <FileText className="h-4 w-4 mr-2"/>
-                        Create document
-                    </DropdownMenuItem>
-                )}
-                {onCreateStickies && (
-                    <DropdownMenuItem onClick={onCreateStickies}>
-                        <StickyNote className="h-4 w-4 mr-2"/>
-                        Create stickies
-                    </DropdownMenuItem>
-                )}
-            </DropdownMenuContent>
-        </DropdownMenu>
-    )) : null;
+                    onCreateDoc ? <Button size="default" onClick={onCreateDoc}>
+                        <Plus/>
+                        <span className="mr-2">New document</span>
+                    </Button> : onCreateStickies ?
+                        <Button size="default" onClick={onCreateStickies}>
+                            <Plus/>
+                            <span className="mr-2">New stickies</span>
+                        </Button> : null
+                ) :
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button size="default">
+                            <Plus/>
+                            <span className="mr-2">New</span>
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                        {onCreateFolder && (
+                            <DropdownMenuItem onClick={onCreateFolder}>
+                                <FolderPlus className="h-4 w-4 mr-2"/>
+                                Create folder
+                            </DropdownMenuItem>
+                        )}
+                        {onUploadFile && (
+                            <DropdownMenuItem onClick={onUploadFile}>
+                                <UploadIcon className="h-4 w-4 mr-2"/>
+                                Upload file
+                            </DropdownMenuItem>
+                        )}
+                        {onCreateDoc && (
+                            <DropdownMenuItem onClick={onCreateDoc}>
+                                <FileText className="h-4 w-4 mr-2"/>
+                                Create document
+                            </DropdownMenuItem>
+                        )}
+                        {onCreateStickies && (
+                            <DropdownMenuItem onClick={onCreateStickies}>
+                                <StickyNote className="h-4 w-4 mr-2"/>
+                                Create stickies
+                            </DropdownMenuItem>
+                        )}
+                    </DropdownMenuContent>
+                </DropdownMenu>
+        )) : null;
 
     return (
         <div

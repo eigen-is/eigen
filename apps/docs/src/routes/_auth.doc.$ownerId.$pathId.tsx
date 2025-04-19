@@ -5,7 +5,7 @@ import {usePathInfo} from '@workspace/lib/drive'
 import {EigenLoader} from '@workspace/ui'
 import {useApp} from '@workspace/ui/components/layout/app-context'
 import {useCallback, useEffect, useState} from 'react'
-import { DriveAccessDialog } from '@workspace/ui/components/layout/drive/drive-access-dialog'
+import {DriveAccessDialog} from '@workspace/ui/components/layout/drive/drive-access-dialog'
 
 export const Route = createFileRoute('/_auth/doc/$ownerId/$pathId')({
     component: CollaborativeTextEditor,
@@ -51,7 +51,8 @@ function CollaborativeTextEditor() {
     return (
         <>
             <div className="bg-muted flex-1 overflow-hidden">
-                <CollaborativeEditor ownerId={ownerId} path={path} access={access} onAccessDialogOpen={handleAccessDialogOpen}/>
+                <CollaborativeEditor ownerId={ownerId} path={path} access={access}
+                                     onAccessDialogOpen={handleAccessDialogOpen}/>
             </div>
             <DriveAccessDialog
                 open={accessDialogOpen}

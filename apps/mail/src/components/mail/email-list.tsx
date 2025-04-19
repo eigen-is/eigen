@@ -1,18 +1,11 @@
-import {
-    Paperclip, 
-    Search
-} from "lucide-react";
-import {KeyboardEvent, useEffect, useMemo, useState, useRef} from "react";
+import {Paperclip, Search} from "lucide-react";
+import {KeyboardEvent, useEffect, useMemo, useRef, useState} from "react";
 import {cn} from "@workspace/ui/lib/utils";
 import {Input} from "@workspace/ui/components/input";
 import {EigenLoader} from "@workspace/ui/components/layout/eigen-loader";
-import {EmailSummary} from "@apps/api-server/types/mail";
-import {
-    DropdownMenu,
-    DropdownMenuTrigger,
-} from "@workspace/ui/components/dropdown-menu";
-import { MaildirMailbox } from "@apps/api-server/types/mail";
-import { EmailContextMenu } from "./email-context-menu";
+import {EmailSummary, MaildirMailbox} from "@apps/api-server/types/mail";
+import {DropdownMenu, DropdownMenuTrigger,} from "@workspace/ui/components/dropdown-menu";
+import {EmailContextMenu} from "./email-context-menu";
 
 interface EmailListProps {
     emails: EmailSummary[];
@@ -53,7 +46,7 @@ export function EmailList({
     // State for the context menu
     const [contextMenuEmail, setContextMenuEmail] = useState<EmailSummary | null>(null);
     // State for the context menu position
-    const [menuPosition, setMenuPosition] = useState({ x: 0, y: 0 });
+    const [menuPosition, setMenuPosition] = useState({x: 0, y: 0});
     // Ref for the context menu
     const contextMenuRef = useRef<HTMLDivElement>(null);
     // Ref voor de tabel om naar geselecteerde rijen te kunnen scrollen
@@ -75,7 +68,7 @@ export function EmailList({
     // Gefilterde e-mails voor gebruik met toetsenbord navigatie
     const filteredEmails = useMemo(() => {
         const globalFilterLowerCase = globalFilter.toLowerCase();
-        return  [...emails].filter ( email => email.subject.toLowerCase().includes(globalFilterLowerCase) || email.fromShort.toLowerCase().includes(globalFilterLowerCase) || email.textShort.toLowerCase().includes(globalFilterLowerCase) ).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+        return [...emails].filter(email => email.subject.toLowerCase().includes(globalFilterLowerCase) || email.fromShort.toLowerCase().includes(globalFilterLowerCase) || email.textShort.toLowerCase().includes(globalFilterLowerCase)).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     }, [emails, globalFilter]);
 
     // Effect om selectedIndex bij te werken wanneer activeRowId verandert
@@ -159,7 +152,7 @@ export function EmailList({
     const handleContextMenu = (e: React.MouseEvent, email: EmailSummary) => {
         e.preventDefault();
         setContextMenuEmail(email);
-        setMenuPosition({ x: e.clientX, y: e.clientY });
+        setMenuPosition({x: e.clientX, y: e.clientY});
     };
 
     // Close context menu when clicking outside
@@ -280,17 +273,17 @@ export function EmailList({
                     )}
                 </div>
             </div>
-            
+
             {/* Custom context menu using shadcn dropdown-menu */}
-            <DropdownMenu 
-                open={!!contextMenuEmail} 
+            <DropdownMenu
+                open={!!contextMenuEmail}
                 onOpenChange={(open) => !open && setContextMenuEmail(null)}
             >
                 <DropdownMenuTrigger className="hidden">
                     {/* Hidden trigger */}
                 </DropdownMenuTrigger>
-                
-                <EmailContextMenu 
+
+                <EmailContextMenu
                     style={{
                         position: 'absolute',
                         top: `${menuPosition.y}px`,

@@ -1,5 +1,4 @@
 import {useEffect, useState} from 'react';
-import {Trash2} from 'lucide-react';
 import {z} from 'zod';
 import {useForm} from 'react-hook-form';
 import {zodResolver} from '@hookform/resolvers/zod';
@@ -116,10 +115,10 @@ export function LabelDialog({
                                         <FormItem>
                                             <FormLabel className="invisible">Color</FormLabel>
                                             <FormControl>
-                                                <Input 
+                                                <Input
                                                     type="color"
-                                                    {...field} 
-                                                    className="w-12" 
+                                                    {...field}
+                                                    className="w-12"
                                                     disabled={isLoading}
                                                 />
                                             </FormControl>
@@ -133,13 +132,13 @@ export function LabelDialog({
                                     control={form.control}
                                     name="name"
                                     render={({field, fieldState}) => (
-                                        <FormItem  className="flex-1">
+                                        <FormItem className="flex-1">
                                             <FormLabel>Label Name</FormLabel>
                                             <FormControl>
-                                                <Input 
-                                                    placeholder="Enter label name" 
-                                                    autoFocus 
-                                                    {...field} 
+                                                <Input
+                                                    placeholder="Enter label name"
+                                                    autoFocus
+                                                    {...field}
                                                     disabled={isLoading}
                                                 />
                                             </FormControl>
@@ -162,17 +161,17 @@ export function LabelDialog({
                                         Delete
                                     </Button>
                                 )}
-                                <Button 
-                                    type="button" 
-                                    variant="outline" 
+                                <Button
+                                    type="button"
+                                    variant="outline"
                                     onClick={() => onOpenChange(false)}
-                                    className="mr-2" 
+                                    className="mr-2"
                                     disabled={isLoading}
                                 >
                                     Cancel
                                 </Button>
-                                <Button 
-                                    type="submit" 
+                                <Button
+                                    type="submit"
                                     disabled={isLoading || form.formState.isSubmitting}
                                 >
                                     {isLoading ? 'Saving...' : 'Save'}

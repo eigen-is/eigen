@@ -10,9 +10,9 @@ import {withHistory} from "slate-history";
 import {EditorToolbar} from "./editor-toolbar";
 import {CustomElement} from "./editor.types";
 import {EigenLoader} from "@workspace/ui";
-import { UserPublicAvatar } from "@workspace/ui/components/layout/user-public-avatar";
-import { Button } from "@workspace/ui/components/button";
-import { ArrowUp } from "lucide-react";
+import {UserPublicAvatar} from "@workspace/ui/components/layout/user-public-avatar";
+import {Button} from "@workspace/ui/components/button";
+import {ArrowUp} from "lucide-react";
 
 // Define the initial value with proper typing
 const initialValue: CustomElement[] = [
@@ -49,7 +49,7 @@ export const CollaborativeEditor = ({ownerId, path, access, onAccessDialogOpen}:
     useEffect(() => {
         // Build WebSocket URL
         const wsUrl = `${import.meta.env.VITE_API_HOST}/ws/collab/${ownerId}/${path.id}`;
-        
+
         // Create WebSocket provider
         const yProvider = new WebsocketProvider(wsUrl, slug, yDoc, {
             resyncInterval: 5000,
@@ -83,19 +83,20 @@ export const CollaborativeEditor = ({ownerId, path, access, onAccessDialogOpen}:
 
     return <>
         <div className="absolute top-26 right-6 flex items-center gap-1">
-            {Array.from(users || []).map(user => (<UserPublicAvatar key={user[0]} email={user[0]} color={user[1].color} className="-ml-2"/>))}
+            {Array.from(users || []).map(user => (
+                <UserPublicAvatar key={user[0]} email={user[0]} color={user[1].color} className="-ml-2"/>))}
         </div>
-        <SlateEditor path={path} sharedType={sharedType} provider={provider} access={access} onAccessDialogOpen={onAccessDialogOpen}/>
+        <SlateEditor path={path} sharedType={sharedType} provider={provider} access={access}
+                     onAccessDialogOpen={onAccessDialogOpen}/>
     </>;
 };
-          
 
 
 const SlateEditor = ({
                          sharedType,
                          provider,
                          path,
-                         access ,
+                         access,
                          onAccessDialogOpen,
                      }: {
     sharedType: Y.XmlText | null;
@@ -266,7 +267,8 @@ const SlateEditor = ({
                 <div className="flex h-full w-full flex-col">
                     <EditorToolbar path={path} canWrite={access.canWrite} onAccessDialogOpen={onAccessDialogOpen}/>
                     <div className="h-full w-full overflow-y-scroll bg-gray-200 p-4">
-                        <div data-document className="grid p-[2cm] bg-white rounded-lg shadow-sm min-h-full w-[210mm] m-auto print:p-0" >
+                        <div data-document
+                             className="grid p-[2cm] bg-white rounded-lg shadow-sm min-h-full w-[210mm] m-auto print:p-0">
                             <Cursors className="h-full">
                                 <Editable
                                     readOnly={!access.canWrite}

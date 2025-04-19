@@ -27,7 +27,7 @@ export function useContacts() {
 // Hook to invalidate contacts cache
 export function useInvalidateAllContacts() {
     const queryClient = useQueryClient();
-    
+
     return () => {
         queryClient.invalidateQueries({queryKey: contactKeys.lists()});
     };

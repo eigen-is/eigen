@@ -6,7 +6,7 @@ import {useAuth} from '@workspace/lib/auth/auth-context.js';
 import {useIsMobile} from "@workspace/lib/media";
 import {EigenLoader} from '@workspace/ui';
 import {useState} from "react";
-import { FilePreview } from '../components/drive/file-preview';
+import {FilePreview} from '../components/drive/file-preview';
 
 export interface DriveSearchParams {
     pid?: string;
@@ -47,7 +47,7 @@ function DriveRoute() {
             if (mimeType.startsWith("image/") || mimeType.startsWith("video/")) {
                 // Update the preview if new selection is also previewable
                 const url = `${import.meta.env.VITE_API_HOST}/drive/embed/${path.ownerId}/${path.id}/${path.name}`;
-                setPreview({ url, mimeType });
+                setPreview({url, mimeType});
             } else {
                 // Close the preview if the new selection isn't previewable
                 setPreview(null);
@@ -67,7 +67,7 @@ function DriveRoute() {
 
     const onRowActivate = (path: DrivePath) => {
         const mimeType = path.mimeType || "";
-        
+
         if (path.type === 'folder') {
             navigate({
                 to: '/fs/$ownerId/$pathId',
@@ -81,7 +81,7 @@ function DriveRoute() {
             window.open(url, '_blank');
         } else if (mimeType.startsWith("image/") || mimeType.startsWith("video/")) {
             const url = `${import.meta.env.VITE_API_HOST}/drive/embed/${path.ownerId}/${path.id}/${path.name}`;
-            setPreview({url, mimeType: mimeType });
+            setPreview({url, mimeType: mimeType});
         } else {
             const url = `${import.meta.env.VITE_API_HOST}/drive/download/${path.ownerId}/${path.id}`;
             window.open(url, "_blank");
@@ -110,11 +110,11 @@ function DriveRoute() {
 
     return (
         <>
-            <FilePreview 
-                url={preview?.url || ''} 
-                mimeType={preview?.mimeType || ''} 
-                onClose={() => setPreview(null)} 
-                open={preview !== null} 
+            <FilePreview
+                url={preview?.url || ''}
+                mimeType={preview?.mimeType || ''}
+                onClose={() => setPreview(null)}
+                open={preview !== null}
             />
             <DriveLayout
                 pid={pid}

@@ -30,7 +30,7 @@ function PasswordComponent() {
 
     return (
         <div className="flex flex-col min-h-screen m-8">
-          <div className="w-full max-w-3xl">
+            <div className="w-full max-w-3xl">
                 <h1 className="text-2xl font-semibold mb-6">Change Password</h1>
                 <ChangePassword onPasswordChange={handlePasswordChange}/>
             </div>

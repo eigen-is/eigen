@@ -1,4 +1,4 @@
-import {BookUser, CircleUser, KeySquare, LockKeyholeIcon, Download, X} from 'lucide-react';
+import {BookUser, CircleUser, Download, KeySquare, LockKeyholeIcon, X} from 'lucide-react';
 import {Button} from "@workspace/ui/components/button";
 import {SidebarSection} from '@workspace/ui/components/layout/sidebar/sidebar-section';
 import {AppLogo} from '@workspace/ui/components/layout/app-logo';

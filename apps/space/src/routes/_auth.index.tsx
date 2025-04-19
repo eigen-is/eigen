@@ -61,7 +61,8 @@ function HomeComponent() {
                                             </div>
                                             <div>
                                                 <h3 className={`font-medium ${app.className} text-sm md:text-base`}>{app.name}</h3>
-                                                <p className="text-xs text-gray-500 hidden md:block">Access your {app.name.toLowerCase()}</p>
+                                                <p className="text-xs text-gray-500 hidden md:block">Access
+                                                    your {app.name.toLowerCase()}</p>
                                             </div>
                                         </div>
                                     </a>
