@@ -1,11 +1,12 @@
 import {createFileRoute, useNavigate} from '@tanstack/react-router';
 import {EigenLoader} from "@workspace/ui";
 import {useFolderContent, useInvalidateFolder, usePathInfo} from '@workspace/lib/drive';
-import {useContext, useEffect} from "react";
+import {useContext, useEffect, useState} from "react";
 import {DriveLayout} from "@workspace/ui/components/layout/drive/drive-layout";
 import {DrivePath} from "@apps/api-server/types/drive";
 import {useIsMobile} from "@workspace/lib/media";
 import {DriveContext} from "./_auth";
+import { FilePreview } from '../components/drive/file-preview';
 
 // Define search params type
 export interface DriveSearchParams {
@@ -27,6 +28,7 @@ function DriveRoute() {
     const invalidateFolder = useInvalidateFolder();
     const isMobile = useIsMobile();
     const {rootPathId} = useContext(DriveContext);
+    const [preview, setPreview] = useState<{ url: string; mimeType: string } | null>(null);
 
     // If pathId is "root", navigate to the actual root folder ID when available
     useEffect(() => {
@@ -52,6 +54,20 @@ function DriveRoute() {
 
     // Handle row click to show path details
     const onRowSelect = (path: DrivePath) => {
+        // Handle preview behavior when using keyboard navigation
+        const mimeType = path.mimeType || "";
+        if (preview !== null) {
+            // If a preview is already open
+            if (mimeType.startsWith("image/") || mimeType.startsWith("video/")) {
+                // Update the preview if new selection is also previewable
+                const url = `${import.meta.env.VITE_API_HOST}/drive/embed/${path.ownerId}/${path.id}/${path.name}`;
+                setPreview({ url, mimeType });
+            } else {
+                // Close the preview if the new selection isn't previewable
+                setPreview(null);
+            }
+        }
+
         if (isMobile && (path.type === 'folder' || path.type === 'doc' || path.type === 'stickies')) {
             onRowActivate(path);
         } else if (currentPath?.parentId === path.id) {
@@ -70,6 +86,8 @@ function DriveRoute() {
     };
 
     const onRowActivate = (path: DrivePath) => {
+        const mimeType = path.mimeType || "";
+
         if (path.type === 'folder') {
             navigate({
                 to: Route.fullPath,
@@ -82,9 +100,12 @@ function DriveRoute() {
         } else if (path.type === 'stickies') {
             const url = `${import.meta.env.VITE_APP_STICKIES_URL}/board/${path.ownerId}/${path.id}`;
             window.open(url, '_blank');
+        } else if (mimeType.startsWith("image/") || mimeType.startsWith("video/")) {
+            const url = `${import.meta.env.VITE_API_HOST}/drive/embed/${path.ownerId}/${path.id}/${path.name}`;
+            setPreview({url, mimeType: mimeType });
         } else {
-            const url = `${import.meta.env.VITE_API_HOST}/drive/download/${path.ownerId}/${path.id}`
-            window.open(url, '_blank');
+            const url = `${import.meta.env.VITE_API_HOST}/drive/download/${path.ownerId}/${path.id}`;
+            window.open(url, "_blank");
         }
     };
 
@@ -130,27 +151,35 @@ function DriveRoute() {
     }
 
     return (
-        <DriveLayout
-            ownerId={ownerId}
-            pathId={pathId}
-            folderContents={folderContents}
-            isLoading={isFolderContentLoading}
-            error={isFolderContentLoadingError}
-            selectedPath={selectedPath}
-            currentPath={currentPath}
-            onRowSelect={onRowSelect}
-            onRowActivate={onRowActivate}
-            onBackToList={handleBackToList}
-            onAfterAction={handleAfterAction}
-            allowCreateFolder={true}
-            allowCreateDoc={true}
-            allowCreateStickies={true}
-            allowDelete={true}
-            allowShare={true}
-            allowUpload={true}
-            isMobile={isMobile}
-            showBreadcrumb={true}
-            pid={pid}
-        />
+        <>
+            <FilePreview 
+                url={preview?.url || ''} 
+                mimeType={preview?.mimeType || ''} 
+                onClose={() => setPreview(null)} 
+                open={preview !== null} 
+            />
+            <DriveLayout
+                ownerId={ownerId}
+                pathId={pathId}
+                folderContents={folderContents}
+                isLoading={isFolderContentLoading}
+                error={isFolderContentLoadingError}
+                selectedPath={selectedPath}
+                currentPath={currentPath}
+                onRowSelect={onRowSelect}
+                onRowActivate={onRowActivate}
+                onBackToList={handleBackToList}
+                onAfterAction={handleAfterAction}
+                allowCreateFolder={true}
+                allowCreateDoc={true}
+                allowCreateStickies={true}
+                allowDelete={true}
+                allowShare={true}
+                allowUpload={true}
+                isMobile={isMobile}
+                showBreadcrumb={true}
+                pid={pid}
+            />
+        </>
     );
 }

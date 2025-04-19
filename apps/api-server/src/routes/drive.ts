@@ -288,6 +288,7 @@ export const driveRouter = new Elysia({name: "drive"})
         // Set caching headers for thumbnails (1 day)
         set.headers['Cache-Control'] = 'public, max-age=86400';
         set.headers['Expires'] = new Date(Date.now() + 86400000).toUTCString();
+        set.headers['Content-Type'] = 'image/webp';
 
         const drive = await getSharedDrive(params.ownerId, user);
         return await drive.getThumbnail(params.fileName);
@@ -318,6 +319,21 @@ export const driveRouter = new Elysia({name: "drive"})
         params: t.Object({
             ownerId: t.String(),
             pathId: t.String()
+        })
+    })
+
+    .get("/drive/embed/:ownerId/:pathId/:fileName", async ({params, user}: {
+        params: { ownerId: string, pathId: string, fileName: string },
+        user: User
+    }) => {
+        const drive = await getSharedDrive(params.ownerId, user);
+        return await drive.downloadFile(params.pathId);
+    }, {
+        auth: true,
+        params: t.Object({
+            ownerId: t.String(),
+            pathId: t.String(),
+            fileName: t.String()
         })
     })
 

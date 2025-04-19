@@ -5,6 +5,8 @@ import {DrivePath} from "@apps/api-server/types/drive";
 import {useAuth} from '@workspace/lib/auth/auth-context.js';
 import {useIsMobile} from "@workspace/lib/media";
 import {EigenLoader} from '@workspace/ui';
+import {useState} from "react";
+import { FilePreview } from '../components/drive/file-preview';
 
 export interface DriveSearchParams {
     pid?: string;
@@ -27,6 +29,7 @@ function DriveRoute() {
     const ownerId = auth?.user?.id;
     const {data: selectedPath = null} = usePathInfo(uid || '', pid || '');
     const isMobile = useIsMobile();
+    const [preview, setPreview] = useState<{ url: string; mimeType: string } | null>(null);
 
     // Fetch folder content and path information
     const {
@@ -37,6 +40,20 @@ function DriveRoute() {
 
     // Handle row click to show path details
     const onRowSelect = (path: DrivePath) => {
+        // Handle preview behavior when using keyboard navigation
+        const mimeType = path.mimeType || "";
+        if (preview !== null) {
+            // If a preview is already open
+            if (mimeType.startsWith("image/") || mimeType.startsWith("video/")) {
+                // Update the preview if new selection is also previewable
+                const url = `${import.meta.env.VITE_API_HOST}/drive/embed/${path.ownerId}/${path.id}/${path.name}`;
+                setPreview({ url, mimeType });
+            } else {
+                // Close the preview if the new selection isn't previewable
+                setPreview(null);
+            }
+        }
+
         if (isMobile && (path.type === 'folder' || path.type === 'doc' || path.type === 'stickies')) {
             onRowActivate(path);
         } else {
@@ -49,6 +66,8 @@ function DriveRoute() {
     };
 
     const onRowActivate = (path: DrivePath) => {
+        const mimeType = path.mimeType || "";
+        
         if (path.type === 'folder') {
             navigate({
                 to: '/fs/$ownerId/$pathId',
@@ -60,9 +79,12 @@ function DriveRoute() {
         } else if (path.type === 'stickies') {
             const url = `${import.meta.env.VITE_APP_STICKIES_URL}/board/${path.ownerId}/${path.id}`;
             window.open(url, '_blank');
+        } else if (mimeType.startsWith("image/") || mimeType.startsWith("video/")) {
+            const url = `${import.meta.env.VITE_API_HOST}/drive/embed/${path.ownerId}/${path.id}/${path.name}`;
+            setPreview({url, mimeType: mimeType });
         } else {
-            const url = `${import.meta.env.VITE_API_HOST}/drive/download/${path.ownerId}/${path.id}`
-            window.open(url, '_blank');
+            const url = `${import.meta.env.VITE_API_HOST}/drive/download/${path.ownerId}/${path.id}`;
+            window.open(url, "_blank");
         }
     };
 
@@ -87,26 +109,34 @@ function DriveRoute() {
     }
 
     return (
-        <DriveLayout
-            pid={pid}
-            selectedPath={selectedPath}
-            ownerId={uid || ownerId}
-            folderContents={folderContents ?? []}
-            isLoading={isFolderContentLoading}
-            error={isFolderContentLoadingError}
-            onRowSelect={onRowSelect}
-            onRowActivate={onRowActivate}
-            onBackToList={handleBackToList}
-            onAfterAction={() => {
-            }}
-            allowDelete={to === 'by-me'}
-            allowShare={true}
-            allowCreateFolder={false}
-            allowUpload={false}
-            allowCreateDoc={false}
-            allowCreateStickies={false}
-            isMobile={isMobile}
-            showBreadcrumb={false}
-        />
+        <>
+            <FilePreview 
+                url={preview?.url || ''} 
+                mimeType={preview?.mimeType || ''} 
+                onClose={() => setPreview(null)} 
+                open={preview !== null} 
+            />
+            <DriveLayout
+                pid={pid}
+                selectedPath={selectedPath}
+                ownerId={uid || ownerId}
+                folderContents={folderContents ?? []}
+                isLoading={isFolderContentLoading}
+                error={isFolderContentLoadingError}
+                onRowSelect={onRowSelect}
+                onRowActivate={onRowActivate}
+                onBackToList={handleBackToList}
+                onAfterAction={() => {
+                }}
+                allowDelete={to === 'by-me'}
+                allowShare={true}
+                allowCreateFolder={false}
+                allowUpload={false}
+                allowCreateDoc={false}
+                allowCreateStickies={false}
+                isMobile={isMobile}
+                showBreadcrumb={false}
+            />
+        </>
     );
 }
