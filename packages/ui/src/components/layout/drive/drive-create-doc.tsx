@@ -63,7 +63,8 @@ export function DriveCreateDoc({
             onOpenChange={handleOpenChange}
             onCreateItem={handleCreateDoc}
             isPending={createDocMutation.isPending}
-            type="Doc"
+            type="Document"
+            path={path}
         />
     );
 }
