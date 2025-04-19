@@ -30,7 +30,7 @@ export default class Maildir {
         const basePathExists = await this.home.fs.dirExists(this.basePath);
         if (!basePathExists) {
             await this.createMailboxes();
-            await this.mailboxDeliver(welcomeMail(this.user.name));
+            await this.mailboxDeliver(welcomeMail(this.user.name), false);
         }
         this.db = new maildb(this.home);
         await this.db.init();
@@ -132,7 +132,7 @@ export default class Maildir {
      * @param message Message content
      * @returns Filename of the delivered message
      */
-    public async mailboxDeliver(message: string): Promise<string> {
+    public async mailboxDeliver(message: string, notify: boolean = true): Promise<string> {
         try {
             // Create a unique filename
             const messageId = createUniqueMessageId();
@@ -145,11 +145,13 @@ export default class Maildir {
             // parse the message
             this.mailboxGet('').then(async () => {
                 this.messageGet(messageId).then(async (parsedMessage) => {
-                    if (this.notifyCallback) {
+                    if (this.notifyCallback && notify) {
                         this.notifyCallback({
                             type: 'mail',
-                            title: 'New email',
-                            description: `${parsedMessage?.subject || 'No subject'}`,
+                            title: `New email: ${parsedMessage?.subject || 'No subject'}`,
+                            body: `${parsedMessage?.textShort || 'No body'}`,
+                            link: `/mail/box/inbox?mailId=${parsedMessage?.id}`,
+                            tag: 'mail'
                         });
                     }
                 });

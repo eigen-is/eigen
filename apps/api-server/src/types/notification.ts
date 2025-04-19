@@ -3,4 +3,5 @@ export type EigenNotification = {
     title: string;
     body: string;
     tag: string;
+    link?: string;
 }

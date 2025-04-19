@@ -717,6 +717,14 @@ export default class Drive {
                 createdAt: new Date(),
                 updatedAt: new Date()
             }).run();
+            // send notification
+            this.home.notify({
+                type: "acl_insert",
+                title: "Item shared with you",
+                body: `${path.name} has been shared with you`,
+                tag: "shared_path_created",
+                link: `/drive/fs/${path.ownerId}/${path.id}`
+            });
         }
     }
 

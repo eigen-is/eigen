@@ -144,7 +144,7 @@ export class Home {
         return {mail, contacts, drive, used: (mail + contacts + drive), max};
     }
 
-    private notify(event: EigenNotification) {
+    public notify(event: EigenNotification) {
         this.notificationSockets = this.notificationSockets.filter(ws => {
             if (ws.readyState === 1) {
                 ws.send(JSON.stringify(event));
