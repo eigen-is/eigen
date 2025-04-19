@@ -54,11 +54,12 @@ function DriveRoute() {
     };
 
     const onRowActivate = (path: DrivePath) => {
-        if (path.type === 'stickies') {
-            navigate({
-                to: '/board/$ownerId/$pathId',
-                params: {ownerId: path.ownerId, pathId: path.id}
-            });
+        if (path.type === 'doc') {
+            const url = `${import.meta.env.VITE_APP_DOCS_URL}/doc/${path.ownerId}/${path.id}`;
+            window.open(url, '_blank');
+        } else if (path.type === 'stickies') {
+            const url = `${import.meta.env.VITE_APP_STICKIES_URL}/board/${path.ownerId}/${path.id}`;
+            window.open(url, '_blank');
         }
     };
 
