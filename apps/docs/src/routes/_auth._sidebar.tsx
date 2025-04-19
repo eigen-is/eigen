@@ -9,11 +9,11 @@ import {DocsSidebar} from "@/components/docs/docs-sidebar.tsx";
 
 // Create a drive context to share data with child routes
 export interface DriveContextType {
-  rootPathId: string | undefined;
+  rootPath: DrivePath | null;
 }
 
 export const DriveContext = createContext<DriveContextType>({
-  rootPathId: undefined
+  rootPath: null
 });
 
 export const Route = createFileRoute('/_auth/_sidebar')({
@@ -38,7 +38,7 @@ function AuthLayout() {
 
   // Get root folder information
   const {data: rootFolder, isLoading: isRootLoading, error: rootError} = useRootFolder(user.id);
-  const rootPathId = rootFolder?.id;
+  const rootPath = rootFolder || null;
 
   // Loading state
   const isLoading = isRootLoading;
@@ -63,7 +63,7 @@ function AuthLayout() {
 
   // Create context value to pass to child routes
   const driveContextValue: DriveContextType = {
-    rootPathId
+    rootPath
   };
 
   return (
@@ -80,8 +80,7 @@ function AuthLayout() {
               condensed={isTablet}
               isMobile={isMobile}
               onClose={() => setSidebarOpen(false)}
-              rootPath={`/fs/${rootFolder?.ownerId}/${rootFolder?.id}`}
-              error={error}
+              rootPath={rootPath}
           />
         </div>
 
