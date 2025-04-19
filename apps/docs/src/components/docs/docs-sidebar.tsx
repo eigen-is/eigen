@@ -61,24 +61,15 @@ export function DocsSidebar({
 
             {/* New button dropdown */}
             <div className="px-3 py-2">
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button
-                            variant="default"
-                            size={condensed ? "icon" : "default"}
-                            className={`${condensed ? 'w-10 p-0' : 'w-full justify-start gap-3'}`}
-                        >
-                            <Plus className="h-4 w-4"/>
-                            {!condensed && <span>New</span>}
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align={condensed ? "center" : "start"}>
-                        <DropdownMenuItem onClick={() => setCreateDocOpen(true)}>
-                            <FileText className="h-4 w-4 mr-2"/>
-                            Create document
-                        </DropdownMenuItem>
-                    </DropdownMenuContent>
-                </DropdownMenu>
+                <Button
+                    variant="default"
+                    size={condensed ? "icon" : "default"}
+                    className={`${condensed ? 'w-10 p-0' : 'w-full justify-start gap-3'}`}
+                    onClick={() => setCreateDocOpen(true)}
+                >
+                    <Plus className="h-4 w-4"/>
+                    {!condensed && <span>New</span>}
+                </Button>
             </div>
 
             <SidebarSection
