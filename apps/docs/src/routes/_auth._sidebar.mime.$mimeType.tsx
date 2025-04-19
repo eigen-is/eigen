@@ -52,10 +52,11 @@ function DriveRoute() {
 
     const onRowActivate = (path: DrivePath) => {
         if (path.type === 'doc') {
-            navigate({
-                to: '/doc/$ownerId/$pathId',
-                params: {ownerId: path.ownerId, pathId: path.id}
-            });
+            const url = `${import.meta.env.VITE_APP_DOCS_URL}/doc/${path.ownerId}/${path.id}`;
+            window.open(url, '_blank');
+        } else if (path.type === 'stickies') {
+            const url = `${import.meta.env.VITE_APP_STICKIES_URL}/board/${path.ownerId}/${path.id}`;
+            window.open(url, '_blank');
         }
     };
 
