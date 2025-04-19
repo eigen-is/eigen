@@ -311,6 +311,9 @@ export const driveRouter = new Elysia({name: "drive"})
         if (path && path.name) {
             // Set the Content-Disposition header with the file's name
             set.headers['Content-Disposition'] = `attachment; filename="${path.name}"`;
+            // Set caching headers (1 day)
+            set.headers['Cache-Control'] = 'public, max-age=86400';
+            set.headers['Expires'] = new Date(Date.now() + 86400000).toUTCString();
         }
 
         return await drive.downloadFile(params.pathId);
@@ -322,11 +325,15 @@ export const driveRouter = new Elysia({name: "drive"})
         })
     })
 
-    .get("/drive/embed/:ownerId/:pathId/:fileName", async ({params, user}: {
+    .get("/drive/embed/:ownerId/:pathId/:fileName", async ({params, user, set}: {
         params: { ownerId: string, pathId: string, fileName: string },
-        user: User
+        user: User,
+        set: any
     }) => {
         const drive = await getSharedDrive(params.ownerId, user);
+        // Set caching headers (1 day)
+        set.headers['Cache-Control'] = 'public, max-age=86400';
+        set.headers['Expires'] = new Date(Date.now() + 86400000).toUTCString();
         return await drive.downloadFile(params.pathId);
     }, {
         auth: true,
