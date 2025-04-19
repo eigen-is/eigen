@@ -149,7 +149,19 @@ export function DriveList({
         );
     }
 
+    const numberOfDropDownItems = (onCreateFolder ? 1 : 0 ) + (onUploadFile ? 1:0) + (onCreateDoc?1:0) + (onCreateStickies?1:0);
+
     const newItemButton = (onCreateFolder || onUploadFile || onCreateDoc || onCreateStickies) ? (
+        (numberOfDropDownItems === 1 ? (
+            onCreateDoc ? <Button size="default"  onClick={onCreateDoc}>
+            <Plus/>
+            <span className="mr-2">New document</span>
+        </Button> : onCreateStickies ?
+        <Button size="default"  onClick={onCreateStickies}>
+        <Plus/>
+        <span className="mr-2">New stickies</span>
+    </Button> : null
+        ) :
         <DropdownMenu>
             <DropdownMenuTrigger asChild>
                 <Button size="default">
@@ -184,7 +196,7 @@ export function DriveList({
                 )}
             </DropdownMenuContent>
         </DropdownMenu>
-    ) : null;
+    )) : null;
 
     return (
         <div
