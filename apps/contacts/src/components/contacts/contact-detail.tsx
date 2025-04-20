@@ -151,10 +151,6 @@ export function ContactDetail({contact, onDelete, onBack, filterType, filterId, 
                                 <Printer className="h-4 w-4 mr-2"/>
                                 Print
                             </DropdownMenuItem>
-                            <DropdownMenuItem className="flex items-center">
-                                <Download className="h-4 w-4 mr-2"/>
-                                Export as vCard
-                            </DropdownMenuItem>
                             <DropdownMenuSeparator/>
                             <DropdownMenuItem asChild className="flex items-center">
                                 <Link
