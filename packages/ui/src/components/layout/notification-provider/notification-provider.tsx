@@ -7,6 +7,7 @@ import {useQueryClient} from "@tanstack/react-query";
 import {emailKeys, mailboxKeys} from "@workspace/lib/mail";
 import type {EigenNotification} from "@apps/api-server/types/notification";
 import {useAuth} from "@workspace/lib/auth/auth-context.tsx"; // Fixed import path
+import { driveKeys } from '@workspace/lib/drive/index.js';
 
 interface NotificationProviderProps {
     children: React.ReactNode;
@@ -95,6 +96,8 @@ export function NotificationProvider({children}: NotificationProviderProps) {
                 if (body?.type === 'mail') {
                     queryClient.invalidateQueries({queryKey: emailKeys.list('inbox')});
                     queryClient.invalidateQueries({queryKey: mailboxKeys.lists()});
+                } else if (body?.type === 'acl_insert' || body?.type === 'acl_delete') {
+                    queryClient.invalidateQueries({queryKey: driveKeys.shared('with-me')});
                 }
 
                 // Send pong response
