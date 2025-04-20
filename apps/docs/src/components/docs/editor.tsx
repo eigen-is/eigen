@@ -1,4 +1,4 @@
-import {useCallback, useEffect, useMemo, useState} from "react";
+import {useCallback, useEffect, useMemo, useState, useRef} from "react";
 import {createEditor, Editor, Node, NodeEntry, Transforms} from "slate";
 import {Editable, ReactEditor, RenderElementProps, RenderLeafProps, Slate, withReact} from "slate-react";
 import {withCursors, withYjs, YjsEditor} from "@slate-yjs/core";
@@ -86,6 +86,34 @@ const SlateEditor = ({
     onAccessDialogOpen: () => void;
 }) => {
     const auth = useAuth();
+    const [scale, setScale] = useState(1);
+    const documentRef = useRef<HTMLDivElement>(null);
+
+    // Calculate scale factor based on screen width
+    useEffect(() => {
+        const calculateScale = () => {
+            // A4 paper width is 210mm (approximately 793px)
+            const documentWidth = 793; // 210mm in pixels
+            const padding = 32; // Container padding (16px on each side)
+            const availableWidth = window.innerWidth - padding;
+            
+            // Only scale down if needed, never scale up
+            const newScale = Math.min(1, availableWidth / documentWidth);
+            setScale(newScale);
+        };
+
+        calculateScale();
+        // Recalculate on window resize
+        window.addEventListener('resize', calculateScale);
+        
+        // Small delay to ensure proper calculation after render
+        const timer = setTimeout(calculateScale, 100);
+        
+        return () => {
+            window.removeEventListener('resize', calculateScale);
+            clearTimeout(timer);
+        };
+    }, []);
 
     const editor = useMemo(() => {
         const e = withReact(
@@ -246,20 +274,35 @@ const SlateEditor = ({
             <Slate editor={editor} initialValue={initialValue}>
                 <div className="flex h-full w-full flex-col">
                     <EditorToolbar path={path} canWrite={access.canWrite} onAccessDialogOpen={onAccessDialogOpen}/>
-                    <div className="h-full w-full overflow-y-scroll bg-gray-200 p-4">
-                        <div data-document
-                             className="grid p-[2cm] bg-white rounded-lg shadow-sm min-h-full w-[210mm] m-auto print:p-0">
-                            <Cursors className="h-full">
-                                <Editable
-                                    readOnly={!access.canWrite}
-                                    spellCheck={false}
-                                    autoFocus
-                                    className="h-full outline-none"
-                                    renderElement={renderElement}
-                                    renderLeaf={renderLeaf}
-                                    onKeyDown={handleKeyDown}
-                                />
-                            </Cursors>
+                    <div className="h-full w-full bg-gray-200 overflow-y-auto p-4  overflow-x-hidden flex flex-col items-center">
+                        <div 
+                            style={{ 
+                                transform: `scale(${scale})`,
+                                transformOrigin: 'top center',
+                                width: '210mm',
+                                height: `calc(100% / ${scale})`,
+                            }}
+                        >
+                            <div 
+                                ref={documentRef}
+                                data-document
+                                className="bg-white rounded-lg shadow-lg w-full p-[2cm] relative"
+                                style={{ 
+                                    minHeight: `calc((100dvh - 120px) / ${scale})`
+                                }}
+                            >
+                                <Cursors className="h-full absolute inset-0">
+                                    <Editable
+                                        readOnly={!access.canWrite}
+                                        spellCheck={false}
+                                        autoFocus
+                                        className="outline-none h-full"
+                                        renderElement={renderElement}
+                                        renderLeaf={renderLeaf}
+                                        onKeyDown={handleKeyDown}
+                                    />
+                                </Cursors>
+                            </div>
                         </div>
                     </div>
                 </div>
