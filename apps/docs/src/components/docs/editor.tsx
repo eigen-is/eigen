@@ -13,6 +13,7 @@ import {EigenLoader} from "@workspace/ui";
 import {UserPublicAvatar} from "@workspace/ui/components/layout/user-public-avatar";
 import {Button} from "@workspace/ui/components/button";
 import {ArrowUp} from "lucide-react";
+import { DrivePath } from "@apps/api-server/types/drive";
 
 // Define the initial value with proper typing
 const initialValue: CustomElement[] = [
@@ -35,16 +36,6 @@ export const CollaborativeEditor = ({ownerId, path, access, onAccessDialogOpen}:
 
     const yDoc = useMemo(() => new Y.Doc(), []);
     const sharedType = useMemo(() => yDoc.get('slate', Y.XmlText), [yDoc]);
-    const [users, setUsers] = useState<Map<string, any>>();
-
-    // TODO: wil je dit uit de awareness halen? Dit gaat mis als je hetzelfde document opent in meerdere tabs - of niet?
-    // en dan gelijk even toevoegen aan stickies :)
-    useEffect(() => {
-        const userMap = yDoc.getMap('users');
-        const observe = () => setUsers(new Map(userMap));
-        userMap.observe(observe);
-        return () => userMap.unobserve(observe);
-    }, [yDoc]);
 
     useEffect(() => {
         // Build WebSocket URL
@@ -64,14 +55,7 @@ export const CollaborativeEditor = ({ownerId, path, access, onAccessDialogOpen}:
 
         setProvider(yProvider);
 
-        yDoc.getMap('users').set(auth.user.email, {
-            name: auth.user.name,
-            color: '#660044'
-        });
-
         return () => {
-            yDoc.getMap('users').delete(auth.user.email);
-
             yProvider?.off("sync", setConnected);
             yProvider?.destroy();
         };
@@ -82,10 +66,6 @@ export const CollaborativeEditor = ({ownerId, path, access, onAccessDialogOpen}:
     }
 
     return <>
-        <div className="absolute top-26 right-6 flex items-center gap-1">
-            {Array.from(users || []).map(user => (
-                <UserPublicAvatar key={user[0]} email={user[0]} color={user[1].color} className="-ml-2"/>))}
-        </div>
         <SlateEditor path={path} sharedType={sharedType} provider={provider} access={access}
                      onAccessDialogOpen={onAccessDialogOpen}/>
     </>;
@@ -282,12 +262,6 @@ const SlateEditor = ({
                             </Cursors>
                         </div>
                     </div>
-                </div>
-                <div className="fixed bottom-2 left-2">
-                    {/** button with arrow up */}
-                    <Button variant="ghost" className="bg-white" title="Move up" onClick={() => window.scrollTo(0, 0)}>
-                        <ArrowUp className="h-4 w-4"/>
-                    </Button>
                 </div>
             </Slate>
         </>
