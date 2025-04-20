@@ -694,6 +694,13 @@ export default class Drive {
     public async recieveACLChange(path: DrivePath, newACL: DriveACL[] | null) {
         if (newACL === null) {
             this.sharedDb.delete(sharedSchema.sharedPaths).where(eq(sharedSchema.sharedPaths.id, path.id)).run();
+            // send notification
+            this.home.notify({
+                type: "acl_delete",
+                title: "Item unshared with you",
+                body: `${path.name} has been unshared with you`,
+                tag: "shared_path_deleted",
+            });
         } else if (this.sharedDb.select().from(sharedSchema.sharedPaths).where(eq(sharedSchema.sharedPaths.id, path.id)).get()) {
             this.sharedDb.update(sharedSchema.sharedPaths).set({
                 acl: newACL,
