@@ -270,9 +270,9 @@ export function DriveList({
                 <div className="flex-1 flex flex-col items-center justify-top text-center">
                     <p className="text-muted-foreground mb-4">Within this void, all possibilities are yet
                         unobserved.</p>
-                    <div className="flex gap-2">
+                    {/* <div className="flex gap-2">
                         {newItemButton}
-                    </div>
+                    </div> */}
                 </div>
             )}
         </div>
