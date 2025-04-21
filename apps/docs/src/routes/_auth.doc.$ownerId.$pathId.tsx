@@ -6,7 +6,8 @@ import {EigenLoader} from '@workspace/ui'
 import {useApp} from '@workspace/ui/components/layout/app-context'
 import {useCallback, useEffect, useState} from 'react'
 import {DriveAccessDialog} from '@workspace/ui/components/layout/drive/drive-access-dialog'
-
+import {DriveDeleteItem} from '@workspace/ui/components/layout/drive/drive-delete-item'
+import {useNavigate} from '@tanstack/react-router';
 export const Route = createFileRoute('/_auth/doc/$ownerId/$pathId')({
     component: CollaborativeTextEditor,
 })
@@ -18,6 +19,8 @@ function CollaborativeTextEditor() {
     const {appName, setAppName} = useApp();
     const [originalAppName] = useState(appName);
     const [accessDialogOpen, setAccessDialogOpen] = useState(false);
+    const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+    const navigate = useNavigate();
 
     // Always call hooks at the top level, before any conditional logic
     useEffect(() => {
@@ -36,6 +39,8 @@ function CollaborativeTextEditor() {
         setAccessDialogOpen(true);
     }, [setAccessDialogOpen]);
 
+
+    // Handle loading states
     if (isLoading || pathLoading) {
         return <EigenLoader/>
     }
@@ -51,13 +56,21 @@ function CollaborativeTextEditor() {
     return (
         <>
             <div className="bg-muted flex-1 overflow-hidden">
-                <CollaborativeEditor ownerId={ownerId} path={path} access={access}
-                                     onAccessDialogOpen={handleAccessDialogOpen}/>
+                <CollaborativeEditor path={path} access={access}
+                                     onAccessDialogOpen={handleAccessDialogOpen}
+                                     onDeleteDialogOpen={setDeleteDialogOpen}/>
             </div>
             <DriveAccessDialog
                 open={accessDialogOpen}
                 onOpenChange={setAccessDialogOpen}
                 path={path}
+            /><DriveDeleteItem
+                path={path}
+                open={deleteDialogOpen}
+                onOpenChange={setDeleteDialogOpen}
+                onAfterAction={() => {
+                    navigate({to: `/`});
+                }}
             />
         </>
     )
