@@ -56,6 +56,8 @@ function MailRoute() {
     const getEmailById = useEmailById();
     const {data: mailboxes = [], isLoading: isMailboxesLoading, error: isMailboxesError} = useMailboxes();
 
+    const selectedEmailInData = emails.find(m => m.id === selectedEmail?.id);
+    if (selectedEmailInData) selectedEmailInData.isRead = true;
 
     // Handler for replying to an email
     const handleReplyEmail = async (emailId: string) => {
