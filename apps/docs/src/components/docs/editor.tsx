@@ -10,9 +10,6 @@ import {withHistory} from "slate-history";
 import {EditorToolbar} from "./editor-toolbar";
 import {CustomElement} from "./editor.types";
 import {EigenLoader} from "@workspace/ui";
-import {UserPublicAvatar} from "@workspace/ui/components/layout/user-public-avatar";
-import {Button} from "@workspace/ui/components/button";
-import {ArrowUp} from "lucide-react";
 import { DrivePath } from "@apps/api-server/types/drive";
 
 // Define the initial value with proper typing
