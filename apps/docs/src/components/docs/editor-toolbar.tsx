@@ -582,10 +582,8 @@ export const EditorToolbar = ({path, canWrite, onAccessDialogOpen}: EditorToolba
                     path={path}
                     open={deleteDialogOpen}
                     onOpenChange={setDeleteDialogOpen}
-                    onAfterAction={(actionType) => {
-                        if (actionType === 'delete') {
-                            navigate({to: `/`});
-                        }
+                    onAfterAction={() => {
+                        navigate({to: `/`});
                     }}
                 />
             )}
