@@ -297,6 +297,11 @@ export default class Drive {
             throw new Error("No write permission");
         }
 
+        // if collab document
+        if (folder.type === "doc" || folder.type === "stickies") {
+            await this.closeCollabDocument(pathId);
+        }
+
         // first try to delete all files in folder
         try {
             // get all files from folder
@@ -664,6 +669,8 @@ export default class Drive {
             console.log("Destructing document", key);
             (await document.get()).destruct();
             documents.delete(key);
+        } else {
+            return;
         }
 
         // update size of document

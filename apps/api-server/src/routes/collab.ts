@@ -57,6 +57,7 @@ export const collabRouter = new Elysia({
                 ws.close(1008, "Authentication failed");
                 return;
             }
+            try {
             const document = await drive.getCollabDocument(pathId);
 
             document.subscribe(user, ws as unknown as ServerWebSocket<any>);
@@ -68,6 +69,10 @@ export const collabRouter = new Elysia({
                     console.error('Error unsubscribing from document:', err);
                 }
             });
+            } catch (err) {
+                console.error('Error getting document:', err);
+                ws.close(1008, "Failed to get document");
+            }
         },
 
         async message(ws, message) {
@@ -116,10 +121,13 @@ export const collabRouter = new Elysia({
                 const ownerId = ws.data.params.ownerId;
                 const pathId = ws.data.params.pathId;
 
-                const drive = await getSharedDrive(ownerId, user);
-                const document = await drive.getCollabDocument(pathId);
-
-                document.unsubscribe(user, ws as unknown as ServerWebSocket<any>);
+                try {
+                    const drive = await getSharedDrive(ownerId, user);
+                    const document = await drive.getCollabDocument(pathId);
+                    document.unsubscribe(user, ws as unknown as ServerWebSocket<any>);
+                } catch (err) {
+                    console.error('Error handling WebSocket close:', err);
+                }
             } catch (err) {
                 console.error('Error handling WebSocket close:', err);
             }

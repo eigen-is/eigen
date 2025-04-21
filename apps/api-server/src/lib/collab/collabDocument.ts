@@ -107,6 +107,7 @@ export default class CollabDocument {
     private provider!: LoggingProvider | DbProvider;
     private awareness!: awarenessProtocol.Awareness;
     private connections: Set<ServerWebSocket<any>> = new Set();
+    private closed: boolean = false;
 
     constructor(drive: Drive, path: DrivePath) {
         this.drive = drive;
@@ -138,18 +139,30 @@ export default class CollabDocument {
     }
 
     public destruct() {
+        this.closed = true;
+        // destroy all connections
+        this.connections.forEach((conn) => {
+            conn.close();
+            this.connections.delete(conn);
+        });
         this.provider.destroy();
         this.awareness.destroy();
         this.doc.destroy();
     }
 
     public subscribe(user: User, conn: ServerWebSocket<any>) {
+        if (this.closed) {
+            return;
+        }
         this.connections.add(conn);
         this.sendSyncStep1(conn);
         console.log(`User ${user.id} connected to document ${this.path.name}`);
     }
 
     public unsubscribe(user: User, conn: ServerWebSocket<any>) {
+        if (this.closed) {
+            return;
+        }
         this.connections.delete(conn);
         console.log(`User ${user.id} disconnected from document ${this.path.name}`);
         this.connections.forEach((connection) => {
@@ -165,6 +178,9 @@ export default class CollabDocument {
     }
 
     public handleMessage(conn: ServerWebSocket<any>, update: Uint8Array, canWrite: boolean) {
+        if (this.closed) {
+            return;
+        }
         // Create a decoder from the message
         const decoder = decoding.createDecoder(update);
         const messageType = decoding.readVarUint(decoder);
@@ -219,6 +235,9 @@ export default class CollabDocument {
 
     // Helper function to broadcast a message to all clients
     private broadcastMessage(originConn: ServerWebSocket<any>, message: Uint8Array) {
+        if (this.closed) {
+            return;
+        }
         for (const conn of this.connections) {
             if (conn !== originConn && conn.readyState === 1) { // OPEN
                 try {
@@ -232,6 +251,9 @@ export default class CollabDocument {
 
 // Helper function to send full document state to a client
     private sendSyncStep1(conn: ServerWebSocket<any>) {
+        if (this.closed) {
+            return;
+        }
         try {
             // Create encoder for sync step 1 message
             const encoder = encoding.createEncoder();
