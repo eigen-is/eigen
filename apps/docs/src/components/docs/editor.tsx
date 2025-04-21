@@ -20,11 +20,11 @@ const initialValue: CustomElement[] = [
     },
 ];
 
-export const CollaborativeEditor = ({path, access, onAccessDialogOpen}: {
+export const CollaborativeEditor = ({path, access, onAccessDialogOpen, onDeleteDialogOpen}: {
     path: DrivePath, access: {
         canRead: boolean;
         canWrite: boolean;
-    }, onAccessDialogOpen: () => void
+    }, onAccessDialogOpen: () => void, onDeleteDialogOpen: (open: boolean) => void
 }) => {
     const [connected, setConnected] = useState(false);
     const [provider, setProvider] = useState<WebsocketProvider>();
@@ -63,7 +63,8 @@ export const CollaborativeEditor = ({path, access, onAccessDialogOpen}: {
 
     return <>
         <SlateEditor path={path} sharedType={sharedType} provider={provider} access={access}
-                     onAccessDialogOpen={onAccessDialogOpen}/>
+                     onAccessDialogOpen={onAccessDialogOpen}
+                     onDeleteDialogOpen={onDeleteDialogOpen}/>
     </>;
 };
 
@@ -74,12 +75,14 @@ const SlateEditor = ({
                          path,
                          access,
                          onAccessDialogOpen,
+                         onDeleteDialogOpen,
                      }: {
     sharedType: Y.XmlText | null;
     provider: WebsocketProvider | null;
     path: DrivePath;
     access: { canRead: boolean, canWrite: boolean };
     onAccessDialogOpen: () => void;
+    onDeleteDialogOpen: (open: boolean) => void;
 }) => {
     const auth = useAuth();
 
@@ -241,7 +244,7 @@ const SlateEditor = ({
         <>
             <Slate editor={editor} initialValue={initialValue}>
                 <div className="flex h-full w-full flex-col">
-                    <EditorToolbar path={path} canWrite={access.canWrite} onAccessDialogOpen={onAccessDialogOpen}/>
+                    <EditorToolbar path={path} canWrite={access.canWrite} onDeleteDialogOpen={onDeleteDialogOpen}  onAccessDialogOpen={onAccessDialogOpen}/>
                     <div className="h-full w-full overflow-y-scroll bg-gray-200 p-4">
                         <div data-document
                              className="grid p-[2cm] bg-white rounded-lg shadow-sm min-h-full w-[210mm] m-auto print:p-0">
