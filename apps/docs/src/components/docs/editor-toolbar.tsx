@@ -230,6 +230,8 @@ export const EditorToolbar = ({path, canWrite, onAccessDialogOpen}: EditorToolba
     const [linkUrl, setLinkUrl] = useState('');
     const [linkDialogOpen, setLinkDialogOpen] = useState(false);
     const [commandKey, setCommandKey] = useState('⌘');
+    const [createDocOpen, setCreateDocOpen] = useState(false);
+    const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
     const {user} = useAuth();
     const {data: rootFolder} = useRootFolder(user?.id || '');
     const navigate = useNavigate();
@@ -303,7 +305,7 @@ export const EditorToolbar = ({path, canWrite, onAccessDialogOpen}: EditorToolba
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="start">
                         <DropdownMenuItem onClick={() => {
-                            rootFolder && setLinkDialogOpen(true);
+                            rootFolder && setCreateDocOpen(true);
                         }}>
                             <FileText/> New document
                         </DropdownMenuItem>
@@ -316,7 +318,7 @@ export const EditorToolbar = ({path, canWrite, onAccessDialogOpen}: EditorToolba
                         {canWrite && (
                             <>
                                 <Separator/>
-                                <DropdownMenuItem onClick={() => path && setLinkDialogOpen(true)}>
+                                <DropdownMenuItem onClick={() => path && setDeleteDialogOpen(true)}>
                                     <Trash2/> Delete
                                 </DropdownMenuItem>
                             </>
@@ -567,20 +569,19 @@ export const EditorToolbar = ({path, canWrite, onAccessDialogOpen}: EditorToolba
             </div>
 
             {/* Document Creation Dialog */}
-            {/* Debug: {createDocOpen ? 'Dialog should be open' : 'Dialog closed'}, rootFolder exists: {!!rootFolder} */}
             {rootFolder && (
                 <DriveCreateDoc
                     path={rootFolder}
-                    open={false}
-                    onOpenChange={() => {}}
+                    open={createDocOpen}
+                    onOpenChange={setCreateDocOpen}
                 />
             )}
             {/* Document Delete Dialog */}
             {path && (
                 <DriveDeleteItem
                     path={path}
-                    open={false}
-                    onOpenChange={() => {}}
+                    open={deleteDialogOpen}
+                    onOpenChange={setDeleteDialogOpen}
                     onAfterAction={(actionType) => {
                         if (actionType === 'delete') {
                             navigate({to: `/`});
