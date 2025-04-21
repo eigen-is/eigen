@@ -20,15 +20,14 @@ const initialValue: CustomElement[] = [
     },
 ];
 
-export const CollaborativeEditor = ({ownerId, path, access, onAccessDialogOpen}: {
-    ownerId: string, path: DrivePath, access: {
+export const CollaborativeEditor = ({path, access, onAccessDialogOpen}: {
+    path: DrivePath, access: {
         canRead: boolean;
         canWrite: boolean;
     }, onAccessDialogOpen: () => void
 }) => {
     const [connected, setConnected] = useState(false);
     const [provider, setProvider] = useState<WebsocketProvider>();
-    const auth = useAuth();
     const slug = ``;
 
     const yDoc = useMemo(() => new Y.Doc(), []);
@@ -36,7 +35,7 @@ export const CollaborativeEditor = ({ownerId, path, access, onAccessDialogOpen}:
 
     useEffect(() => {
         // Build WebSocket URL
-        const wsUrl = `${import.meta.env.VITE_API_HOST}/ws/collab/${ownerId}/${path.id}`;
+        const wsUrl = `${import.meta.env.VITE_API_HOST}/ws/collab/${path.ownerId}/${path.id}`;
 
         // Create WebSocket provider
         const yProvider = new WebsocketProvider(wsUrl, slug, yDoc, {
@@ -56,7 +55,7 @@ export const CollaborativeEditor = ({ownerId, path, access, onAccessDialogOpen}:
             yProvider?.off("sync", setConnected);
             yProvider?.destroy();
         };
-    }, [yDoc, auth]);
+    }, [yDoc, path.ownerId, path.id]);
 
     if (!connected || !sharedType || !provider) {
         return <div className="flex h-full items-center justify-center"><EigenLoader/></div>;
