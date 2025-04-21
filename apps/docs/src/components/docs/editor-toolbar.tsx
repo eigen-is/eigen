@@ -225,13 +225,12 @@ const AlignmentButton = ({alignment, icon, tooltipText}: AlignmentButtonProps) =
     );
 };
 
-export const EditorToolbar = ({path, canWrite, onAccessDialogOpen}: EditorToolbarProps) => {
+export const EditorToolbar = ({path, canWrite, onAccessDialogOpen, onDeleteDialogOpen}: EditorToolbarProps) => {
     const editor = useSlate() as CustomEditor;
     const [linkUrl, setLinkUrl] = useState('');
     const [linkDialogOpen, setLinkDialogOpen] = useState(false);
     const [commandKey, setCommandKey] = useState('⌘');
     const [createDocOpen, setCreateDocOpen] = useState(false);
-    const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
     const {user} = useAuth();
     const {data: rootFolder} = useRootFolder(user?.id || '');
     const navigate = useNavigate();
@@ -318,7 +317,7 @@ export const EditorToolbar = ({path, canWrite, onAccessDialogOpen}: EditorToolba
                         {canWrite && (
                             <>
                                 <Separator/>
-                                <DropdownMenuItem onClick={() => path && setDeleteDialogOpen(true)}>
+                                <DropdownMenuItem onClick={() => path && onDeleteDialogOpen(true)}>
                                     <Trash2/> Delete
                                 </DropdownMenuItem>
                             </>
@@ -576,17 +575,6 @@ export const EditorToolbar = ({path, canWrite, onAccessDialogOpen}: EditorToolba
                     onOpenChange={setCreateDocOpen}
                 />
             )}
-            {/* Document Delete Dialog */}
-            {path && (
-                <DriveDeleteItem
-                    path={path}
-                    open={deleteDialogOpen}
-                    onOpenChange={setDeleteDialogOpen}
-                    onAfterAction={() => {
-                        navigate({to: `/`});
-                    }}
-                />
-            )}
             <Dialog open={linkDialogOpen} onOpenChange={setLinkDialogOpen}>
                 <DialogContent className="sm:max-w-[425px]">
                     <DialogHeader>
@@ -622,6 +610,7 @@ export const EditorToolbar = ({path, canWrite, onAccessDialogOpen}: EditorToolba
 interface EditorToolbarProps {
     canWrite: boolean;
     onAccessDialogOpen: () => void;
+    onDeleteDialogOpen: (open: boolean) => void;
     path: DrivePath;
 }
 
