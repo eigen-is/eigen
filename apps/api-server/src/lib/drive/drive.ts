@@ -299,7 +299,11 @@ export default class Drive {
 
         // if collab document
         if (folder.type === "doc" || folder.type === "stickies") {
-            await this.closeCollabDocument(pathId);
+            try {
+                await this.closeCollabDocument(pathId);
+            } catch (err) {
+                console.error('Error closing collab document:', err);
+            }
         }
 
         // first try to delete all files in folder
