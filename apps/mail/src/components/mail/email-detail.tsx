@@ -240,14 +240,12 @@ export function EmailDetail({
                     {needsToShowDetails && (
                         <details >
                             <summary className="text-xs truncate p-1 cursor-pointer hover:bg-muted rounded-md" onClick={toggleExpanded}>
-                                {true && (
-                                    <span className={cn(isExpanded ? 'opacity-0' : 'opacity-100')}>
+                                <span className={cn(isExpanded ? 'opacity-0' : 'opacity-100')}>
                                     {needsToShowTo && email.to && <> to: {formatContactObjects(email.to, true)}</>}  
                                     {email.cc && <> cc: {formatContactObjects(email.cc,true)}</>}   
                                     {email.bcc && <> bcc: {formatContactObjects(email.bcc,true)}</>}
                                 </span>
-                            )}
-                        </summary>
+                            </summary>
                         <div>
                             <Table className="text-sm text-muted-foreground">
                                 <TableBody>
