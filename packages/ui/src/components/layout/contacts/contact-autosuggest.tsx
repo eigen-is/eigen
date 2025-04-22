@@ -20,7 +20,8 @@ export function ContactAutosuggest({
                                        id,
                                        name,
                                        required,
-                                       inputRef: externalInputRef
+                                       inputRef: externalInputRef,
+                                       onSubmit
                                    }: ContactAutosuggestProps) {
     const [isOpen, setIsOpen] = useState(false);
     const [selectedIndex, setSelectedIndex] = useState(0);
@@ -92,6 +93,14 @@ export function ContactAutosuggest({
         }
     }, [isOpen, displayedSuggestions, selectedIndex, handleSelect]);
 
+    // Handle Enter key for onSubmit
+    const handleKeyDownSubmit = (event: React.KeyboardEvent<HTMLInputElement>) => {
+        if (event.key === "Enter" && onSubmit) {
+            console.log('Submitting value:', inputValue);
+            onSubmit(inputValue);
+        }
+    };
+
     const handleFocus = useCallback(() => {
         setIsOpen(true);
     }, []);
@@ -125,7 +134,10 @@ export function ContactAutosuggest({
                 onChange={handleInputChange}
                 onFocus={handleFocus}
                 onBlur={handleBlur}
-                onKeyDown={handleKeyDown}
+                onKeyDown={(e) => {
+                    handleKeyDown(e);
+                    handleKeyDownSubmit(e);
+                }}
                 className={inputClassName}
                 placeholder={placeholder}
                 disabled={disabled}

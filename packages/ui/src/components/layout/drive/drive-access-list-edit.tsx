@@ -128,8 +128,6 @@ export function DriveAccessListEdit({
 
     // Parse contact suggestion from input and add user if valid
     const processContactInput = useCallback((value: string) => {
-        console.log('Processing contact input:', value)
-
         // First try to extract an email from a formatted string like "Name <email@eigen.is>"
         const emailMatch = value.match(/<(.+)>/)
         let email: string
@@ -181,8 +179,6 @@ export function DriveAccessListEdit({
 
     // This is called when a suggestion is selected from the dropdown
     const handleContactSelected = useCallback((value: string) => {
-        console.log('Contact selected:', value)
-
         // If the value contains angle brackets, it's a selected suggestion
         if (value.includes('<') && value.includes('>')) {
             const added = processContactInput(value)
@@ -290,6 +286,7 @@ export function DriveAccessListEdit({
                             onlyEigenIsMails={true}
                             placeholder="Enter email addresses"
                             inputRef={inputRef}
+                            onSubmit={handleAddContactClick}
                         />
                     </div>
                     <Button
