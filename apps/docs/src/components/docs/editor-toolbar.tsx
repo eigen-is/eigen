@@ -309,22 +309,22 @@ export const EditorToolbar = ({path, canWrite, onAccessDialogOpen, onDeleteDialo
                         <DropdownMenuItem onClick={() => {
                             rootFolder && setCreateDocOpen(true);
                         }}>
-                            <FileText/> New document
+                            <FileText className="w-4 h-4 mr-2"/> New document
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => navigate({to: `/`})}>
-                            <Folder/> Open
+                            <Folder className="w-4 h-4 mr-2"/> Open
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => path && setRenameDialogOpen(true)}>
-                            <Pencil/> Rename
+                            <Pencil className="w-4 h-4 mr-2"/> Rename
                         </DropdownMenuItem>
                         <Separator/>
-                        <DropdownMenuItem onClick={onAccessDialogOpen}><UserRoundPlus/> Edit access</DropdownMenuItem>
-                        <DropdownMenuItem onClick={printDocument}><Printer/> Print</DropdownMenuItem>
+                        <DropdownMenuItem onClick={onAccessDialogOpen}><UserRoundPlus  className="w-4 h-4 mr-2"/> Edit access</DropdownMenuItem>
+                        <DropdownMenuItem onClick={printDocument}><Printer className="w-4 h-4 mr-2"/> Print</DropdownMenuItem>
                         {canWrite && (
                             <>
                                 <Separator/>
                                 <DropdownMenuItem onClick={() => path && onDeleteDialogOpen(true)}>
-                                    <Trash2/> Delete
+                                    <Trash2  className="w-4 h-4 mr-2"/> Delete
                                 </DropdownMenuItem>
                             </>
                         )}
