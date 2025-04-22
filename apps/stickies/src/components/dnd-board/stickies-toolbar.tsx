@@ -5,6 +5,7 @@ import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
+    DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
 import {Separator} from '@workspace/ui/components/separator';
@@ -83,11 +84,11 @@ export const StickiesToolbar = ({canWrite, undoManager, onAccessDialogOpen, path
                         <DropdownMenuItem onClick={() => path && setRenameDialogOpen(true)}>
                             <Pencil  className="w-4 h-4 mr-2"/> Rename
                         </DropdownMenuItem>
-                        <Separator/>
+                        <DropdownMenuSeparator/>
                         <DropdownMenuItem onClick={onAccessDialogOpen}><UserRoundPlus  className="w-4 h-4 mr-2"/> Edit access</DropdownMenuItem>
                         {canWrite && (
                             <>
-                                <Separator/>
+                                <DropdownMenuSeparator/>
                                 <DropdownMenuItem onClick={() => path && setDeleteDialogOpen(true)}>
                                     <Trash2  className="w-4 h-4 mr-2"/> Delete
                                 </DropdownMenuItem>
