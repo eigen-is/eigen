@@ -28,6 +28,7 @@ import {useLabels} from '@workspace/lib/contacts';
 import {TooltipButton, UserAvatar} from "@workspace/ui";
 import {EigenLoader} from '@workspace/ui/components/layout/eigen-loader';
 import {useOpenWriteEmailTo} from "@workspace/lib/mail";
+import { printDocument } from '@workspace/ui/lib/printElement';
 
 interface ContactDetailProps {
     contact: Contact;
@@ -133,7 +134,7 @@ export function ContactDetail({contact, onDelete, onBack, filterType, filterId, 
 
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" className="w-full justify-start px-2 py-1.5">
+                            <Button variant="ghost" className="w-full justify-start px-2 py-1.5" title="More actions">
                                 <MoreVertical className="h-4 w-4"/>
                             </Button>
                         </DropdownMenuTrigger>
@@ -141,18 +142,17 @@ export function ContactDetail({contact, onDelete, onBack, filterType, filterId, 
                             {contact.email && contact.email.length > 0 && (
                                 <DropdownMenuItem
                                     onClick={() => openWriteEmailTo(contact.email[0])}
-                                    className="flex items-center"
                                 >
-                                    <Mail className="h-4 w-4 mr-2"/>
+                                    <Mail className="mr-2"/>
                                     Send email
                                 </DropdownMenuItem>
                             )}
-                            <DropdownMenuItem className="flex items-center">
-                                <Printer className="h-4 w-4 mr-2"/>
+                            <DropdownMenuItem onClick={printDocument}>
+                                <Printer className="mr-2"/>
                                 Print
                             </DropdownMenuItem>
                             <DropdownMenuSeparator/>
-                            <DropdownMenuItem asChild className="flex items-center">
+                            <DropdownMenuItem asChild className="cursor-pointer">
                                 <Link
                                     to="/edit/$filterType/$filterId"
                                     params={{
@@ -163,12 +163,12 @@ export function ContactDetail({contact, onDelete, onBack, filterType, filterId, 
                                         contactId: contact.id
                                     }}
                                 >
-                                    <Edit className="h-4 w-4 mr-2"/>
+                                    <Edit className="mr-2"/>
                                     Edit
                                 </Link>
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => setDeleteDialogOpen(true)} className="flex items-center">
-                                <Trash2 className="h-4 w-4 mr-2"/>
+                            <DropdownMenuItem onClick={() => setDeleteDialogOpen(true)}>
+                                <Trash2 className="mr-2" />
                                 Delete
                             </DropdownMenuItem>
                         </DropdownMenuContent>
