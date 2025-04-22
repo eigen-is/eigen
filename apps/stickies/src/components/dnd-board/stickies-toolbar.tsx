@@ -1,5 +1,5 @@
 import {useEffect, useState} from 'react';
-import {FileText, Folder, Redo, Trash2, Undo, UserPlus, UserRoundPlus} from 'lucide-react';
+import {FileText, Folder, Pencil, Redo, Trash2, Undo, UserPlus, UserRoundPlus} from 'lucide-react';
 import {Button} from '@workspace/ui/components/button';
 import {
     DropdownMenu,
@@ -17,6 +17,7 @@ import {useRootFolder} from '@workspace/lib/drive';
 import {DriveCreateStickies} from '@workspace/ui/components/layout/drive/drive-create-stickies';
 import {DriveDeleteItem} from '@workspace/ui/components/layout/drive/drive-delete-item';
 import {DrivePath} from '@apps/api-server/types/drive';
+import { DriveRenameItem } from '@workspace/ui/components/layout/drive/drive-rename-item';
 
 interface StickiesToolbarProps {
     canWrite: boolean;
@@ -34,6 +35,7 @@ export const StickiesToolbar = ({canWrite, undoManager, onAccessDialogOpen, path
     const [canRedo, setCanRedo] = useState(false);
     const [createStickiesOpen, setCreateStickiesOpen] = useState(false);
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+    const [renameDialogOpen, setRenameDialogOpen] = useState(false);
     const {user} = useAuth();
     const {data: rootFolder} = useRootFolder(user?.id || '');
     const navigate = useNavigate();
@@ -77,6 +79,9 @@ export const StickiesToolbar = ({canWrite, undoManager, onAccessDialogOpen, path
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => navigate({to: `/`})}>
                             <Folder/> Open
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => path && setRenameDialogOpen(true)}>
+                            <Pencil/> Rename
                         </DropdownMenuItem>
                         <Separator/>
                         <DropdownMenuItem onClick={onAccessDialogOpen}><UserRoundPlus/> Edit access</DropdownMenuItem>
@@ -144,6 +149,15 @@ export const StickiesToolbar = ({canWrite, undoManager, onAccessDialogOpen, path
                             navigate({to: `/`});
                         }
                     }}
+                />
+            )}
+
+            {/* Stickies Rename Dialog */}
+            {path && (
+                <DriveRenameItem
+                    path={path}
+                    open={renameDialogOpen}
+                    onOpenChange={setRenameDialogOpen}
                 />
             )}
         </div>
