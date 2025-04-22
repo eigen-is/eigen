@@ -36,7 +36,8 @@ export function ShadowContent({
             shadowRoot.innerHTML = "";
         } else {
             // Create new shadow root with "closed" mode for better security
-            shadowRoot = hostElement.attachShadow({mode: "closed"});
+            // @ts-ignore
+            shadowRoot = hostElement.attachShadow({mode: "closed", clonable: true});
             // Store reference to the shadow root since we can't access it later with mode: "closed"
             (hostElement as any)._shadowRoot = shadowRoot;
         }
