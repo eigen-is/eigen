@@ -177,6 +177,14 @@ export function DriveTable({
                 }
                 break;
 
+            case 'Delete':
+                e.preventDefault();
+                if (onDelete && selectedIndex >= 0 && selectedIndex < allItems.length) {
+                    onDelete(allItems[selectedIndex]);
+                }
+                break;
+
+            case 'PageUp':
             case 'Home':
                 e.preventDefault();
                 if (allItems.length > 0) {
@@ -185,6 +193,7 @@ export function DriveTable({
                 }
                 break;
 
+            case 'PageDown':
             case 'End':
                 e.preventDefault();
                 if (allItems.length > 0) {
