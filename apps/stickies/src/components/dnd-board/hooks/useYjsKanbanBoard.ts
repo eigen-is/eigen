@@ -128,7 +128,7 @@ export const useYjsKanbanBoard = (ownerId: string, pathId: string) => {
     };
 
     // Add new task (mutates Yjs only)
-    const handleAddTask = (taskData: Omit<TaskItem, 'id' | 'creator' | 'createdAt'>) => {
+    const handleAddTask = (taskData: Omit<TaskItem, 'id' | 'createdAt'>) => {
         if (!selectedColumnId || !docRef.current) return;
         const doc = docRef.current;
         doc.transact(() => {
@@ -140,7 +140,7 @@ export const useYjsKanbanBoard = (ownerId: string, pathId: string) => {
             newTaskMap.set('id', taskId);
             newTaskMap.set('title', taskData.title);
             newTaskMap.set('description', taskData.description || '');
-            newTaskMap.set('creator', ownerId);
+            newTaskMap.set('creator', taskData.creator);
             newTaskMap.set('createdAt', now);
             tasksMap.set(taskId, newTaskMap);
             const columnMapValue = columnsMap.get(selectedColumnId);
@@ -154,7 +154,7 @@ export const useYjsKanbanBoard = (ownerId: string, pathId: string) => {
     };
 
     // Add new column (mutates Yjs only)
-    const handleAddColumn = (columnData: Omit<ColumnItem, 'id' | 'taskIds' | 'creator' | 'createdAt'>) => {
+    const handleAddColumn = (columnData: Omit<ColumnItem, 'id' | 'taskIds' | 'createdAt'>) => {
         if (!docRef.current) return;
         const doc = docRef.current;
         doc.transact(() => {
@@ -166,7 +166,7 @@ export const useYjsKanbanBoard = (ownerId: string, pathId: string) => {
             newColumnMap.set('id', columnId);
             newColumnMap.set('title', columnData.title);
             newColumnMap.set('taskIds', new Y.Array());
-            newColumnMap.set('creator', ownerId);
+            newColumnMap.set('creator', columnData.creator);
             newColumnMap.set('createdAt', now);
             columnsMap.set(columnId, newColumnMap);
             columnOrderArray.push([columnId]);
