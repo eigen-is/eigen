@@ -115,10 +115,6 @@ export function EmailDetail({
         console.error('Error formatting date:', error);
     }
 
-
-    const [isExpanded, setIsExpanded] = useState(false);
-    const toggleExpanded = useCallback(() => setIsExpanded(!isExpanded), [isExpanded]);
-
     // Get email content
     const emailContent = email.html || email.textAsHtml || email.text || '';
     
@@ -238,9 +234,9 @@ export function EmailDetail({
                     </div>
                     
                     {needsToShowDetails && (
-                        <details >
-                            <summary className="text-xs truncate p-1 cursor-pointer hover:bg-muted rounded-md" onClick={toggleExpanded}>
-                                <span className={cn(isExpanded ? 'opacity-0' : 'opacity-100')}>
+                        <details className="group">
+                            <summary className="text-xs truncate p-1 cursor-pointer hover:bg-muted rounded-md">
+                                <span className="opacity-100 group-open:opacity-0">
                                     {needsToShowTo && email.to && <> to: {formatContactObjects(email.to, true)}</>}  
                                     {email.cc && <> cc: {formatContactObjects(email.cc,true)}</>}   
                                     {email.bcc && <> bcc: {formatContactObjects(email.bcc,true)}</>}
