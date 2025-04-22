@@ -54,9 +54,8 @@ export function EmailContextMenu({
                             onPrint?.(messageId);
                             onClose();
                         }}
-                        className="flex items-center"
                     >
-                        <Printer className="h-4 w-4 mr-2"/>
+                        <Printer className="mr-2"/>
                         Print
                     </DropdownMenuItem>
                     <DropdownMenuSeparator/>
@@ -69,9 +68,8 @@ export function EmailContextMenu({
                     onReply?.(messageId);
                     onClose();
                 }}
-                className="flex items-center"
             >
-                <Reply className="h-4 w-4 mr-2"/>
+                <Reply className="mr-2"/>
                 Reply
             </DropdownMenuItem>
             <DropdownMenuItem
@@ -79,9 +77,8 @@ export function EmailContextMenu({
                     onReplyAll?.(messageId);
                     onClose();
                 }}
-                className="flex items-center"
             >
-                <ReplyAll className="h-4 w-4 mr-2"/>
+                <ReplyAll className="mr-2"/>
                 Reply All
             </DropdownMenuItem>
             <DropdownMenuItem
@@ -89,9 +86,8 @@ export function EmailContextMenu({
                     onForward?.(messageId);
                     onClose();
                 }}
-                className="flex items-center"
             >
-                <Forward className="h-4 w-4 mr-2"/>
+                <Forward className="mr-2"/>
                 Forward
             </DropdownMenuItem>
 
@@ -103,9 +99,8 @@ export function EmailContextMenu({
                     onArchive?.(messageId);
                     onClose();
                 }}
-                className="flex items-center"
             >
-                <Archive className="h-4 w-4 mr-2"/>
+                <Archive className="mr-2"/>
                 Archive
             </DropdownMenuItem>
             <DropdownMenuItem
@@ -113,9 +108,8 @@ export function EmailContextMenu({
                     onReportSpam?.(messageId);
                     onClose();
                 }}
-                className="flex items-center"
             >
-                <AlertTriangle className="h-4 w-4 mr-2"/>
+                <AlertTriangle className="mr-2"/>
                 Report Spam
             </DropdownMenuItem>
             <DropdownMenuItem
@@ -123,9 +117,8 @@ export function EmailContextMenu({
                     onDelete?.(messageId);
                     onClose();
                 }}
-                className="flex items-center"
             >
-                <Trash2 className="h-4 w-4 mr-2"/>
+                <Trash2 className="mr-2"/>
                 Delete
             </DropdownMenuItem>
 
@@ -133,7 +126,7 @@ export function EmailContextMenu({
 
             {/* Move to folder submenu */}
             <DropdownMenuSub>
-                <DropdownMenuSubTrigger className="flex items-center">
+                <DropdownMenuSubTrigger>
                     Move to folder
                 </DropdownMenuSubTrigger>
                 <DropdownMenuSubContent className="w-48">
