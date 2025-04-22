@@ -35,8 +35,6 @@ export const AddTaskDialog: React.FC<AddTaskDialogProps> = ({
             createdAt: Date.now()
         });
 
-        console.log(user, user?.email);
-
         setTitle('');
         setDescription('');
         onClose();
