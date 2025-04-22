@@ -21,6 +21,7 @@ export interface ContactAutosuggestProps {
     name?: string;
     required?: boolean;
     inputRef?: Ref<HTMLInputElement>;
+    onSubmit?: (value: string) => void;
 }
 
 /**
