@@ -239,7 +239,7 @@ export function EmailDetail({
                     
                     {needsToShowDetails && (
                         <details >
-                            <summary className="text-xs truncate p-1 cursor-pointer hover:bg-muted" onClick={toggleExpanded}>
+                            <summary className="text-xs truncate p-1 cursor-pointer hover:bg-muted rounded-md" onClick={toggleExpanded}>
                                 {true && (
                                     <span className={cn(isExpanded ? 'opacity-0' : 'opacity-100')}>
                                     {needsToShowTo && email.to && <> to: {formatContactObjects(email.to, true)}</>}  
