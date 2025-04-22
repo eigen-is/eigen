@@ -2,16 +2,21 @@ import {
     AlertTriangle,
     Archive,
     ArrowLeft,
+    BadgeInfo,
+    BadgeInfoIcon,
     Forward,
+    InfoIcon,
+    Mail,
     MoreVertical,
     Paperclip,
+    Printer,
     Reply,
     ReplyAll,
     Trash2
 } from "lucide-react";
 import {cn} from "@workspace/ui/lib/utils";
 import {Button} from "@workspace/ui/components/button";
-import {DropdownMenu, DropdownMenuTrigger} from "@workspace/ui/components/dropdown-menu";
+import {DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger} from "@workspace/ui/components/dropdown-menu";
 import {format} from "date-fns";
 import {Email, MaildirMailbox} from "@apps/api-server/types/mail";
 import {ShadowContent} from "@workspace/ui/components/layout/shadow-content";
@@ -20,6 +25,10 @@ import {TooltipButton} from "@workspace/ui";
 import {Separator} from "@workspace/ui/components/separator";
 import {EmailContextMenu} from "./email-context-menu";
 import { printDocument } from "@workspace/ui/lib/printElement";
+import { AddressObject } from "../../../../api-server/src/lib/mail/mailtypes";
+import { Table, TableBody, TableCell, TableRow } from "@workspace/ui/components/table";
+import path from "path";
+import { useCallback, useState } from "react";
 
 interface EmailDetailProps {
     email: Email | null;
@@ -35,6 +44,26 @@ interface EmailDetailProps {
     onDelete?: (emailId: string) => void;
     onMoveToFolder?: (emailId: string, folderId: string) => void;
     mailboxes?: MaildirMailbox[];
+}
+
+export function MailLink({email, name, mailLink = true, compact = false}: {email?: string, name:string, mailLink?: boolean, compact?: boolean}) {
+    
+    let label = name && email ? (<>{name} &lt;{email}&gt;</>) : (email ?? undefined);
+    if (compact) {
+        label = email ?? undefined;
+    }
+    return email && (
+        <span className="text-xs text-gray-500">
+            {mailLink ? 
+                <a 
+                    className="hover:underline" 
+                    href={`${import.meta.env.VITE_APP_MAIL_URL}/box/inbox?mode=compose&to=${email}`} 
+                    title={email}
+                >
+                    {label}
+                </a> 
+            : (label)}
+        </span>)
 }
 
 export function EmailDetail({
@@ -70,6 +99,11 @@ export function EmailDetail({
     const fromName = firstFrom?.name || firstFrom?.address || 'Unknown';
     const fromEmail = firstFrom?.address || 'unknown@example.com';
 
+    const needsToShowTo = email.to ? (Array.isArray(email.to) ? email.to.length > 1 : email.to.value.length > 1) : false;
+
+    const needsToShowDetails = needsToShowTo || email.cc || email.bcc;
+
+
     // Format date
     let formattedDate = 'Unknown date';
     try {
@@ -81,8 +115,20 @@ export function EmailDetail({
         console.error('Error formatting date:', error);
     }
 
+
+    const [isExpanded, setIsExpanded] = useState(false);
+    const toggleExpanded = useCallback(() => setIsExpanded(!isExpanded), [isExpanded]);
+
     // Get email content
     const emailContent = email.html || email.textAsHtml || email.text || '';
+    
+    const formatContactObjects = (contacts: AddressObject | AddressObject[], compact:boolean = false) => {
+        return Array.isArray(contacts)? contacts.map((contact) => formatContactObject(contact, compact)) : formatContactObject(contacts, compact);
+    };
+    
+    const formatContactObject = (contact: AddressObject, compact:boolean = false) => {
+        return contact.value.map((address, idx, arr) => (<><MailLink email={address.address} name={address.name} mailLink={!compact} compact={compact} />{idx < arr.length - 1 ? ', ' : ''}</>));
+    };
 
     return (
         <div className={cn("flex flex-col h-full bg-white", className)} {...props}>
@@ -180,14 +226,66 @@ export function EmailDetail({
                             {email.subject ? String(email.subject) : '(No subject)'}
                         </h1>
 
-                        <div className="mt-4">
+                        <div className="mt-4 ">
                             <UserItem
                                 name={fromName}
                                 email={fromEmail}
                                 label={formattedDate}
-                            />
+                                mailLink={true}
+                                />
                         </div>
+                        
                     </div>
+                    
+                    {needsToShowDetails && (
+                        <details >
+                            <summary className="text-xs truncate p-1 cursor-pointer hover:bg-muted" onClick={toggleExpanded}>
+                                {true && (
+                                    <span className={cn(isExpanded ? 'opacity-0' : 'opacity-100')}>
+                                    {needsToShowTo && email.to && <> to: {formatContactObjects(email.to, true)}</>}  
+                                    {email.cc && <> cc: {formatContactObjects(email.cc,true)}</>}   
+                                    {email.bcc && <> bcc: {formatContactObjects(email.bcc,true)}</>}
+                                </span>
+                            )}
+                        </summary>
+                        <div>
+                            <Table className="text-sm text-muted-foreground">
+                                <TableBody>
+                                    <TableRow className="border-none">
+                                        <TableCell className="text-xs w-10 px-1 py-1">From</TableCell>
+                                        <TableCell className="truncate px-1 py-1">
+                                            {email.from && formatContactObjects(email.from)}
+                                        </TableCell>
+                                    </TableRow>
+                                    {needsToShowTo ? (
+                                    <TableRow className="border-none">
+                                        <TableCell className="text-xs w-10 px-1 py-1">To</TableCell>
+                                        <TableCell className="truncate px-1 py-1">
+                                            {email.to && formatContactObjects(email.to)}
+                                        </TableCell>
+                                    </TableRow>
+                                    ) : null}
+                                    {email.cc && (
+                                        <TableRow className="border-none">
+                                            <TableCell className="text-xs px-1 py-1">Cc</TableCell>
+                                            <TableCell className="truncate px-1 py-1">
+                                                {email.cc && formatContactObjects(email.cc)}
+                                            </TableCell>
+                                        </TableRow>
+                                    )}
+                                    {email.bcc && (
+                                        <TableRow className="border-none">
+                                            <TableCell className="text-xs px-1 py-1">Bcc</TableCell>
+                                            <TableCell className="truncate px-1 py-1">
+                                                {formatContactObjects(email.bcc)}
+                                            </TableCell>
+                                        </TableRow>
+                                    )}
+                                </TableBody>
+                            </Table>
+                        </div>
+                    </details>
+                    )}
 
                     <Separator/>
 
