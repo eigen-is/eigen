@@ -1,4 +1,4 @@
-import {createRootRouteWithContext, Outlet} from '@tanstack/react-router'
+import {createRootRouteWithContext, Outlet, useMatch} from '@tanstack/react-router'
 import {TanStackRouterDevtools} from '@tanstack/react-router-devtools'
 import {AuthContextType} from "@workspace/lib/auth/auth-context.tsx";
 import {Topbar} from "@workspace/ui/components/layout/topbar";
@@ -24,14 +24,19 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
     component: () => {
         const [sidebarOpen, setSidebarOpen] = useState(false);
         const isMobile = useIsMobile();
-
+            
+        const routeMatch = useMatch({
+            from: '/_auth/board/$ownerId/$pathId',
+            shouldThrow: false,
+        });
+        
         return (
             <>
                 <SidebarContext.Provider value={{sidebarOpen, setSidebarOpen}}>
                     <div className="flex flex-col h-dvh">
                         <Topbar
                             rootRoute={Route}
-                            showMobileMenu={isMobile}
+                            showMobileMenu={isMobile && !routeMatch}
                             onMobileMenuClick={() => setSidebarOpen(true)}
                             isMobile={isMobile}
                         />
