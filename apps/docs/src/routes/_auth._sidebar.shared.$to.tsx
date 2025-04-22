@@ -109,6 +109,7 @@ function DriveRoute() {
             isMobile={isMobile}
             showBreadcrumb={false}
             currentPath={rootPath}
+            allowRename={to === 'by-me'}
         />
     );
 }

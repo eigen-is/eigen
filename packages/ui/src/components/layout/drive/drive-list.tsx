@@ -44,6 +44,7 @@ interface DriveListProps {
     allowDelete?: boolean;
     allowDownload?: boolean;
     allowUpload?: boolean;
+    onRename?: (item: DrivePath) => void;
 }
 
 export function DriveList({
@@ -68,6 +69,7 @@ export function DriveList({
                               allowDelete = false,
                               allowDownload = false,
                               allowUpload = false,
+                              onRename,
                           }: DriveListProps) {
     const [isDragging, setIsDragging] = useState(false);
     const dragCounter = useRef(0);
@@ -264,6 +266,7 @@ export function DriveList({
                 allowDownload={allowDownload}
                 onDelete={onDelete}
                 allowDelete={allowDelete}
+                onRename={onRename}
             />
 
             {items.length === 0 && (
