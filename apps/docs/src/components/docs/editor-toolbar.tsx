@@ -19,6 +19,7 @@ import {
     List,
     ListOrdered,
     LucideIcon,
+    Pencil,
     Printer,
     Redo,
     RemoveFormatting,
@@ -54,6 +55,7 @@ import {DriveDeleteItem} from "@workspace/ui/components/layout/drive/drive-delet
 import {DrivePath} from "@apps/api-server/types/drive";
 import {useNavigate} from '@tanstack/react-router';
 import { useIsMobile } from "@workspace/lib/media/index.js";
+import { DriveRenameItem } from "@workspace/ui/components/layout/drive/drive-rename-item";
 
 // Define custom editor type
 type CustomEditor = BaseEditor & ReactEditor & HistoryEditor;
@@ -231,6 +233,7 @@ export const EditorToolbar = ({path, canWrite, onAccessDialogOpen, onDeleteDialo
     const [linkDialogOpen, setLinkDialogOpen] = useState(false);
     const [commandKey, setCommandKey] = useState('⌘');
     const [createDocOpen, setCreateDocOpen] = useState(false);
+    const [renameDialogOpen, setRenameDialogOpen] = useState(false);
     const {user} = useAuth();
     const {data: rootFolder} = useRootFolder(user?.id || '');
     const navigate = useNavigate();
@@ -310,6 +313,9 @@ export const EditorToolbar = ({path, canWrite, onAccessDialogOpen, onDeleteDialo
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => navigate({to: `/`})}>
                             <Folder/> Open
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => path && setRenameDialogOpen(true)}>
+                            <Pencil/> Rename
                         </DropdownMenuItem>
                         <Separator/>
                         <DropdownMenuItem onClick={onAccessDialogOpen}><UserRoundPlus/> Edit access</DropdownMenuItem>
@@ -567,6 +573,14 @@ export const EditorToolbar = ({path, canWrite, onAccessDialogOpen, onDeleteDialo
                 )}
             </div>
 
+            {/* Document Rename Dialog */}
+            {path && (
+                <DriveRenameItem
+                    path={path}
+                    open={renameDialogOpen}
+                    onOpenChange={setRenameDialogOpen}
+                />
+            )}
             {/* Document Creation Dialog */}
             {rootFolder && (
                 <DriveCreateDoc
