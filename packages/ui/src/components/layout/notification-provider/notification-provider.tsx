@@ -14,8 +14,11 @@ interface NotificationProviderProps {
 }
 
 function notify(notification: EigenNotification) {
-    toast(notification.title, {
-        description: notification.body,
+    const truncatedTitle = notification.title.length > 50 ? notification.title.slice(0, 50) + '…' : notification.title;
+    const truncatedBody = notification.body.length > 120 ? notification.body.slice(0, 120) + '…' : notification.body;
+
+    toast(truncatedTitle, {
+        description: truncatedBody,
         action: notification.link ? {
             label: 'Open',
             onClick: (event) => {
@@ -28,8 +31,8 @@ function notify(notification: EigenNotification) {
     if (!("Notification" in window)) {
         return;
     } else if (Notification.permission === 'granted') {
-        const n = new Notification(notification.title, {
-            body: notification.body,
+        const n = new Notification(truncatedTitle, {
+            body: truncatedBody,
             tag: notification.tag,
         });
         notification.link && n.addEventListener('click', (event) => {
