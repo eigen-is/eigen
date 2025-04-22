@@ -4,7 +4,7 @@ import {cn} from "@workspace/ui/lib/utils";
 import {formatDistanceToNow} from "date-fns";
 import {DrivePath} from "@apps/api-server/types/drive";
 import {DriveShareSummary} from "./drive-share-summary";
-import {ArrowRight, ChevronLeft, Download, Trash2, UserRoundPlus} from "lucide-react";
+import {ArrowRight, ChevronLeft, Download, Trash2, UserRoundPlus, Pencil} from "lucide-react";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -24,6 +24,7 @@ export interface DriveTableProps {
     onShareClick?: (item: DrivePath) => void;
     onDownload?: (item: DrivePath) => void;
     onDelete?: (item: DrivePath) => void;
+    onRename?: (item: DrivePath) => void;
     allowDelete?: boolean;
     allowDownload?: boolean;
 }
@@ -38,6 +39,7 @@ export function DriveTable({
                                onShareClick,
                                onDownload,
                                onDelete,
+                               onRename,
                                allowDelete = false,
                            }: DriveTableProps) {
 
@@ -385,10 +387,22 @@ export function DriveTable({
                             Edit access
                         </DropdownMenuItem>
                     )}
+                    {onRename && (
+                        <DropdownMenuItem
+                            onClick={() => {
+                                onRename?.(contextMenuItem!);
+                                closeContextMenu();
+                            }}
+                            className="flex items-center"
+                        >
+                            <Pencil className="h-4 w-4 mr-2"/>
+                            Rename
+                        </DropdownMenuItem>
+                    )}
 
                     {allowDelete && (
                         <>
-                            {(onDownload || onShareClick) && <DropdownMenuSeparator/>}
+                            {(onDownload || onShareClick || onRename) && <DropdownMenuSeparator/>}
                             <DropdownMenuItem
                                 onClick={() => {
                                     onDelete?.(contextMenuItem!);
