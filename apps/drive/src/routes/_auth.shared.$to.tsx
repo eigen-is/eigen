@@ -136,6 +136,7 @@ function DriveRoute() {
                 allowCreateStickies={false}
                 isMobile={isMobile}
                 showBreadcrumb={false}
+                allowRename={to === 'by-me'}
             />
         </>
     );

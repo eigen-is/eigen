@@ -9,6 +9,7 @@ import {DriveCreateStickies} from "./drive-create-stickies";
 import {DriveDeleteItem} from "./drive-delete-item";
 import {DriveUploadFiles} from "./drive-upload-files";
 import {DriveCreateFolder} from "./drive-create-folder";
+import {DriveRenameItem} from "./drive-rename-item";
 
 export interface DriveLayoutProps {
     // Required data
@@ -36,6 +37,7 @@ export interface DriveLayoutProps {
     allowUpload?: boolean;
     allowCreateDoc?: boolean;
     allowCreateStickies?: boolean;
+    allowRename?: boolean;
 
     // UI options
     isMobile?: boolean;
@@ -60,6 +62,7 @@ export function DriveLayout({
                                 allowCreateDoc = true,
                                 allowCreateStickies = true,
                                 allowUpload = true,
+                                allowRename = true,
                                 isMobile = false,
                                 pid = undefined,
                                 showBreadcrumb = false,
@@ -77,6 +80,10 @@ export function DriveLayout({
     // Delete confirmation dialog state
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
     const [itemToDelete, setItemToDelete] = useState<DrivePath | null>(null);
+
+    // Rename dialog state
+    const [renameDialogOpen, setRenameDialogOpen] = useState(false);
+    const [itemToRename, setItemToRename] = useState<DrivePath | null>(null);
 
     // Share dialog state
     const [accessDialogOpen, setAccessDialogOpen] = useState(false);
@@ -131,6 +138,14 @@ export function DriveLayout({
         setDeleteDialogOpen(true);
     };
 
+    const handleRenamePath = (path: DrivePath) => {
+        if (!allowRename) return;
+
+        // Open the rename dialog and store the path to be renamed
+        setItemToRename(path);
+        setRenameDialogOpen(true);
+    };
+
     const handleDownloadPath = (path: DrivePath) => {
         if (path && path.type === 'file' && path.id) {
             const downloadUrl = `${import.meta.env.VITE_API_HOST}/drive/download/${path.ownerId}/${path.id}`;
@@ -177,6 +192,7 @@ export function DriveLayout({
                             onDownload={handleDownloadPath}
                             onItemOpen={onRowActivate}
                             allowDelete={allowDelete}
+                            onRename={allowRename ? handleRenamePath : undefined}
                         />
                     </div>
                 ) : (
@@ -204,6 +220,7 @@ export function DriveLayout({
                             onDownload={handleDownloadPath}
                             allowDelete={allowDelete}
                             allowUpload={allowUpload}
+                            onRename={allowRename ? handleRenamePath : undefined}
                         />
                     </div>
                 )
@@ -236,6 +253,7 @@ export function DriveLayout({
                                     onDownload={handleDownloadPath}
                                     allowDelete={allowDelete}
                                     allowUpload={allowUpload}
+                                    onRename={allowRename ? handleRenamePath : undefined}
                                 />
                             </div>)}
                         {(pid || currentPath?.type !== 'folder') && (
@@ -252,6 +270,7 @@ export function DriveLayout({
                                         onDownload={handleDownloadPath}
                                         onItemOpen={onRowActivate}
                                         allowDelete={allowDelete}
+                                        onRename={allowRename ? handleRenamePath : undefined}
                                     />
                                 </div>
                             </div>
@@ -317,6 +336,16 @@ export function DriveLayout({
                     path={itemToDelete}
                     open={deleteDialogOpen}
                     onOpenChange={setDeleteDialogOpen}
+                    onAfterAction={onAfterAction}
+                />
+            )}
+
+            {/* Rename Dialog */}
+            {allowRename && (
+                <DriveRenameItem
+                    path={itemToRename}
+                    open={renameDialogOpen}
+                    onOpenChange={setRenameDialogOpen}
                     onAfterAction={onAfterAction}
                 />
             )}

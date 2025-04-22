@@ -1,4 +1,4 @@
-import {useState} from "react";
+import {useState, useEffect} from "react";
 import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,} from "@workspace/ui/components/dialog";
 import {Input} from "@workspace/ui/components/input";
 import {Label} from "@workspace/ui/components/label";
@@ -13,6 +13,9 @@ interface DriveCreateItemDialogProps {
     isPending?: boolean;
     type: string;
     path: DrivePath;
+    title?: string;
+    defaultValue?: string;
+    confirmLabel?: string;
 }
 
 export function DriveCreateItemDialog({
@@ -21,10 +24,18 @@ export function DriveCreateItemDialog({
                                           onCreateItem,
                                           isPending = false,
                                           type,
-                                          path
+                                          path,
+                                          title,
+                                          defaultValue = "",
+                                          confirmLabel,
                                       }: DriveCreateItemDialogProps) {
-    const [itemName, setItemName] = useState("");
+    const [itemName, setItemName] = useState(defaultValue);
     const {data: breadcrumbPaths = []} = useBreadcrumb(path.ownerId, path.id);
+
+    // Reset input value when dialog opens/closes or defaultValue changes
+    useEffect(() => {
+        setItemName(defaultValue);
+    }, [open, defaultValue]);
 
     const handleCreateItem = () => {
         if (itemName.trim() && !isPending) {
@@ -35,14 +46,14 @@ export function DriveCreateItemDialog({
 
     const handleCancel = () => {
         onOpenChange(false);
-        setItemName("");
+        setItemName(defaultValue);
     };
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent>
                 <DialogHeader>
-                    <DialogTitle>New {type.toLowerCase()}</DialogTitle>
+                    <DialogTitle>{title || `New ${type.toLowerCase()}`}</DialogTitle>
                 </DialogHeader>
                 <div className="py-4">
                     <Label htmlFor="itemName" className="mb-3">{type} name</Label>
@@ -77,7 +88,7 @@ export function DriveCreateItemDialog({
                         onClick={handleCreateItem}
                         disabled={!itemName.trim() || isPending}
                     >
-                        {isPending ? "Creating..." : "Create"}
+                        {isPending ? (confirmLabel ? `${confirmLabel}...` : "Creating...") : (confirmLabel || "Create")}
                     </Button>
                 </DialogFooter>
             </DialogContent>
