@@ -144,8 +144,8 @@ export function Topbar({rootRoute, showMobileMenu, onMobileMenuClick, isMobile}:
     }, [appName]);
 
     return (
-        <header>
-            <div>
+        <header className="bg-app">
+            <div className="flex h-12 items-center px-4">
                 {isMobile && showMobileMenu && (
                     <Button
                         variant="ghost"
