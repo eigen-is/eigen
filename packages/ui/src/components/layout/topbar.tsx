@@ -1,4 +1,4 @@
-import {useState} from "react";
+import {useState, useEffect} from "react";
 import {Calendar, FileText, HardDrive, LayoutDashboard, Mail, Menu, StickyNote, Users} from "lucide-react";
 import {useRouter} from "@tanstack/react-router";
 import {Button} from "@workspace/ui/components/button";
@@ -139,9 +139,13 @@ function UserDropdown({rootRoute}: { rootRoute: TopbarProps['rootRoute'] }) {
 export function Topbar({rootRoute, showMobileMenu, onMobileMenuClick, isMobile}: TopbarProps) {
     const {appName} = useApp();
 
+    useEffect(() => {
+        document.title = `eigen|${appName}>`;
+    }, [appName]);
+
     return (
-        <header className="bg-app">
-            <div className="flex h-12 items-center px-4">
+        <header>
+            <div>
                 {isMobile && showMobileMenu && (
                     <Button
                         variant="ghost"
