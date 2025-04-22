@@ -74,10 +74,10 @@ function DriveRoute() {
             });
         } else if (path.type === 'doc') {
             const url = `${import.meta.env.VITE_APP_DOCS_URL}/doc/${path.ownerId}/${path.id}`;
-            window.open(url, '_blank');
+            document.location.href = url;
         } else if (path.type === 'stickies') {
             const url = `${import.meta.env.VITE_APP_STICKIES_URL}/board/${path.ownerId}/${path.id}`;
-            window.open(url, '_blank');
+            document.location.href = url;
         } else if (fileMimeType.startsWith("image/") || fileMimeType.startsWith("video/")) {
             const url = `${import.meta.env.VITE_API_HOST}/drive/embed/${path.ownerId}/${path.id}/${path.name}`;
             setPreview({url, mimeType: fileMimeType});
