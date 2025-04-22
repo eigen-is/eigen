@@ -17,6 +17,8 @@ export function printElement(el: HTMLElement) {
     let cloned = el.cloneNode(true) as HTMLElement;
     document.body.appendChild(cloned);
     cloned.classList.add("printable");
-    window.print();
-    document.body.removeChild(cloned);
+    setTimeout(() => {
+        window.print();
+        document.body.removeChild(cloned);
+    }, 450);
 }
