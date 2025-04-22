@@ -30,7 +30,7 @@ export default class Maildir {
         const basePathExists = await this.home.fs.dirExists(this.basePath);
         if (!basePathExists) {
             await this.createMailboxes();
-            await this.mailboxDeliver(welcomeMail(this.user.name), false);
+            await this.mailboxDeliver(welcomeMail(this.user.name, this.user.email), false);
         }
         this.db = new maildb(this.home);
         await this.db.init();

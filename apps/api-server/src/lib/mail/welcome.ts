@@ -1,6 +1,6 @@
-export function welcomeMail(name: string) {
+export function welcomeMail(name: string, email: string) {
     return `From: Reinder Nijhoff <reinder@eigen.is>
-To: Reinder Nijhoff <reinder@eigen.is>
+To: ${name} <${email}>
 Subject: Welcome!
 Thread-Topic: Welcome!
 Thread-Index: AQHbnjsP//2bcUdyz0CLIQ5rcVSblw==
