@@ -317,12 +317,12 @@ export const EditorToolbar = ({path, canWrite, onAccessDialogOpen, onDeleteDialo
                         <DropdownMenuItem onClick={() => path && setRenameDialogOpen(true)}>
                             <Pencil className="w-4 h-4 mr-2"/> Rename
                         </DropdownMenuItem>
-                        <Separator/>
+                        <DropdownMenuSeparator/>
                         <DropdownMenuItem onClick={onAccessDialogOpen}><UserRoundPlus  className="w-4 h-4 mr-2"/> Edit access</DropdownMenuItem>
                         <DropdownMenuItem onClick={printDocument}><Printer className="w-4 h-4 mr-2"/> Print</DropdownMenuItem>
                         {canWrite && (
                             <>
-                                <Separator/>
+                                <DropdownMenuSeparator/>
                                 <DropdownMenuItem onClick={() => path && onDeleteDialogOpen(true)}>
                                     <Trash2  className="w-4 h-4 mr-2"/> Delete
                                 </DropdownMenuItem>
