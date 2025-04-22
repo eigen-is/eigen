@@ -1,9 +1,10 @@
-import {createRootRouteWithContext, Outlet} from '@tanstack/react-router'
+import {createRootRouteWithContext, Outlet, useRouter, useMatches} from '@tanstack/react-router'
 import {TanStackRouterDevtools} from '@tanstack/react-router-devtools'
 import {AuthContextType} from "@workspace/lib/auth/auth-context.tsx";
 import {Topbar} from "@workspace/ui/components/layout/topbar";
 import {createContext, useState} from 'react';
 import {useIsMobile} from "@workspace/lib/media";
+import {useMatch} from '@tanstack/react-router';
 
 // Create sidebar context to manage sidebar visibility
 export const SidebarContext = createContext<{
@@ -24,6 +25,11 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
     component: () => {
         const [sidebarOpen, setSidebarOpen] = useState(false);
         const isMobile = useIsMobile();
+            
+        const routeMatch = useMatch({
+            from: '/_auth/doc/$ownerId/$pathId',
+            shouldThrow: false,
+        });
 
         return (
             <>
@@ -31,7 +37,7 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
                     <div className="flex flex-col h-dvh">
                         <Topbar
                             rootRoute={Route}
-                            showMobileMenu={isMobile}
+                            showMobileMenu={isMobile && !routeMatch}
                             onMobileMenuClick={() => setSidebarOpen(true)}
                             isMobile={isMobile}
                         />
