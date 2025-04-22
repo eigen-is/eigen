@@ -338,11 +338,11 @@ export const EditorToolbar = ({path, canWrite, onAccessDialogOpen, onDeleteDialo
                             </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="start">
-                            <DropdownMenuItem onClick={() => editor.undo()}>
+                            <DropdownMenuItem onClick={() => editor.undo()} disabled={editor.history.undos.length === 0}>
                                 <Undo className="w-4 h-4 mr-2" />
                                 Undo
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => editor.redo()}>
+                            <DropdownMenuItem onClick={() => editor.redo()} disabled={editor.history.redos.length === 0}>
                                 <Redo className="w-4 h-4 mr-2" />
                                 Redo
                             </DropdownMenuItem>
@@ -481,12 +481,14 @@ export const EditorToolbar = ({path, canWrite, onAccessDialogOpen, onDeleteDialo
                         <TooltipButton
                             icon={Undo}
                             tooltipText={`Undo (${commandKey}+Z)`}
+                            disabled={editor.history.undos.length === 0}
                             onClick={() => HistoryEditor.undo(editor)}
                         />
 
                         <TooltipButton
                             icon={Redo}
                             tooltipText={`Redo (${commandKey}+Y)`}
+                            disabled={editor.history.redos.length === 0}
                             onClick={() => HistoryEditor.redo(editor)}
                         />
                     </>
