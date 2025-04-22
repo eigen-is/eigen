@@ -75,21 +75,21 @@ export const StickiesToolbar = ({canWrite, undoManager, onAccessDialogOpen, path
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="start">
                         <DropdownMenuItem onClick={() => rootFolder && setCreateStickiesOpen(true)}>
-                            <FileText/> New stickies
+                            <FileText  className="w-4 h-4 mr-2"/> New stickies
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => navigate({to: `/`})}>
-                            <Folder/> Open
+                            <Folder className="w-4 h-4 mr-2"/> Open
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => path && setRenameDialogOpen(true)}>
-                            <Pencil/> Rename
+                            <Pencil  className="w-4 h-4 mr-2"/> Rename
                         </DropdownMenuItem>
                         <Separator/>
-                        <DropdownMenuItem onClick={onAccessDialogOpen}><UserRoundPlus/> Edit access</DropdownMenuItem>
+                        <DropdownMenuItem onClick={onAccessDialogOpen}><UserRoundPlus  className="w-4 h-4 mr-2"/> Edit access</DropdownMenuItem>
                         {canWrite && (
                             <>
                                 <Separator/>
                                 <DropdownMenuItem onClick={() => path && setDeleteDialogOpen(true)}>
-                                    <Trash2/> Delete
+                                    <Trash2  className="w-4 h-4 mr-2"/> Delete
                                 </DropdownMenuItem>
                             </>
                         )}
