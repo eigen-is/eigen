@@ -378,6 +378,8 @@ export default class Drive {
         } catch (e) {
             throw new Error("Failed to delete file");
         }
+
+        this.emitACLChange(file, file.acl, null);
     }
 
     public async getRootFolder(): Promise<DrivePath | null> {
