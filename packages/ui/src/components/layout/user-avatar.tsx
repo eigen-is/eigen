@@ -44,11 +44,11 @@ export function UserAvatar({
     };
 
     return (
-        <Avatar className={cn(sizeClasses[size], className)} {...props}>
+        <Avatar className={cn(sizeClasses[size], className, "print-exact")} {...props}>
             {avatarImage ? (
                 <AvatarImage src={`${import.meta.env.VITE_API_HOST}/${avatarImage}`} alt={displayName}/>
             ) : (
-                <div className="bg-gray-200 text-gray-600 font-medium  h-full w-full">
+                <div className="bg-gray-200 text-gray-600 font-medium h-full w-full">
                     <AvatarFallback>{firstChar}</AvatarFallback>
                 </div>
             )}
