@@ -1,4 +1,4 @@
-import {AlertTriangle, Archive, Forward, Printer, Reply, ReplyAll, Trash2} from "lucide-react";
+import {AlertTriangle, Archive, Download, Forward, Printer, Reply, ReplyAll, Trash2} from "lucide-react";
 import {
     DropdownMenuContent,
     DropdownMenuItem,
@@ -120,6 +120,19 @@ export function EmailContextMenu({
             >
                 <Trash2 className="mr-2"/>
                 Delete
+            </DropdownMenuItem>
+
+            <DropdownMenuSeparator/>
+
+            <DropdownMenuItem
+                onClick={() => {
+                    const url = `${import.meta.env.VITE_API_HOST}/mail/message/download/${messageId}`;
+                    window.open(url, "_blank");
+                    onClose();
+                }}
+            >
+                <Download className="mr-2"/>
+                Download
             </DropdownMenuItem>
 
             <DropdownMenuSeparator/>
