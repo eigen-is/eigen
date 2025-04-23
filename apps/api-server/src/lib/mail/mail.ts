@@ -40,9 +40,9 @@ export async function mailboxDeliver(to: string, file: ArrayBuffer) {
     }
 }
 
-export async function messageGetFile(user: User, messageId: string, index: number) {
+export async function messageGetFile(user: User, messageId: string) {
     const mail = await getMailClient(user);
-    return await mail.messageGetFile(messageId, index);
+    return await mail.messageGetFile(messageId);
 }
 
 export async function messageGet(user: User, messageId: string) {
