@@ -11,6 +11,7 @@ import {
     messageDelete,
     messageGet,
     messageGetAttachment,
+    messageGetFile,
     messageHandleDraft,
     messageMove,
     messageMoveToArchive,
@@ -77,6 +78,19 @@ export const mailRouter = new Elysia({name: "mail"})
     // Message routes
     .get("/mail/message/:id", async ({params, user}: { params: { id: string }, user: User }) => {
         return await messageGet(user, params['id']);
+    }, {
+        auth: true,
+        params: t.Object({
+            id: t.String()
+        })
+    })
+    .get("/mail/message/download/:id", async ({params, user, set}: { params: { id: string }, user: User, set: any }) => {
+        set.headers['Cache-Control'] = 'public, max-age=86400';
+        set.headers['Expires'] = new Date(Date.now() + 86400000).toUTCString();
+        set.headers['Content-Type'] = 'message/rfc822';
+        set.headers['Content-Transfer-Encoding'] = 'binary';
+        set.headers['Content-Disposition'] = `attachment; filename="${params['id']}.elm"`;
+        return await messageGetFile(user, params['id']);
     }, {
         auth: true,
         params: t.Object({

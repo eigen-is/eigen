@@ -41,10 +41,6 @@ export default class Maildir {
         return (await this.home.fs.dirSize('eigen.mail')) || this.db.size();
     }
 
-    /**
-     * Lists all mailboxes in the Maildir structure
-     * @returns Array of mailbox objects with hierarchy information
-     */
     public async mailboxesList(): Promise<MaildirMailbox[]> {
         try {
             const mailboxes: MaildirMailbox[] = [];
@@ -127,11 +123,6 @@ export default class Maildir {
         return await this.getMailboxInfo(mailbox) || false;
     }
 
-    /**
-     * Delivers a message to the INBOX
-     * @param message Message content
-     * @returns Filename of the delivered message
-     */
     public async mailboxDeliver(message: string, notify: boolean = true): Promise<string> {
         try {
             // Create a unique filename
@@ -164,11 +155,6 @@ export default class Maildir {
         }
     }
 
-    /**
-     * Gets all messages in a mailbox
-     * @param mailbox Mailbox name
-     * @returns Array of messages or false if mailbox doesn't exist
-     */
     public async mailboxGet(mailbox: string): Promise<EmailSummary[] | false> {
         try {
             const mailboxPath = await this.sanitizeDirName(mailbox);
@@ -225,11 +211,16 @@ export default class Maildir {
         }
     }
 
-    /**
-     * Gets a specific message by ID
-     * @param messageId Message ID
-     * @returns Message or null if not found
-     */
+    public async messageGetFile(messageId: string): Promise<ArrayBuffer> {
+        const email = await this.db.getEmail(messageId);
+        if (!email) {
+            throw new Error('Email not found');
+        }
+        const filePath = this.getFullPath({id: messageId, mailbox: email.mailbox});
+        const file = this.home.fs.file(filePath);
+        return await file.arrayBuffer();
+    }
+
     public async messageGet(messageId: string): Promise<Email | null> {
         try {
             // get mail from db
@@ -254,11 +245,6 @@ export default class Maildir {
         }
     }
 
-    /**
-     * Deletes a message
-     * @param messageId Message ID
-     * @returns True if successful
-     */
     public async messageDelete(messageId: string): Promise<boolean> {
         try {
             // Find the message
@@ -287,12 +273,6 @@ export default class Maildir {
         }
     }
 
-    /**
-     * Moves a message to another mailbox
-     * @param messageId Message ID
-     * @param targetMailbox Target mailbox name
-     * @returns True if successful
-     */
     public async messageMove(messageId: string, targetMailbox: string): Promise<boolean> {
         try {
             // Find the message
@@ -329,12 +309,6 @@ export default class Maildir {
         }
     }
 
-    /**
-     * Copies a message to another mailbox
-     * @param messageId Message ID
-     * @param targetMailbox Target mailbox name
-     * @returns True if successful
-     */
     public async messageCopy(messageId: string, targetMailbox: string): Promise<boolean> {
         try {
             // Find the message
@@ -371,11 +345,6 @@ export default class Maildir {
             return false;
         }
     }
-
-    /**
-     * Creates a new draft message
-     * @returns New draft message
-     */
     public async messageHandleDraft(email: EmailDraft): Promise<EmailDraft> {
         try {
             // Check if Drafts mailbox exists
@@ -459,11 +428,6 @@ export default class Maildir {
         }
     }
 
-    /**
-     * Sends a draft message
-     * @param mail Draft message to send
-     * @returns True if successful
-     */
     // @ts-ignore - Ignore TypeScript errors in this method
     public async messageSend(mailToSend: EmailDraft): Promise<EmailDraft | null> {
         // update message
@@ -544,22 +508,10 @@ export default class Maildir {
         return mail;
     }
 
-    /**
-     * Sets the read status of a message
-     * @param messageId Message ID
-     * @param read True to mark as read, false to mark as unread
-     * @returns True if successful
-     */
     public async messageSetRead(messageId: string, read: boolean): Promise<boolean> {
         return (await this.db.setRead(messageId, read)) !== null;
     }
 
-    /**
-     * Gets an attachment from a message
-     * @param messageId Message ID
-     * @param index Attachment index
-     * @returns Attachment or null if not found
-     */
     public async messageGetAttachment(messageId: string, index: number): Promise<Attachment | null> {
         try {
             // Find the message
@@ -618,11 +570,6 @@ export default class Maildir {
         }
     }
 
-    /**
-     * Recursively processes nested mailboxes
-     * @param parentPath Parent mailbox path
-     * @param mailboxes Array to store found mailboxes
-     */
     private async processNestedMailboxes(parentPath: string, mailboxes: MaildirMailbox[]) {
         try {
             // Get all entries in the parent directory
@@ -651,11 +598,6 @@ export default class Maildir {
         }
     }
 
-    /**
-     * Gets information about a specific mailbox
-     * @param mailboxName Name of the mailbox
-     * @returns Mailbox object with information or null if not found
-     */
     private async getMailboxInfo(mailboxName: string): Promise<MaildirMailbox | null> {
         try {
             const mailboxPath = await this.sanitizeDirName(mailboxName);
@@ -690,12 +632,6 @@ export default class Maildir {
         }
     }
 
-    /**
-     * Sanitizes directory names for mailbox paths
-     * @param mailbox Mailbox name
-     * @param sub Optional subdirectory
-     * @returns Sanitized directory path
-     */
     private sanitizeDirName(mailbox: string, sub: string = '') {
         let dirname = `${this.basePath}/.${mailbox.toLowerCase().replace('/', '.')}`;
         // replace .. with . and // with /
@@ -750,11 +686,6 @@ export default class Maildir {
         }
     }
 
-    /**
-     * Gets mailbox attributes
-     * @param mailbox Mailbox name
-     * @returns Array of IMAP attributes
-     */
     private async getMailboxAttributes(mailbox: string): Promise<string[]> {
         try {
             const attributesPath = this.home.fs.pathJoin(this.sanitizeMailboxPath(mailbox), '.attributes');
