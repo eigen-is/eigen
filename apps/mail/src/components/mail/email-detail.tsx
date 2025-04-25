@@ -100,8 +100,10 @@ export function EmailDetail({
     const fromEmail = firstFrom?.address || 'unknown@example.com';
 
     const needsToShowTo = email.to ? (Array.isArray(email.to) ? email.to.length > 1 : email.to.value.length > 1) : false;
+    const needsToShowCc = email.cc ? (Array.isArray(email.cc) ? email.cc.length > 1 : email.cc.value.length > 1) : false;
+    const needsToShowBcc = email.bcc ? (Array.isArray(email.bcc) ? email.bcc.length > 1 : email.bcc.value.length > 1) : false;
 
-    const needsToShowDetails = needsToShowTo || email.cc || email.bcc;
+    const needsToShowDetails = needsToShowTo || needsToShowCc || needsToShowBcc;
 
 
     // Format date
@@ -238,8 +240,8 @@ export function EmailDetail({
                             <summary className="text-xs truncate p-1 cursor-pointer hover:bg-muted rounded-md">
                                 <span className="opacity-100 group-open:opacity-0">
                                     {needsToShowTo && email.to && <> to: {formatContactObjects(email.to, true)}</>}  
-                                    {email.cc && <> cc: {formatContactObjects(email.cc,true)}</>}   
-                                    {email.bcc && <> bcc: {formatContactObjects(email.bcc,true)}</>}
+                                    {needsToShowCc && email.cc && <> cc: {formatContactObjects(email.cc,true)}</>}   
+                                    {needsToShowBcc && email.bcc && <> bcc: {formatContactObjects(email.bcc,true)}</>}
                                 </span>
                             </summary>
                         <div>
@@ -259,22 +261,22 @@ export function EmailDetail({
                                         </TableCell>
                                     </TableRow>
                                     ) : null}
-                                    {email.cc && (
+                                    {(needsToShowCc && email.cc) ? (
                                         <TableRow className="border-none">
                                             <TableCell className="text-xs px-1 py-1">Cc</TableCell>
                                             <TableCell className="truncate px-1 py-1">
                                                 {email.cc && formatContactObjects(email.cc)}
                                             </TableCell>
                                         </TableRow>
-                                    )}
-                                    {email.bcc && (
+                                    ) : null}
+                                    {(needsToShowBcc && email.bcc) ? (
                                         <TableRow className="border-none">
                                             <TableCell className="text-xs px-1 py-1">Bcc</TableCell>
                                             <TableCell className="truncate px-1 py-1">
                                                 {formatContactObjects(email.bcc)}
                                             </TableCell>
                                         </TableRow>
-                                    )}
+                                    ) : null}
                                 </TableBody>
                             </Table>
                         </div>
