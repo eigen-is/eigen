@@ -1,11 +1,14 @@
 # Eigen
 
+**Your personal workspace in the cloud. Simple and secure. You control your own data.**
+
 A modern Google Workspace-like application suite providing integrated productivity and collaboration tools.
 
 ## Overview
 
-Eigen is a comprehensive workspace platform that includes:
+Eigen is your minimal, secure workspace in the cloud. It includes mail, calendar, docs, and drive — everything you need, nothing you don't. It is a comprehensive workspace platform that includes:
 
+- **Index**: Landing page and central hub
 - **Mail**: Email client with mailbox management
 - **Drive**: File storage and management system
 - **Docs**: Document editing and collaboration
@@ -15,11 +18,11 @@ Eigen is a comprehensive workspace platform that includes:
 
 ## Project Structure
 
-This project follows a monorepo structure:
+This project follows a monorepo structure, managed via Bun workspaces:
 
 - `/apps`: Contains all applications
     - `/api-server`: Backend API server that powers all applications
-    - `/drive`, `/mail`, `/docs`, etc.: Frontend applications
+    - `/index`, `/drive`, `/mail`, `/docs`, etc.: Frontend applications
 - `/packages`: Shared libraries and components
     - `/ui`: Reusable UI components built with shadcn/ui
     - `/lib`: Shared business logic and utilities
@@ -43,11 +46,11 @@ This project follows a monorepo structure:
 1. Clone the repository:
 
 ```bash
-git clone https://github.com/yourusername/eigen.git
+git clone https://github.com/<repository-owner>/eigen.git
 cd eigen
 ```
 
-2. Install dependencies:
+2. Install dependencies (this will install dependencies for all workspaces):
 
 ```bash
 bun install
