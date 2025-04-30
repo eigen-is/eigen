@@ -394,9 +394,15 @@ export default class Drive {
 
     public async getMimeTypeContents(mimeType: string): Promise<DrivePath[]> {
         // Get contents from database
-        const results = await this.db.select().from(drivePaths)
-            .where(like(drivePaths.mimeType, `${mimeType}%`))
-            .all();
+        const results = await Promise.all([
+            this.db.select().from(drivePaths)
+                .where(like(drivePaths.mimeType, `${mimeType}%`))
+                .all()
+                ,
+            this.sharedDb.select().from(sharedSchema.sharedPaths)
+                .where(like(sharedSchema.sharedPaths.mimeType, `${mimeType}%`))
+                .all()
+        ]).then(([ownResults, sharedResults]) => [...ownResults, ...sharedResults]);
 
         // Convert to DrivePath type
         return results.map(result => ({
