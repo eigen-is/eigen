@@ -71,7 +71,7 @@ export function DocsSidebar({
                 <SidebarItem
                     icon={<FileText className="h-4 w-4"/>}
                     to="/mime/application-eigendoc"
-                    label="All my docs"
+                    label="All docs"
                     condensed={condensed}
                 />
                 <SidebarItem
