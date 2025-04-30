@@ -157,19 +157,19 @@ export function DriveSidebar({
                 <SidebarItem
                     icon={<Image className="h-4 w-4"/>}
                     to="/mime/image"
-                    label="Images"
+                    label="All images"
                     condensed={condensed}
                 />
                 <SidebarItem
                     icon={<FileText className="h-4 w-4"/>}
                     to="/mime/application-eigendoc"
-                    label="Docs"
+                    label="All docs"
                     condensed={condensed}
                 />
                 <SidebarItem
                     icon={<StickyNote className="h-4 w-4"/>}
                     to="/mime/application-eigenstickies"
-                    label="Stickies"
+                    label="All stickies"
                     condensed={condensed}
                 />
 

@@ -73,7 +73,7 @@ export function StickiesSidebar({
                 <SidebarItem
                     icon={<FileText className="h-4 w-4"/>}
                     to="/mime/application-eigenstickies"
-                    label="All my stickies"
+                    label="All stickies"
                     condensed={condensed}
                 />
                 <SidebarItem
