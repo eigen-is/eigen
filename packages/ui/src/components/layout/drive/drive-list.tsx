@@ -87,48 +87,60 @@ export function DriveList({
         }
     };
 
+    const isValidDataTransfer = (data: DataTransfer) => data.types.includes('Files');
+
     // Drag and drop handlers
     const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
-        e.preventDefault(); // Necessary to allow drops
-        e.stopPropagation();
+        // Only handle external file drops, not internal drag operations
+        if (isValidDataTransfer(e.dataTransfer)) {
+            e.preventDefault(); // Necessary to allow drops
+            e.stopPropagation();
+        }
     };
 
     const handleDragEnter = (e: React.DragEvent<HTMLDivElement>) => {
-        e.preventDefault();
-        e.stopPropagation();
+        // Only handle external file drops, not internal drag operations
+        if (isValidDataTransfer(e.dataTransfer)) {
+            e.preventDefault();
+            e.stopPropagation();
 
-        // Increment counter when entering any element
-        dragCounter.current += 1;
+            // Increment counter when entering any element
+            dragCounter.current += 1;
 
-        // Only set dragging state if this is first entrance
-        if (dragCounter.current === 1) {
-            setIsDragging(true);
+            // Only set dragging state if this is first entrance
+            if (dragCounter.current === 1) {
+                setIsDragging(true);
+            }
         }
     };
 
     const handleDragLeave = (e: React.DragEvent<HTMLDivElement>) => {
-        e.preventDefault();
-        e.stopPropagation();
+        // Only handle external file drops, not internal drag operations
+        if (isValidDataTransfer(e.dataTransfer)) {
+            e.preventDefault();
+            e.stopPropagation();
 
-        // Decrement counter when leaving any element
-        dragCounter.current -= 1;
+            // Decrement counter when leaving any element
+            dragCounter.current -= 1;
 
-        // Only set dragging state to false if we've left all elements
-        if (dragCounter.current === 0) {
-            setIsDragging(false);
+            // Only set dragging state to false if we've left all elements
+            if (dragCounter.current === 0) {
+                setIsDragging(false);
+            }
         }
     };
 
     const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
-        e.preventDefault();
-        e.stopPropagation();
-
-        // Reset counter and dragging state
-        dragCounter.current = 0;
-        setIsDragging(false);
-
+        // Only handle external file drops, not internal drag operations
         const files = Array.from(e.dataTransfer.files);
         if (files.length > 0 && onUploadFiles) {
+            e.preventDefault();
+            e.stopPropagation();
+
+            // Reset counter and dragging state
+            dragCounter.current = 0;
+            setIsDragging(false);
+
             onUploadFiles(files);
         }
     };

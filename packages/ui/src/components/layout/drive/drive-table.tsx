@@ -25,6 +25,7 @@ export interface DriveTableProps {
     onDownload?: (item: DrivePath) => void;
     onDelete?: (item: DrivePath) => void;
     onRename?: (item: DrivePath) => void;
+    onMove?: (itemId: string, targetItemId: string) => void;
     allowDelete?: boolean;
     allowDownload?: boolean;
 }
@@ -40,6 +41,7 @@ export function DriveTable({
                                onDownload,
                                onDelete,
                                onRename,
+                               onMove,
                                allowDelete = false,
                            }: DriveTableProps) {
 
@@ -55,6 +57,11 @@ export function DriveTable({
     // State for the context menu
     const [contextMenuPosition, setContextMenuPosition] = useState<{ x: number, y: number } | null>(null);
     const [contextMenuItem, setContextMenuItem] = useState<DrivePath | null>(null);
+    
+    // Drag and drop state
+    const [draggedItem, setDraggedItem] = useState<DrivePath | null>(null);
+    const [dragOverItem, setDragOverItem] = useState<string | null>(null);
+    const [isValidDropTarget, setIsValidDropTarget] = useState<boolean>(false);
 
     // Bepaal of er een parent navigatie-item is
     const hasParentItem = Boolean(currentPath?.parentId);
@@ -234,6 +241,87 @@ export function DriveTable({
         setContextMenuItem(null);
     };
 
+    // Handle drag start event
+    const handleDragStart = (e: React.DragEvent, item: DrivePath) => {
+        setDraggedItem(item);
+        // Set data transfer properties
+        e.dataTransfer.setData('text/plain', item.id);
+        e.dataTransfer.setData('application/eigen', JSON.stringify({
+            id: item.id,
+            type: item.type
+        }));
+        e.dataTransfer.effectAllowed = 'move';
+    };
+
+    // Handle drag over event
+    const handleDragOver = (e: React.DragEvent, item: DrivePath) => {
+        e.preventDefault();
+        if (!draggedItem) return;
+        
+        // Check if this is a valid drop target
+        const isValid = isValidDrop(draggedItem, item);
+        
+        if (isValid) {
+            e.dataTransfer.dropEffect = 'move';
+        } else {
+            e.dataTransfer.dropEffect = 'none';
+        }
+    };
+    
+    // Handle drag enter event
+    const handleDragEnter = (item: DrivePath) => {
+        if (!draggedItem) return;
+        
+        setDragOverItem(item.id);
+        setIsValidDropTarget(isValidDrop(draggedItem, item));
+    };
+    
+    // Handle drag leave event
+    const handleDragLeave = () => {
+        //setDragOverItem(null);
+        //setIsValidDropTarget(false);
+    };
+    
+    // Handle drop event
+    const handleDrop = (e: React.DragEvent, targetItem: DrivePath) => {
+        e.preventDefault();
+        
+        if (!draggedItem) return;
+        
+        // Check if this is a valid drop
+        if (isValidDrop(draggedItem, targetItem)) {
+            alert('Valid drop ' + draggedItem.type)
+            // Handle the move based on the item type
+            onMove?.(draggedItem.id, targetItem.id);
+        }
+        
+        // Reset drag state
+        setDraggedItem(null);
+        setDragOverItem(null);
+        setIsValidDropTarget(false);
+    };
+    
+    // Handle drag end event
+    const handleDragEnd = () => {
+        setDraggedItem(null);
+        setDragOverItem(null);
+        setIsValidDropTarget(false);
+    };
+    
+    // Check if a drop is valid
+    const isValidDrop = (source: DrivePath, target: DrivePath): boolean => {
+        // Can't drop on itself
+        if (source.id === target.id) return false;
+        
+        // Can only drop on folders
+        if (target.type !== 'folder') return false;
+        
+        // Can't drop a folder on its own child (would create circular reference)
+        // This would require more complex logic with knowledge of the folder hierarchy
+        
+        return true;
+    };
+
     return (
         <div className="flex-1 overflow-auto">
             <Table
@@ -294,10 +382,18 @@ export function DriveTable({
                                 key={item.id}
                                 className={cn(
                                     "eigen-list-item",
-                                    (activeItemId === item.id || selectedIndex === adjustedIndex) && "eigen-list-item-active"
+                                    (activeItemId === item.id || selectedIndex === adjustedIndex) && "eigen-list-item-active",
+                                    dragOverItem === item.id && isValidDropTarget && "bg-accent"
                                 )}
                                 onClick={() => onItemClick?.(item)}
                                 onContextMenu={(e) => handleContextMenu(e, item)}
+                                draggable={true}
+                                onDragStart={(e) => handleDragStart(e, item)}
+                                onDragOver={(e) => handleDragOver(e, item)}
+                                onDragEnter={() => handleDragEnter(item)}
+                                onDragLeave={() => handleDragLeave()}
+                                onDrop={(e) => handleDrop(e, item)}
+                                onDragEnd={() => handleDragEnd()}
                             >
                                 <TableCell>
                                     <div className="flex items-center max-w-full overflow-hidden">
