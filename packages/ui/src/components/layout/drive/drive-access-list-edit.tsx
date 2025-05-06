@@ -79,9 +79,9 @@ export function DriveAccessListEdit({
                         read: access.read,
                         write: access.write
                     })
-                } else if (access.email !== owner.data?.email) {
+                } else if (access.email.toLowerCase() !== owner.data?.email.toLowerCase()) {
                     newAccessList.push({
-                        email: access.email,
+                        email: access.email.toLowerCase(),
                         read: access.read,
                         write: access.write,
                         public: access.public,
@@ -141,35 +141,35 @@ export function DriveAccessListEdit({
             // Check if the input itself is a valid email
             const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())
             if (isEmail) {
-                email = value.trim()
-                displayName = email.split('@')[0] // Use part before @ as display name
+                email = value.trim().toLowerCase();
+                displayName = email.split('@')[0]; // Use part before @ as display name
             } else {
                 // Not a valid email format
                 console.log('Invalid email format:', value)
-                return false
+                return false;
             }
         }
 
         // Check if it's an eigen.is email
         if (!email.toLowerCase().endsWith('@eigen.is')) {
             // Not an eigen.is email
-            console.log('Not an eigen.is email:', email)
-            return false
+            console.log('Not an eigen.is email:', email);
+            return false;
         }
 
         // Check if this email is already in the list
         if (accessList.some(user => user.email.toLowerCase() === email.toLowerCase())) {
             // Already in the list
-            console.log('Email already in access list:', email)
-            return false
+            console.log('Email already in access list:', email);
+            return false;
         }
 
         // Valid eigen.is email not already in the list
         const suggestion: ContactSuggestion = {
-            id: email,
-            email: email,
+            id: email.toLowerCase(),
+            email: email.toLowerCase(),
             displayName: displayName,
-            allEmails: [email]
+            allEmails: [email.toLowerCase()]
         }
 
         console.log('Valid eigen.is email, adding user:', suggestion)
