@@ -539,6 +539,14 @@ export default class Drive {
             acl = null;
         }
 
+        if (acl) {
+            // lowercase all emails
+            acl = acl.map(a => ({
+                ...a,
+                email: a.email.toLowerCase()
+            }));
+        }
+
         // Update in database
         await this.db.update(drivePaths)
             .set({
@@ -574,7 +582,7 @@ export default class Drive {
 
         // Check ACL
         if (item.acl && item.acl.length > 0) {
-            const userAcl = item.acl.find(a => a.email === user.email);
+            const userAcl = item.acl.find(a => a.email.toLowerCase() === user.email.toLowerCase());
             if (userAcl) {
                 return userAcl.read || userAcl.public;
             }
@@ -609,7 +617,7 @@ export default class Drive {
 
         // Check ACL
         if (item.acl && item.acl.length > 0) {
-            const userAcl = item.acl.find(a => a.email === user.email);
+            const userAcl = item.acl.find(a => a.email.toLowerCase() === user.email.toLowerCase());
             if (userAcl) {
                 return userAcl.write;
             }
