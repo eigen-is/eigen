@@ -10,6 +10,8 @@ import {DriveDeleteItem} from "./drive-delete-item";
 import {DriveUploadFiles} from "./drive-upload-files";
 import {DriveCreateFolder} from "./drive-create-folder";
 import {DriveRenameItem} from "./drive-rename-item";
+import {useInvalidateFolder, useMovePath} from "@workspace/lib/drive";
+import { toast } from "sonner";
 
 export interface DriveLayoutProps {
     // Required data
@@ -38,6 +40,8 @@ export interface DriveLayoutProps {
     allowCreateDoc?: boolean;
     allowCreateStickies?: boolean;
     allowRename?: boolean;
+    allowMove?: boolean;
+
 
     // UI options
     isMobile?: boolean;
@@ -63,6 +67,7 @@ export function DriveLayout({
                                 allowCreateStickies = true,
                                 allowUpload = true,
                                 allowRename = true,
+                                allowMove = true,
                                 isMobile = false,
                                 pid = undefined,
                                 showBreadcrumb = false,
@@ -92,6 +97,10 @@ export function DriveLayout({
     // State for file upload
     const [uploadOpen, setUploadOpen] = useState(false);
     const [uploadFiles, setUploadFiles] = useState<File[]>([]);
+
+    // Path move hook
+    const movePath = useMovePath(ownerId);
+    const invalidateFolder = useInvalidateFolder(ownerId);
 
     // File upload handler
     const handleFileUpload = () => {
@@ -144,6 +153,17 @@ export function DriveLayout({
         // Open the rename dialog and store the path to be renamed
         setItemToRename(path);
         setRenameDialogOpen(true);
+    };
+
+    const handleMovePath = async (path: DrivePath, targetItemId: string) => {
+        if (!allowMove) return;
+
+        await movePath.mutateAsync({ pathId: path.id, targetParentId: targetItemId });
+        // invalidate parent folders
+        invalidateFolder(path.id);
+        invalidateFolder(path.parentId || '');
+
+        toast.success('Item moved successfully');
     };
 
     const handleDownloadPath = (path: DrivePath) => {
@@ -221,6 +241,7 @@ export function DriveLayout({
                             allowDelete={allowDelete}
                             allowUpload={allowUpload}
                             onRename={allowRename ? handleRenamePath : undefined}
+                            onMove={allowMove ? handleMovePath : undefined}
                         />
                     </div>
                 )
@@ -254,6 +275,7 @@ export function DriveLayout({
                                     allowDelete={allowDelete}
                                     allowUpload={allowUpload}
                                     onRename={allowRename ? handleRenamePath : undefined}
+                                    onMove={allowMove ? handleMovePath : undefined}
                                 />
                             </div>)}
                         {(pid || currentPath?.type !== 'folder') && (

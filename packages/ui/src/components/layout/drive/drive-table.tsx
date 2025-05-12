@@ -25,7 +25,7 @@ export interface DriveTableProps {
     onDownload?: (item: DrivePath) => void;
     onDelete?: (item: DrivePath) => void;
     onRename?: (item: DrivePath) => void;
-    onMove?: (itemId: string, targetItemId: string) => void;
+    onMove?: (item: DrivePath, targetItemId: string) => void;
     allowDelete?: boolean;
     allowDownload?: boolean;
 }
@@ -290,9 +290,8 @@ export function DriveTable({
         
         // Check if this is a valid drop
         if (isValidDrop(draggedItem, targetItem)) {
-            alert('Valid drop ' + draggedItem.type)
             // Handle the move based on the item type
-            onMove?.(draggedItem.id, targetItem.id);
+            onMove?.(draggedItem, targetItem.id);
         }
         
         // Reset drag state
