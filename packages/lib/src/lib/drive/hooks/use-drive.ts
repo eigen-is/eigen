@@ -184,7 +184,23 @@ export function useDeleteFile(ownerId: string) {
     });
 }
 
-// RENAME PATH (FILE OR FOLDER)
+export function useMovePath(ownerId: string) {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: async ({pathId, targetParentId}: { pathId: string, targetParentId: string }) => {
+            const response = await driveApi.path.move[ownerId][pathId].put({
+                targetParentId
+            });
+            return response.data;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({queryKey: driveKeys.all});
+            queryClient.invalidateQueries({queryKey: driveKeys.mimeTypes()});
+        }
+    });
+}
+
 export function useRenamePath(ownerId: string) {
     const queryClient = useQueryClient();
 

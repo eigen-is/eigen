@@ -275,6 +275,39 @@ export default class Drive {
         return fileId;
     }
 
+    public async movePath(pathId: string, targetParentId: string) {
+        // make sure targetParentId exists and is a folder and you have write permissions
+        // also make sure you have write permissions on the path you want to move
+        const path = await this.getPath(pathId);
+        if (!path) {
+            throw new Error("Path not found");
+        }
+
+        const targetParent = await this.getPath(targetParentId);
+        if (!targetParent || targetParent.type !== "folder") {
+            throw new Error("Target parent is not a folder");
+        }
+
+        if (!(await this.canWrite(pathId, this.owner))) {
+            throw new Error("No write permission");
+        }
+
+        // move path/file to new destination
+        const oldPathName = await this.getFolderPath(pathId);
+        const newPathName = this.home.fs.pathJoin(await this.getFolderPath(targetParentId), path.name);
+        await this.home.fs.rename(oldPathName, newPathName);
+
+        // Update path parentId in database
+        await this.db.update(drivePaths).set({
+            parentId: targetParentId,
+            updatedAt: new Date()
+        }).where(eq(drivePaths.id, pathId)).run();
+
+        // Update parent folder size
+        await this.updateSizeOfFolder(targetParentId);
+        await this.updateSizeOfFolder(path.parentId || '');
+    }
+
     public async uploadFiles(parentId: string, files: File[]): Promise<string[]> {
         const uploadPromises = files.map(file => this.uploadFile(parentId, file));
         return Promise.all(uploadPromises);

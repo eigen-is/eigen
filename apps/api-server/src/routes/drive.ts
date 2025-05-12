@@ -39,6 +39,10 @@ type UpdateACLBody = {
     acl: DriveACL[];
 }
 
+type MovePathBody = {
+    targetParentId: string;
+}
+
 export const driveRouter = new Elysia({name: "drive"})
     .use(betterAuth)
 
@@ -220,6 +224,26 @@ export const driveRouter = new Elysia({name: "drive"})
         }),
         body: t.Object({
             newName: t.String()
+        })
+    })
+
+    // Move path (file or folder)
+    .put("/drive/path/move/:ownerId/:pathId", async ({params, body, user}: {
+        params: { ownerId: string, pathId: string },
+        body: MovePathBody,
+        user: User
+    }) => {
+        const drive = await getSharedDrive(params.ownerId, user);
+        await drive.movePath(params.pathId, body.targetParentId);
+        return {success: true};
+    }, {
+        auth: true,
+        params: t.Object({
+            ownerId: t.String(),
+            pathId: t.String()
+        }),
+        body: t.Object({
+            targetParentId: t.String()
         })
     })
 
