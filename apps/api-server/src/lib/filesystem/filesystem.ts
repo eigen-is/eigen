@@ -78,7 +78,6 @@ export default class FileSystem {
         } catch (error: unknown) {
             const errorMessage = error instanceof Error ? error.message : String(error);
             console.error(`Failed to clean up temporary directory: ${errorMessage}`);
-
         }
     }
 

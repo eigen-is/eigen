@@ -26,14 +26,16 @@ export class S3Storage implements Storage {
         return `${pathId}.${this.prefix}.${this.user.id}`;
     }
 
-    async uploadFile(pathId: string, data: Buffer | Uint8Array | BunFile | S3File | ArrayBuffer): Promise<void> {
+    async uploadFile(pathId: string, data: Buffer | Uint8Array | BunFile | S3File | ArrayBuffer): Promise<boolean> {
         const key = this.generateKey(pathId);
 
         try {
             await this.client.write(key, data);
+            return true;
         } catch (error: unknown) {
             const errorMessage = error instanceof Error ? error.message : String(error);
-            throw new Error(`Failed to upload file ${pathId}: ${errorMessage}`);
+            console.error(`Failed to upload file ${pathId}: ${errorMessage}`);
+            return false;
         }
     }
 
@@ -48,14 +50,16 @@ export class S3Storage implements Storage {
         }
     }
 
-    public async deleteFile(pathId: string): Promise<void> {
+    public async deleteFile(pathId: string): Promise<boolean> {
         const key = this.generateKey(pathId);
 
         try {
             await this.client.delete(key);
+            return true;
         } catch (error: unknown) {
             const errorMessage = error instanceof Error ? error.message : String(error);
-            throw new Error(`Failed to delete file ${pathId}: ${errorMessage}`);
+            console.error(`Failed to delete file ${pathId}: ${errorMessage}`);
+            return false;
         }
     }
 
