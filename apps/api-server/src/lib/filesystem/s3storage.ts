@@ -26,7 +26,7 @@ export class S3Storage implements Storage {
         return `${pathId}.${this.prefix}.${this.user.id}`;
     }
 
-    async uploadFile(pathId: string, data: Buffer | Uint8Array | BunFile | S3File | ArrayBuffer): Promise<boolean> {
+    async write(pathId: string, data: Buffer | Uint8Array | BunFile | S3File | ArrayBuffer): Promise<boolean> {
         const key = this.generateKey(pathId);
 
         try {
@@ -39,7 +39,7 @@ export class S3Storage implements Storage {
         }
     }
 
-    public getFile(pathId: string): S3File | BunFile {
+    public file(pathId: string): S3File | BunFile {
         const key = this.generateKey(pathId);
 
         try {
@@ -50,7 +50,7 @@ export class S3Storage implements Storage {
         }
     }
 
-    public async deleteFile(pathId: string): Promise<boolean> {
+    public async delete(pathId: string): Promise<boolean> {
         const key = this.generateKey(pathId);
 
         try {
@@ -63,7 +63,7 @@ export class S3Storage implements Storage {
         }
     }
 
-    public async fileExists(pathId: string): Promise<boolean> {
+    public async exists(pathId: string): Promise<boolean> {
         const key = this.generateKey(pathId);
 
         try {
