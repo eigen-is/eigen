@@ -1,4 +1,5 @@
-import {asyncCache, getHome, type Home} from "../home/home.ts";
+import {getHome, type Home} from "../home/home.ts";
+import {createAsyncSingleton} from "../../utils/singleton";
 import type Database from "bun:sqlite";
 import {BunSQLiteDatabase, drizzle} from "drizzle-orm/bun-sqlite";
 import * as schema from "./schema.ts";
@@ -68,7 +69,7 @@ export async function getDrive(user: User) {
     return home.drive;
 }
 
-const documents: Map<string, asyncCache<CollabDocument>> = new Map();
+const documents: Map<string, () => Promise<CollabDocument>> = new Map();
 
 export default class Drive {
     private basePath: string;
@@ -700,18 +701,17 @@ export default class Drive {
 
     public async getCollabDocument(pathId: string): Promise<CollabDocument> {
         const key = `${this.owner.id}.${pathId}`;
-        if (documents.has(key)) {
-            return await (documents.get(key)!.get()) as CollabDocument;
+        if (!documents.has(key)) {
+            documents.set(key, createAsyncSingleton(async () => {
+                const path = await this.getPath(pathId);
+                if (!path || path.type !== "doc" && path.type !== "stickies") {
+                    throw new Error("Document not found");
+                }
+                const document = new CollabDocument(this, path);
+                return (await document.init()) as CollabDocument;
+            }));
         }
-        documents.set(key, new asyncCache(async () => {
-            const path = await this.getPath(pathId);
-            if (!path || path.type !== "doc" && path.type !== "stickies") {
-                throw new Error("Document not found");
-            }
-            const document = new CollabDocument(this, path);
-            return (await document.init()) as CollabDocument;
-        }));
-        return await (documents.get(key)!.get()) as CollabDocument;
+        return await documents.get(key)!() as CollabDocument;
     }
 
     public async closeCollabDocument(pathId: string) {
@@ -720,7 +720,7 @@ export default class Drive {
         const document = documents.get(key);
         if (document) {
             console.log("Destructing document", key);
-            (await document.get()).destruct();
+            (await document()).destruct();
             documents.delete(key);
         } else {
             return;

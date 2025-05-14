@@ -7,8 +7,9 @@ import {getUserById} from "../users/users.ts";
 import Drive from "../drive/drive.ts";
 import type {ServerWebSocket} from "bun";
 import type {EigenNotification} from "../../types/notification.ts";
+import { createAsyncSingleton } from '../../utils/singleton';
 
-const city = new Map<string, Home>();
+const homeFactories: Map<string, () => Promise<Home>> = new Map();
 
 export class asyncCache<T> {
     private value: T | undefined;
@@ -52,7 +53,7 @@ export class Home {
     private initializationStarted: boolean = false;
     private timeout: Timer | undefined;
 
-    private databases: Map<string, asyncCache<Database>> = new Map();
+    private databases: Map<string, () => Promise<Database>> = new Map();
     private notificationSockets: ServerWebSocket[] = [];
 
     constructor(user: User) {
@@ -104,7 +105,7 @@ export class Home {
         }
         this.timeout = setTimeout(() => {
             // remove the home from the cache
-            city.delete(this.user.id);
+            homeFactories.delete(this.user.id);
             this.destruct();
             console.log(`Closed home for ${this.user.id}`);
         }, 1000 * 60 * 5); // 5 minutes
@@ -112,25 +113,24 @@ export class Home {
     }
 
     public async openSQLiteDatabase(file: string, onCreate: (db: Database) => Promise<void>) {
-        if (this.databases.has(file)) {
-            return await (this.databases.get(file)!.get()) as Database;
+        if (!this.databases.has(file)) {
+            this.databases.set(file, createAsyncSingleton(async () => {
+                const db = await this.fs.createAndOpenDatabase(file, true, onCreate);
+                db.exec("PRAGMA journal_mode = WAL;");
+                return db;
+            }));
         }
-        this.databases.set(file, new asyncCache(async () => {
-            const db = await this.fs.createAndOpenDatabase(file, true, onCreate);
-            db.exec("PRAGMA journal_mode = WAL;");
-            return db;
-        }));
-        return await (this.databases.get(file)!.get()) as Database;
+        return await this.databases.get(file)!() as Database;
     }
 
     public async closeSQLiteDatabase(db: Database) {
-        Object.keys(this.databases).forEach(async (key) => {
-            const database = await (this.databases.get(key)!.get()) as Database;
+        for (const key of this.databases.keys()) {
+            const database = await this.databases.get(key)!() as Database;
             if (database === db) {
                 database.close();
                 this.databases.delete(key);
             }
-        });
+        }
     }
 
     public async size() {
@@ -162,22 +162,23 @@ export class Home {
     }
 }
 
-export async function getHome(user: User) {
-    // Check if the user already has a home
-    if (city.has(user.id)) {
-        const home = city.get(user.id)!;
-        await home.init();
-        return home.touch();
-    } else {
-        const home = new Home(user);
-        city.set(user.id, home);
-        // check if user exists
+export function getHome(user: User): Promise<Home> {
+    // Create a factory for this user if it doesn't exist
+    if (!homeFactories.has(user.id)) {
+      homeFactories.set(user.id, createAsyncSingleton(async () => {
+        // Check if user exists
         const userExists = await getUserById(user.id);
         if (!userExists) {
-            city.delete(user.id);
-            throw new Error('User not found');
+          throw new Error('User not found');
         }
+        
+        // Create and initialize the home
+        const home = new Home(user);
         await home.init();
         return home.touch();
+      }));
     }
-}
+    
+    // Always return from the factory, which handles initialization once
+    return homeFactories.get(user.id)!();
+  }
