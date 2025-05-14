@@ -15,7 +15,7 @@ export default class EigenDatabase {
     }
 
     public async init(onCreate: (db: Database) => Promise<void>) {
-        if (await this.fileSystem.exists(this.pathId)) {
+        if (await this.fileSystem.existsOnStorage(this.pathId)) {
             const tempFilePath = await this.fileSystem.downloadToTemp(this.pathId);
             this.db = new Database(tempFilePath);
         } else {

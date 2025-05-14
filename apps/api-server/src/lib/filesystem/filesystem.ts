@@ -72,6 +72,10 @@ export default class FileSystem {
         return this.storage.exists(pathId);
     }
 
+    public async existsOnStorage(pathId: string): Promise<boolean> {
+        return this.storage.exists(pathId);
+    }
+
     public getTempFilePath(pathId: string): string {
         const tempFilename = pathId.replace(/\//g, '_');
         return path.join(this.tempDir, tempFilename);
