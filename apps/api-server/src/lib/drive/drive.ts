@@ -14,6 +14,7 @@ import sharp from "sharp";
 import CollabDocument from "../collab/collabDocument.ts";
 import {getSharedDatabase} from "./shared";
 import {getUserByEmail} from "../users/users.ts";
+import FileSystem from "../filesystem/filesystem.ts";
 
 async function getDriveDatabase(home: Home) {
     const db = await home.openSQLiteDatabase('eigen.drive/metadata.db', async (db: Database) => {
@@ -120,8 +121,135 @@ export default class Drive {
                 updatedAt: new Date()
             });
         }
+
+        // // Initialize new filesystem
+        // const newFileSystem = new FileSystem(this.owner, 'drive');
+        // await newFileSystem.init();
+        
+        // // Perform migration if needed
+        // await this.migrateToNewFileSystem(newFileSystem);
+        
     }
 
+    /**
+     * Migrate existing files and folders from old filesystem to new FileSystem
+     * @param newFileSystem The new FileSystem instance to migrate to
+     */
+    private async migrateToNewFileSystem(newFileSystem: FileSystem): Promise<void> {
+        console.log(`Starting migration to new FileSystem for user ${this.owner.id}`);
+        
+        try {
+            // Get all paths from the database - these are the only ones we need to migrate
+            const paths = await this.db.select().from(drivePaths).where(eq(drivePaths.ownerId, this.owner.id)).all();
+            
+            // Create a mapping of old IDs to new IDs for parent references
+            const idMapping: Record<string, string> = {};
+            
+            // First pass: Create all folders
+            const folders = paths.filter(p => p.type !== 'file');
+            console.log(`Creating ${folders.length} folders in new filesystem`);
+            
+            // Start with root folders (parentId is null)
+            const rootFolders = folders.filter(p => p.parentId === null);
+            for (const folder of rootFolders) {
+                // Create the folder in the new filesystem
+                const newId = await newFileSystem.mkdir(folder.name);
+                idMapping[folder.id] = newId;
+                
+                // Update folder metadata with properties from database
+                await newFileSystem.update(newId, {
+                    name: folder.name,
+                    type: folder.type,
+                    mimeType: folder.mimeType,
+                    acl: folder.acl
+                });
+            }
+            
+            // Continue with child folders (level by level to maintain hierarchy)
+            let remainingFolders = folders.filter(p => p.parentId !== null);
+            let processedInLastIteration = 1; // Start with a non-zero value to enter the loop
+            
+            // Process folders as long as we find parents for some of them
+            while (remainingFolders.length > 0 && processedInLastIteration > 0) {
+                processedInLastIteration = 0;
+                const stillRemaining = [];
+                
+                for (const folder of remainingFolders) {
+                    // Check if parent has been processed
+                    if (folder.parentId && idMapping[folder.parentId]) {
+                        // Create folder with mapped parent ID
+                        const newId = await newFileSystem.mkdir(folder.name, idMapping[folder.parentId]);
+                        idMapping[folder.id] = newId;
+                        
+                        // Update folder metadata with properties from database
+                        await newFileSystem.update(newId, {
+                            name: folder.name,
+                            type: folder.type,
+                            mimeType: folder.mimeType,
+                            acl: folder.acl
+                        });
+                        
+                        processedInLastIteration++;
+                    } else {
+                        // Parent not processed yet, keep for next iteration
+                        stillRemaining.push(folder);
+                    }
+                }
+                
+                remainingFolders = stillRemaining;
+            }
+            
+            // If we have folders left, their parent hierarchy is broken
+            if (remainingFolders.length > 0) {
+                console.warn(`Warning: ${remainingFolders.length} folders couldn't be migrated due to missing parent folders`);
+            }
+            
+            // Second pass: Migrate files
+            const files = paths.filter(p => p.type === 'file');
+            console.log(`Migrating ${files.length} files to new filesystem`);
+            
+            for (const file of files) {
+                try {
+                    if (!file.parentId || !idMapping[file.parentId]) {
+                        console.warn(`Skipping file ${file.name}: Parent folder not found in mapping`);
+                        continue;
+                    }
+                    
+                    // Get the file path in old filesystem
+                    const oldFilePath = await this.getFolderPath(file.id);
+                    
+                    // Check if file exists
+                    const bunFile = await this.home.fs.file(oldFilePath);
+                    if (await bunFile.exists()) {
+                        // Create new file in the new filesystem with data from old file
+                        const newId = await newFileSystem.write(idMapping[file.parentId], bunFile);
+                        idMapping[file.id] = newId;
+                        
+                        // Update the file metadata using properties from database
+                        await newFileSystem.update(newId, {
+                            name: file.name,
+                            type: file.type,
+                            mimeType: file.mimeType,
+                            acl: file.acl
+                        });
+                    } else {
+                        console.warn(`File not found during migration: ${oldFilePath}`);
+                    }
+                } catch (error: unknown) {
+                    const errorMessage = error instanceof Error ? error.message : String(error);
+                    console.error(`Error migrating file ${file.name}:`, errorMessage);
+                }
+            }
+            
+            console.log(`Migration completed successfully. Migrated ${Object.keys(idMapping).length} items.`);
+        } catch (error: unknown) {
+            const errorMessage = error instanceof Error ? error.message : String(error);
+            console.error('Error during filesystem migration:', errorMessage);
+            throw new Error(`Migration failed: ${errorMessage}`);
+        }
+        newFileSystem.close();
+    }
+    
     public async size(): Promise<number> {
         // get total size of mailbox
         return (await this.home.fs.dirSize('eigen.drive')) || this.db.select({size: sql`SUM(${drivePaths.size})`}).from(drivePaths).where(eq(drivePaths.type, 'file')).get()?.size as number || 0;
