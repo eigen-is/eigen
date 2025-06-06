@@ -44,3 +44,4 @@ backend/src/all/data/home/*
 /apps/api-server/data/home
 /apps/api-server/myapp
 apps/api-server/myapp
+/apps/api-server/data/bucket
