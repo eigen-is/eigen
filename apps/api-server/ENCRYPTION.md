@@ -7,9 +7,10 @@ This repository contains a secure file sharing system similar to Google Drive, b
 The system implements a hybrid cryptographic approach with the following key components:
 
 1. **User-based Key Management**: Each user has a public/private key pair for secure key exchange
-2. **Per-file Encryption**: Each file has its own symmetric encryption key
-3. **Encrypted Metadata**: Sensitive metadata (filenames, paths) is encrypted separately
-4. **Secure Sharing Mechanism**: Files can be shared without re-encrypting content
+2. **Directory Key Hierarchy**: Each directory has its own key that encrypts file keys and subdirectory keys
+3. **Per-file Encryption**: Each file has its own symmetric encryption key
+4. **Encrypted Metadata**: Sensitive metadata (filenames, paths) is encrypted separately
+5. **Secure Sharing Mechanism**: Directories and files can be shared without re-encrypting content
 
 ## Cryptographic Design
 
@@ -17,8 +18,13 @@ The system implements a hybrid cryptographic approach with the following key com
 
 ```
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│  User Password  │────>│  User Key Pair  │────>│ File Keys (AES) │
+│  User Password  │────>│  User Key Pair  │────>│ Directory Keys  │
 └─────────────────┘     └─────────────────┘     └─────────────────┘
+                                                         │
+                                                         ▼
+                                                ┌─────────────────┐
+                                                │ File Keys (AES) │
+                                                └─────────────────┘
                                                          │
                                                          ▼
                                                 ┌─────────────────┐
@@ -45,14 +51,28 @@ The system implements a hybrid cryptographic approach with the following key com
 1. **Upload**:
    - Generate a random AES-256 key for the file
    - Encrypt file content with AES-256-GCM using this key
-   - Encrypt the file key with the user's public key (RSA)
+   - Encrypt the file key with the directory key
    - Encrypt sensitive metadata (filename, path) with the same file key
    - Store encrypted file, encrypted metadata, and encrypted file key
 
 2. **Download**:
-   - Retrieve encrypted file key and decrypt it with user's private key
-   - Use decrypted file key to decrypt file content and metadata
+   - Retrieve encrypted directory key and decrypt it with user's private key
+   - Use directory key to decrypt the file key
+   - Use file key to decrypt file content and metadata
    - Present decrypted file to user
+
+### Directory Key Management
+
+1. **Directory Structure**:
+   - Each directory has its own AES-256 key
+   - The directory key encrypts all file keys and subdirectory keys within it
+   - This forms a hierarchical key structure that simplifies sharing
+
+2. **Directory Creation**:
+   - Generate a random AES-256 key for the directory
+   - Encrypt the directory key with the user's public key
+   - If it's a subdirectory, also encrypt its key with the parent directory's key
+   - Store the encrypted directory key
 
 ### Sharing Mechanism
 
@@ -62,9 +82,16 @@ The system implements a hybrid cryptographic approach with the following key com
    - System encrypts metadata with the file key for the recipient
    - Store new encrypted file key and metadata records for recipient
 
-2. **Access Revocation**:
-   - Delete the encrypted file key record for the revoked user
-   - User immediately loses access to the file key, and thus the file
+2. **Share Directory**:
+   - Owner decrypts the directory key using their private key
+   - System encrypts the directory key with recipient's public key
+   - Store the encrypted directory key for the recipient
+   - The recipient gains access to all files and subdirectories within the shared directory
+
+3. **Access Revocation**:
+   - For file access: Delete the encrypted file key record for the revoked user
+   - For directory access: Delete the encrypted directory key record for the revoked user
+   - User immediately loses access to the keys, and thus the files/directories
 
 ### Metadata Protection
 
@@ -105,12 +132,43 @@ CREATE TABLE user_keys (
   updated_at TIMESTAMP DEFAULT NOW()
 );
 
+-- Directories
+CREATE TABLE directories (
+  id VARCHAR(36) PRIMARY KEY,
+  parent_id VARCHAR(36) REFERENCES directories(id),
+  created_by INTEGER NOT NULL REFERENCES users(id),
+  created_at TIMESTAMP DEFAULT NOW(),
+  updated_at TIMESTAMP DEFAULT NOW()
+);
+
+-- Directory Keys
+CREATE TABLE directory_keys (
+  directory_id VARCHAR(36) REFERENCES directories(id),
+  user_id INTEGER REFERENCES users(id),
+  encrypted_directory_key BYTEA NOT NULL,
+  iv BYTEA NOT NULL,
+  auth_tag BYTEA NOT NULL,
+  PRIMARY KEY (directory_id, user_id)
+);
+
+-- Directory Metadata
+CREATE TABLE encrypted_directory_metadata (
+  directory_id VARCHAR(36) REFERENCES directories(id),
+  user_id INTEGER REFERENCES users(id),
+  encrypted_metadata BYTEA NOT NULL,
+  iv BYTEA NOT NULL,
+  auth_tag BYTEA NOT NULL,
+  PRIMARY KEY (directory_id, user_id)
+);
+
 -- Files (Non-sensitive metadata)
 CREATE TABLE files (
   id VARCHAR(36) PRIMARY KEY,
+  directory_id VARCHAR(36) REFERENCES directories(id),
   mime_type VARCHAR(255) NOT NULL,
   size BIGINT NOT NULL,
   created_by INTEGER NOT NULL REFERENCES users(id),
+  uploaded_by INTEGER NOT NULL REFERENCES users(id),
   created_at TIMESTAMP DEFAULT NOW(),
   updated_at TIMESTAMP DEFAULT NOW()
 );
@@ -128,11 +186,25 @@ CREATE TABLE encrypted_file_metadata (
 -- File Keys
 CREATE TABLE file_keys (
   file_id VARCHAR(36) REFERENCES files(id),
+  directory_id VARCHAR(36) REFERENCES directories(id),
   user_id INTEGER REFERENCES users(id),
   encrypted_file_key BYTEA NOT NULL,
   iv BYTEA NOT NULL,
   auth_tag BYTEA NOT NULL,
   PRIMARY KEY (file_id, user_id)
+);
+
+-- Public Links
+CREATE TABLE public_links (
+  id VARCHAR(36) PRIMARY KEY,
+  resource_id VARCHAR(36) NOT NULL,
+  resource_type VARCHAR(10) NOT NULL, -- 'file' or 'directory'
+  encrypted_resource_key BYTEA NOT NULL,
+  iv BYTEA NOT NULL,
+  auth_tag BYTEA NOT NULL,
+  created_by INTEGER NOT NULL REFERENCES users(id),
+  expires_at TIMESTAMP,
+  created_at TIMESTAMP DEFAULT NOW()
 );
 
 -- Account Recovery (Optional)
@@ -159,14 +231,19 @@ Key functions:
 
 ### 2. File Service
 
-Handles file operations with encryption.
+Handles file and directory operations with encryption.
 
 Key functions:
-- `uploadFile(fileData, metadata, userId, privateKey)`: Encrypts and stores a new file
+- `createDirectory(name, parentId, userId, privateKey)`: Creates a new encrypted directory
+- `uploadFile(fileData, metadata, userId, privateKey, directoryId)`: Encrypts and stores a new file in a directory
 - `getFile(fileId, userId, privateKey)`: Retrieves and decrypts a file
+- `shareDirectory(directoryId, ownerId, targetUserId, ownerPrivateKey)`: Shares a directory and all its contents
 - `shareFile(fileId, ownerId, targetUserId, ownerPrivateKey)`: Shares a file with another user
+- `createPublicLink(resourceId, resourceType, userId, privateKey, expiresAt)`: Creates a public link for a file or directory
 - `revokeAccess(fileId, targetUserId)`: Revokes a user's access to a file
-- `renameFile(fileId, newName, newPath, userId, privateKey)`: Updates file metadata
+- `revokeDirectoryAccess(directoryId, targetUserId)`: Revokes a user's access to a directory
+- `renameFile(fileId, newName, userId, privateKey)`: Updates file metadata
+- `renameDirectory(directoryId, newName, userId, privateKey)`: Updates directory metadata
 
 ### 3. Encryption Utils
 
@@ -180,6 +257,9 @@ Key functions:
 - `encryptWithPublicKey(data, publicKey)`: Encrypts data with RSA public key
 - `decryptWithPrivateKey(encryptedData, privateKey)`: Decrypts data with RSA private key
 - `generateFileKey()`: Creates random AES-256 key for file encryption
+- `generateDirectoryKey()`: Creates random AES-256 key for directory encryption
+- `encryptDirectoryKey(directoryKey, publicKey)`: Encrypts directory key with user's public key
+- `encryptDirectoryKeyWithParentKey(directoryKey, parentDirectoryKey)`: Encrypts directory key with parent directory key
 
 ### 4. Session Service
 
@@ -207,18 +287,26 @@ Key functions:
 - `POST /api/users/logout`: End user session
 - `POST /api/users/change-password`: Update user password
 
+### Directory Operations
+- `POST /api/directories/create`: Create new directory
+- `GET /api/directories/list/:directoryId?`: List contents of directory
+- `PUT /api/directories/:directoryId/rename`: Rename directory
+- `DELETE /api/directories/:directoryId`: Delete directory and contents
+
 ### File Operations
 - `POST /api/files/upload`: Upload and encrypt new file
 - `GET /api/files/download/:fileId`: Download and decrypt file
-- `GET /api/files/list/:path?`: List files in directory
-- `PUT /api/files/:fileId/rename`: Rename file or move to new path
+- `PUT /api/files/:fileId/rename`: Rename file
 - `DELETE /api/files/:fileId`: Delete file
 
 ### Sharing
 - `POST /api/files/share/:fileId`: Share file with another user
+- `POST /api/directories/share/:directoryId`: Share directory with another user
 - `POST /api/files/revoke/:fileId`: Revoke access to shared file
-- `GET /api/files/shared-with-me`: List files shared with current user
-- `GET /api/files/shared-by-me`: List files shared by current user
+- `POST /api/directories/revoke/:directoryId`: Revoke access to shared directory
+- `GET /api/resources/shared-with-me`: List files and directories shared with current user
+- `GET /api/resources/shared-by-me`: List files and directories shared by current user
+- `POST /api/resources/public-link`: Create public link for a file or directory
 
 ### Recovery (Optional)
 - `POST /api/recovery/generate-key`: Generate account recovery key
@@ -382,6 +470,76 @@ function decryptFile(
 }
 ```
 
+### Directory Key Operations
+
+```typescript
+function generateDirectoryKey(): Buffer {
+  return crypto.randomBytes(32); // Generate a random 32-byte (256-bit) key
+}
+
+function encryptDirectoryKey(
+  directoryKey: Buffer,
+  publicKey: string
+): Buffer {
+  return crypto.publicEncrypt(
+    {
+      key: publicKey,
+      padding: crypto.constants.RSA_PKCS1_OAEP_PADDING
+    },
+    directoryKey
+  );
+}
+
+function encryptDirectoryKeyWithParentKey(
+  directoryKey: Buffer,
+  parentDirectoryKey: Buffer
+): {
+  encryptedKey: Buffer;
+  iv: Buffer;
+  authTag: Buffer;
+} {
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', parentDirectoryKey, iv);
+  
+  const encryptedKey = Buffer.concat([
+    cipher.update(directoryKey),
+    cipher.final()
+  ]);
+  
+  const authTag = cipher.getAuthTag();
+  
+  return {
+    encryptedKey,
+    iv,
+    authTag
+  };
+}
+
+async function shareDirectory(
+  directoryId: string,
+  ownerId: number,
+  targetUserId: number,
+  ownerPrivateKey: string
+): Promise<void> {
+  // 1. Get the encrypted directory key for the owner
+  const ownerDirKey = await getEncryptedDirectoryKey(directoryId, ownerId);
+  
+  // 2. Decrypt the directory key using the owner's private key
+  const directoryKey = decryptWithPrivateKey(ownerDirKey.encryptedDirectoryKey, ownerPrivateKey);
+  
+  // 3. Get the target user's public key
+  const targetPublicKey = await getUserPublicKey(targetUserId);
+  
+  // 4. Encrypt the directory key with the target user's public key
+  const encryptedKeyForTarget = encryptWithPublicKey(directoryKey, targetPublicKey);
+  
+  // 5. Store the encrypted directory key for the target user
+  await storeEncryptedDirectoryKey(directoryId, targetUserId, encryptedKeyForTarget);
+  
+  // 6. The target user now has access to the directory key, which allows access to all files and subdirectories
+}
+```
+
 ### Metadata Encryption
 
 ```typescript
@@ -411,6 +569,33 @@ function encryptMetadata(
   };
 }
 
+// Similarly for directory metadata
+function encryptDirectoryMetadata(
+  metadata: { name: string; [key: string]: any },
+  directoryKey: Buffer
+): {
+  encryptedMetadata: Buffer;
+  iv: Buffer;
+  authTag: Buffer;
+} {
+  const iv = crypto.randomBytes(12);
+  const cipher = crypto.createCipheriv('aes-256-gcm', directoryKey, iv);
+  
+  const metadataBuffer = Buffer.from(JSON.stringify(metadata));
+  const encryptedMetadata = Buffer.concat([
+    cipher.update(metadataBuffer),
+    cipher.final()
+  ]);
+  
+  const authTag = cipher.getAuthTag();
+  
+  return {
+    encryptedMetadata,
+    iv,
+    authTag
+  };
+}
+
 function decryptMetadata(
   encryptedMetadata: Buffer,
   fileKey: Buffer,
@@ -418,6 +603,23 @@ function decryptMetadata(
   authTag: Buffer
 ): { name: string; path: string; [key: string]: any } {
   const decipher = crypto.createDecipheriv('aes-256-gcm', fileKey, iv);
+  decipher.setAuthTag(authTag);
+  
+  const metadataBuffer = Buffer.concat([
+    decipher.update(encryptedMetadata),
+    decipher.final()
+  ]);
+  
+  return JSON.parse(metadataBuffer.toString());
+}
+
+function decryptDirectoryMetadata(
+  encryptedMetadata: Buffer,
+  directoryKey: Buffer,
+  iv: Buffer,
+  authTag: Buffer
+): { name: string; [key: string]: any } {
+  const decipher = crypto.createDecipheriv('aes-256-gcm', directoryKey, iv);
   decipher.setAuthTag(authTag);
   
   const metadataBuffer = Buffer.concat([
@@ -468,9 +670,11 @@ This project is licensed under the MIT License - see the LICENSE file for detail
    - File deletion
 
 4. **Sharing Functionality**
-   - Implement sharing mechanism
+   - Implement directory key hierarchy
+   - Directory sharing mechanism
+   - File sharing mechanism
+   - Public link generation
    - Access control and revocation
-   - Shared file management
 
 5. **UI/UX Development**
    - File browser interface
