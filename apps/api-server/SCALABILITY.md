@@ -2,6 +2,12 @@
 
 A simple, cost-effective, and scalable architecture for document collaboration with end-to-end encryption, user-specific storage, and real-time collaboration capabilities.
 
+**Key Architecture Principles:**
+- **SQLite databases**: Store encrypted file/folder metadata per user (NOT document content)
+- **YJS documents**: Handle real-time collaborative editing in-memory (NOT persistent storage)
+- **Consistent user routing**: Ensures reliability and session persistence
+- **End-to-end encryption**: Zero-knowledge server architecture
+
 ## Table of Contents
 
 - [Architecture Overview](#architecture-overview)
@@ -47,15 +53,25 @@ Our system employs a straightforward architecture designed for simplicity and sc
 │ WebSocket handler for │ │ WebSocket handler │ │ WebSocket handler for │
 │ all documents of      │ │ for all docs of   │ │ all documents of      │
 │ users A, B, and C     │ │ users D and E     │ │ users F, G, and H     │
+│                       │ │                   │ │                       │
+│ YJS Documents         │ │ YJS Documents     │ │ YJS Documents         │
+│ (in-memory)           │ │ (in-memory)       │ │ (in-memory)           │
 └──────────┬────────────┘ └─────────┬─────────┘ └──────────┬────────────┘
            │                        │                      │
            ▼                        ▼                      ▼
 ┌───────────────────────┐ ┌───────────────────┐ ┌───────────────────────┐
-│ User Databases &      │ │ User Databases &  │ │ User Databases &      │
-│ File Storage          │ │ File Storage      │ │ File Storage          │
+│ User SQLite DBs       │ │ User SQLite DBs   │ │ User SQLite DBs       │
+│ (metadata only)       │ │ (metadata only)   │ │ (metadata only)       │
+│ + Encrypted Files     │ │ + Encrypted Files │ │ + Encrypted Files     │
 │ (users A,B,C)         │ │ (users D,E)       │ │ (users F,G,H)         │
 └───────────────────────┘ └───────────────────┘ └───────────────────────┘
 ```
+
+**Data Flow Explanation:**
+- **Metadata operations** (create folder, rename file, permissions) → SQLite databases
+- **Document content operations** (read, write collaborative editing) → YJS documents in-memory
+- **Document persistence** → Encrypted files in storage layer
+- **Real-time collaboration** → WebSocket connections + YJS operational transforms
 
 This architecture maximizes simplicity while maintaining scalability, ensuring user requests and WebSocket connections are handled consistently.
 
@@ -124,7 +140,7 @@ This architecture maximizes simplicity while maintaining scalability, ensuring u
 **Purpose**: Per-user isolated storage for document metadata and keys.
 
 **Key Functions**:
-- Stores encrypted file metadata
+- Stores encrypted file metadata (filenames, paths, permissions)
 - Manages encryption keys for documents
 - Tracks shared document access
 - Maintains folder structures and permissions
@@ -133,15 +149,37 @@ This architecture maximizes simplicity while maintaining scalability, ensuring u
 
 **Scaling Strategy**: One database per user; sharding for organizations and power users
 
+**Important Note**: SQLite is NOT used for document content or collaborative editing - only for metadata storage.
+
 ### 6. File Storage System
 
 **Purpose**: Secure storage for encrypted document content.
 
-**Options**:
-- Default S3 storage
-- User-specific storage providers (optional)
+**Key Functions**:
+- Stores encrypted document files (S3, local storage, etc.)
+- Handles file upload/download operations
+- Manages file versioning and backup
 
-**Scaling Strategy**: Inherently scalable through distributed object storage
+### 7. YJS Document Collaboration
+
+**Purpose**: Real-time collaborative editing engine running in-memory on API servers.
+
+**Key Functions**:
+- Manages YJS documents for active collaborative sessions
+- Handles operational transforms and conflict resolution
+- Broadcasts changes via WebSockets to connected clients
+- Maintains document state only while users are actively editing
+
+**Data Flow**:
+1. User opens document → API server loads YJS document into memory
+2. Multiple users edit → YJS handles real-time synchronization
+3. Periodic saves → Document content encrypted and stored in file system
+4. Session ends → YJS document removed from memory
+
+**Important Notes**:
+- YJS documents are ephemeral (in-memory only during active sessions)
+- Persistent storage handled separately via encrypted file system
+- Each API server manages YJS documents for its assigned users
 
 ## Core Design Principles
 
@@ -202,7 +240,7 @@ Our system scales through several mechanisms:
 ### 4. Connection Management
 
 - Connection pooling for database access
-- WebSocket connection limits per document
+- WebSocket connection limits
 - Efficient management of concurrent connections
 
 ## Security Model
@@ -311,17 +349,26 @@ docker-compose.yml                 # Main services
 
 ## Performance Considerations
 
-### Document Limits
+### Document Collaboration Limits
 
-- Maximum concurrent editors per document (e.g., 50)
-- Document size limits for collaborative editing
-- Rate limiting for rapid changes
+- Maximum concurrent editors per YJS document (e.g., 50)
+- Document size limits for in-memory YJS documents
+- Rate limiting for rapid collaborative changes
+- Memory allocation per active document session
+
+### Metadata Operations Performance
+
+- SQLite query optimization for file/folder operations
+- Connection pooling for per-user databases
+- Indexing strategy for frequently accessed metadata
+- Batch operations for bulk file operations
 
 ### Resource Management
 
-- Memory allocation per API server
-- WebSocket connection limits
-- Database connection pooling
+- Memory allocation per API server for YJS documents
+- WebSocket connection limits per server
+- SQLite database connection pooling per user
+- Storage I/O optimization for document persistence
 
 ### Optimization Techniques
 
