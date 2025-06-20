@@ -87,6 +87,9 @@ bun serve:contacts
 
 # Run docs app with API server
 bun serve:docs
+
+# Run stickies app with API server
+bun serve:stickies
 ```
 
 ### Building for Production
