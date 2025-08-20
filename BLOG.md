@@ -1,12 +1,12 @@
 # Eigen: Building a European Alternative to Google Workspace
 
-> **TL;DR**: Built a proof of concept for a cloud productivity suite alternative in 6 weeks. Live demo at eigen.is. Real-time collaboration, file sharing, and multiple integrated apps work. Much more needed to make it production-ready and complete. Looking for contributors. Going open source soon.
+> **TL;DR**: Built a proof of concept for a Google Workspace alternative. Live demo at eigen.is. Real-time collaboration, file sharing, and multiple integrated apps work. Much more needed to make it production-ready and complete. Looking for contributors. Going open source soon.
 
 ## What is Eigen?
 
 Eigen is a workspace suite like Google Workspace or Microsoft 365, but where you control your data. It's a collection of productivity apps (mail, drive, docs, calendar, contacts, and more) that work together.
 
-**Already working**: minimal implementations of Mail, Drive, Docs (with real-time collaboration), Contacts, and Kanban boards - all built as a proof of concept in just 6 weeks of development.
+**Already working**: minimal implementations of Mail, Drive, Docs (with real-time collaboration), Contacts, and Kanban boards - all built as a proof of concept.
 
 The difference: with eigen.is you can choose where your data lives*. Use the public service at eigen.is, optionally store your data on your own cloud storage, or self-host your own instance entirely. Your choice.
 
@@ -26,11 +26,9 @@ With Eigen, you get:
 
 I believe organizations and individuals should have a real alternative to Big Tech solutions. One that respects privacy and gives complete control back to users.
 
-## Current Status: 6 Weeks of Proof of Concept
+## Current Status: Six Weeks of Proof of Concept
 
 I've been working on this for six weeks in my free time. The proof of concept is live - and it works!
-
-**Live demo at eigen.is** - try it yourself! Works on desktop and mobile browsers. Here's what's already working:
 
 ### eigen|mail> - Email Client
 A full webmail client with:
@@ -106,7 +104,7 @@ The constraints push me to find creative solutions. The result: an architecture 
 - React with TypeScript
 - TanStack Router (type-safe routing)
 - TanStack Query (data fetching)
-- Tailwind CSS + shadcn/ui (styling)
+- Tailwind CSS + shadcn/ui (responsive design for desktop and mobile)
 
 **Infrastructure (Planned):**
 - Docker containers for easy deployment
