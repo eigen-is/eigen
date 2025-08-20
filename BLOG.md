@@ -1,16 +1,18 @@
 # Eigen: Building a European Alternative to Google Workspace
 
-> **TL;DR**: Built a working Google Workspace alternative in 6 weeks. Live demo at eigen.is. Real-time collaboration works. Looking for contributors and feedback. Going open source soon.
+> **TL;DR**: Built a proof of concept for a cloud productivity suite alternative in 6 weeks. Live demo at eigen.is. Real-time collaboration, file sharing, and multiple integrated apps work. Much more needed to make it production-ready and complete. Looking for contributors. Going open source soon.
 
 ## What is Eigen?
 
-Eigen is a workspace suite like Google Workspace, but where you control your data. It's a collection of productivity apps (mail, drive, docs, calendar, contacts, and more) that work together.
+Eigen is a workspace suite like Google Workspace or Microsoft 365, but where you control your data. It's a collection of productivity apps (mail, drive, docs, calendar, contacts, and more) that work together.
 
-**Already working**: Mail, Drive, Docs with real-time collaboration, Contacts, and Kanban boards - all built in just 6 weeks of development.
+**Already working**: minimal implementations of Mail, Drive, Docs (with real-time collaboration), Contacts, and Kanban boards - all built as a proof of concept in just 6 weeks of development.
 
-The difference: with eigen.is you can choose where your data lives. Use the public service at eigen.is, optionally store your data on your own cloud storage, or self-host your own instance entirely. Your choice.
+The difference: with eigen.is you can choose where your data lives*. Use the public service at eigen.is, optionally store your data on your own cloud storage, or self-host your own instance entirely. Your choice.
 
 The name "eigen" means "own" in Dutch/German. It's about owning your digital workspace.
+
+*Currently eigen.is runs as a hosted service. Own cloud storage and self-hosting options are planned features.
 
 ## Why Build Another Workspace Suite?
 
@@ -116,7 +118,7 @@ The architecture is designed to support everything from a single user on a Raspb
 
 Six weeks of spare time coding has resulted in something I'm genuinely excited about. A working proof of concept with real-time collaboration, file sharing, and multiple integrated apps. The per-user architecture works. The technical constraints I set have led to interesting solutions. It's real, it's running at eigen.is, and people can use it today.
 
-But let me be honest: what exists now is maybe 5% of what this needs to become. To build a genuine alternative to Google Workspace - with calendar, spreadsheets, presentations, full encryption, organizational support, and protocol compatibility (IMAP, CalDAV, WebDAV) - I estimate this needs at least 10 person-years of focused development.
+But let me be honest: what exists now is maybe 5% of what this needs to become. To build a genuine alternative to Big Tech cloud suites - with calendar, spreadsheets, presentations, full encryption, organizational support, and protocol compatibility (IMAP, CalDAV, WebDAV) - I estimate this needs at least 10 person-years of focused development.
 
 The foundation is solid, but the mountain ahead is high. Essential features still need to be built:
 - **eigen|calendar>** with proper event management and sharing
