@@ -1,16 +1,16 @@
 # Eigen: Building a European Alternative to Google Workspace
 
-> **TL;DR**: Built a proof of concept for a Google Workspace alternative. Live demo at eigen.is. Real-time collaboration, file sharing, and multiple integrated apps work. Much more needed to make it production-ready and complete. Looking for contributors. Going open source soon.
+> **TL;DR**: Built a proof of concept for a Google Workspace alternative. Live demo at eigen.is, demonstrating real-time collaboration, file sharing, and multiple integrated apps. Much more needed to make it production-ready and complete. Looking for contributors. Going open source soon.
 
 ## What is Eigen?
 
 Eigen is a workspace suite like Google Workspace or Microsoft 365, but where you control your data. It's a collection of productivity apps (mail, drive, docs, calendar, contacts, and more) that work together.
 
+The name "eigen" means "own" in Dutch/German. It's about owning your digital workspace.
+
 **Already working**: minimal implementations of Mail, Drive, Docs (with real-time collaboration), Contacts, and Kanban boards - all built as a proof of concept.
 
 The difference: with Eigen you can choose where your data lives*. Use the public service at eigen.is, optionally store your data on your own cloud storage, or self-host your own instance entirely. Your choice.
-
-The name "eigen" means "own" in Dutch/German. It's about owning your digital workspace.
 
 *Currently Eigen runs as a hosted service. Own cloud storage and self-hosting options are planned features.
 
