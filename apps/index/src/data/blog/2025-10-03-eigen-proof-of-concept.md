@@ -4,11 +4,13 @@ title: "Eigen: Building a Workspace"
 summary: "After two months of development, I built a working proof of concept for a Google Workspace alternative where you control your own data. Here's what works and what's next."
 ---
 
-Last spring I started wondering: how hard would it be to build my own Google Workspace? Given the situation in the USA and the power large tech companies hold, a European alternative feels needed. Building a workspace yourself sounds impossible, but you only know for sure if you have tried.
+Last spring I started wondering: how hard would it be to build my own Google Workspace? Given the situation in the USA and the power large tech companies hold, a European alternative feels needed. 
 
-Surprisingly, after only two months of spare-time development, I had a working proof of concept. Mail, drive, docs, contacts and kanban boards are in place with real time collaboration. You can try it at eigen.is.
+Of course, building a workspace yourself sounds impossible, but you only know for sure if you have tried :)
 
-The name Eigen is Dutch and German for own, which turned out to describe the whole idea well.
+Surprisingly, after only two months of spare-time development (with some help from [Mark](https://bsky.app/profile/mknol.bsky.social)), I had a working proof of concept. Mail, drive, docs, contacts and kanban boards are in place with real time collaboration. You can try it at [eigen.is](https://eigen.is).
+
+The name Eigen is Dutch/German for "own", which turned out to describe the whole idea well.
 
 ## Apps
 
@@ -24,7 +26,7 @@ It’s all minimal, but functional enough to feel like a small ecosystem.
 
 ## Under the hood
 
-To prototype something quickly, I decided to use NPM packages and build on open source libraries. This is something I normally avoid. I often end up writing all code myself and reinventing wheels. Even the few NPM packages I published are dependency free.
+To prototype something quickly, I decided to use NPM packages and build on open source libraries. This is something I normally avoid. For my other [projects](https://reindernijhoff.net/about/), I often end up writing all code myself and reinventing wheels. Even the few [NPM packages](https://reindernijhoff.net/npm/) I published are dependency free.
 
 The stack is standard and modern (at least, that’s what someone who knows these things told me): Bun for the server runtime, Elysia for routing, Vite and React with TypeScript for the frontend, TanStack Router and TanStack Query for routing and data fetching, Tailwind CSS and shadcn/ui for the interface.
 
@@ -32,20 +34,20 @@ The interesting part is the architecture I accidentally ended up with. I started
 
 I did it that way because it was the simplest thing that could work.
 
-But it has some nice properties:
+**But it has some nice properties:**
 
 - Each user's data is completely isolated. No shared database means no way to accidentally access someone else's data.
 - Backups are trivial: just copy a user's directory.
 - Adding users doesn't affect existing ones. Easy to scale.
 - Each user could potentially bring their own storage backend.
 
-Of course, it also creates a few interesting problems:
+**Of course, it also creates a few interesting problems:**
 
 - How do you share documents when each user's data is isolated?
 - How do you enable real-time collaboration without a central database?
 - How do you handle search across file-based data?
 
-For real time collaboration in docs and stickies, the server keeps Yjs documents in memory while they are active. They sync over WebSockets and periodically write to disk. When everyone closes the doc, it disappears from memory.
+For real time collaboration in docs and stickies, the server keeps [Yjs](https://yjs.dev/) documents in memory while they are active. They sync over WebSockets and periodically write to disk. When everyone closes the doc, it disappears from memory.
 
 ## What's Next?
 
@@ -53,7 +55,7 @@ After two months of spare time development, much more works than I expected. Tha
 
 Reality check: I have built only a very small part of a minimum viable product. Probably less than five percent of what needs to be built, and it will take many years of work to reach production readiness.
 
-Missing pieces:
+**Missing pieces:**
 - End-to-end encryption
 - Calendar
 - Spreadsheets and presentations
@@ -61,14 +63,14 @@ Missing pieces:
 - Protocol compatibility (IMAP, CalDAV, WebDAV) for standard clients
 - Backup and migration tools
 
-Open questions in the per user file architecture:
+**Open questions in the per user file architecture:**
 
 - Can it scale? What are the performance limits?
 - How do you implement encryption with this layout?
 - Should workspace users map to system users for simplicity and security?
 - What's the simplest backup strategy that actually works?
 
-Next steps:
+**Next steps:**
 
 - Keep pushing and see where it breaks
 - Open source the code so others can look at it, try to break it and help validate the architecture

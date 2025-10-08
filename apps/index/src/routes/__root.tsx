@@ -20,7 +20,7 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
     },
     component: () => (
         <>
-            <div className="flex flex-col h-dvh">
+            <div className="flex flex-col min-h-dvh">
                 <Outlet/>
             </div>
             <TanStackRouterDevtools position="bottom-right"/>
