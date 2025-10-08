@@ -63,15 +63,18 @@ Reality check: I have built only a very small part of a minimum viable product. 
 - Protocol compatibility (IMAP, CalDAV, WebDAV) for standard clients
 - Backup and migration tools
 
-**Open questions in the per user file architecture:**
+**Beyond implementing missing pieces, there are fundamental questions to answer:**
 
-- Can it scale? What are the performance limits?
-- How do you implement encryption with this layout?
+First, can the current architecture actually scale? I need to find out where the limits are before going too far in the wrong direction.
 
-**Next steps:**
+Second, is this the simplest approach? For example, could mapping workspace users 1-to-1 to Linux system users make everything easier and more secure? I chose the current structure because it seemed simple at the time, but there might be better solutions.
 
-- Keep pushing and see where it breaks
-- Critically examine the technical architecture. Will this work? Are there more elegant or simpler solutions that could make developing Eigen easier? What if workspace users mapped 1-to-1 to (Linux) system users for simplicity and security?
+Third, how do we make Eigen extensible? The core will stay minimal by design. But organizations rolling this out should be able to extend it. We should figure out early what a plugin/API architecture looks like. How can third parties write deep integrations as extensions without forking the entire project.
+
+Fourth, where should this go? I'm thinking of a model like WordPress: you can self-host Eigen (startups could run their own instance), while eigen.is would be a public platform running the same software. Ideally, users from different servers could still share and collaborate—similar to how Mastodon works with decentralized authentication. Whether and how to implement this is another question entirely.
+
+**First steps:**
+
 - Open source the code so others can look at it, try to break it and help validate the architecture
 - Collect feedback, refine the scope and decide what to build first
 
