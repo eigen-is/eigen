@@ -71,7 +71,7 @@ Second, is this the simplest approach? For example, could mapping workspace user
 
 Third, how do we make Eigen extensible? The core will stay minimal by design. But organizations rolling this out should be able to extend it. We should figure out early what a plugin/API architecture looks like. How can third parties write deep integrations as extensions without forking the entire project.
 
-Fourth, where should this go? I'm thinking of a model like WordPress: you can self-host Eigen (startups could run their own instance), while eigen.is would be a public platform running the same software. Ideally, users from different servers could still share and collaborate—similar to how Mastodon works with decentralized authentication. Whether and how to implement this is another question entirely.
+Fourth, where should this go? I'm thinking of a model like WordPress: you can self-host Eigen (startups could run their own instance), while eigen.is would be a public platform running the same software. Ideally, users from different servers could still share and collaborate; similar to how Mastodon works with decentralized authentication. Whether and how to implement this is another question.
 
 **First steps:**
 
