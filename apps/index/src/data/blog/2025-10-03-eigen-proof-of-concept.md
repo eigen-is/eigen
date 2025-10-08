@@ -26,11 +26,11 @@ It’s all minimal, but functional enough to feel like a small ecosystem.
 
 ## Under the hood
 
-To prototype something quickly, I decided to use NPM packages and build on open source libraries. This is something I normally avoid. For my other [projects](https://reindernijhoff.net/about/), I often end up writing all code myself and reinventing wheels. Even the few [NPM packages](https://reindernijhoff.net/npm/) I published are dependency free.
+To prototype something quickly, I decided to use NPM packages and build on open source libraries. This is something I normally avoid. For my other [projects](https://reindernijhoff.net/about/), I often end up writing all code myself and reinventing wheels. Even the few [NPM packages](https://reindernijhoff.net/npm/) I published are completely dependency free.
 
-The stack is standard and modern (at least, that’s what someone who knows these things told me): Bun for the server runtime, Elysia for routing, Vite and React with TypeScript for the frontend, TanStack Router and TanStack Query for routing and data fetching, Tailwind CSS and shadcn/ui for the interface.
+The stack is standard and modern (at least, that’s what someone who knows these things told me): Bun for the server runtime, Elysia for server routing, Vite and React with TypeScript for the frontend, TanStack Router and TanStack Query for routing and data fetching, Tailwind CSS and shadcn/ui for the interface.
 
-The interesting part is the architecture I accidentally ended up with. I started with a simple approach: each user gets their own directory. SQLite databases store metadata and structured data, actual content is stored as files. No shared databases, no complex central systems.
+The interesting part is the architecture I accidentally ended up with. I started with a simple approach: each user gets their own directory. SQLite databases (per user) store metadata and structured data, actual content is stored as files. No shared databases, no complex central systems.
 
 I did it that way because it was the simplest thing that could work.
 
@@ -44,10 +44,10 @@ I did it that way because it was the simplest thing that could work.
 **Of course, it also creates a few interesting problems:**
 
 - How do you share documents when each user's data is isolated?
-- How do you enable real-time collaboration without a central database?
+- How do you enable real-time collaboration?
 - How do you handle search across file-based data?
 
-For real time collaboration in docs and stickies, the server keeps [Yjs](https://yjs.dev/) documents in memory while they are active. They sync over WebSockets and periodically write to disk. When everyone closes the doc, it disappears from memory.
+For real time collaboration in docs and stickies, the server keeps [Yjs](https://yjs.dev/) documents in memory while they are active. They sync over WebSockets and are periodically written to disk. When everyone closes a doc, it disappears from memory.
 
 ## What's Next?
 
@@ -67,12 +67,11 @@ Reality check: I have built only a very small part of a minimum viable product. 
 
 - Can it scale? What are the performance limits?
 - How do you implement encryption with this layout?
-- Should workspace users map to system users for simplicity and security?
-- What's the simplest backup strategy that actually works?
 
 **Next steps:**
 
 - Keep pushing and see where it breaks
+- Critically examine the technical architecture. Will this work? Are there more elegant or simpler solutions that could make developing Eigen easier? What if workspace users mapped 1-to-1 to (Linux) system users for simplicity and security?
 - Open source the code so others can look at it, try to break it and help validate the architecture
 - Collect feedback, refine the scope and decide what to build first
 
@@ -80,4 +79,4 @@ Reality check: I have built only a very small part of a minimum viable product. 
 
 I would love input from others. The current structure is not leading and not a requirement. I want it to work. The aim is a simple and safe workspace where you own your data.
 
-If you want to try early versions, contribute or sponsor, let me know. The project is at eigen.is. You can reach me at [reinder@eigen.is](mailto:reinder@eigen.is).
+If you want to try early versions, contribute or sponsor, let me know. The project is at [eigen.is](https://eigen.is). You can reach me at [reinder@eigen.is](mailto:reinder@eigen.is).
