@@ -28,20 +28,20 @@ function notify(notification: EigenNotification) {
         } : undefined
     });
 
-    if (!("Notification" in window)) {
-        return;
-    } else if (Notification.permission === 'granted') {
-        const n = new Notification(truncatedTitle, {
-            body: truncatedBody,
-            tag: notification.tag,
-        });
-        notification.link && n.addEventListener('click', (event) => {
-            event.preventDefault(); // prevent the browser from focusing the Notification's tab
-            window.open(notification.link, "_blank");
-        });
-    } else {
-        askNotificationPermission();
-    }
+    // if (!("Notification" in window)) {
+    //     return;
+    // } else if (Notification.permission === 'granted') {
+    //     const n = new Notification(truncatedTitle, {
+    //         body: truncatedBody,
+    //         tag: notification.tag,
+    //     });
+    //     notification.link && n.addEventListener('click', (event) => {
+    //         event.preventDefault(); // prevent the browser from focusing the Notification's tab
+    //         window.open(notification.link, "_blank");
+    //     });
+    // } else {
+    //     askNotificationPermission();
+    // }
 }
 
 function askNotificationPermission() {
