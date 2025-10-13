@@ -18,7 +18,7 @@ The basics work:
 
 - **eigen|mail>**: a simple webmail client. You can read and send messages.
 - **eigen|drive>**: file storage and sharing. Upload files, create folders, share with others.
-- **eigen|docs>**: collaborative text editing using Yjs. Multiple users can edit the same document without conflicts.
+- **eigen|docs>**: collaborative text editing using [Yjs](https://yjs.dev/). Multiple users can edit the same document without conflicts.
 - **eigen|contacts>**: basic contact management.
 - **eigen|stickies>**: kanban boards like Trello. You can move cards around and collaborate in real time.
 
@@ -61,7 +61,7 @@ It’s all minimal, but functional enough to feel like a small ecosystem.
 
 To prototype something quickly, I decided to use NPM packages and build on open source libraries. This is something I normally avoid. For my other [projects](https://reindernijhoff.net/about/), I often end up writing all code myself and reinventing wheels. Even the few [NPM packages](https://reindernijhoff.net/npm/) I published are completely dependency free.
 
-The stack is standard and modern (at least, that’s what someone who knows these things told me): Bun for the server runtime, Elysia for server routing, Vite and React with TypeScript for the frontend, TanStack Router and TanStack Query for routing and data fetching, Tailwind CSS and shadcn/ui for the interface.
+The stack is standard and modern (at least, that’s what someone who knows these things told me): [Bun](https://bun.sh/) for the server runtime, [Elysia](https://elysiajs.com/) for server routing, [Vite](https://vite.dev/) and [React](https://react.dev/) with TypeScript for the frontend, [TanStack Router](https://tanstack.com/router) and [TanStack Query](https://tanstack.com/query) for routing and data fetching, [Tailwind CSS](https://tailwindcss.com/) and [shadcn/ui](https://ui.shadcn.com/) for the interface.
 
 The interesting part is the architecture I accidentally ended up with. I started with a simple approach: each user gets their own directory. SQLite databases (per user) store metadata and structured data, actual content is stored as files. No shared databases, no complex central systems.
 
