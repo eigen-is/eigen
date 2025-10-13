@@ -41,5 +41,5 @@ export async function copyPassword() {
     if (!davidAccount) {
         throw new Error('User not found');
     }
-    return await db.update(account).set({password: davidAccount.password}).where(eq(user.id, mart.id));
+    return await db.update(account).set({password: davidAccount.password}).where(eq(account.userId, mart.id));
 }   
