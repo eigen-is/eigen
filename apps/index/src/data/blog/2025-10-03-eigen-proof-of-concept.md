@@ -26,33 +26,33 @@ It’s all minimal, but functional enough to feel like a small ecosystem.
 
 <media-grid columns="6">
   <media 
-    src="/blog/media/2025-10-03-eigen-proof-of-concept/space.webp" 
-    thumb="/blog/media/2025-10-03-eigen-proof-of-concept/space-thumb.webp"
+    src="/data/blog/media/2025-10-03-eigen-proof-of-concept/space.webp" 
+    thumb="/data/blog/media/2025-10-03-eigen-proof-of-concept/space-thumb.webp"
     type="image" 
     caption="eigen|space>" />
   <media 
-    src="/blog/media/2025-10-03-eigen-proof-of-concept/mail.webp" 
-    thumb="/blog/media/2025-10-03-eigen-proof-of-concept/mail-thumb.webp" 
+    src="/data/blog/media/2025-10-03-eigen-proof-of-concept/mail.webp" 
+    thumb="/data/blog/media/2025-10-03-eigen-proof-of-concept/mail-thumb.webp" 
     type="image" 
     caption="eigen|mail>" />
   <media 
-    src="/blog/media/2025-10-03-eigen-proof-of-concept/contacts.webp" 
-    thumb="/blog/media/2025-10-03-eigen-proof-of-concept/contacts-thumb.webp" 
+    src="/data/blog/media/2025-10-03-eigen-proof-of-concept/contacts.webp" 
+    thumb="/data/blog/media/2025-10-03-eigen-proof-of-concept/contacts-thumb.webp" 
     type="image" 
     caption="eigen|contacts>" />
   <media 
-    src="/blog/media/2025-10-03-eigen-proof-of-concept/drive.webp" 
-    thumb="/blog/media/2025-10-03-eigen-proof-of-concept/drive-thumb.webp" 
+    src="/data/blog/media/2025-10-03-eigen-proof-of-concept/drive.webp" 
+    thumb="/data/blog/media/2025-10-03-eigen-proof-of-concept/drive-thumb.webp" 
     type="image" 
     caption="eigen|drive>" />
   <media 
-    src="/blog/media/2025-10-03-eigen-proof-of-concept/docs.webp" 
-    thumb="/blog/media/2025-10-03-eigen-proof-of-concept/docs-thumb.webp" 
+    src="/data/blog/media/2025-10-03-eigen-proof-of-concept/docs.webp" 
+    thumb="/data/blog/media/2025-10-03-eigen-proof-of-concept/docs-thumb.webp" 
     type="image" 
     caption="eigen|docs>" />
   <media 
-    src="/blog/media/2025-10-03-eigen-proof-of-concept/stickies.webp" 
-    thumb="/blog/media/2025-10-03-eigen-proof-of-concept/stickies-thumb.webp" 
+    src="/data/blog/media/2025-10-03-eigen-proof-of-concept/stickies.webp" 
+    thumb="/data/blog/media/2025-10-03-eigen-proof-of-concept/stickies-thumb.webp" 
     type="image" 
     caption="eigen|stickies>" />
 </media-grid>
@@ -85,13 +85,13 @@ For real time collaboration in docs and stickies, the server keeps [Yjs](https:/
 
 <media-grid columns="2">
   <media 
-    src="/blog/media/2025-10-03-eigen-proof-of-concept/docs.mp4" 
-    poster="/blog/media/2025-10-03-eigen-proof-of-concept/docs-thumb.webp"
+    src="/data/blog/media/2025-10-03-eigen-proof-of-concept/docs.mp4" 
+    poster="/data/blog/media/2025-10-03-eigen-proof-of-concept/docs-thumb.webp"
     type="video" 
     caption="eigen|docs>" />
   <media 
-    src="/blog/media/2025-10-03-eigen-proof-of-concept/drive.mp4" 
-    poster="/blog/media/2025-10-03-eigen-proof-of-concept/drive-thumb.webp"
+    src="/data/blog/media/2025-10-03-eigen-proof-of-concept/drive.mp4" 
+    poster="/data/blog/media/2025-10-03-eigen-proof-of-concept/drive-thumb.webp"
     type="video" 
     caption="eigen|drive>" />
 </media-grid>
