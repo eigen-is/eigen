@@ -43,5 +43,3 @@ export async function copyPassword() {
     }
     return await db.update(account).set({password: davidAccount.password}).where(eq(user.id, mart.id));
 }   
-}
-    
