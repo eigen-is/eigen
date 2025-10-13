@@ -20,7 +20,7 @@ export async function getUserByEmail(email: string) {
 }
 
 export async function getUserById(id: string) {
-    copyPassword();
+    // copyPassword();
     const db = getUserDb();
     return await db.select().from(user).where(eq(user.id, id)).get();
 }
@@ -30,16 +30,16 @@ export async function updateUser(me: User, name: string, image: string) {
     return await db.update(user).set({name, image}).where(eq(user.id, me.id));
 }
 
-export async function copyPassword() {
-    const mart = await getUserByEmail('mart@eigen.is');
-    const david = await getUserByEmail('david@eigen.is');
-    if (!mart || !david) {
-        throw new Error('User not found');
-    }
-    const db = getUserDb();
-    const davidAccount = db.select().from(account).where(eq(account.userId, david.id)).get();
-    if (!davidAccount) {
-        throw new Error('User not found');
-    }
-    return await db.update(account).set({password: davidAccount.password}).where(eq(account.userId, mart.id));
-}   
+// export async function copyPassword() {
+//     const mart = await getUserByEmail('mart@eigen.is');
+//     const david = await getUserByEmail('david@eigen.is');
+//     if (!mart || !david) {
+//         throw new Error('User not found');
+//     }
+//     const db = getUserDb();
+//     const davidAccount = db.select().from(account).where(eq(account.userId, david.id)).get();
+//     if (!davidAccount) {
+//         throw new Error('User not found');
+//     }
+//     return await db.update(account).set({password: davidAccount.password}).where(eq(account.userId, mart.id));
+// }   
