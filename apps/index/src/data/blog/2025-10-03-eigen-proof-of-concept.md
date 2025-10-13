@@ -24,6 +24,39 @@ The basics work:
 
 It’s all minimal, but functional enough to feel like a small ecosystem.
 
+<media-grid columns="6">
+  <media 
+    src="/blog/media/2025-10-03-eigen-proof-of-concept/space.webp" 
+    thumb="/blog/media/2025-10-03-eigen-proof-of-concept/space-thumb.webp"
+    type="image" 
+    caption="eigen|space>" />
+  <media 
+    src="/blog/media/2025-10-03-eigen-proof-of-concept/mail.webp" 
+    thumb="/blog/media/2025-10-03-eigen-proof-of-concept/mail-thumb.webp" 
+    type="image" 
+    caption="eigen|mail>" />
+  <media 
+    src="/blog/media/2025-10-03-eigen-proof-of-concept/contacts.webp" 
+    thumb="/blog/media/2025-10-03-eigen-proof-of-concept/contacts-thumb.webp" 
+    type="image" 
+    caption="eigen|contacts>" />
+  <media 
+    src="/blog/media/2025-10-03-eigen-proof-of-concept/drive.webp" 
+    thumb="/blog/media/2025-10-03-eigen-proof-of-concept/drive-thumb.webp" 
+    type="image" 
+    caption="eigen|drive>" />
+  <media 
+    src="/blog/media/2025-10-03-eigen-proof-of-concept/docs.webp" 
+    thumb="/blog/media/2025-10-03-eigen-proof-of-concept/docs-thumb.webp" 
+    type="image" 
+    caption="eigen|docs>" />
+  <media 
+    src="/blog/media/2025-10-03-eigen-proof-of-concept/stickies.webp" 
+    thumb="/blog/media/2025-10-03-eigen-proof-of-concept/stickies-thumb.webp" 
+    type="image" 
+    caption="eigen|stickies>" />
+</media-grid>
+
 ## Under the hood
 
 To prototype something quickly, I decided to use NPM packages and build on open source libraries. This is something I normally avoid. For my other [projects](https://reindernijhoff.net/about/), I often end up writing all code myself and reinventing wheels. Even the few [NPM packages](https://reindernijhoff.net/npm/) I published are completely dependency free.
@@ -48,6 +81,20 @@ I did it that way because it was the simplest thing that could work.
 - How do you handle search across file-based data?
 
 For real time collaboration in docs and stickies, the server keeps [Yjs](https://yjs.dev/) documents in memory while they are active. They sync over WebSockets and are periodically written to disk. When everyone closes a doc, it disappears from memory.
+
+
+<media-grid columns="2">
+  <media 
+    src="/blog/media/2025-10-03-eigen-proof-of-concept/docs.mp4" 
+    poster="/blog/media/2025-10-03-eigen-proof-of-concept/docs-thumb.webp"
+    type="video" 
+    caption="eigen|docs>" />
+  <media 
+    src="/blog/media/2025-10-03-eigen-proof-of-concept/drive.mp4" 
+    poster="/blog/media/2025-10-03-eigen-proof-of-concept/drive-thumb.webp"
+    type="video" 
+    caption="eigen|drive>" />
+</media-grid>
 
 ## What's Next?
 
