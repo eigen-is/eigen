@@ -4,6 +4,53 @@ import {BlogPost} from '../components/BlogPost';
 
 export const Route = createFileRoute('/blog/$id')({
     component: BlogPostComponent,
+    head: ({params}) => {
+        const post = getBlogPost(params.id);
+        
+        if (!post) {
+            return {
+                meta: [
+                    {
+                        title: 'Post not found - eigen blog',
+                    },
+                ],
+            };
+        }
+
+        const url = `https://eigen.is/blog/${post.id}`;
+        
+        return {
+            meta: [
+                {
+                    title: `${post.title} - eigen blog`,
+                },
+                {
+                    name: 'description',
+                    content: post.summary,
+                },
+                {
+                    property: 'og:title',
+                    content: post.title,
+                },
+                {
+                    property: 'og:description',
+                    content: post.summary,
+                },
+                {
+                    property: 'og:type',
+                    content: 'article',
+                },
+                {
+                    property: 'og:url',
+                    content: url,
+                },
+                {
+                    property: 'article:published_time',
+                    content: post.date,
+                },
+            ],
+        };
+    },
 })
 
 function BlogPostComponent() {
