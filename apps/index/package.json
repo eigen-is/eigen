@@ -6,7 +6,9 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "dev": "bunx --bun vite --port 3000",
+    "prebuild": "bun run scripts/generate-blog-meta.ts",
     "build": "bunx --bun vite build",
+    "postbuild": "bun run scripts/post-build.ts",
     "serve": "bunx --bun vite preview --port 3000",
     "start": "vite"
   },

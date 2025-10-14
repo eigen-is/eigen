@@ -4,6 +4,33 @@ import {BlogPost} from '../components/BlogPost';
 
 export const Route = createFileRoute('/blog/')({
     component: BlogOverviewComponent,
+    head: () => ({
+        meta: [
+            {
+                title: 'Blog - eigen',
+            },
+            {
+                name: 'description',
+                content: 'Read about the development of eigen, a minimal and secure workspace in the cloud where you control your own data.',
+            },
+            {
+                property: 'og:title',
+                content: 'Blog - eigen',
+            },
+            {
+                property: 'og:description',
+                content: 'Read about the development of eigen, a minimal and secure workspace in the cloud where you control your own data.',
+            },
+            {
+                property: 'og:type',
+                content: 'website',
+            },
+            {
+                property: 'og:url',
+                content: 'https://eigen.is/blog',
+            },
+        ],
+    }),
 })
 
 function BlogOverviewComponent() {
