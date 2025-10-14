@@ -27,6 +27,9 @@ export default defineConfig({
     },
     build: {
         rollupOptions: {
+            input: {
+                main: './index.html',
+            },
             output: {
                 entryFileNames: 'assets/[name].[hash].js',
                 chunkFileNames: 'assets/[name].[hash].js',
@@ -35,5 +38,6 @@ export default defineConfig({
         },
         minify: 'esbuild',
         sourcemap: false, // Disable sourcemaps for minimal size
-    }
+    },
+    publicDir: 'public'
 });
