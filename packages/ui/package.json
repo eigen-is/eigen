@@ -27,6 +27,7 @@
     "@tanstack/react-router-devtools": "latest",
     "@tanstack/react-table": "^8.21.2",
     "class-variance-authority": "^0.7.1",
+    "eigen-avatar-generator": "^1.1.2",
     "lucide-react": "^0.482.0",
     "next-themes": "^0.4.6",
     "postcss": "^8.5.3",

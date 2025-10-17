@@ -2,8 +2,9 @@
 
 import {HTMLAttributes} from "react"
 import {cn} from "@workspace/ui/lib/utils"
-import {Avatar, AvatarFallback, AvatarImage} from "@workspace/ui/components/avatar"
+import {Avatar, AvatarImage} from "@workspace/ui/components/avatar"
 import {useAvatar} from "@workspace/lib/media"
+import {AvatarDigiDoodle} from "eigen-avatar-generator/react"
 
 export interface UserAvatarProps extends HTMLAttributes<HTMLDivElement> {
     name?: string
@@ -26,7 +27,6 @@ export function UserAvatar({
                                ...props
                            }: UserAvatarProps) {
     const displayName = (name || email || "");
-    const firstChar = displayName.trim().charAt(0).toUpperCase();
 
     // Fetch public user data if we don't have an image URL
     const {data} = useAvatar(email || userId || '', {
@@ -48,9 +48,7 @@ export function UserAvatar({
             {avatarImage ? (
                 <AvatarImage src={`${import.meta.env.VITE_API_HOST}/${avatarImage}`} alt={displayName}/>
             ) : (
-                <div className="bg-gray-200 text-gray-600 font-medium h-full w-full">
-                    <AvatarFallback>{firstChar}</AvatarFallback>
-                </div>
+                <AvatarDigiDoodle id={userId || email || ''} background="#d1d1ff" />
             )}
         </Avatar>
     );
