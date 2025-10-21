@@ -7,6 +7,7 @@
     "buildfordocker": "bun build --minify --sourcemap --target=bun  src/index.ts --outdir=./build "
   },
   "dependencies": {
+    "@better-auth/cli": "^1.3.28",
     "@elysiajs/cors": "^1.2.0",
     "@elysiajs/swagger": "^1.2.2",
     "@libsql/client": "^0.15.2",
