@@ -30,7 +30,7 @@ A modern workspace platform providing integrated productivity and collaboration 
 ### Installation
 
 ```bash
-git clone https://github.com/<repository-owner>/eigen.git
+git clone https://github.com/eigen-foundation/eigen.git
 cd eigen
 bun install
 ```
