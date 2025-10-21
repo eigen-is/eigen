@@ -2,36 +2,22 @@
 
 **Your personal workspace in the cloud. Simple and secure. You control your own data.**
 
-A modern Google Workspace-like application suite providing integrated productivity and collaboration tools.
+A modern workspace platform providing integrated productivity and collaboration tools.
 
-## Overview
-
-Eigen is your minimal, secure workspace in the cloud. It includes mail, calendar, docs, and drive — everything you need, nothing you don't. It is a comprehensive workspace platform that includes:
+## Apps
 
 - **Index**: Landing page and central hub
 - **Mail**: Email client with mailbox management
-- **Drive**: File storage and management system
+- **Drive**: File storage and management
 - **Docs**: Document editing and collaboration
-- **Calendar**: Schedule management
 - **Contacts**: Contact management
 - **Space**: Team collaboration workspace
-
-## Project Structure
-
-This project follows a monorepo structure, managed via Bun workspaces:
-
-- `/apps`: Contains all applications
-    - `/api-server`: Backend API server that powers all applications
-    - `/index`, `/drive`, `/mail`, `/docs`, etc.: Frontend applications
-- `/packages`: Shared libraries and components
-    - `/ui`: Reusable UI components built with shadcn/ui
-    - `/lib`: Shared business logic and utilities
-    - `/config`: Shared configuration
+- **Stickies**: Kanban board
 
 ## Technology Stack
 
-- **Backend**: Bun + Elysia + Drizzle ORM
-- **Frontend**: React + TypeScript + TanStack Router + TanStack Query
+- **Backend**: Bun + Elysia + Drizzle ORM + SQLite
+- **Frontend**: React + TypeScript + TanStack Router
 - **Styling**: Tailwind CSS + shadcn/ui
 - **Authentication**: better-auth
 
@@ -43,50 +29,38 @@ This project follows a monorepo structure, managed via Bun workspaces:
 
 ### Installation
 
-1. Clone the repository:
-
 ```bash
 git clone https://github.com/<repository-owner>/eigen.git
 cd eigen
-```
-
-2. Install dependencies (this will install dependencies for all workspaces):
-
-```bash
 bun install
 ```
 
-### Running the Application
+### Initial Setup
 
-To run all applications simultaneously:
+On first run, the system will create the database and prompt you to create an admin user:
+
+1. Start the server:
+   ```bash
+   bun serve:index
+   ```
+
+2. Visit `http://localhost:8000/setup` to create your first admin user
+
+### Running Applications
 
 ```bash
+# Run all applications
 bun serve
-```
 
-To run specific applications:
-
-```bash
-# Run index app with API server
+# Run specific app with API server
 bun serve:index
-
-# Run mail app with API server
 bun serve:mail
-
-# Run drive app with API server
 bun serve:drive
-
-# Run space app with API server
 bun serve:space
-
-# Run calendar app with API server
 bun serve:calendar
-
-# Run contacts app with API server
 bun serve:contacts
-
-# Run docs app with API server
 bun serve:docs
+bun serve:stickies
 ```
 
 ### Building for Production
@@ -95,20 +69,13 @@ bun serve:docs
 bun build
 ```
 
-## Development
+## Project Structure
 
-The project uses TypeScript for type safety and follows a modular architecture. Each application in the `/apps`
-directory is self-contained but shares common components and utilities from the `/packages` directory.
-
-### Adding Components
-
-Components are built using shadcn/ui and Tailwind CSS. Shared components should be added to the `/packages/ui`
-directory.
-
-### API Development
-
-API routes are organized by domain in the `/apps/api-server/src/routes` directory. Authentication is handled through
-better-auth.
+- `/apps`: All applications (api-server + frontend apps)
+- `/packages`: Shared code
+  - `/ui`: Reusable UI components (shadcn/ui)
+  - `/lib`: Shared business logic
+  - `/config`: Shared configuration
 
 ## License
 
