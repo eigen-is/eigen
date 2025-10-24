@@ -41,7 +41,7 @@ On first run, the system will create the database and prompt you to create an ad
 
 1. Start the server:
    ```bash
-   bun serve:admin
+   bun serve
    ```
 
 2. Visit `http://localhost:3010/admin` to create your first admin user
@@ -67,6 +67,58 @@ bun serve:stickies
 
 ```bash
 bun build
+```
+
+## Docker Deployment
+
+### Prerequisites
+
+- Docker
+- Docker Compose
+
+### Local Docker Deployment
+
+To run Eigen in Docker locally:
+
+```bash
+./deploy.sh --local
+```
+
+This will:
+1. Build all frontend applications
+2. Create Docker images for nginx (frontend) and API server
+3. Start containers with Docker Compose
+4. Make all apps available at `http://localhost/`
+
+Access your applications:
+- Home: http://localhost/
+- Admin: http://localhost/admin
+- Mail: http://localhost/mail
+- Contacts: http://localhost/contacts
+- Calendar: http://localhost/calendar
+- Drive: http://localhost/drive
+- Docs: http://localhost/docs
+- Stickies: http://localhost/stickies
+- Space: http://localhost/space
+
+### Production Docker Deployment
+
+For production deployment:
+
+```bash
+./deploy.sh
+```
+
+**Docker management:**
+```bash
+# View logs
+docker-compose logs -f
+
+# Stop containers
+docker-compose down
+
+# Restart containers
+docker-compose restart
 ```
 
 ## Project Structure
