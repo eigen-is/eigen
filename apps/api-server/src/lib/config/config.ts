@@ -15,6 +15,12 @@ export interface SystemConfig {
     enabledApps: string[];
     maxFileSize: number;
     allowRegistration: boolean;
+    storageType: 'local-fullnames' | 'local-id' | 's3';
+    s3Bucket?: string;
+    s3Region?: string;
+    s3AccessKey?: string;
+    s3SecretKey?: string;
+    s3Endpoint?: string;
 }
 
 export const DEFAULT_CONFIG: SystemConfig = {
@@ -25,8 +31,9 @@ export const DEFAULT_CONFIG: SystemConfig = {
     smtpPassword: "",
     smtpFrom: "noreply@eigen.local",
     enabledApps: ["index", "mail", "drive", "docs", "contacts", "space", "calendar", "stickies"],
-    maxFileSize: 104857600, // 100MB
+    maxFileSize: 104857600,
     allowRegistration: false,
+    storageType: 'local-id',
 };
 
 let configDb: ReturnType<typeof drizzle> | null = null;
@@ -66,7 +73,7 @@ export async function isSystemConfigured(): Promise<boolean> {
     try {
         await initializeConfigDatabase();
         const db = getConfigDb();
-        const result = await db.select().from(systemConfig).where(eq(systemConfig.key, 'domain')).get();
+        const result = await db.select().from(systemConfig).where(eq(systemConfig.key, 'storageType')).get();
         return !!result;
     } catch (error) {
         console.error('Error checking system configuration:', error);

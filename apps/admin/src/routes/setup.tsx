@@ -1,97 +1,100 @@
-import { createFileRoute, useNavigate } from '@tanstack/react-router'
-import { useState, useEffect } from 'react'
-import { checkSetupRequired } from '@workspace/lib/admin'
-import { SystemConfigForm } from '../components/setup/system-config-form'
-import { AdminUserForm } from '../components/setup/admin-user-form'
+import {createFileRoute, useNavigate} from '@tanstack/react-router'
+import {useState, useEffect} from 'react'
+import {checkSetupRequired} from '@workspace/lib/admin'
+import {SystemConfigForm} from '../components/setup/system-config-form'
+import {AdminUserForm} from '../components/setup/admin-user-form'
 
 export const Route = createFileRoute('/setup')({
-  component: SetupWizard,
+    component: SetupWizard,
 })
 
 function SetupWizard() {
-  const navigate = useNavigate()
-  const [step, setStep] = useState<'system' | 'user'>('system')
-  const [isCheckingSetup, setIsCheckingSetup] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-  const [success, setSuccess] = useState<string | null>(null)
+    const navigate = useNavigate()
+    const [step, setStep] = useState<'storage' | 'user'>('storage')
+    const [isCheckingSetup, setIsCheckingSetup] = useState(true)
+    const [error, setError] = useState<string | null>(null)
+    const [shouldShowWizard, setShouldShowWizard] = useState(false)
 
-  useEffect(() => {
-    checkSetupRequired().then((setupStatus) => {
-      if (!setupStatus?.setupRequired) {
-        navigate({ to: '/' })
-        return
-      }
-      
-      if (!setupStatus.systemSetupRequired && setupStatus.userSetupRequired) {
+    useEffect(() => {
+        checkSetupRequired().then((setupStatus) => {
+            if (!setupStatus?.setupRequired) {
+                window.location.href = '/admin'
+                return
+            }
+
+            if (!setupStatus.systemSetupRequired && setupStatus.userSetupRequired) {
+                setStep('user')
+            }
+            setIsCheckingSetup(false)
+            setShouldShowWizard(true)
+        }).catch(() => {
+            setError('Failed to check setup status')
+            setIsCheckingSetup(false)
+        })
+    }, [navigate])
+
+    const handleStorageSuccess = () => {
+        setError(null)
         setStep('user')
-      }
-      setIsCheckingSetup(false)
-    }).catch(() => {
-      setError('Failed to check setup status')
-      setIsCheckingSetup(false)
-    })
-  }, [navigate])
+    }
 
-  const handleSystemSuccess = () => {
-    setSuccess('System configured successfully!')
-    setError(null)
-    setTimeout(() => {
-      setSuccess(null)
-      setStep('user')
-    }, 1000)
-  }
+    const handleUserSuccess = () => {
+        setError(null)
+        window.location.href = '/admin'
+    }
 
-  const handleUserSuccess = () => {
-    setSuccess('Admin user created successfully! Redirecting...')
-    setError(null)
-    setTimeout(() => navigate({ to: '/' }), 2000)
-  }
+    const handleError = (err: string) => {
+        setError(err)
+    }
 
-  const handleError = (err: string) => {
-    setError(err)
-    setSuccess(null)
-  }
+    if (isCheckingSetup || !shouldShowWizard) {
+        return (
+            <div className="min-h-screen flex items-center justify-center">
+                <div className="text-muted-foreground">Loading...</div>
+            </div>
+        )
+    }
 
-  if (isCheckingSetup) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div>Loading...</div>
-      </div>
-    )
-  }
+        <div className="min-h-screen flex items-center justify-center px-4 py-8">
+            <div className="max-w-md w-full space-y-8">
+                <div className="text-center">
+                    <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-app/10 mb-4">
+                        <div className="w-12 h-12 rounded-full bg-app flex items-center justify-center text-white text-xl font-bold">
+                            {step === 'storage' ? '1' : '2'}
+                        </div>
+                    </div>
+                    <h2 className="text-3xl font-extrabold">
+                        {step === 'storage' ? 'Storage Configuration' : 'Create Admin User'}
+                    </h2>
+                    <p className="mt-2 text-sm text-muted-foreground">
+                        {step === 'storage'
+                            ? 'Choose how to store your files'
+                            : 'Create your first admin user'}
+                    </p>
+                </div>
 
-  return (
-    <div className="min-h-screen flex items-center justify-center px-4">
-      <div className="max-w-md w-full space-y-8">
-        <div className="text-center">
-          <h2 className="text-3xl font-extrabold text-gray-900">
-            {step === 'system' ? 'System Configuration' : 'Create Admin User'}
-          </h2>
-          <p className="mt-2 text-sm text-gray-600">
-            {step === 'system' 
-              ? 'Configure your Eigen instance'
-              : 'Create your first admin user to get started'}
-          </p>
+                {error && (
+                    <div className="bg-destructive/10 border border-destructive/20 text-destructive px-4 py-3 rounded-lg">
+                        {error}
+                    </div>
+                )}
+
+                <div className="bg-card border rounded-lg p-6">
+                    {step === 'storage' ? (
+                        <SystemConfigForm onSuccess={handleStorageSuccess} onError={handleError}/>
+                    ) : (
+                        <AdminUserForm onSuccess={handleUserSuccess} onError={handleError}/>
+                    )}
+                </div>
+
+                <div className="flex justify-center">
+                    <div className="flex space-x-2">
+                        <div className={`w-2 h-2 rounded-full ${step === 'storage' ? 'bg-app' : 'bg-muted'}`}/>
+                        <div className={`w-2 h-2 rounded-full ${step === 'user' ? 'bg-app' : 'bg-muted'}`}/>
+                    </div>
+                </div>
+            </div>
         </div>
-
-        {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded">
-            {error}
-          </div>
-        )}
-
-        {success && (
-          <div className="bg-green-50 border border-green-200 text-green-700 px-4 py-3 rounded">
-            {success}
-          </div>
-        )}
-
-        {step === 'system' ? (
-          <SystemConfigForm onSuccess={handleSystemSuccess} onError={handleError} />
-        ) : (
-          <AdminUserForm onSuccess={handleUserSuccess} onError={handleError} />
-        )}
-      </div>
-    </div>
-  )
+    )
 }

@@ -15,58 +15,78 @@ export const adminRouter = new Elysia({ name: "admin" })
         };
     })
     
-    // Configure system settings
     .post("/admin/setup/system", async ({ body, set }) => {
         const systemConfigured = await isSystemConfigured();
+        const userSetupRequired = await isSetupRequired();
+        
         if (systemConfigured) {
             set.status = 403;
             return { error: "System has already been configured" };
         }
-
-        const { domain, smtpHost, smtpPort, smtpUser, smtpPassword, smtpFrom } = body;
         
-        // Basic validation
-        if (!domain || !smtpHost || !smtpPort) {
+        if (!userSetupRequired) {
+            set.status = 403;
+            return { error: "Setup is no longer available - admin user already exists" };
+        }
+
+        const { storageType, s3Bucket, s3Region, s3AccessKey, s3SecretKey, s3Endpoint } = body;
+        
+        if (!storageType) {
             set.status = 400;
-            return { error: "Domain, SMTP host, and SMTP port are required" };
+            return { error: "Storage type is required" };
+        }
+
+        if (storageType === 's3') {
+            if (!s3Bucket || !s3Region || !s3AccessKey || !s3SecretKey) {
+                set.status = 400;
+                return { error: "S3 configuration requires bucket, region, access key, and secret key" };
+            }
         }
 
         try {
-            await setAllConfig({
-                domain,
-                smtpHost,
-                smtpPort,
-                smtpUser: smtpUser || "",
-                smtpPassword: smtpPassword || "",
-                smtpFrom: smtpFrom || `noreply@${domain}`,
-            });
+            const config: any = {storageType};
+            
+            if (storageType === 's3') {
+                config.s3Bucket = s3Bucket;
+                config.s3Region = s3Region;
+                config.s3AccessKey = s3AccessKey;
+                config.s3SecretKey = s3SecretKey;
+                if (s3Endpoint) config.s3Endpoint = s3Endpoint;
+            }
+            
+            await setAllConfig(config);
 
             return {
                 success: true,
-                message: "System configured successfully"
+                message: "Storage configured successfully"
             };
         } catch (error) {
             set.status = 500;
             return {
-                error: error instanceof Error ? error.message : "Failed to configure system"
+                error: error instanceof Error ? error.message : "Failed to configure storage"
             };
         }
     }, {
         body: t.Object({
-            domain: t.String({ minLength: 1 }),
-            smtpHost: t.String({ minLength: 1 }),
-            smtpPort: t.Number({ minimum: 1, maximum: 65535 }),
-            smtpUser: t.Optional(t.String()),
-            smtpPassword: t.Optional(t.String()),
-            smtpFrom: t.Optional(t.String()),
+            storageType: t.Union([t.Literal('local-fullnames'), t.Literal('local-id'), t.Literal('s3')]),
+            s3Bucket: t.Optional(t.String()),
+            s3Region: t.Optional(t.String()),
+            s3AccessKey: t.Optional(t.String()),
+            s3SecretKey: t.Optional(t.String()),
+            s3Endpoint: t.Optional(t.String()),
         })
     })
     
-    // Create first admin user
     .post("/admin/setup/user", async ({ body, set }) => {
-        // Check if user setup is still required
-        const required = await isSetupRequired();
-        if (!required) {
+        const systemConfigured = await isSystemConfigured();
+        const userSetupRequired = await isSetupRequired();
+        
+        if (!systemConfigured) {
+            set.status = 403;
+            return { error: "System must be configured before creating admin user" };
+        }
+        
+        if (!userSetupRequired) {
             set.status = 403;
             return { error: "Admin user has already been created" };
         }
