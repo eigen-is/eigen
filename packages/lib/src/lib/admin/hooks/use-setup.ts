@@ -6,12 +6,12 @@ export async function checkSetupRequired() {
 }
 
 export async function configureSystem(data: {
-    domain: string;
-    smtpHost: string;
-    smtpPort: number;
-    smtpUser?: string;
-    smtpPassword?: string;
-    smtpFrom?: string;
+    storageType: 'local-fullnames' | 'local-id' | 's3';
+    s3Bucket?: string;
+    s3Region?: string;
+    s3AccessKey?: string;
+    s3SecretKey?: string;
+    s3Endpoint?: string;
 }) {
     const response = await adminApi.setup.system.post(data as any);
     return response.data;
