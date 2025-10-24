@@ -10,6 +10,8 @@
     "start": "vite"
   },
   "dependencies": {
+    "@tanstack/react-query": "^5.69.0",
+    "@tanstack/react-query-devtools": "^5.69.0",
     "@tanstack/react-router": "latest",
     "@tanstack/react-router-devtools": "latest",
     "@workspace/lib": "workspace:*",
@@ -23,6 +25,8 @@
   },
   "devDependencies": {
     "@workspace/config": "workspace:*",
+    "@workspace/lib": "workspace:*",
+    "@apps/api-server": "workspace:*",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
