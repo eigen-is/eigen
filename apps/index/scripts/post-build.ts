@@ -2,7 +2,7 @@ import {copyFileSync, existsSync, readFileSync, writeFileSync} from 'fs';
 import {join} from 'path';
 
 function postBuild() {
-    const distDir = join(process.cwd(), 'dist');
+    const distDir = join(process.cwd(), '../../dist/index');
     
     if (!existsSync(distDir)) {
         console.error('Error: dist directory does not exist. Run build first.');

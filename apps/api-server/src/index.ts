@@ -10,8 +10,10 @@ import {driveRouter} from "./routes/drive.ts";
 import {homeRouter} from "./routes/home.ts";
 import {wsRouter} from "./routes/ws.ts";
 import {collabRouter} from "./routes/collab";
-import {setupRouter} from "./routes/setup";
+import {adminRouter} from "./routes/admin";
+import {configRouter} from "./routes/config";
 import {isSetupRequired} from "./lib/setup/setup";
+import {isSystemConfigured} from "./lib/config/config";
 
 const app = new Elysia()
     .use(swagger())
@@ -21,9 +23,11 @@ const app = new Elysia()
         credentials: true,
         allowedHeaders: ["Content-Type", "Authorization"],
     }))
-    .use(setupRouter)
     .use(betterAuth)
-    .onError(({set}) => {
+    .use(adminRouter)
+    .use(configRouter)
+    .onError(({error, set}) => {
+        console.error('API Error:', error);
         set.status = 400;
         return 'Uncertain state: API request failed to resolve';
     })
@@ -36,17 +40,24 @@ const app = new Elysia()
     .use(homeRouter)
     .use(wsRouter)
     .use(collabRouter)
+    .use(adminRouter)
     .listen(8000);
 
 export type app = typeof app;
 
 // Check setup status on startup
-isSetupRequired().then(required => {
-    if (required) {
-        console.log('⚠️  Setup required: No users found in database');
-        console.log('📋 Visit http://localhost:8000/setup to create your first admin user');
+Promise.all([isSystemConfigured(), isSetupRequired()]).then(([systemConfigured, userSetupRequired]) => {
+    if (!systemConfigured || userSetupRequired) {
+        console.log('⚠️  Setup required');
+        if (!systemConfigured) {
+            console.log('   - System configuration needed');
+        }
+        if (userSetupRequired) {
+            console.log('   - Admin user creation needed');
+        }
+        console.log('📋 Visit http://localhost:3010/admin to complete setup');
     } else {
-        console.log('✅ Setup complete: Users found in database');
+        console.log('✅ Setup complete');
     }
 });
 
