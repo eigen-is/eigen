@@ -50,7 +50,7 @@ import {CustomElement, CustomElementType, CustomText, TextAlignment} from "./edi
 import {DocumentModeButton} from "@workspace/ui/components/layout/toolbar/DocumentModeButton";
 import {DriveCreateDoc} from "@workspace/ui/components/layout/drive/drive-create-doc";
 import {useRootFolder} from "@workspace/lib/drive";
-import {useAuth} from "@workspace/lib/auth/auth-context.js";
+import {useAuth} from "@workspace/lib/auth";
 import {DriveDeleteItem} from "@workspace/ui/components/layout/drive/drive-delete-item";
 import {DrivePath} from "@apps/api-server/types/drive";
 import {useNavigate} from '@tanstack/react-router';

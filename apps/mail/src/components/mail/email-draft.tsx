@@ -8,7 +8,7 @@ import {Textarea} from "@workspace/ui/components/textarea";
 import {useEffect, useMemo, useRef, useState} from "react";
 import {toast} from "sonner";
 import {createDraftEmail} from "@workspace/lib/mail";
-import {useAuth} from "@workspace/lib/auth/auth-context.tsx";
+import {useAuth} from "@workspace/lib/auth";
 
 /**
  * Checks the status of an email draft

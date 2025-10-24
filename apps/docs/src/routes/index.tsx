@@ -1,5 +1,5 @@
 import {createFileRoute} from '@tanstack/react-router'
-import {useAuth} from '@workspace/lib/auth/auth-context.js';
+import {useAuth} from '@workspace/lib/auth';
 
 export const Route = createFileRoute('/')({
     component: HomeComponent,
