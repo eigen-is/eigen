@@ -7,15 +7,15 @@ import {createSharedViteConfig} from '../../vite.shared.config';
 
 export default defineConfig(mergeConfig(
     createSharedViteConfig({
-        appName: 'calendar',
-        port: 3005,
-        basePath: '/calendar'
+        appName: 'admin',
+        port: 3010,
+        basePath: '/admin'
     }),
     {
         plugins: [
             TanStackRouterVite({
                 target: 'react',
-                autoCodeSplitting: true,
+                autoCodeSplitting: false,
             }),
             react(),
             tailwindcss(),

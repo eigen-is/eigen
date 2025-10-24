@@ -3,6 +3,7 @@
   "private": true,
   "scripts": {
     "serve": "bun --filter '*' dev",
+    "serve:admin": "bun --filter './apps/api-server' --filter './apps/admin' dev",
     "serve:index": "bun --filter './apps/api-server' --filter './apps/index' dev",
     "serve:mail": "bun --filter './apps/api-server' --filter './apps/mail' dev",
     "serve:space": "bun --filter './apps/api-server' --filter './apps/space' dev",
@@ -11,7 +12,8 @@
     "serve:drive": "bun --filter './apps/api-server' --filter './apps/drive' dev",
     "serve:docs": "bun --filter './apps/api-server' --filter './apps/docs' dev",
     "serve:stickies": "bun --filter './apps/api-server' --filter './apps/stickies' dev",
-    "build": "bun --filter '*' build"
+    "build": "bun --filter '*' build",
+    "build:prod": "bun --filter './apps/*' build && bun --filter './apps/api-server' buildfordocker"
   },
   "workspaces": [
     "packages/*",

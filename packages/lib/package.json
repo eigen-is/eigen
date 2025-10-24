@@ -45,6 +45,7 @@
   "exports": {
     "./*": "./src/lib/*",
     "./api": "./src/lib/api.ts",
+    "./admin": "./src/lib/admin/index.ts",
     "./contacts": "./src/lib/contacts/index.ts",
     "./mail": "./src/lib/mail/index.ts",
     "./drive": "./src/lib/drive/index.ts",

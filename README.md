@@ -41,10 +41,10 @@ On first run, the system will create the database and prompt you to create an ad
 
 1. Start the server:
    ```bash
-   bun serve:index
+   bun serve:admin
    ```
 
-2. Visit `http://localhost:8000/setup` to create your first admin user
+2. Visit `http://localhost:3010/admin` to create your first admin user
 
 ### Running Applications
 
@@ -57,7 +57,7 @@ bun serve:index
 bun serve:mail
 bun serve:drive
 bun serve:space
-bun serve:calendar
+bun serve:admin
 bun serve:contacts
 bun serve:docs
 bun serve:stickies
