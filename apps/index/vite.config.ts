@@ -1,43 +1,30 @@
-import {defineConfig} from 'vite';
+import {defineConfig, mergeConfig} from 'vite';
 import react from '@vitejs/plugin-react';
 import {TanStackRouterVite} from '@tanstack/router-plugin/vite';
 import tailwindcss from '@tailwindcss/vite';
 import viteTsConfigPaths from 'vite-tsconfig-paths'
+import {createSharedViteConfig} from '../../vite.shared.config';
 
-// https://vitejs.dev/config/
-export default defineConfig({
-    base: '/',
-    envDir: './../../',
-    server: {
+export default defineConfig(mergeConfig(
+    createSharedViteConfig({
+        appName: 'index',
         port: 3000,
-    },
-    plugins: [
-        TanStackRouterVite({
-            target: 'react',
-            autoCodeSplitting: false,
-        }),
-        react(),
-        tailwindcss(),
-        viteTsConfigPaths({
-            projects: ['./tsconfig.json'],
-        }),
-    ],
-    resolve: {
-        extensions: ['.tsx', '.ts', '.jsx', '.js']
-    },
-    build: {
-        rollupOptions: {
-            input: {
-                main: './index.html',
-            },
-            output: {
-                entryFileNames: 'assets/[name].[hash].js',
-                chunkFileNames: 'assets/[name].[hash].js',
-                assetFileNames: 'assets/[name].[hash][extname]',
-            },
+        basePath: '/index'
+    }),
+    {
+        plugins: [
+            TanStackRouterVite({
+                target: 'react',
+                autoCodeSplitting: true,
+            }),
+            react(),
+            tailwindcss(),
+            viteTsConfigPaths({
+                projects: ['./tsconfig.json'],
+            }),
+        ],
+        resolve: {
+            extensions: ['.tsx', '.ts', '.jsx', '.js']
         },
-        minify: 'esbuild',
-        sourcemap: false, // Disable sourcemaps for minimal size
-    },
-    publicDir: 'public'
-});
+    }
+));
