@@ -8,158 +8,116 @@
 // You should NOT make any changes in this file as it will be overwritten.
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
-import { Route as rootRouteImport } from './routes/__root'
-import { Route as LoginRouteImport } from './routes/login'
-import { Route as AuthRouteImport } from './routes/_auth'
-import { Route as IndexRouteImport } from './routes/index'
-import { Route as AuthSidebarRouteImport } from './routes/_auth._sidebar'
-import { Route as AuthDocOwnerIdPathIdRouteImport } from './routes/_auth.doc.$ownerId.$pathId'
-import { Route as AuthSidebarSharedToRouteImport } from './routes/_auth._sidebar.shared.$to'
-import { Route as AuthSidebarMimeMimeTypeRouteImport } from './routes/_auth._sidebar.mime.$mimeType'
+// Import Routes
 
-const LoginRoute = LoginRouteImport.update({
+import { Route as rootRoute } from './routes/__root'
+import { Route as LoginImport } from './routes/login'
+import { Route as AuthImport } from './routes/_auth'
+import { Route as IndexImport } from './routes/index'
+import { Route as AuthSidebarImport } from './routes/_auth._sidebar'
+import { Route as AuthDocOwnerIdPathIdImport } from './routes/_auth.doc.$ownerId.$pathId'
+import { Route as AuthSidebarSharedToImport } from './routes/_auth._sidebar.shared.$to'
+import { Route as AuthSidebarMimeMimeTypeImport } from './routes/_auth._sidebar.mime.$mimeType'
+
+// Create/Update Routes
+
+const LoginRoute = LoginImport.update({
   id: '/login',
   path: '/login',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => rootRoute,
 } as any)
-const AuthRoute = AuthRouteImport.update({
+
+const AuthRoute = AuthImport.update({
   id: '/_auth',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => rootRoute,
 } as any)
-const IndexRoute = IndexRouteImport.update({
+
+const IndexRoute = IndexImport.update({
   id: '/',
   path: '/',
-  getParentRoute: () => rootRouteImport,
+  getParentRoute: () => rootRoute,
 } as any)
-const AuthSidebarRoute = AuthSidebarRouteImport.update({
+
+const AuthSidebarRoute = AuthSidebarImport.update({
   id: '/_sidebar',
   getParentRoute: () => AuthRoute,
 } as any)
-const AuthDocOwnerIdPathIdRoute = AuthDocOwnerIdPathIdRouteImport.update({
+
+const AuthDocOwnerIdPathIdRoute = AuthDocOwnerIdPathIdImport.update({
   id: '/doc/$ownerId/$pathId',
   path: '/doc/$ownerId/$pathId',
   getParentRoute: () => AuthRoute,
 } as any)
-const AuthSidebarSharedToRoute = AuthSidebarSharedToRouteImport.update({
+
+const AuthSidebarSharedToRoute = AuthSidebarSharedToImport.update({
   id: '/shared/$to',
   path: '/shared/$to',
   getParentRoute: () => AuthSidebarRoute,
 } as any)
-const AuthSidebarMimeMimeTypeRoute = AuthSidebarMimeMimeTypeRouteImport.update({
+
+const AuthSidebarMimeMimeTypeRoute = AuthSidebarMimeMimeTypeImport.update({
   id: '/mime/$mimeType',
   path: '/mime/$mimeType',
   getParentRoute: () => AuthSidebarRoute,
 } as any)
 
-export interface FileRoutesByFullPath {
-  '/': typeof IndexRoute
-  '/login': typeof LoginRoute
-  '/mime/$mimeType': typeof AuthSidebarMimeMimeTypeRoute
-  '/shared/$to': typeof AuthSidebarSharedToRoute
-  '/doc/$ownerId/$pathId': typeof AuthDocOwnerIdPathIdRoute
-}
-export interface FileRoutesByTo {
-  '/': typeof IndexRoute
-  '/login': typeof LoginRoute
-  '/mime/$mimeType': typeof AuthSidebarMimeMimeTypeRoute
-  '/shared/$to': typeof AuthSidebarSharedToRoute
-  '/doc/$ownerId/$pathId': typeof AuthDocOwnerIdPathIdRoute
-}
-export interface FileRoutesById {
-  __root__: typeof rootRouteImport
-  '/': typeof IndexRoute
-  '/_auth': typeof AuthRouteWithChildren
-  '/login': typeof LoginRoute
-  '/_auth/_sidebar': typeof AuthSidebarRouteWithChildren
-  '/_auth/_sidebar/mime/$mimeType': typeof AuthSidebarMimeMimeTypeRoute
-  '/_auth/_sidebar/shared/$to': typeof AuthSidebarSharedToRoute
-  '/_auth/doc/$ownerId/$pathId': typeof AuthDocOwnerIdPathIdRoute
-}
-export interface FileRouteTypes {
-  fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths:
-    | '/'
-    | '/login'
-    | '/mime/$mimeType'
-    | '/shared/$to'
-    | '/doc/$ownerId/$pathId'
-  fileRoutesByTo: FileRoutesByTo
-  to:
-    | '/'
-    | '/login'
-    | '/mime/$mimeType'
-    | '/shared/$to'
-    | '/doc/$ownerId/$pathId'
-  id:
-    | '__root__'
-    | '/'
-    | '/_auth'
-    | '/login'
-    | '/_auth/_sidebar'
-    | '/_auth/_sidebar/mime/$mimeType'
-    | '/_auth/_sidebar/shared/$to'
-    | '/_auth/doc/$ownerId/$pathId'
-  fileRoutesById: FileRoutesById
-}
-export interface RootRouteChildren {
-  IndexRoute: typeof IndexRoute
-  AuthRoute: typeof AuthRouteWithChildren
-  LoginRoute: typeof LoginRoute
-}
+// Populate the FileRoutesByPath interface
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
-    '/login': {
-      id: '/login'
-      path: '/login'
-      fullPath: '/login'
-      preLoaderRoute: typeof LoginRouteImport
-      parentRoute: typeof rootRouteImport
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexImport
+      parentRoute: typeof rootRoute
     }
     '/_auth': {
       id: '/_auth'
       path: ''
       fullPath: ''
-      preLoaderRoute: typeof AuthRouteImport
-      parentRoute: typeof rootRouteImport
+      preLoaderRoute: typeof AuthImport
+      parentRoute: typeof rootRoute
     }
-    '/': {
-      id: '/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof IndexRouteImport
-      parentRoute: typeof rootRouteImport
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginImport
+      parentRoute: typeof rootRoute
     }
     '/_auth/_sidebar': {
       id: '/_auth/_sidebar'
       path: ''
       fullPath: ''
-      preLoaderRoute: typeof AuthSidebarRouteImport
-      parentRoute: typeof AuthRoute
-    }
-    '/_auth/doc/$ownerId/$pathId': {
-      id: '/_auth/doc/$ownerId/$pathId'
-      path: '/doc/$ownerId/$pathId'
-      fullPath: '/doc/$ownerId/$pathId'
-      preLoaderRoute: typeof AuthDocOwnerIdPathIdRouteImport
-      parentRoute: typeof AuthRoute
-    }
-    '/_auth/_sidebar/shared/$to': {
-      id: '/_auth/_sidebar/shared/$to'
-      path: '/shared/$to'
-      fullPath: '/shared/$to'
-      preLoaderRoute: typeof AuthSidebarSharedToRouteImport
-      parentRoute: typeof AuthSidebarRoute
+      preLoaderRoute: typeof AuthSidebarImport
+      parentRoute: typeof AuthImport
     }
     '/_auth/_sidebar/mime/$mimeType': {
       id: '/_auth/_sidebar/mime/$mimeType'
       path: '/mime/$mimeType'
       fullPath: '/mime/$mimeType'
-      preLoaderRoute: typeof AuthSidebarMimeMimeTypeRouteImport
-      parentRoute: typeof AuthSidebarRoute
+      preLoaderRoute: typeof AuthSidebarMimeMimeTypeImport
+      parentRoute: typeof AuthSidebarImport
+    }
+    '/_auth/_sidebar/shared/$to': {
+      id: '/_auth/_sidebar/shared/$to'
+      path: '/shared/$to'
+      fullPath: '/shared/$to'
+      preLoaderRoute: typeof AuthSidebarSharedToImport
+      parentRoute: typeof AuthSidebarImport
+    }
+    '/_auth/doc/$ownerId/$pathId': {
+      id: '/_auth/doc/$ownerId/$pathId'
+      path: '/doc/$ownerId/$pathId'
+      fullPath: '/doc/$ownerId/$pathId'
+      preLoaderRoute: typeof AuthDocOwnerIdPathIdImport
+      parentRoute: typeof AuthImport
     }
   }
 }
+
+// Create and export the route tree
 
 interface AuthSidebarRouteChildren {
   AuthSidebarMimeMimeTypeRoute: typeof AuthSidebarMimeMimeTypeRoute
@@ -187,11 +145,124 @@ const AuthRouteChildren: AuthRouteChildren = {
 
 const AuthRouteWithChildren = AuthRoute._addFileChildren(AuthRouteChildren)
 
+export interface FileRoutesByFullPath {
+  '/': typeof IndexRoute
+  '': typeof AuthSidebarRouteWithChildren
+  '/login': typeof LoginRoute
+  '/mime/$mimeType': typeof AuthSidebarMimeMimeTypeRoute
+  '/shared/$to': typeof AuthSidebarSharedToRoute
+  '/doc/$ownerId/$pathId': typeof AuthDocOwnerIdPathIdRoute
+}
+
+export interface FileRoutesByTo {
+  '/': typeof IndexRoute
+  '': typeof AuthSidebarRouteWithChildren
+  '/login': typeof LoginRoute
+  '/mime/$mimeType': typeof AuthSidebarMimeMimeTypeRoute
+  '/shared/$to': typeof AuthSidebarSharedToRoute
+  '/doc/$ownerId/$pathId': typeof AuthDocOwnerIdPathIdRoute
+}
+
+export interface FileRoutesById {
+  __root__: typeof rootRoute
+  '/': typeof IndexRoute
+  '/_auth': typeof AuthRouteWithChildren
+  '/login': typeof LoginRoute
+  '/_auth/_sidebar': typeof AuthSidebarRouteWithChildren
+  '/_auth/_sidebar/mime/$mimeType': typeof AuthSidebarMimeMimeTypeRoute
+  '/_auth/_sidebar/shared/$to': typeof AuthSidebarSharedToRoute
+  '/_auth/doc/$ownerId/$pathId': typeof AuthDocOwnerIdPathIdRoute
+}
+
+export interface FileRouteTypes {
+  fileRoutesByFullPath: FileRoutesByFullPath
+  fullPaths:
+    | '/'
+    | ''
+    | '/login'
+    | '/mime/$mimeType'
+    | '/shared/$to'
+    | '/doc/$ownerId/$pathId'
+  fileRoutesByTo: FileRoutesByTo
+  to:
+    | '/'
+    | ''
+    | '/login'
+    | '/mime/$mimeType'
+    | '/shared/$to'
+    | '/doc/$ownerId/$pathId'
+  id:
+    | '__root__'
+    | '/'
+    | '/_auth'
+    | '/login'
+    | '/_auth/_sidebar'
+    | '/_auth/_sidebar/mime/$mimeType'
+    | '/_auth/_sidebar/shared/$to'
+    | '/_auth/doc/$ownerId/$pathId'
+  fileRoutesById: FileRoutesById
+}
+
+export interface RootRouteChildren {
+  IndexRoute: typeof IndexRoute
+  AuthRoute: typeof AuthRouteWithChildren
+  LoginRoute: typeof LoginRoute
+}
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AuthRoute: AuthRouteWithChildren,
   LoginRoute: LoginRoute,
 }
-export const routeTree = rootRouteImport
+
+export const routeTree = rootRoute
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
+
+/* ROUTE_MANIFEST_START
+{
+  "routes": {
+    "__root__": {
+      "filePath": "__root.tsx",
+      "children": [
+        "/",
+        "/_auth",
+        "/login"
+      ]
+    },
+    "/": {
+      "filePath": "index.tsx"
+    },
+    "/_auth": {
+      "filePath": "_auth.tsx",
+      "children": [
+        "/_auth/_sidebar",
+        "/_auth/doc/$ownerId/$pathId"
+      ]
+    },
+    "/login": {
+      "filePath": "login.tsx"
+    },
+    "/_auth/_sidebar": {
+      "filePath": "_auth._sidebar.tsx",
+      "parent": "/_auth",
+      "children": [
+        "/_auth/_sidebar/mime/$mimeType",
+        "/_auth/_sidebar/shared/$to"
+      ]
+    },
+    "/_auth/_sidebar/mime/$mimeType": {
+      "filePath": "_auth._sidebar.mime.$mimeType.tsx",
+      "parent": "/_auth/_sidebar"
+    },
+    "/_auth/_sidebar/shared/$to": {
+      "filePath": "_auth._sidebar.shared.$to.tsx",
+      "parent": "/_auth/_sidebar"
+    },
+    "/_auth/doc/$ownerId/$pathId": {
+      "filePath": "_auth.doc.$ownerId.$pathId.tsx",
+      "parent": "/_auth"
+    }
+  }
+}
+ROUTE_MANIFEST_END */
