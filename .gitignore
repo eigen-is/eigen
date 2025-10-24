@@ -46,3 +46,4 @@ backend/src/all/data/home/*
 apps/api-server/myapp
 /apps/api-server/data/bucket
 apps/api-server/data/users3.db
+apps/api-server/data/config.db
