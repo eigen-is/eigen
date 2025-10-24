@@ -5,7 +5,7 @@ import {withCursors, withYjs, YjsEditor} from "@slate-yjs/core";
 import * as Y from "yjs";
 import {WebsocketProvider} from "y-websocket";
 import {Cursors} from "./cursors";
-import {useAuth} from "@workspace/lib/auth/auth-context.js";
+import {useAuth} from "@workspace/lib/auth";
 import {withHistory} from "slate-history";
 import {EditorToolbar} from "./editor-toolbar";
 import {CustomElement} from "./editor.types";

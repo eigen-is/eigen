@@ -7,7 +7,7 @@ import {ScrollArea} from "@workspace/ui/components/scroll-area";
 import {nanoid} from "nanoid";
 import * as Y from "yjs";
 import {formatDistanceToNow} from "date-fns";
-import {useAuth} from "@workspace/lib/auth/auth-context.tsx";
+import {useAuth} from "@workspace/lib/auth";
 import {useAvatar} from "@workspace/lib/media";
 import {UserAvatar} from "@workspace/ui/components/layout/user-avatar";
 import {cn} from "@workspace/ui/lib/utils";

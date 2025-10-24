@@ -4,7 +4,7 @@ import {Button} from "@workspace/ui/components/button";
 import {Input} from "@workspace/ui/components/input";
 import {Textarea} from "@workspace/ui/components/textarea";
 import {TaskItem} from './types';
-import {useAuth} from "@workspace/lib/auth/auth-context.tsx";
+import {useAuth} from "@workspace/lib/auth";
 
 interface AddTaskDialogProps {
     isOpen: boolean;

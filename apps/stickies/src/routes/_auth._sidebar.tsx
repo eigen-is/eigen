@@ -3,7 +3,7 @@ import {createContext, useContext} from 'react';
 import {SidebarContext} from './__root';
 import {useRootFolder} from '@workspace/lib/drive';
 import {EigenLoader} from '@workspace/ui';
-import {useAuth} from '@workspace/lib/auth/auth-context.js';
+import {useAuth} from '@workspace/lib/auth';
 import {useIsMobile, useIsTablet} from "@workspace/lib/media";
 import {DrivePath} from '@apps/api-server/types/drive';
 import {StickiesSidebar} from '@/components/dnd-board/stickies-sidebar';
