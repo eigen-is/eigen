@@ -13,11 +13,11 @@ export default defineConfig(mergeConfig(
     }),
     {
         plugins: [
+            react(),
             TanStackRouterVite({
                 target: 'react',
                 autoCodeSplitting: false,
             }),
-            react(),
             tailwindcss(),
             viteTsConfigPaths({
                 projects: ['./tsconfig.json'],
