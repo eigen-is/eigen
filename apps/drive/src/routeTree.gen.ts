@@ -8,227 +8,164 @@
 // You should NOT make any changes in this file as it will be overwritten.
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
-// Import Routes
+import { Route as rootRouteImport } from './routes/__root'
+import { Route as LoginRouteImport } from './routes/login'
+import { Route as AuthRouteImport } from './routes/_auth'
+import { Route as IndexRouteImport } from './routes/index'
+import { Route as AuthSharedToRouteImport } from './routes/_auth.shared.$to'
+import { Route as AuthMimeMimeTypeRouteImport } from './routes/_auth.mime.$mimeType'
+import { Route as AuthFsOwnerIdPathIdRouteImport } from './routes/_auth.fs.$ownerId.$pathId'
 
-import {Route as rootRoute} from './routes/__root'
-import {Route as LoginImport} from './routes/login'
-import {Route as AuthImport} from './routes/_auth'
-import {Route as IndexImport} from './routes/index'
-import {Route as AuthSharedToImport} from './routes/_auth.shared.$to'
-import {Route as AuthMimeMimeTypeImport} from './routes/_auth.mime.$mimeType'
-import {Route as AuthFsOwnerIdPathIdImport} from './routes/_auth.fs.$ownerId.$pathId'
-
-// Create/Update Routes
-
-const LoginRoute = LoginImport.update({
-    id: '/login',
-    path: '/login',
-    getParentRoute: () => rootRoute,
+const LoginRoute = LoginRouteImport.update({
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthRoute = AuthRouteImport.update({
+  id: '/_auth',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const IndexRoute = IndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AuthSharedToRoute = AuthSharedToRouteImport.update({
+  id: '/shared/$to',
+  path: '/shared/$to',
+  getParentRoute: () => AuthRoute,
+} as any)
+const AuthMimeMimeTypeRoute = AuthMimeMimeTypeRouteImport.update({
+  id: '/mime/$mimeType',
+  path: '/mime/$mimeType',
+  getParentRoute: () => AuthRoute,
+} as any)
+const AuthFsOwnerIdPathIdRoute = AuthFsOwnerIdPathIdRouteImport.update({
+  id: '/fs/$ownerId/$pathId',
+  path: '/fs/$ownerId/$pathId',
+  getParentRoute: () => AuthRoute,
 } as any)
 
-const AuthRoute = AuthImport.update({
-    id: '/_auth',
-    getParentRoute: () => rootRoute,
-} as any)
-
-const IndexRoute = IndexImport.update({
-    id: '/',
-    path: '/',
-    getParentRoute: () => rootRoute,
-} as any)
-
-const AuthSharedToRoute = AuthSharedToImport.update({
-    id: '/shared/$to',
-    path: '/shared/$to',
-    getParentRoute: () => AuthRoute,
-} as any)
-
-const AuthMimeMimeTypeRoute = AuthMimeMimeTypeImport.update({
-    id: '/mime/$mimeType',
-    path: '/mime/$mimeType',
-    getParentRoute: () => AuthRoute,
-} as any)
-
-const AuthFsOwnerIdPathIdRoute = AuthFsOwnerIdPathIdImport.update({
-    id: '/fs/$ownerId/$pathId',
-    path: '/fs/$ownerId/$pathId',
-    getParentRoute: () => AuthRoute,
-} as any)
-
-// Populate the FileRoutesByPath interface
-
-declare module '@tanstack/react-router' {
-    interface FileRoutesByPath {
-        '/': {
-            id: '/'
-            path: '/'
-            fullPath: '/'
-            preLoaderRoute: typeof IndexImport
-            parentRoute: typeof rootRoute
-        }
-        '/_auth': {
-            id: '/_auth'
-            path: ''
-            fullPath: ''
-            preLoaderRoute: typeof AuthImport
-            parentRoute: typeof rootRoute
-        }
-        '/login': {
-            id: '/login'
-            path: '/login'
-            fullPath: '/login'
-            preLoaderRoute: typeof LoginImport
-            parentRoute: typeof rootRoute
-        }
-        '/_auth/mime/$mimeType': {
-            id: '/_auth/mime/$mimeType'
-            path: '/mime/$mimeType'
-            fullPath: '/mime/$mimeType'
-            preLoaderRoute: typeof AuthMimeMimeTypeImport
-            parentRoute: typeof AuthImport
-        }
-        '/_auth/shared/$to': {
-            id: '/_auth/shared/$to'
-            path: '/shared/$to'
-            fullPath: '/shared/$to'
-            preLoaderRoute: typeof AuthSharedToImport
-            parentRoute: typeof AuthImport
-        }
-        '/_auth/fs/$ownerId/$pathId': {
-            id: '/_auth/fs/$ownerId/$pathId'
-            path: '/fs/$ownerId/$pathId'
-            fullPath: '/fs/$ownerId/$pathId'
-            preLoaderRoute: typeof AuthFsOwnerIdPathIdImport
-            parentRoute: typeof AuthImport
-        }
-    }
+export interface FileRoutesByFullPath {
+  '/': typeof IndexRoute
+  '/login': typeof LoginRoute
+  '/mime/$mimeType': typeof AuthMimeMimeTypeRoute
+  '/shared/$to': typeof AuthSharedToRoute
+  '/fs/$ownerId/$pathId': typeof AuthFsOwnerIdPathIdRoute
+}
+export interface FileRoutesByTo {
+  '/': typeof IndexRoute
+  '/login': typeof LoginRoute
+  '/mime/$mimeType': typeof AuthMimeMimeTypeRoute
+  '/shared/$to': typeof AuthSharedToRoute
+  '/fs/$ownerId/$pathId': typeof AuthFsOwnerIdPathIdRoute
+}
+export interface FileRoutesById {
+  __root__: typeof rootRouteImport
+  '/': typeof IndexRoute
+  '/_auth': typeof AuthRouteWithChildren
+  '/login': typeof LoginRoute
+  '/_auth/mime/$mimeType': typeof AuthMimeMimeTypeRoute
+  '/_auth/shared/$to': typeof AuthSharedToRoute
+  '/_auth/fs/$ownerId/$pathId': typeof AuthFsOwnerIdPathIdRoute
+}
+export interface FileRouteTypes {
+  fileRoutesByFullPath: FileRoutesByFullPath
+  fullPaths:
+    | '/'
+    | '/login'
+    | '/mime/$mimeType'
+    | '/shared/$to'
+    | '/fs/$ownerId/$pathId'
+  fileRoutesByTo: FileRoutesByTo
+  to:
+    | '/'
+    | '/login'
+    | '/mime/$mimeType'
+    | '/shared/$to'
+    | '/fs/$ownerId/$pathId'
+  id:
+    | '__root__'
+    | '/'
+    | '/_auth'
+    | '/login'
+    | '/_auth/mime/$mimeType'
+    | '/_auth/shared/$to'
+    | '/_auth/fs/$ownerId/$pathId'
+  fileRoutesById: FileRoutesById
+}
+export interface RootRouteChildren {
+  IndexRoute: typeof IndexRoute
+  AuthRoute: typeof AuthRouteWithChildren
+  LoginRoute: typeof LoginRoute
 }
 
-// Create and export the route tree
+declare module '@tanstack/react-router' {
+  interface FileRoutesByPath {
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_auth': {
+      id: '/_auth'
+      path: ''
+      fullPath: ''
+      preLoaderRoute: typeof AuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_auth/shared/$to': {
+      id: '/_auth/shared/$to'
+      path: '/shared/$to'
+      fullPath: '/shared/$to'
+      preLoaderRoute: typeof AuthSharedToRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/_auth/mime/$mimeType': {
+      id: '/_auth/mime/$mimeType'
+      path: '/mime/$mimeType'
+      fullPath: '/mime/$mimeType'
+      preLoaderRoute: typeof AuthMimeMimeTypeRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/_auth/fs/$ownerId/$pathId': {
+      id: '/_auth/fs/$ownerId/$pathId'
+      path: '/fs/$ownerId/$pathId'
+      fullPath: '/fs/$ownerId/$pathId'
+      preLoaderRoute: typeof AuthFsOwnerIdPathIdRouteImport
+      parentRoute: typeof AuthRoute
+    }
+  }
+}
 
 interface AuthRouteChildren {
-    AuthMimeMimeTypeRoute: typeof AuthMimeMimeTypeRoute
-    AuthSharedToRoute: typeof AuthSharedToRoute
-    AuthFsOwnerIdPathIdRoute: typeof AuthFsOwnerIdPathIdRoute
+  AuthMimeMimeTypeRoute: typeof AuthMimeMimeTypeRoute
+  AuthSharedToRoute: typeof AuthSharedToRoute
+  AuthFsOwnerIdPathIdRoute: typeof AuthFsOwnerIdPathIdRoute
 }
 
 const AuthRouteChildren: AuthRouteChildren = {
-    AuthMimeMimeTypeRoute: AuthMimeMimeTypeRoute,
-    AuthSharedToRoute: AuthSharedToRoute,
-    AuthFsOwnerIdPathIdRoute: AuthFsOwnerIdPathIdRoute,
+  AuthMimeMimeTypeRoute: AuthMimeMimeTypeRoute,
+  AuthSharedToRoute: AuthSharedToRoute,
+  AuthFsOwnerIdPathIdRoute: AuthFsOwnerIdPathIdRoute,
 }
 
 const AuthRouteWithChildren = AuthRoute._addFileChildren(AuthRouteChildren)
 
-export interface FileRoutesByFullPath {
-    '/': typeof IndexRoute
-    '': typeof AuthRouteWithChildren
-    '/login': typeof LoginRoute
-    '/mime/$mimeType': typeof AuthMimeMimeTypeRoute
-    '/shared/$to': typeof AuthSharedToRoute
-    '/fs/$ownerId/$pathId': typeof AuthFsOwnerIdPathIdRoute
-}
-
-export interface FileRoutesByTo {
-    '/': typeof IndexRoute
-    '': typeof AuthRouteWithChildren
-    '/login': typeof LoginRoute
-    '/mime/$mimeType': typeof AuthMimeMimeTypeRoute
-    '/shared/$to': typeof AuthSharedToRoute
-    '/fs/$ownerId/$pathId': typeof AuthFsOwnerIdPathIdRoute
-}
-
-export interface FileRoutesById {
-    __root__: typeof rootRoute
-    '/': typeof IndexRoute
-    '/_auth': typeof AuthRouteWithChildren
-    '/login': typeof LoginRoute
-    '/_auth/mime/$mimeType': typeof AuthMimeMimeTypeRoute
-    '/_auth/shared/$to': typeof AuthSharedToRoute
-    '/_auth/fs/$ownerId/$pathId': typeof AuthFsOwnerIdPathIdRoute
-}
-
-export interface FileRouteTypes {
-    fileRoutesByFullPath: FileRoutesByFullPath
-    fullPaths:
-        | '/'
-        | ''
-        | '/login'
-        | '/mime/$mimeType'
-        | '/shared/$to'
-        | '/fs/$ownerId/$pathId'
-    fileRoutesByTo: FileRoutesByTo
-    to:
-        | '/'
-        | ''
-        | '/login'
-        | '/mime/$mimeType'
-        | '/shared/$to'
-        | '/fs/$ownerId/$pathId'
-    id:
-        | '__root__'
-        | '/'
-        | '/_auth'
-        | '/login'
-        | '/_auth/mime/$mimeType'
-        | '/_auth/shared/$to'
-        | '/_auth/fs/$ownerId/$pathId'
-    fileRoutesById: FileRoutesById
-}
-
-export interface RootRouteChildren {
-    IndexRoute: typeof IndexRoute
-    AuthRoute: typeof AuthRouteWithChildren
-    LoginRoute: typeof LoginRoute
-}
-
 const rootRouteChildren: RootRouteChildren = {
-    IndexRoute: IndexRoute,
-    AuthRoute: AuthRouteWithChildren,
-    LoginRoute: LoginRoute,
+  IndexRoute: IndexRoute,
+  AuthRoute: AuthRouteWithChildren,
+  LoginRoute: LoginRoute,
 }
-
-export const routeTree = rootRoute
-    ._addFileChildren(rootRouteChildren)
-    ._addFileTypes<FileRouteTypes>()
-
-/* ROUTE_MANIFEST_START
-{
-  "routes": {
-    "__root__": {
-      "filePath": "__root.tsx",
-      "children": [
-        "/",
-        "/_auth",
-        "/login"
-      ]
-    },
-    "/": {
-      "filePath": "index.tsx"
-    },
-    "/_auth": {
-      "filePath": "_auth.tsx",
-      "children": [
-        "/_auth/mime/$mimeType",
-        "/_auth/shared/$to",
-        "/_auth/fs/$ownerId/$pathId"
-      ]
-    },
-    "/login": {
-      "filePath": "login.tsx"
-    },
-    "/_auth/mime/$mimeType": {
-      "filePath": "_auth.mime.$mimeType.tsx",
-      "parent": "/_auth"
-    },
-    "/_auth/shared/$to": {
-      "filePath": "_auth.shared.$to.tsx",
-      "parent": "/_auth"
-    },
-    "/_auth/fs/$ownerId/$pathId": {
-      "filePath": "_auth.fs.$ownerId.$pathId.tsx",
-      "parent": "/_auth"
-    }
-  }
-}
-ROUTE_MANIFEST_END */
+export const routeTree = rootRouteImport
+  ._addFileChildren(rootRouteChildren)
+  ._addFileTypes<FileRouteTypes>()
