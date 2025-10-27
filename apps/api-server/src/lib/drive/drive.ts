@@ -880,7 +880,7 @@ export default class Drive {
     }
 
     public async recieveACLChange(path: DrivePath, newACL: DriveACL[] | null) {
-        if (newACL === null) {
+        if (newACL === null || !newACL.find(acl => acl.email.toLowerCase() === this.owner.email.toLowerCase())) {
             this.sharedDb.delete(sharedSchema.sharedPaths).where(eq(sharedSchema.sharedPaths.id, path.id)).run();
             // send notification
             this.home.notify({

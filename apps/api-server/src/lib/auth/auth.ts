@@ -14,6 +14,7 @@ import {
 } from '../../../auth-schema.ts';
 
 export const trustedOrigins = [
+    "http://localhost",
     "http://localhost:3000",
     "http://localhost:3001",
     "http://localhost:3002",
@@ -22,6 +23,7 @@ export const trustedOrigins = [
     "http://localhost:3005",
     "http://localhost:3006",
     "http://localhost:3007",
+    "http://localhost:3010",
     "https://eigen.is"];
 
 export const auth = betterAuth({
@@ -57,6 +59,6 @@ export const auth = betterAuth({
     trustedOrigins,
     appName: "eigen",
     baseURL: process.env["API_URL"],
-    basePath: "/api/auth",
+    basePath: "/auth",  // Auth routes at /auth/*
     secret: "+/SmL4b3+bxwJgsJU7yT1Sbfm9YR/0GZhVGRaBm838c=",
 });

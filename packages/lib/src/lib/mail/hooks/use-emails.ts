@@ -2,7 +2,6 @@ import {useQuery, useQueryClient} from '@tanstack/react-query';
 import {mailApi} from '@workspace/lib/api.ts';
 import {Email} from "@apps/api-server/types/mail";
 import {mailboxKeys} from "./use-mailboxes.ts";
-import {Route} from "@apps/space/src/routes/_auth.user.tsx";
 import {invalidateHomeSize} from "../../home";
 
 // Define query keys for reuse
@@ -122,12 +121,7 @@ export function useMoveEmail() {
 }
 
 export function useOpenWriteEmailTo() {
-    const navigate = Route.useNavigate();
     return (address: string) => {
-        navigate({
-            href: `${import.meta.env.VITE_APP_MAIL_URL}/box/inbox?mode=compose&to=${address}`,
-            reloadDocument: true,
-            replace: true,
-        });
+        window.location.href = `${import.meta.env.VITE_APP_MAIL_URL}/box/inbox?mode=compose&to=${address}`;
     }
 }

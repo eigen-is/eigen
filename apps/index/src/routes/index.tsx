@@ -1,4 +1,4 @@
-import {createFileRoute} from '@tanstack/react-router'
+import {createFileRoute, Link} from '@tanstack/react-router'
 import React, {useCallback} from 'react';
 import {Button} from "@workspace/ui/components/button";
 import {apps} from "@workspace/lib/apps.ts";
@@ -15,7 +15,6 @@ export const Route = createFileRoute('/')({
 
 export function HomeComponent() {
     const [appIndex, setAppIndex] = React.useState(0);
-    const [showMore, setShowMore] = React.useState(false);
     const [showWaitlistForm, setShowWaitlistForm] = React.useState(false);
     const [email, setEmail] = React.useState("");
     const [notes, setNotes] = React.useState("");
@@ -42,7 +41,6 @@ export function HomeComponent() {
     }, []);
 
     const handleShowWaitlist = useCallback(() => {
-        setShowMore(false);
         setShowWaitlistForm(true);
     }, []);
 
@@ -74,22 +72,12 @@ export function HomeComponent() {
                 <span className={app.className}>|{app.name.toLowerCase()}&gt;</span>
             </div>
             <div className="text-lg text-center mb-8 max-w-md">
-                <div className={`transition-all duration-500 linear overflow-hidden`}>
+                <div>
                     <p className="mb-4">
                         Your personal workspace in the cloud.
                         <br/>
                         Simple and secure. You control your data.
                     </p>
-                </div>
-                <div
-                    className={`transition-all duration-500 linear overflow-hidden ${
-                        showMore ? 'max-h-[500px] opacity-100' : 'max-h-0 opacity-0'
-                    }`}
-                >
-                    <div className="flex justify-center w-full text-gray-500">
-                        <p>Eigen is made and hosted in the European Union. Our goal is to quickly deliver a MVP and
-                            scale up afterwards.</p>
-                    </div>
                 </div>
             </div>
 
@@ -108,12 +96,12 @@ export function HomeComponent() {
                         </Button>
                     </div>
                     <div className="flex justify-center mt-4">
-                        <button
-                            onClick={() => setShowMore(!showMore)}
-                            className="text-blue-600 hover:text-blue-800 underline text-sm cursor-pointer"
+                        <Link
+                            to="/blog"
+                            className="text-blue-600 hover:text-blue-800 underline text-sm"
                         >
-                            {showMore ? 'Show less' : 'Learn more'}
-                        </button>
+                            Learn more
+                        </Link>
                     </div>
                 </>
             ) : (

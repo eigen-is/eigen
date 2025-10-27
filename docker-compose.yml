@@ -1,20 +1,58 @@
-version: '3.8'
-
 services:
-  api-server:
+  # API Server - Bun backend with WebSocket support
+  api:
     build:
       context: .
-      dockerfile: apps/api-server/Dockerfile
+      dockerfile: Dockerfile
+      target: api
+    image: eigen/api:latest
+    container_name: eigen-api
     ports:
       - "8000:8000"
     volumes:
-      - ./apps/api-server/data:/app/apps/api-server/data
+      - eigen-data:/app/apps/api-server/data
     environment:
       - NODE_ENV=production
+      - PRODUCTION=${PRODUCTION:-1}
+      - COOKIE_DOMAIN=${COOKIE_DOMAIN:-.eigen.is}
+    networks:
+      - eigen-network
     restart: unless-stopped
     healthcheck:
-      test: [ "CMD", "curl", "-f", "http://localhost:8000/health" ]
+      test: ["CMD-SHELL", "bun run -e \"fetch('http://localhost:8000/health').then(r => r.ok ? process.exit(0) : process.exit(1)).catch(() => process.exit(1))\""]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 15s
+
+  # nginx - Web server for static files and reverse proxy
+  nginx:
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: nginx
+    image: eigen/nginx:latest
+    container_name: eigen-nginx
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on:
+      api:
+        condition: service_healthy
+    networks:
+      - eigen-network
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost/health || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 3
       start_period: 10s
+
+networks:
+  eigen-network:
+    driver: bridge
+
+volumes:
+  eigen-data:
+    driver: local

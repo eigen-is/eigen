@@ -1,0 +1,17 @@
+.git
+.gitignore
+.env
+!.env.production
+*.log
+.DS_Store
+coverage
+.vscode
+.idea
+*.md
+!README.md
+data/*.db
+data/*.db-shm
+data/*.db-wal
+apps/api-server/data
+apps/*/node_modules
+packages/*/node_modules

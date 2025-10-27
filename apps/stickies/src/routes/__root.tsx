@@ -1,6 +1,6 @@
 import {createRootRouteWithContext, Outlet, useMatch} from '@tanstack/react-router'
 import {TanStackRouterDevtools} from '@tanstack/react-router-devtools'
-import {AuthContextType} from "@workspace/lib/auth/auth-context.tsx";
+import {AuthContextType} from "@workspace/lib/auth";
 import {Topbar} from "@workspace/ui/components/layout/topbar";
 import {createContext, useState} from 'react';
 import {useIsMobile} from "@workspace/lib/media";

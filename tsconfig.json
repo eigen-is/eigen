@@ -1,4 +1,4 @@
 {
-  "extends": "@workspace/config/base.json"
+  "extends": "./packages/config/base.json"
 }
 
