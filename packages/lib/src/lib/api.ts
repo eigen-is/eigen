@@ -13,4 +13,5 @@ export const mailApi = api.mail;
 export const spaceApi = api.space;
 export const driveApi = api.drive;
 export const homeApi = api.home;
+export const adminApi = api.admin;
 export const wsApi = api.ws;
