@@ -18,17 +18,50 @@ The basics work:
 
 - **eigen|mail>**: a simple webmail client. You can read and send messages.
 - **eigen|drive>**: file storage and sharing. Upload files, create folders, share with others.
-- **eigen|docs>**: collaborative text editing using Yjs. Multiple users can edit the same document without conflicts.
+- **eigen|docs>**: collaborative text editing using [Yjs](https://yjs.dev/). Multiple users can edit the same document without conflicts.
 - **eigen|contacts>**: basic contact management.
 - **eigen|stickies>**: kanban boards like Trello. You can move cards around and collaborate in real time.
 
 It’s all minimal, but functional enough to feel like a small ecosystem.
 
+<media-grid columns="6">
+  <media 
+    src="/data/blog/media/2025-10-03-eigen-proof-of-concept/space.webp" 
+    thumb="/data/blog/media/2025-10-03-eigen-proof-of-concept/space-thumb.webp"
+    type="image" 
+    caption="eigen|space>" />
+  <media 
+    src="/data/blog/media/2025-10-03-eigen-proof-of-concept/mail.webp" 
+    thumb="/data/blog/media/2025-10-03-eigen-proof-of-concept/mail-thumb.webp" 
+    type="image" 
+    caption="eigen|mail>" />
+  <media 
+    src="/data/blog/media/2025-10-03-eigen-proof-of-concept/contacts.webp" 
+    thumb="/data/blog/media/2025-10-03-eigen-proof-of-concept/contacts-thumb.webp" 
+    type="image" 
+    caption="eigen|contacts>" />
+  <media 
+    src="/data/blog/media/2025-10-03-eigen-proof-of-concept/drive.webp" 
+    thumb="/data/blog/media/2025-10-03-eigen-proof-of-concept/drive-thumb.webp" 
+    type="image" 
+    caption="eigen|drive>" />
+  <media 
+    src="/data/blog/media/2025-10-03-eigen-proof-of-concept/docs.webp" 
+    thumb="/data/blog/media/2025-10-03-eigen-proof-of-concept/docs-thumb.webp" 
+    type="image" 
+    caption="eigen|docs>" />
+  <media 
+    src="/data/blog/media/2025-10-03-eigen-proof-of-concept/stickies.webp" 
+    thumb="/data/blog/media/2025-10-03-eigen-proof-of-concept/stickies-thumb.webp" 
+    type="image" 
+    caption="eigen|stickies>" />
+</media-grid>
+
 ## Under the hood
 
 To prototype something quickly, I decided to use NPM packages and build on open source libraries. This is something I normally avoid. For my other [projects](https://reindernijhoff.net/about/), I often end up writing all code myself and reinventing wheels. Even the few [NPM packages](https://reindernijhoff.net/npm/) I published are completely dependency free.
 
-The stack is standard and modern (at least, that’s what someone who knows these things told me): Bun for the server runtime, Elysia for server routing, Vite and React with TypeScript for the frontend, TanStack Router and TanStack Query for routing and data fetching, Tailwind CSS and shadcn/ui for the interface.
+The stack is standard and modern (at least, that’s what someone who knows these things told me): [Bun](https://bun.sh/) for the server runtime, [Elysia](https://elysiajs.com/) for server routing, [Vite](https://vite.dev/) and [React](https://react.dev/) with TypeScript for the frontend, [TanStack Router](https://tanstack.com/router) and [TanStack Query](https://tanstack.com/query) for routing and data fetching, [Tailwind CSS](https://tailwindcss.com/) and [shadcn/ui](https://ui.shadcn.com/) for the interface.
 
 The interesting part is the architecture I accidentally ended up with. I started with a simple approach: each user gets their own directory. SQLite databases (per user) store metadata and structured data, actual content is stored as files. No shared databases, no complex central systems.
 
@@ -49,6 +82,20 @@ I did it that way because it was the simplest thing that could work.
 
 For real time collaboration in docs and stickies, the server keeps [Yjs](https://yjs.dev/) documents in memory while they are active. They sync over WebSockets and are periodically written to disk. When everyone closes a doc, it disappears from memory.
 
+
+<media-grid columns="2">
+  <media 
+    src="/data/blog/media/2025-10-03-eigen-proof-of-concept/docs.mp4" 
+    poster="/data/blog/media/2025-10-03-eigen-proof-of-concept/docs-thumb.webp"
+    type="video" 
+    caption="eigen|docs>" />
+  <media 
+    src="/data/blog/media/2025-10-03-eigen-proof-of-concept/drive.mp4" 
+    poster="/data/blog/media/2025-10-03-eigen-proof-of-concept/drive-thumb.webp"
+    type="video" 
+    caption="eigen|drive>" />
+</media-grid>
+
 ## What's Next?
 
 After two months of spare time development, much more works than I expected. That makes me excited to keep going and to see how far this can go. You never know if it will really work or become truly useful, but I would like to find out.
@@ -63,15 +110,18 @@ Reality check: I have built only a very small part of a minimum viable product. 
 - Protocol compatibility (IMAP, CalDAV, WebDAV) for standard clients
 - Backup and migration tools
 
-**Open questions in the per user file architecture:**
+**Beyond implementing missing pieces, there are fundamental questions to answer:**
 
-- Can it scale? What are the performance limits?
-- How do you implement encryption with this layout?
+First, can the current architecture actually scale? I need to find out where the limits are before going too far in the wrong direction.
 
-**Next steps:**
+Second, is this the simplest approach? For example, could mapping workspace users 1-to-1 to Linux system users make everything easier and more secure? I chose the current structure because it seemed simple at the time, but there might be better solutions.
 
-- Keep pushing and see where it breaks
-- Critically examine the technical architecture. Will this work? Are there more elegant or simpler solutions that could make developing Eigen easier? What if workspace users mapped 1-to-1 to (Linux) system users for simplicity and security?
+Third, how do we make Eigen extensible? The core will stay minimal by design. But organizations rolling this out should be able to extend it. We should figure out early what a plugin/API architecture looks like. How can third parties write deep integrations as extensions without forking the entire project.
+
+Fourth, where should this go? I'm thinking of a model like WordPress: you can self-host Eigen (startups could run their own instance), while eigen.is would be a public platform running the same software. Ideally, users from different servers could still share and collaborate; similar to how Mastodon works with decentralized authentication. Whether and how to implement this is another question.
+
+**First steps:**
+
 - Open source the code so others can look at it, try to break it and help validate the architecture
 - Collect feedback, refine the scope and decide what to build first
 

@@ -3,7 +3,7 @@ import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle} from "@w
 import {Button} from "@workspace/ui/components/button";
 import {Input} from "@workspace/ui/components/input";
 import {ColumnItem} from './types';
-import {useAuth} from "@workspace/lib/auth/auth-context.tsx";
+import {useAuth} from "@workspace/lib/auth";
 
 interface AddColumnDialogProps {
     isOpen: boolean;

@@ -1,0 +1,62 @@
+#0 building with "desktop-linux" instance using docker driver
+
+#1 [api internal] load build definition from Dockerfile
+#1 transferring dockerfile: 1.37kB done
+#1 DONE 0.0s
+
+#2 [api internal] load metadata for docker.io/oven/bun:1-slim
+#2 DONE 0.9s
+
+#3 [api internal] load .dockerignore
+#3 transferring context: 254B done
+#3 DONE 0.0s
+
+#4 [api api 1/7] FROM docker.io/oven/bun:1-slim@sha256:86604aff15a156a8854137896af174e2d29e2310f9c9f1aa63de13882e25893d
+#4 resolve docker.io/oven/bun:1-slim@sha256:86604aff15a156a8854137896af174e2d29e2310f9c9f1aa63de13882e25893d 0.0s done
+#4 DONE 0.0s
+
+#5 [api internal] load build context
+#5 transferring context: 7.19MB 4.2s done
+#5 DONE 4.3s
+
+#6 [api api 2/7] WORKDIR /app
+#6 CACHED
+
+#7 [api api 3/7] RUN apt-get update && apt-get install -y     libvips     python3     make     g++     && rm -rf /var/lib/apt/lists/*
+#7 CACHED
+
+#8 [api api 4/7] COPY . .
+#8 DONE 8.5s
+
+#9 [api api 5/7] RUN bun install --ignore-scripts
+#9 0.342 [0.08ms] ".env.production"
+#9 0.343 bun install v1.3.1 (89fa0f34)
+#9 0.362 Resolving dependencies
+#9 2.670 Resolved, downloaded and extracted [226]
+#9 12.91 Saved lockfile
+#9 12.91 
+#9 12.91 1505 packages installed [12.57s]
+#9 DONE 13.4s
+
+#10 [api api 6/7] RUN mkdir -p /app/data /app/uploads
+#10 DONE 0.5s
+
+#11 [api api 7/7] WORKDIR /app/apps/api-server
+#11 DONE 0.0s
+
+#12 [api] exporting to image
+#12 exporting layers
+#12 exporting layers 21.8s done
+#12 exporting manifest sha256:f206fe3ce487dd2fdd8e9cb04fbd6904baaf8689c9f64ef6fbcc33df583bde57
+#12 exporting manifest sha256:f206fe3ce487dd2fdd8e9cb04fbd6904baaf8689c9f64ef6fbcc33df583bde57 done
+#12 exporting config sha256:4fa82f4f33186373750d3b1e9238fda0598eb9435f8f45c435ccaf9a8536c747 done
+#12 exporting attestation manifest sha256:3887c6a2eb4b7aa6187410425ca3d8fb305fbd0232663ea7ceeb89044e61ab60 done
+#12 exporting manifest list sha256:810caf45e07332ffebc6a2f3f7af0c50f2c5dfb6c4dbf3525e4f8de97edb8019 done
+#12 naming to docker.io/eigen/api:latest done
+#12 unpacking to docker.io/eigen/api:latest
+#12 unpacking to docker.io/eigen/api:latest 18.0s done
+#12 DONE 39.8s
+
+#13 [api] resolving provenance for metadata file
+#13 DONE 0.0s
+ api  Built
