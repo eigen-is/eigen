@@ -11,7 +11,7 @@ export default class FileSystem {
 
     constructor(home: Home) {
         this.home = home;
-        this.homeDir = `./data/home/${home.user.id}/`;
+        this.homeDir = `./../../data/home/${home.user.id}/`;
     }
 
     public async init() {

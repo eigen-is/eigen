@@ -56,8 +56,6 @@ Promise.all([isSystemConfigured(), isSetupRequired()]).then(([systemConfigured, 
             console.log('   - Admin user creation needed');
         }
         console.log('📋 Visit http://localhost:3010/admin to complete setup');
-    } else {
-        console.log('✅ Setup complete');
     }
 });
 

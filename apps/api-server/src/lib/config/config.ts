@@ -42,7 +42,7 @@ let cachedConfig: SystemConfig | null = null;
 function getConfigDb() {
     if (configDb) return configDb;
     
-    const dbPath = './data/config.db';
+    const dbPath = './../../data/server/config.db';
     const dataDir = dirname(dbPath);
     
     if (!existsSync(dataDir)) {
