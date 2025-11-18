@@ -12,8 +12,6 @@ import {wsRouter} from "./routes/ws.ts";
 import {collabRouter} from "./routes/collab";
 import {adminRouter} from "./routes/admin";
 import {configRouter} from "./routes/config";
-import {isSetupRequired} from "./lib/setup/setup";
-import {isSystemConfigured} from "./lib/config/config";
 
 const app = new Elysia()
     .use(swagger())
@@ -45,19 +43,19 @@ const app = new Elysia()
 
 export type app = typeof app;
 
-// Check setup status on startup
-Promise.all([isSystemConfigured(), isSetupRequired()]).then(([systemConfigured, userSetupRequired]) => {
-    if (!systemConfigured || userSetupRequired) {
-        console.log('⚠️  Setup required');
-        if (!systemConfigured) {
-            console.log('   - System configuration needed');
-        }
-        if (userSetupRequired) {
-            console.log('   - Admin user creation needed');
-        }
-        console.log('📋 Visit http://localhost:3010/admin to complete setup');
-    }
-});
+// // Check setup status on startup
+// Promise.all([isSystemConfigured(), isSetupRequired()]).then(([systemConfigured, userSetupRequired]) => {
+//     if (!systemConfigured || userSetupRequired) {
+//         console.log('⚠️  Setup required');
+//         if (!systemConfigured) {
+//             console.log('   - System configuration needed');
+//         }
+//         if (userSetupRequired) {
+//             console.log('   - Admin user creation needed');
+//         }
+//         console.log('📋 Visit http://localhost:3010/admin to complete setup');
+//     }
+// });
 
 console.log(
     `🦊 Elysia is running at ${app.server?.hostname}:${app.server?.port}`,

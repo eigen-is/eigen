@@ -7,7 +7,7 @@ import { dirname } from "path";
 
 function getSetupDb() {
     // Use relative path to match users.ts and auth.ts
-    const dbPath = './data/users3.db';
+    const dbPath = './../../data/server/users3.db';
     const dataDir = dirname(dbPath);
     
     if (!existsSync(dataDir)) {
@@ -27,8 +27,6 @@ function getSetupDb() {
 
 async function initializeDatabaseSchema(): Promise<{ success: boolean; error?: string }> {
     try {
-        console.log('🔄 Initializing database schema...');
-        
         // Create tables directly using Drizzle
         const db = getSetupDb();
         

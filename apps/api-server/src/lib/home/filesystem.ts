@@ -16,7 +16,12 @@ export default class FileSystem {
 
     public async init() {
         // Create the home directory if it doesn't exist
-        await fs.mkdir(this.homeDir, {recursive: true});
+        try {
+            await fs.stat(this.homeDir);
+        } catch (error) {
+            // Directory doesn't exist, create it
+            await fs.mkdir(this.homeDir, {recursive: true});
+        }
     }
 
     /**
@@ -26,7 +31,12 @@ export default class FileSystem {
      */
     public async mkdir(dirPath: string, options: { recursive?: boolean } = {recursive: true}) {
         const absolutePath = this.makeAbsolutePath(dirPath);
-        return await fs.mkdir(absolutePath, options);
+        try {
+            await fs.stat(absolutePath);
+        } catch (error) {
+            // Directory doesn't exist, create it
+            await fs.mkdir(absolutePath, options);
+        }
     }
 
     /**
@@ -172,7 +182,12 @@ export default class FileSystem {
 
         // Ensure the directory exists
         const dirPath = path.dirname(absolutePath);
-        await fs.mkdir(dirPath, {recursive: true});
+        try {
+            await fs.stat(dirPath);
+        } catch (error) {
+            // Directory doesn't exist, create it
+            await fs.mkdir(dirPath, {recursive: true});
+        }
 
         const bunfile = Bun.file(absolutePath);
         if (await bunfile.exists()) {

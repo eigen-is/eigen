@@ -7,7 +7,7 @@ export const betterAuthView = (context: Context) => {
     if (BETTER_AUTH_ACCEPT_METHODS.includes(context.request.method)) {
         return auth.handler(context.request);
     } else {
-        context.error(405);
+        return new Response("Method Not Allowed", { status: 405 });
     }
 };
 
@@ -16,12 +16,14 @@ export const betterAuth = new Elysia({name: "better-auth"})
     .mount(auth.handler)
     .macro({
         auth: {
-            async resolve({error, request: {headers}}) {
+            async resolve({request: {headers}}) {
                 const session = await auth.api.getSession({
                     headers,
                 });
 
-                if (!session) return error(401);
+                if (!session) {
+                    throw new Error("Unauthorized");
+                }
 
                 return {
                     user: session.user,

@@ -4,7 +4,7 @@ import {eq} from "drizzle-orm";
 import type {User} from "better-auth/types";
 
 function getUserDb() {
-    return drizzle('./data/users3.db', {
+    return drizzle('./../../data/server/users3.db', {
         schema: {
             user,
             session,
