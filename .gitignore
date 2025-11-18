@@ -44,3 +44,5 @@ next-env.d.ts
 /apps/api-server/data/bucket
 /apps/api-server/data/users3.db
 /apps/api-server/data/config.db
+/data/home
+/data/server
