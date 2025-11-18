@@ -78,7 +78,7 @@ function UserDropdown({rootRoute}: { rootRoute: TopbarProps['rootRoute'] }) {
                         <UserAvatar
                             name={auth.user.name}
                             email={auth.user.email}
-                            userId={auth.user.id}
+                            userId={auth.user.email}
                             size="sm"
                         />
                     </Button>
