@@ -10,7 +10,8 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - eigen-data:/app/apps/api-server/data
+      - eigen-user-data:/app/data/home
+      - eigen-server-data:/app/data/server
     environment:
       - NODE_ENV=production
       - PRODUCTION=${PRODUCTION:-1}
@@ -54,5 +55,7 @@ networks:
     driver: bridge
 
 volumes:
-  eigen-data:
+  eigen-user-data:
+    driver: local
+  eigen-server-data:
     driver: local
