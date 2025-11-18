@@ -33,8 +33,8 @@ COPY . .
 # Install dependencies (skip lifecycle scripts to avoid hangs)
 RUN bun install --ignore-scripts
 
-# Create data directory
-RUN mkdir -p /app/apps/api-server/data
+# Create data directories
+RUN mkdir -p /app/data/home /app/data/server
 
 WORKDIR /app/apps/api-server
 
