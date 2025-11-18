@@ -3,6 +3,7 @@ import { systemConfig } from "./schema";
 import { eq } from "drizzle-orm";
 import { existsSync, mkdirSync } from "fs";
 import { dirname } from "path";
+import { getServerDataPath } from "./paths";
 
 // Configuration defaults
 export interface SystemConfig {
@@ -42,7 +43,7 @@ let cachedConfig: SystemConfig | null = null;
 function getConfigDb() {
     if (configDb) return configDb;
     
-    const dbPath = './../../data/server/config.db';
+    const dbPath = getServerDataPath('config.db');
     const dataDir = dirname(dbPath);
     
     if (!existsSync(dataDir)) {

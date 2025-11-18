@@ -1,10 +1,11 @@
 import {drizzle} from "drizzle-orm/bun-sqlite";
 import {account, session, user, verification} from '../../../auth-schema.ts';
 import {eq} from "drizzle-orm";
+import {getServerDataPath} from "../config/paths";
 import type {User} from "better-auth/types";
 
 function getUserDb() {
-    return drizzle('./../../data/server/users3.db', {
+    return drizzle(getServerDataPath('users3.db'), {
         schema: {
             user,
             session,

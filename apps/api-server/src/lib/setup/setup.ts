@@ -4,10 +4,11 @@ import { count, eq } from "drizzle-orm";
 import { auth } from "../auth/auth";
 import { existsSync, mkdirSync } from "fs";
 import { dirname } from "path";
+import { getServerDataPath } from "../config/paths";
 
 function getSetupDb() {
     // Use relative path to match users.ts and auth.ts
-    const dbPath = './../../data/server/users3.db';
+    const dbPath = getServerDataPath('users3.db');
     const dataDir = dirname(dbPath);
     
     if (!existsSync(dataDir)) {

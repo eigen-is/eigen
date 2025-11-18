@@ -1,6 +1,7 @@
 import type {Home} from "./home";
 import * as path from "path";
 import * as fs from "node:fs/promises";
+import {getUserHomePath} from "../config/paths";
 import {watch} from "node:fs";
 import {Database} from "bun:sqlite";
 import Bun, {type BunFile} from 'bun';
@@ -11,7 +12,7 @@ export default class FileSystem {
 
     constructor(home: Home) {
         this.home = home;
-        this.homeDir = `./../../data/home/${home.user.id}/`;
+        this.homeDir = getUserHomePath(home.user.id) + '/';
     }
 
     public async init() {
