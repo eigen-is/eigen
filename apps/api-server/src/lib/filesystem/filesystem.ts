@@ -1,8 +1,6 @@
 import * as path from "path";
-import * as fs from "node:fs/promises";
-import {tmpdir} from "node:os";
+import * as fs from "node:fs";
 import type {Storage} from "./storage";
-import {LocalStorage} from "./localstorage";
 import type {User} from "better-auth/types";
 import type {BunFile, S3File} from "bun";
 import {randomUUID} from "crypto";
@@ -10,23 +8,31 @@ import MetadataDb from "./metadatadb";
 import { eq } from "drizzle-orm";
 import { drivePaths } from "./metadatadbschema";
 import type { DrivePath } from "../../types/drive";
+import { getUserHomePath } from "../config/paths";
+import { PathStorage } from "./pathstorage";
 
 export default class FileSystem {
     protected user: User;
+    protected baseDir: string;
+    protected userDir: string;
     private tempDir: string;
-    private storage: Storage;
+    protected storage: Storage;
 
-    private metadata: MetadataDb;
+    protected metadata: MetadataDb;
 
-    constructor(user: User, prefix: string = 'drive') {
+    constructor(user: User, baseDir: string = 'eigen.drive') {
         this.user = user;
-        this.tempDir = path.join(tmpdir(), 'eigen-files', this.user.id, prefix);
-        this.storage = new LocalStorage(this.user, prefix);
+        this.baseDir = baseDir;
+        this.userDir = getUserHomePath(user.id);
+        this.tempDir = path.join(this.userDir, baseDir, 'tmp');
+        this.storage = new PathStorage(this.user, baseDir);
         this.metadata = new MetadataDb(this, 'metadata.db');
     }
 
     public async init() {
-        await fs.mkdir(this.tempDir, {recursive: true});
+        if (!(fs.existsSync(this.tempDir))) {
+            await fs.mkdirSync(this.tempDir, {recursive: true});
+        }
         await this.metadata.init();
     }
 
@@ -178,8 +184,8 @@ export default class FileSystem {
 
     async cleanupTemp(): Promise<void> {
         try {
-            if (await fs.exists(this.tempDir)) {
-                await fs.rm(this.tempDir, {recursive: true, force: true});
+            if (fs.existsSync(this.tempDir)) {
+                await fs.rmSync(this.tempDir, {recursive: true, force: true});
             }
         } catch (error: unknown) {
             const errorMessage = error instanceof Error ? error.message : String(error);

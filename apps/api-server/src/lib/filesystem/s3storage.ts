@@ -5,16 +5,16 @@ import type {User} from "better-auth/types";
 export class S3Storage implements Storage {
     private client: S3Client;
     private user: User;
-    private prefix: string;
+    private baseDir: string;
 
-    constructor(user: User, prefix: string, config: {
+    constructor(user: User, baseDir: string, config: {
         endpoint: string;
         region?: string;
         accessKeyId: string;
         secretAccessKey: string;
     }) {
         this.user = user;
-        this.prefix = prefix;
+        this.baseDir = baseDir;
         this.client = new S3Client({
             endpoint: config.endpoint,
             accessKeyId: config.accessKeyId,
@@ -23,7 +23,7 @@ export class S3Storage implements Storage {
     }
 
     private generateKey(pathId: string): string {
-        return `${pathId}.${this.prefix}.${this.user.id}`;
+        return `${pathId}.${this.baseDir}.${this.user.id}`;
     }
 
     async write(pathId: string, data: Buffer | Uint8Array | BunFile | S3File | ArrayBuffer): Promise<boolean> {

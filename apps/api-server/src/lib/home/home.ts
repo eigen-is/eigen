@@ -114,7 +114,7 @@ export class Home {
 
     public async openSQLiteDatabase(file: string, onCreate: (db: Database) => Promise<void>) {
         console.log(file, this.databases.has(file));
-        
+
         if (!this.databases.has(file)) {
             this.databases.set(file, createAsyncSingleton(async () => {
                 const db = await this.fs.createAndOpenDatabase(file, true, onCreate);

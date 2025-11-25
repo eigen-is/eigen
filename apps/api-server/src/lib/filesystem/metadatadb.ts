@@ -174,4 +174,25 @@ export default class MetadataDb extends EigenDatabase<DriveSchema> {
         await this.db.delete(drivePaths)
             .where(eq(drivePaths.id, pathId));
     }
+
+    /**
+     * Resolve full path by walking up the parent chain
+     * Returns path like "/folder1/subfolder2/file.txt"
+     */
+    public async resolveFullPath(pathId: string): Promise<string | null> {
+        const pathSegments: string[] = [];
+        let currentId: string | null = pathId;
+
+        while (currentId) {
+            const item = await this.getPath(currentId);
+            if (!item) {
+                return null;
+            }
+            
+            pathSegments.unshift(item.name);
+            currentId = item.parentId;
+        }
+
+        return '/' + pathSegments.join('/');
+    }
 }

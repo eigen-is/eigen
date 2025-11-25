@@ -8,5 +8,13 @@ export interface Storage {
     delete(pathId: string): Promise<boolean>;
 
     exists(pathId: string): Promise<boolean>;
+
+// only used for local, directory based, storage:
+
+    // mkdir(pathId: string, name: string): Promise<boolean>;
+
+    // move(pathId: string, newParentId: string): Promise<boolean>;
+
+    // rename(pathId: string, name: string): Promise<boolean>;
 }
     
