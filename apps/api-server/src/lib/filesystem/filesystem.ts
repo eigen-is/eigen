@@ -9,7 +9,7 @@ import { eq } from "drizzle-orm";
 import { drivePaths } from "./metadatadbschema";
 import type { DrivePath } from "../../types/drive";
 import { getUserHomePath } from "../config/paths";
-import { PathStorage } from "./pathstorage";
+import { LocalStorage } from "./localstorage";
 
 export default class FileSystem {
     protected user: User;
@@ -25,7 +25,7 @@ export default class FileSystem {
         this.baseDir = baseDir;
         this.userDir = getUserHomePath(user.id);
         this.tempDir = path.join(this.userDir, baseDir, 'tmp');
-        this.storage = new PathStorage(this.user, baseDir);
+        this.storage = new LocalStorage(this.user, baseDir);
         this.metadata = new MetadataDb(this, 'metadata.db');
     }
 

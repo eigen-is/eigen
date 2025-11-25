@@ -123,7 +123,7 @@ export default class Drive {
         }
 
         // // Initialize new filesystem
-        // const newFileSystem = new FileSystem(this.owner, 'drive');
+        // const newFileSystem = new FileSystem(this.owner, 'localtest.drive');
         // await newFileSystem.init();
         
         // // Perform migration if needed

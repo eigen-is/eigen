@@ -21,7 +21,7 @@ export class LocalStorage implements Storage {
     }
 
     private generateKey(pathId: string): string {
-        return `${pathId}.${this.baseDir}.${this.user.id}`;
+        return `${this.user.id}.${this.baseDir}.${pathId}`;
     }
 
     public async write(pathId: string, data: Buffer | Uint8Array | BunFile | S3File | ArrayBuffer): Promise<boolean> {

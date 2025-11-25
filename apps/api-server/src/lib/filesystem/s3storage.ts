@@ -23,7 +23,7 @@ export class S3Storage implements Storage {
     }
 
     private generateKey(pathId: string): string {
-        return `${pathId}.${this.baseDir}.${this.user.id}`;
+        return `${this.user.id}/${this.baseDir}/${pathId}`;
     }
 
     async write(pathId: string, data: Buffer | Uint8Array | BunFile | S3File | ArrayBuffer): Promise<boolean> {
