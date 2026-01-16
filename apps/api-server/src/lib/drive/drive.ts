@@ -12,7 +12,8 @@ import {getSharedDatabase} from './shared';
 import * as sharedSchema from './sharedschema';
 import {getUserByEmail} from '../users/users';
 import {createAsyncSingleton} from '../../utils/singleton';
-import type {HomeInterface} from '../home/types';
+import type {HomeInterface} from '../../types/home';
+import {NotificationTypes} from '../../types/notification';
 
 export type {PathEntry, ACLEntry} from '../mount/types';
 
@@ -89,7 +90,15 @@ export default class Drive {
         }
 
         const safeName = folderName.replace(/[/\\]/g, '_');
-        return await this.mount.createFolder(parentId, safeName);
+        const folderId = await this.mount.createFolder(parentId, safeName);
+        this.home.notify({
+            type: NotificationTypes.DRIVE_FOLDER_CREATED,
+            title: 'Folder created',
+            body: `${safeName} created`,
+            showToast: false,
+            data: {pathId: folderId, parentId}
+        });
+        return folderId;
     }
 
     async createDoc(parentId: string, docName: string): Promise<string | undefined> {
@@ -98,7 +107,15 @@ export default class Drive {
         }
 
         const safeName = `${docName}.eigendoc`;
-        return await this.mount.createFolder(parentId, safeName, 'doc');
+        const docId = await this.mount.createFolder(parentId, safeName, 'doc');
+        this.home.notify({
+            type: NotificationTypes.DRIVE_FOLDER_CREATED,
+            title: 'Document created',
+            body: `${docName} created`,
+            showToast: false,
+            data: {pathId: docId, parentId}
+        });
+        return docId;
     }
 
     async createStickies(parentId: string, stickiesName: string): Promise<string | undefined> {
@@ -107,7 +124,15 @@ export default class Drive {
         }
 
         const safeName = `${stickiesName}.eigenstickies`;
-        return await this.mount.createFolder(parentId, safeName, 'stickies');
+        const stickiesId = await this.mount.createFolder(parentId, safeName, 'stickies');
+        this.home.notify({
+            type: NotificationTypes.DRIVE_FOLDER_CREATED,
+            title: 'Stickies created',
+            body: `${stickiesName} created`,
+            showToast: false,
+            data: {pathId: stickiesId, parentId}
+        });
+        return stickiesId;
     }
 
     async uploadFile(parentId: string, file: File): Promise<string> {
@@ -142,6 +167,13 @@ export default class Drive {
             await this.mount.updatePath(fileId, {thumbnail});
         }
 
+        this.home.notify({
+            type: NotificationTypes.DRIVE_FILE_UPLOADED,
+            title: 'File uploaded',
+            body: `${safeName} uploaded`,
+            showToast: false,
+            data: {pathId: fileId, parentId}
+        });
         return fileId;
     }
 
@@ -172,6 +204,13 @@ export default class Drive {
 
         await this.mount.deletePath(pathId);
         this.emitACLChange(folder, folder.acl, null);
+        this.home.notify({
+            type: NotificationTypes.DRIVE_FOLDER_DELETED,
+            title: 'Folder deleted',
+            body: `${folder.name} deleted`,
+            showToast: false,
+            data: {pathId, parentId: folder.parentId}
+        });
     }
 
     async deleteFile(pathId: string): Promise<void> {
@@ -191,6 +230,13 @@ export default class Drive {
         await deleteThumbnail(this.mount.thumbsDir, pathId);
         await this.mount.deletePath(pathId);
         this.emitACLChange(file, file.acl, null);
+        this.home.notify({
+            type: NotificationTypes.DRIVE_FILE_DELETED,
+            title: 'File deleted',
+            body: `${file.name} deleted`,
+            showToast: false,
+            data: {pathId, parentId: file.parentId}
+        });
     }
 
     async movePath(pathId: string, targetParentId: string): Promise<void> {
@@ -208,7 +254,15 @@ export default class Drive {
             throw new Error('No write permission');
         }
 
+        const oldParentId = path.parentId;
         await this.mount.updatePath(pathId, {parentId: targetParentId});
+        this.home.notify({
+            type: NotificationTypes.DRIVE_PATH_MOVED,
+            title: 'Item moved',
+            body: `${path.name} moved`,
+            showToast: false,
+            data: {pathId, parentId: targetParentId, oldParentId}
+        });
     }
 
     async renamePath(pathId: string, newName: string): Promise<void> {
@@ -223,6 +277,13 @@ export default class Drive {
 
         await this.mount.updatePath(pathId, {name: newName});
         this.emitACLChange(item, item.acl, item.acl);
+        this.home.notify({
+            type: NotificationTypes.DRIVE_PATH_RENAMED,
+            title: 'Item renamed',
+            body: `Renamed to ${newName}`,
+            showToast: false,
+            data: {pathId, parentId: item.parentId}
+        });
     }
 
     async downloadFile(pathId: string): Promise<ArrayBuffer | null> {
@@ -372,10 +433,11 @@ export default class Drive {
                 .where(eq(sharedSchema.sharedPaths.id, path.id))
                 .run();
             this.home.notify({
-                type: 'acl_delete',
+                type: NotificationTypes.DRIVE_ACL_UNSHARED,
                 title: 'Item unshared with you',
                 body: `${path.name} has been unshared with you`,
-                tag: 'shared_path_deleted'
+                tag: 'shared_path_deleted',
+                data: {pathId: path.id}
             });
         } else if (this.sharedDb.select().from(sharedSchema.sharedPaths).where(eq(sharedSchema.sharedPaths.id, path.id)).get()) {
             this.sharedDb.update(sharedSchema.sharedPaths).set({
@@ -401,11 +463,12 @@ export default class Drive {
                 updatedAt: new Date()
             }).run();
             this.home.notify({
-                type: 'acl_insert',
+                type: NotificationTypes.DRIVE_ACL_SHARED,
                 title: 'Item shared with you',
                 body: `${path.name} has been shared with you`,
                 tag: 'shared_path_created',
-                link: `/drive/fs/${path.ownerId}/${path.id}`
+                link: `/drive/fs/${path.ownerId}/${path.id}`,
+                data: {pathId: path.id}
             });
         }
     }

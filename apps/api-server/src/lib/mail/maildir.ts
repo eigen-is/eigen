@@ -6,10 +6,10 @@ import {createUniqueMessageId, getMailIDfromFileName, getStandardMailboxFlags} f
 import {welcomeMail} from "./welcome.ts";
 import DOMPurify from 'isomorphic-dompurify';
 import maildb from "./maildb.ts";
-import type {HomeInterface} from "../home/types";
+import type {HomeInterface} from "../../types/home";
 import {sendMail, draftToMailOptions} from './sender';
 import type {EmailDraft} from "../../types/mail.ts";
-import type {EigenNotification} from "../../types/notification.ts";
+import {type EigenNotification, NotificationTypes} from "../../types/notification";
 import {LocalStorage} from "../storage";
 
 export default class Maildir {
@@ -141,7 +141,7 @@ export default class Maildir {
                 this.messageGet(messageId).then(async (parsedMessage) => {
                     if (this.notifyCallback && notify) {
                         this.notifyCallback({
-                            type: 'mail',
+                            type: NotificationTypes.MAIL_RECEIVED,
                             title: `New email: ${parsedMessage?.subject || 'No subject'}`,
                             body: `${parsedMessage?.textShort || 'No body'}`,
                             link: `/mail/box/inbox?mailId=${parsedMessage?.id}`,

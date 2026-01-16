@@ -6,7 +6,7 @@ import {eq, sql} from "drizzle-orm";
 import * as schema from "./schema";
 import {v4 as uuidv4} from "uuid";
 import {getHome} from "../home/home";
-import type {HomeInterface} from "../home/types";
+import type {HomeInterface} from "../../types/home";
 import type {User} from "better-auth/types";
 import {getUserByEmail, updateUser} from "../users/users.ts";
 import {LocalStorage} from "../storage";

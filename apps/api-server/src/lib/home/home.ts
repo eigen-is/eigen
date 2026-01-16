@@ -10,7 +10,7 @@ import {getUserById} from '../users/users';
 import type {EigenNotification} from '../../types/notification';
 import {createAsyncSingleton} from '../../utils/singleton';
 import {getUserHomePath} from '../config/paths';
-import type {HomeInterface} from './types';
+import type {HomeInterface} from '../../types/home';
 import {LocalStorage} from '../storage';
 import Drive from '../drive/drive';
 

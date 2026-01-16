@@ -2,7 +2,7 @@ import type {BunSQLiteDatabase} from "drizzle-orm/bun-sqlite";
 import {and, count, eq, sql} from "drizzle-orm";
 import * as schema from "./schema.ts";
 import type {EmailSummary} from "./mailtypes.ts";
-import type {HomeInterface} from "../home/types";
+import type {HomeInterface} from "../../types/home";
 import {createDatabase} from "../core";
 
 const MAIL_MIGRATION_SQL = `
