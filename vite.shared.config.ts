@@ -1,10 +1,9 @@
-import type { UserConfig } from 'vite'
-
-interface AppConfig {
-  appName: string
-  port: number
-  basePath: string
-}
+import { defineConfig, mergeConfig, type UserConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+import { TanStackRouterVite } from '@tanstack/router-plugin/vite'
+import tailwindcss from '@tailwindcss/vite'
+import viteTsConfigPaths from 'vite-tsconfig-paths'
+import path from 'path'
 
 const APP_PORTS: Record<string, number> = {
   index: 3000,
@@ -18,30 +17,38 @@ const APP_PORTS: Record<string, number> = {
   admin: 3010,
 }
 
-export function createSharedViteConfig(config: AppConfig): UserConfig {
-  const isDev = process.env.NODE_ENV !== 'production'
-  
-  const devProxies = isDev ? undefined : undefined
-  
-  return {
-    base: config.basePath,
+export function createAppConfig(appName: string, extraConfig?: UserConfig) {
+  const port = APP_PORTS[appName] ?? 3000
+  const basePath = appName === 'index' ? '/' : `/${appName}`
+
+  const baseConfig: UserConfig = {
+    base: basePath,
     envDir: './../../',
+    plugins: [
+      react(),
+      TanStackRouterVite({
+        target: 'react',
+        autoCodeSplitting: false,
+      }),
+      tailwindcss(),
+      viteTsConfigPaths({
+        projects: ['./tsconfig.json'],
+      }),
+    ],
+    resolve: {
+      alias: {
+        '@': path.resolve(process.cwd(), 'src'),
+      },
+    },
     server: {
-      port: config.port,
-      proxy: devProxies
+      port,
     },
     build: {
-      outDir: `./../../dist/${config.appName}`,
+      target: 'es2023',
+      outDir: `./../../dist/${appName}`,
       emptyOutDir: true,
-      rollupOptions: {
-        output: {
-          entryFileNames: 'assets/[name].[hash].js',
-          chunkFileNames: 'assets/[name].[hash].js',
-          assetFileNames: 'assets/[name].[hash][extname]',
-        },
-      },
-      minify: 'esbuild',
-      sourcemap: false,
     },
   }
+
+  return defineConfig(extraConfig ? mergeConfig(baseConfig, extraConfig) : baseConfig)
 }

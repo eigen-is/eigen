@@ -1,11 +1,6 @@
 {
-  "extends": "../../packages/config/base.json",
+  "extends": "../../packages/config/tsconfig.app.json",
   "compilerOptions": {
-    "baseUrl": ".",
-    "paths": {
-      "@/*": ["./src/*"]
-    }
-  },
-  "include": ["src"],
-  "exclude": ["node_modules", "dist"]
+    "baseUrl": "./src/"
+  }
 }
