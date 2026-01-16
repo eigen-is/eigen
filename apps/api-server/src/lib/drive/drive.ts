@@ -342,6 +342,13 @@ export default class Drive {
         const normalizedACL = normalizeACL(acl);
         await this.mount.updatePath(pathId, {acl: normalizedACL});
         this.emitACLChange(item, item.acl, normalizedACL);
+        this.home.notify({
+            type: NotificationTypes.DRIVE_ACL_UPDATED,
+            title: 'Sharing updated',
+            body: `${item.name} sharing settings updated`,
+            showToast: false,
+            data: {pathId, parentId: item.parentId}
+        });
     }
 
     getACL(_pathId: string): ACLEntry[] | null {
