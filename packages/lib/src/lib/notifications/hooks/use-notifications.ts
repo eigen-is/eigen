@@ -3,6 +3,7 @@ import {useQueryClient} from '@tanstack/react-query';
 import {useAuth} from '../../auth/auth-context';
 import {emailKeys, mailboxKeys} from '../../mail';
 import {driveKeys} from '../../drive';
+import {SSE_NOTIFICATIONS_URL} from '../../api';
 
 export const NotificationTypes = {
     MAIL_RECEIVED: 'mail:received',
@@ -93,8 +94,7 @@ export function useNotifications(options: UseNotificationsOptions = {}) {
     useEffect(() => {
         if (!isAuthenticated) return;
 
-        const apiHost = import.meta.env.VITE_API_HOST as string;
-        const url = `${apiHost}/sse/notifications`;
+        const url = SSE_NOTIFICATIONS_URL;
         
         const eventSource = new EventSource(url, {withCredentials: true});
         eventSourceRef.current = eventSource;
@@ -108,9 +108,9 @@ export function useNotifications(options: UseNotificationsOptions = {}) {
             }
         };
 
-        eventSource.onerror = () => {
-            console.log('SSE connection error, will auto-reconnect...');
-        };
+        // eventSource.onerror = () => {
+        //     console.log('SSE connection error, will auto-reconnect...');
+        // };
 
         return () => {
             eventSource.close();
