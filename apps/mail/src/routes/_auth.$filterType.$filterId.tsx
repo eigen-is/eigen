@@ -175,7 +175,7 @@ function MailRoute() {
             setPendingDeleteMail(mail);
             setDeleteDialogOpen(true);
         } else {
-            await deleteMail(mail);
+            await deleteMail.mutateAsync(mail);
             toast("Email deleted");
             navigate({
                 to: Route.fullPath,
@@ -187,7 +187,7 @@ function MailRoute() {
 
     const confirmDeleteEmail = async () => {
         if (pendingDeleteMail) {
-            await deleteMail(pendingDeleteMail);
+            await deleteMail.mutateAsync(pendingDeleteMail);
             toast("Email deleted");
             setDeleteDialogOpen(false);
             setPendingDeleteMail(null);
@@ -200,7 +200,6 @@ function MailRoute() {
     };
 
     const handleSendEmail = async (mail: EmailDraftType) => {
-        console.log('send email', mail.id, mail)
         await sendDraft.mutateAsync(mail);
         toast.success("Email sent");
         navigate({
@@ -211,7 +210,7 @@ function MailRoute() {
     }
 
     const handleMoveEmail = async (mail: Email, mailbox: string) => {
-        await moveMail(mail, mailbox);
+        await moveMail.mutateAsync({email: mail, mailbox});
         toast(`Email moved to ${mailbox}`);
         navigate({
             to: Route.fullPath,
@@ -269,7 +268,7 @@ function MailRoute() {
                                 isMobile={true}
                                 onBackClick={handleBackToList}
                                 onDelete={handleDeleteEmail}
-                                toggleMailRead={toggleMailRead}
+                                toggleMailRead={(email, isRead) => toggleMailRead.mutate({email, isRead})}
                                 sendDraft={handleSendEmail}
                                 to={to}
                                 updateDraft={updateDraft.mutateAsync}
@@ -279,7 +278,7 @@ function MailRoute() {
                                 email={selectedEmail}
                                 isMobile={true}
                                 onBackClick={handleBackToList}
-                                toggleMailRead={toggleMailRead}
+                                toggleMailRead={(email, isRead) => toggleMailRead.mutate({email, isRead})}
                                 onDelete={handleDeleteEmailById}
                                 onArchive={handleArchiveEmailById}
                                 onReportSpam={handleReportSpamById}
@@ -367,7 +366,7 @@ function MailRoute() {
                                 email={selectedEmail as EmailDraftType}
                                 className="border-none h-full"
                                 onDelete={handleDeleteEmail}
-                                toggleMailRead={toggleMailRead}
+                                toggleMailRead={(email, isRead) => toggleMailRead.mutate({email, isRead})}
                                 sendDraft={handleSendEmail}
                                 to={to}
                                 updateDraft={updateDraft.mutateAsync}
@@ -376,7 +375,7 @@ function MailRoute() {
                             <EmailDetail
                                 email={selectedEmail}
                                 className="border-none h-full"
-                                toggleMailRead={toggleMailRead}
+                                toggleMailRead={(email, isRead) => toggleMailRead.mutate({email, isRead})}
                                 onDelete={handleDeleteEmailById}
                                 onArchive={handleArchiveEmailById}
                                 onReportSpam={handleReportSpamById}

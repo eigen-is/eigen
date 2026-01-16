@@ -118,12 +118,12 @@ function DriveRoute() {
         });
     };
 
-    // Callback die door DriveLayout wordt aangeroepen na acties
+    // Callback called by DriveLayout after actions
     const handleAfterAction = (actionType: string, data: any) => {
         // Invalidate data after mutations
         invalidateFolder(pathId);
 
-        // Alleen navigatie na verwijderen als het item dat geselecteerd was verwijderd is
+        // Only navigate after delete if the selected item was deleted
         if (actionType === 'delete' && pid === data.id) {
             navigate({
                 to: Route.fullPath,

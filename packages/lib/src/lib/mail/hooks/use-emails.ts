@@ -1,4 +1,4 @@
-import {useQuery, useQueryClient} from '@tanstack/react-query';
+import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {mailApi} from '@workspace/lib/api.ts';
 import {Email} from "@apps/api-server/types/mail";
 import {mailboxKeys} from "./use-mailboxes.ts";
@@ -20,7 +20,6 @@ export function useEmails(mailboxPath: string) {
         queryFn: async () => {
             mailboxPath = mailboxPath.toLowerCase();
             mailboxPath = mailboxPath === 'inbox' ? '' : mailboxPath;
-            console.log(`Fetching emails for mailbox: ${mailboxPath}`);
             // Wildcard route - use type assertion for dynamic path
             const response = await (mailApi.mailbox as any)[mailboxPath].get();
             return (response.data || []) as Email[];
@@ -58,8 +57,7 @@ export function useEmailById() {
                 },
                 staleTime: Infinity,
             });
-        } catch (error) {
-            console.error("Error fetching email by ID:", error);
+        } catch {
             return null;
         }
     };
@@ -68,56 +66,65 @@ export function useEmailById() {
 export function useDeleteEmail() {
     const queryClient = useQueryClient();
 
-    return async (email: Email) => {
-        // if mail is not in the trash folder, move it to trash
-        if (email.mailbox === 'trash') {
-            await mailApi.message({id: email.id}).delete();
-        } else {
-            await mailApi.message.moveToTrash.put({messageId: email.id});
-            // invalidate mailbox cache
-            queryClient.invalidateQueries({queryKey: emailKeys.list('trash')});
+    return useMutation({
+        mutationFn: async (email: Email) => {
+            if (email.mailbox === 'trash') {
+                await mailApi.message({id: email.id}).delete();
+            } else {
+                await mailApi.message.moveToTrash.put({messageId: email.id});
+                queryClient.invalidateQueries({queryKey: emailKeys.list('trash')});
+            }
+            return email;
+        },
+        onSuccess: (email) => {
+            queryClient.invalidateQueries({queryKey: emailKeys.detail(email.id)});
+            queryClient.invalidateQueries({queryKey: emailKeys.list(email.mailbox === '' ? 'inbox' : email.mailbox)});
+            invalidateHomeSize(queryClient);
         }
-        // invalidate mailbox cache
-        // queryClient.invalidateQueries({queryKey: emailKeys.lists()});
-        queryClient.invalidateQueries({queryKey: emailKeys.detail(email.id)});
-        queryClient.invalidateQueries({queryKey: emailKeys.list(email.mailbox === '' ? 'inbox' : email.mailbox)});
-        invalidateHomeSize(queryClient);
-    }
+    });
 }
 
 export function useToggleReadEmail() {
     const queryClient = useQueryClient();
 
-    return async (email: Email, isRead: boolean) => {
-        if (isRead === email.isRead) {
-            return;
+    return useMutation({
+        mutationFn: async ({email, isRead}: {email: Email, isRead: boolean}) => {
+            if (isRead === email.isRead) {
+                return email;
+            }
+            await mailApi.message.read.put({
+                messageId: email.id,
+                read: isRead
+            });
+            return email;
+        },
+        onSuccess: (email) => {
+            queryClient.invalidateQueries({queryKey: emailKeys.detail(email.id)});
+            queryClient.invalidateQueries({queryKey: emailKeys.list(email.mailbox)});
+            queryClient.invalidateQueries({queryKey: mailboxKeys.lists()});
         }
-        const currentMailbox = email.mailbox;
-
-        await mailApi.message.read.put({
-            messageId: email.id,
-            read: isRead
-        });
-        queryClient.invalidateQueries({queryKey: emailKeys.detail(email.id)});
-        queryClient.invalidateQueries({queryKey: emailKeys.list(currentMailbox)});
-        queryClient.invalidateQueries({queryKey: mailboxKeys.lists()});
-    }
+    });
 }
 
 export function useMoveEmail() {
     const queryClient = useQueryClient();
 
-    return async (email: Email, mailbox: string) => {
-        const currentMailbox = email.mailbox;
-        await mailApi.message.move.put({
-            messageId: email.id,
-            targetMailbox: mailbox
-        });
-        queryClient.invalidateQueries({queryKey: emailKeys.detail(email.id)});
-        queryClient.invalidateQueries({queryKey: emailKeys.list(currentMailbox === '' ? 'inbox' : currentMailbox)});
-        queryClient.invalidateQueries({queryKey: emailKeys.list(mailbox === '' ? 'inbox' : mailbox)});
-        queryClient.invalidateQueries({queryKey: mailboxKeys.lists()});
-    }
+    return useMutation({
+        mutationFn: async ({email, mailbox}: {email: Email, mailbox: string}) => {
+            const currentMailbox = email.mailbox;
+            await mailApi.message.move.put({
+                messageId: email.id,
+                targetMailbox: mailbox
+            });
+            return {email, currentMailbox, mailbox};
+        },
+        onSuccess: ({email, currentMailbox, mailbox}) => {
+            queryClient.invalidateQueries({queryKey: emailKeys.detail(email.id)});
+            queryClient.invalidateQueries({queryKey: emailKeys.list(currentMailbox === '' ? 'inbox' : currentMailbox)});
+            queryClient.invalidateQueries({queryKey: emailKeys.list(mailbox === '' ? 'inbox' : mailbox)});
+            queryClient.invalidateQueries({queryKey: mailboxKeys.lists()});
+        }
+    });
 }
 
 export function useOpenWriteEmailTo() {
