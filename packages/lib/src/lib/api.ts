@@ -1,9 +1,8 @@
-import {edenTreaty} from '@elysiajs/eden';
+import {treaty} from '@elysiajs/eden';
 import type {app} from "@apps/api-server";
 
-// export const api = edenTreaty<app>('https://eigen.is:8000', {
-export const api = edenTreaty<app>(import.meta.env.VITE_API_HOST as string, {
-    $fetch: {
+export const api = treaty<app>(import.meta.env.VITE_API_HOST as string, {
+    fetch: {
         credentials: 'include'
     }
 });
