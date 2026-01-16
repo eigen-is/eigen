@@ -169,9 +169,6 @@ export function useDeleteFile(ownerId: string) {
             queryClient.invalidateQueries({queryKey: driveKeys.folders()});
             queryClient.invalidateQueries({queryKey: driveKeys.mimeTypes()});
             invalidateHomeSize(queryClient);
-        },
-        onError: (error) => {
-            console.error('Error deleting file:', error);
         }
     });
 }
@@ -212,9 +209,7 @@ export function useUpdateACL(ownerId: string) {
 
     return useMutation({
         mutationFn: async ({path, acl}: { path: DrivePath, acl: DriveACL[] }) => {
-            console.log('put acls', path.id, acl);
             const response = await driveApi.path.acl({ownerId})({pathId: path.id}).put({acl});
-            console.log(response.data);
             return response.data;
         },
         onSuccess: (_, variables) => {

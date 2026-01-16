@@ -135,7 +135,6 @@ export class Home implements HomeInterface {
         this.timeout = setTimeout(() => {
             homeFactories.delete(this.user.id);
             this.destruct();
-            console.log(`Closed home for ${this.user.id}`);
         }, 1000 * 60 * 5);
         return this;
     }
@@ -165,7 +164,9 @@ export class Home implements HomeInterface {
         for (const db of this.databases.values()) {
             try {
                 db.close();
-            } catch {}
+            } catch (error) {
+                console.error('Failed to close database:', error);
+            }
         }
         this.databases.clear();
         this.databaseFactories.clear();

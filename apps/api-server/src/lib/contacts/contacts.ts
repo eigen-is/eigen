@@ -228,8 +228,6 @@ export class Contacts {
     }
 
     public async updateLabel(id: string, label: Omit<Label, 'id'>) {
-        console.log('Updating label:', id, label);
-
         try {
             await this.db.update(schema.labels)
                 .set({
@@ -239,14 +237,9 @@ export class Contacts {
                 })
                 .where(eq(schema.labels.id, id));
 
-            console.log('Label updated successfully');
-
-            // Return the updated label
             const updatedLabel = await this.db.select().from(schema.labels).where(eq(schema.labels.id, id)).get();
-            console.log('Updated label:', updatedLabel);
             return updatedLabel;
         } catch (error) {
-            console.error('Error updating label:', error);
             throw error;
         }
     }

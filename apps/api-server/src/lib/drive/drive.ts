@@ -199,7 +199,9 @@ export default class Drive {
         if (folder.type === 'doc' || folder.type === 'stickies') {
             try {
                 await this.closeCollabDocument(pathId);
-            } catch {}
+            } catch (error) {
+                console.error('Failed to close collab document:', error);
+            }
         }
 
         await this.mount.deletePath(pathId);
@@ -434,7 +436,7 @@ export default class Drive {
         );
     }
 
-    async recieveACLChange(path: PathEntry, newACL: ACLEntry[] | null): Promise<void> {
+    async receiveACLChange(path: PathEntry, newACL: ACLEntry[] | null): Promise<void> {
         if (newACL === null || !newACL.find(acl => acl.email.toLowerCase() === this.owner.email.toLowerCase())) {
             this.sharedDb.delete(sharedSchema.sharedPaths)
                 .where(eq(sharedSchema.sharedPaths.id, path.id))
@@ -490,9 +492,11 @@ export default class Drive {
                 if (user) {
                     const {getHome} = await import('../home/home');
                     const home = await getHome(user as User);
-                    await home.drive.recieveACLChange(path, newACL);
+                    await home.drive.receiveACLChange(path, newACL);
                 }
-            } catch {}
+            } catch (error) {
+                console.error('Failed to emit ACL change:', error);
+            }
         }
     }
 }
