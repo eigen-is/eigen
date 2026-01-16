@@ -60,36 +60,28 @@ export async function messageMove(user: User, messageId: string, targetMailbox: 
     return await mail.messageMove(messageId, targetMailbox);
 }
 
-export async function messageMoveToInbox(user: User, messageId: string) {
+async function messageMoveToSpecial(user: User, messageId: string, flag: string) {
     const mailboxes = await mailboxesList(user);
-    const inbox = mailboxes.find(mailbox => mailbox.flags.includes('\\Inbox'));
-    if (inbox) {
-        return await messageMove(user, messageId, inbox.path);
+    const target = mailboxes.find(mailbox => mailbox.flags.includes(flag));
+    if (target) {
+        return await messageMove(user, messageId, target.path);
     }
+}
+
+export async function messageMoveToInbox(user: User, messageId: string) {
+    return messageMoveToSpecial(user, messageId, '\\Inbox');
 }
 
 export async function messageMoveToArchive(user: User, messageId: string) {
-    const mailboxes = await mailboxesList(user);
-    const archive = mailboxes.find(mailbox => mailbox.flags.includes('\\Archive'));
-    if (archive) {
-        return await messageMove(user, messageId, archive.path);
-    }
+    return messageMoveToSpecial(user, messageId, '\\Archive');
 }
 
 export async function messageMoveToSpam(user: User, messageId: string) {
-    const mailboxes = await mailboxesList(user);
-    const spam = mailboxes.find(mailbox => mailbox.flags.includes('\\Junk'));
-    if (spam) {
-        return await messageMove(user, messageId, spam.path);
-    }
+    return messageMoveToSpecial(user, messageId, '\\Junk');
 }
 
 export async function messageMoveToTrash(user: User, messageId: string) {
-    const mailboxes = await mailboxesList(user);
-    const trash = mailboxes.find(mailbox => mailbox.flags.includes('\\Trash'));
-    if (trash) {
-        return await messageMove(user, messageId, trash.path);
-    }
+    return messageMoveToSpecial(user, messageId, '\\Trash');
 }
 
 export async function messageCopy(user: User, messageId: string, targetMailbox: string) {

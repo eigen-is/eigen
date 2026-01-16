@@ -12,7 +12,7 @@ import type {EigenNotification} from '../../types/notification';
 import {createAsyncSingleton} from '../../utils/singleton';
 import {getUserHomePath} from '../config/paths';
 import type {HomeInterface} from './types';
-import {HomeFileSystem} from './filesystem';
+import {LocalStorage} from '../storage';
 import Drive from '../drive/drive';
 
 const homeFactories: Map<string, () => Promise<Home>> = new Map();
@@ -20,7 +20,7 @@ const homeFactories: Map<string, () => Promise<Home>> = new Map();
 export class Home implements HomeInterface {
     public user: User;
     public homeDir: string;
-    public fs: HomeFileSystem;
+    public fs: LocalStorage;
 
     public drive!: Drive;
     public contacts: Contacts;
@@ -37,7 +37,7 @@ export class Home implements HomeInterface {
     constructor(user: User) {
         this.user = user;
         this.homeDir = getUserHomePath(user.id);
-        this.fs = new HomeFileSystem(this.homeDir);
+        this.fs = new LocalStorage(this.homeDir);
         this.contacts = new Contacts(this as any);
         this.mail = new Maildir(this as any, this.notify.bind(this));
     }
@@ -57,10 +57,6 @@ export class Home implements HomeInterface {
             });
         }
         this.initializationStarted = true;
-
-        if (!fs.existsSync(this.homeDir)) {
-            fs.mkdirSync(this.homeDir, {recursive: true});
-        }
 
         this.drive = new Drive(this);
         await this.drive.init();
@@ -154,6 +150,10 @@ export class Home implements HomeInterface {
         const maxMB = 50;
         const max = maxMB * 1024 * 1024;
         return {mail, contacts, drive, used: (mail + contacts + drive), max};
+    }
+
+    public async getZip(): Promise<{data: ArrayBuffer, contentType: string, fileName: string}> {
+        throw new Error('Not implemented');
     }
 
     public notify(event: EigenNotification) {

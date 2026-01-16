@@ -49,8 +49,7 @@ export const auth = betterAuth({
             issuer: "eigen",
             otpOptions: {
                 async sendOTP({user, otp}, ctx) {
-                    // send otp to user (sms or something)
-                    console.log('send otp', user, otp, ctx.request);
+                    console.log('send otp', user, otp, ctx?.request);
                 },
             },
         }),

@@ -30,7 +30,7 @@ export interface ACLEntry {
     email: string;
     read: boolean;
     write: boolean;
-    public?: boolean;
+    public: boolean;
 }
 
 export interface MountInfo {

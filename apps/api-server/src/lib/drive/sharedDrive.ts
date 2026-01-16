@@ -23,138 +23,54 @@ export default class SharedDrive extends Drive {
 
     constructor(sharedHome: Home, user: User) {
         super(sharedHome);
-
         this.sharedDrive = sharedHome.drive;
         this.user = user;
     }
 
-    public async init() {
+    private async withReadPermission<T>(pathId: string, fn: () => Promise<T>, fallback: T): Promise<T> {
+        return (await this.canRead(pathId, this.user)) ? fn() : fallback;
     }
 
-    public async getRootFolder() {
-        return null;
+    private async withWritePermission<T>(pathId: string, fn: () => Promise<T>, fallback: T): Promise<T> {
+        return (await this.canWrite(pathId, this.user)) ? fn() : fallback;
     }
 
-    public async getFolderContents(pathId: string) {
-        if (await this.canRead(pathId, this.user)) {
-            return this.sharedDrive.getFolderContents(pathId);
-        }
-        return [];
-    }
-
-    public async getPath(pathId: string) {
-        if (await this.canRead(pathId, this.user)) {
-            return this.sharedDrive.getPath(pathId);
-        }
-        return null;
-    }
-
-    public async createFolder(parentId: string, folderName: string) {
-        if (await this.canWrite(parentId, this.user)) {
-            return this.sharedDrive.createFolder(parentId, folderName);
-        }
-        return;
-    }
-
-    public async uploadFile(parentId: string, file: File) {
-        if (await this.canWrite(parentId, this.user)) {
-            return this.sharedDrive.uploadFile(parentId, file);
-        }
-        return '';
-    }
-
-    public async deleteFolder(pathId: string) {
-        // you should have write access in parent dir
+    private async withParentWritePermission<T>(pathId: string, fn: () => Promise<T>, fallback: T): Promise<T> {
         const path = await this.getPath(pathId);
-        if (path && path.parentId && await this.canWrite(path.parentId, this.user)) {
-            return this.sharedDrive.deleteFolder(pathId);
+        if (path?.parentId && await this.canWrite(path.parentId, this.user)) {
+            return fn();
         }
-        return;
+        return fallback;
     }
 
-    public async deleteFile(pathId: string) {
-        // you should have write access in parent dir
-        const path = await this.getPath(pathId);
-        if (path && path.parentId && await this.canWrite(path.parentId, this.user)) {
-            return this.sharedDrive.deleteFile(pathId);
-        }
-        return;
-    }
-
-    public async renamePath(pathId: string, newName: string) {
-        // you should have write access in parent dir
-        const path = await this.getPath(pathId);
-        if (path && path.parentId && await this.canWrite(path.parentId, this.user)) {
-            return this.sharedDrive.renamePath(pathId, newName);
-        }
-        return;
-    }
-
-    public async updateACL(pathId: string, acl: DriveACL[]) {
-        if (await this.canWrite(pathId, this.user)) {
-            return this.sharedDrive.updateACL(pathId, acl);
-        }
-        return;
-    }
-
-    public async size() {
-        return 0;
-    }
+    public async init() {}
+    public async getRootFolder() { return null; }
+    public async size() { return 0; }
+    public async getMimeTypeContents(_mimeType: string): Promise<DrivePath[]> { return []; }
 
     public async canWrite(pathId: string, user: User) {
-        return await this.sharedDrive.canWrite(pathId, user);
+        return this.sharedDrive.canWrite(pathId, user);
     }
 
     public async canRead(pathId: string, user: User) {
-        return await this.sharedDrive.canRead(pathId, user);
+        return this.sharedDrive.canRead(pathId, user);
+    }
+
+    public async getFolderContents(pathId: string) {
+        return this.withReadPermission(pathId, () => this.sharedDrive.getFolderContents(pathId), []);
+    }
+
+    public async getPath(pathId: string) {
+        return this.withReadPermission(pathId, () => this.sharedDrive.getPath(pathId), null);
     }
 
     public async downloadFile(pathId: string) {
-        if (await this.canRead(pathId, this.user)) {
-            return this.sharedDrive.downloadFile(pathId);
-        }
-        return null;
+        return this.withReadPermission(pathId, () => this.sharedDrive.downloadFile(pathId), null);
     }
 
     public async getThumbnail(fileName: string) {
         const pathId = fileName.split('.')[0];
-        if (await this.canRead(pathId, this.user)) {
-            return this.sharedDrive.getThumbnail(fileName);
-        }
-        return null;
-    }
-
-    public async breadCrumb(pathId: string) {
-        const bread = (await this.sharedDrive.breadCrumb(pathId));
-        const crumb: DrivePath[] = [];
-        while (bread.length > 0) {
-            const path = bread.pop();
-            if (path && await this.canRead(path.id, this.user)) {
-                crumb.push(path);
-            } else {
-                break;
-            }
-        }
-
-        return crumb.reverse();
-    }
-
-    public async createStickies(parentId: string, stickiesName: string): Promise<string | undefined> {
-        if (await this.canWrite(parentId, this.user)) {
-            return this.sharedDrive.createStickies(parentId, stickiesName);
-        }
-        return;
-    }
-
-    public async createDoc(parentId: string, docName: string): Promise<string | undefined> {
-        if (await this.canWrite(parentId, this.user)) {
-            return this.sharedDrive.createDoc(parentId, docName);
-        }
-        return;
-    }
-
-    public async getMimeTypeContents(mimeType: string): Promise<DrivePath[]> {
-        return [];
+        return this.withReadPermission(pathId, () => this.sharedDrive.getThumbnail(fileName), null);
     }
 
     public async getCollabDocument(pathId: string): Promise<CollabDocument> {
@@ -165,9 +81,53 @@ export default class SharedDrive extends Drive {
     }
 
     public async closeCollabDocument(pathId: string) {
-        if (await this.canRead(pathId, this.user)) {
-            return this.sharedDrive.closeCollabDocument(pathId);
+        return this.withReadPermission(pathId, () => this.sharedDrive.closeCollabDocument(pathId), undefined);
+    }
+
+    public async createFolder(parentId: string, folderName: string) {
+        return this.withWritePermission(parentId, () => this.sharedDrive.createFolder(parentId, folderName), undefined);
+    }
+
+    public async uploadFile(parentId: string, file: File) {
+        return this.withWritePermission(parentId, () => this.sharedDrive.uploadFile(parentId, file), '');
+    }
+
+    public async createStickies(parentId: string, stickiesName: string): Promise<string | undefined> {
+        return this.withWritePermission(parentId, () => this.sharedDrive.createStickies(parentId, stickiesName), undefined);
+    }
+
+    public async createDoc(parentId: string, docName: string): Promise<string | undefined> {
+        return this.withWritePermission(parentId, () => this.sharedDrive.createDoc(parentId, docName), undefined);
+    }
+
+    public async updateACL(pathId: string, acl: DriveACL[]) {
+        return this.withWritePermission(pathId, () => this.sharedDrive.updateACL(pathId, acl), undefined);
+    }
+
+    public async deleteFolder(pathId: string) {
+        return this.withParentWritePermission(pathId, () => this.sharedDrive.deleteFolder(pathId), undefined);
+    }
+
+    public async deleteFile(pathId: string) {
+        return this.withParentWritePermission(pathId, () => this.sharedDrive.deleteFile(pathId), undefined);
+    }
+
+    public async renamePath(pathId: string, newName: string) {
+        return this.withParentWritePermission(pathId, () => this.sharedDrive.renamePath(pathId, newName), undefined);
+    }
+
+    public async breadCrumb(pathId: string) {
+        const bread = await this.sharedDrive.breadCrumb(pathId);
+        const crumb: DrivePath[] = [];
+        while (bread.length > 0) {
+            const path = bread.pop();
+            if (path && await this.canRead(path.id, this.user)) {
+                crumb.push(path);
+            } else {
+                break;
+            }
         }
+        return crumb.reverse();
     }
 
     public async openSQLiteDatabase(parentPathId: string, file: string, onCreate: (db: Database) => Promise<void>) {

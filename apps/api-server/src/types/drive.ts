@@ -9,12 +9,12 @@ export type DrivePath = {
     id: string;
     name: string;
     type: "folder" | "file" | "doc" | "stickies";
-    parentId?: string;
+    parentId: string | null;
     ownerId: string;
-    labels: string[];
+    labels?: string[];
     mimeType: string;
     size: number;
-    thumbnail: string;
+    thumbnail: string | null;
     acl: DriveACL[] | null;
     createdAt: Date;
     updatedAt: Date;

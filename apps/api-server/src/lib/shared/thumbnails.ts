@@ -7,12 +7,14 @@ export interface ThumbnailOptions {
     maxSize?: number;
     quality?: number;
     format?: 'webp' | 'jpeg';
+    fit?: 'inside' | 'cover';
 }
 
 const DEFAULT_OPTIONS: Required<ThumbnailOptions> = {
     maxSize: 512,
     quality: 80,
-    format: 'webp'
+    format: 'webp',
+    fit: 'inside'
 };
 
 const THUMBNAIL_SUPPORTED_MIMES = [
@@ -63,8 +65,9 @@ export async function generateThumbnail(
         }
 
         const resized = image.resize(opts.maxSize, opts.maxSize, {
-            fit: 'inside',
-            withoutEnlargement: true
+            fit: opts.fit,
+            position: 'center',
+            withoutEnlargement: opts.fit === 'inside'
         });
 
         if (opts.format === 'webp') {

@@ -9,8 +9,9 @@ import {getHome} from "../home/home";
 import type {HomeInterface} from "../home/types";
 import type {User} from "better-auth/types";
 import {getUserByEmail, updateUser} from "../users/users.ts";
-import sharp from "sharp";
 import {LocalStorage} from "../storage";
+import {generateThumbnail} from "../shared/thumbnails";
+import {PATHS, DEFAULT_LABELS} from "../core/constants";
 
 export async function getContacts(user: User) {
     const home = await getHome(user);
@@ -54,39 +55,41 @@ async function getContactsDatabase(home: HomeInterface) {
 
 
         try {
-            // Initialize drizzle
             const dr = drizzle(db, {schema});
-
-            // Mock labels to add if none exist
-            const mockLabels: Label[] = [
-                {id: uuidv4(), name: 'Family', color: '#f87171'},
-                {id: uuidv4(), name: 'Friends', color: '#60a5fa'},
-                {id: uuidv4(), name: 'Work', color: '#4ade80'},
-                {id: uuidv4(), name: 'Important', color: '#facc15'}
-            ];
-
-            // Check if labels already exist
             const existingLabels = await dr.select().from(schema.labels).all();
-            console.log('Existing labels:', existingLabels);
-
-            // Only add mock labels if none exist
             if (existingLabels.length === 0) {
-                console.log('Adding mock labels...');
-                for (const label of mockLabels) {
+                for (const label of DEFAULT_LABELS) {
                     await dr.insert(schema.labels).values({
-                        id: label.id,
+                        id: uuidv4(),
                         name: label.name,
                         color: label.color
                     });
                 }
-                console.log('Mock labels added successfully');
             }
         } catch (error) {
-            console.error('Error setting up mock labels:', error);
+            console.error('Error setting up default labels:', error);
         }
     });
 
     return drizzle(db, {schema});
+}
+
+function extractContactData(contact: Omit<Contact, 'id'>) {
+    const {labels, ...contactData} = contact;
+    return {
+        data: {
+            email: contactData.email,
+            phone: contactData.phone,
+            company: contactData.company,
+            jobTitle: contactData.jobTitle,
+            address: contactData.address,
+            birthday: contactData.birthday,
+            notes: contactData.notes,
+            avatar: contactData.avatar
+        },
+        contactData,
+        labels
+    };
 }
 
 export class Contacts {
@@ -154,18 +157,7 @@ export class Contacts {
 
     public async addContact(contact: Omit<Contact, 'id'>) {
         const contactId = uuidv4();
-
-        const {labels, ...contactData} = contact;
-        const data = {
-            email: contactData.email,
-            phone: contactData.phone,
-            company: contactData.company,
-            jobTitle: contactData.jobTitle,
-            address: contactData.address,
-            birthday: contactData.birthday,
-            notes: contactData.notes,
-            avatar: contactData.avatar
-        };
+        const {data, contactData, labels} = extractContactData(contact);
 
         await this.db.insert(schema.contacts).values({
             id: contactId,
@@ -201,17 +193,7 @@ export class Contacts {
             }
         }
 
-        const {labels, ...contactData} = contact;
-        const data = {
-            email: contactData.email,
-            phone: contactData.phone,
-            company: contactData.company,
-            jobTitle: contactData.jobTitle,
-            address: contactData.address,
-            birthday: contactData.birthday,
-            notes: contactData.notes,
-            avatar: contactData.avatar
-        };
+        const {data, contactData, labels} = extractContactData(contact);
 
         // Update contact
         await this.db.update(schema.contacts)
@@ -334,20 +316,20 @@ export class Contacts {
     public async uploadAvatar(file: File) {
         this.cleanupAvatarImages();
 
-        // Read file content as buffer
         const buffer = Buffer.from(await file.arrayBuffer());
+        const thumbnail = await generateThumbnail(buffer, file.type, {
+            maxSize: 512,
+            quality: 80,
+            format: 'webp',
+            fit: 'cover'
+        });
 
-        // convert file to webp
-        const convertedFile = await sharp(buffer)
-            .webp({quality: 80})
-            .resize(512, 512, {
-                fit: 'cover',
-                position: 'center'
-            })
-            .toBuffer();
+        if (!thumbnail) {
+            throw new Error('Failed to generate avatar thumbnail');
+        }
 
         const fileName = `${uuidv4()}.webp`;
-        await this.storage.write(`avatars/${fileName}`, convertedFile);
+        await this.storage.write(`${PATHS.CONTACTS.AVATARS}/${fileName}`, thumbnail);
 
         return `contacts/avatar/${fileName}`;
     }

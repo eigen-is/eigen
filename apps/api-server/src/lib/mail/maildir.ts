@@ -7,7 +7,7 @@ import {welcomeMail} from "./welcome.ts";
 import DOMPurify from 'isomorphic-dompurify';
 import maildb from "./maildb.ts";
 import type {HomeInterface} from "../home/types";
-import nodemailer from 'nodemailer';
+import {sendMail, draftToMailOptions} from './sender';
 import type {EmailDraft} from "../../types/mail.ts";
 import type {EigenNotification} from "../../types/notification.ts";
 import {LocalStorage} from "../storage";
@@ -431,83 +431,17 @@ export default class Maildir {
         }
     }
 
-    // @ts-ignore - Ignore TypeScript errors in this method
     public async messageSend(mailToSend: EmailDraft): Promise<EmailDraft | null> {
-        // update message
         const mail = await this.messageHandleDraft(mailToSend);
-        if (!mail) {
-            return null;
-        }
-
-        // use nodemailer, to send email to reinder@eigen.is
-        // @ts-ignore - Ignore nodemailer type errors
-        const transporter = nodemailer.createTransport({
-            sendmail: true,
-            newline: 'unix',
-            path: '/usr/sbin/sendmail'
-        });
-
+        if (!mail) return null;
         try {
-            // Convert the mail object to the format needed for nodemailer
-            // @ts-ignore - Ignore type errors in mail conversion
-            const nodemailerMail = {
-                // From address - use the address and name from the mail object
-                from: mail.from?.value?.[0] ?
-                    {name: mail.from.value[0].name, address: mail.from.value[0].address} :
-                    this.home.user.email,
-
-                // To addresses - convert the array of addresses to the format needed
-                // @ts-ignore - Ignore type errors in mail conversion
-                to: mail.to?.value?.map(recipient => ({
-                    name: recipient.name,
-                    address: recipient.address
-                })) || [],
-
-                // CC addresses if present
-                // @ts-ignore - Ignore type errors in mail conversion
-                ...(mail.cc?.value?.length ? {
-                    // @ts-ignore - Ignore type errors in mail conversion
-                    cc: mail.cc.value.map(recipient => ({
-                        name: recipient.name,
-                        address: recipient.address
-                    }))
-                } : {}),
-
-                // BCC addresses if present
-                // @ts-ignore - Ignore type errors in mail conversion
-                ...(mail.bcc?.value?.length ? {
-                    // @ts-ignore - Ignore type errors in mail conversion
-                    bcc: mail.bcc.value.map(recipient => ({
-                        name: recipient.name,
-                        address: recipient.address
-                    }))
-                } : {}),
-
-                // Subject
-                subject: mail.subject || '(No subject)',
-
-                // Text content
-                text: mail.text || '',
-            };
-
-            // Send mail with defined transport object
-
-            console.log(nodemailerMail);
-
-            try {
-                // @ts-ignore - Ignore sendMail type errors
-                const result = await transporter.sendMail(nodemailerMail);
-            } catch (error) {
-                console.error('Error sending email:', error);
-            }
-
-            // move message to send directory
-            await this.messageMove(mail.id, 'sent');
+            const mailOptions = draftToMailOptions(mail, this.home.user.email);
+            const sent = await sendMail(mailOptions);
+            if (sent) await this.messageMove(mail.id, 'sent');
         } catch (error) {
             console.error('Error sending email:', error);
             return null;
         }
-
         return mail;
     }
 
@@ -691,7 +625,7 @@ export default class Maildir {
 
     private async getMailboxAttributes(mailbox: string): Promise<string[]> {
         try {
-            const attributesPath = this.storage.pathJoin(this.sanitizeMailboxPath(mailbox), '.attributes');
+            const attributesPath = this.storage.pathJoin(this.sanitizeDirName(mailbox), '.attributes');
 
             // Check if attributes file exists
             if (!await this.storage.fileExists(attributesPath)) {
@@ -706,13 +640,5 @@ export default class Maildir {
             console.error(`Error getting attributes for mailbox ${mailbox}:`, error);
             return [];
         }
-    }
-
-    private sanitizeMailboxPath(mailbox: string): string {
-        let dirname = `${this.basePath}/.${mailbox.replace('/', '.')}`;
-        // replace .. with . and // with /
-        dirname = dirname.replace(/\.{2,}/g, '.');
-        dirname = dirname.replace(/\/+/g, '/');
-        return dirname;
     }
 }

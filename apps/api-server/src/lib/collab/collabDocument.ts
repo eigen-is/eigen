@@ -25,7 +25,7 @@ class LoggingProvider {
         // Listen for document updates
 
         // updateV2 ?
-        doc.on('update', (update: Uint8Array) => {
+        doc.on('update', (_update: Uint8Array) => {
             // console.log(`[LoggingProvider] Document ${docId} updated, update size: ${update.length} bytes`);
             // console.log(doc.toJSON());
         });
@@ -69,7 +69,7 @@ class DbProvider {
         });
 
         // updateV2 ?
-        doc.on('updateV2', (update: Uint8Array) => {
+        doc.on('updateV2', (_update: Uint8Array) => {
             // this.storeUpdate(update);
         });
     }
