@@ -1,4 +1,3 @@
-import {useState} from "react";
 import {DrivePath} from "@apps/api-server/types/drive";
 import {EigenLoader} from "@workspace/ui";
 import {DriveList} from "./drive-list";
@@ -11,27 +10,21 @@ import {DriveUploadFiles} from "./drive-upload-files";
 import {DriveCreateFolder} from "./drive-create-folder";
 import {DriveRenameItem} from "./drive-rename-item";
 import {useInvalidateFolder, useMovePath} from "@workspace/lib/drive";
-import { toast } from "sonner";
+import {toast} from "sonner";
+import {useDriveDialogs} from "./use-drive-dialogs";
 
 export interface DriveLayoutProps {
-    // Required data
     ownerId: string;
     pathId?: string;
-
-    // Data fetched by parent component
     folderContents: DrivePath[];
     isLoading: boolean;
     error: any;
     selectedPath?: DrivePath | null;
     currentPath?: DrivePath | null;
-
-    // Navigation callbacks
     onRowSelect: (path: DrivePath) => void;
     onRowActivate?: (path: DrivePath) => void;
     onBackToList: () => void;
     onAfterAction?: (actionType: string, data: any) => void;
-
-    // Feature flags
     allowCreateFolder?: boolean;
     allowDelete?: boolean;
     allowShare?: boolean;
@@ -41,153 +34,88 @@ export interface DriveLayoutProps {
     allowCreateStickies?: boolean;
     allowRename?: boolean;
     allowMove?: boolean;
-
-
-    // UI options
     isMobile?: boolean;
     pid?: string;
 }
 
 export function DriveLayout({
-                                ownerId,
-                                folderContents,
-                                isLoading,
-                                error,
-                                onRowSelect,
-                                onRowActivate,
-                                onBackToList,
-                                onAfterAction,
-                                pathId = 'unknown',
-                                selectedPath = null,
-                                currentPath = null,
-                                allowCreateFolder = true,
-                                allowDelete = true,
-                                allowShare = true,
-                                allowCreateDoc = true,
-                                allowCreateStickies = true,
-                                allowUpload = true,
-                                allowRename = true,
-                                allowMove = true,
-                                isMobile = false,
-                                pid = undefined,
-                                showBreadcrumb = false,
-                            }: DriveLayoutProps) {
-
-    // Folder creation state and handlers
-    const [createFolderOpen, setCreateFolderOpen] = useState(false);
-
-    // Doc creation state and handlers
-    const [createDocOpen, setCreateDocOpen] = useState(false);
-
-    // Stickies creation state and handlers
-    const [createStickiesOpen, setCreateStickiesOpen] = useState(false);
-
-    // Delete confirmation dialog state
-    const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-    const [itemToDelete, setItemToDelete] = useState<DrivePath | null>(null);
-
-    // Rename dialog state
-    const [renameDialogOpen, setRenameDialogOpen] = useState(false);
-    const [itemToRename, setItemToRename] = useState<DrivePath | null>(null);
-
-    // Share dialog state
-    const [accessDialogOpen, setAccessDialogOpen] = useState(false);
-    const [itemToShare, setItemToShare] = useState<DrivePath | null>(null);
-
-    // State for file upload
-    const [uploadOpen, setUploadOpen] = useState(false);
-    const [uploadFiles, setUploadFiles] = useState<File[]>([]);
-
-    // Path move hook
+    ownerId,
+    folderContents,
+    isLoading,
+    error,
+    onRowSelect,
+    onRowActivate,
+    onBackToList,
+    onAfterAction,
+    pathId = 'unknown',
+    selectedPath = null,
+    currentPath = null,
+    allowCreateFolder = true,
+    allowDelete = true,
+    allowShare = true,
+    allowCreateDoc = true,
+    allowCreateStickies = true,
+    allowUpload = true,
+    allowRename = true,
+    allowMove = true,
+    isMobile = false,
+    pid = undefined,
+    showBreadcrumb = false,
+}: DriveLayoutProps) {
+    const dialogs = useDriveDialogs();
     const movePath = useMovePath(ownerId);
     const invalidateFolder = useInvalidateFolder(ownerId);
 
-    // File upload handler
     const handleFileUpload = () => {
         if (allowUpload && currentPath) {
-            setUploadOpen(true);
+            dialogs.upload.openDialog();
         }
     };
 
-    // Handler for dropped files
     const handleUploadFiles = (files: File[]) => {
         if (allowUpload && currentPath && files.length > 0) {
-            setUploadFiles(files);
-            setUploadOpen(true);
+            dialogs.upload.openDialog(files);
         }
     };
 
-    // Function to open the create folder dialog
-    const openCreateFolderDialog = () => {
-        if (allowCreateFolder) {
-            setCreateFolderOpen(true);
-        }
-    };
-
-    // Function to open the create doc dialog
-    const openCreateDocDialog = () => {
-        if (allowCreateDoc) {
-            setCreateDocOpen(true);
-        }
-    };
-
-    // Function to open the create stickies dialog
-    const openCreateStickiesDialog = () => {
-        if (allowCreateStickies) {
-            setCreateStickiesOpen(true);
-        }
-    };
-
-    // Handle delete path
     const handleDeletePath = (path: DrivePath) => {
-        if (!allowDelete) return;
-
-        // Open the delete confirmation dialog and store the path to be deleted
-        setItemToDelete(path);
-        setDeleteDialogOpen(true);
+        if (allowDelete) {
+            dialogs.delete.openDialog(path);
+        }
     };
 
     const handleRenamePath = (path: DrivePath) => {
-        if (!allowRename) return;
-
-        // Open the rename dialog and store the path to be renamed
-        setItemToRename(path);
-        setRenameDialogOpen(true);
+        if (allowRename) {
+            dialogs.rename.openDialog(path);
+        }
     };
 
     const handleMovePath = async (path: DrivePath, targetItemId: string) => {
         if (!allowMove) return;
-
-        await movePath.mutateAsync({ pathId: path.id, targetParentId: targetItemId });
-        // invalidate parent folders
+        await movePath.mutateAsync({pathId: path.id, targetParentId: targetItemId});
         invalidateFolder(path.id);
         invalidateFolder(path.parentId || '');
-
         toast.success('Item moved successfully');
     };
 
     const handleDownloadPath = (path: DrivePath) => {
-        if (path && path.type === 'file' && path.id) {
+        if (path?.type === 'file' && path.id) {
             const downloadUrl = `${import.meta.env.VITE_API_HOST}/drive/download/${path.ownerId}/${path.id}`;
-            // Create a temporary anchor element to trigger the download
             const a = document.createElement('a');
             a.href = downloadUrl;
-            a.download = path.name || 'download'; // Use the file name or a default
+            a.download = path.name || 'download';
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
         }
-    }
-
-    // Handle share icon click
-    const handleShareClick = (path: DrivePath) => {
-        if (!allowShare) return;
-
-        setItemToShare(path);
-        setAccessDialogOpen(true);
     };
 
-    // Show loading state
+    const handleShareClick = (path: DrivePath) => {
+        if (allowShare) {
+            dialogs.share.openDialog(path);
+        }
+    };
+
     if (isLoading) {
         return (
             <div className="flex items-center justify-center h-full w-full">
@@ -196,188 +124,142 @@ export function DriveLayout({
         );
     }
 
+    const listProps = {
+        items: folderContents,
+        isLoading,
+        error,
+        onRowSelect,
+        onRowActivate,
+        activeRowId: pid,
+        onCreateFolder: allowCreateFolder ? dialogs.createFolder.openDialog : undefined,
+        onUploadFile: allowUpload ? handleFileUpload : undefined,
+        onUploadFiles: allowUpload ? handleUploadFiles : undefined,
+        onDelete: allowDelete ? handleDeletePath : undefined,
+        onShareClick: allowShare ? handleShareClick : undefined,
+        onCreateDoc: allowCreateDoc ? dialogs.createDoc.openDialog : undefined,
+        onCreateStickies: allowCreateStickies ? dialogs.createStickies.openDialog : undefined,
+        currentPath,
+        ownerId,
+        pathId,
+        showBreadcrumb,
+        onDownload: handleDownloadPath,
+        allowDelete,
+        allowUpload,
+        onRename: allowRename ? handleRenamePath : undefined,
+        onMove: allowMove ? handleMovePath : undefined,
+    };
+
+    const detailProps = {
+        path: selectedPath || currentPath,
+        onDelete: allowDelete ? handleDeletePath : undefined,
+        onBackClick: onBackToList,
+        onShareClick: allowShare ? handleShareClick : undefined,
+        onDownload: handleDownloadPath,
+        onItemOpen: onRowActivate,
+        allowDelete,
+        onRename: allowRename ? handleRenamePath : undefined,
+    };
+
+    const showDetail = isMobile 
+        ? (selectedPath || (currentPath && currentPath?.type !== 'folder'))
+        : (pid || currentPath?.type !== 'folder');
+    
+    const showList = isMobile 
+        ? !showDetail
+        : (!currentPath || currentPath?.type === 'folder');
+
     return (
         <>
             {isMobile ? (
-                (selectedPath || (currentPath && currentPath?.type !== 'folder')) ? (
-                    <div className="flex-1 h-full w-full">
-                        <DriveDetail
-                            path={selectedPath || currentPath}
-                            isMobile={true}
-                            onBackClick={onBackToList}
-                            onDelete={allowDelete ? handleDeletePath : () => {
-                            }}
-                            onShareClick={allowShare ? handleShareClick : () => {
-                            }}
-                            onDownload={handleDownloadPath}
-                            onItemOpen={onRowActivate}
-                            allowDelete={allowDelete}
-                            onRename={allowRename ? handleRenamePath : undefined}
-                        />
-                    </div>
-                ) : (
-                    <div className="flex-1 h-full w-full">
-                        <DriveList
-                            items={folderContents}
-                            isLoading={isLoading}
-                            error={error}
-                            onRowSelect={onRowSelect}
-                            onRowActivate={onRowActivate}
-                            activeRowId={pid}
-                            onCreateFolder={allowCreateFolder ? openCreateFolderDialog : undefined}
-                            onUploadFile={allowUpload ? handleFileUpload : undefined}
-                            onUploadFiles={allowUpload ? handleUploadFiles : undefined}
-                            onDelete={allowDelete ? handleDeletePath : () => {
-                            }}
-                            onShareClick={allowShare ? handleShareClick : () => {
-                            }}
-                            onCreateDoc={allowCreateDoc ? openCreateDocDialog : undefined}
-                            onCreateStickies={allowCreateStickies ? openCreateStickiesDialog : undefined}
-                            currentPath={currentPath}
-                            ownerId={ownerId}
-                            pathId={pathId}
-                            showBreadcrumb={showBreadcrumb}
-                            onDownload={handleDownloadPath}
-                            allowDelete={allowDelete}
-                            allowUpload={allowUpload}
-                            onRename={allowRename ? handleRenamePath : undefined}
-                            onMove={allowMove ? handleMovePath : undefined}
-                        />
-                    </div>
-                )
+                <div className="flex-1 h-full w-full">
+                    {showDetail ? (
+                        <DriveDetail {...detailProps} isMobile={true} />
+                    ) : (
+                        <DriveList {...listProps} />
+                    )}
+                </div>
             ) : (
-                <>
-                    <div className="flex h-full w-full">
-                        {/* Path list column */}
-                        {(!currentPath || currentPath?.type === 'folder') && (
-                            <div className={`${pid ? 'w-2/3' : 'w-full'} h-full overflow-hidden border-r`}>
-                                <DriveList
-                                    items={folderContents}
-                                    isLoading={isLoading}
-                                    error={error}
-                                    onRowSelect={onRowSelect}
-                                    onRowActivate={onRowActivate}
-                                    activeRowId={pid}
-                                    onCreateFolder={allowCreateFolder ? openCreateFolderDialog : undefined}
-                                    onUploadFile={allowUpload ? handleFileUpload : undefined}
-                                    onUploadFiles={allowUpload ? handleUploadFiles : undefined}
-                                    onDelete={allowDelete ? handleDeletePath : () => {
-                                    }}
-                                    onShareClick={allowShare ? handleShareClick : () => {
-                                    }}
-                                    onCreateDoc={allowCreateDoc ? openCreateDocDialog : undefined}
-                                    onCreateStickies={allowCreateStickies ? openCreateStickiesDialog : undefined}
-                                    currentPath={currentPath}
-                                    ownerId={ownerId}
-                                    pathId={pathId}
-                                    showBreadcrumb={showBreadcrumb}
-                                    onDownload={handleDownloadPath}
-                                    allowDelete={allowDelete}
-                                    allowUpload={allowUpload}
-                                    onRename={allowRename ? handleRenamePath : undefined}
-                                    onMove={allowMove ? handleMovePath : undefined}
-                                />
-                            </div>)}
-                        {(pid || currentPath?.type !== 'folder') && (
-                            <div className="flex-1 h-full overflow-hidden">
-                                <div className="h-full">
-                                    <DriveDetail
-                                        path={selectedPath || currentPath}
-                                        className="border-none h-full"
-                                        onDelete={allowDelete ? handleDeletePath : () => {
-                                        }}
-                                        onBackClick={onBackToList}
-                                        onShareClick={allowShare ? handleShareClick : () => {
-                                        }}
-                                        onDownload={handleDownloadPath}
-                                        onItemOpen={onRowActivate}
-                                        allowDelete={allowDelete}
-                                        onRename={allowRename ? handleRenamePath : undefined}
-                                    />
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                </>
+                <div className="flex h-full w-full">
+                    {showList && (
+                        <div className={`${pid ? 'w-2/3' : 'w-full'} h-full overflow-hidden border-r`}>
+                            <DriveList {...listProps} />
+                        </div>
+                    )}
+                    {showDetail && (
+                        <div className="flex-1 h-full overflow-hidden">
+                            <DriveDetail {...detailProps} className="border-none h-full" />
+                        </div>
+                    )}
+                </div>
             )}
 
-            {/* Create Folder Dialog */}
             {allowCreateFolder && currentPath && (
                 <DriveCreateFolder
                     path={currentPath}
-                    open={createFolderOpen}
-                    onOpenChange={setCreateFolderOpen}
-                    onSave={() => {
-                    }}
-                    onCancel={() => setCreateFolderOpen(false)}
+                    open={dialogs.createFolder.open}
+                    onOpenChange={dialogs.createFolder.setOpen}
+                    onSave={dialogs.createFolder.closeDialog}
+                    onCancel={dialogs.createFolder.closeDialog}
                     onAfterAction={onAfterAction}
                 />
             )}
 
-            {/* Create Doc Dialog */}
             {allowCreateDoc && currentPath && (
                 <DriveCreateDoc
                     path={currentPath}
-                    open={createDocOpen}
-                    onOpenChange={setCreateDocOpen}
-                    onSave={() => {
-                    }}
-                    onCancel={() => setCreateDocOpen(false)}
+                    open={dialogs.createDoc.open}
+                    onOpenChange={dialogs.createDoc.setOpen}
+                    onSave={dialogs.createDoc.closeDialog}
+                    onCancel={dialogs.createDoc.closeDialog}
                     onAfterAction={onAfterAction}
                 />
             )}
 
-            {/* Create Stickies Dialog */}
             {allowCreateStickies && currentPath && (
                 <DriveCreateStickies
                     path={currentPath}
-                    open={createStickiesOpen}
-                    onOpenChange={setCreateStickiesOpen}
-                    onSave={() => {
-                    }}
-                    onCancel={() => setCreateStickiesOpen(false)}
+                    open={dialogs.createStickies.open}
+                    onOpenChange={dialogs.createStickies.setOpen}
+                    onSave={dialogs.createStickies.closeDialog}
+                    onCancel={dialogs.createStickies.closeDialog}
                     onAfterAction={onAfterAction}
                 />
             )}
 
-            {/* File Upload Dialog */}
             {allowUpload && currentPath && (
                 <DriveUploadFiles
                     path={currentPath}
-                    open={uploadOpen}
-                    onOpenChange={setUploadOpen}
-                    initialFiles={uploadFiles}
-                    onAfterUpload={() => setUploadFiles([])}
+                    open={dialogs.upload.open}
+                    onOpenChange={dialogs.upload.setOpen}
+                    initialFiles={dialogs.upload.files}
+                    onAfterUpload={dialogs.upload.closeDialog}
                     onAfterAction={onAfterAction}
                 />
             )}
 
-            {/* Delete Confirmation Dialog */}
             {allowDelete && (
                 <DriveDeleteItem
-                    path={itemToDelete}
-                    open={deleteDialogOpen}
-                    onOpenChange={setDeleteDialogOpen}
+                    path={dialogs.delete.item}
+                    open={dialogs.delete.open}
+                    onOpenChange={dialogs.delete.setOpen}
                     onAfterAction={onAfterAction}
                 />
             )}
 
-            {/* Rename Dialog */}
             {allowRename && (
                 <DriveRenameItem
-                    path={itemToRename}
-                    open={renameDialogOpen}
-                    onOpenChange={setRenameDialogOpen}
+                    path={dialogs.rename.item}
+                    open={dialogs.rename.open}
+                    onOpenChange={dialogs.rename.setOpen}
                     onAfterAction={onAfterAction}
                 />
             )}
 
-            {/* Access Control Edit Dialog */}
             {allowShare && (
                 <DriveAccessDialog
-                    open={accessDialogOpen}
-                    onOpenChange={setAccessDialogOpen}
-                    path={itemToShare}
+                    open={dialogs.share.open}
+                    onOpenChange={dialogs.share.setOpen}
+                    path={dialogs.share.item}
                 />
             )}
         </>

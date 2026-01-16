@@ -15,15 +15,15 @@ import {formatFileSize} from "@workspace/ui/lib/formatFileSize";
 import {Table, TableBody, TableCell, TableRow} from "@workspace/ui/components/table";
 
 interface DriveDetailProps {
-    path: any | null;
+    path: DrivePath | null;
     isMobile?: boolean;
     className?: string;
     onBackClick?: () => void;
-    onDelete: (path: any) => void;
-    onShareClick?: (item: DrivePath) => void;
+    onDelete?: (path: DrivePath) => void;
+    onShareClick?: (path: DrivePath) => void;
     onDownload?: (path: DrivePath) => void;
-    onItemOpen?: (item: DrivePath) => void;
-    onRename?: (item: DrivePath) => void;
+    onItemOpen?: (path: DrivePath) => void;
+    onRename?: (path: DrivePath) => void;
     allowDelete?: boolean;
 }
 
@@ -68,12 +68,13 @@ export function DriveDetail({
                 </div>
 
                 <div className="flex items-center gap-1">
-                    {/* Right side icons */}
-                    <TooltipButton
-                        icon={Trash2}
-                        tooltipText="Delete"
-                        onClick={() => onDelete(path)}
-                    />
+                    {onDelete && (
+                        <TooltipButton
+                            icon={Trash2}
+                            tooltipText="Delete"
+                            onClick={() => onDelete(path)}
+                        />
+                    )}
 
                     <div className="h-6 w-[1px] bg-border mx-1"></div>
 
