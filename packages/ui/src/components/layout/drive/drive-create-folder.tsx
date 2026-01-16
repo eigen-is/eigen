@@ -33,7 +33,7 @@ export function DriveCreateFolder({
             const newPath = await createFolderMutation.mutateAsync({
                 parentId: path.id,
                 folderName: folderName,
-            });
+            }) as string | undefined;
             toast.success(`Folder "${folderName}" created successfully`);
             onOpenChange(false);
 

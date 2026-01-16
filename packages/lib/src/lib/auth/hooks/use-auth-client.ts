@@ -4,9 +4,6 @@ import {adminClient, organizationClient, twoFactorClient} from "better-auth/clie
 
 console.log(import.meta.env.VITE_API_HOST);
 
-let f2aRedirect = () => {
-};
-
 export const authClient = createAuthClient({
     // baseURL: `https://eigen.is:8000`, // the base url of your auth server
     baseURL: import.meta.env.VITE_API_HOST + '/auth', // the base url of your auth server

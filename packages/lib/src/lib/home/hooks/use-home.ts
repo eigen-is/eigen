@@ -1,6 +1,6 @@
 import {useQuery} from '@tanstack/react-query';
 import {homeApi} from '@workspace/lib/api.ts';
-import type {QueryClient} from "@tanstack/query-core";
+import type {QueryClient} from "@tanstack/react-query";
 
 // Define query keys for reuse
 export const homeKeys = {

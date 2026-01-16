@@ -44,19 +44,19 @@ function notify(notification: EigenNotification) {
     // }
 }
 
-function askNotificationPermission() {
-    if (!("Notification" in window)) {
-        return;
-    } else if (Notification.permission === 'granted') {
-        return;
-    } else if (Notification.permission !== 'denied') {
-        Notification.requestPermission().then((permission) => {
-            if (permission === 'granted') {
-                return;
-            }
-        });
-    }
-}
+// function askNotificationPermission() {
+//     if (!("Notification" in window)) {
+//         return;
+//     } else if (Notification.permission === 'granted') {
+//         return;
+//     } else if (Notification.permission !== 'denied') {
+//         Notification.requestPermission().then((permission) => {
+//             if (permission === 'granted') {
+//                 return;
+//             }
+//         });
+//     }
+// }
 
 export function NotificationProvider({children}: NotificationProviderProps) {
     const {isAuthenticated} = useAuth(); // Get authentication status
