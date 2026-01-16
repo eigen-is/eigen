@@ -1,46 +1,34 @@
-import {Elysia} from "elysia";
+import {Elysia, sse} from "elysia";
 import {betterAuth} from "./auth";
 import {getHome} from "../lib/home/home";
 
 export const sseRouter = new Elysia({name: "sse"})
     .use(betterAuth)
-    .get('/sse/notifications', async ({user}) => {
-        if (!user) {
-            return new Response('Unauthorized', {status: 401});
-        }
+    .get('/sse/notifications', async function* ({user}) {
+        if (!user) return;
 
         const home = await getHome(user);
-        
-        const encoder = new TextEncoder();
-        let keepalive: Timer | null = null;
-        let listener: ((event: any) => void) | null = null;
-        
-        const stream = new ReadableStream({
-            start(controller) {
-                listener = (event: any) => {
-                    const data = `data: ${JSON.stringify(event)}\n\n`;
-                    controller.enqueue(encoder.encode(data));
-                };
+        const queue: any[] = [];
+        let resolve: (() => void) | null = null;
 
-                home.subscribeSSE(listener);
+        const listener = (event: any) => {
+            queue.push(event);
+            resolve?.();
+        };
 
-                keepalive = setInterval(() => {
-                    controller.enqueue(encoder.encode(': keepalive\n\n'));
-                }, 30000);
-            },
-            cancel() {
-                if (keepalive) clearInterval(keepalive);
-                if (listener) home.unsubscribeSSE(listener);
+        home.subscribeSSE(listener);
+
+        try {
+            while (true) {
+                if (queue.length > 0) {
+                    yield sse(queue.shift());
+                } else {
+                    await new Promise<void>(r => { resolve = r; });
+                }
             }
-        });
-
-        return new Response(stream, {
-            headers: {
-                'Content-Type': 'text/event-stream',
-                'Cache-Control': 'no-cache',
-                'Connection': 'keep-alive'
-            }
-        });
+        } finally {
+            home.unsubscribeSSE(listener);
+        }
     }, {
         auth: true
     });
