@@ -8,10 +8,10 @@ import {trustedOrigins} from "./lib/auth/auth";
 import {spaceRouter} from "./routes/space";
 import {driveRouter} from "./routes/drive.ts";
 import {homeRouter} from "./routes/home.ts";
-import {wsRouter} from "./routes/ws.ts";
 import {collabRouter} from "./routes/collab";
 import {adminRouter} from "./routes/admin";
 import {configRouter} from "./routes/config";
+import {sseRouter} from "./routes/sse";
 
 export const app = new Elysia()
     .use(swagger())
@@ -36,8 +36,8 @@ export const app = new Elysia()
     .use(spaceRouter)
     .use(driveRouter)
     .use(homeRouter)
-    .use(wsRouter)
     .use(collabRouter)
-    .use(adminRouter);
+    .use(adminRouter)
+    .use(sseRouter);
 
 export type App = typeof app;

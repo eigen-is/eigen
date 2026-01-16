@@ -1,7 +1,6 @@
 import type {User} from 'better-auth/types';
 import type Database from 'bun:sqlite';
 import {Database as BunDatabase} from 'bun:sqlite';
-import type {ServerWebSocket} from 'bun';
 import * as path from 'path';
 import * as fs from 'node:fs';
 
@@ -32,7 +31,7 @@ export class Home implements HomeInterface {
 
     private databases: Map<string, Database> = new Map();
     private databaseFactories: Map<string, () => Promise<Database>> = new Map();
-    private notificationSockets: ServerWebSocket[] = [];
+    private sseListeners: ((event: any) => void)[] = [];
 
     constructor(user: User) {
         this.user = user;
@@ -121,12 +120,12 @@ export class Home implements HomeInterface {
         }
     }
 
-    public subscribe(ws: ServerWebSocket) {
-        this.notificationSockets.push(ws);
+    public subscribeSSE(listener: (event: any) => void) {
+        this.sseListeners.push(listener);
     }
 
-    public unsubscribe(ws: ServerWebSocket) {
-        this.notificationSockets = this.notificationSockets.filter(socket => socket !== ws);
+    public unsubscribeSSE(listener: (event: any) => void) {
+        this.sseListeners = this.sseListeners.filter(l => l !== listener);
     }
 
     public touch() {
@@ -157,13 +156,9 @@ export class Home implements HomeInterface {
     }
 
     public notify(event: EigenNotification) {
-        this.notificationSockets = this.notificationSockets.filter(ws => {
-            if (ws.readyState === 1) {
-                ws.send(JSON.stringify(event));
-                return true;
-            }
-            return false;
-        });
+        for (const listener of this.sseListeners) {
+            listener(event);
+        }
     }
 
     private destruct() {

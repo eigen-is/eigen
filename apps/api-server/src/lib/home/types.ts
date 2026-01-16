@@ -1,6 +1,5 @@
 import type {User} from 'better-auth/types';
 import type Database from 'bun:sqlite';
-import type {ServerWebSocket} from 'bun';
 
 export interface HomeInterface {
     user: User;
@@ -10,7 +9,7 @@ export interface HomeInterface {
     openSQLiteDatabase(relativePath: string, onCreate: (db: Database) => Promise<void>): Promise<Database>;
     closeSQLiteDatabase(db: Database): Promise<void>;
     
-    subscribe(ws: ServerWebSocket): void;
-    unsubscribe(ws: ServerWebSocket): void;
+    subscribeSSE(listener: (event: any) => void): void;
+    unsubscribeSSE(listener: (event: any) => void): void;
     notify(event: any): void;
 }

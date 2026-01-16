@@ -21,6 +21,7 @@
     "./home": "./src/lib/home/index.ts",
     "./docs": "./src/lib/docs/index.ts",
     "./public": "./src/lib/public/index.ts",
-    "./auth/hooks": "./src/lib/auth/hooks/index.ts"
+    "./auth/hooks": "./src/lib/auth/hooks/index.ts",
+    "./notifications": "./src/lib/notifications/index.ts"
   }
 }
