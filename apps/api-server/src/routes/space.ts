@@ -17,8 +17,12 @@ export const spaceRouter = new Elysia({name: "space"})
             set.status = 404;
             return null;
         }
+    }, {
+        params: t.Object({id: t.String(), filename: t.String()})
     })
-    .get("/space/public/:id", async ({params}) => await getPublicInfo(params.id))
+    .get("/space/public/:id", async ({params}) => await getPublicInfo(params.id), {
+        params: t.Object({id: t.String()})
+    })
     .post("/space/waitlist", async ({body}) => await waitlist(body.email, body.notes), {
         body: t.Object({
             email: t.String(),
@@ -48,10 +52,10 @@ export const spaceRouter = new Elysia({name: "space"})
             }
         });
     }, {
+        auth: true,
         body: t.Object({
             email: t.String(),
             password: t.String(),
             name: t.String()
-        }),
-        auth: true
+        })
     })

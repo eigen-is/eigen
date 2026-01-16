@@ -13,6 +13,8 @@ export const gravatarRouter = new Elysia({ name: "public" })
         set.headers['Cache-Control'] = 'public, max-age=3600';
         set.headers['Expires'] = new Date(Date.now() + 3600000).toUTCString();
         return result;
+    }, {
+        params: t.Object({hash: t.String()})
     })
     .post("/public/gravatar/batch", async ({ body, request, set }) => {
         const baseUrl = getBaseUrl(request);

@@ -17,7 +17,10 @@ export const collabRouter = new Elysia({
         const canRead = await drive.canRead(params.pathId, user);
         const canWrite = await drive.canWrite(params.pathId, user);
         return {canRead, canWrite};
-    }, {auth: true})
+    }, {
+        auth: true,
+        params: t.Object({ownerId: t.String(), pathId: t.String()})
+    })
 
     // WebSocket endpoint for collaborative editing
     .ws("/ws/collab/:ownerId/:pathId", {
