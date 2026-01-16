@@ -2,7 +2,7 @@
   "name": "@apps/api-server",
   "version": "1.0.50",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
+    "test": "bun test",
     "dev": "bun run --env-file=../../.env --watch src/index.ts",
     "buildfordocker": "bun build --minify --sourcemap --target=bun --external '*' src/index.ts --outdir=./build "
   },
