@@ -33,7 +33,7 @@ export function DriveCreateDoc({
             const newPath = await createDocMutation.mutateAsync({
                 parentId: path.id,
                 fileName: fileName,
-            });
+            }) as string | undefined;
             toast.success(`Doc "${fileName}" created successfully`);
             onOpenChange(false);
 

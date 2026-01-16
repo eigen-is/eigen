@@ -129,7 +129,7 @@ export function useUploadFiles(ownerId: string) {
     });
 }
 
-export function useInvalidateFolder() {
+export function useInvalidateFolder(_ownerId?: string) {
     const queryClient = useQueryClient();
 
     return (pathId: string) => {
