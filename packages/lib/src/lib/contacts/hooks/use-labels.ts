@@ -47,7 +47,7 @@ export function useUpdateLabel() {
     return useMutation({
         mutationFn: async (updatedLabel: Label) => {
             // We gebruiken type assertion om TypeScript te laten weten dat dit oké is
-            const response = await contactsApi.labels[updatedLabel.id].put({
+            const response = await contactsApi.labels({id: updatedLabel.id}).put({
                 name: updatedLabel.name,
                 color: updatedLabel.color
             } as any);
@@ -71,7 +71,7 @@ export function useDeleteLabel() {
 
     return useMutation({
         mutationFn: async (labelId: string) => {
-            const response = await contactsApi.labels[labelId].delete();
+            const response = await contactsApi.labels({id: labelId}).delete();
             return response.data;
         },
         onSuccess: async (_, labelId) => {

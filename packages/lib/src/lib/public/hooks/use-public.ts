@@ -18,7 +18,7 @@ export function usePublicUser(emailOrId: string | undefined, options: { enabled:
             const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(emailOrId);
             if (isEmail && !emailOrId.endsWith('@eigen.is')) return null;
 
-            const res = await spaceApi.public[emailOrId].get();
+            const res = await spaceApi.public({id: emailOrId}).get();
 
             return res.data;
         },

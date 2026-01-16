@@ -33,13 +33,8 @@ export const mailRouter = new Elysia({name: "mail"})
         })
     })
     .get("/mail/mailbox-exists/*", async ({params, user}) => await mailboxExists(user, params['*']), {auth: true})
-    .post("/mail/deliver/:to", async ({params, body}) => await mailboxDeliver(params.to, body as ArrayBuffer), {
-        params: t.Object({to: t.String()})
-    })
-    .get("/mail/message/:id", async ({params, user}) => await messageGet(user, params.id), {
-        auth: true,
-        params: t.Object({id: t.String()})
-    })
+    .post("/mail/deliver/:to", async ({params, body}) => await mailboxDeliver(params.to, body as ArrayBuffer))
+    .get("/mail/message/:id", async ({params, user}) => await messageGet(user, params.id), {auth: true})
     .get("/mail/message/download/:id", async ({params, user, set}) => {
         set.headers['Cache-Control'] = 'public, max-age=86400';
         set.headers['Expires'] = new Date(Date.now() + 86400000).toUTCString();
@@ -47,14 +42,8 @@ export const mailRouter = new Elysia({name: "mail"})
         set.headers['Content-Transfer-Encoding'] = 'binary';
         set.headers['Content-Disposition'] = `attachment; filename="${params.id}.elm"`;
         return await messageGetFile(user, params.id);
-    }, {
-        auth: true,
-        params: t.Object({id: t.String()})
-    })
-    .delete("/mail/message/:id", async ({params, user}) => await messageDelete(user, params.id), {
-        auth: true,
-        params: t.Object({id: t.String()})
-    })
+    }, {auth: true})
+    .delete("/mail/message/:id", async ({params, user}) => await messageDelete(user, params.id), {auth: true})
     .put("/mail/message/move", async ({body, user}) => await messageMove(user, body.messageId, body.targetMailbox), {
         auth: true,
         body: t.Object({
@@ -107,7 +96,4 @@ export const mailRouter = new Elysia({name: "mail"})
         set.headers['Content-Disposition'] = `attachment; filename="${params.fileName}"`;
         const attachment = await messageGetAttachment(user, params.id, Number(params.index));
         return attachment?.content ?? null;
-    }, {
-        auth: true,
-        params: t.Object({id: t.String(), index: t.String(), fileName: t.String()})
-    });
+    }, {auth: true});
