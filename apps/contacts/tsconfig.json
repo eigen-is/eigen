@@ -1,26 +1,6 @@
 {
-  "extends": "../../packages/config/base.json",
+  "extends": "../../packages/config/tsconfig.app.json",
   "compilerOptions": {
-    "jsx": "react-jsx",
-    "baseUrl": "./src/",
-    "paths": {
-      "@/*": [
-        "./*"
-      ],
-      "@workspace/ui/*": [
-        "../../packages/ui/src/*"
-      ],
-      "@workspace/lib/*": [
-        "../../packages/lib/src/lib/*"
-      ]
-    }
-  },
-  "include": [
-    "**/*.ts",
-    "**/*.tsx",
-    "src"
-  ],
-  "exclude": [
-    "node_modules"
-  ]
+    "baseUrl": "./src/"
+  }
 }
