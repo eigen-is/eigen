@@ -1,4 +1,6 @@
-import React, {KeyboardEvent, useEffect, useMemo, useRef, useState} from "react";
+import React, {useCallback, useEffect, useMemo, useRef, useState} from "react";
+import {useTableKeyboard} from "./use-table-keyboard";
+import {useTableDragDrop} from "./use-table-drag-drop";
 import {Table, TableBody, TableCell, TableHead, TableHeader, TableRow} from "@workspace/ui/components/table";
 import {cn} from "@workspace/ui/lib/utils";
 import {formatDistanceToNow} from "date-fns";
@@ -45,48 +47,33 @@ export function DriveTable({
                                allowDelete = false,
                            }: DriveTableProps) {
 
-    // Ref voor de tabel element
     const tableRef = useRef<HTMLTableElement>(null);
-
-    // State om bij te houden of de tabel focus heeft
     const [hasFocus, setHasFocus] = useState(false);
-
-    // State voor het bijhouden van de huidige geselecteerde index
     const [selectedIndex, setSelectedIndex] = useState<number>(-1);
-
-    // State for the context menu
     const [contextMenuPosition, setContextMenuPosition] = useState<{ x: number, y: number } | null>(null);
     const [contextMenuItem, setContextMenuItem] = useState<DrivePath | null>(null);
-    
-    // Drag and drop state
-    const [draggedItem, setDraggedItem] = useState<DrivePath | null>(null);
-    const [dragOverItem, setDragOverItem] = useState<string | null>(null);
-    const [isValidDropTarget, setIsValidDropTarget] = useState<boolean>(false);
 
-    // Bepaal of er een parent navigatie-item is
     const hasParentItem = Boolean(currentPath?.parentId);
 
-    // Sort items: folders first, then sort alphabetically by name
+    const scrollToRow = useCallback((index: number) => {
+        if (tableRef.current) {
+            const rows = tableRef.current.querySelectorAll('tbody tr');
+            if (rows[index]) {
+                rows[index].scrollIntoView({behavior: 'smooth', block: 'nearest'});
+            }
+        }
+    }, []);
+
     const sortedItems = useMemo(() => {
         return [...items].sort((a, b) => {
-            // First sort by type (folders first)
-            if (a.type === 'folder' && b.type !== 'folder') {
-                return -1;
-            }
-            if (a.type !== 'folder' && b.type === 'folder') {
-                return 1;
-            }
-
-            // Then sort alphabetically by name
+            if (a.type === 'folder' && b.type !== 'folder') return -1;
+            if (a.type !== 'folder' && b.type === 'folder') return 1;
             return a.name.localeCompare(b.name, undefined, {sensitivity: 'base'});
         });
     }, [items]);
 
-    // Create a combined item list including the parent folder
     const allItems = useMemo(() => {
         const result = [...sortedItems];
-
-        // If there's a parent item, add a placeholder at the beginning
         if (hasParentItem && currentPath?.parentId) {
             result.unshift({
                 id: currentPath.parentId,
@@ -103,23 +90,18 @@ export function DriveTable({
                 updatedAt: new Date()
             });
         }
-
         return result;
     }, [sortedItems, hasParentItem, currentPath]);
 
-    // Effect om de tabel automatisch focus te geven bij het laden
     useEffect(() => {
-        // Korte timeout om ervoor te zorgen dat de tabel eerst gerenderd is
         const timer = setTimeout(() => {
             if (tableRef.current) {
                 tableRef.current.focus();
             }
         }, 100);
-
         return () => clearTimeout(timer);
     }, []);
 
-    // Effect om selectedIndex bij te werken wanneer activeItemId verandert
     useEffect(() => {
         if (activeItemId) {
             const index = allItems.findIndex(item => item.id === activeItemId);
@@ -131,201 +113,44 @@ export function DriveTable({
         }
     }, [activeItemId, allItems]);
 
-    // Handel toetsenbord navigatie af
-    const handleKeyDown = (e: KeyboardEvent<HTMLTableElement>) => {
-        if (!hasFocus || allItems.length === 0) return;
+    const {handleKeyDown} = useTableKeyboard({
+        items: allItems,
+        selectedIndex,
+        setSelectedIndex,
+        hasParentItem,
+        onItemClick,
+        onDelete,
+        scrollToRow,
+        hasFocus,
+    });
 
-        switch (e.key) {
-            case 'ArrowDown':
-                e.preventDefault();
-                setSelectedIndex(prev => {
-                    const newIndex = Math.min(prev + 1, allItems.length - 1);
-                    if (newIndex >= 0 && newIndex !== prev) {
-                        if (!hasParentItem || newIndex > 0) {
-                            const targetItem = allItems[newIndex];
-                            onItemClick?.(targetItem);
-                        }
-                        // Auto-scroll indien nodig
-                        scrollToRow(newIndex);
-                    }
-                    return newIndex;
-                });
-                break;
+    const {
+        dragOverItem,
+        isValidDropTarget,
+        handleDragStart,
+        handleDragOver,
+        handleDragEnter,
+        handleDragLeave,
+        handleDrop,
+        handleDragEnd,
+    } = useTableDragDrop({onMove});
 
-            case 'ArrowUp':
-                e.preventDefault();
-                setSelectedIndex(prev => {
-                    const newIndex = Math.max(prev - 1, 0);
-                    if (newIndex >= 0 && newIndex !== prev) {
-                        if (!hasParentItem || newIndex > 0) {
-                            const targetItem = allItems[newIndex];
-                            onItemClick?.(targetItem);
-                        }
-                        // Auto-scroll indien nodig
-                        scrollToRow(newIndex);
-                    }
-                    return newIndex;
-                });
-                break;
-
-            case ' ':
-                e.preventDefault();
-                if (selectedIndex >= 0 && selectedIndex < allItems.length) {
-                    // Bij Enter altijd onItemClick uitvoeren, ook voor folders
-                    onItemClick?.(allItems[selectedIndex]);
-                }
-                break;
-
-            case 'Enter':
-                e.preventDefault();
-                if (selectedIndex >= 0 && selectedIndex < allItems.length) {
-                    // Bij Enter altijd onItemClick uitvoeren, ook voor folders
-                    onItemClick?.(allItems[selectedIndex]);
-                }
-                break;
-
-            case 'Delete':
-                e.preventDefault();
-                if (onDelete && selectedIndex >= 0 && selectedIndex < allItems.length) {
-                    onDelete(allItems[selectedIndex]);
-                }
-                break;
-
-            case 'PageUp':
-            case 'Home':
-                e.preventDefault();
-                if (allItems.length > 0) {
-                    setSelectedIndex(0);
-                    scrollToRow(0);
-                }
-                break;
-
-            case 'PageDown':
-            case 'End':
-                e.preventDefault();
-                if (allItems.length > 0) {
-                    const lastIndex = allItems.length - 1;
-                    setSelectedIndex(lastIndex);
-
-                    if (!hasParentItem || lastIndex > 0) {
-                        const targetItem = allItems[lastIndex];
-                        onItemClick?.(targetItem);
-                    }
-
-                    scrollToRow(lastIndex);
-                }
-                break;
-        }
-    };
-
-    // Helper functie om naar een specifieke rij te scrollen
-    const scrollToRow = (index: number) => {
-        if (tableRef.current) {
-            const rows = tableRef.current.querySelectorAll('tbody tr');
-            if (rows[index]) {
-                rows[index].scrollIntoView({behavior: 'smooth', block: 'nearest'});
-            }
-        }
-    };
-
-    // Handle right-click on table row
-    const handleContextMenu = (e: React.MouseEvent, item: DrivePath) => {
+    const handleContextMenu = useCallback((e: React.MouseEvent, item: DrivePath) => {
         e.preventDefault();
         setContextMenuPosition({x: e.clientX, y: e.clientY});
         setContextMenuItem(item);
-    };
+    }, []);
 
-    // Close context menu
-    const closeContextMenu = () => {
+    const closeContextMenu = useCallback(() => {
         setContextMenuPosition(null);
         setContextMenuItem(null);
-    };
-
-    // Handle drag start event
-    const handleDragStart = (e: React.DragEvent, item: DrivePath) => {
-        setDraggedItem(item);
-        // Set data transfer properties
-        e.dataTransfer.setData('text/plain', item.id);
-        e.dataTransfer.setData('application/eigen', JSON.stringify({
-            id: item.id,
-            type: item.type
-        }));
-        e.dataTransfer.effectAllowed = 'move';
-    };
-
-    // Handle drag over event
-    const handleDragOver = (e: React.DragEvent, item: DrivePath) => {
-        e.preventDefault();
-        if (!draggedItem) return;
-        
-        // Check if this is a valid drop target
-        const isValid = isValidDrop(draggedItem, item);
-        
-        if (isValid) {
-            e.dataTransfer.dropEffect = 'move';
-        } else {
-            e.dataTransfer.dropEffect = 'none';
-        }
-    };
-    
-    // Handle drag enter event
-    const handleDragEnter = (item: DrivePath) => {
-        if (!draggedItem) return;
-        
-        setDragOverItem(item.id);
-        setIsValidDropTarget(isValidDrop(draggedItem, item));
-    };
-    
-    // Handle drag leave event
-    const handleDragLeave = () => {
-        //setDragOverItem(null);
-        //setIsValidDropTarget(false);
-    };
-    
-    // Handle drop event
-    const handleDrop = (e: React.DragEvent, targetItem: DrivePath) => {
-        e.preventDefault();
-        
-        if (!draggedItem) return;
-        
-        // Check if this is a valid drop
-        if (isValidDrop(draggedItem, targetItem)) {
-            // Handle the move based on the item type
-            onMove?.(draggedItem, targetItem.id);
-        }
-        
-        // Reset drag state
-        setDraggedItem(null);
-        setDragOverItem(null);
-        setIsValidDropTarget(false);
-    };
-    
-    // Handle drag end event
-    const handleDragEnd = () => {
-        setDraggedItem(null);
-        setDragOverItem(null);
-        setIsValidDropTarget(false);
-    };
-    
-    // Check if a drop is valid
-    const isValidDrop = (source: DrivePath, target: DrivePath): boolean => {
-        // Can't drop on itself
-        if (source.id === target.id) return false;
-        
-        // Can only drop on folders
-        if (target.type !== 'folder') return false;
-        
-        // Can't drop a folder on its own child (would create circular reference)
-        // This would require more complex logic with knowledge of the folder hierarchy
-        
-        return true;
-    };
+    }, []);
 
     return (
         <div className="flex-1 overflow-auto">
             <Table
                 ref={tableRef}
-                tabIndex={0} // Maak de tabel focusable
+                tabIndex={0}
                 onFocus={() => setHasFocus(true)}
                 onBlur={() => setHasFocus(false)}
                 onKeyDown={handleKeyDown}
@@ -339,7 +164,6 @@ export function DriveTable({
                     </TableRow>
                 </TableHeader>
                 <TableBody>
-                    {/* Parent folder navigation row */}
                     {hasParentItem && (
                         <TableRow
                             className={cn(
@@ -373,7 +197,6 @@ export function DriveTable({
                     )}
 
                     {sortedItems.map((item, index) => {
-                        // Adjust index based on whether there's a parent item
                         const adjustedIndex = hasParentItem ? index + 1 : index;
 
                         return (
@@ -437,7 +260,6 @@ export function DriveTable({
                 </TableBody>
             </Table>
 
-            {/* Context Menu using shadcn dropdown-menu */}
             <DropdownMenu
                 open={!!contextMenuPosition}
                 onOpenChange={(open) => !open && closeContextMenu()}
