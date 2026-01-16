@@ -17,7 +17,7 @@ export async function uploadWithProgress({
                                              onProgress,
                                              onSuccess,
                                              onError,
-                                             headers = {}
+                                             headers: _headers = {}
                                          }: UploadWithProgressOptions): Promise<Response> {
     return new Promise((resolve, reject) => {
         const xhr = new XMLHttpRequest();

@@ -33,7 +33,7 @@ export function DriveCreateStickies({
             const newPath = await createStickiesMutation.mutateAsync({
                 parentId: path.id,
                 fileName: fileName,
-            });
+            }) as string | undefined;
             toast.success(`Stickies "${fileName}" created successfully`);
             onOpenChange(false);
 

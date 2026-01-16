@@ -21,7 +21,8 @@ export function useEmails(mailboxPath: string) {
             mailboxPath = mailboxPath.toLowerCase();
             mailboxPath = mailboxPath === 'inbox' ? '' : mailboxPath;
             console.log(`Fetching emails for mailbox: ${mailboxPath}`);
-            const response = await mailApi.mailbox[mailboxPath].get();
+            // Wildcard route - use type assertion for dynamic path
+            const response = await (mailApi.mailbox as any)[mailboxPath].get();
             return (response.data || []) as Email[];
         },
         staleTime: 1 * 60 * 1000, // 1 minute
