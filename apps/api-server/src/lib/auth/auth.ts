@@ -48,9 +48,9 @@ export const auth = betterAuth({
         twoFactor({
             issuer: "eigen",
             otpOptions: {
-                async sendOTP({user, otp}, request) {
+                async sendOTP({user, otp}, ctx) {
                     // send otp to user (sms or something)
-                    console.log('send otp', user, otp, request);
+                    console.log('send otp', user, otp, ctx.request);
                 },
             },
         }),

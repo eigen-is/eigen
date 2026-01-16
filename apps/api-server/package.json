@@ -7,16 +7,16 @@
     "buildfordocker": "bun build --minify --sourcemap --target=bun --external '*' src/index.ts --outdir=./build "
   },
   "dependencies": {
-    "@better-auth/cli": "^1.3.28",
-    "@elysiajs/cors": "^1.2.0",
-    "@elysiajs/swagger": "^1.2.2",
-    "@libsql/client": "^0.15.2",
+    "@better-auth/cli": "^1.4.0",
+    "@elysiajs/cors": "^1.4.0",
+    "@elysiajs/swagger": "^1.3.1",
+    "@libsql/client": "^0.15.5",
     "@types/nodemailer": "^6.4.17",
     "@types/uuid": "^10.0.0",
-    "better-auth": "^1.2.3",
-    "drizzle-kit": "^0.30.5",
-    "drizzle-orm": "^0.40.0",
-    "elysia": "^1.2.25",
+    "better-auth": "^1.4.0",
+    "drizzle-kit": "^0.31.0",
+    "drizzle-orm": "^0.44.0",
+    "elysia": "^1.4.22",
     "encoding-japanese": "^2.2.0",
     "he": "^1.2.0",
     "html-to-text": "^9.0.5",
@@ -29,14 +29,14 @@
     "linkify-it": "^5.0.0",
     "nodemailer": "^6.10.0",
     "punycode.js": "^2.3.1",
-    "sharp": "^0.33.5",
+    "sharp": "^0.34.0",
     "tlds": "^1.256.0",
-    "uuid": "^13.0.0",
+    "uuid": "^11.1.0",
     "y-protocols": "^1.0.6",
-    "yjs": "^13.6.24"
+    "yjs": "^13.6.27"
   },
   "devDependencies": {
-    "@types/bun": "^1.2.5",
+    "@types/bun": "^1.2.6",
     "@workspace/config": "workspace:*",
     "bun-types": "latest"
   },
