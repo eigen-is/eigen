@@ -4,31 +4,35 @@ import {getHome} from "../lib/home/home";
 
 export const sseRouter = new Elysia({name: "sse"})
     .use(betterAuth)
-    .get('/sse/notifications', async function* ({user}) {
-        if (!user) return;
+    .get('/sse/notifications', async ({user}) => {
+        if (!user) {
+            return new Response('Unauthorized', {status: 401});
+        }
 
         const home = await getHome(user);
-        const queue: any[] = [];
-        let resolve: (() => void) | null = null;
+        
+        let keepalive: Timer | null = null;
+        let listener: ((event: any) => void) | null = null;
+        
+        const stream = new ReadableStream({
+            start(controller) {
+                listener = (event: any) => {
+                    controller.enqueue(event);
+                };
 
-        const listener = (event: any) => {
-            queue.push(event);
-            resolve?.();
-        };
+                home.subscribeSSE(listener);
 
-        home.subscribeSSE(listener);
-
-        try {
-            while (true) {
-                if (queue.length > 0) {
-                    yield sse(queue.shift());
-                } else {
-                    await new Promise<void>(r => { resolve = r; });
-                }
+                keepalive = setInterval(() => {
+                    controller.enqueue({event: 'keepalive'});
+                }, 30000);
+            },
+            cancel() {
+                if (keepalive) clearInterval(keepalive);
+                if (listener) home.unsubscribeSSE(listener);
             }
-        } finally {
-            home.unsubscribeSSE(listener);
-        }
+        });
+
+        return sse(stream);
     }, {
         auth: true
     });
