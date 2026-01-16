@@ -1,71 +1,23 @@
-import {getHome, type Home} from "../home/home.ts";
-import {createAsyncSingleton} from "../../utils/singleton";
-import type Database from "bun:sqlite";
-import {BunSQLiteDatabase, drizzle} from "drizzle-orm/bun-sqlite";
-import * as schema from "./schema.ts";
-import {drivePaths} from "./schema.ts";
-import * as sharedSchema from "./sharedschema.ts";
-import {and, eq, isNotNull, isNull, like, sql} from "drizzle-orm";
-import type {User} from "better-auth/types";
-import type {DriveACL, DrivePath} from "../../types/drive.ts";
-import {randomUUID} from "crypto";
-import path from "path";
-import sharp from "sharp";
-import CollabDocument from "../collab/collabDocument.ts";
-import {getSharedDatabase} from "./shared";
-import {getUserByEmail} from "../users/users.ts";
-import FileSystem from "../filesystem/filesystem.ts";
+import type {User} from 'better-auth/types';
+import type Database from 'bun:sqlite';
+import {BunSQLiteDatabase} from 'drizzle-orm/bun-sqlite';
+import {eq} from 'drizzle-orm';
 
-async function getDriveDatabase(home: Home) {
-    const db = await home.openSQLiteDatabase('eigen.drive/metadata.db', async (db: Database) => {
-        // Execute migration SQL to create tables
-        db.exec(`
-          -- Create drive_paths table
-          CREATE TABLE IF NOT EXISTS drive_paths (
-            id TEXT PRIMARY KEY,
-            name TEXT NOT NULL,
-            type TEXT NOT NULL,
-            parentId TEXT,
-            size INTEGER DEFAULT 0,
-            thumbnail TEXT,
-            ownerId TEXT NOT NULL,
-            mimeType TEXT NOT NULL,
-            acl TEXT,
-            createdAt INTEGER DEFAULT (unixepoch()),
-            updatedAt INTEGER DEFAULT (unixepoch()),
-            FOREIGN KEY (parentId) REFERENCES drive_paths(id) ON DELETE CASCADE
-          );
+import {Mount, createDefaultMountConfig} from '../mount';
+import type {PathEntry, ACLEntry} from '../mount/types';
+import {canRead, canWrite, normalizeACL} from './acl';
+import {saveThumbnail, deleteThumbnail, getThumbnail} from '../shared/thumbnails';
+import CollabDocument from '../collab/collabDocument';
+import {getSharedDatabase} from './shared';
+import * as sharedSchema from './sharedschema';
+import {getUserByEmail} from '../users/users';
+import {createAsyncSingleton} from '../../utils/singleton';
+import type {HomeInterface} from '../home/types';
 
-          -- Create drive_labels table
-          CREATE TABLE IF NOT EXISTS drive_labels (
-            id TEXT PRIMARY KEY,
-            name TEXT NOT NULL,
-            color TEXT NOT NULL,
-            createdAt INTEGER DEFAULT (unixepoch()),
-            updatedAt INTEGER DEFAULT (unixepoch())
-          );
+export type {PathEntry, ACLEntry} from '../mount/types';
 
-          -- Create junction table for drive_paths and labels
-          CREATE TABLE IF NOT EXISTS drive_paths_to_labels (
-            drivePathId TEXT NOT NULL,
-            labelId TEXT NOT NULL,
-            PRIMARY KEY (drivePathId, labelId),
-            FOREIGN KEY (drivePathId) REFERENCES drive_paths(id) ON DELETE CASCADE,
-            FOREIGN KEY (labelId) REFERENCES drive_labels(id) ON DELETE CASCADE
-          );
-          
-          -- Create indexes for faster queries
-          CREATE INDEX IF NOT EXISTS idx_drive_paths_parentId ON drive_paths(parentId);
-          CREATE INDEX IF NOT EXISTS idx_drive_paths_ownerId ON drive_paths(ownerId);
-          CREATE INDEX IF NOT EXISTS idx_drive_paths_to_labels_drivePathId ON drive_paths_to_labels(drivePathId);
-          CREATE INDEX IF NOT EXISTS idx_drive_paths_to_labels_labelId ON drive_paths_to_labels(labelId);
-        `);
-    });
-
-    return drizzle(db, {schema});
-}
-
-export async function getDrive(user: User) {
+export async function getDrive(user: User): Promise<Drive> {
+    const {getHome} = await import('../home/home');
     const home = await getHome(user);
     return home.drive;
 }
@@ -73,821 +25,357 @@ export async function getDrive(user: User) {
 const documents: Map<string, () => Promise<CollabDocument>> = new Map();
 
 export default class Drive {
-    private basePath: string;
+    private home: HomeInterface;
     private owner: User;
-    private home: Home;
-    private db!: BunSQLiteDatabase<typeof schema>;
+    private mount!: Mount;
     private sharedDb!: BunSQLiteDatabase<typeof sharedSchema>;
 
-    constructor(home: Home) {
+    constructor(home: HomeInterface) {
         this.home = home;
-        this.owner = this.home.user;
-        this.basePath = 'eigen.drive/';
+        this.owner = home.user;
     }
 
-    public async init() {
-        this.db = await getDriveDatabase(this.home);
-        if (!this.db) {
-            throw new Error("No drive database found");
-        }
+    async init(): Promise<void> {
+        const config = createDefaultMountConfig();
+        this.mount = new Mount(
+            this.owner.id,
+            this.home.homeDir,
+            config,
+            this.home.getDatabase.bind(this.home)
+        );
+        await this.mount.init();
         this.sharedDb = await getSharedDatabase(this.home);
-        if (!this.sharedDb) {
-            throw new Error("No shared database found");
-        }
-
-        // Ensure the base drive directory exists
-        await this.home.fs.mkdir(this.home.fs.pathJoin(this.basePath, "Drive"), {recursive: true});
-        await this.home.fs.mkdir(this.home.fs.pathJoin(this.basePath, "thumbs"), {recursive: true});
-
-        // Check if root folder exists in DB
-        const rootFolder = this.db.select().from(drivePaths).where(and(
-            isNull(drivePaths.parentId),
-            eq(drivePaths.type, "folder"),
-            eq(drivePaths.ownerId, this.owner.id)
-        )).get();
-
-        // Create root folder if not exists
-        if (!rootFolder) {
-            const rootId = randomUUID();
-            await this.db.insert(drivePaths).values({
-                id: rootId,
-                name: "Drive",
-                type: "folder",
-                parentId: null,
-                ownerId: this.owner.id,
-                mimeType: "folder",
-                acl: null,
-                createdAt: new Date(),
-                updatedAt: new Date()
-            });
-        }
-
-        // // Initialize new filesystem
-        // const newFileSystem = new FileSystem(this.owner, 'localtest.drive');
-        // await newFileSystem.init();
-        
-        // // Perform migration if needed
-        // await this.migrateToNewFileSystem(newFileSystem);
-        
     }
 
-    /**
-     * Migrate existing files and folders from old filesystem to new FileSystem
-     * @param newFileSystem The new FileSystem instance to migrate to
-     */
-    private async migrateToNewFileSystem(newFileSystem: FileSystem): Promise<void> {
-        console.log(`Starting migration to new FileSystem for user ${this.owner.id}`);
-        
-        try {
-            // Get all paths from the database - these are the only ones we need to migrate
-            const paths = await this.db.select().from(drivePaths).where(eq(drivePaths.ownerId, this.owner.id)).all();
-            
-            // Create a mapping of old IDs to new IDs for parent references
-            const idMapping: Record<string, string> = {};
-            
-            // First pass: Create all folders
-            const folders = paths.filter(p => p.type !== 'file');
-            console.log(`Creating ${folders.length} folders in new filesystem`);
-            
-            // Start with root folders (parentId is null)
-            const rootFolders = folders.filter(p => p.parentId === null);
-            for (const folder of rootFolders) {
-                // Create the folder in the new filesystem
-                const newId = await newFileSystem.mkdir(folder.name);
-                idMapping[folder.id] = newId;
-                
-                // Update folder metadata with properties from database
-                await newFileSystem.update(newId, {
-                    name: folder.name,
-                    type: folder.type,
-                    mimeType: folder.mimeType,
-                    acl: folder.acl
-                });
-            }
-            
-            // Continue with child folders (level by level to maintain hierarchy)
-            let remainingFolders = folders.filter(p => p.parentId !== null);
-            let processedInLastIteration = 1; // Start with a non-zero value to enter the loop
-            
-            // Process folders as long as we find parents for some of them
-            while (remainingFolders.length > 0 && processedInLastIteration > 0) {
-                processedInLastIteration = 0;
-                const stillRemaining = [];
-                
-                for (const folder of remainingFolders) {
-                    // Check if parent has been processed
-                    if (folder.parentId && idMapping[folder.parentId]) {
-                        // Create folder with mapped parent ID
-                        const newId = await newFileSystem.mkdir(folder.name, idMapping[folder.parentId]);
-                        idMapping[folder.id] = newId;
-                        
-                        // Update folder metadata with properties from database
-                        await newFileSystem.update(newId, {
-                            name: folder.name,
-                            type: folder.type,
-                            mimeType: folder.mimeType,
-                            acl: folder.acl
-                        });
-                        
-                        processedInLastIteration++;
-                    } else {
-                        // Parent not processed yet, keep for next iteration
-                        stillRemaining.push(folder);
-                    }
-                }
-                
-                remainingFolders = stillRemaining;
-            }
-            
-            // If we have folders left, their parent hierarchy is broken
-            if (remainingFolders.length > 0) {
-                console.warn(`Warning: ${remainingFolders.length} folders couldn't be migrated due to missing parent folders`);
-            }
-            
-            // Second pass: Migrate files
-            const files = paths.filter(p => p.type === 'file');
-            console.log(`Migrating ${files.length} files to new filesystem`);
-            
-            for (const file of files) {
-                try {
-                    if (!file.parentId || !idMapping[file.parentId]) {
-                        console.warn(`Skipping file ${file.name}: Parent folder not found in mapping`);
-                        continue;
-                    }
-                    
-                    // Get the file path in old filesystem
-                    const oldFilePath = await this.getFolderPath(file.id);
-                    
-                    // Check if file exists
-                    const bunFile = await this.home.fs.file(oldFilePath);
-                    if (await bunFile.exists()) {
-                        // Create new file in the new filesystem with data from old file
-                        const newId = await newFileSystem.write(idMapping[file.parentId], bunFile);
-                        idMapping[file.id] = newId;
-                        
-                        // Update the file metadata using properties from database
-                        await newFileSystem.update(newId, {
-                            name: file.name,
-                            type: file.type,
-                            mimeType: file.mimeType,
-                            acl: file.acl
-                        });
-                    } else {
-                        console.warn(`File not found during migration: ${oldFilePath}`);
-                    }
-                } catch (error: unknown) {
-                    const errorMessage = error instanceof Error ? error.message : String(error);
-                    console.error(`Error migrating file ${file.name}:`, errorMessage);
-                }
-            }
-            
-            console.log(`Migration completed successfully. Migrated ${Object.keys(idMapping).length} items.`);
-        } catch (error: unknown) {
-            const errorMessage = error instanceof Error ? error.message : String(error);
-            console.error('Error during filesystem migration:', errorMessage);
-            throw new Error(`Migration failed: ${errorMessage}`);
-        }
-        newFileSystem.close();
-    }
-    
-    public async size(): Promise<number> {
-        // get total size of mailbox
-        return (await this.home.fs.dirSize('eigen.drive')) || this.db.select({size: sql`SUM(${drivePaths.size})`}).from(drivePaths).where(eq(drivePaths.type, 'file')).get()?.size as number || 0;
+    async size(): Promise<number> {
+        return await this.mount.getTotalSize();
     }
 
-    public async createFolder(parentId: string, folderName: string): Promise<string | undefined> {
-        // Get parent folder
-        const parent = await this.getPath(parentId);
-        if (!parent || parent.type !== "folder") {
-            throw new Error("Parent folder not found");
+    async getRootFolder(): Promise<PathEntry | null> {
+        return await this.mount.getRootFolder();
+    }
+
+    async getPath(pathId: string): Promise<PathEntry | null> {
+        return await this.mount.getPath(pathId);
+    }
+
+    async getFolderContents(pathId: string): Promise<PathEntry[]> {
+        const folder = await this.mount.getPath(pathId);
+        if (!folder || (folder.type !== 'folder' && folder.type !== 'doc' && folder.type !== 'stickies')) {
+            throw new Error('Folder not found');
         }
 
-        // Check write permissions
+        if (!(await this.canRead(pathId, this.owner))) {
+            throw new Error('No read permission');
+        }
+
+        const contents = await this.mount.listFolder(pathId);
+        const parentACL = this.getACL(pathId);
+
+        return contents.map(item => ({
+            ...item,
+            acl: item.acl ?? parentACL
+        }));
+    }
+
+    async createFolder(parentId: string, folderName: string): Promise<string | undefined> {
+        const parent = await this.mount.getPath(parentId);
+        if (!parent || parent.type !== 'folder') {
+            throw new Error('Parent folder not found');
+        }
+
         if (!(await this.canWrite(parentId, this.owner))) {
-            throw new Error("No write permission");
+            throw new Error('No write permission');
         }
 
-        // remove all / and \ from folder name
-        folderName = folderName.replace(/[/\\]/g, "_");
-
-        // Create filesystem folder
-        const folderPath = path.join(await this.getFolderPath(parentId), folderName);
-
-        // check if folder already exists
-        const folderExists = await this.home.fs.dirExists(folderPath);
-
-        if (!folderExists) {
-            await this.home.fs.mkdir(folderPath, {recursive: true});
-
-            // Check if folder exists
-            const exists = await this.home.fs.dirExists(folderPath);
-            if (exists) {
-                // Create folder in database
-                const folderId = randomUUID();
-                await this.db.insert(drivePaths).values({
-                    id: folderId,
-                    name: folderName,
-                    type: "folder",
-                    parentId: parentId,
-                    ownerId: this.owner.id,
-                    mimeType: "folder",
-                    acl: null, // Will inherit from parent
-                    createdAt: new Date(),
-                    updatedAt: new Date()
-                });
-
-                return folderId;
-            }
-        } else {
-            throw new Error(`Folder not created on filesystem ${folderPath}`);
-        }
+        const safeName = folderName.replace(/[/\\]/g, '_');
+        return await this.mount.createFolder(parentId, safeName);
     }
 
-    public async createDoc(parentId: string, docName: string): Promise<string | undefined> {
-        const pathId = await this.createFolder(parentId, `${docName}.eigendoc`);
-        if (!pathId) {
-            throw new Error("Failed to create document");
-        }
-        // change file type to eigendoc
-        await this.db.update(drivePaths).set({
-            type: "doc",
-            mimeType: "application/eigendoc"
-        }).where(eq(drivePaths.id, pathId));
-
-        return pathId;
-    }
-
-    public async createStickies(parentId: string, stickiesName: string): Promise<string | undefined> {
-        const pathId = await this.createFolder(parentId, `${stickiesName}.eigenstickies`);
-        if (!pathId) {
-            throw new Error("Failed to create stickies");
-        }
-        // change file type to eigenstickies
-        await this.db.update(drivePaths).set({
-            type: "stickies",
-            mimeType: "application/eigenstickies"
-        }).where(eq(drivePaths.id, pathId));
-
-        return pathId;
-    }
-
-    public async uploadFile(parentId: string, file: File): Promise<string> {
-        // Get parent folder
-        const parent = await this.getPath(parentId);
-
-        if (!parent || parent.type !== "folder") {
-            throw new Error("Parent folder not found");
-        }
-
-        // Check write permissions
+    async createDoc(parentId: string, docName: string): Promise<string | undefined> {
         if (!(await this.canWrite(parentId, this.owner))) {
-            throw new Error("No write permission");
+            throw new Error('No write permission');
         }
 
-        // Create file ID
-        const fileId = randomUUID();
+        const safeName = `${docName}.eigendoc`;
+        return await this.mount.createFolder(parentId, safeName, 'doc');
+    }
 
-        // remove all / and \ from folder name
-        const fileName = file.name.replace(/[/\\]/g, "_");
+    async createStickies(parentId: string, stickiesName: string): Promise<string | undefined> {
+        if (!(await this.canWrite(parentId, this.owner))) {
+            throw new Error('No write permission');
+        }
 
-        // Save file in filesystem
-        const filePath = path.join(await this.getFolderPath(parentId), fileName);
+        const safeName = `${stickiesName}.eigenstickies`;
+        return await this.mount.createFolder(parentId, safeName, 'stickies');
+    }
 
-        // check if file already exists
-        const fileExists = await this.home.fs.file(filePath).exists();
+    async uploadFile(parentId: string, file: File): Promise<string> {
+        const parent = await this.mount.getPath(parentId);
+        if (!parent || parent.type !== 'folder') {
+            throw new Error('Parent folder not found');
+        }
 
+        if (!(await this.canWrite(parentId, this.owner))) {
+            throw new Error('No write permission');
+        }
+
+        const safeName = file.name.replace(/[/\\]/g, '_');
         const buffer = await file.arrayBuffer();
-        await this.home.fs.writeFile(filePath, buffer);
 
-        const {file: bunFile, size, type: mimeType} = await this.home.fs.fileMeta(filePath);
-        if (!bunFile) {
-            throw new Error("Failed to get file metadata");
+        const fileId = await this.mount.createFile(
+            parentId,
+            safeName,
+            file.type || 'application/octet-stream',
+            buffer.byteLength,
+            buffer
+        );
+
+        const thumbnail = await saveThumbnail(
+            this.mount.thumbsDir,
+            fileId,
+            Buffer.from(buffer),
+            file.type
+        );
+
+        if (thumbnail) {
+            await this.mount.updatePath(fileId, {thumbnail});
         }
-
-        // Save file metadata in database
-        if (!fileExists) {
-            const thumbnail = await this.generateThumbnail(fileId, mimeType, filePath);
-
-            await this.db.insert(drivePaths).values({
-                id: fileId,
-                name: file.name,
-                type: "file",
-                parentId: parent.id,
-                ownerId: this.owner.id,
-                mimeType: mimeType,
-                acl: null, // Will inherit from parent
-                size: size,
-                thumbnail: thumbnail,
-                createdAt: new Date(),
-                updatedAt: new Date()
-            });
-        } else {
-            // update file metadata, first find file in database based on fileName and parentId
-            const dbfile = await this.db.select().from(drivePaths).where(
-                and(eq(drivePaths.name, fileName), eq(drivePaths.parentId, parent.id))).get();
-            if (!dbfile) {
-                throw new Error("File not found");
-            }
-
-            const thumbnail = await this.generateThumbnail(dbfile.id, mimeType, filePath);
-
-            await this.db.update(drivePaths).set({
-                size: size,
-                thumbnail: thumbnail,
-                updatedAt: new Date()
-            }).where(eq(drivePaths.id, dbfile.id));
-        }
-
-        // Update parent folder size
-        await this.updateSizeOfFolder(parent.id);
 
         return fileId;
     }
 
-    public async movePath(pathId: string, targetParentId: string) {
-        // make sure targetParentId exists and is a folder and you have write permissions
-        // also make sure you have write permissions on the path you want to move
-        const path = await this.getPath(pathId);
-        if (!path) {
-            throw new Error("Path not found");
-        }
-
-        const targetParent = await this.getPath(targetParentId);
-        if (!targetParent || targetParent.type !== "folder") {
-            throw new Error("Target parent is not a folder");
-        }
-
-        if (!(await this.canWrite(pathId, this.owner))) {
-            throw new Error("No write permission");
-        }
-
-        // move path/file to new destination
-        const oldPathName = await this.getFolderPath(pathId);
-        const newPathName = this.home.fs.pathJoin(await this.getFolderPath(targetParentId), path.name);
-        await this.home.fs.rename(oldPathName, newPathName);
-
-        // Update path parentId in database
-        await this.db.update(drivePaths).set({
-            parentId: targetParentId,
-            updatedAt: new Date()
-        }).where(eq(drivePaths.id, pathId)).run();
-
-        // Update parent folder size
-        await this.updateSizeOfFolder(targetParentId);
-        await this.updateSizeOfFolder(path.parentId || '');
+    async uploadFiles(parentId: string, files: File[]): Promise<string[]> {
+        const results = await Promise.all(files.map(f => this.uploadFile(parentId, f)));
+        return results;
     }
 
-    public async uploadFiles(parentId: string, files: File[]): Promise<string[]> {
-        const uploadPromises = files.map(file => this.uploadFile(parentId, file));
-        return Promise.all(uploadPromises);
-    }
-
-    public async deleteFolder(pathId: string): Promise<void> {
-        // Get folder
-        const folder = await this.getPath(pathId);
-        if (!folder || (folder.type !== "folder" && folder.type !== "doc" && folder.type !== "stickies")) {
-            throw new Error("Folder not found");
+    async deleteFolder(pathId: string): Promise<void> {
+        const folder = await this.mount.getPath(pathId);
+        if (!folder || (folder.type !== 'folder' && folder.type !== 'doc' && folder.type !== 'stickies')) {
+            throw new Error('Folder not found');
         }
 
-        // Root folder cannot be deleted
         if (folder.parentId === null) {
-            throw new Error("Cannot delete root folder");
+            throw new Error('Cannot delete root folder');
         }
 
-        // Check write permissions
         if (!(await this.canWrite(pathId, this.owner))) {
-            throw new Error("No write permission");
+            throw new Error('No write permission');
         }
 
-        // if collab document
-        if (folder.type === "doc" || folder.type === "stickies") {
+        if (folder.type === 'doc' || folder.type === 'stickies') {
             try {
                 await this.closeCollabDocument(pathId);
-            } catch (err) {
-                console.error('Error closing collab document:', err);
-            }
+            } catch {}
         }
 
-        // first try to delete all files in folder
-        try {
-            // get all files from folder
-            const content = await this.getFolderContents(pathId);
-
-            // TODO: dit moet niet recursive en zal geoptimaliseerd moeten worden
-            await Promise.all(
-                content.filter(f => f.type === 'file').map(f =>
-                    this.deleteFile(f.id)
-                )
-            );
-            // and delete all subfolders
-            await Promise.all(
-                content.filter(f => f.type === 'folder').map(f =>
-                    this.deleteFolder(f.id)
-                )
-            );
-        } catch (e) {
-            throw new Error("Failed to delete folder");
-        }
-
-        const folderPath = await this.getFolderPath(pathId);
-        await this.home.fs.rm(folderPath, {recursive: true, force: true});
-
-        // Delete folder and all children from database (cascade delete will handle this)
-        await this.db.delete(drivePaths).where(eq(drivePaths.id, pathId));
-
+        await this.mount.deletePath(pathId);
         this.emitACLChange(folder, folder.acl, null);
-
-        // Update parent folder size
-        if (folder.parentId) {
-            await this.updateSizeOfFolder(folder.parentId);
-        }
     }
 
-    public async deleteFile(pathId: string): Promise<void> {
-        // Get file
-        const file = await this.getPath(pathId);
+    async deleteFile(pathId: string): Promise<void> {
+        const file = await this.mount.getPath(pathId);
         if (!file) {
-            throw new Error("File not found");
+            throw new Error('File not found');
         }
 
-        if (file.type === "doc" || file.type === "stickies") {
-            // eigendocs and eigenstickies are folders, so delete folder
-            // TODO: close document first!!
+        if (file.type === 'doc' || file.type === 'stickies') {
             return this.deleteFolder(pathId);
         }
 
-        // Check write permissions
         if (!(await this.canWrite(pathId, this.owner))) {
-            throw new Error("No write permission");
+            throw new Error('No write permission');
         }
 
-        // Get parent to find file path
-        const parent = await this.getPath(file.parentId || "");
-        if (!parent) {
-            throw new Error("Parent folder not found");
-        }
-
-        // Delete file in filesystem
-        try {
-            const filePath = path.join(await this.getFolderPath(parent.id), file.name);
-            await this.home.fs.file(filePath).delete();
-            // Delete thumbnail
-            await this.deleteThumbnail(file);
-            // Delete file from database
-            await this.db.delete(drivePaths).where(eq(drivePaths.id, pathId));
-            // Update parent folder size
-            await this.updateSizeOfFolder(parent.id);
-        } catch (e) {
-            throw new Error("Failed to delete file");
-        }
-
+        await deleteThumbnail(this.mount.thumbsDir, pathId);
+        await this.mount.deletePath(pathId);
         this.emitACLChange(file, file.acl, null);
     }
 
-    public async getRootFolder(): Promise<DrivePath | null> {
-        return await this.db.select().from(drivePaths)
-            .where(and(
-                isNull(drivePaths.parentId),
-                eq(drivePaths.type, "folder"),
-                eq(drivePaths.ownerId, this.owner.id)
-            ))
-            .get() as DrivePath | null;
-    }
-
-    public async getMimeTypeContents(mimeType: string): Promise<DrivePath[]> {
-        // Get contents from database
-        const results = await Promise.all([
-            this.db.select().from(drivePaths)
-                .where(like(drivePaths.mimeType, `${mimeType}%`))
-                .all()
-                ,
-            this.sharedDb.select().from(sharedSchema.sharedPaths)
-                .where(like(sharedSchema.sharedPaths.mimeType, `${mimeType}%`))
-                .all()
-        ]).then(([ownResults, sharedResults]) => [...ownResults, ...sharedResults]);
-
-        // Convert to DrivePath type
-        return results.map(result => ({
-            id: result.id,
-            name: result.name,
-            type: result.type as "folder" | "file" | "doc" | "stickies",
-            parentId: result.parentId || undefined,
-            ownerId: result.ownerId,
-            labels: [], // We would need to fetch labels separately
-            mimeType: result.mimeType,
-            size: result.size ?? 0,
-            thumbnail: result.thumbnail || '',
-            acl: result.acl ?? this.getACL(result.id),
-            createdAt: new Date(result.createdAt || ''),
-            updatedAt: new Date(result.updatedAt || '')
-        }));
-    }
-
-    public async getFolderContents(pathId: string): Promise<DrivePath[]> {
-        // Check if folder exists
-        const folder = await this.getPath(pathId);
-        if (!folder || (folder.type !== "folder" && folder.type !== "doc" && folder.type !== "stickies")) {
-            throw new Error("Folder not found");
+    async movePath(pathId: string, targetParentId: string): Promise<void> {
+        const path = await this.mount.getPath(pathId);
+        if (!path) {
+            throw new Error('Path not found');
         }
 
-        // Check read permissions
-        if (!(await this.canRead(pathId, this.owner))) {
-            throw new Error("No read permission");
+        const targetParent = await this.mount.getPath(targetParentId);
+        if (!targetParent || targetParent.type !== 'folder') {
+            throw new Error('Target parent is not a folder');
         }
 
-        // get permissions for folder
-        const parentACL = await this.getACL(pathId);
-
-        // Get contents from database
-        const results = await this.db.select().from(drivePaths)
-            .where(eq(drivePaths.parentId, pathId))
-            .all();
-
-        // Convert to DrivePath type
-        return results.map(result => ({
-            id: result.id,
-            name: result.name,
-            type: result.type as "folder" | "file" | "doc" | "stickies",
-            parentId: result.parentId || undefined,
-            ownerId: result.ownerId,
-            size: result.size ?? 0,
-            thumbnail: result.thumbnail || '',
-            labels: [], // We would need to fetch labels separately
-            mimeType: result.mimeType,
-            acl: result.acl ?? parentACL,
-            createdAt: new Date(result.createdAt || ''),
-            updatedAt: new Date(result.updatedAt || '')
-        }));
-    }
-
-    public async renamePath(pathId: string, newName: string): Promise<void> {
-        // Get path
-        const item = await this.getPath(pathId);
-        if (!item) {
-            throw new Error("Path not found");
-        }
-
-        // Check write permissions
         if (!(await this.canWrite(pathId, this.owner))) {
-            throw new Error("No write permission");
+            throw new Error('No write permission');
         }
 
-        // Get parent to find file path
-        let parentPath = "";
-        if (item.parentId) {
-            const parent = await this.getPath(item.parentId);
-            if (!parent) {
-                throw new Error("Parent folder not found");
-            }
-            parentPath = await this.getFolderPath(parent.id);
-        } else {
-            parentPath = this.basePath;
+        await this.mount.updatePath(pathId, {parentId: targetParentId});
+    }
+
+    async renamePath(pathId: string, newName: string): Promise<void> {
+        const item = await this.mount.getPath(pathId);
+        if (!item) {
+            throw new Error('Path not found');
         }
 
-        // Rename in filesystem
-        const oldPath = path.join(parentPath, item.name);
-        const newPath = path.join(parentPath, newName);
-        await this.home.fs.rename(oldPath, newPath);
+        if (!(await this.canWrite(pathId, this.owner))) {
+            throw new Error('No write permission');
+        }
 
-        // Update in database
-        await this.db.update(drivePaths)
-            .set({
-                name: newName,
-                updatedAt: new Date()
-            })
-            .where(eq(drivePaths.id, pathId));
-
+        await this.mount.updatePath(pathId, {name: newName});
         this.emitACLChange(item, item.acl, item.acl);
     }
 
-    public async getPath(pathId: string): Promise<DrivePath | null> {
-        const result = await this.db.select().from(drivePaths)
-            .where(eq(drivePaths.id, pathId))
-            .get();
-
-        if (!result) {
+    async downloadFile(pathId: string): Promise<ArrayBuffer | null> {
+        const path = await this.mount.getPath(pathId);
+        if (!path || path.type !== 'file') {
             return null;
         }
-
-        return {
-            id: result.id,
-            name: result.name,
-            type: result.type as "folder" | "file" | "doc" | "stickies",
-            parentId: result.parentId || undefined,
-            ownerId: result.ownerId,
-            labels: [], // We would need to fetch labels separately
-            mimeType: result.mimeType,
-            size: result.size ?? 0,
-            thumbnail: result.thumbnail || '',
-            acl: result.acl ?? this.getACL(result.id),
-            createdAt: new Date(result.createdAt || ''),
-            updatedAt: new Date(result.updatedAt || '')
-        };
+        return await this.mount.readFile(pathId);
     }
 
-    public async updateACL(pathId: string, acl: DriveACL[] | null): Promise<void> {
-        // Get path
-        const item = await this.getPath(pathId);
+    async getThumbnail(fileName: string): Promise<ArrayBuffer | null> {
+        const pathId = fileName.split('.')[0];
+        const data = await getThumbnail(this.mount.thumbsDir, pathId);
+        return data ? new Uint8Array(data).buffer : null;
+    }
+
+    async getMimeTypeContents(mimeType: string): Promise<PathEntry[]> {
+        const ownResults = await this.mount.getPathsByMimeType(mimeType);
+
+        const sharedResults = await this.sharedDb.select()
+            .from(sharedSchema.sharedPaths)
+            .where(eq(sharedSchema.sharedPaths.mimeType, mimeType))
+            .all();
+
+        const mapped = sharedResults.map(r => ({
+            id: r.id,
+            name: r.name,
+            type: r.type as PathEntry['type'],
+            parentId: r.parentId,
+            ownerId: r.ownerId,
+            mimeType: r.mimeType,
+            size: r.size ?? 0,
+            thumbnail: r.thumbnail,
+            acl: r.acl as ACLEntry[] | null,
+            createdAt: r.createdAt ?? new Date(),
+            updatedAt: r.updatedAt ?? new Date()
+        }));
+
+        return [...ownResults, ...mapped];
+    }
+
+    async breadCrumb(pathId: string): Promise<PathEntry[]> {
+        return await this.mount.getBreadcrumb(pathId);
+    }
+
+    async updateACL(pathId: string, acl: ACLEntry[] | null): Promise<void> {
+        const item = await this.mount.getPath(pathId);
         if (!item) {
-            throw new Error("Path not found");
+            throw new Error('Path not found');
         }
 
-        // Check write permissions
         if (!(await this.canWrite(pathId, this.owner))) {
-            throw new Error("No write permission");
+            throw new Error('No write permission');
         }
 
-        if (acl?.length === 0) {
-            acl = null;
-        }
-
-        if (acl) {
-            // lowercase all emails
-            acl = acl.map(a => ({
-                ...a,
-                email: a.email.toLowerCase()
-            }));
-        }
-
-        // Update in database
-        await this.db.update(drivePaths)
-            .set({
-                acl,
-                updatedAt: new Date()
-            })
-            .where(eq(drivePaths.id, pathId));
-
-        this.emitACLChange(item, item.acl, acl);
+        const normalizedACL = normalizeACL(acl);
+        await this.mount.updatePath(pathId, {acl: normalizedACL});
+        this.emitACLChange(item, item.acl, normalizedACL);
     }
 
-    public getACL(pathId: string): DriveACL[] | null {
-        const item = this.db.select().from(drivePaths)
-            .where(eq(drivePaths.id, pathId))
-            .get();
-        if (!item) {
-            return null;
-        }
-        return item.acl ?? (item.parentId ? this.getACL(item.parentId) : null);
+    getACL(_pathId: string): ACLEntry[] | null {
+        return null;
     }
 
-    public async canRead(pathId: string, user: User): Promise<boolean> {
-        // Get path
-        const item = await this.getPath(pathId);
-        if (!item) {
-            return false;
-        }
-
-        // If user is owner, they have read access
-        if (item.ownerId === user.id) {
-            return true;
-        }
-
-        // Check ACL
-        if (item.acl && item.acl.length > 0) {
-            const userAcl = item.acl.find(a => a.email.toLowerCase() === user.email.toLowerCase());
-            if (userAcl) {
-                return userAcl.read || userAcl.public;
-            }
-
-            // Check if there's a public access entry
-            const publicAcl = item.acl.find(a => a.public);
-            if (publicAcl) {
-                return true;
-            }
-        } else if (item.parentId) {
-            // If no ACL, inherit from parent
-            return this.canRead(item.parentId, user);
-        } else {
-            // Root folder with no ACL - only owner has access
-            return item.ownerId === user.id;
-        }
-
-        return false;
+    async canRead(pathId: string, user: User): Promise<boolean> {
+        const path = await this.mount.getPath(pathId);
+        if (!path) return false;
+        return await canRead(path, user, this.mount.getPath.bind(this.mount));
     }
 
-    public async canWrite(pathId: string, user: User): Promise<boolean> {
-        // Get path
-        const item = await this.getPath(pathId);
-        if (!item) {
-            return false;
-        }
-
-        // If user is owner, they have write access
-        if (item.ownerId === user.id) {
-            return true;
-        }
-
-        // Check ACL
-        if (item.acl && item.acl.length > 0) {
-            const userAcl = item.acl.find(a => a.email.toLowerCase() === user.email.toLowerCase());
-            if (userAcl) {
-                return userAcl.write;
-            }
-        } else if (item.parentId) {
-            // If no ACL, inherit from parent
-            return this.canWrite(item.parentId, user);
-        } else {
-            // Root folder with no ACL - only owner has access
-            return item.ownerId === user.id;
-        }
-
-        return false;
+    async canWrite(pathId: string, user: User): Promise<boolean> {
+        const path = await this.mount.getPath(pathId);
+        if (!path) return false;
+        return await canWrite(path, user, this.mount.getPath.bind(this.mount));
     }
 
-    public async getThumbnail(fileName: string): Promise<ArrayBuffer | null> {
-        const url = this.home.fs.pathJoin(this.basePath, 'thumbs', fileName);
-        const file = this.home.fs.file(url);
-        if (!file.exists()) {
-            return null;
-        }
-        return file.arrayBuffer();
-    }
-
-    public async downloadFile(pathId: string): Promise<ArrayBuffer | null> {
-        const path = await this.getPath(pathId);
-        console.log("Path:", path);
-        if (!path || path.type !== "file" || !path.parentId) {
-            return null;
-        }
-        const file = this.home.fs.file(this.home.fs.pathJoin(await this.getFolderPath(path.parentId), path.name));
-        if (!file.exists()) {
-            return null;
-        }
-        return file.arrayBuffer();
-    }
-
-    public async breadCrumb(pathId: string) {
-        let parent = await this.getPath(pathId);
-        const crumb: DrivePath[] = [];
-        while (parent) {
-            crumb.push(parent);
-            parent = (parent.parentId && await this.getPath(parent.parentId)) || null;
-        }
-
-        return crumb.reverse();
-    }
-
-    public async getCollabDocument(pathId: string): Promise<CollabDocument> {
+    async getCollabDocument(pathId: string): Promise<CollabDocument> {
         const key = `${this.owner.id}.${pathId}`;
         if (!documents.has(key)) {
             documents.set(key, createAsyncSingleton(async () => {
-                const path = await this.getPath(pathId);
-                if (!path || path.type !== "doc" && path.type !== "stickies") {
-                    throw new Error("Document not found");
+                const path = await this.mount.getPath(pathId);
+                if (!path || (path.type !== 'doc' && path.type !== 'stickies')) {
+                    throw new Error('Document not found');
                 }
-                const document = new CollabDocument(this, path);
+                const document = new CollabDocument(this, path as any);
                 return (await document.init()) as CollabDocument;
             }));
         }
         return await documents.get(key)!() as CollabDocument;
     }
 
-    public async closeCollabDocument(pathId: string) {
+    async closeCollabDocument(pathId: string): Promise<void> {
         const key = `${this.owner.id}.${pathId}`;
-        console.log("Closing document", key);
         const document = documents.get(key);
         if (document) {
-            console.log("Destructing document", key);
             (await document()).destruct();
             documents.delete(key);
-        } else {
-            return;
         }
 
-        // update size of document
-        const path = await this.getPath(pathId);
+        const path = await this.mount.getPath(pathId);
         if (path) {
-            const pathUrl = await this.getFolderPath(pathId);
-            const size = await this.home.fs.dirSize(pathUrl);
-            await this.db.update(drivePaths).set({
-                size: size || 0,
-                updatedAt: new Date()
-            }).where(eq(drivePaths.id, pathId));
-            if (path.parentId) {
-                this.updateSizeOfFolder(path.parentId);
-            }
+            const size = await this.mount.getTotalSize();
+            await this.mount.updatePath(pathId, {size});
             this.emitACLChange(path, path.acl, path.acl);
         }
     }
 
-    public async openSQLiteDatabase(parentPathId: string, file: string, onCreate: (db: Database) => Promise<void>) {
-        const databasePath = this.home.fs.pathJoin(await this.getFolderPath(parentPathId), file);
-        return this.home.openSQLiteDatabase(databasePath, onCreate);
+    async openSQLiteDatabase(
+        parentPathId: string,
+        file: string,
+        onCreate: (db: Database) => Promise<void>
+    ): Promise<Database> {
+        const dbPath = `mounts/${this.mount.id}/docs/${parentPathId}/${file}`;
+        return await this.home.getDatabase(dbPath, onCreate);
     }
 
-    public async closeSQLiteDatabase(db: Database) {
-        return this.home.closeSQLiteDatabase(db);
+    async closeSQLiteDatabase(db: Database): Promise<void> {
+        await this.home.closeSQLiteDatabase(db);
     }
 
-    public async recieveACLChange(path: DrivePath, newACL: DriveACL[] | null) {
+    async getSharedPathsWithMe(): Promise<PathEntry[]> {
+        const results = await this.sharedDb.select().from(sharedSchema.sharedPaths).all();
+        return results.map(r => ({
+            id: r.id,
+            name: r.name,
+            type: r.type as PathEntry['type'],
+            parentId: r.parentId,
+            ownerId: r.ownerId,
+            mimeType: r.mimeType,
+            size: r.size ?? 0,
+            thumbnail: r.thumbnail,
+            acl: r.acl as ACLEntry[] | null,
+            createdAt: r.createdAt ?? new Date(),
+            updatedAt: r.updatedAt ?? new Date()
+        }));
+    }
+
+    async getSharedPathsByMe(): Promise<PathEntry[]> {
+        return await this.mount.getPathsByMimeType('').then(paths =>
+            paths.filter(p => p.acl !== null && p.acl.length > 0)
+        );
+    }
+
+    async recieveACLChange(path: PathEntry, newACL: ACLEntry[] | null): Promise<void> {
         if (newACL === null || !newACL.find(acl => acl.email.toLowerCase() === this.owner.email.toLowerCase())) {
-            this.sharedDb.delete(sharedSchema.sharedPaths).where(eq(sharedSchema.sharedPaths.id, path.id)).run();
-            // send notification
+            this.sharedDb.delete(sharedSchema.sharedPaths)
+                .where(eq(sharedSchema.sharedPaths.id, path.id))
+                .run();
             this.home.notify({
-                type: "acl_delete",
-                title: "Item unshared with you",
+                type: 'acl_delete',
+                title: 'Item unshared with you',
                 body: `${path.name} has been unshared with you`,
-                tag: "shared_path_deleted",
+                tag: 'shared_path_deleted'
             });
         } else if (this.sharedDb.select().from(sharedSchema.sharedPaths).where(eq(sharedSchema.sharedPaths.id, path.id)).get()) {
             this.sharedDb.update(sharedSchema.sharedPaths).set({
@@ -912,128 +400,29 @@ export default class Drive {
                 createdAt: new Date(),
                 updatedAt: new Date()
             }).run();
-            // send notification
             this.home.notify({
-                type: "acl_insert",
-                title: "Item shared with you",
+                type: 'acl_insert',
+                title: 'Item shared with you',
                 body: `${path.name} has been shared with you`,
-                tag: "shared_path_created",
+                tag: 'shared_path_created',
                 link: `/drive/fs/${path.ownerId}/${path.id}`
             });
         }
     }
 
-    public async getSharedPathsWithMe(): Promise<DrivePath[]> {
-        return await this.sharedDb.select().from(sharedSchema.sharedPaths) as DrivePath[];
-    }
-
-    public async getSharedPathsByMe(): Promise<DrivePath[]> {
-        return await this.db.select().from(drivePaths).where(isNotNull(drivePaths.acl)) as DrivePath[];
-    }
-
-    private async getParentPaths(pathId: string): Promise<DrivePath[]> {
-        const paths: DrivePath[] = [];
-        let currentPathId: string | null = pathId;
-
-        while (currentPathId) {
-            const path = await this.getPath(currentPathId);
-            if (!path) break;
-            paths.push(path);
-            currentPathId = path.parentId || null;
-        }
-
-        return paths.reverse();
-    }
-
-    private async deleteThumbnail(file: DrivePath) {
-        try {
-            if (!file || file.type !== "file") {
-                throw new Error("File not found");
-            }
-
-            // Get parent to find file path
-            const parent = await this.getPath(file.parentId || "");
-            if (!parent) {
-                throw new Error("Parent folder not found");
-            }
-
-            // Delete thumbnail
-            const thumbnailPath = this.home.fs.pathJoin(this.basePath, 'thumbs', file.thumbnail);
-            await this.home.fs.unlink(thumbnailPath);
-        } catch (e) {
-
-        }
-    }
-
-    private async getFolderPath(pathId: string): Promise<string> {
-        return path.join(this.basePath, ...(await this.getParentPaths(pathId)).map(a => a.name));
-    }
-
-    private async updateSizeOfFolder(pathId: string): Promise<void> {
-        const folder = await this.getPath(pathId);
-        if (!folder || folder.type !== "folder") {
-            throw new Error("Folder not found");
-        }
-
-        // Get folder size by adding size of all children in database
-        const size = await this.db.select({
-            totalSize: sql<number>`sum(${drivePaths.size})`
-        }).from(drivePaths).where(eq(drivePaths.parentId, folder.id)).get();
-
-        await this.db.update(drivePaths).set({
-            size: size?.totalSize || 0,
-            updatedAt: new Date()
-        }).where(eq(drivePaths.id, folder.id));
-        // update parent
-        if (folder.parentId) {
-            await this.updateSizeOfFolder(folder.parentId);
-        }
-    }
-
-    private async generateThumbnail(id: string, mimeType: string, filePath: string): Promise<string | null> {
-        console.log("Generating thumbnail for", id, mimeType, filePath);
-        // if (!mimeType.includes('image')) {
-        //     return null;
-        // }
-        console.log("Probably an image, checking dimensions for thumbnail generation");
-        console.log("Absolute path:", this.home.fs.absolutePath(filePath));
-        try {
-            const image = sharp(this.home.fs.absolutePath(filePath));
-            const {width, height} = await image.metadata();
-            console.log("Image dimensions", width, height);
-            if (!width || !height || width > 12000 || height > 12000) {
-                return null;
-            }
-
-            const thumbnail = await image
-                .webp({quality: 80})
-                .resize(512, 512, {
-                    fit: 'inside',
-                    withoutEnlargement: true
-                })
-                .toBuffer();
-
-            const url = this.home.fs.pathJoin(this.basePath, 'thumbs', `${id}.webp`);
-            this.home.fs.file(url).write(thumbnail);
-
-            return `${id}.webp`;
-        } catch (e) {
-            console.error("Failed to generate thumbnail", e);
-            return null;
-        }
-    }
-
-    private async emitACLChange(path: DrivePath, oldACL: DriveACL[] | null, newACL: DriveACL[] | null) {
-        // get list of all unique users in oldACL and newACL
+    private async emitACLChange(path: PathEntry, oldACL: ACLEntry[] | null, newACL: ACLEntry[] | null): Promise<void> {
         const users = new Set(oldACL?.map(acl => acl.email) || []);
         newACL?.forEach(acl => users.add(acl.email));
-        users.forEach(email => {
-            // TODO, this could/should be done by calling API endpoints
-            getUserByEmail(email).then(user => {
+
+        for (const email of users) {
+            try {
+                const user = await getUserByEmail(email);
                 if (user) {
-                    getHome(user as User).then(home => home.drive.recieveACLChange(path, newACL));
+                    const {getHome} = await import('../home/home');
+                    const home = await getHome(user as User);
+                    await home.drive.recieveACLChange(path, newACL);
                 }
-            });
-        });
+            } catch {}
+        }
     }
 }

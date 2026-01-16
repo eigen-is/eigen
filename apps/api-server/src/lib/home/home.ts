@@ -1,51 +1,28 @@
-import type {User} from "better-auth/types";
-import type Database from "bun:sqlite";
-import {Contacts} from "../contacts/contacts.ts";
-import Maildir from "../mail/maildir.ts";
-import FileSystem from "./filesystem.ts";
-import {getUserById} from "../users/users.ts";
-import Drive from "../drive/drive.ts";
-import type {ServerWebSocket} from "bun";
-import type {EigenNotification} from "../../types/notification.ts";
-import { createAsyncSingleton } from '../../utils/singleton';
+import type {User} from 'better-auth/types';
+import type Database from 'bun:sqlite';
+import {Database as BunDatabase} from 'bun:sqlite';
+import type {ServerWebSocket} from 'bun';
+import * as path from 'path';
+import * as fs from 'node:fs';
+
+import {Contacts} from '../contacts/contacts';
+import Maildir from '../mail/maildir';
+import {getUserById} from '../users/users';
+import type {EigenNotification} from '../../types/notification';
+import {createAsyncSingleton} from '../../utils/singleton';
+import {getUserHomePath} from '../config/paths';
+import type {HomeInterface} from './types';
+import {HomeFileSystem} from './filesystem';
+import Drive from '../drive/drive';
 
 const homeFactories: Map<string, () => Promise<Home>> = new Map();
 
-export class asyncCache<T> {
-    private value: T | undefined;
-    private createPromise: () => Promise<T>;
-    private initializationStarted: boolean = false;
-
-    constructor(create: () => Promise<T>) {
-        this.createPromise = create;
-    }
-
-    public async get(): Promise<T> {
-        if (this.value) {
-            return this.value;
-        }
-        if (this.initializationStarted) {
-            // Wait for initialization to complete
-            return new Promise((resolve) => {
-                const interval = setInterval(() => {
-                    if (this.value) {
-                        console.log('Resolved, asyncCache is ready');
-                        clearInterval(interval);
-                        resolve(this.value);
-                    }
-                }, 1);
-            });
-        }
-        this.initializationStarted = true;
-        return this.value = await this.createPromise();
-    }
-}
-
-export class Home {
+export class Home implements HomeInterface {
     public user: User;
+    public homeDir: string;
+    public fs: HomeFileSystem;
 
-    public fs: FileSystem;
-    public drive: Drive;
+    public drive!: Drive;
     public contacts: Contacts;
     public mail: Maildir;
 
@@ -53,15 +30,16 @@ export class Home {
     private initializationStarted: boolean = false;
     private timeout: Timer | undefined;
 
-    private databases: Map<string, () => Promise<Database>> = new Map();
+    private databases: Map<string, Database> = new Map();
+    private databaseFactories: Map<string, () => Promise<Database>> = new Map();
     private notificationSockets: ServerWebSocket[] = [];
 
     constructor(user: User) {
         this.user = user;
-        this.fs = new FileSystem(this);
-        this.drive = new Drive(this);
-        this.contacts = new Contacts(this);
-        this.mail = new Maildir(this, this.notify.bind(this));
+        this.homeDir = getUserHomePath(user.id);
+        this.fs = new HomeFileSystem(this.homeDir);
+        this.contacts = new Contacts(this as any);
+        this.mail = new Maildir(this as any, this.notify.bind(this));
     }
 
     public async init() {
@@ -69,8 +47,7 @@ export class Home {
             return this;
         }
         if (this.initializationStarted) {
-            // Wait for initialization to complete
-            return new Promise((resolve) => {
+            return new Promise<Home>((resolve) => {
                 const interval = setInterval(() => {
                     if (this.initialized) {
                         clearInterval(interval);
@@ -81,13 +58,71 @@ export class Home {
         }
         this.initializationStarted = true;
 
-        await this.fs.init();
+        if (!fs.existsSync(this.homeDir)) {
+            fs.mkdirSync(this.homeDir, {recursive: true});
+        }
+
+        this.drive = new Drive(this);
         await this.drive.init();
+
         await this.contacts.init();
         await this.mail.init();
 
         this.initialized = true;
         return this;
+    }
+
+    public async getDatabase(
+        relativePath: string,
+        onCreate: (db: Database) => Promise<void>
+    ): Promise<Database> {
+        if (this.databases.has(relativePath)) {
+            return this.databases.get(relativePath)!;
+        }
+
+        if (!this.databaseFactories.has(relativePath)) {
+            this.databaseFactories.set(relativePath, createAsyncSingleton(async () => {
+                const absolutePath = path.join(this.homeDir, relativePath);
+                const dirPath = path.dirname(absolutePath);
+
+                if (!fs.existsSync(dirPath)) {
+                    fs.mkdirSync(dirPath, {recursive: true});
+                }
+
+                const fileExists = fs.existsSync(absolutePath);
+                const db = new BunDatabase(absolutePath, {create: true});
+
+                db.exec('PRAGMA journal_mode = WAL;');
+                db.exec('PRAGMA wal_checkpoint(TRUNCATE);');
+
+                if (!fileExists) {
+                    await onCreate(db);
+                }
+
+                this.databases.set(relativePath, db);
+                return db;
+            }));
+        }
+
+        return await this.databaseFactories.get(relativePath)!();
+    }
+
+    public async openSQLiteDatabase(
+        relativePath: string,
+        onCreate: (db: Database) => Promise<void>
+    ): Promise<Database> {
+        return this.getDatabase(relativePath, onCreate);
+    }
+
+    public async closeSQLiteDatabase(db: Database): Promise<void> {
+        for (const [key, database] of this.databases.entries()) {
+            if (database === db) {
+                database.close();
+                this.databases.delete(key);
+                this.databaseFactories.delete(key);
+                break;
+            }
+        }
     }
 
     public subscribe(ws: ServerWebSocket) {
@@ -99,40 +134,15 @@ export class Home {
     }
 
     public touch() {
-        // Reset the timeout
         if (this.timeout) {
             clearTimeout(this.timeout);
         }
         this.timeout = setTimeout(() => {
-            // remove the home from the cache
             homeFactories.delete(this.user.id);
             this.destruct();
             console.log(`Closed home for ${this.user.id}`);
-        }, 1000 * 60 * 5); // 5 minutes
+        }, 1000 * 60 * 5);
         return this;
-    }
-
-    public async openSQLiteDatabase(file: string, onCreate: (db: Database) => Promise<void>) {
-        console.log(file, this.databases.has(file));
-
-        if (!this.databases.has(file)) {
-            this.databases.set(file, createAsyncSingleton(async () => {
-                const db = await this.fs.createAndOpenDatabase(file, true, onCreate);
-                db.exec("PRAGMA journal_mode = WAL;");
-                return db;
-            }));
-        }
-        return await this.databases.get(file)!() as Database;
-    }
-
-    public async closeSQLiteDatabase(db: Database) {
-        for (const key of this.databases.keys()) {
-            const database = await this.databases.get(key)!() as Database;
-            if (database === db) {
-                database.close();
-                this.databases.delete(key);
-            }
-        }
     }
 
     public async size() {
@@ -152,35 +162,34 @@ export class Home {
                 ws.send(JSON.stringify(event));
                 return true;
             }
+            return false;
         });
     }
 
-    public async getZip() {
-        return await this.fs.getZip();
-    }
-
-    private async destruct() {
-        this.contacts = undefined!;
+    private destruct() {
+        for (const db of this.databases.values()) {
+            try {
+                db.close();
+            } catch {}
+        }
+        this.databases.clear();
+        this.databaseFactories.clear();
     }
 }
 
 export function getHome(user: User): Promise<Home> {
-    // Create a factory for this user if it doesn't exist
     if (!homeFactories.has(user.id)) {
-      homeFactories.set(user.id, createAsyncSingleton(async () => {
-        // Check if user exists
-        const userExists = await getUserById(user.id);
-        if (!userExists) {
-          throw new Error('User not found');
-        }
-        
-        // Create and initialize the home
-        const home = new Home(user);
-        await home.init();
-        return home.touch();
-      }));
+        homeFactories.set(user.id, createAsyncSingleton(async () => {
+            const userExists = await getUserById(user.id);
+            if (!userExists) {
+                throw new Error('User not found');
+            }
+
+            const home = new Home(user);
+            await home.init();
+            return home.touch();
+        }));
     }
-    
-    // Always return from the factory, which handles initialization once
+
     return homeFactories.get(user.id)!();
-  }
+}

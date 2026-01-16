@@ -3,9 +3,9 @@ import {drizzle} from "drizzle-orm/bun-sqlite";
 import {and, count, eq, sql} from "drizzle-orm";
 import * as schema from "./schema.ts";
 import type {EmailSummary} from "./mailtypes.ts";
-import {Home} from "../home/home.ts";
+import type {HomeInterface} from "../home/types";
 
-async function getMailDatabase(home: Home) {
+async function getMailDatabase(home: HomeInterface) {
     const db = await home.openSQLiteDatabase('eigen.mail/mail.db', async (db: Database) => {
         // Execute migration SQL to create tables
         db.exec(`
@@ -41,6 +41,12 @@ async function getMailDatabase(home: Home) {
                 FOREIGN KEY (emailId) REFERENCES emails(id) ON DELETE CASCADE,
                 FOREIGN KEY (labelId) REFERENCES email_labels(id) ON DELETE CASCADE
             );
+            
+            -- Performance indexes for mail queries
+            CREATE INDEX IF NOT EXISTS idx_emails_mailbox ON emails(mailbox);
+            CREATE INDEX IF NOT EXISTS idx_emails_date ON emails(date DESC);
+            CREATE INDEX IF NOT EXISTS idx_emails_mailbox_date ON emails(mailbox, date DESC);
+            CREATE INDEX IF NOT EXISTS idx_emails_mailbox_read ON emails(mailbox, isRead);
         `);
     });
 
@@ -48,10 +54,10 @@ async function getMailDatabase(home: Home) {
 }
 
 export default class maildb {
-    private home: Home;
+    private home: HomeInterface;
     private db!: ReturnType<typeof drizzle<typeof schema>>;
 
-    constructor(home: Home) {
+    constructor(home: HomeInterface) {
         this.home = home;
     }
 

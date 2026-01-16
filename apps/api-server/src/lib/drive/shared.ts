@@ -1,10 +1,10 @@
-import type {Home} from "../home/home";
+import type {HomeInterface} from "../home/types";
 import type Database from "bun:sqlite";
 import {drizzle} from "drizzle-orm/bun-sqlite";
 import * as schema from "./sharedschema";
 
-export async function getSharedDatabase(home: Home) {
-    const db = await home.openSQLiteDatabase('eigen.drive/shared.db', async (db: Database) => {
+export async function getSharedDatabase(home: HomeInterface) {
+    const db = await home.openSQLiteDatabase('mounts/shared.db', async (db: Database) => {
         // Execute migration SQL to create tables
         db.exec(`
           -- Create shared_paths table

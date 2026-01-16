@@ -5,10 +5,12 @@ import {BunSQLiteDatabase, drizzle} from "drizzle-orm/bun-sqlite";
 import {eq, sql} from "drizzle-orm";
 import * as schema from "./schema";
 import {v4 as uuidv4} from "uuid";
-import {getHome, Home} from "../home/home";
+import {getHome} from "../home/home";
+import type {HomeInterface} from "../home/types";
 import type {User} from "better-auth/types";
 import {getUserByEmail, updateUser} from "../users/users.ts";
 import sharp from "sharp";
+import {LocalStorage} from "../storage";
 
 export async function getContacts(user: User) {
     const home = await getHome(user);
@@ -18,7 +20,7 @@ export async function getContacts(user: User) {
     return home.contacts;
 }
 
-async function getContactsDatabase(home: Home) {
+async function getContactsDatabase(home: HomeInterface) {
     const db = await home.openSQLiteDatabase('eigen.contacts/contacts.db', async (db: Database) => {
         // Execute migration SQL to create tables
         db.exec(`
@@ -89,10 +91,12 @@ async function getContactsDatabase(home: Home) {
 
 export class Contacts {
     private db!: BunSQLiteDatabase<typeof schema>;
-    private home: Home;
+    private home: HomeInterface;
+    private storage: LocalStorage;
 
-    constructor(home: Home) {
+    constructor(home: HomeInterface) {
         this.home = home;
+        this.storage = new LocalStorage(`${home.homeDir}/eigen.contacts`);
     }
 
     public async init() {
@@ -126,8 +130,13 @@ export class Contacts {
     }
 
     public async size(): Promise<number> {
-        // get total size of mailbox
-        return (await this.home.fs.dirSize('eigen.contacts'));
+        let total = 0;
+        const files = await this.storage.list('avatars');
+        for (const file of files) {
+            const size = await this.storage.size(`avatars/${file}`);
+            if (size) total += size;
+        }
+        return total;
     }
 
     public async setContactLabels(contactId: string, labels: string[]) {
@@ -325,10 +334,6 @@ export class Contacts {
     public async uploadAvatar(file: File) {
         this.cleanupAvatarImages();
 
-        // create random file name in 'eigen.contacts/avatars' with correct extension
-        const baseDir = 'eigen.contacts/avatars/';
-        await this.home.fs.mkdir(baseDir, {recursive: true});
-
         // Read file content as buffer
         const buffer = Buffer.from(await file.arrayBuffer());
 
@@ -341,22 +346,15 @@ export class Contacts {
             })
             .toBuffer();
 
-        const extension = 'webp';
-        // create file name
-        const fileName = `${uuidv4()}.${extension}`;
-        const fullFileName = `${baseDir}${fileName}`;
-
-        await this.home.fs.file(fullFileName).write(convertedFile);
+        const fileName = `${uuidv4()}.webp`;
+        await this.storage.write(`avatars/${fileName}`, convertedFile);
 
         return `contacts/avatar/${fileName}`;
     }
 
     public async downloadAvatar(filename: string) {
-        // return file if exists with correct headers
-        const filePath = `eigen.contacts/avatars/${filename}`;
-        const file = this.home.fs.file(filePath);
-
-        if (!file.exists()) {
+        const file = this.storage.read(`avatars/${filename}`);
+        if (!(await file.exists())) {
             return null;
         }
         return file.arrayBuffer();
@@ -368,16 +366,13 @@ export class Contacts {
     }
 
     private async cleanupAvatarImages() {
-        const baseDir = 'eigen.contacts/avatars/';
-        await this.home.fs.mkdir(baseDir, {recursive: true});
-
-        const files = await this.home.fs.readdir(baseDir);
+        await this.storage.mkdir('avatars');
+        const files = await this.storage.list('avatars');
         const contacts = await this.getContacts();
         for (const file of files) {
-            // delete file if it is not in the database
             const contact = contacts.find(c => c.avatar?.includes(file));
             if (!contact) {
-                await this.home.fs.unlink(`${baseDir}${file}`);
+                await this.storage.delete(`avatars/${file}`);
             }
         }
     }
