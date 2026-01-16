@@ -87,6 +87,9 @@ export function useNotifications(options: UseNotificationsOptions = {}) {
                 if (notification.data?.pathId) {
                     queryClient.invalidateQueries({queryKey: driveKeys.path(notification.data.pathId)});
                 }
+                if (notification.data?.parentId) {
+                    queryClient.invalidateQueries({queryKey: driveKeys.folder(notification.data.parentId)});
+                }
                 break;
         }
     }, [onNotification, queryClient]);
@@ -103,6 +106,7 @@ export function useNotifications(options: UseNotificationsOptions = {}) {
             try {
                 const notification = JSON.parse(event.data) as EigenNotification;
                 handleNotification(notification);
+                console.log('Received notification', notification);
             } catch (e) {
                 console.error('Failed to parse notification', e);
             }
