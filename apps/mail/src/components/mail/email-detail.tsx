@@ -28,7 +28,7 @@ import { printDocument } from "@workspace/ui/lib/printElement";
 import { AddressObject } from "../../../../api-server/src/lib/mail/mailtypes";
 import { Table, TableBody, TableCell, TableRow } from "@workspace/ui/components/table";
 import path from "path";
-import { useCallback, useState } from "react";
+import { useEffect, useRef } from "react";
 
 interface EmailDetailProps {
     email: Email | null;
@@ -82,8 +82,16 @@ export function EmailDetail({
                                 mailboxes = [],
                                 ...props
                             }: EmailDetailProps) {
+    const hasMarkedAsRead = useRef<string | null>(null);
+    
+    useEffect(() => {
+        if (email && !email.isRead && hasMarkedAsRead.current !== email.id) {
+            hasMarkedAsRead.current = email.id;
+            toggleMailRead(email, true);
+        }
+    }, [email, toggleMailRead]);
+
     if (!email) {
-        console.log('No email provided to EmailDetail component');
         return (
             <div className="flex h-full items-center justify-center text-muted-foreground">
                 Email data not available
@@ -91,10 +99,8 @@ export function EmailDetail({
         );
     }
 
-    toggleMailRead(email, true);
-
     console.log('Rendering EmailDetail with email:', email);
-
+    
     const firstFrom = email.from?.value[0];
     const fromName = firstFrom?.name || firstFrom?.address || 'Unknown';
     const fromEmail = firstFrom?.address || 'unknown@example.com';
