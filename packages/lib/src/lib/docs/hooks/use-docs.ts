@@ -19,7 +19,7 @@ export function useDocumentAccess(ownerId: string, pathId: string | undefined) {
         queryFn: async () => {
             if (!pathId) return {canRead: false, canWrite: false};
 
-            const response = await api.collab.access[ownerId][pathId].get();
+            const response = await api.collab.access({ownerId})({pathId}).get();
 
             if (response.error) {
                 console.error('Error fetching document access:', response.error);

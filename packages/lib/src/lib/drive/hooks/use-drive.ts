@@ -24,7 +24,7 @@ export function useRootFolder(ownerId: string) {
     return useQuery({
         queryKey: driveKeys.root(),
         queryFn: async () => {
-            const response = await driveApi.root[ownerId].get();
+            const response = await driveApi.root({ownerId}).get();
             return response.data || null;
         },
         staleTime: Infinity
@@ -37,9 +37,9 @@ export function useFolderContent(ownerId: string, pathId: string) {
         queryKey: driveKeys.folder(pathId),
         queryFn: async () => {
             if (!pathId) return [];
-            const response = await driveApi.folder[ownerId][pathId].get();
+            const response = await driveApi.folder({ownerId})({pathId}).get();
             if (response.error) {
-                throw new Error(response.error.message);
+                throw new Error(String(response.error));
             }
             return response.data || [];
         },
@@ -55,9 +55,9 @@ export function useMimeContent(ownerId: string, mimeType: string) {
         queryKey: driveKeys.mime(mimeType),
         queryFn: async () => {
             if (!mimeType) return [];
-            const response = await driveApi.mime[ownerId][mimeType].get();
+            const response = await driveApi.mime({ownerId})({mimeType}).get();
             if (response.error) {
-                throw new Error(response.error.message);
+                throw new Error(String(response.error));
             }
             return response.data || [];
         },
@@ -73,7 +73,7 @@ export function usePathInfo(ownerId: string, pathId: string | undefined) {
         queryKey: driveKeys.path(pathId || ''),
         queryFn: async () => {
             if (!pathId) return null;
-            const response = await driveApi.path[ownerId][pathId].get();
+            const response = await driveApi.path({ownerId})({pathId}).get();
             return response.data || null;
         },
         enabled: !!pathId,
@@ -87,9 +87,7 @@ export function useCreateFolder(ownerId: string) {
 
     return useMutation({
         mutationFn: async ({parentId, folderName}: { parentId: string, folderName: string }) => {
-            const response = await driveApi.folder[ownerId][parentId].post({
-                folderName
-            });
+            const response = await driveApi.folder({ownerId})({pathId: parentId}).post({folderName});
             return response.data;
         },
         onSuccess: (_, variables) => {
@@ -104,10 +102,7 @@ export function useUploadFile(ownerId: string) {
 
     return useMutation({
         mutationFn: async ({parentId, file}: { parentId: string, file: File }) => {
-            const response = await driveApi.file[ownerId].post({
-                parentId,
-                file
-            });
+            const response = await driveApi.file({ownerId})({pathId: parentId}).post({file});
             return response.data;
         },
         onSuccess: (_, variables) => {
@@ -124,10 +119,7 @@ export function useUploadFiles(ownerId: string) {
 
     return useMutation({
         mutationFn: async ({parentId, files}: { parentId: string, files: File[] }) => {
-            const response = await driveApi.files[ownerId].post({
-                parentId,
-                files
-            });
+            const response = await driveApi.files({ownerId})({pathId: parentId}).post({files});
             return response.data;
         },
         onSuccess: (_, variables) => {
@@ -151,7 +143,7 @@ export function useDeleteFolder(ownerId: string) {
 
     return useMutation({
         mutationFn: async (pathId: string) => {
-            const response = await driveApi.folder[ownerId][pathId].delete();
+            const response = await driveApi.folder({ownerId})({pathId}).delete();
             return response.data;
         },
         onSuccess: () => {
@@ -169,7 +161,7 @@ export function useDeleteFile(ownerId: string) {
 
     return useMutation({
         mutationFn: async (pathId: string) => {
-            const response = await driveApi.file[ownerId][pathId].delete();
+            const response = await driveApi.file({ownerId})({pathId}).delete();
             return response.data;
         },
         onSuccess: () => {
@@ -189,9 +181,7 @@ export function useMovePath(ownerId: string) {
 
     return useMutation({
         mutationFn: async ({pathId, targetParentId}: { pathId: string, targetParentId: string }) => {
-            const response = await driveApi.path.move[ownerId][pathId].put({
-                targetParentId
-            });
+            const response = await driveApi.path.move({ownerId})({pathId}).put({targetParentId});
             return response.data;
         },
         onSuccess: () => {
@@ -206,9 +196,7 @@ export function useRenamePath(ownerId: string) {
 
     return useMutation({
         mutationFn: async ({pathId, newName}: { pathId: string, newName: string }) => {
-            const response = await driveApi.path.rename[ownerId][pathId].put({
-                newName
-            });
+            const response = await driveApi.path.rename({ownerId})({pathId}).put({newName});
             return response.data;
         },
         onSuccess: () => {
@@ -225,9 +213,7 @@ export function useUpdateACL(ownerId: string) {
     return useMutation({
         mutationFn: async ({path, acl}: { path: DrivePath, acl: DriveACL[] }) => {
             console.log('put acls', path.id, acl);
-            const response = await driveApi.path.acl[ownerId][path.id].put({
-                acl
-            });
+            const response = await driveApi.path.acl({ownerId})({pathId: path.id}).put({acl});
             console.log(response.data);
             return response.data;
         },
@@ -253,7 +239,7 @@ export function useCheckReadPermission(ownerId: string, pathId: string | undefin
         queryKey: driveKeys.read(pathId || ''),
         queryFn: async () => {
             if (!pathId) return {canRead: false};
-            const response = await driveApi.permissions.read[ownerId][pathId].get();
+            const response = await driveApi.permissions.read({ownerId})({pathId}).get();
             return response.data || {canRead: false};
         },
         enabled: !!pathId
@@ -266,7 +252,7 @@ export function useCheckWritePermission(ownerId: string, pathId: string | undefi
         queryKey: driveKeys.write(pathId || ''),
         queryFn: async () => {
             if (!pathId) return {canWrite: false};
-            const response = await driveApi.permissions.write[ownerId][pathId].get();
+            const response = await driveApi.permissions.write({ownerId})({pathId}).get();
             return response.data || {canWrite: false};
         },
         enabled: !!pathId
@@ -279,7 +265,7 @@ export function useBreadcrumb(ownerId: string, pathId: string | undefined) {
         queryKey: [...driveKeys.path(pathId || ''), 'breadcrumb'],
         queryFn: async () => {
             if (!pathId) return [];
-            const response = await driveApi.breadcrumb[ownerId][pathId].get();
+            const response = await driveApi.breadcrumb({ownerId})({pathId}).get();
             return response.data || [];
         },
         enabled: !!pathId
@@ -292,9 +278,7 @@ export function useCreateDoc(ownerId: string) {
 
     return useMutation({
         mutationFn: async ({parentId, fileName}: { parentId: string, fileName: string }) => {
-            const response = await driveApi.doc[ownerId][parentId].post({
-                fileName
-            });
+            const response = await driveApi.doc({ownerId})({pathId: parentId}).post({fileName});
             return response.data;
         },
         onSuccess: (_, variables) => {
@@ -310,9 +294,7 @@ export function useCreateStickies(ownerId: string) {
 
     return useMutation({
         mutationFn: async ({parentId, fileName}: { parentId: string, fileName: string }) => {
-            const response = await driveApi.stickies[ownerId][parentId].post({
-                fileName
-            });
+            const response = await driveApi.stickies({ownerId})({pathId: parentId}).post({fileName});
             return response.data;
         },
         onSuccess: (_, variables) => {
@@ -326,7 +308,7 @@ export function useSharedPaths(to: 'by-me' | 'with-me') {
     return useQuery({
         queryKey: driveKeys.shared(to),
         queryFn: async () => {
-            const response = await driveApi.shared[`${to}`].get();
+            const response = await driveApi.shared[to].get();
             return response.data;
         }
     });

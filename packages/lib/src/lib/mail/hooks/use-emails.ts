@@ -21,7 +21,6 @@ export function useEmails(mailboxPath: string) {
             mailboxPath = mailboxPath.toLowerCase();
             mailboxPath = mailboxPath === 'inbox' ? '' : mailboxPath;
             console.log(`Fetching emails for mailbox: ${mailboxPath}`);
-            // @ts-ignore
             const response = await mailApi.mailbox[mailboxPath].get();
             return (response.data || []) as Email[];
         },
@@ -35,7 +34,7 @@ export function useEmail(messageId: string | undefined) {
         queryKey: emailKeys.detail(messageId || ''),
         queryFn: async () => {
             if (!messageId) return null;
-            const response = await mailApi.message[messageId].get();
+            const response = await mailApi.message({id: messageId}).get();
             return response.data || null;
         },
         enabled: !!messageId,
@@ -53,7 +52,7 @@ export function useEmailById() {
             return await queryClient.fetchQuery({
                 queryKey: emailKeys.detail(messageId),
                 queryFn: async () => {
-                    const response = await mailApi.message[messageId].get();
+                    const response = await mailApi.message({id: messageId}).get();
                     return response.data || null;
                 },
                 staleTime: Infinity,
@@ -71,7 +70,7 @@ export function useDeleteEmail() {
     return async (email: Email) => {
         // if mail is not in the trash folder, move it to trash
         if (email.mailbox === 'trash') {
-            await mailApi.message[email.id].delete();
+            await mailApi.message({id: email.id}).delete();
         } else {
             await mailApi.message.moveToTrash.put({messageId: email.id});
             // invalidate mailbox cache

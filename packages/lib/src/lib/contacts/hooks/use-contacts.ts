@@ -39,7 +39,7 @@ export function useContact(id: string) {
         queryKey: contactKeys.detail(id),
         queryFn: async () => {
             if (!id) return null;
-            const response = await contactsApi.contacts[id].get();
+            const response = await contactsApi.contacts({id}).get();
             return response.data;
         },
         enabled: !!id,
@@ -69,7 +69,7 @@ export function useUpdateContact() {
 
     return useMutation({
         mutationFn: async ({id, ...data}: Contact) => {
-            const response = await contactsApi.contacts[id].put(data as any);
+            const response = await contactsApi.contacts({id}).put(data as any);
             return response.data;
         },
         onSuccess: (_, variables) => {
@@ -87,7 +87,7 @@ export function useDeleteContact() {
 
     return useMutation({
         mutationFn: async (id: string) => {
-            const response = await contactsApi.contacts[id].delete();
+            const response = await contactsApi.contacts({id}).delete();
             return response.data;
         },
         onSuccess: (_, id) => {
