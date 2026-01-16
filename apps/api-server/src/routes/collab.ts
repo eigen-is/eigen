@@ -1,6 +1,5 @@
 import {Elysia, t} from "elysia";
 import {betterAuth} from "./auth";
-import {type User} from "better-auth/types";
 import {type ServerWebSocket} from "bun";
 import {getSharedDrive} from "../lib/drive/sharedDrive.ts";
 import {keepWebSocketAlive} from "../utils/websockets.ts";
@@ -13,22 +12,12 @@ export const collabRouter = new Elysia({
 })
     .use(betterAuth)
 
-    // Endpoint to check if user has access to document
-    .get("/collab/access/:ownerId/:pathId", async ({params, user}: {
-        params: { ownerId: string, pathId: string },
-        user: User
-    }) => {
+    .get("/collab/access/:ownerId/:pathId", async ({params, user}) => {
         const drive = await getSharedDrive(params.ownerId, user);
         const canRead = await drive.canRead(params.pathId, user);
         const canWrite = await drive.canWrite(params.pathId, user);
         return {canRead, canWrite};
-    }, {
-        auth: true,
-        params: t.Object({
-            ownerId: t.String(),
-            pathId: t.String(),
-        })
-    })
+    }, {auth: true})
 
     // WebSocket endpoint for collaborative editing
     .ws("/ws/collab/:ownerId/:pathId", {
@@ -53,7 +42,7 @@ export const collabRouter = new Elysia({
             const pathId = ws.data.params.pathId;
 
             const drive = await getSharedDrive(ownerId, user);
-            if (!drive || !drive.canRead(pathId, user)) {
+            if (!drive || !(await drive.canRead(pathId, user))) {
                 ws.close(1008, "Authentication failed");
                 return;
             }

@@ -7,6 +7,9 @@ import type Database from "bun:sqlite";
 import CollabDocument from "../collab/collabDocument.ts";
 
 export async function getSharedDrive(ownerId: string, user: User) {
+    if (!user?.id) {
+        throw new Error('User is required');
+    }
     if (ownerId !== user.id) {
         // get user from ownerId
         const owner = await getUserById(ownerId);
