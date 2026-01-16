@@ -1,6 +1,6 @@
 import { defineConfig, mergeConfig, type UserConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-import { TanStackRouterVite } from '@tanstack/router-plugin/vite'
+import { tanstackRouter } from '@tanstack/router-plugin/vite'
 import tailwindcss from '@tailwindcss/vite'
 import viteTsConfigPaths from 'vite-tsconfig-paths'
 import path from 'path'
@@ -25,11 +25,11 @@ export function createAppConfig(appName: string, extraConfig?: UserConfig) {
     base: basePath,
     envDir: './../../',
     plugins: [
-      react(),
-      TanStackRouterVite({
+      tanstackRouter({
         target: 'react',
-        autoCodeSplitting: false,
+        autoCodeSplitting: true,
       }),
+      react(),
       tailwindcss(),
       viteTsConfigPaths({
         projects: ['./tsconfig.json'],
