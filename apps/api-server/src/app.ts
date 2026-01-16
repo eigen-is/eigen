@@ -37,7 +37,6 @@ export const app = new Elysia()
     .use(driveRouter)
     .use(homeRouter)
     .use(collabRouter)
-    .use(adminRouter)
     .use(sseRouter);
 
 export type App = typeof app;
