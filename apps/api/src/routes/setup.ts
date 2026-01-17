@@ -83,9 +83,9 @@ export const setupRouter = new Elysia({ name: "setup" })
                 success: true,
                 message: "Setup completed successfully",
                 user: result.user ? {
-                    id: result.user.id,
-                    email: result.user.email,
-                    name: result.user.name
+                    id: result.user.user.id,
+                    email: result.user.user.email,
+                    name: result.user.user.name
                 } : undefined
             };
         } catch (error) {
