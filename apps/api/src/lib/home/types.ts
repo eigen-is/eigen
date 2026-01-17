@@ -1,6 +1,6 @@
 import type {User} from 'better-auth/types';
 import type Database from 'bun:sqlite';
-import type {EigenNotification} from '@workspace/lib/types/notification';
+import type {SSEEvent} from '@workspace/lib/types/sse';
 
 export interface HomeInterface {
     user: User;
@@ -10,7 +10,7 @@ export interface HomeInterface {
     openSQLiteDatabase(relativePath: string, onCreate: (db: Database) => Promise<void>): Promise<Database>;
     closeSQLiteDatabase(db: Database): Promise<void>;
     
-    subscribeSSE(listener: (event: EigenNotification) => void): void;
-    unsubscribeSSE(listener: (event: EigenNotification) => void): void;
-    notify(event: EigenNotification): void;
+    subscribeSSE(listener: (event: SSEEvent) => void): void;
+    unsubscribeSSE(listener: (event: SSEEvent) => void): void;
+    notify(event: SSEEvent): void;
 }
