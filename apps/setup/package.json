@@ -1,0 +1,14 @@
+{
+  "name": "@apps/setup",
+  "version": "0.0.1",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "bunx --bun vite",
+    "build": "bunx --bun vite build"
+  },
+  "dependencies": {
+    "@workspace/lib": "workspace:*",
+    "@workspace/ui": "workspace:*"
+  }
+}
