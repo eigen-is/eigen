@@ -6,7 +6,7 @@ import {EigenLoader} from '@workspace/ui';
 import {useAuth} from '@workspace/lib/auth';
 import {DriveSidebar} from '@/components/drive/drive-sidebar';
 import {useIsMobile, useIsTablet} from "@workspace/lib/media";
-import {DrivePath} from '@apps/api-server/types/drive';
+import {DrivePath} from '@apps/api/types/drive';
 
 // Create a drive context to share data with child routes
 export interface DriveContextType {
