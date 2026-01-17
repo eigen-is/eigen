@@ -1,5 +1,5 @@
 import {treaty} from '@elysiajs/eden';
-import type {app} from "@apps/api-server";
+import type {app} from "@apps/api";
 
 export const API_HOST = import.meta.env.VITE_API_HOST as string;
 
