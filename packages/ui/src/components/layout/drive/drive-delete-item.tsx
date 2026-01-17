@@ -1,5 +1,5 @@
 import {toast} from "sonner";
-import {DrivePath} from "@apps/api-server/types/drive";
+import {DrivePath} from "@workspace/lib/types/drive";
 import {useDeleteFile, useDeleteFolder, useInvalidateFolder} from "@workspace/lib/drive";
 import {DeleteDialog} from "@workspace/ui/components/layout/delete/delete-dialog";
 import {useQueryClient} from "@tanstack/react-query";

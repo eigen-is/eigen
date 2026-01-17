@@ -1,7 +1,7 @@
 import {useState} from "react"
 import {Dialog, DialogContent, DialogHeader, DialogTitle} from "@workspace/ui/components/dialog"
 import {DriveAccessListEdit} from "@workspace/ui/components/layout/drive/drive-access-list-edit"
-import type {DriveACL, DrivePath} from "@apps/api-server/types/drive"
+import type {DriveACL, DrivePath} from "@workspace/lib/types/drive"
 import {useUpdateACL} from "@workspace/lib/drive";
 
 export interface DriveAccessDialogProps {

@@ -1,6 +1,6 @@
 "use client"
 import {UserPublicItem} from "../user-item"
-import type {DriveACL, DrivePath} from "@apps/api-server/types/drive"
+import type {DriveACL, DrivePath} from "@workspace/lib/types/drive"
 import {cn} from "@workspace/ui/lib/utils"
 import {useMemo} from "react"
 import {usePublicUser} from "@workspace/lib/public"

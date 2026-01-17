@@ -17,7 +17,7 @@ import {Form, FormControl, FormField, FormItem, FormLabel, FormMessage,} from "@
 import {Input} from "@workspace/ui/components/input";
 import {Button} from "@workspace/ui/components/button";
 import {DeleteDialog} from "@workspace/ui/components/layout/delete/delete-dialog";
-import type {Label} from "@apps/api-server/types/label";
+import type {Label} from "@workspace/lib/types/label";
 
 // Form schema for label management
 const labelFormSchema = z.object({
