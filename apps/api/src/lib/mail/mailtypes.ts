@@ -1,4 +1,3 @@
-export * from "./mail-parser";
 export type {
     EmailSummary,
     Email,
