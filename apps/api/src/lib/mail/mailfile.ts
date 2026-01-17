@@ -1,4 +1,4 @@
-import type {Email, EmailAddress} from "./mailtypes";
+import type {Email, EmailAddress} from "@workspace/lib/types/mail";
 
 /**
  * Creates an EML format content from an Email object

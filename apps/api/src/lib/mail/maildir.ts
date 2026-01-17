@@ -1,5 +1,5 @@
 import type {User} from "better-auth";
-import type {Attachment, Email, EmailSummary, MaildirMailbox} from "./mailtypes";
+import type {Attachment, Email, EmailSummary, MaildirMailbox} from "@workspace/lib/types/mail";
 import {simpleParser} from "./mail-parser";
 import {createELMContent} from "./mailfile";
 import {createUniqueMessageId, getMailIDfromFileName, getStandardMailboxFlags} from "./mailutils";
