@@ -12,6 +12,7 @@ import {collabRouter} from "./routes/collab";
 import {adminRouter} from "./routes/admin";
 import {configRouter} from "./routes/config";
 import {sseRouter} from "./routes/sse";
+import {setupRouter} from "./routes/setup";
 
 export const app = new Elysia()
     .use(swagger())
@@ -22,6 +23,7 @@ export const app = new Elysia()
         allowedHeaders: ["Content-Type", "Authorization"],
     }))
     .use(betterAuth)
+    .use(setupRouter)
     .use(adminRouter)
     .use(configRouter)
     .onError(({error, set}) => {

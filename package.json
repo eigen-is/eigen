@@ -12,6 +12,7 @@
     "serve:drive": "bun --filter 'apps/api' --filter './apps/drive' dev",
     "serve:docs": "bun --filter 'apps/api' --filter './apps/docs' dev",
     "serve:stickies": "bun --filter 'apps/api' --filter './apps/stickies' dev",
+    "serve:setup": "bun --filter 'apps/api' --filter './apps/setup' dev",
     "build": "bun --filter '*' build",
     "build:prod": "bun --filter './apps/*' build && bun --filter 'apps/api' buildfordocker"
   },
