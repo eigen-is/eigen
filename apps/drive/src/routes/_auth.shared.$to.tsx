@@ -1,7 +1,7 @@
 import {createFileRoute, useNavigate} from '@tanstack/react-router';
 import {usePathInfo, useSharedPaths} from '@workspace/lib/drive';
 import {DriveLayout} from "@workspace/ui/components/layout/drive/drive-layout";
-import {DrivePath} from "@apps/api-server/types/drive";
+import {DrivePath} from "@apps/api/types/drive";
 import {useAuth} from '@workspace/lib/auth';
 import {useIsMobile} from "@workspace/lib/media";
 import {EigenLoader} from '@workspace/ui';

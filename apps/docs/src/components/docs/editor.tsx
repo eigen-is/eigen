@@ -10,7 +10,7 @@ import {withHistory} from "slate-history";
 import {EditorToolbar} from "./editor-toolbar";
 import {CustomElement} from "./editor.types";
 import {EigenLoader} from "@workspace/ui";
-import { DrivePath } from "@apps/api-server/types/drive";
+import { DrivePath } from "@apps/api/types/drive";
 
 // Define the initial value with proper typing
 const initialValue: CustomElement[] = [

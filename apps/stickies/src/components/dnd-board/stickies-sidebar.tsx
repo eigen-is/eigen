@@ -3,7 +3,7 @@ import {Button} from "@workspace/ui/components/button";
 import {SidebarSection} from '@workspace/ui/components/layout/sidebar/sidebar-section';
 import {AppLogo} from '@workspace/ui/components/layout/app-logo';
 import {SidebarItem, StorageUsage} from "@workspace/ui";
-import {DrivePath} from '@apps/api-server/types/drive';
+import {DrivePath} from '@apps/api/types/drive';
 import {useState} from 'react';
 import {useNavigate} from '@tanstack/react-router';
 

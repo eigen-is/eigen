@@ -12,7 +12,7 @@ import {
     Printer,
     Trash2
 } from 'lucide-react';
-import {type Contact} from "@apps/api-server/types/contact";
+import {type Contact} from "@apps/api/types/contact";
 import {Button} from "@workspace/ui/components/button";
 import {
     DropdownMenu,

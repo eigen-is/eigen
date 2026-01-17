@@ -17,7 +17,7 @@ import {useAuth} from '@workspace/lib/auth/auth-context.js';
 import {useRootFolder} from '@workspace/lib/drive';
 import {DriveCreateStickies} from '@workspace/ui/components/layout/drive/drive-create-stickies';
 import {DriveDeleteItem} from '@workspace/ui/components/layout/drive/drive-delete-item';
-import {DrivePath} from '@apps/api-server/types/drive';
+import {DrivePath} from '@apps/api/types/drive';
 import { DriveRenameItem } from '@workspace/ui/components/layout/drive/drive-rename-item';
 
 interface StickiesToolbarProps {

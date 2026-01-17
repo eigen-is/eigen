@@ -11,7 +11,7 @@ import {useIsMobile} from "@workspace/lib/media";
 import {useYjsKanbanBoard} from './hooks/useYjsKanbanBoard';
 import {useYjsDragAndDrop} from './hooks/useYjsDragAndDrop';
 import {StickiesToolbar} from './stickies-toolbar';
-import {DrivePath} from '@apps/api-server/types/drive';
+import {DrivePath} from '@apps/api/types/drive';
 
 interface StickiesBoardProps {
     ownerId: string;
