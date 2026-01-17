@@ -15,6 +15,7 @@ const APP_PORTS: Record<string, number> = {
   docs: 3006,
   stickies: 3007,
   admin: 3010,
+  setup: 3011,
 }
 
 export function createAppConfig(appName: string, extraConfig?: UserConfig) {

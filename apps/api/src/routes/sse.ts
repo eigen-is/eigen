@@ -13,20 +13,32 @@ export const sseRouter = new Elysia({name: "sse"})
         
         let keepalive: Timer | null = null;
         let listener: ((event: any) => void) | null = null;
+        let isClosed = false;
         
         const stream = new ReadableStream({
             start(controller) {
                 listener = (event: any) => {
-                    controller.enqueue(event);
+                    if (isClosed) return;
+                    try {
+                        controller.enqueue(event);
+                    } catch {
+                        isClosed = true;
+                    }
                 };
 
                 home.subscribeSSE(listener);
 
                 keepalive = setInterval(() => {
-                    controller.enqueue({event: 'keepalive'});
+                    if (isClosed) return;
+                    try {
+                        controller.enqueue({event: 'keepalive'});
+                    } catch {
+                        isClosed = true;
+                    }
                 }, 30000);
             },
             cancel() {
+                isClosed = true;
                 if (keepalive) clearInterval(keepalive);
                 if (listener) home.unsubscribeSSE(listener);
             }
