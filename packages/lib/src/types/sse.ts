@@ -1,30 +1,52 @@
-export const SSEEventTypes = {
-    MAIL_RECEIVED: 'mail:received',
-    DRIVE_FOLDER_CREATED: 'drive:folder-created',
-    DRIVE_FILE_UPLOADED: 'drive:file-uploaded',
-    DRIVE_FOLDER_DELETED: 'drive:folder-deleted',
-    DRIVE_FILE_DELETED: 'drive:file-deleted',
-    DRIVE_PATH_RENAMED: 'drive:path-renamed',
-    DRIVE_PATH_MOVED: 'drive:path-moved',
-    DRIVE_ACL_UPDATED: 'drive:acl-updated',
-    DRIVE_ACL_SHARED: 'drive:acl-shared',
-    DRIVE_ACL_UNSHARED: 'drive:acl-unshared',
-} as const;
-
-export type SSEEventType = typeof SSEEventTypes[keyof typeof SSEEventTypes];
-
-export interface SSEEvent {
-    type: SSEEventType;
+// Base for all events
+type SSEventBase = {
     title: string;
+};
+
+// Notification mixin - events that should show toasts
+type SSEventNotification = {
     body: string;
     tag?: string;
     link?: string;
-    showToast?: boolean;
-    data?: {
-        pathId?: string;
-        parentId?: string | null;
-        oldParentId?: string | null;
-        folderId?: string;
-        mimeType?: string;
-    };
+};
+
+// Drive data events (no toast, just sync)
+type SSEventDrivePathChange = SSEventBase & {
+    type: 'drive:folder-created' | 'drive:file-uploaded' | 'drive:folder-deleted'
+        | 'drive:file-deleted' | 'drive:path-renamed' | 'drive:acl-updated';
+    data: { pathId: string; parentId: string | null };
+};
+
+type SSEventDrivePathMoved = SSEventBase & {
+    type: 'drive:path-moved';
+    data: { pathId: string; parentId: string | null; oldParentId: string | null };
+};
+
+// Drive notification events (show toast)
+type SSEventDriveShared = SSEventBase & SSEventNotification & {
+    type: 'drive:acl-shared';
+    data: { pathId: string };
+};
+
+type SSEventDriveUnshared = SSEventBase & SSEventNotification & {
+    type: 'drive:acl-unshared';
+    data: { pathId: string };
+};
+
+type SSEventDrive = SSEventDrivePathChange | SSEventDrivePathMoved | SSEventDriveShared | SSEventDriveUnshared;
+
+// Mail notification events (show toast)
+type SSEventMail = SSEventBase & SSEventNotification & {
+    type: 'mail:received';
+};
+
+// Union of all events
+export type SSEvent = SSEventDrive | SSEventMail;
+
+// Type guard to check if event is a notification (has body, should show toast)
+export function isSSEventNotification(event: SSEvent): event is SSEvent & SSEventNotification {
+    return 'body' in event;
 }
+
+// Export individual types for consumers
+export type { SSEventBase, SSEventNotification, SSEventDrive, SSEventMail };

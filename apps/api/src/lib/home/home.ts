@@ -7,7 +7,7 @@ import * as fs from 'node:fs';
 import {Contacts} from '../contacts/contacts';
 import Maildir from '../mail/maildir';
 import {getUserById} from '../users/users';
-import type {SSEEvent} from '@workspace/lib/types/sse';
+import type {SSEvent} from '@workspace/lib/types/sse';
 import {createAsyncSingleton} from '../../utils/singleton';
 import {getUserHomePath} from '../config/paths';
 import type {HomeInterface} from './types';
@@ -154,7 +154,7 @@ export class Home implements HomeInterface {
         throw new Error('Not implemented');
     }
 
-    public notify(event: SSEEvent) {
+    public notify(event: SSEvent) {
         for (const listener of this.sseListeners) {
             listener(event);
         }
