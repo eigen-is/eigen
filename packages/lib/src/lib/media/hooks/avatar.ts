@@ -1,8 +1,8 @@
 import {useContacts, useInvalidateAllContacts} from '../../contacts/hooks/use-contacts';
 import {useMemo} from 'react';
-import {Contact} from '@apps/api-server/types/contact';
+import {Contact} from '@workspace/lib/types/contact';
 import {usePublicUser} from '../../public';
-import {type PublicUser} from '@apps/api-server/types/public';
+import {type PublicUser} from '@workspace/lib/types/public';
 
 export function useAvatar(email: string, options: { enabled?: boolean } = {enabled: true}): {
     data: PublicUser | undefined,

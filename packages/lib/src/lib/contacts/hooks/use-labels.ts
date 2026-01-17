@@ -1,6 +1,6 @@
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {contactsApi} from "@workspace/lib/api.ts";
-import type {Label} from "@apps/api-server/types/label";
+import type {Label} from "@workspace/lib/types/label";
 
 // Definieer query keys voor hergebruik
 export const labelKeys = {

@@ -7,7 +7,7 @@ import {
     DropdownMenuSubContent,
     DropdownMenuSubTrigger
 } from "@workspace/ui/components/dropdown-menu";
-import {MaildirMailbox} from "@apps/api-server/types/mail";
+import {MaildirMailbox} from "@workspace/lib/types/mail";
 import {ucfirst} from "@workspace/ui/lib/utils";
 import {CSSProperties} from "react";
 

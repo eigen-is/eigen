@@ -1,5 +1,5 @@
 import {useMutation, useQuery, useQueryClient} from "@tanstack/react-query";
-import type {DriveACL, DrivePath} from "@apps/api-server/types/drive";
+import type {DriveACL, DrivePath} from "@workspace/lib/types/drive";
 import {driveApi} from "@workspace/lib/api";
 import {invalidateHomeSize} from "../../home";
 

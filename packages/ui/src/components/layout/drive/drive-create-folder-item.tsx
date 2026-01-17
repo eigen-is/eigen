@@ -4,7 +4,7 @@ import {Input} from "@workspace/ui/components/input";
 import {Label} from "@workspace/ui/components/label";
 import {Button} from "@workspace/ui/components/button";
 import {useBreadcrumb} from "@workspace/lib/drive";
-import {DrivePath} from "@apps/api-server/types/drive";
+import {DrivePath} from "@workspace/lib/types/drive";
 
 interface DriveCreateItemDialogProps {
     open: boolean;

@@ -10,7 +10,7 @@ import {
 import {Button} from "@workspace/ui/components/button";
 import {EigenLoader, TooltipButton} from "@workspace/ui";
 import {DriveAccessList} from "@workspace/ui/components/layout/drive";
-import {type DrivePath} from "@apps/api-server/types/drive";
+import {type DrivePath} from "@workspace/lib/types/drive";
 import {formatFileSize} from "@workspace/ui/lib/formatFileSize";
 import {Table, TableBody, TableCell, TableRow} from "@workspace/ui/components/table";
 

@@ -1,5 +1,5 @@
 import {toast} from "sonner";
-import {DrivePath} from "@apps/api-server/types/drive";
+import {DrivePath} from "@workspace/lib/types/drive";
 import {useCreateDoc, useInvalidateFolder} from "@workspace/lib/drive";
 import {DriveCreateItemDialog} from "./drive-create-folder-item";
 
