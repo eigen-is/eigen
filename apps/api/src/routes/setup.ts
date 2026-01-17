@@ -1,6 +1,6 @@
 import { Elysia, t } from "elysia";
 import { getServerConfig, saveServerConfig, isSetupRequired, type ServerConfig } from "../lib/config/server-config";
-import { auth } from "../lib/auth/auth";
+import { createFirstAdminUser } from "../lib/setup/setup";
 
 export const setupRouter = new Elysia({ name: "setup" })
     .get("/setup/status", async () => {
@@ -71,29 +71,22 @@ export const setupRouter = new Elysia({ name: "setup" })
                 setupCompletedAt: new Date().toISOString()
             };
 
-            saveServerConfig(serverConfig);
+            const result = await createFirstAdminUser(adminEmail, adminPassword, adminName);
 
-            const result = await auth.api.createUser({
-                body: {
-                    email: adminEmail,
-                    password: adminPassword,
-                    name: adminName,
-                    role: 'admin'
-                }
-            });
-
-            if (!result.user) {
-                throw new Error('Failed to create admin user');
+            if (!result.success) {
+                throw new Error(result.error || 'Failed to create admin user');
             }
+
+            saveServerConfig(serverConfig);
 
             return {
                 success: true,
                 message: "Setup completed successfully",
-                user: {
+                user: result.user ? {
                     id: result.user.id,
                     email: result.user.email,
                     name: result.user.name
-                }
+                } : undefined
             };
         } catch (error) {
             set.status = 500;
