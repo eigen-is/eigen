@@ -5,7 +5,7 @@ import {useRootFolder} from '@workspace/lib/drive';
 import {EigenLoader} from '@workspace/ui';
 import {useAuth} from '@workspace/lib/auth';
 import {useIsMobile, useIsTablet} from "@workspace/lib/media";
-import {DrivePath} from '@apps/api-server/types/drive';
+import {DrivePath} from '@apps/api/types/drive';
 import {StickiesSidebar} from '@/components/dnd-board/stickies-sidebar';
 
 // Create a drive context to share data with child routes

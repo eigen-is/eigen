@@ -36,7 +36,7 @@ RUN bun install --ignore-scripts
 # Create data directories
 RUN mkdir -p /app/data/home /app/data/server
 
-WORKDIR /app/apps/api-server
+WORKDIR /app/apps/api
 
 EXPOSE 8000
 

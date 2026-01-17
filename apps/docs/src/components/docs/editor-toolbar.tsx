@@ -52,7 +52,7 @@ import {DriveCreateDoc} from "@workspace/ui/components/layout/drive/drive-create
 import {useRootFolder} from "@workspace/lib/drive";
 import {useAuth} from "@workspace/lib/auth";
 import {DriveDeleteItem} from "@workspace/ui/components/layout/drive/drive-delete-item";
-import {DrivePath} from "@apps/api-server/types/drive";
+import {DrivePath} from "@apps/api/types/drive";
 import {useNavigate} from '@tanstack/react-router';
 import { useIsMobile } from "@workspace/lib/media/index.js";
 import { DriveRenameItem } from "@workspace/ui/components/layout/drive/drive-rename-item";

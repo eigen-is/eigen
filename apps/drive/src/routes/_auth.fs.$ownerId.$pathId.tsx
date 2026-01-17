@@ -3,7 +3,7 @@ import {EigenLoader} from "@workspace/ui";
 import {useFolderContent, useInvalidateFolder, usePathInfo} from '@workspace/lib/drive';
 import {useContext, useEffect, useState} from "react";
 import {DriveLayout} from "@workspace/ui/components/layout/drive/drive-layout";
-import {DrivePath} from "@apps/api-server/types/drive";
+import {DrivePath} from "@apps/api/types/drive";
 import {useIsMobile} from "@workspace/lib/media";
 import {DriveContext} from "./_auth";
 import {FilePreview} from '../components/drive/file-preview';

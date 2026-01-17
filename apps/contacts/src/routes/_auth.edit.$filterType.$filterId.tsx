@@ -2,7 +2,7 @@ import {createFileRoute, redirect, useNavigate} from '@tanstack/react-router';
 import {z} from 'zod';
 import {ContactEdit, ContactFormValues} from '../components/contacts/contact-edit';
 import {useAddContact, useContacts, useUpdateContact} from '@workspace/lib/contacts';
-import {type Contact} from "@apps/api-server/types/contact";
+import {type Contact} from "@apps/api/types/contact";
 import {toast} from "sonner";
 import {EigenLoader} from "@workspace/ui";
 

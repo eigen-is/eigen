@@ -47,7 +47,7 @@
         "@workspace/ui": "workspace:*",
       },
     },
-    "apps/api-server": {
+    "apps/api": {
       "name": "@apps/api-server",
       "version": "1.0.50",
       "dependencies": {
@@ -222,7 +222,7 @@
 
     "@apps/admin": ["@apps/admin@workspace:apps/admin"],
 
-    "@apps/api-server": ["@apps/api-server@workspace:apps/api-server"],
+    "@apps/api-server": ["@apps/api-server@workspace:apps/api"],
 
     "@apps/calendar": ["@apps/calendar@workspace:apps/calendar"],
 

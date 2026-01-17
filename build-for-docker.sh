@@ -33,7 +33,7 @@ bun --filter './apps/space' build
 # Build API server
 echo ""
 echo "⚙️  Building API server..."
-bun --filter './apps/api-server' buildfordocker
+bun --filter './apps/api' buildfordocker
 
 echo ""
 echo "✅ Build completed successfully!"
