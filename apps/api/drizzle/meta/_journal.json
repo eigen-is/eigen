@@ -1,0 +1,13 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "7",
+      "when": 1737150000000,
+      "tag": "0000_init_auth",
+      "breakpoints": true
+    }
+  ]
+}

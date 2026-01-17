@@ -1,13 +1,13 @@
 import { drizzle } from "drizzle-orm/bun-sqlite";
-import { user, account, session, verification } from '../../../auth-schema';
+import { migrate } from "drizzle-orm/bun-sqlite/migrator";
+import { user } from '../../../auth-schema';
 import { count, eq } from "drizzle-orm";
 import { auth } from "../auth/auth";
 import { existsSync, mkdirSync } from "fs";
-import { dirname } from "path";
+import { dirname, resolve } from "path";
 import { getServerDataPath } from "../config/paths";
 
-function getSetupDb() {
-    // Use relative path to match users.ts and auth.ts
+function getAuthDb() {
     const dbPath = getServerDataPath('users3.db');
     const dataDir = dirname(dbPath);
     
@@ -15,78 +15,22 @@ function getSetupDb() {
         mkdirSync(dataDir, { recursive: true });
     }
     
-    return drizzle(dbPath, {
-        schema: {
-            user,
-            account,
-            session,
-            verification,
-        },
-    });
+    return drizzle(dbPath);
 }
-
 
 async function initializeDatabaseSchema(): Promise<{ success: boolean; error?: string }> {
     try {
-        // Create tables directly using Drizzle
-        const db = getSetupDb();
+        const dbPath = getServerDataPath('users3.db');
+        const dataDir = dirname(dbPath);
         
-        // Create user table
-        await db.run(`CREATE TABLE IF NOT EXISTS "user" (
-            "id" text PRIMARY KEY NOT NULL,
-            "name" text NOT NULL,
-            "email" text NOT NULL UNIQUE,
-            "email_verified" integer NOT NULL,
-            "image" text,
-            "created_at" integer NOT NULL,
-            "updated_at" integer NOT NULL,
-            "two_factor_enabled" integer,
-            "role" text,
-            "banned" integer,
-            "ban_reason" text,
-            "ban_expires" integer
-        )`);
+        if (!existsSync(dataDir)) {
+            mkdirSync(dataDir, { recursive: true });
+        }
 
-        // Create session table
-        await db.run(`CREATE TABLE IF NOT EXISTS "session" (
-            "id" text PRIMARY KEY NOT NULL,
-            "expires_at" integer NOT NULL,
-            "token" text NOT NULL UNIQUE,
-            "created_at" integer NOT NULL,
-            "updated_at" integer NOT NULL,
-            "ip_address" text,
-            "user_agent" text,
-            "user_id" text NOT NULL REFERENCES "user"("id") ON DELETE CASCADE,
-            "impersonated_by" text,
-            "active_organization_id" text
-        )`);
-
-        // Create account table
-        await db.run(`CREATE TABLE IF NOT EXISTS "account" (
-            "id" text PRIMARY KEY NOT NULL,
-            "account_id" text NOT NULL,
-            "provider_id" text NOT NULL,
-            "user_id" text NOT NULL REFERENCES "user"("id") ON DELETE CASCADE,
-            "access_token" text,
-            "refresh_token" text,
-            "id_token" text,
-            "access_token_expires_at" integer,
-            "refresh_token_expires_at" integer,
-            "scope" text,
-            "password" text,
-            "created_at" integer NOT NULL,
-            "updated_at" integer NOT NULL
-        )`);
-
-        // Create verification table
-        await db.run(`CREATE TABLE IF NOT EXISTS "verification" (
-            "id" text PRIMARY KEY NOT NULL,
-            "identifier" text NOT NULL,
-            "value" text NOT NULL,
-            "expires_at" integer NOT NULL,
-            "created_at" integer,
-            "updated_at" integer
-        )`);
+        const db = drizzle(dbPath);
+        const migrationsFolder = resolve(import.meta.dir, '../../../../drizzle');
+        
+        migrate(db, { migrationsFolder });
 
         console.log('✅ Database schema initialization completed!');
         return { success: true };
@@ -102,7 +46,7 @@ export async function hasAnyUsers(): Promise<boolean> {
         // First ensure database schema exists
         await initializeDatabaseSchema();
         
-        const db = getSetupDb();
+        const db = getAuthDb();
         const result = await db.select({ count: count() }).from(user);
         return result[0].count > 0;
     } catch (error) {
@@ -137,7 +81,7 @@ export async function createFirstAdminUser(email: string, password: string, name
         }
 
         // Update user role to admin
-        const db = getSetupDb();
+        const db = getAuthDb();
         await db.update(user)
             .set({ role: 'admin' })
             .where(eq(user.id, result.user.id));
