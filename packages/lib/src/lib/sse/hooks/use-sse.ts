@@ -4,66 +4,65 @@ import {useAuth} from '../../auth/auth-context';
 import {emailKeys, mailboxKeys} from '../../mail';
 import {driveKeys} from '../../drive';
 import {SSE_EVENTS_URL} from '../../api';
-import {SSEEventTypes, type SSEEvent} from '@workspace/lib/types/sse';
+import {type SSEvent, type SSEventNotification, isSSEventNotification} from '@workspace/lib/types/sse';
 
 interface UseSSEOptions {
-    onEvent?: (event: SSEEvent) => void;
+    onNotification?: (event: SSEvent & SSEventNotification) => void;
 }
 
 export function useSSE(options: UseSSEOptions = {}) {
     const {isAuthenticated} = useAuth();
     const queryClient = useQueryClient();
     const eventSourceRef = useRef<EventSource | null>(null);
-    const {onEvent} = options;
+    const {onNotification} = options;
 
-    const handleEvent = useCallback((event: SSEEvent) => {
-        const showToast = event.showToast !== false;
-        if (showToast) {
-            onEvent?.(event);
+    const handleEvent = useCallback((event: SSEvent) => {
+        if (isSSEventNotification(event)) {
+            onNotification?.(event);
         }
 
         switch (event.type) {
-            case SSEEventTypes.MAIL_RECEIVED:
+            case 'mail:received':
                 queryClient.invalidateQueries({queryKey: emailKeys.list('inbox')});
                 queryClient.invalidateQueries({queryKey: mailboxKeys.lists()});
                 break;
 
-            case SSEEventTypes.DRIVE_ACL_SHARED:
-            case SSEEventTypes.DRIVE_ACL_UNSHARED:
+            case 'drive:acl-shared':
+            case 'drive:acl-unshared':
                 queryClient.invalidateQueries({queryKey: driveKeys.shared('with-me')});
                 break;
 
-            case SSEEventTypes.DRIVE_FOLDER_CREATED:
-            case SSEEventTypes.DRIVE_FILE_UPLOADED:
-                if (event.data?.parentId) {
+            case 'drive:folder-created':
+            case 'drive:file-uploaded':
+                if (event.data.parentId) {
                     queryClient.invalidateQueries({queryKey: driveKeys.folder(event.data.parentId)});
                 }
                 break;
 
-            case SSEEventTypes.DRIVE_FOLDER_DELETED:
-            case SSEEventTypes.DRIVE_FILE_DELETED:
+            case 'drive:folder-deleted':
+            case 'drive:file-deleted':
                 queryClient.invalidateQueries({queryKey: driveKeys.folders()});
                 queryClient.invalidateQueries({queryKey: driveKeys.mimeTypes()});
                 break;
 
-            case SSEEventTypes.DRIVE_PATH_RENAMED:
-            case SSEEventTypes.DRIVE_PATH_MOVED:
+            case 'drive:path-renamed':
+            case 'drive:path-moved':
                 queryClient.invalidateQueries({queryKey: driveKeys.all});
                 queryClient.invalidateQueries({queryKey: driveKeys.mimeTypes()});
                 break;
 
-            case SSEEventTypes.DRIVE_ACL_UPDATED:
+            case 'drive:acl-updated':
                 queryClient.invalidateQueries({queryKey: driveKeys.shared('by-me')});
                 queryClient.invalidateQueries({queryKey: driveKeys.shared('with-me')});
-                if (event.data?.pathId) {
+                if (event.data.pathId) {
                     queryClient.invalidateQueries({queryKey: driveKeys.path(event.data.pathId)});
                 }
-                if (event.data?.parentId) {
+                if (event.data.parentId) {
                     queryClient.invalidateQueries({queryKey: driveKeys.folder(event.data.parentId)});
                 }
                 break;
         }
-    }, [onEvent, queryClient]);
+    }, [onNotification, queryClient]);
 
     useEffect(() => {
         if (!isAuthenticated) return;
@@ -75,7 +74,7 @@ export function useSSE(options: UseSSEOptions = {}) {
 
         eventSource.onmessage = (event) => {
             try {
-                const sseEvent = JSON.parse(event.data) as SSEEvent;
+                const sseEvent = JSON.parse(event.data) as SSEvent;
                 handleEvent(sseEvent);
                 console.log('Received SSE event', sseEvent);
             } catch (e) {

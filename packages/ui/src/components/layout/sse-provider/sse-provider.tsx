@@ -2,14 +2,14 @@
 
 import React, {useCallback} from 'react';
 import {toast} from "sonner";
-import {useSSE, type SSEEvent} from "@workspace/lib/sse";
+import {useSSE, type SSEvent, type SSEventNotification} from "@workspace/lib/sse";
 
 interface SSEProviderProps {
     children: React.ReactNode;
 }
 
 export function SSEProvider({children}: SSEProviderProps) {
-    const showToast = useCallback((event: SSEEvent) => {
+    const showToast = useCallback((event: SSEvent & SSEventNotification) => {
         const truncatedTitle = event.title.length > 50 
             ? event.title.slice(0, 50) + '…' 
             : event.title;
@@ -29,7 +29,7 @@ export function SSEProvider({children}: SSEProviderProps) {
         });
     }, []);
 
-    useSSE({onEvent: showToast});
+    useSSE({onNotification: showToast});
 
     return <>{children}</>;
 }
