@@ -81,7 +81,6 @@
       },
       "devDependencies": {
         "@types/bun": "^1.2.6",
-        "@workspace/config": "workspace:*",
         "bun-types": "latest",
       },
     },
@@ -179,10 +178,6 @@
         "y-websocket": "^3.0.0",
         "yjs": "^13.6.27",
       },
-    },
-    "packages/config": {
-      "name": "@workspace/config",
-      "version": "0.0.0",
     },
     "packages/lib": {
       "name": "@workspace/lib",
@@ -999,8 +994,6 @@
     "@unhead/schema": ["@unhead/schema@1.11.20", "", { "dependencies": { "hookable": "^5.5.3", "zhead": "^2.2.4" } }, "sha512-0zWykKAaJdm+/Y7yi/Yds20PrUK7XabLe9c3IRcjnwYmSWY6z0Cr19VIs3ozCj8P+GhR+/TI2mwtGlueCEYouA=="],
 
     "@vitejs/plugin-react": ["@vitejs/plugin-react@4.7.0", "", { "dependencies": { "@babel/core": "^7.28.0", "@babel/plugin-transform-react-jsx-self": "^7.27.1", "@babel/plugin-transform-react-jsx-source": "^7.27.1", "@rolldown/pluginutils": "1.0.0-beta.27", "@types/babel__core": "^7.20.5", "react-refresh": "^0.17.0" }, "peerDependencies": { "vite": "^4.2.0 || ^5.0.0 || ^6.0.0 || ^7.0.0" } }, "sha512-gUu9hwfWvvEDBBmgtAowQCojwZmJ5mcLn3aufeCsitijs3+f2NsrPtlAWIR6OPiqljl96GVCUbLe0HyqIpVaoA=="],
-
-    "@workspace/config": ["@workspace/config@workspace:packages/config"],
 
     "@workspace/lib": ["@workspace/lib@workspace:packages/lib"],
 

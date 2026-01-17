@@ -37,7 +37,6 @@
   },
   "devDependencies": {
     "@types/bun": "^1.2.6",
-    "@workspace/config": "workspace:*",
     "bun-types": "latest"
   },
   "module": "src/index.js",
