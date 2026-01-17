@@ -6,7 +6,7 @@ import {UploadProvider} from "./upload-provider/upload-provider"
 import {AuthProvider} from "@workspace/lib/auth/auth-context.tsx"
 import {QueryClient, QueryClientProvider} from '@tanstack/react-query';
 import {ReactQueryDevtools} from '@tanstack/react-query-devtools';
-import {NotificationProvider} from "./notification-provider";
+import {SSEProvider} from "./sse-provider";
 import {TooltipProvider} from "@radix-ui/react-tooltip"
 import {AppContext} from "./app-context"
 import {usePrintDocument} from "@workspace/ui/hooks/use-print-document"
@@ -36,12 +36,12 @@ export function EigenApp({children, appName = ''}: EigenAppProps) {
                         appName: currentAppName,
                         setAppName: setCurrentAppName
                     }}>
-                        <NotificationProvider>
+                        <SSEProvider>
                             <UploadProvider>
                                 {children}
                                 <Toaster/>
                             </UploadProvider>
-                        </NotificationProvider>
+                        </SSEProvider>
                     </AppContext.Provider>
                     <ReactQueryDevtools initialIsOpen={false}/>
                 </AuthProvider>

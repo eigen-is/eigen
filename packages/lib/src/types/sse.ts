@@ -1,4 +1,4 @@
-export const NotificationTypes = {
+export const SSEEventTypes = {
     MAIL_RECEIVED: 'mail:received',
     DRIVE_FOLDER_CREATED: 'drive:folder-created',
     DRIVE_FILE_UPLOADED: 'drive:file-uploaded',
@@ -11,10 +11,10 @@ export const NotificationTypes = {
     DRIVE_ACL_UNSHARED: 'drive:acl-unshared',
 } as const;
 
-export type NotificationType = typeof NotificationTypes[keyof typeof NotificationTypes];
+export type SSEEventType = typeof SSEEventTypes[keyof typeof SSEEventTypes];
 
-export interface EigenNotification {
-    type: NotificationType;
+export interface SSEEvent {
+    type: SSEEventType;
     title: string;
     body: string;
     tag?: string;
