@@ -11,6 +11,7 @@ A modern workspace platform providing integrated productivity and collaboration 
 - **Drive**: File storage and management
 - **Docs**: Document editing and collaboration
 - **Contacts**: Contact management
+- **Calendar**: Calendar and scheduling
 - **Space**: Team collaboration workspace
 - **Stickies**: Kanban board
 
@@ -37,20 +38,23 @@ bun install
 
 ### Initial Setup
 
-On first run, the system will create the database and prompt you to create an admin user:
+On first run, a setup wizard will guide you through the initial configuration:
 
 1. Start the server:
    ```bash
-   bun serve
+   bun run serve
    ```
 
-2. Visit `http://localhost:3010/admin` to create your first admin user
+2. Visit `http://localhost:3011/setup` to configure your instance:
+   - Set your domain
+   - Choose storage type (local or S3)
+   - Create your admin account
 
 ### Running Applications
 
 ```bash
 # Run all applications
-bun serve
+bun run serve
 
 # Run specific app with API server
 bun serve:index
@@ -123,7 +127,7 @@ docker-compose restart
 
 ## Project Structure
 
-- `/apps`: All applications (api-server + frontend apps)
+- `/apps`: All applications (api + frontend apps)
 - `/packages`: Shared code
   - `/ui`: Reusable UI components (shadcn/ui)
   - `/lib`: Shared business logic
