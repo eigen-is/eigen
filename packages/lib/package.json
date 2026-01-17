@@ -4,7 +4,7 @@
   "type": "module",
   "private": true,
   "dependencies": {
-    "@apps/api-server": "workspace:*",
+    "@apps/api": "workspace:*",
     "@elysiajs/eden": "^1.3.0",
     "@workspace/ui": "workspace:*",
     "better-auth": "^1.4.0"
