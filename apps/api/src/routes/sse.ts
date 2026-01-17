@@ -4,7 +4,7 @@ import {getHome} from "../lib/home/home";
 
 export const sseRouter = new Elysia({name: "sse"})
     .use(betterAuth)
-    .get('/sse/notifications', async ({user}) => {
+    .get('/sse/events', async ({user}) => {
         if (!user) {
             return new Response('Unauthorized', {status: 401});
         }

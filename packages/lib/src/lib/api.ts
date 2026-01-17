@@ -17,4 +17,4 @@ export const homeApi = api.home;
 
 export const adminApi = api.admin;
 
-export const SSE_NOTIFICATIONS_URL = `${API_HOST}/sse/notifications`;
+export const SSE_EVENTS_URL = `${API_HOST}/sse/events`;

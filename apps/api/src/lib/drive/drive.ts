@@ -13,7 +13,7 @@ import * as sharedSchema from './sharedschema';
 import {getUserByEmail} from '../users/users';
 import {createAsyncSingleton} from '../../utils/singleton';
 import type {HomeInterface} from '../home/types';
-import {NotificationTypes} from '@workspace/lib/types/notification';
+import {SSEEventTypes} from '@workspace/lib/types/sse';
 
 export type {PathEntry, ACLEntry} from '../mount/types';
 
@@ -92,7 +92,7 @@ export default class Drive {
         const safeName = folderName.replace(/[/\\]/g, '_');
         const folderId = await this.mount.createFolder(parentId, safeName);
         this.home.notify({
-            type: NotificationTypes.DRIVE_FOLDER_CREATED,
+            type: SSEEventTypes.DRIVE_FOLDER_CREATED,
             title: 'Folder created',
             body: `${safeName} created`,
             showToast: false,
@@ -109,7 +109,7 @@ export default class Drive {
         const safeName = `${docName}.eigendoc`;
         const docId = await this.mount.createFolder(parentId, safeName, 'doc');
         this.home.notify({
-            type: NotificationTypes.DRIVE_FOLDER_CREATED,
+            type: SSEEventTypes.DRIVE_FOLDER_CREATED,
             title: 'Document created',
             body: `${docName} created`,
             showToast: false,
@@ -126,7 +126,7 @@ export default class Drive {
         const safeName = `${stickiesName}.eigenstickies`;
         const stickiesId = await this.mount.createFolder(parentId, safeName, 'stickies');
         this.home.notify({
-            type: NotificationTypes.DRIVE_FOLDER_CREATED,
+            type: SSEEventTypes.DRIVE_FOLDER_CREATED,
             title: 'Stickies created',
             body: `${stickiesName} created`,
             showToast: false,
@@ -168,7 +168,7 @@ export default class Drive {
         }
 
         this.home.notify({
-            type: NotificationTypes.DRIVE_FILE_UPLOADED,
+            type: SSEEventTypes.DRIVE_FILE_UPLOADED,
             title: 'File uploaded',
             body: `${safeName} uploaded`,
             showToast: false,
@@ -207,7 +207,7 @@ export default class Drive {
         await this.mount.deletePath(pathId);
         this.emitACLChange(folder, folder.acl, null);
         this.home.notify({
-            type: NotificationTypes.DRIVE_FOLDER_DELETED,
+            type: SSEEventTypes.DRIVE_FOLDER_DELETED,
             title: 'Folder deleted',
             body: `${folder.name} deleted`,
             showToast: false,
@@ -233,7 +233,7 @@ export default class Drive {
         await this.mount.deletePath(pathId);
         this.emitACLChange(file, file.acl, null);
         this.home.notify({
-            type: NotificationTypes.DRIVE_FILE_DELETED,
+            type: SSEEventTypes.DRIVE_FILE_DELETED,
             title: 'File deleted',
             body: `${file.name} deleted`,
             showToast: false,
@@ -259,7 +259,7 @@ export default class Drive {
         const oldParentId = path.parentId;
         await this.mount.updatePath(pathId, {parentId: targetParentId});
         this.home.notify({
-            type: NotificationTypes.DRIVE_PATH_MOVED,
+            type: SSEEventTypes.DRIVE_PATH_MOVED,
             title: 'Item moved',
             body: `${path.name} moved`,
             showToast: false,
@@ -280,7 +280,7 @@ export default class Drive {
         await this.mount.updatePath(pathId, {name: newName});
         this.emitACLChange(item, item.acl, item.acl);
         this.home.notify({
-            type: NotificationTypes.DRIVE_PATH_RENAMED,
+            type: SSEEventTypes.DRIVE_PATH_RENAMED,
             title: 'Item renamed',
             body: `Renamed to ${newName}`,
             showToast: false,
@@ -345,7 +345,7 @@ export default class Drive {
         await this.mount.updatePath(pathId, {acl: normalizedACL});
         this.emitACLChange(item, item.acl, normalizedACL);
         this.home.notify({
-            type: NotificationTypes.DRIVE_ACL_UPDATED,
+            type: SSEEventTypes.DRIVE_ACL_UPDATED,
             title: 'Sharing updated',
             body: `${item.name} sharing settings updated`,
             showToast: false,
@@ -442,7 +442,7 @@ export default class Drive {
                 .where(eq(sharedSchema.sharedPaths.id, path.id))
                 .run();
             this.home.notify({
-                type: NotificationTypes.DRIVE_ACL_UNSHARED,
+                type: SSEEventTypes.DRIVE_ACL_UNSHARED,
                 title: 'Item unshared with you',
                 body: `${path.name} has been unshared with you`,
                 tag: 'shared_path_deleted',
@@ -472,7 +472,7 @@ export default class Drive {
                 updatedAt: new Date()
             }).run();
             this.home.notify({
-                type: NotificationTypes.DRIVE_ACL_SHARED,
+                type: SSEEventTypes.DRIVE_ACL_SHARED,
                 title: 'Item shared with you',
                 body: `${path.name} has been shared with you`,
                 tag: 'shared_path_created',
