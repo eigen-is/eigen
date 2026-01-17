@@ -9,7 +9,7 @@ import maildb from "./maildb.ts";
 import type {HomeInterface} from "../home/types";
 import {sendMail, draftToMailOptions} from './sender';
 import type {EmailDraft} from "@workspace/lib/types/mail";
-import type {SSEvent} from "@workspace/lib/types/sse";
+import {SSEventType, type SSEvent} from "@workspace/lib/types/sse";
 import {LocalStorage} from "../storage";
 
 export default class Maildir {
@@ -141,7 +141,7 @@ export default class Maildir {
                 this.messageGet(messageId).then(async (parsedMessage) => {
                     if (this.notifyCallback && notify) {
                         this.notifyCallback({
-                            type: 'mail:received',
+                            type: SSEventType.MAIL_RECEIVED,
                             title: `New email: ${parsedMessage?.subject || 'No subject'}`,
                             body: `${parsedMessage?.textShort || 'No body'}`,
                             link: `/mail/box/inbox?mailId=${parsedMessage?.id}`,
