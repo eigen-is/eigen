@@ -1,3 +1,20 @@
+// Event type constants - single source of truth
+export const SSEventType = {
+    // Mail events
+    MAIL_RECEIVED: 'mail:received',
+    // Drive data events (no toast)
+    DRIVE_FOLDER_CREATED: 'drive:folder-created',
+    DRIVE_FILE_UPLOADED: 'drive:file-uploaded',
+    DRIVE_FOLDER_DELETED: 'drive:folder-deleted',
+    DRIVE_FILE_DELETED: 'drive:file-deleted',
+    DRIVE_PATH_RENAMED: 'drive:path-renamed',
+    DRIVE_PATH_MOVED: 'drive:path-moved',
+    DRIVE_ACL_UPDATED: 'drive:acl-updated',
+    // Drive notification events (show toast)
+    DRIVE_ACL_SHARED: 'drive:acl-shared',
+    DRIVE_ACL_UNSHARED: 'drive:acl-unshared',
+} as const;
+
 // Base for all events
 type SSEventBase = {
     title: string;
@@ -12,24 +29,25 @@ type SSEventNotification = {
 
 // Drive data events (no toast, just sync)
 type SSEventDrivePathChange = SSEventBase & {
-    type: 'drive:folder-created' | 'drive:file-uploaded' | 'drive:folder-deleted'
-        | 'drive:file-deleted' | 'drive:path-renamed' | 'drive:acl-updated';
+    type: typeof SSEventType.DRIVE_FOLDER_CREATED | typeof SSEventType.DRIVE_FILE_UPLOADED 
+        | typeof SSEventType.DRIVE_FOLDER_DELETED | typeof SSEventType.DRIVE_FILE_DELETED 
+        | typeof SSEventType.DRIVE_PATH_RENAMED | typeof SSEventType.DRIVE_ACL_UPDATED;
     data: { pathId: string; parentId: string | null };
 };
 
 type SSEventDrivePathMoved = SSEventBase & {
-    type: 'drive:path-moved';
+    type: typeof SSEventType.DRIVE_PATH_MOVED;
     data: { pathId: string; parentId: string | null; oldParentId: string | null };
 };
 
 // Drive notification events (show toast)
 type SSEventDriveShared = SSEventBase & SSEventNotification & {
-    type: 'drive:acl-shared';
+    type: typeof SSEventType.DRIVE_ACL_SHARED;
     data: { pathId: string };
 };
 
 type SSEventDriveUnshared = SSEventBase & SSEventNotification & {
-    type: 'drive:acl-unshared';
+    type: typeof SSEventType.DRIVE_ACL_UNSHARED;
     data: { pathId: string };
 };
 
@@ -37,7 +55,7 @@ type SSEventDrive = SSEventDrivePathChange | SSEventDrivePathMoved | SSEventDriv
 
 // Mail notification events (show toast)
 type SSEventMail = SSEventBase & SSEventNotification & {
-    type: 'mail:received';
+    type: typeof SSEventType.MAIL_RECEIVED;
 };
 
 // Union of all events

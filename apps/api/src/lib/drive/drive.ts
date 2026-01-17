@@ -13,7 +13,7 @@ import * as sharedSchema from './sharedschema';
 import {getUserByEmail} from '../users/users';
 import {createAsyncSingleton} from '../../utils/singleton';
 import type {HomeInterface} from '../home/types';
-import type {SSEvent} from '@workspace/lib/types/sse';
+import {SSEventType} from '@workspace/lib/types/sse';
 
 export type {PathEntry, ACLEntry} from '../mount/types';
 
@@ -92,7 +92,7 @@ export default class Drive {
         const safeName = folderName.replace(/[/\\]/g, '_');
         const folderId = await this.mount.createFolder(parentId, safeName);
         this.home.notify({
-            type: 'drive:folder-created',
+            type: SSEventType.DRIVE_FOLDER_CREATED,
             title: 'Folder created',
             data: {pathId: folderId, parentId}
         });
@@ -107,7 +107,7 @@ export default class Drive {
         const safeName = `${docName}.eigendoc`;
         const docId = await this.mount.createFolder(parentId, safeName, 'doc');
         this.home.notify({
-            type: 'drive:folder-created',
+            type: SSEventType.DRIVE_FOLDER_CREATED,
             title: 'Document created',
             data: {pathId: docId, parentId}
         });
@@ -122,7 +122,7 @@ export default class Drive {
         const safeName = `${stickiesName}.eigenstickies`;
         const stickiesId = await this.mount.createFolder(parentId, safeName, 'stickies');
         this.home.notify({
-            type: 'drive:folder-created',
+            type: SSEventType.DRIVE_FOLDER_CREATED,
             title: 'Stickies created',
             data: {pathId: stickiesId, parentId}
         });
@@ -162,7 +162,7 @@ export default class Drive {
         }
 
         this.home.notify({
-            type: 'drive:file-uploaded',
+            type: SSEventType.DRIVE_FILE_UPLOADED,
             title: 'File uploaded',
             data: {pathId: fileId, parentId}
         });
@@ -199,7 +199,7 @@ export default class Drive {
         await this.mount.deletePath(pathId);
         this.emitACLChange(folder, folder.acl, null);
         this.home.notify({
-            type: 'drive:folder-deleted',
+            type: SSEventType.DRIVE_FOLDER_DELETED,
             title: 'Folder deleted',
             data: {pathId, parentId: folder.parentId}
         });
@@ -223,7 +223,7 @@ export default class Drive {
         await this.mount.deletePath(pathId);
         this.emitACLChange(file, file.acl, null);
         this.home.notify({
-            type: 'drive:file-deleted',
+            type: SSEventType.DRIVE_FILE_DELETED,
             title: 'File deleted',
             data: {pathId, parentId: file.parentId}
         });
@@ -247,7 +247,7 @@ export default class Drive {
         const oldParentId = path.parentId;
         await this.mount.updatePath(pathId, {parentId: targetParentId});
         this.home.notify({
-            type: 'drive:path-moved',
+            type: SSEventType.DRIVE_PATH_MOVED,
             title: 'Item moved',
             data: {pathId, parentId: targetParentId, oldParentId}
         });
@@ -266,7 +266,7 @@ export default class Drive {
         await this.mount.updatePath(pathId, {name: newName});
         this.emitACLChange(item, item.acl, item.acl);
         this.home.notify({
-            type: 'drive:path-renamed',
+            type: SSEventType.DRIVE_PATH_RENAMED,
             title: 'Item renamed',
             data: {pathId, parentId: item.parentId}
         });
@@ -329,7 +329,7 @@ export default class Drive {
         await this.mount.updatePath(pathId, {acl: normalizedACL});
         this.emitACLChange(item, item.acl, normalizedACL);
         this.home.notify({
-            type: 'drive:acl-updated',
+            type: SSEventType.DRIVE_ACL_UPDATED,
             title: 'Sharing updated',
             data: {pathId, parentId: item.parentId}
         });
@@ -424,7 +424,7 @@ export default class Drive {
                 .where(eq(sharedSchema.sharedPaths.id, path.id))
                 .run();
             this.home.notify({
-                type: 'drive:acl-unshared',
+                type: SSEventType.DRIVE_ACL_UNSHARED,
                 title: 'Item unshared with you',
                 body: `${path.name} has been unshared with you`,
                 tag: 'shared_path_deleted',
@@ -454,7 +454,7 @@ export default class Drive {
                 updatedAt: new Date()
             }).run();
             this.home.notify({
-                type: 'drive:acl-shared',
+                type: SSEventType.DRIVE_ACL_SHARED,
                 title: 'Item shared with you',
                 body: `${path.name} has been shared with you`,
                 tag: 'shared_path_created',
