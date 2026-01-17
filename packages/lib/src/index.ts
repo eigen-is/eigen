@@ -8,6 +8,5 @@ export * from './lib/home';
 export * from './lib/auth';
 export * from './lib/drive';
 export * from './lib/mail';
-export * from './lib/admin';
 
 

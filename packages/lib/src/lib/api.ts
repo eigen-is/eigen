@@ -16,5 +16,6 @@ export const driveApi = api.drive;
 export const homeApi = api.home;
 
 export const adminApi = api.admin;
+export const setupApi = api.setup;
 
 export const SSE_EVENTS_URL = `${API_HOST}/sse/events`;
