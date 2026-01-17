@@ -12,8 +12,8 @@ import {getSharedDatabase} from './shared';
 import * as sharedSchema from './sharedschema';
 import {getUserByEmail} from '../users/users';
 import {createAsyncSingleton} from '../../utils/singleton';
-import type {HomeInterface} from '../../types/home';
-import {NotificationTypes} from '../../types/notification';
+import type {HomeInterface} from '../home/types';
+import {NotificationTypes} from '@workspace/lib/types/notification';
 
 export type {PathEntry, ACLEntry} from '../mount/types';
 

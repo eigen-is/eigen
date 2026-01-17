@@ -1,4 +1,4 @@
-import type {HomeInterface} from "../../types/home";
+import type {HomeInterface} from "../home/types";
 import * as schema from "./sharedschema";
 import {createDatabase} from "../core";
 

@@ -1,6 +1,6 @@
 import React, {useEffect, useRef} from 'react';
 import {toast} from "sonner";
-import {DrivePath} from "@apps/api-server/types/drive";
+import {DrivePath} from "@workspace/lib/types/drive";
 import {useInvalidateFolder} from "@workspace/lib/drive";
 import {invalidateHomeSize} from "@workspace/lib/home";
 import {useQueryClient} from "@tanstack/react-query";

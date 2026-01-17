@@ -1,4 +1,4 @@
-import type {PublicUser} from "../../types/public";
+import type {PublicUser} from "@workspace/lib/types/public";
 import {getHome} from "../home/home";
 import {getUserByEmail, getUserById} from "../users/users";
 

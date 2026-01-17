@@ -1,7 +1,7 @@
 import {useMemo} from 'react';
 import {ContactSuggestion} from './types';
 import {useContacts} from '@workspace/lib/contacts';
-import {type Contact} from '@apps/api-server/types/contact';
+import {type Contact} from '@workspace/lib/types/contact';
 
 /**
  * Hook to get contact suggestions based on input query

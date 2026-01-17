@@ -1,6 +1,6 @@
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {mailApi} from '@workspace/lib/api.ts';
-import {Email} from "@apps/api-server/types/mail";
+import {Email} from "@workspace/lib/types/mail";
 import {mailboxKeys} from "./use-mailboxes.ts";
 import {invalidateHomeSize} from "../../home";
 

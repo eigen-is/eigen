@@ -1,6 +1,6 @@
 import nodemailer from 'nodemailer';
 import type Mail from 'nodemailer/lib/mailer';
-import type {EmailDraft} from "../../types/mail";
+import type {EmailDraft} from "@workspace/lib/types/mail";
 
 interface Address {
     name: string;

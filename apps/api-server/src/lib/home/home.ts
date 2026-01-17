@@ -7,10 +7,10 @@ import * as fs from 'node:fs';
 import {Contacts} from '../contacts/contacts';
 import Maildir from '../mail/maildir';
 import {getUserById} from '../users/users';
-import type {EigenNotification} from '../../types/notification';
+import type {EigenNotification} from '@workspace/lib/types/notification';
 import {createAsyncSingleton} from '../../utils/singleton';
 import {getUserHomePath} from '../config/paths';
-import type {HomeInterface} from '../../types/home';
+import type {HomeInterface} from './types';
 import {LocalStorage} from '../storage';
 import Drive from '../drive/drive';
 

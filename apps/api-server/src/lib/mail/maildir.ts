@@ -6,10 +6,10 @@ import {createUniqueMessageId, getMailIDfromFileName, getStandardMailboxFlags} f
 import {welcomeMail} from "./welcome.ts";
 import DOMPurify from 'isomorphic-dompurify';
 import maildb from "./maildb.ts";
-import type {HomeInterface} from "../../types/home";
+import type {HomeInterface} from "../home/types";
 import {sendMail, draftToMailOptions} from './sender';
-import type {EmailDraft} from "../../types/mail.ts";
-import {type EigenNotification, NotificationTypes} from "../../types/notification";
+import type {EmailDraft} from "@workspace/lib/types/mail";
+import {type EigenNotification, NotificationTypes} from "@workspace/lib/types/notification";
 import {LocalStorage} from "../storage";
 
 export default class Maildir {

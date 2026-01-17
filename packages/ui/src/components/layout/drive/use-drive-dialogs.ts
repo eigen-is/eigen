@@ -1,5 +1,5 @@
 import {useState, useCallback} from "react";
-import {DrivePath} from "@apps/api-server/types/drive";
+import {DrivePath} from "@workspace/lib/types/drive";
 
 export interface DriveDialogsState {
     createFolder: { open: boolean };

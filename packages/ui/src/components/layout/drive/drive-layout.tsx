@@ -1,4 +1,4 @@
-import {DrivePath} from "@apps/api-server/types/drive";
+import {DrivePath} from "@workspace/lib/types/drive";
 import {EigenLoader} from "@workspace/ui";
 import {DriveList} from "./drive-list";
 import {DriveDetail} from "./drive-detail";

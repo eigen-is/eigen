@@ -1,6 +1,6 @@
 import {relations, sql} from 'drizzle-orm';
 import {integer, primaryKey, sqliteTable, text} from 'drizzle-orm/sqlite-core';
-import {type Contact} from '../../types/contact';
+import {type Contact} from '@workspace/lib/types/contact';
 
 // Contacts table
 export const contacts = sqliteTable('contacts', {

@@ -2,7 +2,7 @@
 
 import {useCallback, useEffect, useRef, useState} from "react"
 import {UserPublicItem} from "../user-item"
-import type {DriveACL, DrivePath} from "@apps/api-server/types/drive"
+import type {DriveACL, DrivePath} from "@workspace/lib/types/drive"
 import {cn} from "@workspace/ui/lib/utils"
 import {usePublicUser} from "@workspace/lib/public"
 import {Lock, Plus, Unlock} from "lucide-react"

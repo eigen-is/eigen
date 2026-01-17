@@ -22,6 +22,8 @@
     "./docs": "./src/lib/docs/index.ts",
     "./public": "./src/lib/public/index.ts",
     "./auth/hooks": "./src/lib/auth/hooks/index.ts",
-    "./notifications": "./src/lib/notifications/index.ts"
+    "./notifications": "./src/lib/notifications/index.ts",
+    "./types": "./src/types/index.ts",
+    "./types/*": "./src/types/*"
   }
 }

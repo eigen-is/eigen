@@ -3,7 +3,7 @@ import {Button} from "@workspace/ui/components/button";
 import {EigenLoader} from "@workspace/ui";
 import {FileText, FolderPlus, Plus, StickyNote, UploadIcon} from "lucide-react";
 import {DriveTable, getFileIcon} from "@workspace/ui/components/layout/drive";
-import {type DrivePath} from "@apps/api-server/types/drive";
+import {type DrivePath} from "@workspace/lib/types/drive";
 import {cn} from "@workspace/ui/lib/utils";
 import {
     DropdownMenu,

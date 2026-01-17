@@ -1,5 +1,5 @@
 import {useState, useCallback} from "react";
-import {DrivePath} from "@apps/api-server/types/drive";
+import {DrivePath} from "@workspace/lib/types/drive";
 
 interface UseTableDragDropProps {
     onMove?: (item: DrivePath, targetItemId: string) => void;

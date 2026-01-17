@@ -4,7 +4,7 @@ import {useTableDragDrop} from "./use-table-drag-drop";
 import {Table, TableBody, TableCell, TableHead, TableHeader, TableRow} from "@workspace/ui/components/table";
 import {cn} from "@workspace/ui/lib/utils";
 import {formatDistanceToNow} from "date-fns";
-import {DrivePath} from "@apps/api-server/types/drive";
+import {DrivePath} from "@workspace/lib/types/drive";
 import {DriveShareSummary} from "./drive-share-summary";
 import {ArrowRight, ChevronLeft, Download, Trash2, UserRoundPlus, Pencil} from "lucide-react";
 import {

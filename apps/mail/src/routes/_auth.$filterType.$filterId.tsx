@@ -13,7 +13,7 @@ import {
     useUpdateDraft
 } from '@workspace/lib/mail';
 import {EmailList} from "@/components/mail/email-list.tsx";
-import {Email, EmailDraft as EmailDraftType} from "@apps/api-server/types/mail";
+import {Email, EmailDraft as EmailDraftType} from "@workspace/lib/types/mail";
 import {toast} from "sonner";
 import {useEffect, useState} from 'react';
 import {useIsMobile, useIsTablet} from "@workspace/lib/media";

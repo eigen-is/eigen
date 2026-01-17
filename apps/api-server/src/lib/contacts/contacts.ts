@@ -1,12 +1,12 @@
 import type Database from "bun:sqlite";
-import type {Contact} from "../../types/contact";
-import type {Label} from "../../types/label";
+import type {Contact} from "@workspace/lib/types/contact";
+import type {Label} from "@workspace/lib/types/label";
 import {BunSQLiteDatabase, drizzle} from "drizzle-orm/bun-sqlite";
 import {eq, sql} from "drizzle-orm";
 import * as schema from "./schema";
 import {v4 as uuidv4} from "uuid";
 import {getHome} from "../home/home";
-import type {HomeInterface} from "../../types/home";
+import type {HomeInterface} from "../home/types";
 import type {User} from "better-auth/types";
 import {getUserByEmail, updateUser} from "../users/users.ts";
 import {LocalStorage} from "../storage";

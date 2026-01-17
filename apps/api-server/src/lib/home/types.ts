@@ -1,6 +1,6 @@
 import type {User} from 'better-auth/types';
 import type Database from 'bun:sqlite';
-import type {EigenNotification} from './notification';
+import type {EigenNotification} from '@workspace/lib/types/notification';
 
 export interface HomeInterface {
     user: User;

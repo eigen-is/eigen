@@ -3,7 +3,7 @@ import {KeyboardEvent, useEffect, useMemo, useRef, useState} from "react";
 import {cn} from "@workspace/ui/lib/utils";
 import {Input} from "@workspace/ui/components/input";
 import {EigenLoader} from "@workspace/ui/components/layout/eigen-loader";
-import {EmailSummary, MaildirMailbox} from "@apps/api-server/types/mail";
+import {EmailSummary, MaildirMailbox} from "@workspace/lib/types/mail";
 import {DropdownMenu, DropdownMenuTrigger,} from "@workspace/ui/components/dropdown-menu";
 import {EmailContextMenu} from "./email-context-menu";
 
