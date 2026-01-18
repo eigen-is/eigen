@@ -1,5 +1,5 @@
-import { existsSync, readFileSync, writeFileSync, renameSync } from 'fs';
-import { getServerDataPath } from './paths';
+import {existsSync, readFileSync, renameSync, writeFileSync} from 'fs';
+import {getServerDataPath} from './paths';
 
 export type S3Config = {
     bucket: string;

@@ -1,5 +1,5 @@
 import type {User} from "better-auth";
-import type {Attachment, Email, EmailSummary, MaildirMailbox} from "@workspace/lib/types/mail";
+import type {Attachment, Email, EmailDraft, EmailSummary, MaildirMailbox} from "@workspace/lib/types/mail";
 import {simpleParser} from "./mail-parser";
 import {createELMContent} from "./mailfile";
 import {createUniqueMessageId, getMailIDfromFileName, getStandardMailboxFlags} from "./mailutils";
@@ -7,9 +7,8 @@ import {welcomeMail} from "./welcome.ts";
 import DOMPurify from 'isomorphic-dompurify';
 import maildb from "./maildb.ts";
 import type {HomeInterface} from "../home/types";
-import {sendMail, draftToMailOptions} from './sender';
-import type {EmailDraft} from "@workspace/lib/types/mail";
-import {SSEventType, type SSEventMailData} from "@workspace/lib/types/sse";
+import {draftToMailOptions, sendMail} from './sender';
+import {type SSEventMailData, SSEventType} from "@workspace/lib/types/sse";
 import {LocalStorage} from "../storage";
 import {buildMailEvent} from './sse-events';
 
@@ -363,6 +362,7 @@ export default class Maildir {
             return false;
         }
     }
+
     public async messageHandleDraft(email: EmailDraft): Promise<EmailDraft> {
         try {
             // Check if Drafts mailbox exists

@@ -46,10 +46,20 @@ export default class SharedDrive extends Drive {
         return fallback;
     }
 
-    public async init() {}
-    public async getRootFolder() { return null; }
-    public async size() { return 0; }
-    public async getMimeTypeContents(_mimeType: string): Promise<DrivePath[]> { return []; }
+    public async init() {
+    }
+
+    public async getRootFolder() {
+        return null;
+    }
+
+    public async size() {
+        return 0;
+    }
+
+    public async getMimeTypeContents(_mimeType: string): Promise<DrivePath[]> {
+        return [];
+    }
 
     public async canWrite(pathId: string, user: User) {
         return this.sharedDrive.canWrite(pathId, user);

@@ -38,18 +38,28 @@ export const contactsRouter = new Elysia({name: "contacts"})
     .get("/contacts/contacts", async ({user}) => await (await getContacts(user)).getContacts(), {
         auth: true
     })
-    .get("/contacts/contacts/:id", async ({params, user}) => await (await getContacts(user)).getContactById(params.id), {
+    .get("/contacts/contacts/:id", async ({
+                                              params,
+                                              user
+                                          }) => await (await getContacts(user)).getContactById(params.id), {
         auth: true
     })
     .post("/contacts/contacts", async ({body, user}) => await (await getContacts(user)).addContact(body), {
         body: ContactSchema,
         auth: true
     })
-    .put("/contacts/contacts/:id", async ({params, body, user}) => await (await getContacts(user)).updateContact(params.id, body), {
+    .put("/contacts/contacts/:id", async ({
+                                              params,
+                                              body,
+                                              user
+                                          }) => await (await getContacts(user)).updateContact(params.id, body), {
         body: ContactSchema,
         auth: true
     })
-    .delete("/contacts/contacts/:id", async ({params, user}) => await (await getContacts(user)).deleteContact(params.id), {
+    .delete("/contacts/contacts/:id", async ({
+                                                 params,
+                                                 user
+                                             }) => await (await getContacts(user)).deleteContact(params.id), {
         auth: true
     })
     .get("/contacts/labels", async ({user}) => await (await getContacts(user)).getLabels(), {
@@ -59,7 +69,11 @@ export const contactsRouter = new Elysia({name: "contacts"})
         body: LabelSchema,
         auth: true
     })
-    .put("/contacts/labels/:id", async ({params, body, user}) => await (await getContacts(user)).updateLabel(params.id, body), {
+    .put("/contacts/labels/:id", async ({
+                                            params,
+                                            body,
+                                            user
+                                        }) => await (await getContacts(user)).updateLabel(params.id, body), {
         body: LabelSchema,
         auth: true
     })

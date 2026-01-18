@@ -14,7 +14,7 @@ export const authClient = createAuthClient({
     plugins: [
         twoFactorClient({
             onTwoFactorRedirect() {
-                                history.replaceState(null, '', import.meta.env.VITE_APP_SPACE_URL + '/login-2fa' + location.search);
+                history.replaceState(null, '', import.meta.env.VITE_APP_SPACE_URL + '/login-2fa' + location.search);
             }
         }),
         adminClient(),

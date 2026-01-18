@@ -150,7 +150,7 @@ export class Home implements HomeInterface {
         return {mail, contacts, drive, used: (mail + contacts + drive), max};
     }
 
-    public async getZip(): Promise<{data: ArrayBuffer, contentType: string, fileName: string}> {
+    public async getZip(): Promise<{ data: ArrayBuffer, contentType: string, fileName: string }> {
         throw new Error('Not implemented');
     }
 

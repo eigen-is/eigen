@@ -16,7 +16,7 @@ function parseFrontmatter(markdown: string): { data: Record<string, string>; con
     const match = markdown.match(frontmatterRegex);
 
     if (!match) {
-        return { data: {}, content: markdown };
+        return {data: {}, content: markdown};
     }
 
     const frontmatterText = match[1];
@@ -32,20 +32,20 @@ function parseFrontmatter(markdown: string): { data: Record<string, string>; con
         }
     });
 
-    return { data, content };
+    return {data, content};
 }
 
 function generateBlogMeta() {
     const blogDir = join(process.cwd(), 'src', 'data', 'blog');
     const outputPath = join(process.cwd(), 'public', 'blog-meta.json');
-    
+
     const files = readdirSync(blogDir).filter(file => file.endsWith('.md'));
     const blogMeta: BlogMetaData = {};
 
     for (const file of files) {
         const content = readFileSync(join(blogDir, file), 'utf-8');
-        const { data } = parseFrontmatter(content);
-        
+        const {data} = parseFrontmatter(content);
+
         const dateMatch = file.match(/^(\d{4}-\d{2}-\d{2})-/);
         const date = dateMatch ? dateMatch[1] : '';
 

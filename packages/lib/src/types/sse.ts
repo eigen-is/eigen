@@ -71,4 +71,4 @@ export function isSSEventNotification(event: SSEvent): event is SSEvent & SSEven
 }
 
 // Export individual types for consumers
-export type { SSEventBase, SSEventDrive, SSEventMail };
+export type {SSEventBase, SSEventDrive, SSEventMail};

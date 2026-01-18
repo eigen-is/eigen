@@ -9,7 +9,7 @@ import * as fs from 'node:fs';
 import type {MountConfig} from './types';
 import type {DrivePath} from '@workspace/lib/types/drive';
 import * as schema from './schema';
-import {paths, labels, pathsToLabels, MOUNT_SCHEMA_SQL} from './schema';
+import {labels, MOUNT_SCHEMA_SQL, paths, pathsToLabels} from './schema';
 import type {StorageBackend} from '../storage/types';
 import {LocalKeyStorage} from '../storage/local-key-storage';
 
@@ -124,8 +124,8 @@ export class Mount {
 
     async createFolder(parentId: string, name: string, type: 'folder' | 'doc' | 'stickies' = 'folder'): Promise<string> {
         const folderId = randomUUID();
-        const mimeType = type === 'folder' ? 'folder' : 
-                         type === 'doc' ? 'application/eigendoc' : 'application/eigenstickies';
+        const mimeType = type === 'folder' ? 'folder' :
+            type === 'doc' ? 'application/eigendoc' : 'application/eigenstickies';
 
         await this.db.insert(paths).values({
             id: folderId,
@@ -248,7 +248,8 @@ export class Mount {
             if (await file.exists()) {
                 await file.delete();
             }
-        } catch {}
+        } catch {
+        }
     }
 
     async getTotalSize(): Promise<number> {
