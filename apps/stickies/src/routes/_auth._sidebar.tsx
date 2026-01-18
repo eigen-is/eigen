@@ -6,7 +6,7 @@ import {EigenLoader} from '@workspace/ui';
 import {useAuth} from '@workspace/lib/auth';
 import {useIsMobile, useIsTablet} from "@workspace/lib/media";
 import {DriveContextType} from '@workspace/lib/types/drive';
-import {StickiesSidebar} from '@/components/dnd-board/stickies-sidebar';
+import {StickiesSidebar} from '../components/dnd-board/stickies-sidebar';
 
 export const DriveContext = createContext<DriveContextType>({
     rootPath: null
