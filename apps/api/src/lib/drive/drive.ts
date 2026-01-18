@@ -329,7 +329,7 @@ export default class Drive {
                 if (!path || (path.type !== 'doc' && path.type !== 'stickies')) {
                     throw new Error('Document not found');
                 }
-                const document = new CollabDocument(this, path as any);
+                const document = new CollabDocument(this, path);
                 return (await document.init()) as CollabDocument;
             }));
         }
