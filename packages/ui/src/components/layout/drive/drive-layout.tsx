@@ -9,8 +9,7 @@ import {DriveDeleteItem} from "./drive-delete-item";
 import {DriveUploadFiles} from "./drive-upload-files";
 import {DriveCreateFolder} from "./drive-create-folder";
 import {DriveRenameItem} from "./drive-rename-item";
-import {useInvalidateFolder, useMovePath} from "@workspace/lib/drive";
-import {toast} from "sonner";
+import {useMovePath} from "@workspace/lib/drive";
 import {useDriveDialogs} from "./use-drive-dialogs";
 
 export interface DriveLayoutProps {
@@ -64,7 +63,6 @@ export function DriveLayout({
 }: DriveLayoutProps) {
     const dialogs = useDriveDialogs();
     const movePath = useMovePath(ownerId);
-    const invalidateFolder = useInvalidateFolder(ownerId);
 
     const handleFileUpload = () => {
         if (allowUpload && currentPath) {
@@ -93,9 +91,6 @@ export function DriveLayout({
     const handleMovePath = async (path: DrivePath, targetItemId: string) => {
         if (!allowMove) return;
         await movePath.mutateAsync({pathId: path.id, targetParentId: targetItemId});
-        invalidateFolder(path.id);
-        invalidateFolder(path.parentId || '');
-        toast.success('Item moved successfully');
     };
 
     const handleDownloadPath = (path: DrivePath) => {

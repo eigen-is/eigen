@@ -1,6 +1,6 @@
 import {createFileRoute, useNavigate} from '@tanstack/react-router';
 import {EigenLoader} from "@workspace/ui";
-import {useFolderContent, useInvalidateFolder, usePathInfo} from '@workspace/lib/drive';
+import {useFolderContent, usePathInfo} from '@workspace/lib/drive';
 import {useContext, useEffect, useState} from "react";
 import {DriveLayout} from "@workspace/ui/components/layout/drive/drive-layout";
 import {DrivePath} from "@apps/api/types/drive";
@@ -25,7 +25,6 @@ function DriveRoute() {
     const {ownerId, pathId} = Route.useParams();
     const {pid} = Route.useSearch();
     const navigate = useNavigate();
-    const invalidateFolder = useInvalidateFolder();
     const isMobile = useIsMobile();
     const {rootPath} = useContext(DriveContext);
     const [preview, setPreview] = useState<{ url: string; mimeType: string } | null>(null);
@@ -120,10 +119,7 @@ function DriveRoute() {
 
     // Callback called by DriveLayout after actions
     const handleAfterAction = (actionType: string, data: any) => {
-        // Invalidate data after mutations
-        invalidateFolder(pathId);
-
-        // Only navigate after delete if the selected item was deleted
+        // Navigate away from deleted item if it was selected
         if (actionType === 'delete' && pid === data.id) {
             navigate({
                 to: Route.fullPath,
