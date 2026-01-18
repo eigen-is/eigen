@@ -8,11 +8,11 @@ export interface StorageBackend {
     size(fileId: string): Promise<number | null>;
 }
 
-export interface S3Config {
+export type S3Config = {
     endpoint: string;
     bucket: string;
     prefix: string;
     accessKeyId: string;
     secretAccessKey: string;
     region?: string;
-}
+};

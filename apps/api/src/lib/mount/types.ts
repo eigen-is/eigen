@@ -1,6 +1,6 @@
 import type {S3Config} from '../storage/types';
 
-export interface MountConfig {
+export type MountConfig = {
     id: string;
     name: string;
     storageType: 'local-key' | 's3';
@@ -9,9 +9,9 @@ export interface MountConfig {
     s3Config?: S3Config;
     createdAt?: Date;
     updatedAt?: Date;
-}
+};
 
-export interface PathEntry {
+export type PathEntry = {
     id: string;
     name: string;
     type: 'folder' | 'file' | 'doc' | 'stickies';
@@ -24,20 +24,20 @@ export interface PathEntry {
     labels?: string[];
     createdAt: Date;
     updatedAt: Date;
-}
+};
 
-export interface ACLEntry {
+export type ACLEntry = {
     email: string;
     read: boolean;
     write: boolean;
     public: boolean;
-}
+};
 
-export interface MountInfo {
+export type MountInfo = {
     id: string;
     name: string;
     storageType: 'local-key' | 's3';
     isDefault: boolean;
     totalSize: number;
     fileCount: number;
-}
+};

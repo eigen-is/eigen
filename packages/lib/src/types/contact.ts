@@ -1,4 +1,4 @@
-export interface Contact {
+export type Contact = {
     id: string;
     firstName: string;
     lastName: string;
@@ -18,4 +18,4 @@ export interface Contact {
     avatar?: string;
     labels?: string[];
     eigenId?: string;
-}
+};

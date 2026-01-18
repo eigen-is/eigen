@@ -4,20 +4,18 @@ import {EmailDraft} from '@workspace/lib/types/mail';
 import {emailKeys} from './use-emails';
 import {invalidateHomeSize} from "../../home";
 
-// Define interface for recipient
-export interface EmailRecipient {
+export type EmailRecipient = {
     name?: string;
     address: string;
-}
+};
 
-// Interface for draft creation parameters
-export interface CreateDraftParams {
+export type CreateDraftParams = {
     subject?: string;
     text?: string;
     to?: EmailRecipient[];
     cc?: EmailRecipient[];
     bcc?: EmailRecipient[];
-}
+};
 
 export function createDraftEmail(params: CreateDraftParams): EmailDraft {
     // Create a properly formatted email object
