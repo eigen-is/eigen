@@ -1,6 +1,6 @@
 import {createFileRoute, useNavigate} from '@tanstack/react-router';
-import {EmailDetail} from "../components/mail/email-detail.tsx";
-import {EmailDraft} from "../components/mail/email-draft.tsx";
+import {EmailDetail} from "../components/mail/email-detail";
+import {EmailDraft} from "../components/mail/email-draft";
 import {
     useDeleteEmail,
     useEmail,

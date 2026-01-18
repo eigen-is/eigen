@@ -1,5 +1,5 @@
 import {createFileRoute, Outlet, redirect} from '@tanstack/react-router'
-import {EmailSidebar} from "../components/mail/email-sidebar.tsx";
+import {EmailSidebar} from "../components/mail/email-sidebar";
 import {useContext} from 'react';
 import {SidebarContext} from './__root';
 import {useMailboxes} from '@workspace/lib/mail';
