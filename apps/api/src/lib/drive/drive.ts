@@ -4,7 +4,7 @@ import {BunSQLiteDatabase} from 'drizzle-orm/bun-sqlite';
 import {eq} from 'drizzle-orm';
 
 import {Mount, createDefaultMountConfig} from '../mount';
-import type {PathEntry, ACLEntry} from '../mount/types';
+import type {DrivePath, DriveACL} from '../mount/types';
 import {canRead, canWrite, normalizeACL} from './acl';
 import {saveThumbnail, deleteThumbnail, getThumbnail} from '../shared/thumbnails';
 import CollabDocument from '../collab/collabDocument';
@@ -14,8 +14,9 @@ import {getUserByEmail} from '../users/users';
 import {createAsyncSingleton} from '../../utils/singleton';
 import type {HomeInterface} from '../home/types';
 import {SSEventType} from '@workspace/lib/types/sse';
+import {buildDriveEvent} from './sse-events';
 
-export type {PathEntry, ACLEntry} from '../mount/types';
+export type {DrivePath, DriveACL} from '../mount/types';
 
 export async function getDrive(user: User): Promise<Drive> {
     const {getHome} = await import('../home/home');
@@ -52,15 +53,15 @@ export default class Drive {
         return await this.mount.getTotalSize();
     }
 
-    async getRootFolder(): Promise<PathEntry | null> {
+    async getRootFolder(): Promise<DrivePath | null> {
         return await this.mount.getRootFolder();
     }
 
-    async getPath(pathId: string): Promise<PathEntry | null> {
+    async getPath(pathId: string): Promise<DrivePath | null> {
         return await this.mount.getPath(pathId);
     }
 
-    async getFolderContents(pathId: string): Promise<PathEntry[]> {
+    async getFolderContents(pathId: string): Promise<DrivePath[]> {
         const folder = await this.mount.getPath(pathId);
         if (!folder || (folder.type !== 'folder' && folder.type !== 'doc' && folder.type !== 'stickies')) {
             throw new Error('Folder not found');
@@ -91,11 +92,8 @@ export default class Drive {
 
         const safeName = folderName.replace(/[/\\]/g, '_');
         const folderId = await this.mount.createFolder(parentId, safeName);
-        this.home.notify({
-            type: SSEventType.DRIVE_FOLDER_CREATED,
-            title: 'Folder created',
-            data: {pathId: folderId, parentId}
-        });
+        const folder = await this.mount.getPath(folderId);
+        if (folder) this.emit(SSEventType.DRIVE_FOLDER_CREATED, folder);
         return folderId;
     }
 
@@ -106,11 +104,8 @@ export default class Drive {
 
         const safeName = `${docName}.eigendoc`;
         const docId = await this.mount.createFolder(parentId, safeName, 'doc');
-        this.home.notify({
-            type: SSEventType.DRIVE_FOLDER_CREATED,
-            title: 'Document created',
-            data: {pathId: docId, parentId}
-        });
+        const doc = await this.mount.getPath(docId);
+        if (doc) this.emit(SSEventType.DRIVE_FOLDER_CREATED, doc);
         return docId;
     }
 
@@ -121,11 +116,8 @@ export default class Drive {
 
         const safeName = `${stickiesName}.eigenstickies`;
         const stickiesId = await this.mount.createFolder(parentId, safeName, 'stickies');
-        this.home.notify({
-            type: SSEventType.DRIVE_FOLDER_CREATED,
-            title: 'Stickies created',
-            data: {pathId: stickiesId, parentId}
-        });
+        const stickies = await this.mount.getPath(stickiesId);
+        if (stickies) this.emit(SSEventType.DRIVE_FOLDER_CREATED, stickies);
         return stickiesId;
     }
 
@@ -141,7 +133,6 @@ export default class Drive {
 
         const safeName = file.name.replace(/[/\\]/g, '_');
         const buffer = await file.arrayBuffer();
-
         const fileId = await this.mount.createFile(
             parentId,
             safeName,
@@ -161,11 +152,8 @@ export default class Drive {
             await this.mount.updatePath(fileId, {thumbnail});
         }
 
-        this.home.notify({
-            type: SSEventType.DRIVE_FILE_UPLOADED,
-            title: 'File uploaded',
-            data: {pathId: fileId, parentId}
-        });
+        const uploadedFile = await this.mount.getPath(fileId);
+        if (uploadedFile) this.emit(SSEventType.DRIVE_FILE_UPLOADED, uploadedFile);
         return fileId;
     }
 
@@ -198,11 +186,7 @@ export default class Drive {
 
         await this.mount.deletePath(pathId);
         this.emitACLChange(folder, folder.acl, null);
-        this.home.notify({
-            type: SSEventType.DRIVE_FOLDER_DELETED,
-            title: 'Folder deleted',
-            data: {pathId, parentId: folder.parentId}
-        });
+        this.emit(SSEventType.DRIVE_FOLDER_DELETED, folder);
     }
 
     async deleteFile(pathId: string): Promise<void> {
@@ -222,11 +206,7 @@ export default class Drive {
         await deleteThumbnail(this.mount.thumbsDir, pathId);
         await this.mount.deletePath(pathId);
         this.emitACLChange(file, file.acl, null);
-        this.home.notify({
-            type: SSEventType.DRIVE_FILE_DELETED,
-            title: 'File deleted',
-            data: {pathId, parentId: file.parentId}
-        });
+        this.emit(SSEventType.DRIVE_FILE_DELETED, file);
     }
 
     async movePath(pathId: string, targetParentId: string): Promise<void> {
@@ -244,13 +224,9 @@ export default class Drive {
             throw new Error('No write permission');
         }
 
-        const oldParentId = path.parentId;
         await this.mount.updatePath(pathId, {parentId: targetParentId});
-        this.home.notify({
-            type: SSEventType.DRIVE_PATH_MOVED,
-            title: 'Item moved',
-            data: {pathId, parentId: targetParentId, oldParentId}
-        });
+        const movedPath = await this.mount.getPath(pathId);
+        if (movedPath) this.emit(SSEventType.DRIVE_PATH_MOVED, movedPath);
     }
 
     async renamePath(pathId: string, newName: string): Promise<void> {
@@ -265,11 +241,8 @@ export default class Drive {
 
         await this.mount.updatePath(pathId, {name: newName});
         this.emitACLChange(item, item.acl, item.acl);
-        this.home.notify({
-            type: SSEventType.DRIVE_PATH_RENAMED,
-            title: 'Item renamed',
-            data: {pathId, parentId: item.parentId}
-        });
+        const renamedItem = await this.mount.getPath(pathId);
+        if (renamedItem) this.emit(SSEventType.DRIVE_PATH_RENAMED, renamedItem, {extra: newName});
     }
 
     async downloadFile(pathId: string): Promise<ArrayBuffer | null> {
@@ -286,7 +259,7 @@ export default class Drive {
         return data ? new Uint8Array(data).buffer : null;
     }
 
-    async getMimeTypeContents(mimeType: string): Promise<PathEntry[]> {
+    async getMimeTypeContents(mimeType: string): Promise<DrivePath[]> {
         const ownResults = await this.mount.getPathsByMimeType(mimeType);
 
         const sharedResults = await this.sharedDb.select()
@@ -297,13 +270,13 @@ export default class Drive {
         const mapped = sharedResults.map(r => ({
             id: r.id,
             name: r.name,
-            type: r.type as PathEntry['type'],
+            type: r.type as DrivePath['type'],
             parentId: r.parentId,
             ownerId: r.ownerId,
             mimeType: r.mimeType,
             size: r.size ?? 0,
             thumbnail: r.thumbnail,
-            acl: r.acl as ACLEntry[] | null,
+            acl: r.acl as DriveACL[] | null,
             createdAt: r.createdAt ?? new Date(),
             updatedAt: r.updatedAt ?? new Date()
         }));
@@ -311,11 +284,11 @@ export default class Drive {
         return [...ownResults, ...mapped];
     }
 
-    async breadCrumb(pathId: string): Promise<PathEntry[]> {
+    async breadCrumb(pathId: string): Promise<DrivePath[]> {
         return await this.mount.getBreadcrumb(pathId);
     }
 
-    async updateACL(pathId: string, acl: ACLEntry[] | null): Promise<void> {
+    async updateACL(pathId: string, acl: DriveACL[] | null): Promise<void> {
         const item = await this.mount.getPath(pathId);
         if (!item) {
             throw new Error('Path not found');
@@ -328,14 +301,11 @@ export default class Drive {
         const normalizedACL = normalizeACL(acl);
         await this.mount.updatePath(pathId, {acl: normalizedACL});
         this.emitACLChange(item, item.acl, normalizedACL);
-        this.home.notify({
-            type: SSEventType.DRIVE_ACL_UPDATED,
-            title: 'Sharing updated',
-            data: {pathId, parentId: item.parentId}
-        });
+        const updatedItem = await this.mount.getPath(pathId);
+        if (updatedItem) this.emit(SSEventType.DRIVE_ACL_UPDATED, updatedItem);
     }
 
-    getACL(_pathId: string): ACLEntry[] | null {
+    getACL(_pathId: string): DriveACL[] | null {
         return null;
     }
 
@@ -395,41 +365,35 @@ export default class Drive {
         await this.home.closeSQLiteDatabase(db);
     }
 
-    async getSharedPathsWithMe(): Promise<PathEntry[]> {
+    async getSharedPathsWithMe(): Promise<DrivePath[]> {
         const results = await this.sharedDb.select().from(sharedSchema.sharedPaths).all();
         return results.map(r => ({
             id: r.id,
             name: r.name,
-            type: r.type as PathEntry['type'],
+            type: r.type as DrivePath['type'],
             parentId: r.parentId,
             ownerId: r.ownerId,
             mimeType: r.mimeType,
             size: r.size ?? 0,
             thumbnail: r.thumbnail,
-            acl: r.acl as ACLEntry[] | null,
+            acl: r.acl as DriveACL[] | null,
             createdAt: r.createdAt ?? new Date(),
             updatedAt: r.updatedAt ?? new Date()
         }));
     }
 
-    async getSharedPathsByMe(): Promise<PathEntry[]> {
+    async getSharedPathsByMe(): Promise<DrivePath[]> {
         return await this.mount.getPathsByMimeType('').then(paths =>
             paths.filter(p => p.acl !== null && p.acl.length > 0)
         );
     }
 
-    async receiveACLChange(path: PathEntry, newACL: ACLEntry[] | null): Promise<void> {
+    async receiveACLChange(path: DrivePath, newACL: DriveACL[] | null): Promise<void> {
         if (newACL === null || !newACL.find(acl => acl.email.toLowerCase() === this.owner.email.toLowerCase())) {
             this.sharedDb.delete(sharedSchema.sharedPaths)
                 .where(eq(sharedSchema.sharedPaths.id, path.id))
                 .run();
-            this.home.notify({
-                type: SSEventType.DRIVE_ACL_UNSHARED,
-                title: 'Item unshared with you',
-                body: `${path.name} has been unshared with you`,
-                tag: 'shared_path_deleted',
-                data: {pathId: path.id}
-            });
+            this.emit(SSEventType.DRIVE_ACL_UNSHARED, path, {tag: 'shared_path_deleted'});
         } else if (this.sharedDb.select().from(sharedSchema.sharedPaths).where(eq(sharedSchema.sharedPaths.id, path.id)).get()) {
             this.sharedDb.update(sharedSchema.sharedPaths).set({
                 acl: newACL,
@@ -453,18 +417,18 @@ export default class Drive {
                 createdAt: new Date(),
                 updatedAt: new Date()
             }).run();
-            this.home.notify({
-                type: SSEventType.DRIVE_ACL_SHARED,
-                title: 'Item shared with you',
-                body: `${path.name} has been shared with you`,
+            this.emit(SSEventType.DRIVE_ACL_SHARED, path, {
                 tag: 'shared_path_created',
-                link: `/drive/fs/${path.ownerId}/${path.id}`,
-                data: {pathId: path.id}
+                link: `/drive/fs/${path.ownerId}/${path.id}`
             });
         }
     }
 
-    private async emitACLChange(path: PathEntry, oldACL: ACLEntry[] | null, newACL: ACLEntry[] | null): Promise<void> {
+    private emit(type: Parameters<typeof buildDriveEvent>[0], path: DrivePath, options?: Parameters<typeof buildDriveEvent>[2]): void {
+        this.home.notify(buildDriveEvent(type, path, options));
+    }
+
+    private async emitACLChange(path: DrivePath, oldACL: DriveACL[] | null, newACL: DriveACL[] | null): Promise<void> {
         const users = new Set(oldACL?.map(acl => acl.email) || []);
         newACL?.forEach(acl => users.add(acl.email));
 

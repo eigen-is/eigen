@@ -4,7 +4,7 @@ import * as syncProtocol from "y-protocols/sync";
 import {type ServerWebSocket} from "bun";
 import * as encoding from "lib0/encoding";
 import * as decoding from "lib0/decoding";
-import type {PathEntry} from "../mount/types";
+import type {DrivePath} from "../mount/types";
 import type Drive from "../drive/drive";
 import {drizzle} from "drizzle-orm/bun-sqlite";
 import * as schema from "./schema.ts";
@@ -102,14 +102,14 @@ class DbProvider {
 
 export default class CollabDocument {
     private drive: Drive;
-    private path: PathEntry;
+    private path: DrivePath;
     private doc!: Y.Doc;
     private provider!: LoggingProvider | DbProvider;
     private awareness!: awarenessProtocol.Awareness;
     private connections: Set<ServerWebSocket<any>> = new Set();
     private closed: boolean = false;
 
-    constructor(drive: Drive, path: PathEntry) {
+    constructor(drive: Drive, path: DrivePath) {
         this.drive = drive;
         this.path = path;
 
