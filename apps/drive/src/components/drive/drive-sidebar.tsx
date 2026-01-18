@@ -15,7 +15,7 @@ import {SidebarSection} from '@workspace/ui/components/layout/sidebar/sidebar-se
 import {AppLogo} from '@workspace/ui/components/layout/app-logo';
 import {SidebarItem, StorageUsage} from "@workspace/ui";
 import {Separator} from '@workspace/ui/components/separator';
-import {DrivePath} from '@apps/api/types/drive';
+import {DrivePath} from '@workspace/lib/types/drive';
 import {useState} from 'react';
 import {useMatch, useNavigate} from '@tanstack/react-router';
 import {usePathInfo} from '@workspace/lib/drive';

@@ -1,7 +1,7 @@
 import {useState, useCallback} from "react";
 import {DrivePath} from "@workspace/lib/types/drive";
 
-export interface DriveDialogsState {
+export type DriveDialogsState = {
     createFolder: { open: boolean };
     createDoc: { open: boolean };
     createStickies: { open: boolean };

@@ -3,7 +3,7 @@ import type {DrivePath} from "@workspace/lib/types/drive";
 import {useCreateFolder} from "@workspace/lib/drive";
 import {DriveCreateItemDialog} from "./drive-create-folder-item";
 
-export interface DriveCreateFolderProps {
+export type DriveCreateFolderProps = {
     path: DrivePath;
     open: boolean;
     onOpenChange: (open: boolean) => void;

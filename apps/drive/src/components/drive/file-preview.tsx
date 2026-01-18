@@ -1,6 +1,6 @@
 import {useEffect} from "react";
 
-export interface FilePreviewProps {
+export type FilePreviewProps = {
     url: string;
     mimeType: string;
     onClose: () => void;

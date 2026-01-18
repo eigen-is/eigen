@@ -6,7 +6,7 @@ import {ArrowLeft, Calendar, Camera, Plus, Trash2} from 'lucide-react';
 import {format} from "date-fns";
 import {cn} from "@workspace/ui/lib/utils";
 import {useAddContact, useLabels, useUpdateContact} from '@workspace/lib/contacts';
-import {type Contact} from "@apps/api/types/contact";
+import {type Contact} from "@workspace/lib/types/contact";
 import {useUpload} from '@workspace/ui/components/layout/upload-provider/upload-provider';
 import {uploadWithProgress} from "@workspace/ui/components/layout/upload-provider/upload-with-progress";
 import {Button} from "@workspace/ui/components/button";
