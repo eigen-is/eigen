@@ -38,29 +38,29 @@ export type DriveLayoutProps = {
 }
 
 export function DriveLayout({
-    ownerId,
-    folderContents,
-    isLoading,
-    error,
-    onRowSelect,
-    onRowActivate,
-    onBackToList,
-    onAfterAction,
-    pathId = 'unknown',
-    selectedPath = null,
-    currentPath = null,
-    allowCreateFolder = true,
-    allowDelete = true,
-    allowShare = true,
-    allowCreateDoc = true,
-    allowCreateStickies = true,
-    allowUpload = true,
-    allowRename = true,
-    allowMove = true,
-    isMobile = false,
-    pid = undefined,
-    showBreadcrumb = false,
-}: DriveLayoutProps) {
+                                ownerId,
+                                folderContents,
+                                isLoading,
+                                error,
+                                onRowSelect,
+                                onRowActivate,
+                                onBackToList,
+                                onAfterAction,
+                                pathId = 'unknown',
+                                selectedPath = null,
+                                currentPath = null,
+                                allowCreateFolder = true,
+                                allowDelete = true,
+                                allowShare = true,
+                                allowCreateDoc = true,
+                                allowCreateStickies = true,
+                                allowUpload = true,
+                                allowRename = true,
+                                allowMove = true,
+                                isMobile = false,
+                                pid = undefined,
+                                showBreadcrumb = false,
+                            }: DriveLayoutProps) {
     const dialogs = useDriveDialogs();
     const movePath = useMovePath(ownerId);
 
@@ -155,11 +155,11 @@ export function DriveLayout({
         onRename: allowRename ? handleRenamePath : undefined,
     };
 
-    const showDetail = isMobile 
+    const showDetail = isMobile
         ? (selectedPath || (currentPath && currentPath?.type !== 'folder'))
         : (pid || currentPath?.type !== 'folder');
-    
-    const showList = isMobile 
+
+    const showList = isMobile
         ? !showDetail
         : (!currentPath || currentPath?.type === 'folder');
 
@@ -168,7 +168,7 @@ export function DriveLayout({
             {isMobile ? (
                 <div className="flex-1 h-full w-full">
                     {showDetail ? (
-                        <DriveDetail {...detailProps} isMobile={true} />
+                        <DriveDetail {...detailProps} isMobile={true}/>
                     ) : (
                         <DriveList {...listProps} />
                     )}
@@ -182,7 +182,7 @@ export function DriveLayout({
                     )}
                     {showDetail && (
                         <div className="flex-1 h-full overflow-hidden">
-                            <DriveDetail {...detailProps} className="border-none h-full" />
+                            <DriveDetail {...detailProps} className="border-none h-full"/>
                         </div>
                     )}
                 </div>

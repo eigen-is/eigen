@@ -48,7 +48,7 @@ export function UserAvatar({
             {avatarImage ? (
                 <AvatarImage src={`${import.meta.env.VITE_API_HOST}/${avatarImage}`} alt={displayName}/>
             ) : (
-                <AvatarDigiDoodle id={userId || email || ''} background="#eeeeee" />
+                <AvatarDigiDoodle id={userId || email || ''} background="#eeeeee"/>
             )}
         </Avatar>
     );

@@ -1,4 +1,4 @@
-import {useState, useEffect} from 'react'
+import {useEffect, useState} from 'react'
 import {Button} from '@workspace/ui/components/button'
 import {Input} from '@workspace/ui/components/input'
 import {Label} from '@workspace/ui/components/label'
@@ -44,7 +44,7 @@ export function SetupWizard() {
     const [step, setStep] = useState<'loading' | 'config' | 'complete' | 'already-setup'>('loading')
     const [error, setError] = useState<string | null>(null)
     const [loading, setLoading] = useState(false)
-    
+
     const [formData, setFormData] = useState<SetupData>({
         domain: 'eigen.is',
         storageType: 'local-id',
@@ -131,9 +131,11 @@ export function SetupWizard() {
             <div className="min-h-screen flex items-center justify-center bg-background p-4">
                 <Card className="w-full max-w-md">
                     <CardHeader className="text-center">
-                        <div className="mx-auto w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mb-4">
-                            <svg className="w-8 h-8 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        <div
+                            className="mx-auto w-16 h-16 rounded-full bg-green-100 flex items-center justify-center mb-4">
+                            <svg className="w-8 h-8 text-green-600" fill="none" viewBox="0 0 24 24"
+                                 stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7"/>
                             </svg>
                         </div>
                         <CardTitle className="text-2xl">Setup Complete!</CardTitle>
@@ -165,7 +167,8 @@ export function SetupWizard() {
                 </CardHeader>
                 <CardContent>
                     {error && (
-                        <div className="bg-destructive/10 border border-destructive/20 text-destructive px-4 py-3 rounded-lg mb-6">
+                        <div
+                            className="bg-destructive/10 border border-destructive/20 text-destructive px-4 py-3 rounded-lg mb-6">
                             {error}
                         </div>
                     )}
@@ -173,7 +176,7 @@ export function SetupWizard() {
                     <form onSubmit={handleSubmit} className="space-y-6">
                         <div className="space-y-4">
                             <h3 className="font-semibold text-lg">Server Configuration</h3>
-                            
+
                             <div>
                                 <Label htmlFor="domain">Domain</Label>
                                 <Input
@@ -191,13 +194,13 @@ export function SetupWizard() {
 
                             <div>
                                 <Label className="text-base">Storage Type</Label>
-                                <RadioGroup 
-                                    value={formData.storageType} 
+                                <RadioGroup
+                                    value={formData.storageType}
                                     onValueChange={handleStorageTypeChange}
                                     className="mt-3 space-y-2"
                                 >
                                     <div className="flex items-start space-x-3">
-                                        <RadioGroupItem value="local-id" id="local-id" className="mt-1" />
+                                        <RadioGroupItem value="local-id" id="local-id" className="mt-1"/>
                                         <Label htmlFor="local-id" className="flex-1 cursor-pointer font-normal">
                                             <div className="font-medium">Local storage (ID-based)</div>
                                             <p className="text-sm text-muted-foreground">
@@ -207,7 +210,7 @@ export function SetupWizard() {
                                     </div>
 
                                     <div className="flex items-start space-x-3">
-                                        <RadioGroupItem value="local-fullnames" id="local-fullnames" className="mt-1" />
+                                        <RadioGroupItem value="local-fullnames" id="local-fullnames" className="mt-1"/>
                                         <Label htmlFor="local-fullnames" className="flex-1 cursor-pointer font-normal">
                                             <div className="font-medium">Local storage (full names)</div>
                                             <p className="text-sm text-muted-foreground">
@@ -217,7 +220,7 @@ export function SetupWizard() {
                                     </div>
 
                                     <div className="flex items-start space-x-3">
-                                        <RadioGroupItem value="s3" id="s3" className="mt-1" />
+                                        <RadioGroupItem value="s3" id="s3" className="mt-1"/>
                                         <Label htmlFor="s3" className="flex-1 cursor-pointer font-normal">
                                             <div className="font-medium">S3-compatible storage</div>
                                             <p className="text-sm text-muted-foreground">
@@ -293,7 +296,7 @@ export function SetupWizard() {
 
                         <div className="space-y-4 pt-6 border-t">
                             <h3 className="font-semibold text-lg">Admin Account</h3>
-                            
+
                             <div>
                                 <Label htmlFor="adminName">Full Name</Label>
                                 <Input
@@ -316,7 +319,8 @@ export function SetupWizard() {
                                         required
                                         className="rounded-r-none"
                                     />
-                                    <span className="inline-flex items-center px-3 rounded-r-md border border-l-0 border-input bg-muted text-muted-foreground text-sm">
+                                    <span
+                                        className="inline-flex items-center px-3 rounded-r-md border border-l-0 border-input bg-muted text-muted-foreground text-sm">
                                         @{formData.domain}
                                     </span>
                                 </div>

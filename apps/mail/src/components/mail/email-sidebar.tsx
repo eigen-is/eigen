@@ -1,4 +1,5 @@
 import {AlertOctagon, AlertTriangle, Archive, File, Inbox, Send, Trash2, X} from 'lucide-react';
+import {MaildirMailbox} from "@workspace/lib/types/mail";
 import {Button} from "@workspace/ui/components/button";
 import {SidebarItem} from '@workspace/ui/components/layout/sidebar/sidebar-item';
 import {SidebarSection} from '@workspace/ui/components/layout/sidebar/sidebar-section';
@@ -8,7 +9,7 @@ import {EigenLoader, StorageUsage} from "@workspace/ui";
 import {EmailComposeButton} from "./email-compose-button";
 
 // Map of special mailbox flags to their icons and display names
-const standardMailboxes: Record<string, { icon: React.ComponentType<any>, name: string }> = {
+const standardMailboxes: Record<string, { icon: React.ComponentType<{ className?: string }>, name: string }> = {
     '\\Inbox': {icon: Inbox, name: 'Inbox'},
     '\\Drafts': {icon: File, name: 'Drafts'},
     '\\Sent': {icon: Send, name: 'Sent'},
@@ -79,9 +80,9 @@ interface AppSidebarProps {
     condensed?: boolean;
     onClose?: () => void;
     isMobile?: boolean;
-    mailboxes?: any[];
+    mailboxes?: MaildirMailbox[];
     isLoading?: boolean;
-    error?: any;
+    error?: Error | null;
 }
 
 export function EmailSidebar({
@@ -90,7 +91,7 @@ export function EmailSidebar({
                                  isMobile = false,
                                  mailboxes = [],
                                  isLoading = false,
-                                 error = false
+                                 error = null
                              }: AppSidebarProps) {
 
     // Memoize the processed mailboxes to avoid unnecessary recalculations

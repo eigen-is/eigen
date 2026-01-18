@@ -112,9 +112,9 @@ export function DriveUploadFiles({
                     return {success: false, fileName: name, error: err};
                 }
             });
-        } catch (err: any) {
+        } catch (err: unknown) {
             uploadHandler.error();
-            toast.error(`Upload failed: ${err.message || 'Unknown error'}`);
+            toast.error(`Upload failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
         }
     };
 

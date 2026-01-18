@@ -1,5 +1,5 @@
-import {useState, useEffect} from "react";
-import {BaseEditor, Editor, Transforms, Element as SlateElement} from "slate";
+import {useEffect, useState} from "react";
+import {BaseEditor, Editor, Element as SlateElement, Transforms} from "slate";
 import {ReactEditor, useSlate} from "slate-react";
 import {HistoryEditor} from "slate-history";
 import {
@@ -51,11 +51,10 @@ import {DocumentModeButton} from "@workspace/ui/components/layout/toolbar/Docume
 import {DriveCreateDoc} from "@workspace/ui/components/layout/drive/drive-create-doc";
 import {useRootFolder} from "@workspace/lib/drive";
 import {useAuth} from "@workspace/lib/auth";
-import {DriveDeleteItem} from "@workspace/ui/components/layout/drive/drive-delete-item";
 import {DrivePath} from "@workspace/lib/types/drive";
 import {useNavigate} from '@tanstack/react-router';
-import { useIsMobile } from "@workspace/lib/media/index.js";
-import { DriveRenameItem } from "@workspace/ui/components/layout/drive/drive-rename-item";
+import {useIsMobile} from "@workspace/lib/media/index.js";
+import {DriveRenameItem} from "@workspace/ui/components/layout/drive/drive-rename-item";
 
 // Define custom editor type
 type CustomEditor = BaseEditor & ReactEditor & HistoryEditor;
@@ -269,13 +268,13 @@ export const EditorToolbar = ({path, canWrite, onAccessDialogOpen, onDeleteDialo
     // Apply the link to the selected text
     const applyLink = () => {
         if (!linkUrl) return;
-        
+
         const selection = editor.selection;
         if (selection) {
             // Apply link to selected text
             Editor.addMark(editor, 'link', linkUrl);
         }
-        
+
         setLinkUrl('');
         setLinkDialogOpen(false);
     };
@@ -318,13 +317,15 @@ export const EditorToolbar = ({path, canWrite, onAccessDialogOpen, onDeleteDialo
                             <Pencil className="w-4 h-4 mr-2"/> Rename
                         </DropdownMenuItem>
                         <DropdownMenuSeparator/>
-                        <DropdownMenuItem onClick={onAccessDialogOpen}><UserRoundPlus  className="w-4 h-4 mr-2"/> Edit access</DropdownMenuItem>
-                        <DropdownMenuItem onClick={printDocument}><Printer className="w-4 h-4 mr-2"/> Print</DropdownMenuItem>
+                        <DropdownMenuItem onClick={onAccessDialogOpen}><UserRoundPlus className="w-4 h-4 mr-2"/> Edit
+                            access</DropdownMenuItem>
+                        <DropdownMenuItem onClick={printDocument}><Printer
+                            className="w-4 h-4 mr-2"/> Print</DropdownMenuItem>
                         {canWrite && (
                             <>
                                 <DropdownMenuSeparator/>
                                 <DropdownMenuItem onClick={() => path && onDeleteDialogOpen(true)}>
-                                    <Trash2  className="w-4 h-4 mr-2"/> Delete
+                                    <Trash2 className="w-4 h-4 mr-2"/> Delete
                                 </DropdownMenuItem>
                             </>
                         )}
@@ -338,17 +339,19 @@ export const EditorToolbar = ({path, canWrite, onAccessDialogOpen, onDeleteDialo
                             </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent align="start">
-                            <DropdownMenuItem onClick={() => editor.undo()} disabled={editor.history.undos.length === 0}>
-                                <Undo className="w-4 h-4 mr-2" />
+                            <DropdownMenuItem onClick={() => editor.undo()}
+                                              disabled={editor.history.undos.length === 0}>
+                                <Undo className="w-4 h-4 mr-2"/>
                                 Undo
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => editor.redo()} disabled={editor.history.redos.length === 0}>
-                                <Redo className="w-4 h-4 mr-2" />
+                            <DropdownMenuItem onClick={() => editor.redo()}
+                                              disabled={editor.history.redos.length === 0}>
+                                <Redo className="w-4 h-4 mr-2"/>
                                 Redo
                             </DropdownMenuItem>
                         </DropdownMenuContent>
                     </DropdownMenu>
-                    
+
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
                             <Button variant="ghost" title="Format">
@@ -359,35 +362,35 @@ export const EditorToolbar = ({path, canWrite, onAccessDialogOpen, onDeleteDialo
                             {/* Text formatting submenu */}
                             <DropdownMenuSub>
                                 <DropdownMenuSubTrigger>
-                                    <Type className="w-4 h-4 mr-2" />
+                                    <Type className="w-4 h-4 mr-2"/>
                                     Text
                                 </DropdownMenuSubTrigger>
                                 <DropdownMenuSubContent>
                                     <DropdownMenuItem onClick={() => toggleMark(editor, 'bold')}>
-                                        <Bold className="w-4 h-4 mr-2" />
+                                        <Bold className="w-4 h-4 mr-2"/>
                                         Bold
                                     </DropdownMenuItem>
                                     <DropdownMenuItem onClick={() => toggleMark(editor, 'italic')}>
-                                        <Italic className="w-4 h-4 mr-2" />
+                                        <Italic className="w-4 h-4 mr-2"/>
                                         Italic
                                     </DropdownMenuItem>
                                     <DropdownMenuItem onClick={() => toggleMark(editor, 'underline')}>
-                                        <Underline className="w-4 h-4 mr-2" />
+                                        <Underline className="w-4 h-4 mr-2"/>
                                         Underline
                                     </DropdownMenuItem>
                                     <DropdownMenuItem onClick={() => toggleMark(editor, 'strikethrough')}>
-                                        <Strikethrough className="w-4 h-4 mr-2" />
+                                        <Strikethrough className="w-4 h-4 mr-2"/>
                                         Strikethrough
                                     </DropdownMenuItem>
                                 </DropdownMenuSubContent>
                             </DropdownMenuSub>
 
-                            <DropdownMenuSeparator />
+                            <DropdownMenuSeparator/>
 
                             {/* Heading submenu */}
                             <DropdownMenuSub>
                                 <DropdownMenuSubTrigger>
-                                    <Heading2 className="w-4 h-4 mr-2" />
+                                    <Heading2 className="w-4 h-4 mr-2"/>
                                     Heading
                                 </DropdownMenuSubTrigger>
                                 <DropdownMenuSubContent>
@@ -407,67 +410,67 @@ export const EditorToolbar = ({path, canWrite, onAccessDialogOpen, onDeleteDialo
                                 </DropdownMenuSubContent>
                             </DropdownMenuSub>
 
-                            <DropdownMenuSeparator />
+                            <DropdownMenuSeparator/>
 
                             {/* Lists submenu */}
                             <DropdownMenuSub>
                                 <DropdownMenuSubTrigger>
-                                    <List className="w-4 h-4 mr-2" />
+                                    <List className="w-4 h-4 mr-2"/>
                                     Lists
                                 </DropdownMenuSubTrigger>
                                 <DropdownMenuSubContent>
                                     <DropdownMenuItem onClick={() => toggleBlock(editor, 'numbered-list')}>
-                                        <ListOrdered className="w-4 h-4 mr-2" />
+                                        <ListOrdered className="w-4 h-4 mr-2"/>
                                         Numbered List
                                     </DropdownMenuItem>
                                     <DropdownMenuItem onClick={() => toggleBlock(editor, 'bulleted-list')}>
-                                        <List className="w-4 h-4 mr-2" />
+                                        <List className="w-4 h-4 mr-2"/>
                                         Bulleted List
                                     </DropdownMenuItem>
                                     <DropdownMenuItem onClick={() => toggleBlock(editor, 'check-list')}>
-                                        <CheckSquare className="w-4 h-4 mr-2" />
+                                        <CheckSquare className="w-4 h-4 mr-2"/>
                                         Check List
                                     </DropdownMenuItem>
                                 </DropdownMenuSubContent>
                             </DropdownMenuSub>
 
-                            <DropdownMenuSeparator />
+                            <DropdownMenuSeparator/>
 
                             {/* Alignment submenu */}
                             <DropdownMenuSub>
                                 <DropdownMenuSubTrigger>
-                                    <AlignLeft className="w-4 h-4 mr-2" />
+                                    <AlignLeft className="w-4 h-4 mr-2"/>
                                     Align
                                 </DropdownMenuSubTrigger>
                                 <DropdownMenuSubContent>
                                     <DropdownMenuItem onClick={() => toggleAlignment(editor, 'left')}>
-                                        <AlignLeft className="w-4 h-4 mr-2" />
+                                        <AlignLeft className="w-4 h-4 mr-2"/>
                                         Align Left
                                     </DropdownMenuItem>
                                     <DropdownMenuItem onClick={() => toggleAlignment(editor, 'center')}>
-                                        <AlignCenter className="w-4 h-4 mr-2" />
+                                        <AlignCenter className="w-4 h-4 mr-2"/>
                                         Align Center
                                     </DropdownMenuItem>
                                     <DropdownMenuItem onClick={() => toggleAlignment(editor, 'right')}>
-                                        <AlignRight className="w-4 h-4 mr-2" />
+                                        <AlignRight className="w-4 h-4 mr-2"/>
                                         Align Right
                                     </DropdownMenuItem>
                                 </DropdownMenuSubContent>
                             </DropdownMenuSub>
 
-                            <DropdownMenuSeparator />
+                            <DropdownMenuSeparator/>
 
                             {/* Link */}
                             <DropdownMenuItem onClick={handleLinkOperation}>
-                                <Link className="w-4 h-4 mr-2" />
+                                <Link className="w-4 h-4 mr-2"/>
                                 Add Link
                             </DropdownMenuItem>
 
-                            <DropdownMenuSeparator />
+                            <DropdownMenuSeparator/>
 
                             {/* Clear formatting */}
                             <DropdownMenuItem onClick={clearFormatting}>
-                                <RemoveFormatting className="w-4 h-4 mr-2" />
+                                <RemoveFormatting className="w-4 h-4 mr-2"/>
                                 Clear Formatting
                             </DropdownMenuItem>
                         </DropdownMenuContent>
@@ -614,7 +617,8 @@ export const EditorToolbar = ({path, canWrite, onAccessDialogOpen, onDeleteDialo
                         </div>
                     </div>
                     <DialogFooter>
-                        <Button type="button" variant="secondary" onClick={() => setLinkDialogOpen(false)}>Cancel</Button>
+                        <Button type="button" variant="secondary"
+                                onClick={() => setLinkDialogOpen(false)}>Cancel</Button>
                         <Button type="button" onClick={applyLink}>Save</Button>
                     </DialogFooter>
                 </DialogContent>

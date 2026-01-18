@@ -40,7 +40,8 @@ export function UserItem({
             <div className="ml-3 flex-1">
                 <p className="text-sm font-medium text-gray-900">{displayName}</p>
                 <div className="flex justify-between items-center">
-                    {email && name && <p className="text-xs text-gray-500">{mailLink ? <a className="hover:underline" href={`${import.meta.env.VITE_APP_MAIL_URL}/box/inbox?mode=compose&to=${email}`}>{email}</a> : email}</p>}
+                    {email && name && <p className="text-xs text-gray-500">{mailLink ? <a className="hover:underline"
+                                                                                          href={`${import.meta.env.VITE_APP_MAIL_URL}/box/inbox?mode=compose&to=${email}`}>{email}</a> : email}</p>}
                     {label && (
                         <p className="text-xs text-gray-500 whitespace-nowrap ml-auto">
                             {label}
@@ -79,7 +80,9 @@ export function UserPublicItem({
             <div className="ml-3 flex-1">
                 <p className="text-sm font-medium text-gray-900">{data?.name || email}</p>
                 <div className="flex justify-between items-center">
-                    {data?.email && data?.name && <p className="text-xs text-gray-500">{mailLink ? <a className="hover:underline" href={`${import.meta.env.VITE_APP_MAIL_URL}/box/inbox?mode=compose&to=${data.email}`}>{data.email}</a> : data.email}</p>}
+                    {data?.email && data?.name && <p className="text-xs text-gray-500">{mailLink ?
+                        <a className="hover:underline"
+                           href={`${import.meta.env.VITE_APP_MAIL_URL}/box/inbox?mode=compose&to=${data.email}`}>{data.email}</a> : data.email}</p>}
                     {label && (
                         <p className="text-xs text-gray-500 whitespace-nowrap ml-auto">
                             {label}

@@ -1,3 +1,11 @@
+export type Address = {
+    street?: string;
+    city?: string;
+    state?: string;
+    zipCode?: string;
+    country?: string;
+};
+
 export type Contact = {
     id: string;
     firstName: string;
@@ -6,13 +14,7 @@ export type Contact = {
     phone: string[];
     company?: string;
     jobTitle?: string;
-    address?: {
-        street?: string;
-        city?: string;
-        state?: string;
-        zipCode?: string;
-        country?: string;
-    }[];
+    address?: Address[];
     birthday?: string;
     notes?: string;
     avatar?: string;
