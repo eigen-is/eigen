@@ -65,9 +65,9 @@ export function LoginFa2Form() {
             } else {
                 toast.error(result.error?.message || "Invalid verification code")
             }
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error("Error verifying 2FA:", error)
-            toast.error(error?.message || "Verification failed")
+            toast.error(error instanceof Error ? error.message : "Verification failed")
         } finally {
             setIsLoading(false)
         }

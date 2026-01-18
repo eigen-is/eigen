@@ -1,4 +1,4 @@
-import {createFileRoute} from '@tanstack/react-router'
+import {createFileRoute, useNavigate} from '@tanstack/react-router'
 import {CollaborativeEditor} from '@/components/docs/editor'
 import {useDocumentAccess} from '@workspace/lib/docs'
 import {usePathInfo} from '@workspace/lib/drive'
@@ -7,7 +7,7 @@ import {useApp} from '@workspace/ui/components/layout/app-context'
 import {useCallback, useEffect, useState} from 'react'
 import {DriveAccessDialog} from '@workspace/ui/components/layout/drive/drive-access-dialog'
 import {DriveDeleteItem} from '@workspace/ui/components/layout/drive/drive-delete-item'
-import {useNavigate} from '@tanstack/react-router';
+
 export const Route = createFileRoute('/_auth/doc/$ownerId/$pathId')({
     component: CollaborativeTextEditor,
 })
@@ -65,13 +65,13 @@ function CollaborativeTextEditor() {
                 onOpenChange={setAccessDialogOpen}
                 path={path}
             /><DriveDeleteItem
-                path={path}
-                open={deleteDialogOpen}
-                onOpenChange={setDeleteDialogOpen}
-                onAfterAction={() => {
-                    navigate({to: `/`});
-                }}
-            />
+            path={path}
+            open={deleteDialogOpen}
+            onOpenChange={setDeleteDialogOpen}
+            onAfterAction={() => {
+                navigate({to: `/`});
+            }}
+        />
         </>
     )
 }

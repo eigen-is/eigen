@@ -13,13 +13,13 @@ export type DriveRenameItemProps = {
 }
 
 export function DriveRenameItem({
-    path,
-    open,
-    onOpenChange,
-    onSave,
-    onCancel,
-    onAfterAction,
-}: DriveRenameItemProps) {
+                                    path,
+                                    open,
+                                    onOpenChange,
+                                    onSave,
+                                    onCancel,
+                                    onAfterAction,
+                                }: DriveRenameItemProps) {
     if (!path) return null;
 
     const renamePathMutation = useRenamePath(path.ownerId);
@@ -57,8 +57,8 @@ export function DriveRenameItem({
             }
 
             if (onSave) onSave(newName || '');
-        } catch (error: any) {
-            toast.error(error?.message || "Failed to rename");
+        } catch (error: unknown) {
+            toast.error(error instanceof Error ? error.message : "Failed to rename");
         }
     };
 

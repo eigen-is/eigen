@@ -27,25 +27,20 @@ export function parseMediaGrids(markdown: string): {
         let mediaMatch;
         while ((mediaMatch = mediaRegex.exec(innerContent)) !== null) {
             const attrs = mediaMatch[1];
-            const item: any = {type: 'image'};
-
             const srcMatch = attrs.match(/src="([^"]+)"/);
-            if (srcMatch) item.src = srcMatch[1];
-
             const typeMatch = attrs.match(/type="([^"]+)"/);
-            if (typeMatch) item.type = typeMatch[1];
-
             const captionMatch = attrs.match(/caption="([^"]+)"/);
-            if (captionMatch) item.caption = captionMatch[1];
-
             const thumbnailMatch = attrs.match(/thumbnail="([^"]+)"/);
-            if (thumbnailMatch) item.thumbnail = thumbnailMatch[1];
-
             const thumbMatch = attrs.match(/thumb="([^"]+)"/);
-            if (thumbMatch) item.thumbnail = thumbMatch[1];
-
             const posterMatch = attrs.match(/poster="([^"]+)"/);
-            if (posterMatch) item.poster = posterMatch[1];
+
+            const item: MediaItem = {
+                src: srcMatch ? srcMatch[1] : '',
+                type: (typeMatch?.[1] === 'video' ? 'video' : 'image'),
+                caption: captionMatch?.[1],
+                thumbnail: thumbnailMatch?.[1] ?? thumbMatch?.[1],
+                poster: posterMatch?.[1],
+            };
 
             items.push(item);
         }

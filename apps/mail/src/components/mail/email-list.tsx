@@ -12,7 +12,7 @@ interface EmailListProps {
     onRowClick: (emailId: string) => void;
     activeRowId?: string;
     isLoading?: boolean;
-    error?: any;
+    error?: Error | null;
     onReply?: (emailId: string) => void;
     onReplyAll?: (emailId: string) => void;
     onForward?: (emailId: string) => void;

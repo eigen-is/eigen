@@ -202,7 +202,7 @@ export function ProfileEditor() {
                                                 const responseData = await response.text();
                                                 setAvatar(responseData);
                                             }
-                                        } catch (err: any) {
+                                        } catch (err: unknown) {
                                             console.error('Error uploading file:', err);
                                             uploadHandler.error();
                                         }

@@ -5,7 +5,7 @@ import {uploadWithProgress} from "../../layout/upload-provider/upload-with-progr
 export type UploadResult = {
     success: boolean;
     fileName: string;
-    error?: any;
+    error?: unknown;
 }
 
 export type FileUploadOptions = {
@@ -94,7 +94,7 @@ export function useFileUpload(ownerId: string, folderId: string, options: FileUp
                     return result;
                 }
             });
-        } catch (err: any) {
+        } catch (err: unknown) {
             uploadHandler.error();
 
             const result = {success: false, fileName: name, error: err};

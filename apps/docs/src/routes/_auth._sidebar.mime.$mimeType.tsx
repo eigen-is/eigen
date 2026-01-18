@@ -46,7 +46,7 @@ function DriveRoute() {
         }
     };
 
-    const onRowActivate = (path: DrivePath) => {        
+    const onRowActivate = (path: DrivePath) => {
         if (path.type === 'doc') {
             const url = `${import.meta.env.VITE_APP_DOCS_URL}/doc/${path.ownerId}/${path.id}`;
             document.location.href = url;

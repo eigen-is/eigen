@@ -47,8 +47,8 @@ export function DriveCreateStickies({
             }
 
             if (onSave) onSave(newPath || '');
-        } catch (error: any) {
-            toast.error(error?.message || "Failed to create stickies");
+        } catch (error: unknown) {
+            toast.error(error instanceof Error ? error.message : "Failed to create stickies");
         }
     };
 
