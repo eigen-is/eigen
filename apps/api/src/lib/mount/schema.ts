@@ -1,6 +1,6 @@
 import {sql} from 'drizzle-orm';
 import {integer, primaryKey, sqliteTable, text} from 'drizzle-orm/sqlite-core';
-import type {ACLEntry} from './types';
+import type {DriveACL} from './types';
 
 export const paths = sqliteTable('paths', {
     id: text('id').primaryKey(),
@@ -11,7 +11,7 @@ export const paths = sqliteTable('paths', {
     mimeType: text('mimeType').notNull(),
     size: integer('size').default(0),
     thumbnail: text('thumbnail'),
-    acl: text('acl', {mode: 'json'}).$type<ACLEntry[] | null>(),
+    acl: text('acl', {mode: 'json'}).$type<DriveACL[] | null>(),
     createdAt: integer('createdAt', {mode: 'timestamp'}).default(sql`(unixepoch())`),
     updatedAt: integer('updatedAt', {mode: 'timestamp'}).default(sql`(unixepoch())`),
 });
