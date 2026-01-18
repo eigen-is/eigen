@@ -7,7 +7,7 @@ export const betterAuthView = (context: Context) => {
     if (BETTER_AUTH_ACCEPT_METHODS.includes(context.request.method)) {
         return auth.handler(context.request);
     } else {
-        return new Response("Method Not Allowed", { status: 405 });
+        return new Response("Method Not Allowed", {status: 405});
     }
 };
 

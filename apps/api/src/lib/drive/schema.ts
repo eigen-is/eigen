@@ -16,8 +16,10 @@ export const drivePaths = sqliteTable('drive_paths', {
     size: integer('size'),
     thumbnail: text('thumbnail'),
     acl: text('acl', {mode: 'json'}).$type<DriveACL[] | null>(),
-    createdAt: integer('createdAt', {mode: 'timestamp'}).default(sql`(unixepoch())`),
-    updatedAt: integer('updatedAt', {mode: 'timestamp'}).default(sql`(unixepoch())`),
+    createdAt: integer('createdAt', {mode: 'timestamp'}).default(sql`(unixepoch()
+                                                                     )`),
+    updatedAt: integer('updatedAt', {mode: 'timestamp'}).default(sql`(unixepoch()
+                                                                     )`),
 });
 
 // Labels table
@@ -25,8 +27,10 @@ export const driveLabels = sqliteTable('drive_labels', {
     id: text('id').primaryKey(),
     name: text('name').notNull(),
     color: text('color').notNull(),
-    createdAt: integer('createdAt', {mode: 'timestamp'}).default(sql`(unixepoch())`),
-    updatedAt: integer('updatedAt', {mode: 'timestamp'}).default(sql`(unixepoch())`),
+    createdAt: integer('createdAt', {mode: 'timestamp'}).default(sql`(unixepoch()
+                                                                     )`),
+    updatedAt: integer('updatedAt', {mode: 'timestamp'}).default(sql`(unixepoch()
+                                                                     )`),
 });
 
 // Junction table for drive paths and labels

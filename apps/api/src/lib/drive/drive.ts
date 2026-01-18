@@ -3,10 +3,10 @@ import type Database from 'bun:sqlite';
 import {BunSQLiteDatabase} from 'drizzle-orm/bun-sqlite';
 import {eq} from 'drizzle-orm';
 
-import {Mount, createDefaultMountConfig} from '../mount';
-import type {DrivePath, DriveACL} from '@workspace/lib/types/drive';
+import {createDefaultMountConfig, Mount} from '../mount';
+import type {DriveACL, DrivePath} from '@workspace/lib/types/drive';
 import {canRead, canWrite, normalizeACL} from './acl';
-import {saveThumbnail, deleteThumbnail, getThumbnail} from '../shared/thumbnails';
+import {deleteThumbnail, getThumbnail, saveThumbnail} from '../shared/thumbnails';
 import CollabDocument from '../collab/collabDocument';
 import {getSharedDatabase} from './shared';
 import * as sharedSchema from './sharedschema';

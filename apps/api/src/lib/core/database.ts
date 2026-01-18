@@ -1,5 +1,5 @@
 import type Database from 'bun:sqlite';
-import {drizzle, BunSQLiteDatabase} from 'drizzle-orm/bun-sqlite';
+import {BunSQLiteDatabase, drizzle} from 'drizzle-orm/bun-sqlite';
 import type {HomeInterface} from '../home/types';
 
 export type SchemaType = Record<string, unknown>;

@@ -1,9 +1,9 @@
-import { drizzle } from "drizzle-orm/bun-sqlite";
-import { systemConfig } from "./schema";
-import { eq } from "drizzle-orm";
-import { existsSync, mkdirSync } from "fs";
-import { dirname } from "path";
-import { getServerDataPath } from "./paths";
+import {drizzle} from "drizzle-orm/bun-sqlite";
+import {systemConfig} from "./schema";
+import {eq} from "drizzle-orm";
+import {existsSync, mkdirSync} from "fs";
+import {dirname} from "path";
+import {getServerDataPath} from "./paths";
 
 // Configuration defaults
 export type SystemConfig = {
@@ -42,26 +42,26 @@ let cachedConfig: SystemConfig | null = null;
 
 function getConfigDb() {
     if (configDb) return configDb;
-    
+
     const dbPath = getServerDataPath('config.db');
     const dataDir = dirname(dbPath);
-    
+
     if (!existsSync(dataDir)) {
-        mkdirSync(dataDir, { recursive: true });
+        mkdirSync(dataDir, {recursive: true});
     }
-    
+
     configDb = drizzle(dbPath, {
         schema: {
             systemConfig,
         },
     });
-    
+
     return configDb;
 }
 
 async function initializeConfigDatabase(): Promise<void> {
     const db = getConfigDb();
-    
+
     // Create table if not exists
     await db.run(`CREATE TABLE IF NOT EXISTS "system_config" (
         "key" text PRIMARY KEY NOT NULL,
@@ -87,11 +87,11 @@ export async function getConfig<K extends keyof SystemConfig>(key: K): Promise<S
         await initializeConfigDatabase();
         const db = getConfigDb();
         const result = await db.select().from(systemConfig).where(eq(systemConfig.key, key)).get();
-        
+
         if (result) {
             return JSON.parse(result.value);
         }
-        
+
         // Return default if not found
         return DEFAULT_CONFIG[key];
     } catch (error) {
@@ -103,7 +103,7 @@ export async function getConfig<K extends keyof SystemConfig>(key: K): Promise<S
 export async function setConfig<K extends keyof SystemConfig>(key: K, value: SystemConfig[K]): Promise<void> {
     await initializeConfigDatabase();
     const db = getConfigDb();
-    
+
     await db.insert(systemConfig)
         .values({
             key,
@@ -117,36 +117,36 @@ export async function setConfig<K extends keyof SystemConfig>(key: K, value: Sys
                 updatedAt: new Date(),
             },
         });
-    
+
     // Clear cache
     cachedConfig = null;
 }
 
 export async function getAllConfig(): Promise<SystemConfig> {
     if (cachedConfig) return cachedConfig;
-    
+
     await initializeConfigDatabase();
     const db = getConfigDb();
     const results = await db.select().from(systemConfig).all();
-    
+
     const config: Partial<SystemConfig> = {};
-    
+
     for (const row of results) {
         config[row.key as keyof SystemConfig] = JSON.parse(row.value);
     }
-    
+
     // Merge with defaults for any missing values
-    cachedConfig = { ...DEFAULT_CONFIG, ...config };
+    cachedConfig = {...DEFAULT_CONFIG, ...config};
     return cachedConfig;
 }
 
 export async function setAllConfig(config: Partial<SystemConfig>): Promise<void> {
     await initializeConfigDatabase();
-    
+
     for (const [key, value] of Object.entries(config)) {
         await setConfig(key as keyof SystemConfig, value as any);
     }
-    
+
     cachedConfig = null;
 }
 

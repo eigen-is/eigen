@@ -1,4 +1,4 @@
-import {useState, useCallback} from "react";
+import {useCallback, useState} from "react";
 import {DrivePath} from "@workspace/lib/types/drive";
 
 export type DriveDialogsState = {
@@ -15,16 +15,16 @@ export function useDriveDialogs() {
     const [createFolderOpen, setCreateFolderOpen] = useState(false);
     const [createDocOpen, setCreateDocOpen] = useState(false);
     const [createStickiesOpen, setCreateStickiesOpen] = useState(false);
-    
+
     const [deleteOpen, setDeleteOpen] = useState(false);
     const [deleteItem, setDeleteItem] = useState<DrivePath | null>(null);
-    
+
     const [renameOpen, setRenameOpen] = useState(false);
     const [renameItem, setRenameItem] = useState<DrivePath | null>(null);
-    
+
     const [shareOpen, setShareOpen] = useState(false);
     const [shareItem, setShareItem] = useState<DrivePath | null>(null);
-    
+
     const [uploadOpen, setUploadOpen] = useState(false);
     const [uploadFiles, setUploadFiles] = useState<File[]>([]);
 

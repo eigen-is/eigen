@@ -1,22 +1,27 @@
-import { drizzle } from "drizzle-orm/bun-sqlite";
-import { auth } from "../auth/auth";
-import { getServerConfig, saveServerConfig, isSetupRequired as checkSetupRequired, type ServerConfig } from "../config/server-config";
-import { existsSync, mkdirSync } from "fs";
-import { dirname } from "path";
-import { getServerDataPath } from "../config/paths";
+import {drizzle} from "drizzle-orm/bun-sqlite";
+import {auth} from "../auth/auth";
+import {
+    getServerConfig,
+    isSetupRequired as checkSetupRequired,
+    saveServerConfig,
+    type ServerConfig
+} from "../config/server-config";
+import {existsSync, mkdirSync} from "fs";
+import {dirname} from "path";
+import {getServerDataPath} from "../config/paths";
 
 export const isSetupRequired = checkSetupRequired;
 
 async function initializeDatabaseSchema(): Promise<void> {
     const dbPath = getServerDataPath('users3.db');
     const dataDir = dirname(dbPath);
-    
+
     if (!existsSync(dataDir)) {
-        mkdirSync(dataDir, { recursive: true });
+        mkdirSync(dataDir, {recursive: true});
     }
 
     const db = drizzle(dbPath);
-    
+
     await db.run(`CREATE TABLE IF NOT EXISTS "user" (
         "id" text PRIMARY KEY NOT NULL,
         "name" text NOT NULL,
@@ -127,45 +132,45 @@ export type SetupResult = {
 
 export async function getSetupStatus() {
     const setupRequired = isSetupRequired();
-    
+
     if (!setupRequired) {
         const config = getServerConfig();
-        return { setupRequired: false, domain: config?.domain };
+        return {setupRequired: false, domain: config?.domain};
     }
-    
-    return { setupRequired: true };
+
+    return {setupRequired: true};
 }
 
 export async function completeSetup(input: SetupInput): Promise<SetupResult> {
     if (!isSetupRequired()) {
-        return { success: false, error: "Setup has already been completed" };
+        return {success: false, error: "Setup has already been completed"};
     }
 
     if (!input.domain) {
-        return { success: false, error: "Domain is required" };
+        return {success: false, error: "Domain is required"};
     }
 
     if (!input.storageType) {
-        return { success: false, error: "Storage type is required" };
+        return {success: false, error: "Storage type is required"};
     }
 
     if (input.storageType === 's3') {
         if (!input.s3Bucket || !input.s3Region || !input.s3AccessKey || !input.s3SecretKey) {
-            return { success: false, error: "S3 configuration requires bucket, region, access key, and secret key" };
+            return {success: false, error: "S3 configuration requires bucket, region, access key, and secret key"};
         }
     }
 
     if (!input.adminEmail || !input.adminPassword || !input.adminName) {
-        return { success: false, error: "Admin email, password, and name are required" };
+        return {success: false, error: "Admin email, password, and name are required"};
     }
 
     if (input.adminPassword.length < 8) {
-        return { success: false, error: "Password must be at least 8 characters long" };
+        return {success: false, error: "Password must be at least 8 characters long"};
     }
 
     try {
         await initializeDatabaseSchema();
-        
+
         const user = await auth.api.createUser({
             body: {
                 email: input.adminEmail,
@@ -200,7 +205,7 @@ export async function completeSetup(input: SetupInput): Promise<SetupResult> {
         return {
             success: true,
             message: "Setup completed successfully",
-            user: { id: user.user.id, email: user.user.email, name: user.user.name }
+            user: {id: user.user.id, email: user.user.email, name: user.user.name}
         };
     } catch (error) {
         console.error('Setup failed:', error);

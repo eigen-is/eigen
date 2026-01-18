@@ -47,17 +47,17 @@ export const collabRouter = new Elysia({
                 return;
             }
             try {
-            const document = await drive.getCollabDocument(pathId);
+                const document = await drive.getCollabDocument(pathId);
 
-            document.subscribe(user, ws as unknown as ServerWebSocket<any>);
+                document.subscribe(user, ws as unknown as ServerWebSocket<any>);
 
-            keepWebSocketAlive(user, ws as unknown as ServerWebSocket<any>, async () => {
-                try {
-                    document.unsubscribe(user, ws as unknown as ServerWebSocket<any>);
-                } catch (err) {
-                    console.error('Error unsubscribing from document:', err);
-                }
-            });
+                keepWebSocketAlive(user, ws as unknown as ServerWebSocket<any>, async () => {
+                    try {
+                        document.unsubscribe(user, ws as unknown as ServerWebSocket<any>);
+                    } catch (err) {
+                        console.error('Error unsubscribing from document:', err);
+                    }
+                });
             } catch (err) {
                 console.error('Error getting document:', err);
                 ws.close(1008, "Failed to get document");

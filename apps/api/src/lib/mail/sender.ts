@@ -25,7 +25,7 @@ function createTransport(): Mail {
     });
 }
 
-function convertAddressValue(value: {name?: string; address?: string}[] | undefined): Address[] {
+function convertAddressValue(value: { name?: string; address?: string }[] | undefined): Address[] {
     if (!value) return [];
     return value
         .filter(v => v.address)
@@ -34,9 +34,9 @@ function convertAddressValue(value: {name?: string; address?: string}[] | undefi
 
 export function draftToMailOptions(draft: EmailDraft, fallbackEmail: string): SendMailOptions {
     const fromValue = draft.from?.value?.[0];
-    
+
     return {
-        from: fromValue?.address 
+        from: fromValue?.address
             ? {name: fromValue.name || '', address: fromValue.address}
             : {name: '', address: fallbackEmail},
         to: convertAddressValue(draft.to?.value),
@@ -50,7 +50,7 @@ export function draftToMailOptions(draft: EmailDraft, fallbackEmail: string): Se
 
 export async function sendMail(options: SendMailOptions): Promise<boolean> {
     const transporter = createTransport();
-    
+
     const mailOptions: Mail.Options = {
         from: options.from as Mail.Address,
         to: options.to as Mail.Address[],

@@ -1,4 +1,4 @@
-import {useState, useCallback} from "react";
+import {useCallback, useState} from "react";
 import {DrivePath} from "@workspace/lib/types/drive";
 
 interface UseTableDragDropProps {
@@ -29,7 +29,7 @@ export function useTableDragDrop({onMove}: UseTableDragDropProps) {
     const handleDragOver = useCallback((e: React.DragEvent, item: DrivePath) => {
         e.preventDefault();
         if (!draggedItem) return;
-        
+
         const isValid = isValidDrop(draggedItem, item);
         e.dataTransfer.dropEffect = isValid ? 'move' : 'none';
     }, [draggedItem, isValidDrop]);
@@ -47,11 +47,11 @@ export function useTableDragDrop({onMove}: UseTableDragDropProps) {
     const handleDrop = useCallback((e: React.DragEvent, targetItem: DrivePath) => {
         e.preventDefault();
         if (!draggedItem) return;
-        
+
         if (isValidDrop(draggedItem, targetItem)) {
             onMove?.(draggedItem, targetItem.id);
         }
-        
+
         setDraggedItem(null);
         setDragOverItem(null);
         setIsValidDropTarget(false);

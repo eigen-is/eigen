@@ -6,14 +6,14 @@ export type BlogPost = {
     content: string;
 }
 
-const blogFiles = import.meta.glob('./blog/*.md', { eager: true, query: '?raw', import: 'default' });
+const blogFiles = import.meta.glob('./blog/*.md', {eager: true, query: '?raw', import: 'default'});
 
 function parseFrontmatter(markdown: string): { data: Record<string, string>; content: string } {
     const frontmatterRegex = /^---\s*\n([\s\S]*?)\n---\s*\n([\s\S]*)$/;
     const match = markdown.match(frontmatterRegex);
 
     if (!match) {
-        return { data: {}, content: markdown };
+        return {data: {}, content: markdown};
     }
 
     const frontmatterText = match[1];
@@ -29,7 +29,7 @@ function parseFrontmatter(markdown: string): { data: Record<string, string>; con
         }
     });
 
-    return { data, content };
+    return {data, content};
 }
 
 function parseBlogPosts(): BlogPost[] {
@@ -40,7 +40,7 @@ function parseBlogPosts(): BlogPost[] {
         const dateMatch = filename.match(/^(\d{4}-\d{2}-\d{2})-/);
         const date = dateMatch ? dateMatch[1] : '';
 
-        const { data, content: markdownContent } = parseFrontmatter(content as string);
+        const {data, content: markdownContent} = parseFrontmatter(content as string);
 
         posts.push({
             id: data.id || '',
