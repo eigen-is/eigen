@@ -1,4 +1,5 @@
 import {type User} from "better-auth/types";
+import type {EmailDraft} from "@workspace/lib/types/mail";
 import {getUserByEmail} from "../users/users.ts";
 import {getHome} from "../home/home.ts";
 
@@ -89,12 +90,12 @@ export async function messageCopy(user: User, messageId: string, targetMailbox: 
     return await mail.messageCopy(messageId, targetMailbox);
 }
 
-export async function messageHandleDraft(user: User, mail: any) {
+export async function messageHandleDraft(user: User, mail: EmailDraft) {
     const mailClient = await getMailClient(user);
     return await mailClient.messageHandleDraft(mail);
 }
 
-export async function messageSend(user: User, mail: any) {
+export async function messageSend(user: User, mail: EmailDraft) {
     const mailClient = await getMailClient(user);
     return await mailClient.messageSend(mail);
 }

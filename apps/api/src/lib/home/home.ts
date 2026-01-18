@@ -31,14 +31,14 @@ export class Home implements HomeInterface {
 
     private databases: Map<string, Database> = new Map();
     private databaseFactories: Map<string, () => Promise<Database>> = new Map();
-    private sseListeners: ((event: any) => void)[] = [];
+    private sseListeners: ((event: SSEvent) => void)[] = [];
 
     constructor(user: User) {
         this.user = user;
         this.homeDir = getUserHomePath(user.id);
         this.fs = new LocalStorage(this.homeDir);
-        this.contacts = new Contacts(this as any);
-        this.mail = new Maildir(this as any);
+        this.contacts = new Contacts(this as HomeInterface);
+        this.mail = new Maildir(this as HomeInterface);
     }
 
     public async init() {
@@ -120,11 +120,11 @@ export class Home implements HomeInterface {
         }
     }
 
-    public subscribeSSE(listener: (event: any) => void) {
+    public subscribeSSE(listener: (event: SSEvent) => void) {
         this.sseListeners.push(listener);
     }
 
-    public unsubscribeSSE(listener: (event: any) => void) {
+    public unsubscribeSSE(listener: (event: SSEvent) => void) {
         this.sseListeners = this.sseListeners.filter(l => l !== listener);
     }
 
