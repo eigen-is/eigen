@@ -1,6 +1,6 @@
 import {toast} from "sonner";
-import {DrivePath} from "@workspace/lib/types/drive";
-import {useRenamePath, useInvalidateFolder} from "@workspace/lib/drive";
+import type {DrivePath} from "@workspace/lib/types/drive";
+import {useRenamePath} from "@workspace/lib/drive";
 import {DriveCreateItemDialog} from "./drive-create-folder-item";
 
 export interface DriveRenameItemProps {
@@ -23,7 +23,6 @@ export function DriveRenameItem({
     if (!path) return null;
 
     const renamePathMutation = useRenamePath(path.ownerId);
-    const invalidateFolder = useInvalidateFolder();
 
     const handleOpenChange = (nextOpen: boolean) => {
         onOpenChange(nextOpen);
@@ -50,11 +49,7 @@ export function DriveRenameItem({
                 pathId: path.id,
                 newName,
             });
-            toast.success(`Renamed to "${newName}" successfully`);
             onOpenChange(false);
-
-            // Invalidate parent folder to refresh contents
-            invalidateFolder(path.id);
 
             // Call onAfterAction if provided
             if (onAfterAction) {

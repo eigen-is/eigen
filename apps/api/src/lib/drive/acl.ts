@@ -1,10 +1,10 @@
 import type {User} from 'better-auth/types';
-import type {PathEntry, ACLEntry} from '../mount/types';
+import type {DrivePath, DriveACL} from '../mount/types';
 
-export type PathGetter = (pathId: string) => Promise<PathEntry | null>;
+export type PathGetter = (pathId: string) => Promise<DrivePath | null>;
 
 export async function canRead(
-    path: PathEntry,
+    path: DrivePath,
     user: User,
     getPath: PathGetter
 ): Promise<boolean> {
@@ -33,7 +33,7 @@ export async function canRead(
 }
 
 export async function canWrite(
-    path: PathEntry,
+    path: DrivePath,
     user: User,
     getPath: PathGetter
 ): Promise<boolean> {
@@ -57,9 +57,9 @@ export async function canWrite(
 }
 
 export function getEffectiveACL(
-    path: PathEntry,
-    getPath: (pathId: string) => PathEntry | null
-): ACLEntry[] | null {
+    path: DrivePath,
+    getPath: (pathId: string) => DrivePath | null
+): DriveACL[] | null {
     if (path.acl && path.acl.length > 0) {
         return path.acl;
     }
@@ -74,7 +74,7 @@ export function getEffectiveACL(
     return null;
 }
 
-export function normalizeACL(acl: ACLEntry[] | null): ACLEntry[] | null {
+export function normalizeACL(acl: DriveACL[] | null): DriveACL[] | null {
     if (!acl || acl.length === 0) {
         return null;
     }

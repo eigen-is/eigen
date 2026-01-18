@@ -1,6 +1,6 @@
 import {toast} from "sonner";
-import {DrivePath} from "@workspace/lib/types/drive";
-import {useCreateFolder, useInvalidateFolder} from "@workspace/lib/drive";
+import type {DrivePath} from "@workspace/lib/types/drive";
+import {useCreateFolder} from "@workspace/lib/drive";
 import {DriveCreateItemDialog} from "./drive-create-folder-item";
 
 export interface DriveCreateFolderProps {
@@ -21,7 +21,6 @@ export function DriveCreateFolder({
                                       onAfterAction,
                                   }: DriveCreateFolderProps) {
     const createFolderMutation = useCreateFolder(path.ownerId);
-    const invalidateFolder = useInvalidateFolder();
 
     const handleOpenChange = (nextOpen: boolean) => {
         onOpenChange(nextOpen);
@@ -34,11 +33,7 @@ export function DriveCreateFolder({
                 parentId: path.id,
                 folderName: folderName,
             }) as string | undefined;
-            toast.success(`Folder "${folderName}" created successfully`);
             onOpenChange(false);
-
-            // Invalidate folder to refresh the folder contents
-            invalidateFolder(path.id);
 
             // Call onAfterAction if provided
             if (onAfterAction) {

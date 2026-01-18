@@ -1,7 +1,6 @@
 import {useMutation, useQuery, useQueryClient} from "@tanstack/react-query";
 import type {DriveACL, DrivePath} from "@workspace/lib/types/drive";
 import {driveApi} from "@workspace/lib/api";
-import {invalidateHomeSize} from "../../home";
 
 // Define query keys for reuse
 export const driveKeys = {
@@ -83,48 +82,31 @@ export function usePathInfo(ownerId: string, pathId: string | undefined) {
 
 // CREATE FOLDER
 export function useCreateFolder(ownerId: string) {
-    const queryClient = useQueryClient();
-
     return useMutation({
         mutationFn: async ({parentId, folderName}: { parentId: string, folderName: string }) => {
             const response = await driveApi.folder({ownerId})({pathId: parentId}).post({folderName});
             return response.data;
-        },
-        onSuccess: (_, variables) => {
-            queryClient.invalidateQueries({queryKey: driveKeys.folder(variables.parentId)});
         }
     });
 }
 
 // UPLOAD FILE
 export function useUploadFile(ownerId: string) {
-    const queryClient = useQueryClient();
-
     return useMutation({
         mutationFn: async ({parentId, file}: { parentId: string, file: File }) => {
             const response = await driveApi.file({ownerId})({pathId: parentId}).post({file});
             return response.data;
-        },
-        onSuccess: (_, variables) => {
-            queryClient.invalidateQueries({queryKey: driveKeys.folder(variables.parentId)});
-            invalidateHomeSize(queryClient);
         }
     });
 }
 
 
-// UPLOAD FILE
+// UPLOAD FILES
 export function useUploadFiles(ownerId: string) {
-    const queryClient = useQueryClient();
-
     return useMutation({
         mutationFn: async ({parentId, files}: { parentId: string, files: File[] }) => {
             const response = await driveApi.files({ownerId})({pathId: parentId}).post({files});
             return response.data;
-        },
-        onSuccess: (_, variables) => {
-            queryClient.invalidateQueries({queryKey: driveKeys.folder(variables.parentId)});
-            invalidateHomeSize(queryClient);
         }
     });
 }
@@ -139,92 +121,49 @@ export function useInvalidateFolder(_ownerId?: string) {
 
 // DELETE FOLDER
 export function useDeleteFolder(ownerId: string) {
-    const queryClient = useQueryClient();
-
     return useMutation({
         mutationFn: async (pathId: string) => {
             const response = await driveApi.folder({ownerId})({pathId}).delete();
             return response.data;
-        },
-        onSuccess: () => {
-            // We don't know the parent ID here, so we invalidate all folders
-            queryClient.invalidateQueries({queryKey: driveKeys.folders()});
-            queryClient.invalidateQueries({queryKey: driveKeys.mimeTypes()});
-            invalidateHomeSize(queryClient);
         }
     });
 }
 
 // DELETE FILE
 export function useDeleteFile(ownerId: string) {
-    const queryClient = useQueryClient();
-
     return useMutation({
         mutationFn: async (pathId: string) => {
             const response = await driveApi.file({ownerId})({pathId}).delete();
             return response.data;
-        },
-        onSuccess: () => {
-            // We don't know the parent ID here, so we invalidate all folders
-            queryClient.invalidateQueries({queryKey: driveKeys.folders()});
-            queryClient.invalidateQueries({queryKey: driveKeys.mimeTypes()});
-            invalidateHomeSize(queryClient);
         }
     });
 }
 
 export function useMovePath(ownerId: string) {
-    const queryClient = useQueryClient();
-
     return useMutation({
         mutationFn: async ({pathId, targetParentId}: { pathId: string, targetParentId: string }) => {
             const response = await driveApi.path.move({ownerId})({pathId}).put({targetParentId});
             return response.data;
-        },
-        onSuccess: () => {
-            queryClient.invalidateQueries({queryKey: driveKeys.all});
-            queryClient.invalidateQueries({queryKey: driveKeys.mimeTypes()});
         }
     });
 }
 
 export function useRenamePath(ownerId: string) {
-    const queryClient = useQueryClient();
-
     return useMutation({
         mutationFn: async ({pathId, newName}: { pathId: string, newName: string }) => {
             const response = await driveApi.path.rename({ownerId})({pathId}).put({newName});
             return response.data;
-        },
-        onSuccess: () => {
-            queryClient.invalidateQueries({queryKey: driveKeys.all});
-            queryClient.invalidateQueries({queryKey: driveKeys.mimeTypes()});
         }
     });
 }
 
 // UPDATE ACL
 export function useUpdateACL(ownerId: string) {
-    const queryClient = useQueryClient();
-
     return useMutation({
         mutationFn: async ({path, acl}: { path: DrivePath, acl: DriveACL[] }) => {
             const response = await driveApi.path.acl({ownerId})({pathId: path.id}).put({acl});
             return response.data;
-        },
-        onSuccess: (_, variables) => {
-            queryClient.invalidateQueries({queryKey: driveKeys.path(variables.path.id)});
-            // todo invalidate correct parent folder query
-            if (variables.path.type === 'folder') {
-                // Invalidate all folder caches when a folder's ACL is updated
-                queryClient.invalidateQueries({queryKey: driveKeys.all});
-            } else if (variables.path.parentId) {
-                queryClient.invalidateQueries({queryKey: driveKeys.folder(variables.path.parentId)});
-            }
-            queryClient.invalidateQueries({queryKey: driveKeys.mimeTypes()});
-            queryClient.invalidateQueries({queryKey: driveKeys.shared('by-me')});
-            queryClient.invalidateQueries({queryKey: driveKeys.shared('with-me')});
-        },
+        }
     });
 }
 
@@ -269,32 +208,20 @@ export function useBreadcrumb(ownerId: string, pathId: string | undefined) {
 
 // CREATE DOC
 export function useCreateDoc(ownerId: string) {
-    const queryClient = useQueryClient();
-
     return useMutation({
         mutationFn: async ({parentId, fileName}: { parentId: string, fileName: string }) => {
             const response = await driveApi.doc({ownerId})({pathId: parentId}).post({fileName});
             return response.data;
-        },
-        onSuccess: (_, variables) => {
-            queryClient.invalidateQueries({queryKey: driveKeys.folder(variables.parentId)});
-            queryClient.invalidateQueries({queryKey: driveKeys.mimeTypes()});
         }
     });
 }
 
 // CREATE STICKIES
 export function useCreateStickies(ownerId: string) {
-    const queryClient = useQueryClient();
-
     return useMutation({
         mutationFn: async ({parentId, fileName}: { parentId: string, fileName: string }) => {
             const response = await driveApi.stickies({ownerId})({pathId: parentId}).post({fileName});
             return response.data;
-        },
-        onSuccess: (_, variables) => {
-            queryClient.invalidateQueries({queryKey: driveKeys.folder(variables.parentId)});
-            queryClient.invalidateQueries({queryKey: driveKeys.mimeTypes()});
         }
     });
 }

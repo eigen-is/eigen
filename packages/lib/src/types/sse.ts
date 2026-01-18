@@ -1,8 +1,10 @@
+import type {DrivePath} from './drive';
+
 // Event type constants - single source of truth
 export const SSEventType = {
     // Mail events
     MAIL_RECEIVED: 'mail:received',
-    // Drive data events (no toast)
+    // Drive events
     DRIVE_FOLDER_CREATED: 'drive:folder-created',
     DRIVE_FILE_UPLOADED: 'drive:file-uploaded',
     DRIVE_FOLDER_DELETED: 'drive:folder-deleted',
@@ -10,7 +12,6 @@ export const SSEventType = {
     DRIVE_PATH_RENAMED: 'drive:path-renamed',
     DRIVE_PATH_MOVED: 'drive:path-moved',
     DRIVE_ACL_UPDATED: 'drive:acl-updated',
-    // Drive notification events (show toast)
     DRIVE_ACL_SHARED: 'drive:acl-shared',
     DRIVE_ACL_UNSHARED: 'drive:acl-unshared',
 } as const;
@@ -21,37 +22,17 @@ type SSEventBase = {
 };
 
 // Notification mixin - events that should show toasts
-type SSEventNotification = {
+export type SSEventNotification = {
     body: string;
     tag?: string;
     link?: string;
 };
 
-// Drive data events (no toast, just sync)
-type SSEventDrivePathChange = SSEventBase & {
-    type: typeof SSEventType.DRIVE_FOLDER_CREATED | typeof SSEventType.DRIVE_FILE_UPLOADED 
-        | typeof SSEventType.DRIVE_FOLDER_DELETED | typeof SSEventType.DRIVE_FILE_DELETED 
-        | typeof SSEventType.DRIVE_PATH_RENAMED | typeof SSEventType.DRIVE_ACL_UPDATED;
-    data: { pathId: string; parentId: string | null };
+// All Drive events share the same structure with full path
+type SSEventDrive = SSEventBase & SSEventNotification & {
+    type: typeof SSEventType[keyof typeof SSEventType] & `drive:${string}`;
+    path: DrivePath;
 };
-
-type SSEventDrivePathMoved = SSEventBase & {
-    type: typeof SSEventType.DRIVE_PATH_MOVED;
-    data: { pathId: string; parentId: string | null; oldParentId: string | null };
-};
-
-// Drive notification events (show toast)
-type SSEventDriveShared = SSEventBase & SSEventNotification & {
-    type: typeof SSEventType.DRIVE_ACL_SHARED;
-    data: { pathId: string };
-};
-
-type SSEventDriveUnshared = SSEventBase & SSEventNotification & {
-    type: typeof SSEventType.DRIVE_ACL_UNSHARED;
-    data: { pathId: string };
-};
-
-type SSEventDrive = SSEventDrivePathChange | SSEventDrivePathMoved | SSEventDriveShared | SSEventDriveUnshared;
 
 // Mail notification events (show toast)
 type SSEventMail = SSEventBase & SSEventNotification & {
@@ -67,4 +48,4 @@ export function isSSEventNotification(event: SSEvent): event is SSEvent & SSEven
 }
 
 // Export individual types for consumers
-export type { SSEventBase, SSEventNotification, SSEventDrive, SSEventMail };
+export type { SSEventBase, SSEventDrive, SSEventMail };
