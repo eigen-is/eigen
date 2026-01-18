@@ -8,169 +8,165 @@
 // You should NOT make any changes in this file as it will be overwritten.
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
-import {Route as rootRouteImport} from './routes/__root'
-import {Route as LoginRouteImport} from './routes/login'
-import {Route as AuthRouteImport} from './routes/_auth'
-import {Route as IndexRouteImport} from './routes/index'
-import {Route as AuthNewRouteImport} from './routes/_auth.new'
-import {Route as AuthFilterTypeFilterIdRouteImport} from './routes/_auth.$filterType.$filterId'
-import {Route as AuthEditFilterTypeFilterIdRouteImport} from './routes/_auth.edit.$filterType.$filterId'
+import { Route as rootRouteImport } from './routes/__root'
+import { Route as LoginRouteImport } from './routes/login'
+import { Route as AuthRouteImport } from './routes/_auth'
+import { Route as IndexRouteImport } from './routes/index'
+import { Route as AuthNewRouteImport } from './routes/_auth.new'
+import { Route as AuthFilterTypeFilterIdRouteImport } from './routes/_auth.$filterType.$filterId'
+import { Route as AuthEditFilterTypeFilterIdRouteImport } from './routes/_auth.edit.$filterType.$filterId'
 
 const LoginRoute = LoginRouteImport.update({
-    id: '/login',
-    path: '/login',
-    getParentRoute: () => rootRouteImport,
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const AuthRoute = AuthRouteImport.update({
-    id: '/_auth',
-    getParentRoute: () => rootRouteImport,
+  id: '/_auth',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const IndexRoute = IndexRouteImport.update({
-    id: '/',
-    path: '/',
-    getParentRoute: () => rootRouteImport,
+  id: '/',
+  path: '/',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const AuthNewRoute = AuthNewRouteImport.update({
-    id: '/new',
-    path: '/new',
-    getParentRoute: () => AuthRoute,
+  id: '/new',
+  path: '/new',
+  getParentRoute: () => AuthRoute,
 } as any)
 const AuthFilterTypeFilterIdRoute = AuthFilterTypeFilterIdRouteImport.update({
-    id: '/$filterType/$filterId',
-    path: '/$filterType/$filterId',
-    getParentRoute: () => AuthRoute,
+  id: '/$filterType/$filterId',
+  path: '/$filterType/$filterId',
+  getParentRoute: () => AuthRoute,
 } as any)
 const AuthEditFilterTypeFilterIdRoute =
-    AuthEditFilterTypeFilterIdRouteImport.update({
-        id: '/edit/$filterType/$filterId',
-        path: '/edit/$filterType/$filterId',
-        getParentRoute: () => AuthRoute,
-    } as any)
+  AuthEditFilterTypeFilterIdRouteImport.update({
+    id: '/edit/$filterType/$filterId',
+    path: '/edit/$filterType/$filterId',
+    getParentRoute: () => AuthRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
-    '/': typeof IndexRoute
-    '/login': typeof LoginRoute
-    '/new': typeof AuthNewRoute
-    '/$filterType/$filterId': typeof AuthFilterTypeFilterIdRoute
-    '/edit/$filterType/$filterId': typeof AuthEditFilterTypeFilterIdRoute
+  '/': typeof IndexRoute
+  '/login': typeof LoginRoute
+  '/new': typeof AuthNewRoute
+  '/$filterType/$filterId': typeof AuthFilterTypeFilterIdRoute
+  '/edit/$filterType/$filterId': typeof AuthEditFilterTypeFilterIdRoute
 }
-
 export interface FileRoutesByTo {
-    '/': typeof IndexRoute
-    '/login': typeof LoginRoute
-    '/new': typeof AuthNewRoute
-    '/$filterType/$filterId': typeof AuthFilterTypeFilterIdRoute
-    '/edit/$filterType/$filterId': typeof AuthEditFilterTypeFilterIdRoute
+  '/': typeof IndexRoute
+  '/login': typeof LoginRoute
+  '/new': typeof AuthNewRoute
+  '/$filterType/$filterId': typeof AuthFilterTypeFilterIdRoute
+  '/edit/$filterType/$filterId': typeof AuthEditFilterTypeFilterIdRoute
 }
-
 export interface FileRoutesById {
-    __root__: typeof rootRouteImport
-    '/': typeof IndexRoute
-    '/_auth': typeof AuthRouteWithChildren
-    '/login': typeof LoginRoute
-    '/_auth/new': typeof AuthNewRoute
-    '/_auth/$filterType/$filterId': typeof AuthFilterTypeFilterIdRoute
-    '/_auth/edit/$filterType/$filterId': typeof AuthEditFilterTypeFilterIdRoute
+  __root__: typeof rootRouteImport
+  '/': typeof IndexRoute
+  '/_auth': typeof AuthRouteWithChildren
+  '/login': typeof LoginRoute
+  '/_auth/new': typeof AuthNewRoute
+  '/_auth/$filterType/$filterId': typeof AuthFilterTypeFilterIdRoute
+  '/_auth/edit/$filterType/$filterId': typeof AuthEditFilterTypeFilterIdRoute
 }
-
 export interface FileRouteTypes {
-    fileRoutesByFullPath: FileRoutesByFullPath
-    fullPaths:
-        | '/'
-        | '/login'
-        | '/new'
-        | '/$filterType/$filterId'
-        | '/edit/$filterType/$filterId'
-    fileRoutesByTo: FileRoutesByTo
-    to:
-        | '/'
-        | '/login'
-        | '/new'
-        | '/$filterType/$filterId'
-        | '/edit/$filterType/$filterId'
-    id:
-        | '__root__'
-        | '/'
-        | '/_auth'
-        | '/login'
-        | '/_auth/new'
-        | '/_auth/$filterType/$filterId'
-        | '/_auth/edit/$filterType/$filterId'
-    fileRoutesById: FileRoutesById
+  fileRoutesByFullPath: FileRoutesByFullPath
+  fullPaths:
+    | '/'
+    | '/login'
+    | '/new'
+    | '/$filterType/$filterId'
+    | '/edit/$filterType/$filterId'
+  fileRoutesByTo: FileRoutesByTo
+  to:
+    | '/'
+    | '/login'
+    | '/new'
+    | '/$filterType/$filterId'
+    | '/edit/$filterType/$filterId'
+  id:
+    | '__root__'
+    | '/'
+    | '/_auth'
+    | '/login'
+    | '/_auth/new'
+    | '/_auth/$filterType/$filterId'
+    | '/_auth/edit/$filterType/$filterId'
+  fileRoutesById: FileRoutesById
 }
-
 export interface RootRouteChildren {
-    IndexRoute: typeof IndexRoute
-    AuthRoute: typeof AuthRouteWithChildren
-    LoginRoute: typeof LoginRoute
+  IndexRoute: typeof IndexRoute
+  AuthRoute: typeof AuthRouteWithChildren
+  LoginRoute: typeof LoginRoute
 }
 
 declare module '@tanstack/react-router' {
-    interface FileRoutesByPath {
-        '/login': {
-            id: '/login'
-            path: '/login'
-            fullPath: '/login'
-            preLoaderRoute: typeof LoginRouteImport
-            parentRoute: typeof rootRouteImport
-        }
-        '/_auth': {
-            id: '/_auth'
-            path: ''
-            fullPath: ''
-            preLoaderRoute: typeof AuthRouteImport
-            parentRoute: typeof rootRouteImport
-        }
-        '/': {
-            id: '/'
-            path: '/'
-            fullPath: '/'
-            preLoaderRoute: typeof IndexRouteImport
-            parentRoute: typeof rootRouteImport
-        }
-        '/_auth/new': {
-            id: '/_auth/new'
-            path: '/new'
-            fullPath: '/new'
-            preLoaderRoute: typeof AuthNewRouteImport
-            parentRoute: typeof AuthRoute
-        }
-        '/_auth/$filterType/$filterId': {
-            id: '/_auth/$filterType/$filterId'
-            path: '/$filterType/$filterId'
-            fullPath: '/$filterType/$filterId'
-            preLoaderRoute: typeof AuthFilterTypeFilterIdRouteImport
-            parentRoute: typeof AuthRoute
-        }
-        '/_auth/edit/$filterType/$filterId': {
-            id: '/_auth/edit/$filterType/$filterId'
-            path: '/edit/$filterType/$filterId'
-            fullPath: '/edit/$filterType/$filterId'
-            preLoaderRoute: typeof AuthEditFilterTypeFilterIdRouteImport
-            parentRoute: typeof AuthRoute
-        }
+  interface FileRoutesByPath {
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
     }
+    '/_auth': {
+      id: '/_auth'
+      path: ''
+      fullPath: ''
+      preLoaderRoute: typeof AuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/': {
+      id: '/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_auth/new': {
+      id: '/_auth/new'
+      path: '/new'
+      fullPath: '/new'
+      preLoaderRoute: typeof AuthNewRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/_auth/$filterType/$filterId': {
+      id: '/_auth/$filterType/$filterId'
+      path: '/$filterType/$filterId'
+      fullPath: '/$filterType/$filterId'
+      preLoaderRoute: typeof AuthFilterTypeFilterIdRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/_auth/edit/$filterType/$filterId': {
+      id: '/_auth/edit/$filterType/$filterId'
+      path: '/edit/$filterType/$filterId'
+      fullPath: '/edit/$filterType/$filterId'
+      preLoaderRoute: typeof AuthEditFilterTypeFilterIdRouteImport
+      parentRoute: typeof AuthRoute
+    }
+  }
 }
 
 interface AuthRouteChildren {
-    AuthNewRoute: typeof AuthNewRoute
-    AuthFilterTypeFilterIdRoute: typeof AuthFilterTypeFilterIdRoute
-    AuthEditFilterTypeFilterIdRoute: typeof AuthEditFilterTypeFilterIdRoute
+  AuthNewRoute: typeof AuthNewRoute
+  AuthFilterTypeFilterIdRoute: typeof AuthFilterTypeFilterIdRoute
+  AuthEditFilterTypeFilterIdRoute: typeof AuthEditFilterTypeFilterIdRoute
 }
 
 const AuthRouteChildren: AuthRouteChildren = {
-    AuthNewRoute: AuthNewRoute,
-    AuthFilterTypeFilterIdRoute: AuthFilterTypeFilterIdRoute,
-    AuthEditFilterTypeFilterIdRoute: AuthEditFilterTypeFilterIdRoute,
+  AuthNewRoute: AuthNewRoute,
+  AuthFilterTypeFilterIdRoute: AuthFilterTypeFilterIdRoute,
+  AuthEditFilterTypeFilterIdRoute: AuthEditFilterTypeFilterIdRoute,
 }
 
 const AuthRouteWithChildren = AuthRoute._addFileChildren(AuthRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
-    IndexRoute: IndexRoute,
-    AuthRoute: AuthRouteWithChildren,
-    LoginRoute: LoginRoute,
+  IndexRoute: IndexRoute,
+  AuthRoute: AuthRouteWithChildren,
+  LoginRoute: LoginRoute,
 }
 export const routeTree = rootRouteImport
-    ._addFileChildren(rootRouteChildren)
-    ._addFileTypes<FileRouteTypes>()
+  ._addFileChildren(rootRouteChildren)
+  ._addFileTypes<FileRouteTypes>()
