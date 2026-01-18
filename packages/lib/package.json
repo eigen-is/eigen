@@ -24,6 +24,11 @@
     "./auth/hooks": "./src/lib/auth/hooks/index.ts",
     "./sse": "./src/lib/sse/index.ts",
     "./types": "./src/types/index.ts",
-    "./types/*": "./src/types/*"
+    "./types/drive": "./src/types/drive.ts",
+    "./types/contact": "./src/types/contact.ts",
+    "./types/label": "./src/types/label.ts",
+    "./types/mail": "./src/types/mail.ts",
+    "./types/sse": "./src/types/sse.ts",
+    "./types/public": "./src/types/public.ts"
   }
 }
