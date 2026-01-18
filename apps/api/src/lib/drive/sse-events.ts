@@ -1,4 +1,4 @@
-import type {DrivePath} from '../mount/types';
+import type {DrivePath} from '@workspace/lib/types/drive';
 import type {SSEvent} from '@workspace/lib/types/sse';
 import {SSEventType} from '@workspace/lib/types/sse';
 

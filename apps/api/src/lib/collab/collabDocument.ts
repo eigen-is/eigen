@@ -4,7 +4,7 @@ import * as syncProtocol from "y-protocols/sync";
 import {type ServerWebSocket} from "bun";
 import * as encoding from "lib0/encoding";
 import * as decoding from "lib0/decoding";
-import type {DrivePath} from "../mount/types";
+import type {DrivePath} from "@workspace/lib/types/drive";
 import type Drive from "../drive/drive";
 import {drizzle} from "drizzle-orm/bun-sqlite";
 import * as schema from "./schema.ts";

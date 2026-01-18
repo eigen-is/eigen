@@ -6,7 +6,8 @@ import {randomUUID} from 'crypto';
 import * as path from 'path';
 import * as fs from 'node:fs';
 
-import type {MountConfig, DrivePath} from './types';
+import type {MountConfig} from './types';
+import type {DrivePath} from '@workspace/lib/types/drive';
 import * as schema from './schema';
 import {paths, labels, pathsToLabels, MOUNT_SCHEMA_SQL} from './schema';
 import type {StorageBackend} from '../storage/types';
