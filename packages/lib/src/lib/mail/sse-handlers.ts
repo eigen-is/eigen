@@ -5,11 +5,14 @@ import {emailKeys} from './hooks/use-emails';
 import {mailboxKeys} from './hooks/use-mailboxes';
 import {invalidateHomeSize} from '../home';
 
+const normalizeMailbox = (mailbox: string) => mailbox === '' ? 'inbox' : mailbox;
+
 export function handleMailSSEvent(event: SSEvent, queryClient: QueryClient): boolean {
     if (!event.type.startsWith('mail:')) return false;
     if (!('mail' in event)) return false;
 
     const {mail} = event;
+    const mailbox = normalizeMailbox(mail.mailbox);
 
     switch (event.type) {
         case SSEventType.MAIL_RECEIVED:
@@ -20,24 +23,26 @@ export function handleMailSSEvent(event: SSEvent, queryClient: QueryClient): boo
 
         case SSEventType.MAIL_DELETED:
             queryClient.invalidateQueries({queryKey: emailKeys.detail(mail.messageId)});
-            queryClient.invalidateQueries({queryKey: emailKeys.list(mail.mailbox)});
+            queryClient.invalidateQueries({queryKey: emailKeys.list(mailbox)});
             queryClient.invalidateQueries({queryKey: emailKeys.list('trash')});
             queryClient.invalidateQueries({queryKey: mailboxKeys.lists()});
             invalidateHomeSize(queryClient);
             return true;
 
-        case SSEventType.MAIL_MOVED:
+        case SSEventType.MAIL_MOVED: {
+            const toMailbox = mail.toMailbox != null ? normalizeMailbox(mail.toMailbox) : null;
             queryClient.invalidateQueries({queryKey: emailKeys.detail(mail.messageId)});
-            queryClient.invalidateQueries({queryKey: emailKeys.list(mail.mailbox)});
-            if (mail.toMailbox) {
-                queryClient.invalidateQueries({queryKey: emailKeys.list(mail.toMailbox)});
+            queryClient.invalidateQueries({queryKey: emailKeys.list(mailbox)});
+            if (toMailbox != null) {
+                queryClient.invalidateQueries({queryKey: emailKeys.list(toMailbox)});
             }
             queryClient.invalidateQueries({queryKey: mailboxKeys.lists()});
             return true;
+        }
 
         case SSEventType.MAIL_READ_CHANGED:
             queryClient.invalidateQueries({queryKey: emailKeys.detail(mail.messageId)});
-            queryClient.invalidateQueries({queryKey: emailKeys.list(mail.mailbox)});
+            queryClient.invalidateQueries({queryKey: emailKeys.list(mailbox)});
             queryClient.invalidateQueries({queryKey: mailboxKeys.lists()});
             return true;
 
