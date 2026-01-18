@@ -1,9 +1,6 @@
 import React, {useEffect, useRef} from 'react';
 import {toast} from "sonner";
-import {DrivePath} from "@workspace/lib/types/drive";
-import {useInvalidateFolder} from "@workspace/lib/drive";
-import {invalidateHomeSize} from "@workspace/lib/home";
-import {useQueryClient} from "@tanstack/react-query";
+import type {DrivePath} from "@workspace/lib/types/drive";
 import {useUpload} from "../../layout/upload-provider/upload-provider";
 import {uploadWithProgress} from "../../layout/upload-provider/upload-with-progress";
 
@@ -31,8 +28,6 @@ export function DriveUploadFiles({
                                      onAfterUpload,
                                  }: DriveUploadFilesProps) {
     const fileInputRef = useRef<HTMLInputElement>(null);
-    const invalidateFolder = useInvalidateFolder();
-    const queryClient = useQueryClient();
     const upload = useUpload();
 
     // Process initial files when they're provided and component is opening
@@ -98,13 +93,6 @@ export function DriveUploadFiles({
                 onSuccess: async () => {
                     // Mark upload as complete
                     uploadHandler.complete();
-
-                    // Show success message
-                    toast.success(`${multipleFiles ? 'Files' : `File "${name}"`} uploaded successfully`);
-
-                    // Invalidate queries to refresh folder contents
-                    invalidateFolder(path.id);
-                    invalidateHomeSize(queryClient);
 
                     // Notify parent component
                     if (onAfterAction) {

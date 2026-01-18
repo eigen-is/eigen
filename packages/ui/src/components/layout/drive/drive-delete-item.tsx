@@ -1,9 +1,7 @@
 import {toast} from "sonner";
-import {DrivePath} from "@workspace/lib/types/drive";
-import {useDeleteFile, useDeleteFolder, useInvalidateFolder} from "@workspace/lib/drive";
+import type {DrivePath} from "@workspace/lib/types/drive";
+import {useDeleteFile, useDeleteFolder} from "@workspace/lib/drive";
 import {DeleteDialog} from "@workspace/ui/components/layout/delete/delete-dialog";
-import {useQueryClient} from "@tanstack/react-query";
-import {invalidateHomeSize} from "@workspace/lib/home";
 
 export interface DriveDeleteItemProps {
     path: DrivePath | null;
@@ -18,10 +16,8 @@ export function DriveDeleteItem({
                                     onOpenChange,
                                     onAfterAction,
                                 }: DriveDeleteItemProps) {
-    const queryClient = useQueryClient();
     const deleteFileMutation = useDeleteFile(path?.ownerId || '');
     const deleteFolderMutation = useDeleteFolder(path?.ownerId || '');
-    const invalidateFolder = useInvalidateFolder();
 
     const handleDelete = () => {
         if (!path) return;
@@ -31,12 +27,7 @@ export function DriveDeleteItem({
 
         mutation.mutate(path.id, {
             onSuccess: () => {
-                toast.success(`${path.type === 'folder' ? 'Folder' : 'File'} deleted successfully`);
                 onOpenChange(false);
-
-                // Invalidate queries to refresh folder contents
-                invalidateFolder(path.parentId || '');
-                invalidateHomeSize(queryClient);
 
                 if (onAfterAction) {
                     onAfterAction('delete', path);

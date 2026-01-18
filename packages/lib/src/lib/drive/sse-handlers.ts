@@ -2,8 +2,14 @@ import type {QueryClient} from '@tanstack/react-query';
 import type {SSEvent} from '@workspace/lib/types/sse';
 import {SSEventType} from '@workspace/lib/types/sse';
 import {driveKeys} from './hooks/use-drive';
+import {invalidateHomeSize} from '../home';
 
 export function handleDriveSSEvent(event: SSEvent, queryClient: QueryClient): boolean {
+    if (!event.type.startsWith('drive:')) return false;
+    if (!('path' in event)) return false;
+
+    const {path} = event;
+
     switch (event.type) {
         case SSEventType.DRIVE_ACL_SHARED:
         case SSEventType.DRIVE_ACL_UNSHARED:
@@ -12,15 +18,17 @@ export function handleDriveSSEvent(event: SSEvent, queryClient: QueryClient): bo
 
         case SSEventType.DRIVE_FOLDER_CREATED:
         case SSEventType.DRIVE_FILE_UPLOADED:
-            if (event.data.parentId) {
-                queryClient.invalidateQueries({queryKey: driveKeys.folder(event.data.parentId)});
+            if (path.parentId) {
+                queryClient.invalidateQueries({queryKey: driveKeys.folder(path.parentId)});
             }
+            invalidateHomeSize(queryClient);
             return true;
 
         case SSEventType.DRIVE_FOLDER_DELETED:
         case SSEventType.DRIVE_FILE_DELETED:
             queryClient.invalidateQueries({queryKey: driveKeys.folders()});
             queryClient.invalidateQueries({queryKey: driveKeys.mimeTypes()});
+            invalidateHomeSize(queryClient);
             return true;
 
         case SSEventType.DRIVE_PATH_RENAMED:
@@ -32,11 +40,9 @@ export function handleDriveSSEvent(event: SSEvent, queryClient: QueryClient): bo
         case SSEventType.DRIVE_ACL_UPDATED:
             queryClient.invalidateQueries({queryKey: driveKeys.shared('by-me')});
             queryClient.invalidateQueries({queryKey: driveKeys.shared('with-me')});
-            if (event.data.pathId) {
-                queryClient.invalidateQueries({queryKey: driveKeys.path(event.data.pathId)});
-            }
-            if (event.data.parentId) {
-                queryClient.invalidateQueries({queryKey: driveKeys.folder(event.data.parentId)});
+            queryClient.invalidateQueries({queryKey: driveKeys.path(path.id)});
+            if (path.parentId) {
+                queryClient.invalidateQueries({queryKey: driveKeys.folder(path.parentId)});
             }
             return true;
 

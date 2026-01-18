@@ -6,7 +6,7 @@ import {randomUUID} from 'crypto';
 import * as path from 'path';
 import * as fs from 'node:fs';
 
-import type {MountConfig, PathEntry} from './types';
+import type {MountConfig, DrivePath} from './types';
 import * as schema from './schema';
 import {paths, labels, pathsToLabels, MOUNT_SCHEMA_SQL} from './schema';
 import type {StorageBackend} from '../storage/types';
@@ -97,28 +97,28 @@ export class Mount {
         }
     }
 
-    async getRootFolder(): Promise<PathEntry | null> {
+    async getRootFolder(): Promise<DrivePath | null> {
         const result = await this.db.select().from(paths)
             .where(isNull(paths.parentId))
             .get();
 
-        return result ? this.toPathEntry(result) : null;
+        return result ? this.toDrivePath(result) : null;
     }
 
-    async getPath(pathId: string): Promise<PathEntry | null> {
+    async getPath(pathId: string): Promise<DrivePath | null> {
         const result = await this.db.select().from(paths)
             .where(eq(paths.id, pathId))
             .get();
 
-        return result ? this.toPathEntry(result) : null;
+        return result ? this.toDrivePath(result) : null;
     }
 
-    async listFolder(parentId: string): Promise<PathEntry[]> {
+    async listFolder(parentId: string): Promise<DrivePath[]> {
         const results = await this.db.select().from(paths)
             .where(eq(paths.parentId, parentId))
             .all();
 
-        return results.map(r => this.toPathEntry(r));
+        return results.map(r => this.toDrivePath(r));
     }
 
     async createFolder(parentId: string, name: string, type: 'folder' | 'doc' | 'stickies' = 'folder'): Promise<string> {
@@ -168,7 +168,7 @@ export class Mount {
         return fileId;
     }
 
-    async updatePath(pathId: string, updates: Partial<Omit<PathEntry, 'id' | 'ownerId' | 'createdAt'>>): Promise<void> {
+    async updatePath(pathId: string, updates: Partial<Omit<DrivePath, 'id' | 'ownerId' | 'createdAt'>>): Promise<void> {
         await this.db.update(paths)
             .set({
                 ...updates,
@@ -266,16 +266,16 @@ export class Mount {
         return result?.count ?? 0;
     }
 
-    async getPathsByMimeType(mimeTypePrefix: string): Promise<PathEntry[]> {
+    async getPathsByMimeType(mimeTypePrefix: string): Promise<DrivePath[]> {
         const results = await this.db.select().from(paths)
             .where(sql`${paths.mimeType} LIKE ${mimeTypePrefix + '%'}`)
             .all();
 
-        return results.map(r => this.toPathEntry(r));
+        return results.map(r => this.toDrivePath(r));
     }
 
-    async getBreadcrumb(pathId: string): Promise<PathEntry[]> {
-        const crumbs: PathEntry[] = [];
+    async getBreadcrumb(pathId: string): Promise<DrivePath[]> {
+        const crumbs: DrivePath[] = [];
         let current = await this.getPath(pathId);
 
         while (current) {
@@ -328,7 +328,7 @@ export class Mount {
         return results.map(r => r.labelId);
     }
 
-    private toPathEntry(row: typeof paths.$inferSelect): PathEntry {
+    private toDrivePath(row: typeof paths.$inferSelect): DrivePath {
         return {
             id: row.id,
             name: row.name,

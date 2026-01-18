@@ -1,6 +1,6 @@
 import {toast} from "sonner";
-import {DrivePath} from "@workspace/lib/types/drive";
-import {useCreateStickies, useInvalidateFolder} from "@workspace/lib/drive";
+import type {DrivePath} from "@workspace/lib/types/drive";
+import {useCreateStickies} from "@workspace/lib/drive";
 import {DriveCreateItemDialog} from "./drive-create-folder-item";
 
 export interface DriveCreateStickiesProps {
@@ -21,7 +21,6 @@ export function DriveCreateStickies({
                                         onAfterAction,
                                     }: DriveCreateStickiesProps) {
     const createStickiesMutation = useCreateStickies(path.ownerId);
-    const invalidateFolder = useInvalidateFolder();
 
     const handleOpenChange = (nextOpen: boolean) => {
         onOpenChange(nextOpen);
@@ -34,11 +33,7 @@ export function DriveCreateStickies({
                 parentId: path.id,
                 fileName: fileName,
             }) as string | undefined;
-            toast.success(`Stickies "${fileName}" created successfully`);
             onOpenChange(false);
-
-            // Invalidate folder to refresh the folder contents
-            invalidateFolder(path.id);
 
             // Call onAfterAction if provided
             if (onAfterAction) {
