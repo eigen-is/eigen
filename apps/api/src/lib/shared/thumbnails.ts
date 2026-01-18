@@ -19,7 +19,7 @@ const DEFAULT_OPTIONS: Required<ThumbnailOptions> = {
 
 const THUMBNAIL_SUPPORTED_MIMES = [
     'image/jpeg',
-    'image/png', 
+    'image/png',
     'image/gif',
     'image/webp',
     'image/svg+xml',
@@ -44,7 +44,7 @@ export async function generateThumbnail(
 
     try {
         let inputBuffer: Buffer;
-        
+
         if (typeof source === 'string') {
             inputBuffer = Buffer.from(await Bun.file(source).arrayBuffer());
         } else if (Buffer.isBuffer(source)) {
@@ -93,7 +93,7 @@ export async function saveThumbnail(
     options?: ThumbnailOptions
 ): Promise<string | null> {
     const opts = {...DEFAULT_OPTIONS, ...options};
-    
+
     const thumbData = await generateThumbnail(source, mimeType, opts);
     if (!thumbData) {
         return null;
@@ -105,7 +105,7 @@ export async function saveThumbnail(
 
     const thumbPath = getThumbnailPath(thumbsDir, pathId, opts.format);
     await Bun.write(thumbPath, thumbData);
-    
+
     return `${pathId}.${opts.format}`;
 }
 
@@ -118,14 +118,16 @@ export async function deleteThumbnail(thumbsDir: string, pathId: string): Promis
         if (await webpFile.exists()) {
             await webpFile.delete();
         }
-    } catch {}
+    } catch {
+    }
 
     try {
         const jpegFile = Bun.file(jpegPath);
         if (await jpegFile.exists()) {
             await jpegFile.delete();
         }
-    } catch {}
+    } catch {
+    }
 }
 
 export async function getThumbnail(thumbsDir: string, pathId: string): Promise<Buffer | null> {
@@ -142,7 +144,8 @@ export async function getThumbnail(thumbsDir: string, pathId: string): Promise<B
         if (await jpegFile.exists()) {
             return Buffer.from(await jpegFile.arrayBuffer());
         }
-    } catch {}
+    } catch {
+    }
 
     return null;
 }

@@ -1,8 +1,8 @@
-import {useEffect, useRef, useCallback} from 'react';
+import {useCallback, useEffect, useRef} from 'react';
 import {useQueryClient} from '@tanstack/react-query';
 import {useAuth} from '../../auth/auth-context';
 import {SSE_EVENTS_URL} from '../../api';
-import {type SSEvent, type SSEventNotification, isSSEventNotification} from '@workspace/lib/types/sse';
+import {isSSEventNotification, type SSEvent, type SSEventNotification} from '@workspace/lib/types/sse';
 import {handleDriveSSEvent} from '../../drive/sse-handlers';
 import {handleMailSSEvent} from '../../mail/sse-handlers';
 
@@ -29,7 +29,7 @@ export function useSSE(options: UseSSEOptions = {}) {
         if (!isAuthenticated) return;
 
         const url = SSE_EVENTS_URL;
-        
+
         const eventSource = new EventSource(url, {withCredentials: true});
         eventSourceRef.current = eventSource;
 

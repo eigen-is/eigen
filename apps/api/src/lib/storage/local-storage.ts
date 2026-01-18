@@ -123,11 +123,12 @@ export class LocalStorage implements StorageBackend {
                     totalSize += await this.dirSize(path.join(dirPath, entry.name));
                 }
             }
-        } catch {}
+        } catch {
+        }
         return totalSize;
     }
 
-    async readdir(dirPath: string, options?: {withFileTypes?: boolean}): Promise<any[]> {
+    async readdir(dirPath: string, options?: { withFileTypes?: boolean }): Promise<any[]> {
         const fullPath = this.getFilePath(dirPath);
         return await fsPromises.readdir(fullPath, options as any);
     }
@@ -179,6 +180,7 @@ export class LocalStorage implements StorageBackend {
                 await fsPromises.rmdir(dirPath);
                 await this.cleanupEmptyDirs(path.dirname(dirPath));
             }
-        } catch {}
+        } catch {
+        }
     }
 }

@@ -76,7 +76,7 @@ export function useDeleteEmail() {
 
 export function useToggleReadEmail() {
     return useMutation({
-        mutationFn: async ({email, isRead}: {email: Email, isRead: boolean}) => {
+        mutationFn: async ({email, isRead}: { email: Email, isRead: boolean }) => {
             if (isRead === email.isRead) {
                 return email;
             }
@@ -91,7 +91,7 @@ export function useToggleReadEmail() {
 
 export function useMoveEmail() {
     return useMutation({
-        mutationFn: async ({email, mailbox}: {email: Email, mailbox: string}) => {
+        mutationFn: async ({email, mailbox}: { email: Email, mailbox: string }) => {
             await mailApi.message.move.put({
                 messageId: email.id,
                 targetMailbox: mailbox

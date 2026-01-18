@@ -10,11 +10,11 @@ export const sseRouter = new Elysia({name: "sse"})
         }
 
         const home = await getHome(user);
-        
+
         let keepalive: Timer | null = null;
         let listener: ((event: any) => void) | null = null;
         let isClosed = false;
-        
+
         const stream = new ReadableStream({
             start(controller) {
                 listener = (event: any) => {

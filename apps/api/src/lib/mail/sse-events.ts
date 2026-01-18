@@ -1,5 +1,4 @@
-import type {SSEventMailData} from '@workspace/lib/types/sse';
-import type {SSEvent} from '@workspace/lib/types/sse';
+import type {SSEvent, SSEventMailData} from '@workspace/lib/types/sse';
 import {SSEventType} from '@workspace/lib/types/sse';
 
 type MailEventType = typeof SSEventType[keyof typeof SSEventType] & `mail:${string}`;
@@ -40,7 +39,7 @@ type EventOptions = {
 
 export function buildMailEvent(type: MailEventType, mail: SSEventMailData, options?: EventOptions): SSEvent {
     const notificationTemplate = notificationTemplates[type];
-    
+
     if (notificationTemplate) {
         return {
             type,
@@ -51,7 +50,7 @@ export function buildMailEvent(type: MailEventType, mail: SSEventMailData, optio
             ...(options?.link && {link: options.link}),
         } as SSEvent;
     }
-    
+
     return {
         type,
         title: dataOnlyTitles[type] || type,

@@ -1,5 +1,5 @@
 import {S3Client, type S3File} from 'bun';
-import type {StorageBackend, S3Config} from './types';
+import type {S3Config, StorageBackend} from './types';
 
 export class S3Storage implements StorageBackend {
     private client: S3Client;

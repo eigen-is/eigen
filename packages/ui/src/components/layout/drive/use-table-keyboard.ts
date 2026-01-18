@@ -13,15 +13,15 @@ interface UseTableKeyboardProps {
 }
 
 export function useTableKeyboard({
-    items,
-    selectedIndex,
-    setSelectedIndex,
-    hasParentItem,
-    onItemClick,
-    onDelete,
-    scrollToRow,
-    hasFocus,
-}: UseTableKeyboardProps) {
+                                     items,
+                                     selectedIndex,
+                                     setSelectedIndex,
+                                     hasParentItem,
+                                     onItemClick,
+                                     onDelete,
+                                     scrollToRow,
+                                     hasFocus,
+                                 }: UseTableKeyboardProps) {
     const handleKeyDown = useCallback((e: KeyboardEvent<HTMLTableElement>) => {
         if (!hasFocus || items.length === 0) return;
 
