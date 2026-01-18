@@ -1,5 +1,5 @@
 import {createFileRoute, useNavigate} from '@tanstack/react-router'
-import {CollaborativeEditor} from '@/components/docs/editor'
+import {CollaborativeEditor} from '../components/docs/editor'
 import {useDocumentAccess} from '@workspace/lib/docs'
 import {usePathInfo} from '@workspace/lib/drive'
 import {EigenLoader} from '@workspace/ui'
