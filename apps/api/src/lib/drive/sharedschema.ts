@@ -1,6 +1,6 @@
 import {sql} from 'drizzle-orm';
 import {integer, sqliteTable, text} from 'drizzle-orm/sqlite-core';
-import type {DriveACL} from '../mount/types';
+import type {DriveACL} from '@workspace/lib/types/drive';
 
 export const sharedPaths = sqliteTable('shared_paths', {
     id: text('id').primaryKey(),

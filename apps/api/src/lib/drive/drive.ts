@@ -4,7 +4,7 @@ import {BunSQLiteDatabase} from 'drizzle-orm/bun-sqlite';
 import {eq} from 'drizzle-orm';
 
 import {Mount, createDefaultMountConfig} from '../mount';
-import type {DrivePath, DriveACL} from '../mount/types';
+import type {DrivePath, DriveACL} from '@workspace/lib/types/drive';
 import {canRead, canWrite, normalizeACL} from './acl';
 import {saveThumbnail, deleteThumbnail, getThumbnail} from '../shared/thumbnails';
 import CollabDocument from '../collab/collabDocument';
@@ -16,7 +16,7 @@ import type {HomeInterface} from '../home/types';
 import {SSEventType} from '@workspace/lib/types/sse';
 import {buildDriveEvent} from './sse-events';
 
-export type {DrivePath, DriveACL} from '../mount/types';
+export type {DrivePath, DriveACL} from '@workspace/lib/types/drive';
 
 export async function getDrive(user: User): Promise<Drive> {
     const {getHome} = await import('../home/home');

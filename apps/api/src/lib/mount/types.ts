@@ -1,7 +1,5 @@
 import type {S3Config} from '../storage/types';
 
-export type {DrivePath, DriveACL} from '@workspace/lib/types/drive';
-
 export type MountConfig = {
     id: string;
     name: string;
