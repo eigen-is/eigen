@@ -4,7 +4,7 @@ import {usePathInfo} from '@workspace/lib/drive'
 import {EigenLoader} from '@workspace/ui'
 import {useApp} from '@workspace/ui/components/layout/app-context'
 import {useCallback, useEffect, useState} from 'react'
-import {StickiesBoard} from "@/components/dnd-board/board.tsx";
+import {StickiesBoard} from "../components/dnd-board/board";
 import {DriveAccessDialog} from '@workspace/ui/components/layout/drive/drive-access-dialog'
 
 export const Route = createFileRoute('/_auth/board/$ownerId/$pathId')({

@@ -12,7 +12,7 @@ import {
     useToggleReadEmail,
     useUpdateDraft
 } from '@workspace/lib/mail';
-import {EmailList} from "@/components/mail/email-list.tsx";
+import {EmailList} from "../components/mail/email-list";
 import {Email, EmailDraft as EmailDraftType} from "@workspace/lib/types/mail";
 import {toast} from "sonner";
 import {useEffect, useState} from 'react';
