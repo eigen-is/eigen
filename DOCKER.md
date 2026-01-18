@@ -7,6 +7,7 @@ This guide explains how to build and deploy the Eigen project using Docker.
 The Docker setup uses a **local build approach** for optimal efficiency:
 
 **Build Strategy:**
+
 - Applications are built **locally** on your machine using Bun
 - Docker images only copy the pre-built artifacts
 - Results in smaller images (~250MB total vs ~800MB+)
@@ -14,6 +15,7 @@ The Docker setup uses a **local build approach** for optimal efficiency:
 - Leverages local caching and resources
 
 **Services:**
+
 1. **nginx** (~50MB) - Serves pre-built static frontend apps and proxies API/WebSocket
 2. **api** (~200MB) - Runs the pre-built Bun backend with production dependencies only
 
@@ -52,6 +54,7 @@ chmod +x deploy.sh
 ```
 
 This will:
+
 1. Build all applications locally
 2. Create Docker images
 3. Start all containers
@@ -66,6 +69,7 @@ chmod +x build-for-docker.sh
 ```
 
 This builds:
+
 - All frontend apps → `./dist/`
 - API server → `./apps/api-server/build/`
 
@@ -86,21 +90,25 @@ docker-compose up -d
 ## Managing Services
 
 **Start:**
+
 ```bash
 docker-compose up -d
 ```
 
 **Stop:**
+
 ```bash
 docker-compose down
 ```
 
 **Restart:**
+
 ```bash
 docker-compose restart
 ```
 
 **View logs:**
+
 ```bash
 # All services
 docker-compose logs -f
@@ -111,6 +119,7 @@ docker-compose logs -f nginx
 ```
 
 **Check status:**
+
 ```bash
 docker-compose ps
 ```
@@ -249,6 +258,7 @@ Docker Compose will only restart services that have changed.
 ## Why Local Build?
 
 **Advantages:**
+
 - ✅ **Smaller images**: No build tools (Python, make, g++) in final images
 - ✅ **Faster Docker builds**: Seconds instead of minutes
 - ✅ **Better caching**: Uses local Bun cache and node_modules
@@ -256,6 +266,7 @@ Docker Compose will only restart services that have changed.
 - ✅ **Consistent builds**: Same environment as development
 
 **Image Sizes:**
+
 - nginx: ~50MB (Alpine + static files)
 - api: ~200MB (Bun slim + compiled code + prod deps)
 - **Total: ~250MB** vs ~800MB+ with in-container builds
@@ -266,6 +277,7 @@ Docker Compose will only restart services that have changed.
 - `./deploy.sh` - Complete deployment (build + Docker + start)
 
 Make scripts executable:
+
 ```bash
 chmod +x build-for-docker.sh deploy.sh
 ```

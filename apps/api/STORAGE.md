@@ -3,6 +3,7 @@
 Technical documentation for the storage layer, mount system, and file management architecture.
 
 ## Table of Contents
+
 1. [Architecture Overview](#1-architecture-overview)
 2. [Storage Layer](#2-storage-layer)
 3. [Mount System](#3-mount-system)
@@ -33,15 +34,16 @@ Technical documentation for the storage layer, mount system, and file management
 
 **Components:**
 
-| Component | Description |
-|-----------|-------------|
-| **Home** | Per-user singleton. Manages database connections (one per file), SSE notifications, and app instances. Exposes `LocalStorage` as `home.fs`. |
-| **Mount** | Drive storage unit containing metadata DB, file storage backend, temp directory, and thumbnails. Currently single default mount per user. |
-| **Drive** | Business logic layer on top of Mount. Handles ACL, thumbnails, sharing, and collaborative documents. |
-| **Mail** | Uses `LocalStorage` directly for Maildir file storage, plus SQLite for metadata. |
-| **Contacts** | Uses `LocalStorage` for avatars, SQLite for contact data. |
+| Component    | Description                                                                                                                                 |
+|--------------|---------------------------------------------------------------------------------------------------------------------------------------------|
+| **Home**     | Per-user singleton. Manages database connections (one per file), SSE notifications, and app instances. Exposes `LocalStorage` as `home.fs`. |
+| **Mount**    | Drive storage unit containing metadata DB, file storage backend, temp directory, and thumbnails. Currently single default mount per user.   |
+| **Drive**    | Business logic layer on top of Mount. Handles ACL, thumbnails, sharing, and collaborative documents.                                        |
+| **Mail**     | Uses `LocalStorage` directly for Maildir file storage, plus SQLite for metadata.                                                            |
+| **Contacts** | Uses `LocalStorage` for avatars, SQLite for contact data.                                                                                   |
 
 **Current Limitations:**
+
 - Single default mount (multi-mount architecture ready for future)
 - `Home.getZip()` not implemented
 
@@ -51,11 +53,11 @@ Technical documentation for the storage layer, mount system, and file management
 
 Three pluggable storage backends in `lib/storage/`:
 
-| Backend | Use Case | Storage Pattern |
-|---------|----------|-----------------|
-| **LocalKeyStorage** | Drive mounts | Flat `data/{uuid}` files |
-| **LocalStorage** | Mail, Contacts, Home.fs | Full directory hierarchy with extended fs methods |
-| **S3Storage** | Remote storage (ready) | S3-compatible object storage |
+| Backend             | Use Case                | Storage Pattern                                   |
+|---------------------|-------------------------|---------------------------------------------------|
+| **LocalKeyStorage** | Drive mounts            | Flat `data/{uuid}` files                          |
+| **LocalStorage**    | Mail, Contacts, Home.fs | Full directory hierarchy with extended fs methods |
+| **S3Storage**       | Remote storage (ready)  | S3-compatible object storage                      |
 
 All backends implement the `StorageBackend` interface (read, write, delete, exists, size).
 
@@ -67,19 +69,21 @@ All backends implement the `StorageBackend` interface (read, write, delete, exis
 
 A Mount bundles everything needed for Drive file storage:
 
-| Component | Purpose |
-|-----------|---------|
+| Component     | Purpose                                         |
+|---------------|-------------------------------------------------|
 | `metadata.db` | SQLite database for paths, labels (Drizzle ORM) |
-| `data/` | File storage via `LocalKeyStorage` |
-| `thumbs/` | Thumbnails (always local, even for S3 mounts) |
-| `tmp/` | Temp files for collaborative editing |
+| `data/`       | File storage via `LocalKeyStorage`              |
+| `thumbs/`     | Thumbnails (always local, even for S3 mounts)   |
+| `tmp/`        | Temp files for collaborative editing            |
 
 **Key types** (`lib/mount/types.ts`):
+
 - `PathEntry` – File/folder metadata (id, name, type, parentId, ownerId, mimeType, size, thumbnail, acl, labels)
 - `ACLEntry` – Access control (email, read, write, public)
 - `MountConfig` – Mount configuration (id, name, storageType, isDefault)
 
 **Thumbnails** (`lib/shared/thumbnails.ts`):
+
 - Supports image formats (jpeg, png, gif, webp, svg, bmp, tiff)
 - Generated on upload, stored locally in `thumbs/` as WebP
 - Video/PDF thumbnails not currently supported
@@ -91,6 +95,7 @@ A Mount bundles everything needed for Drive file storage:
 ### 4.1 Drive
 
 Business logic layer (~500 lines) providing:
+
 - **Folder/file operations** with ACL checks
 - **Thumbnail** generation and serving
 - **Sharing** – cross-user ACL propagation via `shared.db`
@@ -141,28 +146,28 @@ For S3 mounts: `metadata.db`, `tmp/`, and `thumbs/` stay local; files go to S3.
 
 ### metadata.db (per mount)
 
-| Table | Purpose |
-|-------|---------|
-| `paths` | File/folder metadata with parentId FK, acl JSON, indexes on parentId/ownerId/type |
-| `labels` | User-defined labels (name, color) |
-| `paths_to_labels` | Many-to-many relationship |
+| Table             | Purpose                                                                           |
+|-------------------|-----------------------------------------------------------------------------------|
+| `paths`           | File/folder metadata with parentId FK, acl JSON, indexes on parentId/ownerId/type |
+| `labels`          | User-defined labels (name, color)                                                 |
+| `paths_to_labels` | Many-to-many relationship                                                         |
 
 ### shared.db
 
-| Table | Purpose |
-|-------|---------|
+| Table          | Purpose                                      |
+|----------------|----------------------------------------------|
 | `shared_paths` | Paths shared with this user from other users |
 
 ### mail.db
 
-| Table | Purpose |
-|-------|---------|
-| `emails` | Email metadata with indexes on mailbox, date, read status |
-| `emailLabels` | Email labels |
-| `emailsToLabels` | Many-to-many relationship |
+| Table            | Purpose                                                   |
+|------------------|-----------------------------------------------------------|
+| `emails`         | Email metadata with indexes on mailbox, date, read status |
+| `emailLabels`    | Email labels                                              |
+| `emailsToLabels` | Many-to-many relationship                                 |
 
 ### Collab document (per doc)
 
-| Table | Purpose |
-|-------|---------|
+| Table         | Purpose                                     |
+|---------------|---------------------------------------------|
 | `doc_updates` | Y.js update blobs for collaborative editing |

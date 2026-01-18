@@ -46,9 +46,9 @@ On first run, a setup wizard will guide you through the initial configuration:
    ```
 
 2. Visit `http://localhost:3011/setup` to configure your instance:
-   - Set your domain
-   - Choose storage type (local or S3)
-   - Create your admin account
+    - Set your domain
+    - Choose storage type (local or S3)
+    - Create your admin account
 
 ### Running Applications
 
@@ -89,12 +89,14 @@ To run Eigen in Docker locally:
 ```
 
 This will:
+
 1. Build all frontend applications
 2. Create Docker images for nginx (frontend) and API server
 3. Start containers with Docker Compose
 4. Make all apps available at `http://localhost/`
 
 Access your applications:
+
 - Home: http://localhost/
 - Admin: http://localhost/admin
 - Mail: http://localhost/mail
@@ -114,6 +116,7 @@ For production deployment:
 ```
 
 **Docker management:**
+
 ```bash
 # View logs
 docker-compose logs -f
@@ -129,9 +132,9 @@ docker-compose restart
 
 - `/apps`: All applications (api + frontend apps)
 - `/packages`: Shared code
-  - `/ui`: Reusable UI components (shadcn/ui)
-  - `/lib`: Shared business logic
-  - `/config`: Shared configuration
+    - `/ui`: Reusable UI components (shadcn/ui)
+    - `/lib`: Shared business logic
+    - `/config`: Shared configuration
 
 ## License
 
