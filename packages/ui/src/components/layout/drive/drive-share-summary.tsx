@@ -4,7 +4,7 @@ import {UserPublicAvatar} from "../user-public-avatar";
 import {type DrivePath} from "@workspace/lib/types/drive";
 import {Tooltip, TooltipContent, TooltipTrigger} from "@workspace/ui/components/tooltip";
 
-export interface DriveShareSummaryProps {
+export type DriveShareSummaryProps = {
     path: DrivePath;
     onClick?: () => void;
     showIconOnHover?: boolean;

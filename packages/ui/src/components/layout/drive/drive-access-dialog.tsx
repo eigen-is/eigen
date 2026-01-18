@@ -4,7 +4,7 @@ import {DriveAccessListEdit} from "@workspace/ui/components/layout/drive/drive-a
 import type {DriveACL, DrivePath} from "@workspace/lib/types/drive"
 import {useUpdateACL} from "@workspace/lib/drive";
 
-export interface DriveAccessDialogProps {
+export type DriveAccessDialogProps = {
     open: boolean
     onOpenChange: (open: boolean) => void
     path: DrivePath | null

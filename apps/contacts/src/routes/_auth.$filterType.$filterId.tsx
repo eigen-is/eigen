@@ -7,8 +7,7 @@ import {EigenLoader} from '@workspace/ui/components/layout/eigen-loader';
 import {LabelFilterHeader} from "@workspace/ui/components/layout/labels/label-filter-header";
 import {useIsMobile} from "@workspace/lib/media";
 
-// Define search params type
-export interface ContactsSearchParams {
+export type ContactsSearchParams = {
     contactId?: string;
 }
 

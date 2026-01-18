@@ -3,7 +3,7 @@ import type {DrivePath} from "@workspace/lib/types/drive";
 import {useDeleteFile, useDeleteFolder} from "@workspace/lib/drive";
 import {DeleteDialog} from "@workspace/ui/components/layout/delete/delete-dialog";
 
-export interface DriveDeleteItemProps {
+export type DriveDeleteItemProps = {
     path: DrivePath | null;
     open: boolean;
     onOpenChange: (open: boolean) => void;

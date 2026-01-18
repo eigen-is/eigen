@@ -3,7 +3,7 @@ import {useForm} from 'react-hook-form';
 import {zodResolver} from '@hookform/resolvers/zod';
 import {useEffect, useRef, useState} from 'react';
 import {Camera, InfoIcon} from 'lucide-react';
-import {Contact} from "@apps/api/types/contact";
+import {Contact} from "@workspace/lib/types/contact";
 import {getMeContact, useUpdateContact} from '@workspace/lib/contacts';
 import {toast} from 'sonner';
 import {useUpload} from '@workspace/ui/components/layout/upload-provider/upload-provider';

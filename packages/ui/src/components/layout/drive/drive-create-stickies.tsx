@@ -3,7 +3,7 @@ import type {DrivePath} from "@workspace/lib/types/drive";
 import {useCreateStickies} from "@workspace/lib/drive";
 import {DriveCreateItemDialog} from "./drive-create-folder-item";
 
-export interface DriveCreateStickiesProps {
+export type DriveCreateStickiesProps = {
     path: DrivePath;
     open: boolean;
     onOpenChange: (open: boolean) => void;

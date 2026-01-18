@@ -1,8 +1,6 @@
-import {useMutation, useQueryClient} from '@tanstack/react-query';
+import {useMutation} from '@tanstack/react-query';
 import {mailApi} from '@workspace/lib/api';
 import {EmailDraft} from '@workspace/lib/types/mail';
-import {emailKeys} from './use-emails';
-import {invalidateHomeSize} from "../../home";
 
 export type EmailRecipient = {
     name?: string;
@@ -95,45 +93,14 @@ export async function sendDraftEmail(draft: EmailDraft): Promise<EmailDraft | nu
     }
 }
 
-/**
- * Hook for updating email drafts
- * @returns Mutation function and status for updating drafts
- */
 export function useUpdateDraft() {
-    const queryClient = useQueryClient();
-
     return useMutation({
         mutationFn: updateDraftEmail,
-        onSuccess: (data) => {
-            if (data) {
-                // Invalidate relevant queries to refresh the drafts list
-                queryClient.invalidateQueries({queryKey: emailKeys.list('drafts')});
-                // Also invalidate the specific email query if it exists
-                queryClient.invalidateQueries({queryKey: emailKeys.detail(data.id)});
-                invalidateHomeSize(queryClient);
-            }
-        }
     });
 }
 
-/**
- * Hook for sending email drafts
- * @returns Mutation function and status for sending drafts
- */
 export function useSendDraft() {
-    const queryClient = useQueryClient();
-
     return useMutation({
         mutationFn: sendDraftEmail,
-        onSuccess: (data) => {
-            if (data) {
-                // Invalidate drafts and sent folders to refresh lists
-                queryClient.invalidateQueries({queryKey: emailKeys.list('drafts')});
-                queryClient.invalidateQueries({queryKey: emailKeys.list('sent')});
-                // Invalidate the specific email query if it exists
-                queryClient.invalidateQueries({queryKey: emailKeys.detail(data.id)});
-                invalidateHomeSize(queryClient);
-            }
-        }
     });
 }

@@ -6,7 +6,7 @@ import {UploadContainer} from "./upload-container.tsx"
 type UploadStatus = "uploading" | "completed" | "error"
 type UploadId = string
 
-export interface UploadItem {
+export type UploadItem = {
     id: UploadId
     filename: string
     progress: number
@@ -14,7 +14,7 @@ export interface UploadItem {
     cancelFn?: () => void
 }
 
-interface UploadContextValue {
+type UploadContextValue = {
     createUpload: (filename: string, cancelFn?: () => void) => {
         id: UploadId,
         updateProgress: (progress: number) => void,

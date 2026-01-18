@@ -13,7 +13,7 @@ import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from "@wo
 import {ContactAutosuggest} from "../contacts/contact-autosuggest"
 import {ContactSuggestion} from "../contacts/types"
 
-export interface DriveAccessListEditProps {
+export type DriveAccessListEditProps = {
     path: DrivePath
     onSave: (updatedAcl: DriveACL[]) => void
     onCancel?: () => void

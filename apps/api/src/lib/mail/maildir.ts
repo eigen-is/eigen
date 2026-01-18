@@ -9,23 +9,24 @@ import maildb from "./maildb.ts";
 import type {HomeInterface} from "../home/types";
 import {sendMail, draftToMailOptions} from './sender';
 import type {EmailDraft} from "@workspace/lib/types/mail";
-import {SSEventType, type SSEvent} from "@workspace/lib/types/sse";
+import {SSEventType, type SSEventMailData} from "@workspace/lib/types/sse";
 import {LocalStorage} from "../storage";
+import {buildMailEvent} from './sse-events';
 
 export default class Maildir {
     private basePath: string;
     private user: User;
-    private home: HomeInterface;
     private storage: LocalStorage;
     private db!: maildb;
-    private notifyCallback: (event: SSEvent) => void | undefined;
 
-    constructor(home: HomeInterface, notifyCallback: (event: SSEvent) => void | undefined) {
-        this.home = home;
-        this.user = this.home.user;
+    constructor(private home: HomeInterface) {
+        this.user = home.user;
         this.basePath = 'Maildir';
         this.storage = new LocalStorage(`${home.homeDir}/eigen.mail`);
-        this.notifyCallback = notifyCallback;
+    }
+
+    private emit(type: Parameters<typeof buildMailEvent>[0], mail: SSEventMailData, options?: Parameters<typeof buildMailEvent>[2]): void {
+        this.home.notify(buildMailEvent(type, mail, options));
     }
 
     public async init() {
@@ -136,17 +137,16 @@ export default class Maildir {
             // Write the message to the new directory
             await this.storage.file(filePath).write(message);
 
-            // parse the message
+            // parse the message and emit SSE event
             this.mailboxGet('').then(async () => {
                 this.messageGet(messageId).then(async (parsedMessage) => {
-                    if (this.notifyCallback && notify) {
-                        this.notifyCallback({
-                            type: SSEventType.MAIL_RECEIVED,
-                            title: `New email: ${parsedMessage?.subject || 'No subject'}`,
-                            body: `${parsedMessage?.textShort || 'No body'}`,
-                            link: `/mail/box/inbox?mailId=${parsedMessage?.id}`,
-                            tag: 'mail'
-                        });
+                    if (notify && parsedMessage) {
+                        this.emit(SSEventType.MAIL_RECEIVED, {
+                            messageId: parsedMessage.id,
+                            mailbox: 'inbox',
+                            subject: parsedMessage.subject,
+                            fromShort: parsedMessage.fromShort,
+                        }, {link: `/mail/box/inbox?mailId=${parsedMessage.id}`, tag: 'mail'});
                     }
                 });
             });
@@ -269,6 +269,13 @@ export default class Maildir {
             }
 
             await this.storage.unlink(filePath);
+
+            this.emit(SSEventType.MAIL_DELETED, {
+                messageId,
+                mailbox: message.mailbox || 'inbox',
+                subject: message.subject,
+            });
+
             return true;
         } catch (error) {
             console.error(`Error deleting message ${messageId}:`, error);
@@ -301,9 +308,17 @@ export default class Maildir {
                 return false;
             }
 
+            const sourceMailbox = message.mailbox || 'inbox';
             this.db.moveEmail(messageId, targetMailbox);
             // use fs move function to move
             await this.storage.rename(sourcePath, targetFilePath);
+
+            this.emit(SSEventType.MAIL_MOVED, {
+                messageId,
+                mailbox: sourceMailbox,
+                toMailbox: targetMailbox,
+                subject: message.subject,
+            });
 
             return true;
         } catch (error) {
@@ -424,6 +439,12 @@ export default class Maildir {
                 throw new Error(`Failed to create draft message: ${messageId}`);
             }
 
+            this.emit(SSEventType.MAIL_DRAFT_UPDATED, {
+                messageId,
+                mailbox: 'drafts',
+                subject: parsedMessage.subject,
+            });
+
             return parsedMessage as EmailDraft;
         } catch (error) {
             console.error('Error creating draft message:', error);
@@ -437,7 +458,14 @@ export default class Maildir {
         try {
             const mailOptions = draftToMailOptions(mail, this.home.user.email);
             const sent = await sendMail(mailOptions);
-            if (sent) await this.messageMove(mail.id, 'sent');
+            if (sent) {
+                await this.messageMove(mail.id, 'sent');
+                this.emit(SSEventType.MAIL_SENT, {
+                    messageId: mail.id,
+                    mailbox: 'sent',
+                    subject: mail.subject,
+                });
+            }
         } catch (error) {
             console.error('Error sending email:', error);
             return null;
@@ -446,7 +474,15 @@ export default class Maildir {
     }
 
     public async messageSetRead(messageId: string, read: boolean): Promise<boolean> {
-        return (await this.db.setRead(messageId, read)) !== null;
+        const message = await this.db.getEmail(messageId);
+        const result = await this.db.setRead(messageId, read);
+        if (result !== null && message) {
+            this.emit(SSEventType.MAIL_READ_CHANGED, {
+                messageId,
+                mailbox: message.mailbox || 'inbox',
+            });
+        }
+        return result !== null;
     }
 
     public async messageGetAttachment(messageId: string, index: number): Promise<Attachment | null> {

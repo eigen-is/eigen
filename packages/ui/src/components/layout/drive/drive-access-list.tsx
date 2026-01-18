@@ -9,7 +9,7 @@ import {AvatarIcon} from "@workspace/ui/components/avatar"
 import {Separator} from "@workspace/ui/components/separator"
 import {TooltipButton} from "../tooltip-button"
 
-export interface DriveAccessListProps {
+export type DriveAccessListProps = {
     path: DrivePath
     className?: string
     onShareClick?: (path: DrivePath) => void

@@ -12,14 +12,14 @@ export type CustomElementType =
 
 export type TextAlignment = 'left' | 'center' | 'right';
 
-export interface CustomElement {
+export type CustomElement = {
     type: CustomElementType;
     children: CustomText[];
     checked?: boolean;
     align?: TextAlignment;
 }
 
-export interface CustomText {
+export type CustomText = {
     text: string;
     bold?: boolean;
     italic?: boolean;

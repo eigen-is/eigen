@@ -12,7 +12,7 @@ import {DriveRenameItem} from "./drive-rename-item";
 import {useMovePath} from "@workspace/lib/drive";
 import {useDriveDialogs} from "./use-drive-dialogs";
 
-export interface DriveLayoutProps {
+export type DriveLayoutProps = {
     ownerId: string;
     pathId?: string;
     folderContents: DrivePath[];
