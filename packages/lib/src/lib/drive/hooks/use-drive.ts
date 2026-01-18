@@ -1,4 +1,4 @@
-import {useMutation, useQuery, useQueryClient} from "@tanstack/react-query";
+import {useMutation, useQuery} from "@tanstack/react-query";
 import type {DriveACL, DrivePath} from "@workspace/lib/types/drive";
 import {driveApi} from "@workspace/lib/api";
 
@@ -109,14 +109,6 @@ export function useUploadFiles(ownerId: string) {
             return response.data;
         }
     });
-}
-
-export function useInvalidateFolder(_ownerId?: string) {
-    const queryClient = useQueryClient();
-
-    return (pathId: string) => {
-        queryClient.invalidateQueries({queryKey: driveKeys.folder(pathId)});
-    };
 }
 
 // DELETE FOLDER
