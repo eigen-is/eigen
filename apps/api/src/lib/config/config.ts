@@ -144,7 +144,7 @@ export async function setAllConfig(config: Partial<SystemConfig>): Promise<void>
     await initializeConfigDatabase();
 
     for (const [key, value] of Object.entries(config)) {
-        await setConfig(key as keyof SystemConfig, value as any);
+        await setConfig(key as keyof SystemConfig, value as SystemConfig[keyof SystemConfig]);
     }
 
     cachedConfig = null;

@@ -152,7 +152,7 @@ export class LocalStorage implements StorageBackend {
             text: () => bunFile.text(),
             json: () => bunFile.json(),
             size: bunFile.size,
-            write: async (data: any) => {
+            write: async (data: Buffer | Uint8Array | ArrayBuffer | string) => {
                 const dir = path.dirname(fullPath);
                 if (!fs.existsSync(dir)) {
                     fs.mkdirSync(dir, {recursive: true});

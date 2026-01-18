@@ -1,6 +1,7 @@
 import {Elysia, sse} from "elysia";
 import {betterAuth} from "./auth";
 import {getHome} from "../lib/home/home";
+import type {SSEvent} from "@workspace/lib/types/sse";
 
 export const sseRouter = new Elysia({name: "sse"})
     .use(betterAuth)
@@ -12,12 +13,12 @@ export const sseRouter = new Elysia({name: "sse"})
         const home = await getHome(user);
 
         let keepalive: Timer | null = null;
-        let listener: ((event: any) => void) | null = null;
+        let listener: ((event: SSEvent) => void) | null = null;
         let isClosed = false;
 
         const stream = new ReadableStream({
             start(controller) {
-                listener = (event: any) => {
+                listener = (event: SSEvent) => {
                     if (isClosed) return;
                     try {
                         controller.enqueue(event);
