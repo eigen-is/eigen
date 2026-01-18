@@ -1,6 +1,6 @@
 import {sql} from 'drizzle-orm';
 import {integer, primaryKey, sqliteTable, text} from 'drizzle-orm/sqlite-core';
-import type {DriveACL} from './types';
+import type {DriveACL} from '@workspace/lib/types/drive';
 
 export const paths = sqliteTable('paths', {
     id: text('id').primaryKey(),
