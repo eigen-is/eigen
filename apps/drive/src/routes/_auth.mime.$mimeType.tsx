@@ -20,7 +20,7 @@ function DriveRoute() {
     const navigate = useNavigate();
     const {pid} = Route.useSearch();
     const auth = useAuth();
-    const ownerId = auth?.user?.id;
+    const ownerId = auth.user!.id;
     const {data: selectedPath = null} = usePathInfo(ownerId, pid);
     const isMobile = useIsMobile();
     const [preview, setPreview] = useState<{ url: string; mimeType: string } | null>(null);
