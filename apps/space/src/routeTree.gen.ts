@@ -8,210 +8,206 @@
 // You should NOT make any changes in this file as it will be overwritten.
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
-import {Route as rootRouteImport} from './routes/__root'
-import {Route as Login2faRouteImport} from './routes/login-2fa'
-import {Route as LoginRouteImport} from './routes/login'
-import {Route as AuthRouteImport} from './routes/_auth'
-import {Route as AuthIndexRouteImport} from './routes/_auth.index'
-import {Route as AuthUserRouteImport} from './routes/_auth.user'
-import {Route as AuthDataRouteImport} from './routes/_auth.data'
-import {Route as AuthSecurityPasswordRouteImport} from './routes/_auth.security.password'
-import {Route as AuthSecurity2faRouteImport} from './routes/_auth.security.2fa'
+import { Route as rootRouteImport } from './routes/__root'
+import { Route as Login2faRouteImport } from './routes/login-2fa'
+import { Route as LoginRouteImport } from './routes/login'
+import { Route as AuthRouteImport } from './routes/_auth'
+import { Route as AuthIndexRouteImport } from './routes/_auth.index'
+import { Route as AuthUserRouteImport } from './routes/_auth.user'
+import { Route as AuthDataRouteImport } from './routes/_auth.data'
+import { Route as AuthSecurityPasswordRouteImport } from './routes/_auth.security.password'
+import { Route as AuthSecurity2faRouteImport } from './routes/_auth.security.2fa'
 
 const Login2faRoute = Login2faRouteImport.update({
-    id: '/login-2fa',
-    path: '/login-2fa',
-    getParentRoute: () => rootRouteImport,
+  id: '/login-2fa',
+  path: '/login-2fa',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const LoginRoute = LoginRouteImport.update({
-    id: '/login',
-    path: '/login',
-    getParentRoute: () => rootRouteImport,
+  id: '/login',
+  path: '/login',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const AuthRoute = AuthRouteImport.update({
-    id: '/_auth',
-    getParentRoute: () => rootRouteImport,
+  id: '/_auth',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const AuthIndexRoute = AuthIndexRouteImport.update({
-    id: '/',
-    path: '/',
-    getParentRoute: () => AuthRoute,
+  id: '/',
+  path: '/',
+  getParentRoute: () => AuthRoute,
 } as any)
 const AuthUserRoute = AuthUserRouteImport.update({
-    id: '/user',
-    path: '/user',
-    getParentRoute: () => AuthRoute,
+  id: '/user',
+  path: '/user',
+  getParentRoute: () => AuthRoute,
 } as any)
 const AuthDataRoute = AuthDataRouteImport.update({
-    id: '/data',
-    path: '/data',
-    getParentRoute: () => AuthRoute,
+  id: '/data',
+  path: '/data',
+  getParentRoute: () => AuthRoute,
 } as any)
 const AuthSecurityPasswordRoute = AuthSecurityPasswordRouteImport.update({
-    id: '/security/password',
-    path: '/security/password',
-    getParentRoute: () => AuthRoute,
+  id: '/security/password',
+  path: '/security/password',
+  getParentRoute: () => AuthRoute,
 } as any)
 const AuthSecurity2faRoute = AuthSecurity2faRouteImport.update({
-    id: '/security/2fa',
-    path: '/security/2fa',
-    getParentRoute: () => AuthRoute,
+  id: '/security/2fa',
+  path: '/security/2fa',
+  getParentRoute: () => AuthRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
-    '/login': typeof LoginRoute
-    '/login-2fa': typeof Login2faRoute
-    '/data': typeof AuthDataRoute
-    '/user': typeof AuthUserRoute
-    '/': typeof AuthIndexRoute
-    '/security/2fa': typeof AuthSecurity2faRoute
-    '/security/password': typeof AuthSecurityPasswordRoute
+  '/login': typeof LoginRoute
+  '/login-2fa': typeof Login2faRoute
+  '/data': typeof AuthDataRoute
+  '/user': typeof AuthUserRoute
+  '/': typeof AuthIndexRoute
+  '/security/2fa': typeof AuthSecurity2faRoute
+  '/security/password': typeof AuthSecurityPasswordRoute
 }
-
 export interface FileRoutesByTo {
-    '/login': typeof LoginRoute
-    '/login-2fa': typeof Login2faRoute
-    '/data': typeof AuthDataRoute
-    '/user': typeof AuthUserRoute
-    '/': typeof AuthIndexRoute
-    '/security/2fa': typeof AuthSecurity2faRoute
-    '/security/password': typeof AuthSecurityPasswordRoute
+  '/login': typeof LoginRoute
+  '/login-2fa': typeof Login2faRoute
+  '/data': typeof AuthDataRoute
+  '/user': typeof AuthUserRoute
+  '/': typeof AuthIndexRoute
+  '/security/2fa': typeof AuthSecurity2faRoute
+  '/security/password': typeof AuthSecurityPasswordRoute
 }
-
 export interface FileRoutesById {
-    __root__: typeof rootRouteImport
-    '/_auth': typeof AuthRouteWithChildren
-    '/login': typeof LoginRoute
-    '/login-2fa': typeof Login2faRoute
-    '/_auth/data': typeof AuthDataRoute
-    '/_auth/user': typeof AuthUserRoute
-    '/_auth/': typeof AuthIndexRoute
-    '/_auth/security/2fa': typeof AuthSecurity2faRoute
-    '/_auth/security/password': typeof AuthSecurityPasswordRoute
+  __root__: typeof rootRouteImport
+  '/_auth': typeof AuthRouteWithChildren
+  '/login': typeof LoginRoute
+  '/login-2fa': typeof Login2faRoute
+  '/_auth/data': typeof AuthDataRoute
+  '/_auth/user': typeof AuthUserRoute
+  '/_auth/': typeof AuthIndexRoute
+  '/_auth/security/2fa': typeof AuthSecurity2faRoute
+  '/_auth/security/password': typeof AuthSecurityPasswordRoute
 }
-
 export interface FileRouteTypes {
-    fileRoutesByFullPath: FileRoutesByFullPath
-    fullPaths:
-        | '/login'
-        | '/login-2fa'
-        | '/data'
-        | '/user'
-        | '/'
-        | '/security/2fa'
-        | '/security/password'
-    fileRoutesByTo: FileRoutesByTo
-    to:
-        | '/login'
-        | '/login-2fa'
-        | '/data'
-        | '/user'
-        | '/'
-        | '/security/2fa'
-        | '/security/password'
-    id:
-        | '__root__'
-        | '/_auth'
-        | '/login'
-        | '/login-2fa'
-        | '/_auth/data'
-        | '/_auth/user'
-        | '/_auth/'
-        | '/_auth/security/2fa'
-        | '/_auth/security/password'
-    fileRoutesById: FileRoutesById
+  fileRoutesByFullPath: FileRoutesByFullPath
+  fullPaths:
+    | '/login'
+    | '/login-2fa'
+    | '/data'
+    | '/user'
+    | '/'
+    | '/security/2fa'
+    | '/security/password'
+  fileRoutesByTo: FileRoutesByTo
+  to:
+    | '/login'
+    | '/login-2fa'
+    | '/data'
+    | '/user'
+    | '/'
+    | '/security/2fa'
+    | '/security/password'
+  id:
+    | '__root__'
+    | '/_auth'
+    | '/login'
+    | '/login-2fa'
+    | '/_auth/data'
+    | '/_auth/user'
+    | '/_auth/'
+    | '/_auth/security/2fa'
+    | '/_auth/security/password'
+  fileRoutesById: FileRoutesById
 }
-
 export interface RootRouteChildren {
-    AuthRoute: typeof AuthRouteWithChildren
-    LoginRoute: typeof LoginRoute
-    Login2faRoute: typeof Login2faRoute
+  AuthRoute: typeof AuthRouteWithChildren
+  LoginRoute: typeof LoginRoute
+  Login2faRoute: typeof Login2faRoute
 }
 
 declare module '@tanstack/react-router' {
-    interface FileRoutesByPath {
-        '/login-2fa': {
-            id: '/login-2fa'
-            path: '/login-2fa'
-            fullPath: '/login-2fa'
-            preLoaderRoute: typeof Login2faRouteImport
-            parentRoute: typeof rootRouteImport
-        }
-        '/login': {
-            id: '/login'
-            path: '/login'
-            fullPath: '/login'
-            preLoaderRoute: typeof LoginRouteImport
-            parentRoute: typeof rootRouteImport
-        }
-        '/_auth': {
-            id: '/_auth'
-            path: ''
-            fullPath: ''
-            preLoaderRoute: typeof AuthRouteImport
-            parentRoute: typeof rootRouteImport
-        }
-        '/_auth/': {
-            id: '/_auth/'
-            path: '/'
-            fullPath: '/'
-            preLoaderRoute: typeof AuthIndexRouteImport
-            parentRoute: typeof AuthRoute
-        }
-        '/_auth/user': {
-            id: '/_auth/user'
-            path: '/user'
-            fullPath: '/user'
-            preLoaderRoute: typeof AuthUserRouteImport
-            parentRoute: typeof AuthRoute
-        }
-        '/_auth/data': {
-            id: '/_auth/data'
-            path: '/data'
-            fullPath: '/data'
-            preLoaderRoute: typeof AuthDataRouteImport
-            parentRoute: typeof AuthRoute
-        }
-        '/_auth/security/password': {
-            id: '/_auth/security/password'
-            path: '/security/password'
-            fullPath: '/security/password'
-            preLoaderRoute: typeof AuthSecurityPasswordRouteImport
-            parentRoute: typeof AuthRoute
-        }
-        '/_auth/security/2fa': {
-            id: '/_auth/security/2fa'
-            path: '/security/2fa'
-            fullPath: '/security/2fa'
-            preLoaderRoute: typeof AuthSecurity2faRouteImport
-            parentRoute: typeof AuthRoute
-        }
+  interface FileRoutesByPath {
+    '/login-2fa': {
+      id: '/login-2fa'
+      path: '/login-2fa'
+      fullPath: '/login-2fa'
+      preLoaderRoute: typeof Login2faRouteImport
+      parentRoute: typeof rootRouteImport
     }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_auth': {
+      id: '/_auth'
+      path: ''
+      fullPath: ''
+      preLoaderRoute: typeof AuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_auth/': {
+      id: '/_auth/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof AuthIndexRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/_auth/user': {
+      id: '/_auth/user'
+      path: '/user'
+      fullPath: '/user'
+      preLoaderRoute: typeof AuthUserRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/_auth/data': {
+      id: '/_auth/data'
+      path: '/data'
+      fullPath: '/data'
+      preLoaderRoute: typeof AuthDataRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/_auth/security/password': {
+      id: '/_auth/security/password'
+      path: '/security/password'
+      fullPath: '/security/password'
+      preLoaderRoute: typeof AuthSecurityPasswordRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/_auth/security/2fa': {
+      id: '/_auth/security/2fa'
+      path: '/security/2fa'
+      fullPath: '/security/2fa'
+      preLoaderRoute: typeof AuthSecurity2faRouteImport
+      parentRoute: typeof AuthRoute
+    }
+  }
 }
 
 interface AuthRouteChildren {
-    AuthDataRoute: typeof AuthDataRoute
-    AuthUserRoute: typeof AuthUserRoute
-    AuthIndexRoute: typeof AuthIndexRoute
-    AuthSecurity2faRoute: typeof AuthSecurity2faRoute
-    AuthSecurityPasswordRoute: typeof AuthSecurityPasswordRoute
+  AuthDataRoute: typeof AuthDataRoute
+  AuthUserRoute: typeof AuthUserRoute
+  AuthIndexRoute: typeof AuthIndexRoute
+  AuthSecurity2faRoute: typeof AuthSecurity2faRoute
+  AuthSecurityPasswordRoute: typeof AuthSecurityPasswordRoute
 }
 
 const AuthRouteChildren: AuthRouteChildren = {
-    AuthDataRoute: AuthDataRoute,
-    AuthUserRoute: AuthUserRoute,
-    AuthIndexRoute: AuthIndexRoute,
-    AuthSecurity2faRoute: AuthSecurity2faRoute,
-    AuthSecurityPasswordRoute: AuthSecurityPasswordRoute,
+  AuthDataRoute: AuthDataRoute,
+  AuthUserRoute: AuthUserRoute,
+  AuthIndexRoute: AuthIndexRoute,
+  AuthSecurity2faRoute: AuthSecurity2faRoute,
+  AuthSecurityPasswordRoute: AuthSecurityPasswordRoute,
 }
 
 const AuthRouteWithChildren = AuthRoute._addFileChildren(AuthRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
-    AuthRoute: AuthRouteWithChildren,
-    LoginRoute: LoginRoute,
-    Login2faRoute: Login2faRoute,
+  AuthRoute: AuthRouteWithChildren,
+  LoginRoute: LoginRoute,
+  Login2faRoute: Login2faRoute,
 }
 export const routeTree = rootRouteImport
-    ._addFileChildren(rootRouteChildren)
-    ._addFileTypes<FileRouteTypes>()
+  ._addFileChildren(rootRouteChildren)
+  ._addFileTypes<FileRouteTypes>()
