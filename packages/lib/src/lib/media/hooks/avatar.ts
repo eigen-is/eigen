@@ -1,4 +1,4 @@
-import {useContacts, useInvalidateAllContacts} from '../../contacts/hooks/use-contacts';
+import {useContacts, useInvalidateAllContacts} from '@workspace/ui/lib/contacts';
 import {useMemo} from 'react';
 import {Contact} from '@workspace/lib/types/contact';
 import {usePublicUser} from '../../public';

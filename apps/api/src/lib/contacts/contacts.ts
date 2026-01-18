@@ -11,7 +11,7 @@ import type {User} from "better-auth/types";
 import {getUserByEmail, updateUser} from "../users/users.ts";
 import {LocalStorage} from "../storage";
 import {generateThumbnail} from "../shared/thumbnails";
-import {DEFAULT_LABELS, PATHS} from "../core/constants";
+import {DEFAULT_LABELS, PATHS} from "../core";
 
 export async function getContacts(user: User) {
     const home = await getHome(user);
