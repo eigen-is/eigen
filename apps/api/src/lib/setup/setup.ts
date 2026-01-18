@@ -105,7 +105,7 @@ async function initializeDatabaseSchema(): Promise<void> {
     )`);
 }
 
-export interface SetupInput {
+export type SetupInput = {
     domain: string;
     storageType: 'local-fullnames' | 'local-id' | 's3';
     s3Bucket?: string;
@@ -116,14 +116,14 @@ export interface SetupInput {
     adminEmail: string;
     adminPassword: string;
     adminName: string;
-}
+};
 
-export interface SetupResult {
+export type SetupResult = {
     success: boolean;
     message?: string;
     error?: string;
     user?: { id: string; email: string; name: string };
-}
+};
 
 export async function getSetupStatus() {
     const setupRequired = isSetupRequired();

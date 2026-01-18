@@ -3,7 +3,7 @@ import {authClient} from "./hooks/use-auth-client.ts";
 import {LoadingScreen} from '@workspace/ui/components/layout/loading-screen';
 import {useQueryClient} from '@tanstack/react-query';
 
-export interface AuthUser {
+export type AuthUser = {
     id: string;
     email: string;
     name: string;
@@ -11,7 +11,7 @@ export interface AuthUser {
     emailVerified: boolean;
     createdAt: Date;
     updatedAt: Date;
-}
+};
 
 export type AuthContextType = {
     isAuthenticated: boolean;
