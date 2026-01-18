@@ -33,7 +33,7 @@ function AuthLayout() {
     const {user} = useAuth();
 
     // Get root folder information
-    const {data: root, isLoading: isRootLoading, error: rootError} = useRootFolder(user.id);
+    const {data: root, isLoading: isRootLoading, error: rootError} = useRootFolder(user!.id);
     const rootPath = root || null;
 
     // Loading state
