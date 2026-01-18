@@ -11,6 +11,7 @@
   },
   "exports": {
     "./*": "./src/lib/*",
+    "./apps": "./src/lib/apps.ts",
     "./api": "./src/lib/api.ts",
     "./admin": "./src/lib/admin/index.ts",
     "./contacts": "./src/lib/contacts/index.ts",

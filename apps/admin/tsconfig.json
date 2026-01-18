@@ -4,7 +4,8 @@
     "baseUrl": "./src/"
   },
   "include": [
-    "src"
+    "src",
+    "css.d.ts"
   ],
   "exclude": [
     "node_modules"

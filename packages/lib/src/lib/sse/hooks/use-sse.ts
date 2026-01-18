@@ -1,10 +1,10 @@
 import {useCallback, useEffect, useRef} from 'react';
 import {useQueryClient} from '@tanstack/react-query';
-import {useAuth} from '@workspace/ui/lib/auth';
+import {useAuth} from '@workspace/lib/auth';
 import {SSE_EVENTS_URL} from '../../api';
 import {isSSEventNotification, type SSEvent, type SSEventNotification} from '@workspace/lib/types/sse';
-import {handleDriveSSEvent} from '@workspace/ui/lib/drive';
-import {handleMailSSEvent} from '@workspace/ui/lib/mail';
+import {handleDriveSSEvent} from '@workspace/lib/drive';
+import {handleMailSSEvent} from '@workspace/lib/mail';
 
 type UseSSEOptions = {
     onNotification?: (event: SSEvent & SSEventNotification) => void;

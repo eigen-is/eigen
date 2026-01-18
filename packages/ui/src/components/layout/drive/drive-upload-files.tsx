@@ -2,7 +2,7 @@ import React, {useEffect, useRef} from 'react';
 import {toast} from "sonner";
 import type {DrivePath} from "@workspace/lib/types/drive";
 import {useUpload} from "../../layout/upload-provider/upload-provider";
-import {uploadWithProgress} from "@workspace/ui/components/layout/upload-provider";
+import {uploadWithProgress} from "../upload-provider/upload-with-progress";
 import type {UploadResult} from "./file-upload";
 
 export type {UploadResult};

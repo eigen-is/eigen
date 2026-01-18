@@ -1,5 +1,5 @@
 import {createFileRoute, Outlet, redirect} from '@tanstack/react-router'
-import {ContactsSidebar} from "../components/contacts/contacts-sidebar.tsx";
+import {ContactsSidebar} from "../components/contacts/contacts-sidebar";
 import {useContext} from 'react';
 import {SidebarContext} from './__root';
 import {useIsMobile, useIsTablet} from "@workspace/lib/media";
