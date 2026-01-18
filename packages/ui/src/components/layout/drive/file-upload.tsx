@@ -2,15 +2,13 @@ import {useRef} from 'react';
 import {useUpload} from "../../layout/upload-provider/upload-provider";
 import {uploadWithProgress} from "../../layout/upload-provider/upload-with-progress";
 
-// Interface for upload result
-export interface UploadResult {
+export type UploadResult = {
     success: boolean;
     fileName: string;
     error?: any;
 }
 
-// Interface for upload options
-export interface FileUploadOptions {
+export type FileUploadOptions = {
     singleFileUrl?: string;
     multipleFilesUrl?: string;
     onSuccess?: (result: UploadResult) => void;

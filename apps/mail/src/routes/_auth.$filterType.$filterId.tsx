@@ -20,8 +20,7 @@ import {useIsMobile, useIsTablet} from "@workspace/lib/media";
 import {format} from "date-fns";
 import {DeleteDialog} from "@workspace/ui/components/layout/delete/delete-dialog";
 
-// Define search params type
-export interface MailSearchParams {
+export type MailSearchParams = {
     mailId?: string;
     mode?: string;
     to?: string;
@@ -176,7 +175,6 @@ function MailRoute() {
             setDeleteDialogOpen(true);
         } else {
             await deleteMail.mutateAsync(mail);
-            toast("Email deleted");
             navigate({
                 to: Route.fullPath,
                 params: {filterType, filterId},
@@ -188,7 +186,6 @@ function MailRoute() {
     const confirmDeleteEmail = async () => {
         if (pendingDeleteMail) {
             await deleteMail.mutateAsync(pendingDeleteMail);
-            toast("Email deleted");
             setDeleteDialogOpen(false);
             setPendingDeleteMail(null);
             navigate({
@@ -201,7 +198,6 @@ function MailRoute() {
 
     const handleSendEmail = async (mail: EmailDraftType) => {
         await sendDraft.mutateAsync(mail);
-        toast.success("Email sent");
         navigate({
             to: Route.fullPath,
             params: {filterType, filterId},
@@ -211,7 +207,6 @@ function MailRoute() {
 
     const handleMoveEmail = async (mail: Email, mailbox: string) => {
         await moveMail.mutateAsync({email: mail, mailbox});
-        toast(`Email moved to ${mailbox}`);
         navigate({
             to: Route.fullPath,
             params: {filterType, filterId},
@@ -222,7 +217,6 @@ function MailRoute() {
     const handleNewDraftEmail = async (mail: EmailDraftType) => {
         const draft = await updateDraft.mutateAsync(mail);
         if (draft) {
-            toast("Email draft updated");
             navigate({
                 to: Route.fullPath,
                 params: {filterType, filterId},

@@ -3,7 +3,7 @@ import type {DrivePath} from "@workspace/lib/types/drive";
 import {useRenamePath} from "@workspace/lib/drive";
 import {DriveCreateItemDialog} from "./drive-create-folder-item";
 
-export interface DriveRenameItemProps {
+export type DriveRenameItemProps = {
     path: DrivePath | null;
     open: boolean;
     onOpenChange: (open: boolean) => void;

@@ -1,15 +1,11 @@
 import {createFileRoute, useNavigate} from '@tanstack/react-router';
 import {useMimeContent, usePathInfo} from '@workspace/lib/drive';
 import {DriveLayout} from "@workspace/ui/components/layout/drive/drive-layout";
-import {DrivePath} from "@apps/api/types/drive";
+import {DrivePath, DriveSearchParams} from "@workspace/lib/types/drive";
 import {useAuth} from '@workspace/lib/auth';
 import {useIsMobile} from "@workspace/lib/media";
 import {useState} from "react";
 import {FilePreview} from '../components/drive/file-preview';
-
-export interface DriveSearchParams {
-    pid?: string;
-}
 
 export const Route = createFileRoute('/_auth/mime/$mimeType')({
     component: DriveRoute,

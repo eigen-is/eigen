@@ -3,14 +3,11 @@ import {toast} from "sonner";
 import type {DrivePath} from "@workspace/lib/types/drive";
 import {useUpload} from "../../layout/upload-provider/upload-provider";
 import {uploadWithProgress} from "../../layout/upload-provider/upload-with-progress";
+import type {UploadResult} from "./file-upload";
 
-export interface UploadResult {
-    success: boolean;
-    fileName: string;
-    error?: any;
-}
+export type {UploadResult};
 
-export interface DriveUploadFilesProps {
+export type DriveUploadFilesProps = {
     path: DrivePath;
     open: boolean;
     onOpenChange: (open: boolean) => void;

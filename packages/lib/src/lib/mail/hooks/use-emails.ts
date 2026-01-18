@@ -1,8 +1,6 @@
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {mailApi} from '@workspace/lib/api.ts';
 import {Email} from "@workspace/lib/types/mail";
-import {mailboxKeys} from "./use-mailboxes.ts";
-import {invalidateHomeSize} from "../../home";
 
 // Define query keys for reuse
 export const emailKeys = {
@@ -64,29 +62,19 @@ export function useEmailById() {
 }
 
 export function useDeleteEmail() {
-    const queryClient = useQueryClient();
-
     return useMutation({
         mutationFn: async (email: Email) => {
             if (email.mailbox === 'trash') {
                 await mailApi.message({id: email.id}).delete();
             } else {
                 await mailApi.message.moveToTrash.put({messageId: email.id});
-                queryClient.invalidateQueries({queryKey: emailKeys.list('trash')});
             }
             return email;
         },
-        onSuccess: (email) => {
-            queryClient.invalidateQueries({queryKey: emailKeys.detail(email.id)});
-            queryClient.invalidateQueries({queryKey: emailKeys.list(email.mailbox === '' ? 'inbox' : email.mailbox)});
-            invalidateHomeSize(queryClient);
-        }
     });
 }
 
 export function useToggleReadEmail() {
-    const queryClient = useQueryClient();
-
     return useMutation({
         mutationFn: async ({email, isRead}: {email: Email, isRead: boolean}) => {
             if (isRead === email.isRead) {
@@ -98,32 +86,18 @@ export function useToggleReadEmail() {
             });
             return email;
         },
-        onSuccess: (email) => {
-            queryClient.invalidateQueries({queryKey: emailKeys.detail(email.id)});
-            queryClient.invalidateQueries({queryKey: emailKeys.list(email.mailbox)});
-            queryClient.invalidateQueries({queryKey: mailboxKeys.lists()});
-        }
     });
 }
 
 export function useMoveEmail() {
-    const queryClient = useQueryClient();
-
     return useMutation({
         mutationFn: async ({email, mailbox}: {email: Email, mailbox: string}) => {
-            const currentMailbox = email.mailbox;
             await mailApi.message.move.put({
                 messageId: email.id,
                 targetMailbox: mailbox
             });
-            return {email, currentMailbox, mailbox};
+            return email;
         },
-        onSuccess: ({email, currentMailbox, mailbox}) => {
-            queryClient.invalidateQueries({queryKey: emailKeys.detail(email.id)});
-            queryClient.invalidateQueries({queryKey: emailKeys.list(currentMailbox === '' ? 'inbox' : currentMailbox)});
-            queryClient.invalidateQueries({queryKey: emailKeys.list(mailbox === '' ? 'inbox' : mailbox)});
-            queryClient.invalidateQueries({queryKey: mailboxKeys.lists()});
-        }
     });
 }
 

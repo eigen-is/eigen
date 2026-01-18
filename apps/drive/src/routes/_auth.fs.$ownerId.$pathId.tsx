@@ -3,15 +3,10 @@ import {EigenLoader} from "@workspace/ui";
 import {useFolderContent, usePathInfo} from '@workspace/lib/drive';
 import {useContext, useEffect, useState} from "react";
 import {DriveLayout} from "@workspace/ui/components/layout/drive/drive-layout";
-import {DrivePath} from "@apps/api/types/drive";
+import {DrivePath, DriveSearchParams} from "@workspace/lib/types/drive";
 import {useIsMobile} from "@workspace/lib/media";
 import {DriveContext} from "./_auth";
 import {FilePreview} from '../components/drive/file-preview';
-
-// Define search params type
-export interface DriveSearchParams {
-    pid?: string;
-}
 
 export const Route = createFileRoute('/_auth/fs/$ownerId/$pathId')({
     component: DriveRoute,

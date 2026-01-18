@@ -6,7 +6,7 @@ import {UserAvatar} from "./user-avatar"
 import {useAvatar} from "@workspace/lib/media"
 import {EigenLoader} from "./eigen-loader"
 
-export interface UserItemProps extends HTMLAttributes<HTMLDivElement> {
+export type UserItemProps = HTMLAttributes<HTMLDivElement> & {
     name?: string
     email?: string
     imageUrl?: string
@@ -52,7 +52,7 @@ export function UserItem({
     );
 }
 
-export interface UserPublicItemProps extends HTMLAttributes<HTMLDivElement> {
+export type UserPublicItemProps = HTMLAttributes<HTMLDivElement> & {
     email?: string
     label?: ReactNode
     className?: string

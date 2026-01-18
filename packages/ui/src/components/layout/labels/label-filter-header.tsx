@@ -5,7 +5,7 @@ import {TooltipButton} from '@workspace/ui';
 import {LabelDialog} from './label-dialog';
 import {useLabels} from './label-provider';
 
-export interface LabelFilterHeaderProps {
+export type LabelFilterHeaderProps = {
     labels: Label[];
     labelId: string;
 }

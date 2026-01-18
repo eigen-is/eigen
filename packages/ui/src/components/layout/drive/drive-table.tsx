@@ -15,8 +15,7 @@ import {
     DropdownMenuTrigger
 } from "@workspace/ui/components/dropdown-menu";
 
-// Props for the DriveTable component   
-export interface DriveTableProps {
+export type DriveTableProps = {
     items: DrivePath[];
     currentPath?: DrivePath | null;
     activeItemId?: string;

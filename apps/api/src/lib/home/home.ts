@@ -38,7 +38,7 @@ export class Home implements HomeInterface {
         this.homeDir = getUserHomePath(user.id);
         this.fs = new LocalStorage(this.homeDir);
         this.contacts = new Contacts(this as any);
-        this.mail = new Maildir(this as any, this.notify.bind(this));
+        this.mail = new Maildir(this as any);
     }
 
     public async init() {

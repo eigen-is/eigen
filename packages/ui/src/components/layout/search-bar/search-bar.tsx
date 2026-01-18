@@ -3,7 +3,7 @@ import {Input} from "@workspace/ui/components/input";
 import {cn} from "@workspace/ui/lib/utils";
 import {ChangeEvent} from 'react';
 
-export interface SearchBarProps {
+export type SearchBarProps = {
     placeholder?: string;
     value: string;
     onChange: (value: string) => void;

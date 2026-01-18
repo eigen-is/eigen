@@ -19,3 +19,12 @@ export type DrivePath = {
     createdAt: Date;
     updatedAt: Date;
 }
+
+export type DriveSearchParams = {
+    pid?: string;
+    uid?: string;
+}
+
+export type DriveContextType = {
+    rootPath: DrivePath | null;
+}
