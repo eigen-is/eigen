@@ -1,8 +1,10 @@
 # Scalable Document Collaboration System
 
-A simple, cost-effective, and scalable architecture for document collaboration with end-to-end encryption, user-specific storage, and real-time collaboration capabilities.
+A simple, cost-effective, and scalable architecture for document collaboration with end-to-end encryption, user-specific
+storage, and real-time collaboration capabilities.
 
 **Key Architecture Principles:**
+
 - **SQLite databases**: Store encrypted file/folder metadata per user (NOT document content)
 - **YJS documents**: Handle real-time collaborative editing in-memory (NOT persistent storage)
 - **Consistent user routing**: Ensures reliability and session persistence
@@ -23,7 +25,9 @@ A simple, cost-effective, and scalable architecture for document collaboration w
 
 ## Architecture Overview
 
-Our system employs a straightforward architecture designed for simplicity and scalability, with a consistent routing strategy that ensures requests from the same user always reach the same API server, which also handles WebSocket connections for collaborative document editing:
+Our system employs a straightforward architecture designed for simplicity and scalability, with a consistent routing
+strategy that ensures requests from the same user always reach the same API server, which also handles WebSocket
+connections for collaborative document editing:
 
 ```
                            ┌───────────────────┐
@@ -68,12 +72,14 @@ Our system employs a straightforward architecture designed for simplicity and sc
 ```
 
 **Data Flow Explanation:**
+
 - **Metadata operations** (create folder, rename file, permissions) → SQLite databases
 - **Document content operations** (read, write collaborative editing) → YJS documents in-memory
 - **Document persistence** → Encrypted files in storage layer
 - **Real-time collaboration** → WebSocket connections + YJS operational transforms
 
-This architecture maximizes simplicity while maintaining scalability, ensuring user requests and WebSocket connections are handled consistently.
+This architecture maximizes simplicity while maintaining scalability, ensuring user requests and WebSocket connections
+are handled consistently.
 
 ## System Components
 
@@ -82,6 +88,7 @@ This architecture maximizes simplicity while maintaining scalability, ensuring u
 **Purpose**: Front-door entry point that routes all incoming traffic to the appropriate API Gateway instances.
 
 **Configuration**:
+
 - SSL termination
 - Consistent hashing for user-based routing
 - WebSocket support
@@ -96,6 +103,7 @@ This architecture maximizes simplicity while maintaining scalability, ensuring u
 **Purpose**: Authenticates requests and routes them to the correct API server based on user identity.
 
 **Key Functions**:
+
 - User authentication and session management
 - Consistent user-to-server routing
 - Service discovery via Redis
@@ -110,6 +118,7 @@ This architecture maximizes simplicity while maintaining scalability, ensuring u
 **Purpose**: Coordinates which API server handles which users.
 
 **Key Functions**:
+
 - Maintains mapping of users to API servers
 - Provides service discovery
 - Stores short-lived session data
@@ -124,6 +133,7 @@ This architecture maximizes simplicity while maintaining scalability, ensuring u
 **Purpose**: Dedicated servers that handle multiple users but maintain user affinity, including WebSocket connections.
 
 **Key Functions**:
+
 - Manages all operations for assigned users
 - Handles WebSocket connections for collaborative editing
 - Handles document encryption/decryption
@@ -140,6 +150,7 @@ This architecture maximizes simplicity while maintaining scalability, ensuring u
 **Purpose**: Per-user isolated storage for document metadata and keys.
 
 **Key Functions**:
+
 - Stores encrypted file metadata (filenames, paths, permissions)
 - Manages encryption keys for documents
 - Tracks shared document access
@@ -156,6 +167,7 @@ This architecture maximizes simplicity while maintaining scalability, ensuring u
 **Purpose**: Secure storage for encrypted document content.
 
 **Key Functions**:
+
 - Stores encrypted document files (S3, local storage, etc.)
 - Handles file upload/download operations
 - Manages file versioning and backup
@@ -165,18 +177,21 @@ This architecture maximizes simplicity while maintaining scalability, ensuring u
 **Purpose**: Real-time collaborative editing engine running in-memory on API servers.
 
 **Key Functions**:
+
 - Manages YJS documents for active collaborative sessions
 - Handles operational transforms and conflict resolution
 - Broadcasts changes via WebSockets to connected clients
 - Maintains document state only while users are actively editing
 
 **Data Flow**:
+
 1. User opens document → API server loads YJS document into memory
 2. Multiple users edit → YJS handles real-time synchronization
 3. Periodic saves → Document content encrypted and stored in file system
 4. Session ends → YJS document removed from memory
 
 **Important Notes**:
+
 - YJS documents are ephemeral (in-memory only during active sessions)
 - Persistent storage handled separately via encrypted file system
 - Each API server manages YJS documents for its assigned users
@@ -192,7 +207,7 @@ This architecture maximizes simplicity while maintaining scalability, ensuring u
 
 ### 2. Integrated WebSockets
 
-- WebSocket connections for collaborative editing handled by the same API server 
+- WebSocket connections for collaborative editing handled by the same API server
 - Each API server manages WebSockets for documents of its assigned users
 - Document editors connect to the API server of the document owner
 - Hard limit on concurrent editors per document (e.g., 50 users)
@@ -295,18 +310,18 @@ docker-compose.yml                 # Main services
 ### Production Deployment Options
 
 1. **Docker Swarm**
-   - Simple orchestration for medium-scale deployments
-   - Easy setup and management
+    - Simple orchestration for medium-scale deployments
+    - Easy setup and management
 
 2. **Kubernetes**
-   - Advanced orchestration for large-scale deployments
-   - Auto-scaling based on metrics
+    - Advanced orchestration for large-scale deployments
+    - Auto-scaling based on metrics
 
 3. **Cloud Provider Integration**
-   - AWS ECS/EKS
-   - GCP GKE
-   - Azure AKS
-   - Managed container services
+    - AWS ECS/EKS
+    - GCP GKE
+    - Azure AKS
+    - Managed container services
 
 ## Implementation Roadmap
 
@@ -389,34 +404,36 @@ docker-compose.yml                 # Main services
 **Challenge**: Organizations share many documents among thousands of users.
 
 **Solution**:
+
 1. **API Server Grouping**
-   - Organization users can be grouped on the same or neighboring API servers
-   - Improved performance for intra-organization collaboration
+    - Organization users can be grouped on the same or neighboring API servers
+    - Improved performance for intra-organization collaboration
 
 2. **Resource Allocation**
-   - Higher memory allocation for API servers handling organization users
-   - Optimized database connections
+    - Higher memory allocation for API servers handling organization users
+    - Optimized database connections
 
 3. **Document Limits**
-   - Configurable limits for organization documents
-   - Premium tier options for higher limits
+    - Configurable limits for organization documents
+    - Premium tier options for higher limits
 
 ### Power Users (100+ active documents)
 
 **Challenge**: Power users have many documents and high activity.
 
 **Solution**:
+
 1. **Dedicated Resources**
-   - Power users can be allocated to API servers with more resources
-   - Lower user-to-server ratio for power users
+    - Power users can be allocated to API servers with more resources
+    - Lower user-to-server ratio for power users
 
 2. **Enhanced Caching**
-   - Increased cache allocation for power users
-   - Document preloading for frequently accessed content
+    - Increased cache allocation for power users
+    - Document preloading for frequently accessed content
 
 3. **Performance Tuning**
-   - Custom database optimization
-   - Prioritized request handling
+    - Custom database optimization
+    - Prioritized request handling
 
 ## Monitoring and Maintenance
 
@@ -439,24 +456,24 @@ docker-compose.yml                 # Main services
 ### Maintenance Procedures
 
 1. **Rolling Updates**
-   - Zero-downtime deployment strategy
-   - Server rotation without disruption
-   - Gradual rollout with monitoring
+    - Zero-downtime deployment strategy
+    - Server rotation without disruption
+    - Gradual rollout with monitoring
 
 2. **Backup Strategy**
-   - Regular SQLite database backups
-   - Encrypted off-site storage
-   - Point-in-time recovery options
+    - Regular SQLite database backups
+    - Encrypted off-site storage
+    - Point-in-time recovery options
 
 3. **Scaling Operations**
-   - Automatic scaling based on metrics
-   - Manual scaling for anticipated events
-   - Scheduled capacity adjustments
+    - Automatic scaling based on metrics
+    - Manual scaling for anticipated events
+    - Scheduled capacity adjustments
 
 4. **Disaster Recovery**
-   - Multi-region redundancy option
-   - Service failover procedures
-   - Data consistency verification
+    - Multi-region redundancy option
+    - Service failover procedures
+    - Data consistency verification
 
 ---
 
@@ -468,4 +485,5 @@ This architecture delivers a simple yet scalable document collaboration system t
 4. **Secures data** through end-to-end encryption
 5. **Supports growth** with a straightforward, container-based design
 
-The consistent user routing ensures reliability while the integrated WebSocket handling simplifies the architecture, making it easier to deploy and maintain.
+The consistent user routing ensures reliability while the integrated WebSocket handling simplifies the architecture,
+making it easier to deploy and maintain.

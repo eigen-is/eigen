@@ -1,6 +1,8 @@
 # MUD-inspired Focused Chat
 
-An innovative, focused chat platform inspired by classic MUDs (Multi-User Dungeons) and enhanced with the usability of modern group chat (Slack, WhatsApp, Signal) — designed to bring the "physical" feeling of presence, room-based interaction, and effective team communication together.
+An innovative, focused chat platform inspired by classic MUDs (Multi-User Dungeons) and enhanced with the usability of
+modern group chat (Slack, WhatsApp, Signal) — designed to bring the "physical" feeling of presence, room-based
+interaction, and effective team communication together.
 
 ---
 
@@ -24,7 +26,10 @@ An innovative, focused chat platform inspired by classic MUDs (Multi-User Dungeo
 
 ## Introduction
 
-This chat system aims to reinvent textual group chat by focusing on “presence in space,” inspired by the room-based model and emote-driven style of MUDs. Unlike Slack/Discord where you "subscribe" to many channels, here you are always *in* a single room, bringing focus and context to interactions. Features like `/me` actions, peeking into rooms, expressive presence, and minimized notification noise are at the core.
+This chat system aims to reinvent textual group chat by focusing on “presence in space,” inspired by the room-based
+model and emote-driven style of MUDs. Unlike Slack/Discord where you "subscribe" to many channels, here you are always
+*in* a single room, bringing focus and context to interactions. Features like `/me` actions, peeking into rooms,
+expressive presence, and minimized notification noise are at the core.
 
 ---
 
@@ -45,6 +50,7 @@ This chat system aims to reinvent textual group chat by focusing on “presence 
 ## User Interface Overview
 
 ### Main Layout (Desktop)
+
 ```
 ------------------------------------------
 | Rooms      |   Chat Area               |
@@ -63,6 +69,7 @@ This chat system aims to reinvent textual group chat by focusing on “presence 
 ```
 
 **Interactions:**
+
 - Click-hold a room: peek into its history and presence; release to return to your current room
 - Double-click or `/go <room>`: enter a room
 - Sidebar shows rooms (visited and available), people (online & status)
@@ -123,7 +130,7 @@ This chat system aims to reinvent textual group chat by focusing on “presence 
 ## Peek Functionality
 
 - **Rooms list:** Shows all rooms you’ve entered recently, and all open rooms.
-- **Peeking:** 
+- **Peeking:**
     - On desktop, click-and-hold a room entry to "peek" at its current state (roster, latest messages).
     - Release mouse: return to your active room, no enter/leave event triggered.
     - Double-click or `/go <room>`: actually move.
@@ -189,6 +196,7 @@ Bob     [lounge]
 Sara    [dev]
 You     [lounge]
 ```
+
 - \* indicates your current room
 - Greyed out or shrunken text when peeking
 
@@ -239,4 +247,6 @@ You     [lounge]
 
 ## End
 
-This document outlines the foundational structure, user experience, and potential implementation details for a modern, MUD-inspired, focused chat app. It can serve as a spec/starting-point for development. For questions, clarifications, or contributions, contact the author.
+This document outlines the foundational structure, user experience, and potential implementation details for a modern,
+MUD-inspired, focused chat app. It can serve as a spec/starting-point for development. For questions, clarifications, or
+contributions, contact the author.
