@@ -7,6 +7,6 @@
       "@/*": ["./*"]
     }
   },
-  "include": ["src"],
+  "include": ["src", "css.d.ts"],
   "exclude": ["node_modules"]
 }
