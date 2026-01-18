@@ -1,15 +1,15 @@
 import { existsSync, readFileSync, writeFileSync, renameSync } from 'fs';
 import { getServerDataPath } from './paths';
 
-export interface S3Config {
+export type S3Config = {
     bucket: string;
     region: string;
     accessKey: string;
     secretKey: string;
     endpoint?: string;
-}
+};
 
-export interface ServerConfig {
+export type ServerConfig = {
     domain: string;
     storage: {
         type: 'local-id' | 'local-fullnames' | 's3';
@@ -17,7 +17,7 @@ export interface ServerConfig {
     };
     setupCompleted: boolean;
     setupCompletedAt?: string;
-}
+};
 
 const CONFIG_FILENAME = 'config.json';
 

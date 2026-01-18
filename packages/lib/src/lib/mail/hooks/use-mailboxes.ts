@@ -11,7 +11,7 @@ export const mailboxKeys = {
     exists: (id: string) => [...mailboxKeys.detail(id), 'exists'] as const,
 };
 
-export interface Mailbox {
+export type Mailbox = {
     path: string;
     name: string;
     flags: string[];
@@ -19,7 +19,7 @@ export interface Mailbox {
     unread: number;
     subscribed: boolean;
     children?: Mailbox[];
-}
+};
 
 export function useMailboxes() {
     return useQuery({

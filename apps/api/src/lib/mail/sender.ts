@@ -2,12 +2,12 @@ import nodemailer from 'nodemailer';
 import type Mail from 'nodemailer/lib/mailer';
 import type {EmailDraft} from "@workspace/lib/types/mail";
 
-interface Address {
+type Address = {
     name: string;
     address: string;
-}
+};
 
-export interface SendMailOptions {
+export type SendMailOptions = {
     from: Address;
     to: Address[];
     cc?: Address[];
@@ -15,7 +15,7 @@ export interface SendMailOptions {
     subject: string;
     text: string;
     html?: string;
-}
+};
 
 function createTransport(): Mail {
     return nodemailer.createTransport({

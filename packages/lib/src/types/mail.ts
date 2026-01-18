@@ -1,7 +1,7 @@
-export interface StructuredHeader {
+export type StructuredHeader = {
     value: string;
     params: { [key: string]: string };
-}
+};
 
 export type HeaderValue = string | string[] | AddressObject | Date | StructuredHeader | StructuredHeader[];
 
@@ -12,19 +12,19 @@ export type HeaderLines = ReadonlyArray<{
     line: string;
 }>;
 
-export interface EmailAddress {
+export type EmailAddress = {
     address?: string | undefined;
     name: string;
     group?: EmailAddress[] | undefined;
-}
+};
 
-export interface AddressObject {
+export type AddressObject = {
     value: EmailAddress[];
     html: string;
     text: string;
-}
+};
 
-export interface Attachment {
+export type Attachment = {
     type: "attachment";
     content: unknown;
     contentType: string;
@@ -37,9 +37,9 @@ export interface Attachment {
     contentId?: string | undefined;
     cid?: string | undefined;
     related: boolean;
-}
+};
 
-export interface ParsedMail {
+export type ParsedMail = {
     attachments: Attachment[];
     headers: Headers;
     headerLines: HeaderLines;
@@ -57,7 +57,7 @@ export interface ParsedMail {
     messageId?: string | undefined;
     inReplyTo?: string | undefined;
     priority?: "normal" | "low" | "high" | undefined;
-}
+};
 
 export type EmailSummary = {
     id: string;

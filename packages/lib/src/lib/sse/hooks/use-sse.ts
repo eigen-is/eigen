@@ -6,9 +6,9 @@ import {type SSEvent, type SSEventNotification, isSSEventNotification} from '@wo
 import {handleDriveSSEvent} from '../../drive/sse-handlers';
 import {handleMailSSEvent} from '../../mail/sse-handlers';
 
-interface UseSSEOptions {
+type UseSSEOptions = {
     onNotification?: (event: SSEvent & SSEventNotification) => void;
-}
+};
 
 export function useSSE(options: UseSSEOptions = {}) {
     const {isAuthenticated} = useAuth();

@@ -6,7 +6,7 @@ import { dirname } from "path";
 import { getServerDataPath } from "./paths";
 
 // Configuration defaults
-export interface SystemConfig {
+export type SystemConfig = {
     domain: string;
     smtpHost: string;
     smtpPort: number;
@@ -22,7 +22,7 @@ export interface SystemConfig {
     s3AccessKey?: string;
     s3SecretKey?: string;
     s3Endpoint?: string;
-}
+};
 
 export const DEFAULT_CONFIG: SystemConfig = {
     domain: "localhost:8000",

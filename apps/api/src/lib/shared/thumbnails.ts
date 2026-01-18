@@ -3,12 +3,12 @@ import sharp from 'sharp';
 import * as path from 'path';
 import * as fs from 'node:fs';
 
-export interface ThumbnailOptions {
+export type ThumbnailOptions = {
     maxSize?: number;
     quality?: number;
     format?: 'webp' | 'jpeg';
     fit?: 'inside' | 'cover';
-}
+};
 
 const DEFAULT_OPTIONS: Required<ThumbnailOptions> = {
     maxSize: 512,
