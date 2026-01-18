@@ -1,10 +1,12 @@
 # Server-Sent Events (SSE) Architecture
 
-> Documentation for the SSE notification system, based on the Drive implementation. Use this as reference when adding SSE support to Mail, Contacts, and other apps.
+> Documentation for the SSE notification system, based on the Drive implementation. Use this as reference when adding
+> SSE support to Mail, Contacts, and other apps.
 
 ## Overview
 
-The SSE system provides real-time notifications and cache invalidation across the application. When a user performs an action (e.g., uploads a file), other browser tabs and potentially other users receive updates via SSE.
+The SSE system provides real-time notifications and cache invalidation across the application. When a user performs an
+action (e.g., uploads a file), other browser tabs and potentially other users receive updates via SSE.
 
 ```
 User Action → API Mutation → emit SSEvent → SSE Stream → Client Handler
@@ -360,15 +362,15 @@ Remove `queryClient.invalidateQueries()` from mutation hooks - SSE handlers will
 
 ## 5. Summary
 
-| Layer | Location | Responsibility |
-|-------|----------|----------------|
-| Types | `packages/lib/src/types/sse.ts` | Event type definitions |
-| Templates | `apps/api/src/lib/{domain}/sse-events.ts` | Text strings + event builder |
-| Emit | `apps/api/src/lib/{domain}/{domain}.ts` | Call `this.emit()` after mutations |
-| Broadcast | `apps/api/src/lib/home/home.ts` | `notify()` sends to all subscribers |
-| Receive | `packages/lib/src/lib/sse/hooks/use-sse.ts` | EventSource connection |
-| Invalidate | `packages/lib/src/lib/{domain}/sse-handlers.ts` | Cache invalidation logic |
-| Toast | `packages/ui/.../sse-provider.tsx` | Display notifications |
+| Layer      | Location                                        | Responsibility                      |
+|------------|-------------------------------------------------|-------------------------------------|
+| Types      | `packages/lib/src/types/sse.ts`                 | Event type definitions              |
+| Templates  | `apps/api/src/lib/{domain}/sse-events.ts`       | Text strings + event builder        |
+| Emit       | `apps/api/src/lib/{domain}/{domain}.ts`         | Call `this.emit()` after mutations  |
+| Broadcast  | `apps/api/src/lib/home/home.ts`                 | `notify()` sends to all subscribers |
+| Receive    | `packages/lib/src/lib/sse/hooks/use-sse.ts`     | EventSource connection              |
+| Invalidate | `packages/lib/src/lib/{domain}/sse-handlers.ts` | Cache invalidation logic            |
+| Toast      | `packages/ui/.../sse-provider.tsx`              | Display notifications               |
 
 ### Benefits
 

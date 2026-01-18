@@ -1,6 +1,8 @@
 # Secure File Sharing System with End-to-End Encryption
 
-This repository contains a secure file sharing system similar to Google Drive, but with robust end-to-end encryption. The system allows users to securely store, share, and manage files while protecting both content and metadata from unauthorized access.
+This repository contains a secure file sharing system similar to Google Drive, but with robust end-to-end encryption.
+The system allows users to securely store, share, and manage files while protecting both content and metadata from
+unauthorized access.
 
 ## Architecture Overview
 
@@ -36,77 +38,77 @@ The system implements a hybrid cryptographic approach with the following key com
 ### User Authentication & Key Generation
 
 1. **Registration**:
-   - User creates an account with a strong password
-   - System generates an RSA key pair (2048-bit)
-   - Private key is encrypted with a key derived from the user's password using PBKDF2
-   - Public key and encrypted private key are stored in the database
+    - User creates an account with a strong password
+    - System generates an RSA key pair (2048-bit)
+    - Private key is encrypted with a key derived from the user's password using PBKDF2
+    - Public key and encrypted private key are stored in the database
 
 2. **Authentication**:
-   - User logs in with password
-   - System derives key from password and decrypts the user's private key
-   - Private key is held in memory only during the user's session
+    - User logs in with password
+    - System derives key from password and decrypts the user's private key
+    - Private key is held in memory only during the user's session
 
 ### File Encryption Process
 
 1. **Upload**:
-   - Generate a random AES-256 key for the file
-   - Encrypt file content with AES-256-GCM using this key
-   - Encrypt the file key with the directory key
-   - Encrypt sensitive metadata (filename, path) with the same file key
-   - Store encrypted file, encrypted metadata, and encrypted file key
+    - Generate a random AES-256 key for the file
+    - Encrypt file content with AES-256-GCM using this key
+    - Encrypt the file key with the directory key
+    - Encrypt sensitive metadata (filename, path) with the same file key
+    - Store encrypted file, encrypted metadata, and encrypted file key
 
 2. **Download**:
-   - Retrieve encrypted directory key and decrypt it with user's private key
-   - Use directory key to decrypt the file key
-   - Use file key to decrypt file content and metadata
-   - Present decrypted file to user
+    - Retrieve encrypted directory key and decrypt it with user's private key
+    - Use directory key to decrypt the file key
+    - Use file key to decrypt file content and metadata
+    - Present decrypted file to user
 
 ### Directory Key Management
 
 1. **Directory Structure**:
-   - Each directory has its own AES-256 key
-   - The directory key encrypts all file keys and subdirectory keys within it
-   - This forms a hierarchical key structure that simplifies sharing
+    - Each directory has its own AES-256 key
+    - The directory key encrypts all file keys and subdirectory keys within it
+    - This forms a hierarchical key structure that simplifies sharing
 
 2. **Directory Creation**:
-   - Generate a random AES-256 key for the directory
-   - Encrypt the directory key with the user's public key
-   - If it's a subdirectory, also encrypt its key with the parent directory's key
-   - Store the encrypted directory key
+    - Generate a random AES-256 key for the directory
+    - Encrypt the directory key with the user's public key
+    - If it's a subdirectory, also encrypt its key with the parent directory's key
+    - Store the encrypted directory key
 
 ### Sharing Mechanism
 
 1. **Share File**:
-   - Owner decrypts the file key using their private key
-   - System encrypts the file key with recipient's public key
-   - System encrypts metadata with the file key for the recipient
-   - Store new encrypted file key and metadata records for recipient
+    - Owner decrypts the file key using their private key
+    - System encrypts the file key with recipient's public key
+    - System encrypts metadata with the file key for the recipient
+    - Store new encrypted file key and metadata records for recipient
 
 2. **Share Directory**:
-   - Owner decrypts the directory key using their private key
-   - System encrypts the directory key with recipient's public key
-   - Store the encrypted directory key for the recipient
-   - The recipient gains access to all files and subdirectories within the shared directory
+    - Owner decrypts the directory key using their private key
+    - System encrypts the directory key with recipient's public key
+    - Store the encrypted directory key for the recipient
+    - The recipient gains access to all files and subdirectories within the shared directory
 
 3. **Access Revocation**:
-   - For file access: Delete the encrypted file key record for the revoked user
-   - For directory access: Delete the encrypted directory key record for the revoked user
-   - User immediately loses access to the keys, and thus the files/directories
+    - For file access: Delete the encrypted file key record for the revoked user
+    - For directory access: Delete the encrypted directory key record for the revoked user
+    - User immediately loses access to the keys, and thus the files/directories
 
 ### Metadata Protection
 
 Metadata is split into two categories:
 
 1. **Non-sensitive Metadata** (stored unencrypted):
-   - File ID
-   - File size
-   - MIME type
-   - Creation/modification timestamps
+    - File ID
+    - File size
+    - MIME type
+    - Creation/modification timestamps
 
 2. **Sensitive Metadata** (encrypted with file key):
-   - File name
-   - File path/location
-   - Custom attributes/tags
+    - File name
+    - File path/location
+    - Custom attributes/tags
 
 ## Database Schema
 
@@ -225,6 +227,7 @@ CREATE TABLE recovery_keys (
 Manages user creation, authentication, and key generation.
 
 Key functions:
+
 - `registerUser(username, password)`: Creates new user with key pair
 - `authenticateUser(username, password)`: Authenticates and retrieves private key
 - `changePassword(userId, oldPassword, newPassword)`: Updates password and re-encrypts private key
@@ -234,12 +237,14 @@ Key functions:
 Handles file and directory operations with encryption.
 
 Key functions:
+
 - `createDirectory(name, parentId, userId, privateKey)`: Creates a new encrypted directory
 - `uploadFile(fileData, metadata, userId, privateKey, directoryId)`: Encrypts and stores a new file in a directory
 - `getFile(fileId, userId, privateKey)`: Retrieves and decrypts a file
 - `shareDirectory(directoryId, ownerId, targetUserId, ownerPrivateKey)`: Shares a directory and all its contents
 - `shareFile(fileId, ownerId, targetUserId, ownerPrivateKey)`: Shares a file with another user
-- `createPublicLink(resourceId, resourceType, userId, privateKey, expiresAt)`: Creates a public link for a file or directory
+- `createPublicLink(resourceId, resourceType, userId, privateKey, expiresAt)`: Creates a public link for a file or
+  directory
 - `revokeAccess(fileId, targetUserId)`: Revokes a user's access to a file
 - `revokeDirectoryAccess(directoryId, targetUserId)`: Revokes a user's access to a directory
 - `renameFile(fileId, newName, userId, privateKey)`: Updates file metadata
@@ -250,6 +255,7 @@ Key functions:
 Provides cryptographic primitives for the system.
 
 Key functions:
+
 - `generateKeyPair()`: Creates RSA key pair for users
 - `deriveKeyFromPassword(password, salt)`: Derives key from user password
 - `encryptWithSymmetricKey(data, key)`: Encrypts data with AES-256-GCM
@@ -266,6 +272,7 @@ Key functions:
 Manages user sessions and secure key handling.
 
 Key functions:
+
 - `createSession(userId, privateKey)`: Creates new session with private key in memory
 - `getSession(sessionId)`: Retrieves session with private key
 - `invalidateSession(sessionId)`: Terminates session and removes private key from memory
@@ -275,6 +282,7 @@ Key functions:
 Provides password recovery options while maintaining security.
 
 Key functions:
+
 - `generateRecoveryKey(userId, privateKey)`: Creates recovery key for account
 - `recoverAccount(userId, recoveryKey)`: Recovers account access using recovery key
 - `resetPassword(userId, newPassword, privateKey)`: Sets new password after recovery
@@ -282,24 +290,28 @@ Key functions:
 ## API Endpoints
 
 ### User Management
+
 - `POST /api/users/register`: Register new user
 - `POST /api/users/login`: Authenticate user and create session
 - `POST /api/users/logout`: End user session
 - `POST /api/users/change-password`: Update user password
 
 ### Directory Operations
+
 - `POST /api/directories/create`: Create new directory
 - `GET /api/directories/list/:directoryId?`: List contents of directory
 - `PUT /api/directories/:directoryId/rename`: Rename directory
 - `DELETE /api/directories/:directoryId`: Delete directory and contents
 
 ### File Operations
+
 - `POST /api/files/upload`: Upload and encrypt new file
 - `GET /api/files/download/:fileId`: Download and decrypt file
 - `PUT /api/files/:fileId/rename`: Rename file
 - `DELETE /api/files/:fileId`: Delete file
 
 ### Sharing
+
 - `POST /api/files/share/:fileId`: Share file with another user
 - `POST /api/directories/share/:directoryId`: Share directory with another user
 - `POST /api/files/revoke/:fileId`: Revoke access to shared file
@@ -309,6 +321,7 @@ Key functions:
 - `POST /api/resources/public-link`: Create public link for a file or directory
 
 ### Recovery (Optional)
+
 - `POST /api/recovery/generate-key`: Generate account recovery key
 - `POST /api/recovery/initiate`: Start account recovery process
 - `POST /api/recovery/recover-with-key`: Recover account using recovery key
@@ -655,27 +668,27 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 ## Implementation Roadmap
 
 1. **Core Cryptography Layer**
-   - Implement key generation functions
-   - Build encryption/decryption utilities
-   - Create tests for cryptographic operations
+    - Implement key generation functions
+    - Build encryption/decryption utilities
+    - Create tests for cryptographic operations
 
 2. **User Management**
-   - User registration with key generation
-   - Authentication and session management
-   - Password change and key rotation
+    - User registration with key generation
+    - Authentication and session management
+    - Password change and key rotation
 
 3. **Basic File Operations**
-   - Encrypted upload/download
-   - Metadata encryption
-   - File deletion
+    - Encrypted upload/download
+    - Metadata encryption
+    - File deletion
 
 4. **Sharing Functionality**
-   - Implement directory key hierarchy
-   - Directory sharing mechanism
-   - File sharing mechanism
-   - Public link generation
-   - Access control and revocation
+    - Implement directory key hierarchy
+    - Directory sharing mechanism
+    - File sharing mechanism
+    - Public link generation
+    - Access control and revocation
 
 5. **UI/UX Development**
-   - File browser interface
-   - Sharing interface
+    - File browser interface
+    - Sharing interface

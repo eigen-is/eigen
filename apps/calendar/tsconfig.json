@@ -3,6 +3,11 @@
   "compilerOptions": {
     "baseUrl": "./src/"
   },
-  "include": ["src", "css.d.ts"],
-  "exclude": ["node_modules"]
+  "include": [
+    "src",
+    "css.d.ts"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
 }
