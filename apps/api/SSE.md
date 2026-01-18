@@ -235,20 +235,23 @@ The `SSEProvider` component wraps `useSSE` and displays toasts:
 ```typescript
 // packages/ui/src/components/layout/sse-provider/sse-provider.tsx
 export function SSEProvider({children}: {children: React.ReactNode}) {
-    useSSE({
-        onNotification: (event) => {
-            const title = event.title.slice(0, 50);
-            const body = event.body.slice(0, 120);
-            
-            toast(title, {
-                description: body,
-                action: event.link ? {
-                    label: 'View',
-                    onClick: () => window.location.href = event.link!
-                } : undefined
-            });
-        }
-    });
+    const showToast = useCallback((event: SSEvent & SSEventNotification) => {
+        const title = event.title.length > 50 ? event.title.slice(0, 50) + '…' : event.title;
+        const body = event.body.length > 120 ? event.body.slice(0, 120) + '…' : event.body;
+        
+        toast(title, {
+            description: body,
+            action: event.link ? {
+                label: 'Open',
+                onClick: (e) => {
+                    e.preventDefault();
+                    window.open(event.link, "_blank");
+                }
+            } : undefined
+        });
+    }, []);
+
+    useSSE({onNotification: showToast});
     
     return <>{children}</>;
 }
