@@ -12,7 +12,7 @@ import {TooltipButton} from '@workspace/ui';
 import {DocumentModeButton} from '@workspace/ui/components/layout/toolbar/DocumentModeButton';
 import * as Y from 'yjs';
 import {useNavigate} from '@tanstack/react-router';
-import {useAuth} from '@workspace/lib/auth/auth-context.js';
+import {useAuth} from '@workspace/lib/auth';
 import {useRootFolder} from '@workspace/lib/drive';
 import {DriveCreateStickies} from '@workspace/ui/components/layout/drive/drive-create-stickies';
 import {DriveDeleteItem} from '@workspace/ui/components/layout/drive/drive-delete-item';

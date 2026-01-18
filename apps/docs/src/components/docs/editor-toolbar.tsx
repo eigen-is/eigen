@@ -53,7 +53,7 @@ import {useRootFolder} from "@workspace/lib/drive";
 import {useAuth} from "@workspace/lib/auth";
 import {DrivePath} from "@workspace/lib/types/drive";
 import {useNavigate} from '@tanstack/react-router';
-import {useIsMobile} from "@workspace/lib/media/index.js";
+import {useIsMobile} from "@workspace/lib/media";
 import {DriveRenameItem} from "@workspace/ui/components/layout/drive/drive-rename-item";
 
 // Define custom editor type

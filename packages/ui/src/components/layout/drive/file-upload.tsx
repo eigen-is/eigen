@@ -1,6 +1,6 @@
 import {useRef} from 'react';
 import {useUpload} from "../../layout/upload-provider/upload-provider";
-import {uploadWithProgress} from "@workspace/ui/components/layout/upload-provider";
+import {uploadWithProgress} from "../upload-provider/upload-with-progress";
 
 export type UploadResult = {
     success: boolean;
