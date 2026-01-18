@@ -10,8 +10,8 @@ import type {MountConfig} from './types';
 import type {DrivePath} from '@workspace/lib/types/drive';
 import * as schema from './schema';
 import {labels, MOUNT_SCHEMA_SQL, paths, pathsToLabels} from './schema';
-import type {StorageBackend} from '../storage/types';
-import {LocalKeyStorage} from '../storage/local-key-storage';
+import type {StorageBackend} from '../storage';
+import {LocalKeyStorage} from '../storage';
 
 type DatabaseGetter = (path: string, onCreate: (db: Database) => Promise<void>) => Promise<Database>;
 

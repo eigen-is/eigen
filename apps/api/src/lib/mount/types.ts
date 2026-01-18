@@ -1,4 +1,4 @@
-import type {S3Config} from '../storage/types';
+import type {S3Config} from '../storage';
 
 export type MountConfig = {
     id: string;
