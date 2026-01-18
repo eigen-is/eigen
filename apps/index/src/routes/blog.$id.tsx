@@ -6,7 +6,7 @@ export const Route = createFileRoute('/blog/$id')({
     component: BlogPostComponent,
     head: ({params}) => {
         const post = getBlogPost(params.id);
-        
+
         if (!post) {
             return {
                 meta: [
@@ -18,7 +18,7 @@ export const Route = createFileRoute('/blog/$id')({
         }
 
         const url = `https://eigen.is/blog/${post.id}`;
-        
+
         return {
             meta: [
                 {
@@ -82,7 +82,7 @@ function BlogPostComponent() {
                     </Link>
                 </div>
 
-                <BlogPost post={post} />
+                <BlogPost post={post}/>
             </div>
         </div>
     );

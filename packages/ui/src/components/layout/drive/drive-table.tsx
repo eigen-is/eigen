@@ -6,7 +6,7 @@ import {cn} from "@workspace/ui/lib/utils";
 import {formatDistanceToNow} from "date-fns";
 import {DrivePath} from "@workspace/lib/types/drive";
 import {DriveShareSummary} from "./drive-share-summary";
-import {ArrowRight, ChevronLeft, Download, Trash2, UserRoundPlus, Pencil} from "lucide-react";
+import {ArrowRight, ChevronLeft, Download, Pencil, Trash2, UserRoundPlus} from "lucide-react";
 import {
     DropdownMenu,
     DropdownMenuContent,

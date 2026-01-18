@@ -6,7 +6,7 @@ import {EigenLoader} from '@workspace/ui';
 import {useAuth} from '@workspace/lib/auth';
 import {useIsMobile, useIsTablet} from "@workspace/lib/media";
 import {DocsSidebar} from "@/components/docs/docs-sidebar.tsx";
-import {DrivePath, DriveContextType} from '@workspace/lib/types/drive';
+import {DriveContextType} from '@workspace/lib/types/drive';
 
 export const DriveContext = createContext<DriveContextType>({
     rootPath: null

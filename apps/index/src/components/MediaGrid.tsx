@@ -42,13 +42,15 @@ function MediaItem({src, type, caption, thumbnail, poster}: MediaItemProps) {
                                     preload="metadata"
                                 />
                             )}
-                            <div className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/30 transition-colors">
+                            <div
+                                className="absolute inset-0 flex items-center justify-center bg-black/20 group-hover:bg-black/30 transition-colors">
                                 <svg
                                     className="w-16 h-16 text-white opacity-80 group-hover:opacity-100 transition-opacity"
                                     fill="currentColor"
                                     viewBox="0 0 20 20"
                                 >
-                                    <path d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z"/>
+                                    <path
+                                        d="M6.3 2.841A1.5 1.5 0 004 4.11V15.89a1.5 1.5 0 002.3 1.269l9.344-5.89a1.5 1.5 0 000-2.538L6.3 2.84z"/>
                                 </svg>
                             </div>
                         </div>
@@ -58,7 +60,7 @@ function MediaItem({src, type, caption, thumbnail, poster}: MediaItemProps) {
                     <p className="mt-2 text-sm text-gray-600 text-center">{caption}</p>
                 )}
             </div>
-            
+
             {isPreviewOpen && (
                 <MediaPreview
                     src={src}
@@ -80,7 +82,7 @@ export function MediaGrid({columns = '2', items = []}: MediaGridProps) {
     if (items.length === 0) {
         return null;
     }
-    
+
     const mediaElements = items.map((item, index) => (
         <MediaItem
             key={index}
