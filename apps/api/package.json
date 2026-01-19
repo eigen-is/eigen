@@ -39,6 +39,7 @@
     "@types/bun": "^1.2.6",
     "bun-types": "latest"
   },
+  "trustedDependencies": [],
   "module": "src/index.js",
   "exports": {
     ".": "./src/index.js",
