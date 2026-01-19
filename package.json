@@ -53,5 +53,6 @@
     "tailwindcss": "^4.1.17",
     "postcss": "^8.5.3",
     "vite-tsconfig-paths": "^5.1.4"
-  }
+  },
+  "trustedDependencies": []
 }
