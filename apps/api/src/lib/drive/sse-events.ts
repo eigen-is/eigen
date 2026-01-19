@@ -48,14 +48,16 @@ const templates: Record<DriveEventType, EventTemplate> = {
     },
 };
 
-type EventOptions = {
+type DriveEventOptions = {
     tag?: string;
     link?: string;
     extra?: string;
+    oldParentId?: string;
 };
 
-export function buildDriveEvent(type: DriveEventType, path: DrivePath, options?: EventOptions): SSEvent {
+export function buildDriveEvent(type: DriveEventType, path: DrivePath, options?: DriveEventOptions): SSEvent {
     const template = templates[type];
+    const drive = options?.oldParentId ? {oldParentId: options.oldParentId} : undefined;
     return {
         type,
         title: template.title,
@@ -63,5 +65,6 @@ export function buildDriveEvent(type: DriveEventType, path: DrivePath, options?:
         path,
         ...(options?.tag && {tag: options.tag}),
         ...(options?.link && {link: options.link}),
+        ...(drive && {drive}),
     } as SSEvent;
 }
