@@ -215,6 +215,8 @@ export default class Drive {
             throw new Error('Path not found');
         }
 
+        const oldParentId = path.parentId;
+
         const targetParent = await this.mount.getPath(targetParentId);
         if (!targetParent || targetParent.type !== 'folder') {
             throw new Error('Target parent is not a folder');
@@ -226,7 +228,7 @@ export default class Drive {
 
         await this.mount.updatePath(pathId, {parentId: targetParentId});
         const movedPath = await this.mount.getPath(pathId);
-        if (movedPath) this.emit(SSEventType.DRIVE_PATH_MOVED, movedPath);
+        if (movedPath) this.emit(SSEventType.DRIVE_PATH_MOVED, movedPath, {oldParentId: oldParentId ?? undefined});
     }
 
     async renamePath(pathId: string, newName: string): Promise<void> {

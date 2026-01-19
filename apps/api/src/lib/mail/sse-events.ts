@@ -32,12 +32,12 @@ const dataOnlyTitles: Partial<Record<MailEventType, string>> = {
     [SSEventType.MAIL_DRAFT_UPDATED]: 'Draft updated',
 };
 
-type EventOptions = {
+type MailEventOptions = {
     tag?: string;
     link?: string;
 };
 
-export function buildMailEvent(type: MailEventType, mail: SSEventMailData, options?: EventOptions): SSEvent {
+export function buildMailEvent(type: MailEventType, mail: SSEventMailData, options?: MailEventOptions): SSEvent {
     const notificationTemplate = notificationTemplates[type];
 
     if (notificationTemplate) {

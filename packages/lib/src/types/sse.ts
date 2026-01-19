@@ -46,6 +46,9 @@ export type SSEventNotification = {
 type SSEventDrive = SSEventBase & SSEventNotification & {
     type: typeof SSEventType[keyof typeof SSEventType] & `drive:${string}`;
     path: DrivePath;
+    drive?: {
+        oldParentId?: string;
+    };
 };
 
 // Mail notification events (with body, show toast)
