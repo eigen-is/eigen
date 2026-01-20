@@ -31,8 +31,9 @@ export const SSEventType = {
     MAIL_SENT: 'mail:sent',
     // Drive events
     DRIVE_FOLDER_CREATED: 'drive:folder-created',
-    DRIVE_FILE_UPLOADED: 'drive:file-uploaded',
     DRIVE_FOLDER_DELETED: 'drive:folder-deleted',
+    DRIVE_FILE_CREATED: 'drive:file-created',
+    DRIVE_FILE_UPLOADED: 'drive:file-uploaded',
     DRIVE_FILE_DELETED: 'drive:file-deleted',
     DRIVE_PATH_RENAMED: 'drive:path-renamed',
     DRIVE_PATH_MOVED: 'drive:path-moved',
