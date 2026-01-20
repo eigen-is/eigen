@@ -1,4 +1,4 @@
-import {useQuery} from '@tanstack/react-query';
+import {useQuery, type QueryClient} from '@tanstack/react-query';
 import {mailApi} from '@workspace/lib/api.ts';
 
 // Define query keys for reuse
@@ -32,4 +32,9 @@ export function useMailboxes() {
         refetchOnWindowFocus: false,
         retry: 1,
     });
+}
+
+// SSE invalidation function
+export function invalidateMailboxes(queryClient: QueryClient): void {
+    queryClient.invalidateQueries({queryKey: mailboxKeys.lists()});
 }

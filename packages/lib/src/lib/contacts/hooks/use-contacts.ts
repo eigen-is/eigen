@@ -1,6 +1,7 @@
-import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
+import {useMutation, useQuery, useQueryClient, type QueryClient} from '@tanstack/react-query';
 import {contactsApi} from '@workspace/lib/api.ts';
 import {type Contact} from '@workspace/lib/types/contact';
+import {invalidateHomeSize} from '../../home';
 
 // Query keys for contacts
 export const contactKeys = {
@@ -79,4 +80,22 @@ export async function getMeContact() {
     const {data} = await contactsApi.me.get();
     console.log(data);
     return data;
+}
+
+// SSE invalidation functions
+export function invalidateContactCreated(queryClient: QueryClient): void {
+    queryClient.invalidateQueries({queryKey: contactKeys.lists()});
+    invalidateHomeSize(queryClient);
+}
+
+export function invalidateContactUpdated(queryClient: QueryClient, contactId: string): void {
+    queryClient.invalidateQueries({queryKey: contactKeys.detail(contactId)});
+    queryClient.invalidateQueries({queryKey: contactKeys.lists()});
+    invalidateHomeSize(queryClient);
+}
+
+export function invalidateContactDeleted(queryClient: QueryClient, contactId: string): void {
+    queryClient.removeQueries({queryKey: contactKeys.detail(contactId)});
+    queryClient.invalidateQueries({queryKey: contactKeys.lists()});
+    invalidateHomeSize(queryClient);
 }

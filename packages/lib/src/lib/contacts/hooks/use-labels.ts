@@ -1,6 +1,7 @@
-import {useMutation, useQuery} from '@tanstack/react-query';
+import {useMutation, useQuery, type QueryClient} from '@tanstack/react-query';
 import {contactsApi} from "@workspace/lib/api.ts";
 import type {Label} from "@workspace/lib/types/label";
+import {contactKeys} from './use-contacts';
 
 // Definieer query keys voor hergebruik
 export const labelKeys = {
@@ -54,4 +55,21 @@ export function useDeleteLabel() {
             return response.data;
         },
     });
+}
+
+// SSE invalidation functions
+export function invalidateLabelCreated(queryClient: QueryClient): void {
+    queryClient.invalidateQueries({queryKey: labelKeys.lists()});
+}
+
+export function invalidateLabelUpdated(queryClient: QueryClient, labelId: string): void {
+    queryClient.invalidateQueries({queryKey: labelKeys.detail(labelId)});
+    queryClient.invalidateQueries({queryKey: labelKeys.lists()});
+    queryClient.invalidateQueries({queryKey: contactKeys.lists()});
+}
+
+export function invalidateLabelDeleted(queryClient: QueryClient, labelId: string): void {
+    queryClient.removeQueries({queryKey: labelKeys.detail(labelId)});
+    queryClient.invalidateQueries({queryKey: labelKeys.lists()});
+    queryClient.invalidateQueries({queryKey: contactKeys.lists()});
 }
