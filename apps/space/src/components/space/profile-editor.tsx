@@ -8,7 +8,6 @@ import {getMeContact, useUpdateContact} from '@workspace/lib/contacts';
 import {toast} from 'sonner';
 import {useUpload} from '@workspace/ui/components/layout/upload-provider/upload-provider';
 import {uploadWithProgress} from "@workspace/ui/components/layout/upload-provider/upload-with-progress";
-import {useInvalidateAllAvatars} from "@workspace/lib/media";
 import {useQueryClient} from '@tanstack/react-query';
 import {UserAvatar} from "@workspace/ui";
 import {Button} from "@workspace/ui/components/button";
@@ -40,9 +39,6 @@ export function ProfileEditor() {
 
     // Upload context for tracking upload progress
     const upload = useUpload();
-
-    // Hook to invalidate avatar cache
-    const invalidateAvatars = useInvalidateAllAvatars();
 
     // Mutation for updating contact
     const updateContactMutation = useUpdateContact();
@@ -104,10 +100,6 @@ export function ProfileEditor() {
 
             // Update the contact
             await updateContactMutation.mutateAsync(updateData);
-
-            // Invalidate all relevant queries
-            queryClient.invalidateQueries({queryKey: ['contacts']});
-            invalidateAvatars();
 
             setError(null);
             setIsLoading(false);
@@ -184,11 +176,9 @@ export function ProfileEditor() {
                                                     // Update the progress in the UI
                                                     uploadHandler.updateProgress(progress);
                                                 },
-                                                onSuccess: async (response: Response) => {
-                                                    // Mark upload as complete
+                                                onSuccess: (response: string) => {
                                                     uploadHandler.complete();
-                                                    const responseData = await response.text();
-                                                    setAvatar(responseData);
+                                                    setAvatar(response);
                                                 },
                                                 onError: (err) => {
                                                     // Mark upload as failed
