@@ -105,7 +105,7 @@ export default class Drive {
         const safeName = `${docName}.eigendoc`;
         const docId = await this.mount.createFolder(parentId, safeName, 'doc');
         const doc = await this.mount.getPath(docId);
-        if (doc) this.emit(SSEventType.DRIVE_FOLDER_CREATED, doc);
+        if (doc) this.emit(SSEventType.DRIVE_FILE_CREATED, doc);
         return docId;
     }
 
@@ -117,7 +117,7 @@ export default class Drive {
         const safeName = `${stickiesName}.eigenstickies`;
         const stickiesId = await this.mount.createFolder(parentId, safeName, 'stickies');
         const stickies = await this.mount.getPath(stickiesId);
-        if (stickies) this.emit(SSEventType.DRIVE_FOLDER_CREATED, stickies);
+        if (stickies) this.emit(SSEventType.DRIVE_FILE_CREATED, stickies);
         return stickiesId;
     }
 
@@ -186,7 +186,12 @@ export default class Drive {
 
         await this.mount.deletePath(pathId);
         this.emitACLChange(folder, folder.acl, null);
-        this.emit(SSEventType.DRIVE_FOLDER_DELETED, folder);
+        
+        if (folder.type === 'doc' || folder.type === 'stickies') {
+            this.emit(SSEventType.DRIVE_FILE_DELETED, folder);
+        } else {
+            this.emit(SSEventType.DRIVE_FOLDER_DELETED, folder);
+        }
     }
 
     async deleteFile(pathId: string): Promise<void> {
