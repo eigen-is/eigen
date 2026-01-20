@@ -62,7 +62,7 @@ export function DriveLayout({
                                 showBreadcrumb = false,
                             }: DriveLayoutProps) {
     const dialogs = useDriveDialogs();
-    const movePath = useMovePath(ownerId);
+    const movePath = useMovePath(ownerId, currentPath?.id);
 
     const handleFileUpload = () => {
         if (allowUpload && currentPath) {
