@@ -191,6 +191,35 @@ bun serve:mail
 - Invalidate queries when mutating data
 - Create custom hooks for reusable data fetching
 
+## Backend Architecture
+
+### Overview
+
+Each user has a **Home** singleton (`apps/api/src/lib/home/home.ts`) that manages:
+- Database connections (one SQLite DB per file/purpose)
+- SSE event broadcasting via `notify()`
+- Domain class instances (Drive, Mail, Contacts)
+
+### Domain Classes
+
+Business logic lives in `apps/api/src/lib/[domain]/[domain].ts`:
+
+| Class | Location | Storage |
+|-------|----------|---------|
+| `Drive` | `lib/drive/drive.ts` | Mount system with metadata DB + file storage |
+| `Mail` | `lib/mail/maildir.ts` | Maildir + SQLite for metadata |
+| `Contacts` | `lib/contacts/contacts.ts` | SQLite + avatars directory |
+
+### Storage Backends
+
+Three pluggable backends in `apps/api/src/lib/storage/`:
+
+- **LocalStorage** - Full filesystem operations (used by Mail, Contacts)
+- **LocalKeyStorage** - Flat UUID-based file storage (used by Drive mounts)
+- **S3Storage** - S3-compatible object storage (ready for use)
+
+For detailed storage architecture, see `apps/api/STORAGE.md`.
+
 ## Documentation
 
 Keep code self-documenting:
