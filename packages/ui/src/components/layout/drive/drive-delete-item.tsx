@@ -17,7 +17,7 @@ export function DriveDeleteItem({
                                     onAfterAction,
                                 }: DriveDeleteItemProps) {
     const deleteFileMutation = useDeleteFile(path?.ownerId || '', path?.parentId || undefined, path?.mimeType || undefined);
-    const deleteFolderMutation = useDeleteFolder(path?.ownerId || '', path?.parentId || undefined);
+    const deleteFolderMutation = useDeleteFolder(path?.ownerId || '', path?.parentId || undefined, path?.mimeType || undefined);
 
     const handleDelete = () => {
         if (!path) return;
