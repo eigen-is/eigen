@@ -1,67 +1,44 @@
 # Server-Sent Events (SSE) Architecture
 
-> Documentation for the SSE notification system, based on the Drive implementation. Use this as reference when adding
-> SSE support to Mail, Contacts, and other apps.
+Real-time notifications and cache invalidation across browser tabs.
 
 ## Overview
 
-The SSE system provides real-time notifications and cache invalidation across the application. When a user performs an
-action (e.g., uploads a file), other browser tabs and potentially other users receive updates via SSE.
+```
+User Action → API Mutation → home.notify() → SSE Stream → Client Handler
+                                                               ↓
+                                                     ┌─────────┴─────────┐
+                                                     │                   │
+                                               Cache Invalidation    Toast Notification
+```
 
-```
-User Action → API Mutation → emit SSEvent → SSE Stream → Client Handler
-                                                              ↓
-                                                    ┌─────────┴─────────┐
-                                                    │                   │
-                                              Cache Invalidation    Toast Notification
-```
+**Currently implemented:** Drive, Mail, Contacts
+
+---
+
+## File Locations
+
+| Purpose | Location |
+|---------|----------|
+| Type definitions | `packages/lib/src/types/sse.ts` |
+| Event builders (backend) | `apps/api/src/lib/[domain]/sse-events.ts` |
+| SSE handlers (frontend) | `packages/lib/src/lib/[domain]/sse-handlers.ts` |
+| useSSE hook | `packages/lib/src/lib/sse/hooks/use-sse.ts` |
+| SSE Provider (toasts) | `packages/ui/src/components/layout/sse-provider/sse-provider.tsx` |
+| SSE route (backend) | `apps/api/src/routes/sse.ts` |
+| Home class (notify) | `apps/api/src/lib/home/home.ts` |
 
 ---
 
 ## 1. Type Definitions
 
-All SSE types are defined in `@workspace/lib/types/sse.ts`:
-
-```typescript
-// Event type constants
-export const SSEventType = {
-    // Mail events
-    MAIL_RECEIVED: 'mail:received',
-    
-    // Drive events
-    DRIVE_FOLDER_CREATED: 'drive:folder-created',
-    DRIVE_FILE_UPLOADED: 'drive:file-uploaded',
-    DRIVE_FOLDER_DELETED: 'drive:folder-deleted',
-    // ... more events
-} as const;
-
-// Base event structure
-type SSEventBase = {
-    title: string;
-};
-
-// Notification mixin (events that show toasts)
-export type SSEventNotification = {
-    body: string;
-    tag?: string;   // For deduplication
-    link?: string;  // Clickable action
-};
-
-// Drive events include the full path object
-type SSEventDrive = SSEventBase & SSEventNotification & {
-    type: `drive:${string}`;
-    path: DrivePath;
-};
-
-// Union of all events
-export type SSEvent = SSEventDrive | SSEventMail;
-```
+See `packages/lib/src/types/sse.ts` for all types.
 
 ### Key Design Decisions
 
 1. **All events have `title`** - Used for toast headings
 2. **Notification events have `body`** - Checked via `isSSEventNotification()` type guard
-3. **Domain-specific data** - Drive uses `path: DrivePath`, Mail could use `email: Email`
+3. **Domain-specific data** - Drive uses `path: DrivePath`, Mail uses `mail: SSEventMailData`, Contacts uses `contact` or `label`
 4. **Type prefixes** - Events are namespaced (`drive:`, `mail:`, `contacts:`)
 
 ---
@@ -70,92 +47,29 @@ export type SSEvent = SSEventDrive | SSEventMail;
 
 ### 2.1 Event Templates
 
-Create a templates file for centralized, localizable text:
+Create `apps/api/src/lib/[domain]/sse-events.ts` with:
+- Templates for event text (title, body)
+- A `build[Domain]Event()` function that constructs the SSEvent
 
-```typescript
-// apps/api/src/lib/drive/sse-events.ts
-import type {DrivePath} from '@workspace/lib/types/drive';
-import type {SSEvent} from '@workspace/lib/types/sse';
-import {SSEventType} from '@workspace/lib/types/sse';
-
-type EventTemplate = {
-    title: string;
-    body: (path: DrivePath, extra?: string) => string;
-};
-
-const templates: Record<string, EventTemplate> = {
-    [SSEventType.DRIVE_FILE_UPLOADED]: {
-        title: 'File uploaded',
-        body: (p) => `File "${p.name}" uploaded`
-    },
-    // ... more templates
-};
-
-export function buildDriveEvent(
-    type: DriveEventType, 
-    path: DrivePath, 
-    options?: {tag?: string; link?: string; extra?: string}
-): SSEvent {
-    const template = templates[type];
-    return {
-        type,
-        title: template.title,
-        body: template.body(path, options?.extra),
-        path,
-        ...(options?.tag && {tag: options.tag}),
-        ...(options?.link && {link: options.link}),
-    } as SSEvent;
-}
-```
+See `apps/api/src/lib/drive/sse-events.ts` for reference.
 
 ### 2.2 Emitting from Business Logic
 
-In your domain class (e.g., `Drive`), add an `emit` helper:
+In your domain class, add an `emit` helper that calls `this.home.notify()`:
 
 ```typescript
-// apps/api/src/lib/drive/drive.ts
-export default class Drive {
-    private home: HomeInterface;
-    
-    private emit(type: DriveEventType, path: DrivePath, options?: EventOptions): void {
-        this.home.notify(buildDriveEvent(type, path, options));
-    }
-    
-    async uploadFile(parentId: string, file: File): Promise<string> {
-        // ... upload logic ...
-        
-        const uploadedFile = await this.mount.getPath(fileId);
-        if (uploadedFile) this.emit(SSEventType.DRIVE_FILE_UPLOADED, uploadedFile);
-        
-        return fileId;
-    }
+private emit(type: DriveEventType, path: DrivePath): void {
+    this.home.notify(buildDriveEvent(type, path));
 }
 ```
+
+Call `emit()` after mutations. See `apps/api/src/lib/drive/drive.ts` for reference.
 
 ### 2.3 Home.notify()
 
-The `Home` class manages SSE subscriptions and broadcasts:
-
-```typescript
-// apps/api/src/lib/home/home.ts
-export class Home implements HomeInterface {
-    private sseListeners: Set<(event: SSEvent) => void> = new Set();
-    
-    public subscribeSSE(listener: (event: SSEvent) => void): void {
-        this.sseListeners.add(listener);
-    }
-    
-    public unsubscribeSSE(listener: (event: SSEvent) => void): void {
-        this.sseListeners.delete(listener);
-    }
-    
-    public notify(event: SSEvent): void {
-        for (const listener of this.sseListeners) {
-            listener(event);
-        }
-    }
-}
-```
+The `Home` class at `apps/api/src/lib/home/home.ts` manages:
+- `subscribeSSE()` / `unsubscribeSSE()` - listener management
+- `notify(event)` - broadcasts to all connected clients
 
 ---
 
@@ -163,200 +77,61 @@ export class Home implements HomeInterface {
 
 ### 3.1 useSSE Hook
 
-The `useSSE` hook establishes the EventSource connection:
+Location: `packages/lib/src/lib/sse/hooks/use-sse.ts`
 
-```typescript
-// packages/lib/src/lib/sse/hooks/use-sse.ts
-export function useSSE(options: UseSSEOptions = {}) {
-    const {isAuthenticated} = useAuth();
-    const queryClient = useQueryClient();
-    const {onNotification} = options;
-
-    const handleEvent = useCallback((event: SSEvent) => {
-        // Call notification handler for toast-worthy events
-        if (isSSEventNotification(event)) {
-            onNotification?.(event);
-        }
-
-        // Dispatch to domain-specific handlers for cache invalidation
-        handleDriveSSEvent(event, queryClient);
-        handleMailSSEvent(event, queryClient);
-    }, [onNotification, queryClient]);
-
-    useEffect(() => {
-        if (!isAuthenticated) return;
-        
-        const eventSource = new EventSource(SSE_EVENTS_URL, {withCredentials: true});
-        
-        eventSource.onmessage = (event) => {
-            const sseEvent = JSON.parse(event.data) as SSEvent;
-            handleEvent(sseEvent);
-        };
-
-        return () => eventSource.close();
-    }, [isAuthenticated, handleEvent]);
-}
-```
+- Establishes EventSource connection when authenticated
+- Dispatches to domain handlers for cache invalidation
+- Calls `onNotification` callback for toast-worthy events
 
 ### 3.2 SSE Handlers (Cache Invalidation)
 
-Each domain has its own handler that invalidates relevant caches:
+Each domain has a handler at `packages/lib/src/lib/[domain]/sse-handlers.ts`:
 
-```typescript
-// packages/lib/src/lib/drive/sse-handlers.ts
-export function handleDriveSSEvent(event: SSEvent, queryClient: QueryClient): boolean {
-    if (!event.type.startsWith('drive:')) return false;
-    if (!('path' in event)) return false;
+- Checks event type prefix (`drive:`, `mail:`, `contacts:`)
+- Calls appropriate invalidation functions from hooks
+- Returns `true` if handled
 
-    const {path} = event;
-
-    switch (event.type) {
-        case SSEventType.DRIVE_FILE_UPLOADED:
-            if (path.parentId) {
-                queryClient.invalidateQueries({queryKey: driveKeys.folder(path.parentId)});
-            }
-            invalidateHomeSize(queryClient);
-            return true;
-            
-        case SSEventType.DRIVE_FILE_DELETED:
-            queryClient.invalidateQueries({queryKey: driveKeys.folders()});
-            queryClient.invalidateQueries({queryKey: driveKeys.mimeTypes()});
-            invalidateHomeSize(queryClient);
-            return true;
-            
-        // ... more cases
-    }
-    return false;
-}
-```
+See existing implementations:
+- `packages/lib/src/lib/drive/sse-handlers.ts`
+- `packages/lib/src/lib/mail/sse-handlers.ts`
+- `packages/lib/src/lib/contacts/sse-handlers.ts`
 
 ### 3.3 SSEProvider (Toast Notifications)
 
-The `SSEProvider` component wraps `useSSE` and displays toasts:
+Location: `packages/ui/src/components/layout/sse-provider/sse-provider.tsx`
 
-```typescript
-// packages/ui/src/components/layout/sse-provider/sse-provider.tsx
-export function SSEProvider({children}: {children: React.ReactNode}) {
-    const showToast = useCallback((event: SSEvent & SSEventNotification) => {
-        const title = event.title.length > 50 ? event.title.slice(0, 50) + '…' : event.title;
-        const body = event.body.length > 120 ? event.body.slice(0, 120) + '…' : event.body;
-        
-        toast(title, {
-            description: body,
-            action: event.link ? {
-                label: 'Open',
-                onClick: (e) => {
-                    e.preventDefault();
-                    window.open(event.link, "_blank");
-                }
-            } : undefined
-        });
-    }, []);
-
-    useSSE({onNotification: showToast});
-    
-    return <>{children}</>;
-}
-```
+Wraps `useSSE` and displays toasts via sonner for notification events.
 
 ---
 
-## 4. Adding SSE to a New Domain (e.g., Contacts)
+## 4. Adding SSE to a New Domain
 
-### Step 1: Define Event Types
+### Checklist
 
-```typescript
-// packages/lib/src/types/sse.ts
-export const SSEventType = {
-    // ... existing events
-    
-    // Contacts events
-    CONTACTS_CREATED: 'contacts:created',
-    CONTACTS_UPDATED: 'contacts:updated',
-    CONTACTS_DELETED: 'contacts:deleted',
-} as const;
+1. **Define event types** in `packages/lib/src/types/sse.ts`
+   - Add constants to `SSEventType`
+   - Create domain event type (e.g., `SSEventNewDomain`)
+   - Add to `SSEvent` union
 
-// Add contacts event type
-type SSEventContacts = SSEventBase & SSEventNotification & {
-    type: `contacts:${string}`;
-    contact: Contact;  // Your domain type
-};
+2. **Create event templates** at `apps/api/src/lib/[domain]/sse-events.ts`
+   - Define templates with `title` and `body` functions
+   - Export `build[Domain]Event()` function
 
-export type SSEvent = SSEventDrive | SSEventMail | SSEventContacts;
-```
+3. **Emit from business logic** in `apps/api/src/lib/[domain]/[domain].ts`
+   - Add `emit()` helper method
+   - Call after mutations
 
-### Step 2: Create Event Templates
+4. **Create SSE handler** at `packages/lib/src/lib/[domain]/sse-handlers.ts`
+   - Export `handle[Domain]SSEvent()` function
+   - Call invalidation functions from hooks
 
-```typescript
-// apps/api/src/lib/contacts/sse-events.ts
-const templates = {
-    [SSEventType.CONTACTS_CREATED]: {
-        title: 'Contact added',
-        body: (c: Contact) => `${c.name} added to contacts`
-    },
-    // ...
-};
+5. **Register handler** in `packages/lib/src/lib/sse/hooks/use-sse.ts`
+   - Import handler
+   - Add to `handleEvent` callback
 
-export function buildContactsEvent(type, contact, options?): SSEvent { ... }
-```
-
-### Step 3: Emit Events from Business Logic
-
-```typescript
-// apps/api/src/lib/contacts/contacts.ts
-export class Contacts {
-    private emit(type, contact, options?) {
-        this.home.notify(buildContactsEvent(type, contact, options));
-    }
-    
-    async addContact(data): Promise<Contact> {
-        const contact = await this.db.insert(...);
-        this.emit(SSEventType.CONTACTS_CREATED, contact);
-        return contact;
-    }
-}
-```
-
-### Step 4: Create SSE Handler
-
-```typescript
-// packages/lib/src/lib/contacts/sse-handlers.ts
-export function handleContactsSSEvent(event: SSEvent, queryClient: QueryClient): boolean {
-    if (!event.type.startsWith('contacts:')) return false;
-    
-    switch (event.type) {
-        case SSEventType.CONTACTS_CREATED:
-        case SSEventType.CONTACTS_UPDATED:
-        case SSEventType.CONTACTS_DELETED:
-            queryClient.invalidateQueries({queryKey: contactKeys.lists()});
-            return true;
-    }
-    return false;
-}
-```
-
-### Step 5: Register Handler in useSSE
-
-```typescript
-// packages/lib/src/lib/sse/hooks/use-sse.ts
-const handleEvent = useCallback((event: SSEvent) => {
-    if (isSSEventNotification(event)) {
-        onNotification?.(event);
-    }
-
-    handleDriveSSEvent(event, queryClient);
-    handleMailSSEvent(event, queryClient);
-    handleContactsSSEvent(event, queryClient);  // Add new handler
-}, [onNotification, queryClient]);
-```
-
-### Step 6: Remove Toast Calls from UI
-
-Remove `toast.success()` calls from mutation `onSuccess` handlers - SSE will handle them.
-
-### Step 7: Remove Duplicate Cache Invalidation
-
-Remove `queryClient.invalidateQueries()` from mutation hooks - SSE handlers will handle them.
+6. **Clean up UI code**
+   - Remove `toast.success()` calls from mutations (SSE handles toasts)
+   - Keep `invalidateQueries()` in `onSuccess` for immediate local updates
 
 ---
 
