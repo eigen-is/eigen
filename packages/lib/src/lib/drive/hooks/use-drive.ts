@@ -119,14 +119,14 @@ export function useUploadFiles(ownerId: string) {
 }
 
 // DELETE FOLDER
-export function useDeleteFolder(ownerId: string, parentId?: string) {
+export function useDeleteFolder(ownerId: string, parentId?: string, mimeType?: string) {
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: async (pathId: string) => {
             const response = await driveApi.folder({ownerId})({pathId}).delete();
             return response.data;
         },
-        onSuccess: (_data, pathId) => invalidateItemDeleted(queryClient, pathId, parentId, undefined),
+        onSuccess: (_data, pathId) => invalidateItemDeleted(queryClient, pathId, parentId, mimeType),
     });
 }
 
@@ -223,7 +223,7 @@ export function useCreateDoc(ownerId: string) {
             const response = await driveApi.doc({ownerId})({pathId: parentId}).post({fileName});
             return response.data;
         },
-        onSuccess: (_data, variables) => invalidateItemCreated(queryClient, variables.parentId),
+        onSuccess: (_data, variables) => invalidateItemCreated(queryClient, variables.parentId, 'application/eigendoc'),
     });
 }
 
@@ -235,7 +235,7 @@ export function useCreateStickies(ownerId: string) {
             const response = await driveApi.stickies({ownerId})({pathId: parentId}).post({fileName});
             return response.data;
         },
-        onSuccess: (_data, variables) => invalidateItemCreated(queryClient, variables.parentId),
+        onSuccess: (_data, variables) => invalidateItemCreated(queryClient, variables.parentId, 'application/eigenstickies'),
     });
 }
 
@@ -254,9 +254,13 @@ export function invalidateAclSharedOrUnshared(queryClient: QueryClient): void {
     queryClient.invalidateQueries({queryKey: driveKeys.shared('with-me')});
 }
 
-export function invalidateItemCreated(queryClient: QueryClient, parentId: string | null | undefined): void {
+export function invalidateItemCreated(queryClient: QueryClient, parentId: string | null | undefined, mimeType?: string | null): void {
     if (parentId) {
         queryClient.invalidateQueries({queryKey: driveKeys.folder(parentId)});
+    }
+    if (mimeType) {
+        const normalizedMimeType = mimeType.replace('/', '-');
+        queryClient.invalidateQueries({queryKey: driveKeys.mime(normalizedMimeType)});
     }
     invalidateHomeSize(queryClient);
 }
@@ -267,7 +271,8 @@ export function invalidateItemDeleted(queryClient: QueryClient, pathId: string, 
     }
     queryClient.removeQueries({queryKey: driveKeys.path(pathId)});
     if (mimeType) {
-        queryClient.invalidateQueries({queryKey: driveKeys.mime(mimeType)});
+        const normalizedMimeType = mimeType.replace('/', '-');
+        queryClient.invalidateQueries({queryKey: driveKeys.mime(normalizedMimeType)});
     }
     invalidateHomeSize(queryClient);
 }
@@ -278,7 +283,8 @@ export function invalidatePathRenamed(queryClient: QueryClient, pathId: string, 
         queryClient.invalidateQueries({queryKey: driveKeys.folder(parentId)});
     }
     if (mimeType) {
-        queryClient.invalidateQueries({queryKey: driveKeys.mime(mimeType)});
+        const normalizedMimeType = mimeType.replace('/', '-');
+        queryClient.invalidateQueries({queryKey: driveKeys.mime(normalizedMimeType)});
     }
 }
 
