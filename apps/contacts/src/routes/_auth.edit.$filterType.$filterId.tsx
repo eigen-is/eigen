@@ -51,11 +51,15 @@ function EditContactRoute() {
     // Handle form submission
     const handleSave = async (data: ContactFormValues) => {
         try {
-            // Transformeer de data voor compatibiliteit met API
+            // Transform data for API compatibility (avatar is added by ContactEdit component)
+            const formData = data as ContactFormValues & {avatar?: string | null};
             const contactData: Omit<Contact, 'id'> = {
-                ...data,
-                birthday: data.birthday?.toISOString(),
-                labels: data.labels || []
+                ...formData,
+                firstName: formData.firstName || '',
+                lastName: formData.lastName || '',
+                birthday: formData.birthday?.toISOString(),
+                labels: formData.labels || [],
+                avatar: formData.avatar ?? ''
             };
 
             if (contactId) {
