@@ -1,6 +1,7 @@
-import {useMutation, useQuery} from "@tanstack/react-query";
+import {useMutation, useQuery, type QueryClient} from "@tanstack/react-query";
 import type {DriveACL, DrivePath} from "@workspace/lib/types/drive";
 import {driveApi} from "@workspace/lib/api";
+import {invalidateHomeSize} from '../../home';
 
 // Define query keys for reuse
 export const driveKeys = {
@@ -226,5 +227,57 @@ export function useSharedPaths(to: 'by-me' | 'with-me') {
             return response.data;
         }
     });
+}
+
+// SSE invalidation functions
+export function invalidateAclSharedOrUnshared(queryClient: QueryClient): void {
+    queryClient.invalidateQueries({queryKey: driveKeys.shared('with-me')});
+}
+
+export function invalidateItemCreated(queryClient: QueryClient, parentId: string | null | undefined): void {
+    if (parentId) {
+        queryClient.invalidateQueries({queryKey: driveKeys.folder(parentId)});
+    }
+    invalidateHomeSize(queryClient);
+}
+
+export function invalidateItemDeleted(queryClient: QueryClient, pathId: string, parentId: string | null | undefined, mimeType: string | null | undefined): void {
+    if (parentId) {
+        queryClient.invalidateQueries({queryKey: driveKeys.folder(parentId)});
+    }
+    queryClient.removeQueries({queryKey: driveKeys.path(pathId)});
+    if (mimeType) {
+        queryClient.invalidateQueries({queryKey: driveKeys.mime(mimeType)});
+    }
+    invalidateHomeSize(queryClient);
+}
+
+export function invalidatePathRenamed(queryClient: QueryClient, pathId: string, parentId: string | null | undefined, mimeType: string | null | undefined): void {
+    queryClient.invalidateQueries({queryKey: driveKeys.path(pathId)});
+    if (parentId) {
+        queryClient.invalidateQueries({queryKey: driveKeys.folder(parentId)});
+    }
+    if (mimeType) {
+        queryClient.invalidateQueries({queryKey: driveKeys.mime(mimeType)});
+    }
+}
+
+export function invalidatePathMoved(queryClient: QueryClient, pathId: string, parentId: string | null | undefined, oldParentId: string | null | undefined): void {
+    queryClient.invalidateQueries({queryKey: driveKeys.path(pathId)});
+    if (parentId) {
+        queryClient.invalidateQueries({queryKey: driveKeys.folder(parentId)});
+    }
+    if (oldParentId) {
+        queryClient.invalidateQueries({queryKey: driveKeys.folder(oldParentId)});
+    }
+}
+
+export function invalidateAclUpdated(queryClient: QueryClient, pathId: string, parentId: string | null | undefined): void {
+    queryClient.invalidateQueries({queryKey: driveKeys.shared('by-me')});
+    queryClient.invalidateQueries({queryKey: driveKeys.shared('with-me')});
+    queryClient.invalidateQueries({queryKey: driveKeys.path(pathId)});
+    if (parentId) {
+        queryClient.invalidateQueries({queryKey: driveKeys.folder(parentId)});
+    }
 }
 

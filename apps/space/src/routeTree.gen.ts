@@ -59,11 +59,11 @@ const AuthSecurity2faRoute = AuthSecurity2faRouteImport.update({
 } as any)
 
 export interface FileRoutesByFullPath {
+  '/': typeof AuthIndexRoute
   '/login': typeof LoginRoute
   '/login-2fa': typeof Login2faRoute
   '/data': typeof AuthDataRoute
   '/user': typeof AuthUserRoute
-  '/': typeof AuthIndexRoute
   '/security/2fa': typeof AuthSecurity2faRoute
   '/security/password': typeof AuthSecurityPasswordRoute
 }
@@ -90,11 +90,11 @@ export interface FileRoutesById {
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
+    | '/'
     | '/login'
     | '/login-2fa'
     | '/data'
     | '/user'
-    | '/'
     | '/security/2fa'
     | '/security/password'
   fileRoutesByTo: FileRoutesByTo
@@ -143,7 +143,7 @@ declare module '@tanstack/react-router' {
     '/_auth': {
       id: '/_auth'
       path: ''
-      fullPath: ''
+      fullPath: '/'
       preLoaderRoute: typeof AuthRouteImport
       parentRoute: typeof rootRouteImport
     }

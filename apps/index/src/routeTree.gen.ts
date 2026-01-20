@@ -32,7 +32,7 @@ const BlogIdRoute = BlogIdRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/blog/$id': typeof BlogIdRoute
-  '/blog': typeof BlogIndexRoute
+  '/blog/': typeof BlogIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -47,7 +47,7 @@ export interface FileRoutesById {
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/blog/$id' | '/blog'
+  fullPaths: '/' | '/blog/$id' | '/blog/'
   fileRoutesByTo: FileRoutesByTo
   to: '/' | '/blog/$id' | '/blog'
   id: '__root__' | '/' | '/blog/$id' | '/blog/'
@@ -71,7 +71,7 @@ declare module '@tanstack/react-router' {
     '/blog/': {
       id: '/blog/'
       path: '/blog'
-      fullPath: '/blog'
+      fullPath: '/blog/'
       preLoaderRoute: typeof BlogIndexRouteImport
       parentRoute: typeof rootRouteImport
     }

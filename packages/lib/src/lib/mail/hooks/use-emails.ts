@@ -1,4 +1,4 @@
-import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
+import {useMutation, useQuery, useQueryClient, type QueryClient} from '@tanstack/react-query';
 import {mailApi} from '@workspace/lib/api.ts';
 import {Email} from "@workspace/lib/types/mail";
 
@@ -105,4 +105,32 @@ export function useOpenWriteEmailTo() {
     return (address: string) => {
         window.location.href = `${import.meta.env.VITE_APP_MAIL_URL}/box/inbox?mode=compose&to=${address}`;
     }
+}
+
+// SSE invalidation functions
+export function invalidateMailReceived(queryClient: QueryClient): void {
+    queryClient.invalidateQueries({queryKey: emailKeys.list('inbox')});
+}
+
+export function invalidateMailDeleted(queryClient: QueryClient, messageId: string, mailbox: string): void {
+    queryClient.removeQueries({queryKey: emailKeys.detail(messageId)});
+    queryClient.invalidateQueries({queryKey: emailKeys.list(mailbox)});
+}
+
+export function invalidateMailMoved(queryClient: QueryClient, messageId: string, fromMailbox: string, toMailbox: string | null | undefined): void {
+    queryClient.invalidateQueries({queryKey: emailKeys.detail(messageId)});
+    queryClient.invalidateQueries({queryKey: emailKeys.list(fromMailbox)});
+    if (toMailbox) {
+        queryClient.invalidateQueries({queryKey: emailKeys.list(toMailbox)});
+    }
+}
+
+export function invalidateMailReadChanged(queryClient: QueryClient, messageId: string, mailbox: string): void {
+    queryClient.invalidateQueries({queryKey: emailKeys.detail(messageId)});
+    queryClient.invalidateQueries({queryKey: emailKeys.list(mailbox)});
+}
+
+export function invalidateDraftUpdated(queryClient: QueryClient, messageId: string): void {
+    queryClient.invalidateQueries({queryKey: emailKeys.list('drafts')});
+    queryClient.invalidateQueries({queryKey: emailKeys.detail(messageId)});
 }
