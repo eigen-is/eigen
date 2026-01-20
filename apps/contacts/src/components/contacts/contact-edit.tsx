@@ -23,7 +23,6 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger
 } from "@workspace/ui/components/dropdown-menu";
-import {useInvalidateAllAvatars} from "@workspace/lib/media";
 
 // Define the form schema
 export const formSchema = z.object({
@@ -83,9 +82,6 @@ export function ContactEdit({
     // Upload context for tracking upload progress
     const upload = useUpload();
 
-    // Hook to invalidate avatar cache
-    const invalidateAvatars = useInvalidateAllAvatars();
-
     // Set up react-hook-form
     const form = useForm<ContactFormValues>({
         resolver: zodResolver(formSchema),
@@ -118,7 +114,6 @@ export function ContactEdit({
 
             // Call the onSave callback with the form data
             await onSave(formData);
-            invalidateAvatars();
         } catch (e) {
             // Handle any errors that might occur during save
             console.error("Error saving contact:", e);
@@ -195,11 +190,9 @@ export function ContactEdit({
                                                             // Update the progress in the UI
                                                             uploadHandler.updateProgress(progress);
                                                         },
-                                                        onSuccess: async (response: Response) => {
-                                                            // Mark upload as complete
+                                                        onSuccess: (response: string) => {
                                                             uploadHandler.complete();
-                                                            const responseData = await response.text();
-                                                            setAvatar(responseData);
+                                                            setAvatar(response);
                                                         },
                                                         onError: (err) => {
                                                             // Mark upload as failed

@@ -6,7 +6,7 @@ interface UploadWithProgressOptions {
     url: string
     formData: FormData
     onProgress?: (progress: number) => void
-    onSuccess?: (resp: Response) => void
+    onSuccess?: (resp: string) => void
     onError?: (error: Error) => void
     headers?: Record<string, string>
 }
