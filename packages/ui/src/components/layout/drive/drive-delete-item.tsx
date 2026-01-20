@@ -23,7 +23,7 @@ export function DriveDeleteItem({
         if (!path) return;
 
         // Use the appropriate mutation based on item type
-        const mutation = path.type !== 'file' ? deleteFolderMutation : deleteFileMutation;
+        const mutation = path.type === 'folder' ? deleteFolderMutation : deleteFileMutation;
 
         mutation.mutate(path.id, {
             onSuccess: () => {
