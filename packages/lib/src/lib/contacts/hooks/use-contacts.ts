@@ -1,7 +1,6 @@
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {contactsApi} from '@workspace/lib/api.ts';
 import {type Contact} from '@workspace/lib/types/contact';
-import {invalidateHomeSize} from '../../home';
 
 // Query keys for contacts
 export const contactKeys = {
@@ -48,54 +47,30 @@ export function useContact(id: string) {
 
 // Add a new contact
 export function useAddContact() {
-    const queryClient = useQueryClient();
-
     return useMutation({
         mutationFn: async (newContact: Omit<Contact, 'id'>) => {
             const response = await contactsApi.contacts.post(newContact as any);
             return response.data;
-        },
-        onSuccess: () => {
-            // Invalidate and refetch contacts list
-            queryClient.invalidateQueries({queryKey: contactKeys.lists()});
-            invalidateHomeSize(queryClient);
         },
     });
 }
 
 // Update an existing contact
 export function useUpdateContact() {
-    const queryClient = useQueryClient();
-
     return useMutation({
         mutationFn: async ({id, ...data}: Contact) => {
             const response = await contactsApi.contacts({id}).put(data as any);
             return response.data;
-        },
-        onSuccess: (_, variables) => {
-            // Invalidate and refetch the specific contact and the contact list
-            queryClient.invalidateQueries({queryKey: contactKeys.detail(variables.id)});
-            queryClient.invalidateQueries({queryKey: contactKeys.lists()});
-            invalidateHomeSize(queryClient);
         },
     });
 }
 
 // Delete a contact
 export function useDeleteContact() {
-    const queryClient = useQueryClient();
-
     return useMutation({
         mutationFn: async (id: string) => {
             const response = await contactsApi.contacts({id}).delete();
             return response.data;
-        },
-        onSuccess: (_, id) => {
-            // Invalidate and refetch contacts list
-            queryClient.invalidateQueries({queryKey: contactKeys.lists()});
-            // Remove the contact from the cache
-            queryClient.removeQueries({queryKey: contactKeys.detail(id)});
-            invalidateHomeSize(queryClient);
         },
     });
 }
