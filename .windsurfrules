@@ -44,6 +44,7 @@
 - UI Components: Place reusable components in /packages/ui
 - Authentication: All protected routes should include the auth: true property
 - Hooks: Place in `packages/lib/src/lib/[domain]/hooks/use-[name].ts`
+- Backend Domain Classes: Business logic in `apps/api/src/lib/[domain]/[domain].ts`, accessed via [Home](cci:2://file:///c:/git/eigen/apps/api/src/lib/home/home.ts:18:0-173:1) singleton
 
 ## Real-Time Updates (SSE)
 - Use Server-Sent Events for real-time cache invalidation across tabs/devices
