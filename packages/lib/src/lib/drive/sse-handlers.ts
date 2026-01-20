@@ -11,7 +11,7 @@ import {
 } from './hooks/use-drive';
 
 export function handleDriveSSEvent(event: SSEvent, queryClient: QueryClient): boolean {
-    if (!event.type.startsWith('drive:')) return false;
+    if (!event?.type?.startsWith('drive:')) return false;
     if (!('path' in event)) return false;
 
     const {path} = event;

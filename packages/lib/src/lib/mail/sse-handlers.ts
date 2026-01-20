@@ -14,7 +14,7 @@ import {invalidateHomeSize} from '../home';
 const normalizeMailbox = (mailbox: string) => mailbox === '' ? 'inbox' : mailbox;
 
 export function handleMailSSEvent(event: SSEvent, queryClient: QueryClient): boolean {
-    if (!event.type.startsWith('mail:')) return false;
+    if (!event?.type?.startsWith('mail:')) return false;
     if (!('mail' in event)) return false;
 
     const {mail} = event;

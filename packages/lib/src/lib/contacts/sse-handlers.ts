@@ -5,7 +5,7 @@ import {invalidateContactCreated, invalidateContactUpdated, invalidateContactDel
 import {invalidateLabelCreated, invalidateLabelUpdated, invalidateLabelDeleted} from './hooks/use-labels';
 
 export function handleContactsSSEvent(event: SSEvent, queryClient: QueryClient): boolean {
-    if (!event.type.startsWith('contacts:')) return false;
+    if (!event?.type?.startsWith('contacts:')) return false;
 
     switch (event.type) {
         case SSEventType.CONTACT_CREATED:
