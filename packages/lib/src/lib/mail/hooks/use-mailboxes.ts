@@ -1,7 +1,6 @@
 import {useQuery, type QueryClient} from '@tanstack/react-query';
 import {mailApi} from '@workspace/lib/api.ts';
 
-// Define query keys for reuse
 export const mailboxKeys = {
     all: ['mailboxes'] as const,
     lists: () => [...mailboxKeys.all, 'list'] as const,
@@ -9,16 +8,6 @@ export const mailboxKeys = {
     details: () => [...mailboxKeys.all, 'detail'] as const,
     detail: (id: string) => [...mailboxKeys.details(), id] as const,
     exists: (id: string) => [...mailboxKeys.detail(id), 'exists'] as const,
-};
-
-export type Mailbox = {
-    path: string;
-    name: string;
-    flags: string[];
-    total: number;
-    unread: number;
-    subscribed: boolean;
-    children?: Mailbox[];
 };
 
 export function useMailboxes() {
