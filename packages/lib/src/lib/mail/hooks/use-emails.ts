@@ -62,6 +62,7 @@ export function useEmailById() {
 }
 
 export function useDeleteEmail() {
+    const queryClient = useQueryClient();
     return useMutation({
         mutationFn: async (email: Email) => {
             if (email.mailbox === 'trash') {
@@ -71,10 +72,18 @@ export function useDeleteEmail() {
             }
             return email;
         },
+        onSuccess: (email) => {
+            if (email.mailbox === 'trash') {
+                invalidateMailDeleted(queryClient, email.id, 'trash');
+            } else {
+                invalidateMailMoved(queryClient, email.id, email.mailbox, 'trash');
+            }
+        },
     });
 }
 
 export function useToggleReadEmail() {
+    const queryClient = useQueryClient();
     return useMutation({
         mutationFn: async ({email, isRead}: { email: Email, isRead: boolean }) => {
             if (isRead === email.isRead) {
@@ -86,10 +95,12 @@ export function useToggleReadEmail() {
             });
             return email;
         },
+        onSuccess: (email) => invalidateMailReadChanged(queryClient, email.id, email.mailbox),
     });
 }
 
 export function useMoveEmail() {
+    const queryClient = useQueryClient();
     return useMutation({
         mutationFn: async ({email, mailbox}: { email: Email, mailbox: string }) => {
             await mailApi.message.move.put({
@@ -98,6 +109,7 @@ export function useMoveEmail() {
             });
             return email;
         },
+        onSuccess: (email, variables) => invalidateMailMoved(queryClient, email.id, email.mailbox, variables.mailbox),
     });
 }
 

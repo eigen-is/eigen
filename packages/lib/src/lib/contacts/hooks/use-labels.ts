@@ -1,4 +1,4 @@
-import {useMutation, useQuery, type QueryClient} from '@tanstack/react-query';
+import {useMutation, useQuery, useQueryClient, type QueryClient} from '@tanstack/react-query';
 import {contactsApi} from "@workspace/lib/api.ts";
 import type {Label} from "@workspace/lib/types/label";
 import {contactKeys} from './use-contacts';
@@ -26,16 +26,19 @@ export function useLabels() {
 
 // Hook om een label toe te voegen
 export function useAddLabel() {
+    const queryClient = useQueryClient();
     return useMutation({
         mutationFn: async (labelData: Omit<Label, 'id'>) => {
             const response = await contactsApi.labels.post(labelData as any);
             return response.data;
         },
+        onSuccess: () => invalidateLabelCreated(queryClient),
     });
 }
 
 // Hook om een label te bewerken
 export function useUpdateLabel() {
+    const queryClient = useQueryClient();
     return useMutation({
         mutationFn: async (updatedLabel: Label) => {
             const response = await contactsApi.labels({id: updatedLabel.id}).put({
@@ -44,16 +47,19 @@ export function useUpdateLabel() {
             } as any);
             return response.data;
         },
+        onSuccess: (_data, variables) => invalidateLabelUpdated(queryClient, variables.id),
     });
 }
 
 // Hook om een label te verwijderen
 export function useDeleteLabel() {
+    const queryClient = useQueryClient();
     return useMutation({
         mutationFn: async (labelId: string) => {
             const response = await contactsApi.labels({id: labelId}).delete();
             return response.data;
         },
+        onSuccess: (_data, labelId) => invalidateLabelDeleted(queryClient, labelId),
     });
 }
 
