@@ -6,7 +6,7 @@
 - All development should be done with TypeScript for type safety
 
 ## Project Overview
-- This is a Google Workspace-like application with multiple integrated apps (Mail, Drive, Docs, Calendar, Contacts, Space)
+- This is a Google Workspace-like application with multiple integrated apps (Mail, Drive, Docs, Stickies, Calendar, Contacts, Space, Admin, Index, Setup)
 - The project follows a monorepo structure with:
   - /apps: Contains all applications (frontend and API server)
   - /packages: Shared libraries and UI components
@@ -43,6 +43,7 @@
 - Shared Logic: Extract to /packages/lib
 - UI Components: Place reusable components in /packages/ui
 - Authentication: All protected routes should include the auth: true property
+- Hooks: Place in `packages/lib/src/lib/[domain]/hooks/use-[name].ts`
 
 ## Real-Time Updates (SSE)
 - Use Server-Sent Events for real-time cache invalidation across tabs/devices
@@ -53,7 +54,7 @@
   - Mutation onSuccess callbacks (for optimistic updates)
 
 ## API Client
-- Use Treaty client from `packages/lib/src/lib/[domain]/api.ts` for type-safe API calls
+- Use Treaty client from [packages/lib/src/lib/api.ts] for type-safe API calls (exports `driveApi`, `mailApi`, `contactsApi`, etc.)
 - API clients are generated from Elysia route types
 
 ## Query Key Patterns
@@ -62,7 +63,7 @@
 - Export invalidation functions alongside hooks for reuse
 
 ## Module Exports
-- Each domain module has an `index.ts` that re-exports public API
+- Each domain module has an [index.ts] that re-exports public API
 - Import from `@workspace/lib/[domain]` not deep paths
 
 ## File Types
