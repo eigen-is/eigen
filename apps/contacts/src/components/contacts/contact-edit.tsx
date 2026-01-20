@@ -38,7 +38,7 @@ export const formSchema = z.object({
             street: z.string().optional(),
             city: z.string().optional(),
             state: z.string().optional(),
-            zip: z.string().optional(),
+            zipCode: z.string().optional(),
             country: z.string().optional(),
         })
     ),
@@ -604,12 +604,12 @@ export function ContactEdit({
                                                     <div className="grid grid-cols-2 gap-3">
                                                         <FormField
                                                             control={form.control}
-                                                            name={`address.${index}.zip`}
+                                                            name={`address.${index}.zipCode`}
                                                             render={({field}) => (
                                                                 <FormItem>
                                                                     <FormLabel>Postal code</FormLabel>
                                                                     <FormControl>
-                                                                        <Input {...field}
+                                                                        <Input {...field} value={field.value || ''}
                                                                                placeholder="Postal/ZIP code"/>
                                                                     </FormControl>
                                                                     <FormMessage/>
