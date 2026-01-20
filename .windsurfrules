@@ -1,60 +1,92 @@
 # Eigen Project Rules and Guidelines
 
 ## Development Environment
-1. Please don't run terminal commands to install packages yourself. Ask me to do it (so output the command and instructions as text)
-2. Use Bun as the JavaScript runtime for both server and client development
-3. All development should be done with TypeScript for type safety
+- Please don't run terminal commands to install packages yourself. Ask me to do it (output the command and instructions as text)
+- Use Bun as the JavaScript runtime for both server and client development
+- All development should be done with TypeScript for type safety
 
 ## Project Overview
-4. This is a Google Workspace-like application with multiple integrated apps (Mail, Drive, Docs, Calendar, Contacts, Space)
-5. The project follows a monorepo structure with:
-   - /apps: Contains all applications (frontend and API server)
-   - /packages: Shared libraries and UI components
-   - /packages/ui: Reusable UI components
-   - /packages/lib: Shared business logic
-   - /packages/config: Shared configuration
+- This is a Google Workspace-like application with multiple integrated apps (Mail, Drive, Docs, Calendar, Contacts, Space)
+- The project follows a monorepo structure with:
+  - /apps: Contains all applications (frontend and API server)
+  - /packages: Shared libraries and UI components
+  - /packages/ui: Reusable UI components
+  - /packages/lib: Shared business logic
 
 ## Technical Stack
-6. Backend: Bun + Elysia for server routes + Drizzle ORM for database
-7. Frontend: React (with Bun) + TypeScript
-8. Data Management: TanStack Query for data fetching and caching
-9. Routing: TanStack Router for type-safe routing
-10. UI: Tailwind CSS + shadcn/ui components
-11. Authentication: better-auth for user authentication and session management
+- Backend: Bun + Elysia for server routes + Drizzle ORM for database
+- Frontend: React (with Bun) + TypeScript
+- Data Management: TanStack Query for data fetching and caching
+- Routing: TanStack Router for type-safe routing
+- UI: Tailwind CSS + shadcn/ui components
+- Authentication: better-auth for user authentication and session management
 
 ## Code Style & Conventions
-12. ALWAYS USE ENGLISH in all code and all texts you generate
-13. Prefer a simple and clean implementation. Keep code simple and HTML layout clean and simple
-14. Use shadcn defaults for UI components
-15. Follow established naming conventions:
-    - For routes: Use domain-based naming (e.g., mail, drive, contacts)
-    - For functions: Use camelCase and descriptive naming
-    - For components: Use PascalCase
+- ALWAYS USE ENGLISH in all code and all texts you generate
+- Prefer a simple and clean implementation. Keep code simple and HTML layout clean and simple
+- Use shadcn defaults for UI components
+- Follow established naming conventions:
+  - For routes: Use domain-based naming (e.g., mail, drive, contacts)
+  - For functions: Use camelCase and descriptive naming
+  - For components: Use PascalCase
+
+## Types & Interfaces
+- Always use `type` instead of `interface`, except when methods are involved
+- All types must be defined in `packages/lib/src/types/[domain].ts`
+- Import types from `@workspace/lib/types/[domain]` or `@workspace/lib/types`
+- Before creating a new type, check if it already exists in the types folder
+- Always discuss with the user before adding, creating, or modifying types
 
 ## Architecture Patterns
-16. API Routes: Group by domain in /apps/api-server/src/routes
-17. Frontend Apps: Place in separate directories under /apps
-18. Shared Logic: Extract to /packages/lib
-19. UI Components: Place reusable components in /packages/ui
-20. Authentication: All protected routes should include the auth: true property
+- API Routes: Group by domain in /apps/api/src/routes
+- Frontend Apps: Place in separate directories under /apps
+- Shared Logic: Extract to /packages/lib
+- UI Components: Place reusable components in /packages/ui
+- Authentication: All protected routes should include the auth: true property
+
+## Real-Time Updates (SSE)
+- Use Server-Sent Events for real-time cache invalidation across tabs/devices
+- SSE handlers are in `packages/lib/src/lib/[domain]/sse-handlers.ts`
+- SSE event builders are in `apps/api/src/lib/[domain]/sse-events.ts`
+- Create dedicated invalidate functions in hooks files and call them from both:
+  - SSE handlers (for cross-tab sync)
+  - Mutation onSuccess callbacks (for optimistic updates)
+
+## API Client
+- Use Treaty client from `packages/lib/src/lib/[domain]/api.ts` for type-safe API calls
+- API clients are generated from Elysia route types
+
+## Query Key Patterns
+- Define query keys as objects (e.g., `driveKeys`, `emailKeys`, `contactKeys`)
+- Use consistent key structure: `[domain, 'list'|'detail', ...params]`
+- Export invalidation functions alongside hooks for reuse
+
+## Module Exports
+- Each domain module has an `index.ts` that re-exports public API
+- Import from `@workspace/lib/[domain]` not deep paths
+
+## File Types
+- Docs use mimeType `application/eigendoc` (`.eigendoc` extension)
+- Stickies use mimeType `application/eigenstickies` (`.eigenstickies` extension)
+- URL params use hyphens (`application-eigendoc`), database uses slashes
 
 ## Development Workflow
-21. Use bun scripts defined in root package.json for development:
-    - serve: Run all applications
-    - serve:[appname]: Run specific app with API server
-22. Always update types when changing database schemas
-23. Remember to invalidate queries when mutating data
-24. Create custom hooks for reusable data fetching logic
+- Use bun scripts defined in root package.json for development:
+  - serve: Run all applications
+  - serve:[appname]: Run specific app with API server
+- Always update types when changing database schemas
+- Remember to invalidate queries when mutating data
+- Create custom hooks for reusable data fetching logic
 
 ## State Management
-25. Use TanStack Query for server state
-26. Use React state hooks for local UI state
-27. Use appropriate caching strategies for optimizing performance
+- Use TanStack Query for server state
+- Use React state hooks for local UI state
+- Use appropriate caching strategies for optimizing performance
 
 ## Documentation
-28. Keep code comments minimal - code should be self-documenting:
-    - DO NOT use JSDoc style comments
-    - Only add comments to explain complex business logic that isn't immediately clear
-    - Focus on making the code readable rather than relying on comments
-    - Use clear variable and function names instead of comments where possible
-29. Keep the README updated with setup instructions and project overview
+- Keep code comments minimal - code should be self-documenting:
+  - DO NOT use JSDoc style comments
+  - Only add comments to explain complex business logic that isn't immediately clear
+  - Focus on making the code readable rather than relying on comments
+  - Use clear variable and function names instead of comments where possible
+- Keep the README updated with setup instructions and project overview
