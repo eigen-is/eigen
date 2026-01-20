@@ -23,6 +23,7 @@ export function handleDriveSSEvent(event: SSEvent, queryClient: QueryClient): bo
             return true;
 
         case SSEventType.DRIVE_FOLDER_CREATED:
+        case SSEventType.DRIVE_FILE_CREATED:    
         case SSEventType.DRIVE_FILE_UPLOADED:
             invalidateItemCreated(queryClient, path.parentId, path.mimeType);
             return true;

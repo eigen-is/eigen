@@ -14,13 +14,17 @@ const templates: Record<DriveEventType, EventTemplate> = {
         title: 'Folder created',
         body: (p) => `Folder "${p.name}" created`
     },
+    [SSEventType.DRIVE_FOLDER_DELETED]: {
+        title: 'Folder deleted',
+        body: (p) => `Folder "${p.name}" deleted`
+    },
     [SSEventType.DRIVE_FILE_UPLOADED]: {
         title: 'File uploaded',
         body: (p) => `File "${p.name}" uploaded`
     },
-    [SSEventType.DRIVE_FOLDER_DELETED]: {
-        title: 'Folder deleted',
-        body: (p) => `Folder "${p.name}" deleted`
+    [SSEventType.DRIVE_FILE_CREATED]: {
+        title: 'File created',
+        body: (p) => `File "${p.name}" created`
     },
     [SSEventType.DRIVE_FILE_DELETED]: {
         title: 'File deleted',
