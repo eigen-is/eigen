@@ -39,31 +39,37 @@ export function useContact(id: string) {
 
 // Add a new contact
 export function useAddContact() {
+    const queryClient = useQueryClient();
     return useMutation({
         mutationFn: async (newContact: Omit<Contact, 'id'>) => {
-            const response = await contactsApi.contacts.post(newContact as any);
+            const response = await contactsApi.contacts.post(newContact);
             return response.data;
         },
+        onSuccess: () => invalidateContactCreated(queryClient),
     });
 }
 
 // Update an existing contact
 export function useUpdateContact() {
+    const queryClient = useQueryClient();
     return useMutation({
         mutationFn: async ({id, ...data}: Contact) => {
-            const response = await contactsApi.contacts({id}).put(data as any);
+            const response = await contactsApi.contacts({id}).put(data);
             return response.data;
         },
+        onSuccess: (_data, variables) => invalidateContactUpdated(queryClient, variables.id),
     });
 }
 
 // Delete a contact
 export function useDeleteContact() {
+    const queryClient = useQueryClient();
     return useMutation({
         mutationFn: async (id: string) => {
             const response = await contactsApi.contacts({id}).delete();
             return response.data;
         },
+        onSuccess: (_data, id) => invalidateContactDeleted(queryClient, id),
     });
 }
 
