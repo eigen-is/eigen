@@ -406,6 +406,36 @@ export class Mount {
             updatedAt: row.updatedAt ?? new Date()
         };
     }
+    
+    // @ts-ignore - Debug utility, called manually when needed
+    private async logStructure(): Promise<void> {
+        const buildTree = async (parentId: string | null, prefix: string): Promise<string[]> => {
+            const children = parentId === null
+                ? await this.db.select().from(paths).where(isNull(paths.parentId)).all()
+                : await this.db.select().from(paths).where(eq(paths.parentId, parentId)).all();
+
+            const lines: string[] = [];
+            for (let i = 0; i < children.length; i++) {
+                const child = children[i];
+                const last = i === children.length - 1;
+                const connector = last ? '└── ' : '├── ';
+                const icon = child.type === 'file' ? '📄 ' : '📁 ';
+                lines.push(`${prefix}${connector}${icon}${child.name}`);
+
+                if (child.type !== 'file') {
+                    const newPrefix = prefix + (last ? '    ' : '│   ');
+                    const subLines = await buildTree(child.id, newPrefix);
+                    lines.push(...subLines);
+                }
+            }
+            return lines;
+        };
+
+        const lines = await buildTree(null, '');
+        console.log('\n📂 Mount Structure:');
+        console.log(lines.join('\n'));
+        console.log('');
+    }
 }
 
 export function createDefaultMountConfig(id: string = 'default'): MountConfig {
