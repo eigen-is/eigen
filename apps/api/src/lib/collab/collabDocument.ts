@@ -6,9 +6,11 @@ import * as encoding from "lib0/encoding";
 import * as decoding from "lib0/decoding";
 import type {DrivePath} from "@workspace/lib/types/drive";
 import type Drive from "../drive/drive";
-import {drizzle} from "drizzle-orm/bun-sqlite";
+import type {ManagedDatabase} from "../core/managed-database";
+import {COLLAB_DB_CONFIG} from "./db-config";
 import * as schema from "./schema.ts";
 import type {User} from "better-auth/types";
+import type {BunSQLiteDatabase} from "drizzle-orm/bun-sqlite";
 
 // Define message types (matching y-websocket protocol)
 const MESSAGE_SYNC = 0;
@@ -45,12 +47,14 @@ class LoggingProvider {
 }
 
 class DbProvider {
-    private db: ReturnType<typeof drizzle<typeof schema>>;
+    private db: BunSQLiteDatabase<typeof schema>;
+    private managedDb: ManagedDatabase<typeof schema>;
     private doc: Y.Doc;
     private docId: string;
 
-    constructor(doc: Y.Doc, docId: string, db: ReturnType<typeof drizzle<typeof schema>>) {
-        this.db = db;
+    constructor(doc: Y.Doc, docId: string, managedDb: ManagedDatabase<typeof schema>) {
+        this.managedDb = managedDb;
+        this.db = managedDb.db;
         this.doc = doc;
         this.docId = docId;
 
@@ -77,11 +81,11 @@ class DbProvider {
     // Method to store an update (would save to database in real implementation)
     storeUpdate(update: Uint8Array): void {
         console.log(`[DbProvider] Storing update for document ${this.docId}, size: ${update.length} bytes`);
-        // Store the update in the database
         try {
             this.db.insert(schema.docUpdates).values({
                 updateData: Buffer.from(update)
             }).run();
+            this.managedDb.markDirty();
             console.log(`[DbProvider] Successfully stored update for document ${this.docId}`);
         } catch (error) {
             console.error(`[DbProvider] Error storing update for document ${this.docId}:`, error);
@@ -91,8 +95,6 @@ class DbProvider {
     // Cleanup resources
     destroy(): void {
         console.log(`[DbProvider] Destroying provider for document ${this.docId}`);
-        // In a real implementation, close database connection
-
         const update = Y.encodeStateAsUpdate(this.doc);
         this.storeUpdate(update);
         this.db.delete(schema.docUpdates).run();
@@ -118,21 +120,11 @@ export default class CollabDocument {
 
     public async init() {
         console.log(`[CollabDocument] init for path: ${this.path.name}`);
-        const db = await this.drive.openSQLiteDatabase(this.path.id, 'data.db', async (db) => {
-            db.exec(`
-                CREATE TABLE IF NOT EXISTS doc_updates (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    updateData BLOB NOT NULL,
-                    createdAt INTEGER DEFAULT (unixepoch())
-                );
-            `);
-            console.log('create database');
-        });
+        const managedDb = await this.drive.openDatabase(COLLAB_DB_CONFIG, this.path.id);
 
         this.doc = new Y.Doc();
         this.doc.gc = true;
-        // this.provider = new LoggingProvider(this.doc, this.path.name);
-        this.provider = new DbProvider(this.doc, this.path.name, drizzle(db, {schema}));
+        this.provider = new DbProvider(this.doc, this.path.name, managedDb);
         this.awareness = new awarenessProtocol.Awareness(this.doc);
 
         return this;

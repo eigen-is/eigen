@@ -51,4 +51,8 @@ export class LocalKeyStorage implements StorageBackend {
         }
         return null;
     }
+
+    getPath(fileId: string): string {
+        return this.getFilePath(fileId);
+    }
 }

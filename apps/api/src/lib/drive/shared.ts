@@ -1,24 +1,7 @@
-import type {HomeInterface} from "../home/types";
-import * as schema from "./sharedschema";
-import {createDatabase} from "../core";
+import type {Home} from "../home/home";
+import {SHARED_DB_CONFIG} from "./db-config";
 
-const SHARED_MIGRATION_SQL = `
-    CREATE TABLE IF NOT EXISTS shared_paths (
-        id TEXT PRIMARY KEY,
-        name TEXT NOT NULL,
-        type TEXT NOT NULL,
-        parentId TEXT,
-        size INTEGER DEFAULT 0,
-        thumbnail TEXT,
-        ownerId TEXT NOT NULL,
-        mimeType TEXT NOT NULL,
-        acl TEXT,
-        createdAt INTEGER DEFAULT (unixepoch()),
-        updatedAt INTEGER DEFAULT (unixepoch()),
-        FOREIGN KEY (parentId) REFERENCES shared_paths(id) ON DELETE CASCADE
-    );
-`;
-
-export async function getSharedDatabase(home: HomeInterface) {
-    return createDatabase(home, 'mounts/shared.db', schema, SHARED_MIGRATION_SQL);
+export async function getSharedDatabase(home: Home) {
+    const managedDb = await home.getLocalDatabase(SHARED_DB_CONFIG, 'mounts/shared.db');
+    return managedDb.db;
 }

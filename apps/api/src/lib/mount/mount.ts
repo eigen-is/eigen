@@ -12,6 +12,8 @@ import * as schema from './schema';
 import {labels, MOUNT_SCHEMA_SQL, paths, pathsToLabels} from './schema';
 import type {StorageBackend} from '../storage';
 import {LocalKeyStorage} from '../storage';
+import {type DatabaseConfig, ManagedDatabase, type SchemaType} from '../core/managed-database';
+import {createAsyncSingleton} from '../../utils/singleton';
 
 type DatabaseGetter = (path: string, onCreate: (db: Database) => Promise<void>) => Promise<Database>;
 
@@ -25,6 +27,7 @@ export class Mount {
     private db!: BunSQLiteDatabase<typeof schema>;
     private getDatabase: DatabaseGetter;
     private ownerId: string;
+    private documentDbs: Map<string, () => Promise<ManagedDatabase<any>>> = new Map();
 
     constructor(
         ownerId: string,
@@ -147,11 +150,13 @@ export class Mount {
         name: string,
         mimeType: string,
         size: number,
-        data: Buffer | Uint8Array | ArrayBuffer | BunFile
+        data: Buffer | Uint8Array | ArrayBuffer | BunFile | undefined
     ): Promise<string> {
         const fileId = randomUUID();
 
-        await this.storage.write(fileId, data);
+        if (data !== undefined) {
+            await this.storage.write(fileId, data);
+        }
 
         await this.db.insert(paths).values({
             id: fileId,
@@ -167,6 +172,10 @@ export class Mount {
         });
 
         return fileId;
+    }
+
+    async touchFile(parentId: string, name: string, mimeType: string) {
+        return this.createFile(parentId, name, mimeType, 0, undefined);
     }
 
     async updatePath(pathId: string, updates: Partial<Omit<DrivePath, 'id' | 'ownerId' | 'createdAt'>>): Promise<void> {
@@ -249,6 +258,50 @@ export class Mount {
                 await file.delete();
             }
         } catch {
+        }
+    }
+
+    get isRemote(): boolean {
+        return this.config.storageType !== 'local-key';
+    }
+
+    async openDatabase<S extends SchemaType>(
+        config: DatabaseConfig<S>,
+        pathId: string
+    ): Promise<ManagedDatabase<S>> {
+        if (!this.documentDbs.has(pathId)) {
+            this.documentDbs.set(pathId, createAsyncSingleton(async () => {
+                const localPath = this.isRemote
+                    ? this.getTempPath(pathId)
+                    : this.storage.getPath!(pathId);
+
+                const db = new ManagedDatabase(
+                    config,
+                    localPath,
+                    this.isRemote ? {
+                        onOpen: async () => {
+                            if (await this.storage.exists(pathId)) {
+                                await this.downloadToTemp(pathId);
+                            }
+                        },
+                        onSync: () => this.uploadFromTemp(pathId),
+                        onClose: () => this.cleanupTemp(pathId),
+                    } : {}
+                );
+
+                await db.open();
+                return db;
+            }));
+        }
+        return this.documentDbs.get(pathId)!() as Promise<ManagedDatabase<S>>;
+    }
+
+    async closeDatabase(pathId: string): Promise<void> {
+        const getter = this.documentDbs.get(pathId);
+        if (getter) {
+            const db = await getter();
+            await db.close();
+            this.documentDbs.delete(pathId);
         }
     }
 
