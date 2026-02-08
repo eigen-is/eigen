@@ -1,12 +1,10 @@
-import type Database from "bun:sqlite";
 import type {Contact} from "@workspace/lib/types/contact";
 import type {Label} from "@workspace/lib/types/label";
-import {BunSQLiteDatabase, drizzle} from "drizzle-orm/bun-sqlite";
+import type {BunSQLiteDatabase} from "drizzle-orm/bun-sqlite";
 import {eq, sql} from "drizzle-orm";
 import * as schema from "./schema";
 import {v4 as uuidv4} from "uuid";
-import {getHome} from "../home/home";
-import type {HomeInterface} from "../home/types";
+import {getHome, type Home} from "../home/home";
 import type {User} from "better-auth/types";
 import {getUserByEmail, updateUser} from "../users/users.ts";
 import {LocalStorage} from "../storage";
@@ -14,6 +12,8 @@ import {generateThumbnail} from "../shared/thumbnails";
 import {DEFAULT_LABELS, PATHS} from "../core";
 import {buildContactEvent, buildLabelEvent} from "./sse-events";
 import {SSEventType} from "@workspace/lib/types/sse";
+import {CONTACTS_DB_CONFIG} from "./db-config";
+import type {ManagedDatabase} from "../core/managed-database";
 
 export async function getContacts(user: User) {
     const home = await getHome(user);
@@ -23,57 +23,8 @@ export async function getContacts(user: User) {
     return home.contacts;
 }
 
-async function getContactsDatabase(home: HomeInterface) {
-    const db = await home.openSQLiteDatabase('eigen.contacts/contacts.db', async (db: Database) => {
-        // Execute migration SQL to create tables
-        db.exec(`
-            CREATE TABLE IF NOT EXISTS contacts (
-                id TEXT PRIMARY KEY,
-                firstName TEXT NOT NULL,
-                lastName TEXT NOT NULL,
-                eigenId TEXT,
-                avatar TEXT,
-                data TEXT,
-                createdAt INTEGER DEFAULT (unixepoch()),
-                updatedAt INTEGER DEFAULT (unixepoch())
-            );
-            
-            CREATE TABLE IF NOT EXISTS labels (
-                id TEXT PRIMARY KEY,
-                name TEXT NOT NULL,
-                color TEXT NOT NULL,
-                createdAt INTEGER DEFAULT (unixepoch()),
-                updatedAt INTEGER DEFAULT (unixepoch())
-            );
-            
-            CREATE TABLE IF NOT EXISTS contacts_to_labels (
-                contactId TEXT NOT NULL,
-                labelId TEXT NOT NULL,
-                PRIMARY KEY (contactId, labelId),
-                FOREIGN KEY (contactId) REFERENCES contacts(id) ON DELETE CASCADE,
-                FOREIGN KEY (labelId) REFERENCES labels(id) ON DELETE CASCADE
-            );
-        `);
-
-
-        try {
-            const dr = drizzle(db, {schema});
-            const existingLabels = await dr.select().from(schema.labels).all();
-            if (existingLabels.length === 0) {
-                for (const label of DEFAULT_LABELS) {
-                    await dr.insert(schema.labels).values({
-                        id: uuidv4(),
-                        name: label.name,
-                        color: label.color
-                    });
-                }
-            }
-        } catch (error) {
-            console.error('Error setting up default labels:', error);
-        }
-    });
-
-    return drizzle(db, {schema});
+async function getContactsDatabase(home: Home): Promise<ManagedDatabase<typeof schema>> {
+    return home.getLocalDatabase(CONTACTS_DB_CONFIG, 'eigen.contacts/contacts.db');
 }
 
 function extractContactData(contact: Omit<Contact, 'id'>) {
@@ -95,11 +46,12 @@ function extractContactData(contact: Omit<Contact, 'id'>) {
 }
 
 export class Contacts {
+    private managedDb!: ManagedDatabase<typeof schema>;
     private db!: BunSQLiteDatabase<typeof schema>;
-    private home: HomeInterface;
+    private home: Home;
     private storage: LocalStorage;
 
-    constructor(home: HomeInterface) {
+    constructor(home: Home) {
         this.home = home;
         this.storage = new LocalStorage(`${home.homeDir}/eigen.contacts`);
     }
@@ -113,7 +65,20 @@ export class Contacts {
     }
 
     public async init() {
-        this.db = await getContactsDatabase(this.home);
+        this.managedDb = await getContactsDatabase(this.home);
+        this.db = this.managedDb.db;
+
+        const existingLabels = await this.db.select().from(schema.labels).all();
+        if (existingLabels.length === 0) {
+            for (const label of DEFAULT_LABELS) {
+                await this.db.insert(schema.labels).values({
+                    id: uuidv4(),
+                    name: label.name,
+                    color: label.color
+                });
+            }
+        }
+
         if (!(await this.getContacts()).length) {
             const user = this.home.user;
 

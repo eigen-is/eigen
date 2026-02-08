@@ -3,6 +3,7 @@ import type Database from 'bun:sqlite';
 import {BunSQLiteDatabase} from 'drizzle-orm/bun-sqlite';
 import {eq} from 'drizzle-orm';
 
+import {type DatabaseConfig, type ManagedDatabase, type SchemaType} from '../core/managed-database';
 import {createDefaultMountConfig, Mount} from '../mount';
 import type {DriveACL, DrivePath} from '@workspace/lib/types/drive';
 import {canRead, canWrite, normalizeACL} from './acl';
@@ -12,7 +13,7 @@ import {getSharedDatabase} from './shared';
 import * as sharedSchema from './sharedschema';
 import {getUserByEmail} from '../users/users';
 import {createAsyncSingleton} from '../../utils/singleton';
-import type {HomeInterface} from '../home/types';
+import type {Home} from '../home/home';
 import {SSEventType} from '@workspace/lib/types/sse';
 import {buildDriveEvent} from './sse-events';
 
@@ -27,12 +28,12 @@ export async function getDrive(user: User): Promise<Drive> {
 const documents: Map<string, () => Promise<CollabDocument>> = new Map();
 
 export default class Drive {
-    private home: HomeInterface;
+    private home: Home;
     private owner: User;
     private mount!: Mount;
     private sharedDb!: BunSQLiteDatabase<typeof sharedSchema>;
 
-    constructor(home: HomeInterface) {
+    constructor(home: Home) {
         this.home = home;
         this.owner = home.user;
     }
@@ -370,6 +371,17 @@ export default class Drive {
 
     async closeSQLiteDatabase(db: Database): Promise<void> {
         await this.home.closeSQLiteDatabase(db);
+    }
+
+    async openDatabase<S extends SchemaType>(
+        config: DatabaseConfig<S>,
+        pathId: string
+    ): Promise<ManagedDatabase<S>> {
+        return this.mount.openDatabase(config, pathId);
+    }
+
+    async closeDatabase(pathId: string): Promise<void> {
+        await this.mount.closeDatabase(pathId);
     }
 
     async getSharedPathsWithMe(): Promise<DrivePath[]> {
