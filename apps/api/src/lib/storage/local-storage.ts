@@ -8,7 +8,7 @@ export class LocalStorage implements StorageBackend {
     private baseDir: string;
 
     constructor(baseDir: string) {
-        this.baseDir = baseDir;
+        this.baseDir = path.join(baseDir, 'data');
         if (!fs.existsSync(this.baseDir)) {
             fs.mkdirSync(this.baseDir, {recursive: true});
         }
