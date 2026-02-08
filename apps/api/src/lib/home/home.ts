@@ -1,8 +1,5 @@
 import type {User} from 'better-auth/types';
-import type Database from 'bun:sqlite';
-import {Database as BunDatabase} from 'bun:sqlite';
 import * as path from 'path';
-import * as fs from 'node:fs';
 
 import {type DatabaseConfig, ManagedDatabase, openLocalDatabase, type SchemaType} from '../core/managed-database';
 import {Contacts} from '../contacts/contacts';
@@ -28,9 +25,6 @@ export class Home {
     private initialized: boolean = false;
     private initializationStarted: boolean = false;
     private timeout: Timer | undefined;
-
-    private databases: Map<string, Database> = new Map();
-    private databaseFactories: Map<string, () => Promise<Database>> = new Map();
     private managedDatabases: Map<string, () => Promise<ManagedDatabase<any>>> = new Map();
     private sseListeners: ((event: SSEvent) => void)[] = [];
 
@@ -66,61 +60,6 @@ export class Home {
 
         this.initialized = true;
         return this;
-    }
-
-    public async getDatabase(
-        relativePath: string,
-        onCreate: (db: Database) => Promise<void>
-    ): Promise<Database> {
-        if (this.databases.has(relativePath)) {
-            return this.databases.get(relativePath)!;
-        }
-
-        if (!this.databaseFactories.has(relativePath)) {
-            this.databaseFactories.set(relativePath, createAsyncSingleton(async () => {
-                const absolutePath = path.join(this.homeDir, relativePath);
-                const dirPath = path.dirname(absolutePath);
-
-                if (!fs.existsSync(dirPath)) {
-                    fs.mkdirSync(dirPath, {recursive: true});
-                }
-
-                const fileExists = fs.existsSync(absolutePath);
-                const db = new BunDatabase(absolutePath, {create: true});
-
-                db.run('PRAGMA journal_mode = WAL;');
-                db.run('PRAGMA foreign_keys = ON;');
-                db.run('PRAGMA busy_timeout = 5000;');
-                db.run('PRAGMA wal_checkpoint(TRUNCATE);');
-
-                if (!fileExists) {
-                    await onCreate(db);
-                }
-
-                this.databases.set(relativePath, db);
-                return db;
-            }));
-        }
-
-        return await this.databaseFactories.get(relativePath)!();
-    }
-
-    public async openSQLiteDatabase(
-        relativePath: string,
-        onCreate: (db: Database) => Promise<void>
-    ): Promise<Database> {
-        return this.getDatabase(relativePath, onCreate);
-    }
-
-    public async closeSQLiteDatabase(db: Database): Promise<void> {
-        for (const [key, database] of this.databases.entries()) {
-            if (database === db) {
-                database.close();
-                this.databases.delete(key);
-                this.databaseFactories.delete(key);
-                break;
-            }
-        }
     }
 
     public async getManagedDatabase<S extends SchemaType>(
@@ -191,16 +130,6 @@ export class Home {
     }
 
     private async destruct() {
-        for (const db of this.databases.values()) {
-            try {
-                db.close();
-            } catch (error) {
-                console.error('Failed to close database:', error);
-            }
-        }
-        this.databases.clear();
-        this.databaseFactories.clear();
-
         for (const [key, getter] of this.managedDatabases) {
             try {
                 const db = await getter();
