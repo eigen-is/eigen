@@ -4,6 +4,7 @@ import {Database as BunDatabase} from 'bun:sqlite';
 import * as path from 'path';
 import * as fs from 'node:fs';
 
+import {type DatabaseConfig, ManagedDatabase, openLocalDatabase, type SchemaType} from '../core/managed-database';
 import {Contacts} from '../contacts/contacts';
 import Maildir from '../mail/maildir';
 import {getUserById} from '../users/users';
@@ -31,14 +32,15 @@ export class Home implements HomeInterface {
 
     private databases: Map<string, Database> = new Map();
     private databaseFactories: Map<string, () => Promise<Database>> = new Map();
+    private managedDatabases: Map<string, () => Promise<ManagedDatabase<any>>> = new Map();
     private sseListeners: ((event: SSEvent) => void)[] = [];
 
     constructor(user: User) {
         this.user = user;
         this.homeDir = getUserHomePath(user.id);
         this.fs = new LocalStorage(this.homeDir);
-        this.contacts = new Contacts(this as HomeInterface);
-        this.mail = new Maildir(this as HomeInterface);
+        this.contacts = new Contacts(this);
+        this.mail = new Maildir(this);
     }
 
     public async init() {
@@ -87,8 +89,8 @@ export class Home implements HomeInterface {
                 const fileExists = fs.existsSync(absolutePath);
                 const db = new BunDatabase(absolutePath, {create: true});
 
-                db.exec('PRAGMA journal_mode = WAL;');
-                db.exec('PRAGMA wal_checkpoint(TRUNCATE);');
+                db.run('PRAGMA journal_mode = WAL;');
+                db.run('PRAGMA wal_checkpoint(TRUNCATE);');
 
                 if (!fileExists) {
                     await onCreate(db);
@@ -117,6 +119,33 @@ export class Home implements HomeInterface {
                 this.databaseFactories.delete(key);
                 break;
             }
+        }
+    }
+
+    public async getManagedDatabase<S extends SchemaType>(
+        key: string,
+        factory: () => Promise<ManagedDatabase<S>>
+    ): Promise<ManagedDatabase<S>> {
+        if (!this.managedDatabases.has(key)) {
+            this.managedDatabases.set(key, createAsyncSingleton(factory));
+        }
+        return this.managedDatabases.get(key)!() as Promise<ManagedDatabase<S>>;
+    }
+
+    public async getLocalDatabase<S extends SchemaType>(
+        config: DatabaseConfig<S>,
+        relativePath: string
+    ): Promise<ManagedDatabase<S>> {
+        const absolutePath = path.join(this.homeDir, relativePath);
+        return this.getManagedDatabase(relativePath, () => openLocalDatabase(config, absolutePath));
+    }
+
+    public async closeManagedDatabase(key: string): Promise<void> {
+        const getter = this.managedDatabases.get(key);
+        if (getter) {
+            const db = await getter();
+            await db.close();
+            this.managedDatabases.delete(key);
         }
     }
 
@@ -160,7 +189,7 @@ export class Home implements HomeInterface {
         }
     }
 
-    private destruct() {
+    private async destruct() {
         for (const db of this.databases.values()) {
             try {
                 db.close();
@@ -170,6 +199,16 @@ export class Home implements HomeInterface {
         }
         this.databases.clear();
         this.databaseFactories.clear();
+
+        for (const [key, getter] of this.managedDatabases) {
+            try {
+                const db = await getter();
+                await db.close();
+            } catch (error) {
+                console.error(`Failed to close managed database ${key}:`, error);
+            }
+        }
+        this.managedDatabases.clear();
     }
 }
 

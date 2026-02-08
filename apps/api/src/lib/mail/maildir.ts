@@ -6,7 +6,7 @@ import {createUniqueMessageId, getMailIDfromFileName, getStandardMailboxFlags} f
 import {welcomeMail} from "./welcome.ts";
 import DOMPurify from 'isomorphic-dompurify';
 import maildb from "./maildb.ts";
-import type {HomeInterface} from "../home/types";
+import type {Home} from "../home/home";
 import {draftToMailOptions, sendMail} from './sender';
 import {type SSEventMailData, SSEventType} from "@workspace/lib/types/sse";
 import {LocalStorage} from "../storage";
@@ -18,7 +18,7 @@ export default class Maildir {
     private storage: LocalStorage;
     private db!: maildb;
 
-    constructor(private home: HomeInterface) {
+    constructor(private home: Home) {
         this.user = home.user;
         this.basePath = 'Maildir';
         this.storage = new LocalStorage(`${home.homeDir}/eigen.mail`);

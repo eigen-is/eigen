@@ -10,6 +10,8 @@ export interface StorageBackend {
     exists(fileId: string): Promise<boolean>;
 
     size(fileId: string): Promise<number | null>;
+
+    getPath?(fileId: string): string;
 }
 
 export type S3Config = {
