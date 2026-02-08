@@ -10,11 +10,9 @@ import type {DrivePath} from '@workspace/lib/types/drive';
 import * as schema from './schema';
 import {labels, paths, pathsToLabels} from './schema';
 import {MOUNT_DB_CONFIG} from './db-config';
-import type {StorageBackend} from '../storage';
-import {LocalKeyStorage} from '../storage';
+import {LocalKeyStorage, LocalStorage, S3Storage, type StorageBackend} from '../storage';
 import {type DatabaseConfig, ManagedDatabase, type SchemaType} from '../core/managed-database';
 import {createAsyncSingleton} from '../../utils/singleton';
-import {S3Storage} from '../storage/s3-storage';
 
 type LocalDatabaseGetter = <S extends SchemaType>(
     config: DatabaseConfig<S>,
@@ -50,6 +48,8 @@ export class Mount {
             this.storage = new LocalKeyStorage(this.baseDir);
         } else if (config.storageType === 's3') {
             this.storage = new S3Storage(config.s3Config!);
+        } else if (config.storageType === 'local') {
+            this.storage = new LocalStorage(this.baseDir);
         } else {
             throw new Error(`Storage type ${config.storageType} not yet supported`);
         }
@@ -446,7 +446,8 @@ export function createDefaultMountConfig(id: string = 'default'): MountConfig {
     return {
         id,
         name: 'My Drive',
-        storageType: 'local-key',
+        storageType: 'local',
+        // storageType: 'local-key',
         isDefault: true
     };
 }
