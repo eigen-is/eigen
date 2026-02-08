@@ -370,6 +370,14 @@ export default class Drive {
         await this.mount.closeDatabase(pathId);
     }
 
+    async getChildByName(parentId: string, name: string): Promise<DrivePath | null> {
+        return this.mount.getChildByName(parentId, name);
+    }
+
+    async touchFile(parentId: string, name: string, mimeType: string): Promise<string> {
+        return this.mount.touchFile(parentId, name, mimeType);
+    }
+
     async getSharedPathsWithMe(): Promise<DrivePath[]> {
         const results = await this.sharedDb.select().from(sharedSchema.sharedPaths).all();
         return results.map(r => ({

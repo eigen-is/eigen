@@ -1,7 +1,7 @@
 import type {BunFile} from 'bun';
 import type Database from 'bun:sqlite';
 import {BunSQLiteDatabase, drizzle} from 'drizzle-orm/bun-sqlite';
-import {eq, isNull, sql} from 'drizzle-orm';
+import {and, eq, isNull, sql} from 'drizzle-orm';
 import {randomUUID} from 'crypto';
 import * as path from 'path';
 import * as fs from 'node:fs';
@@ -123,6 +123,14 @@ export class Mount {
             .all();
 
         return results.map(r => this.toDrivePath(r));
+    }
+
+    async getChildByName(parentId: string, name: string): Promise<DrivePath | null> {
+        const result = await this.db.select().from(paths)
+            .where(and(eq(paths.parentId, parentId), eq(paths.name, name)))
+            .get();
+
+        return result ? this.toDrivePath(result) : null;
     }
 
     async createFolder(parentId: string, name: string, type: 'folder' | 'doc' | 'stickies' = 'folder'): Promise<string> {
