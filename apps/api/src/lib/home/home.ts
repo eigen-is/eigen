@@ -11,13 +11,12 @@ import {getUserById} from '../users/users';
 import type {SSEvent} from '@workspace/lib/types/sse';
 import {createAsyncSingleton} from '../../utils/singleton';
 import {getUserHomePath} from '../config/paths';
-import type {HomeInterface} from './types';
 import {LocalStorage} from '../storage';
 import Drive from '../drive/drive';
 
 const homeFactories: Map<string, () => Promise<Home>> = new Map();
 
-export class Home implements HomeInterface {
+export class Home {
     public user: User;
     public homeDir: string;
     public fs: LocalStorage;
