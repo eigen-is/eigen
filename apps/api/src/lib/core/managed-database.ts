@@ -56,7 +56,7 @@ export class ManagedDatabase<S extends SchemaType> {
         this.rawDb = new BunDatabase(this.localPath, {create: true});
         this.rawDb.run('PRAGMA journal_mode = WAL;');
 
-        this.rawDb.run(`
+        this.rawDb.exec(`
             CREATE TABLE IF NOT EXISTS __schema_version (
                 id INTEGER PRIMARY KEY CHECK (id = 1),
                 version INTEGER NOT NULL DEFAULT 0
