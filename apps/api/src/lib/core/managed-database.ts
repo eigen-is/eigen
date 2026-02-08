@@ -55,6 +55,8 @@ export class ManagedDatabase<S extends SchemaType> {
 
         this.rawDb = new BunDatabase(this.localPath, {create: true});
         this.rawDb.run('PRAGMA journal_mode = WAL;');
+        this.rawDb.run('PRAGMA foreign_keys = ON;');
+        this.rawDb.run('PRAGMA busy_timeout = 5000;');
 
         this.rawDb.exec(`
             CREATE TABLE IF NOT EXISTS __schema_version (
@@ -114,6 +116,7 @@ export class ManagedDatabase<S extends SchemaType> {
         }
 
         await this.sync();
+        this.rawDb?.run('PRAGMA wal_checkpoint(TRUNCATE);');
         this.rawDb?.close();
         this.rawDb = null;
         this.drizzleDb = null;
