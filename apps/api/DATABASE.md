@@ -21,7 +21,7 @@ The application uses SQLite databases managed through Drizzle ORM. Databases are
 | **Shared Paths** | `{home}/mounts/shared.db` | `Home.getLocalDatabase()` | Files shared with user |
 | **Contacts** | `{home}/eigen.contacts/contacts.db` | `Home.getLocalDatabase()` | User contacts |
 | **Mail** | `{home}/eigen.mail/mail.db` | `Home.getLocalDatabase()` | Email metadata |
-| **Collab Docs** | `{home}/mounts/{id}/data/{dataDbPathId}` | `Mount.openDatabase()` | YJS document updates |
+| **Collab Docs** | Mount storage backend (key: `{dataDbPathId}`) | `Mount.openDatabase()` | YJS document updates |
 
 ---
 
@@ -81,13 +81,7 @@ const db = managedDb.db; // Drizzle instance
 
 ### Mount Metadata Database
 
-The mount metadata database is opened via `ManagedDatabase` using `MOUNT_DB_CONFIG`:
-
-```typescript
-const dbPath = path.join('mounts', mountId, 'metadata.db');
-const managedDb = await home.getLocalDatabase(MOUNT_DB_CONFIG, dbPath);
-const db = managedDb.db;
-```
+The mount metadata database is opened via `ManagedDatabase` using `MOUNT_DB_CONFIG`.
 
 - The file lives at `{home}/mounts/{id}/metadata.db`
 - Schema is versioned via `__schema_version` like other user databases
@@ -101,20 +95,11 @@ test.eigendoc/          (pathId: abc123, mimeType: application/eigendoc)
 └── data.db             (pathId: xyz789, mimeType: application/x-sqlite3)
 ```
 
-When opening a CollabDocument:
+Key points:
 
-```typescript
-const dataDbPath = await drive.getChildByName(docFolder.id, 'data.db');
-if (!dataDbPath) {
-    const dataDbId = await drive.touchFile(docFolder.id, 'data.db', 'application/x-sqlite3');
-    dataDbPath = await drive.getPath(dataDbId);
-}
-const managedDb = await drive.openDatabase(COLLAB_DB_CONFIG, dataDbPath.id);
-```
-
-- The database is stored using the `data.db` file's pathId (not the folder's)
-- For **local-key storage**: Opens database directly from `{home}/mounts/{id}/data/{dataDbPathId}`
-- Remote storage is planned but not currently supported by `Mount` (only `local-key` is implemented)
+- The database is stored using the `data.db` file's `pathId` (not the folder's)
+- For **local-key** mounts: `data.db` bytes are stored on disk under `{home}/mounts/{id}/data/{dataDbPathId}`
+- For **s3** mounts: `data.db` bytes are stored in the S3 backend under a key derived from `{dataDbPathId}` (with an optional prefix)
 
 ### Storage Type Detection
 
@@ -125,9 +110,7 @@ get isRemote(): boolean {
 }
 ```
 
-`Mount.openDatabase()` contains logic to support remote backends by using a local temp file and sync callbacks. However, the only currently supported storage type is `local-key` (the `Mount` constructor throws for other values), so `isRemote` is effectively always `false` in the current implementation.
-
-When remote backends are implemented, `openDatabase()` will set up sync callbacks:
+For remote-capable storage backends (for example `s3`), `Mount.openDatabase()` uses a local temp file and sync callbacks:
 - `onOpen`: Download from remote storage to temp
 - `onSync`: Upload temp file to remote storage
 - `onClose`: Cleanup temp file
