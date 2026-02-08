@@ -1,5 +1,4 @@
 import type {User} from 'better-auth/types';
-import type Database from 'bun:sqlite';
 import {BunSQLiteDatabase} from 'drizzle-orm/bun-sqlite';
 import {eq} from 'drizzle-orm';
 
@@ -358,19 +357,6 @@ export default class Drive {
             await this.mount.updatePath(pathId, {size});
             this.emitACLChange(path, path.acl, path.acl);
         }
-    }
-
-    async openSQLiteDatabase(
-        parentPathId: string,
-        file: string,
-        onCreate: (db: Database) => Promise<void>
-    ): Promise<Database> {
-        const dbPath = `mounts/${this.mount.id}/docs/${parentPathId}/${file}`;
-        return await this.home.getDatabase(dbPath, onCreate);
-    }
-
-    async closeSQLiteDatabase(db: Database): Promise<void> {
-        await this.home.closeSQLiteDatabase(db);
     }
 
     async openDatabase<S extends SchemaType>(

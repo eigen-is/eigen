@@ -21,7 +21,7 @@ The application uses SQLite databases managed through Drizzle ORM. Databases are
 | **Shared Paths** | `{home}/mounts/shared.db` | `Home.getLocalDatabase()` | Files shared with user |
 | **Contacts** | `{home}/eigen.contacts/contacts.db` | `Home.getLocalDatabase()` | User contacts |
 | **Mail** | `{home}/eigen.mail/mail.db` | `Home.getLocalDatabase()` | Email metadata |
-| **Collab Docs** | `{home}/mounts/{id}/docs/{pathId}` | `Mount.openDatabase()` | YJS document updates |
+| **Collab Docs** | `{home}/mounts/{id}/data/{pathId}` | `Mount.openDatabase()` | YJS document updates |
 
 ---
 
