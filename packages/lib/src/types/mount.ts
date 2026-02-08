@@ -1,4 +1,11 @@
-import type {S3Config} from '../storage';
+export type S3Config = {
+    endpoint: string;
+    bucket: string;
+    prefix: string;
+    accessKeyId: string;
+    secretAccessKey: string;
+    region?: string;
+};
 
 export type MountConfig = {
     id: string;
