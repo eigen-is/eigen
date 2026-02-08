@@ -1,5 +1,7 @@
 import type {BunFile, S3File} from 'bun';
 
+export type {S3Config} from '@workspace/lib/types';
+
 export interface StorageBackend {
     read(fileId: string): BunFile | S3File;
 
@@ -13,12 +15,3 @@ export interface StorageBackend {
 
     getPath?(fileId: string): string;
 }
-
-export type S3Config = {
-    endpoint: string;
-    bucket: string;
-    prefix: string;
-    accessKeyId: string;
-    secretAccessKey: string;
-    region?: string;
-};
