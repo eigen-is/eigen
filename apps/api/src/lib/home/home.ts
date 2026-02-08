@@ -89,6 +89,8 @@ export class Home {
                 const db = new BunDatabase(absolutePath, {create: true});
 
                 db.run('PRAGMA journal_mode = WAL;');
+                db.run('PRAGMA foreign_keys = ON;');
+                db.run('PRAGMA busy_timeout = 5000;');
                 db.run('PRAGMA wal_checkpoint(TRUNCATE);');
 
                 if (!fileExists) {
