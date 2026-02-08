@@ -3,8 +3,8 @@ import Drive, {getDrive} from "./drive";
 import {getUserById} from "../users/users";
 import {getHome, Home} from "../home/home";
 import type {DriveACL, DrivePath} from "@workspace/lib/types/drive";
-import type Database from "bun:sqlite";
 import CollabDocument from "../collab/collabDocument.ts";
+import type {DatabaseConfig, ManagedDatabase, SchemaType} from "../core/managed-database";
 
 export async function getSharedDrive(ownerId: string, user: User) {
     if (!user?.id) {
@@ -143,11 +143,14 @@ export default class SharedDrive extends Drive {
         return crumb.reverse();
     }
 
-    public async openSQLiteDatabase(parentPathId: string, file: string, onCreate: (db: Database) => Promise<void>) {
-        return this.sharedDrive.openSQLiteDatabase(parentPathId, file, onCreate);
+    public async openDatabase<S extends SchemaType>(
+        config: DatabaseConfig<S>,
+        pathId: string
+    ): Promise<ManagedDatabase<S>> {
+        return this.sharedDrive.openDatabase(config, pathId);
     }
 
-    public async closeSQLiteDatabase(db: Database) {
-        return this.sharedDrive.closeSQLiteDatabase(db);
+    public async closeDatabase(pathId: string): Promise<void> {
+        return this.sharedDrive.closeDatabase(pathId);
     }
 }
