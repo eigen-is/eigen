@@ -43,7 +43,7 @@ export default class Drive {
             this.owner.id,
             this.home.homeDir,
             config,
-            this.home.getDatabase.bind(this.home)
+            this.home.getLocalDatabase.bind(this.home)
         );
         await this.mount.init();
         this.sharedDb = await getSharedDatabase(this.home);

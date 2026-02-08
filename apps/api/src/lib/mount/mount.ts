@@ -1,6 +1,5 @@
 import type {BunFile} from 'bun';
-import type Database from 'bun:sqlite';
-import {BunSQLiteDatabase, drizzle} from 'drizzle-orm/bun-sqlite';
+import {BunSQLiteDatabase} from 'drizzle-orm/bun-sqlite';
 import {and, eq, isNull, sql} from 'drizzle-orm';
 import {randomUUID} from 'crypto';
 import * as path from 'path';
@@ -9,13 +8,17 @@ import * as fs from 'node:fs';
 import type {MountConfig} from './types';
 import type {DrivePath} from '@workspace/lib/types/drive';
 import * as schema from './schema';
-import {labels, MOUNT_SCHEMA_SQL, paths, pathsToLabels} from './schema';
+import {labels, paths, pathsToLabels} from './schema';
+import {MOUNT_DB_CONFIG} from './db-config';
 import type {StorageBackend} from '../storage';
 import {LocalKeyStorage} from '../storage';
 import {type DatabaseConfig, ManagedDatabase, type SchemaType} from '../core/managed-database';
 import {createAsyncSingleton} from '../../utils/singleton';
 
-type DatabaseGetter = (path: string, onCreate: (db: Database) => Promise<void>) => Promise<Database>;
+type LocalDatabaseGetter = <S extends SchemaType>(
+    config: DatabaseConfig<S>,
+    relativePath: string
+) => Promise<ManagedDatabase<S>>;
 
 export class Mount {
     readonly id: string;
@@ -25,7 +28,7 @@ export class Mount {
     private baseDir: string;
     private storage: StorageBackend;
     private db!: BunSQLiteDatabase<typeof schema>;
-    private getDatabase: DatabaseGetter;
+    private getLocalDatabase: LocalDatabaseGetter;
     private ownerId: string;
     private documentDbs: Map<string, () => Promise<ManagedDatabase<any>>> = new Map();
 
@@ -33,14 +36,14 @@ export class Mount {
         ownerId: string,
         baseDir: string,
         config: MountConfig,
-        getDatabase: DatabaseGetter
+        getLocalDatabase: LocalDatabaseGetter
     ) {
         this.ownerId = ownerId;
         this.id = config.id;
         this.name = config.name;
         this.config = config;
         this.baseDir = path.join(baseDir, 'mounts', config.id);
-        this.getDatabase = getDatabase;
+        this.getLocalDatabase = getLocalDatabase;
 
         if (config.storageType === 'local-key') {
             this.storage = new LocalKeyStorage(this.baseDir);
@@ -61,10 +64,8 @@ export class Mount {
         }
 
         const dbPath = path.join('mounts', this.config.id, 'metadata.db');
-        const rawDb = await this.getDatabase(dbPath, async (db: Database) => {
-            db.exec(MOUNT_SCHEMA_SQL);
-        });
-        this.db = drizzle(rawDb, {schema});
+        const managedDb = await this.getLocalDatabase(MOUNT_DB_CONFIG, dbPath);
+        this.db = managedDb.db;
 
         await this.ensureRootFolder();
     }

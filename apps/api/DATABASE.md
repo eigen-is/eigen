@@ -59,8 +59,8 @@ Each domain has a `db-config.ts` defining its schema and migrations:
 - `src/lib/collab/db-config.ts` - COLLAB_DB_CONFIG
 - `src/lib/contacts/db-config.ts` - CONTACTS_DB_CONFIG
 - `src/lib/mail/db-config.ts` - MAIL_DB_CONFIG
-- `src/lib/mount/db-config.ts` - MOUNT_DB_CONFIG
 - `src/lib/drive/db-config.ts` - SHARED_DB_CONFIG
+- `src/lib/mount/db-config.ts` - MOUNT_DB_CONFIG
 
 ---
 
@@ -79,28 +79,42 @@ const db = managedDb.db; // Drizzle instance
 - No remote sync needed
 - Closed automatically on Home destruction
 
+### Mount Metadata Database
+
+The mount metadata database is opened via `ManagedDatabase` using `MOUNT_DB_CONFIG`:
+
+```typescript
+const dbPath = path.join('mounts', mountId, 'metadata.db');
+const managedDb = await home.getLocalDatabase(MOUNT_DB_CONFIG, dbPath);
+const db = managedDb.db;
+```
+
+- The file lives at `{home}/mounts/{id}/metadata.db`
+- Schema is versioned via `__schema_version` like other user databases
+
 ### Mount-Based Databases (Collab Documents)
 
-Eigendocs and Stickies are folders containing a `data.db` file:
+Eigendocs and Stickies are represented as folders. When a collab document is opened, the system ensures there is a `data.db` file under that folder and uses that file's `pathId` as the storage key for the SQLite database.
 
 ```
 test.eigendoc/          (pathId: abc123, mimeType: application/eigendoc)
 └── data.db             (pathId: xyz789, mimeType: application/x-sqlite3)
 ```
 
-When creating an eigendoc/stickies, `Mount.createFolder()` automatically creates the `data.db` file entry.
-
 When opening a CollabDocument:
 
 ```typescript
 const dataDbPath = await drive.getChildByName(docFolder.id, 'data.db');
+if (!dataDbPath) {
+    const dataDbId = await drive.touchFile(docFolder.id, 'data.db', 'application/x-sqlite3');
+    dataDbPath = await drive.getPath(dataDbId);
+}
 const managedDb = await drive.openDatabase(COLLAB_DB_CONFIG, dataDbPath.id);
 ```
 
 - The database is stored using the `data.db` file's pathId (not the folder's)
-- Handles both local and remote storage automatically
-- For **local storage**: Opens database directly from storage path
-- For **remote storage**: Downloads to temp, syncs periodically, uploads on close
+- For **local-key storage**: Opens database directly from `{home}/mounts/{id}/data/{dataDbPathId}`
+- Remote storage is planned but not currently supported by `Mount` (only `local-key` is implemented)
 
 ### Storage Type Detection
 
@@ -111,7 +125,9 @@ get isRemote(): boolean {
 }
 ```
 
-When `isRemote` is true, `openDatabase()` sets up sync callbacks:
+`Mount.openDatabase()` contains logic to support remote backends by using a local temp file and sync callbacks. However, the only currently supported storage type is `local-key` (the `Mount` constructor throws for other values), so `isRemote` is effectively always `false` in the current implementation.
+
+When remote backends are implemented, `openDatabase()` will set up sync callbacks:
 - `onOpen`: Download from remote storage to temp
 - `onSync`: Upload temp file to remote storage
 - `onClose`: Cleanup temp file
