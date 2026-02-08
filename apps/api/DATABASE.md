@@ -21,7 +21,7 @@ The application uses SQLite databases managed through Drizzle ORM. Databases are
 | **Shared Paths** | `{home}/mounts/shared.db` | `Home.getLocalDatabase()` | Files shared with user |
 | **Contacts** | `{home}/eigen.contacts/contacts.db` | `Home.getLocalDatabase()` | User contacts |
 | **Mail** | `{home}/eigen.mail/mail.db` | `Home.getLocalDatabase()` | Email metadata |
-| **Collab Docs** | `{home}/mounts/{id}/data/{pathId}` | `Mount.openDatabase()` | YJS document updates |
+| **Collab Docs** | `{home}/mounts/{id}/data/{dataDbPathId}` | `Mount.openDatabase()` | YJS document updates |
 
 ---
 
@@ -81,13 +81,23 @@ const db = managedDb.db; // Drizzle instance
 
 ### Mount-Based Databases (Collab Documents)
 
-Opened via `Mount.openDatabase()` (exposed through `Drive.openDatabase()`):
+Eigendocs and Stickies are folders containing a `data.db` file:
 
-```typescript
-const managedDb = await drive.openDatabase(COLLAB_DB_CONFIG, pathId);
-const db = managedDb.db;
+```
+test.eigendoc/          (pathId: abc123, mimeType: application/eigendoc)
+└── data.db             (pathId: xyz789, mimeType: application/x-sqlite3)
 ```
 
+When creating an eigendoc/stickies, `Mount.createFolder()` automatically creates the `data.db` file entry.
+
+When opening a CollabDocument:
+
+```typescript
+const dataDbPath = await drive.getChildByName(docFolder.id, 'data.db');
+const managedDb = await drive.openDatabase(COLLAB_DB_CONFIG, dataDbPath.id);
+```
+
+- The database is stored using the `data.db` file's pathId (not the folder's)
 - Handles both local and remote storage automatically
 - For **local storage**: Opens database directly from storage path
 - For **remote storage**: Downloads to temp, syncs periodically, uploads on close
