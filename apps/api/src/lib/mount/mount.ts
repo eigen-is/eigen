@@ -14,6 +14,7 @@ import type {StorageBackend} from '../storage';
 import {LocalKeyStorage} from '../storage';
 import {type DatabaseConfig, ManagedDatabase, type SchemaType} from '../core/managed-database';
 import {createAsyncSingleton} from '../../utils/singleton';
+import {S3Storage} from '../storage/s3-storage';
 
 type LocalDatabaseGetter = <S extends SchemaType>(
     config: DatabaseConfig<S>,
@@ -47,6 +48,8 @@ export class Mount {
 
         if (config.storageType === 'local-key') {
             this.storage = new LocalKeyStorage(this.baseDir);
+        } else if (config.storageType === 's3') {
+            this.storage = new S3Storage(config.s3Config!);
         } else {
             throw new Error(`Storage type ${config.storageType} not yet supported`);
         }
