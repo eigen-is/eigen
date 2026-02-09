@@ -5,13 +5,16 @@ export type DriveACL = {
     public: boolean;
 }
 
-export type DrivePathType = "folder" | "file" | "doc" | "stickies";
-export type DriveContainerType = "folder" | "doc" | "stickies";
-
-export const CONTAINER_TYPES: DriveContainerType[] = ['folder', 'doc', 'stickies'];
+export type DriveCollabType = "doc" | "stickies";
+export type DriveContainerType = "folder" | DriveCollabType;
+export type DrivePathType = "file" | DriveContainerType;
 
 export function isContainerType(type: DrivePathType): type is DriveContainerType {
     return type === 'folder' || type === 'doc' || type === 'stickies';
+}
+
+export function isCollabType(type: DrivePathType): type is DriveCollabType {
+    return type === 'doc' || type === 'stickies';
 }
 
 export type DrivePath = {
