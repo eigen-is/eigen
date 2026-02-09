@@ -1,7 +1,7 @@
 import {useCallback} from "react";
 import {ReactEditor, useSlateStatic} from "slate-react";
 import {Transforms} from "slate";
-import {ResizableMedia} from "@workspace/ui/components/layout/media";
+import {ResizableMedia, defaultStyleOptions, type MediaStyleOptions} from "@workspace/ui/components/layout/media";
 import {CustomElement} from "./editor.types";
 
 type ResizableImageProps = {
@@ -20,6 +20,11 @@ export function ResizableImage({element, src, isSelected, onSelect, onDeselect}:
         Transforms.setNodes(editor, {width}, {at: path});
     }, [editor, element]);
 
+    const handleStyleChange = useCallback((style: MediaStyleOptions) => {
+        const path = ReactEditor.findPath(editor, element);
+        Transforms.setNodes(editor, {style}, {at: path});
+    }, [editor, element]);
+
     const handleDelete = useCallback(() => {
         const path = ReactEditor.findPath(editor, element);
         Transforms.removeNodes(editor, {at: path});
@@ -30,8 +35,10 @@ export function ResizableImage({element, src, isSelected, onSelect, onDeselect}:
         <ResizableMedia
             src={src}
             width={element.width}
+            styleOptions={element.style ?? defaultStyleOptions}
             isSelected={isSelected}
             onWidthChange={handleWidthChange}
+            onStyleChange={handleStyleChange}
             onSelect={onSelect}
             onDeselect={onDeselect}
             onDelete={handleDelete}
