@@ -7,6 +7,6 @@ export {AppLogo} from "./app-logo"
 export {Topbar} from "./topbar"
 
 // Media components
-export {ResizableMedia} from "./media"
+export {ResizableMedia, MediaStylePicker, defaultStyleOptions} from "./media"
 export type {MediaStyleOptions, ResizableMediaProps} from "./media"
 

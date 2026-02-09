@@ -13,11 +13,18 @@ export type CustomElementType =
 
 export type TextAlignment = 'left' | 'center' | 'right';
 
+export type MediaStyle = {
+    borderRadius: 'none' | 'sm' | 'md' | 'lg' | 'xl' | 'full';
+    shadow: 'none' | 'sm' | 'md' | 'lg' | 'xl';
+    border: boolean;
+}
+
 export type ImageElement = {
     type: 'image';
     pathId: string;
     width?: number;
     height?: number;
+    style?: MediaStyle;
     children: CustomText[];
     align?: TextAlignment;
 }
@@ -30,6 +37,7 @@ export type CustomElement = {
     pathId?: string;
     width?: number;
     height?: number;
+    style?: MediaStyle;
 }
 
 export type CustomText = {
