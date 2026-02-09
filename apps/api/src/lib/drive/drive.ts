@@ -11,7 +11,7 @@ import {extractImageDetails, getThumbnail, saveThumbnail} from '../shared/thumbn
 import CollabDocument from '../collab/collabDocument';
 import {getSharedDatabase} from './shared';
 import * as sharedSchema from './sharedschema';
-import {getUserByEmail} from '../users/users';
+import {propagateACLChange} from './acl-propagation';
 import {createAsyncSingleton} from '../../utils/singleton';
 import type {Home} from '../home/home';
 import {SSEventType} from '@workspace/lib/types/sse';
@@ -234,7 +234,7 @@ export default class Drive {
         await this.closeCollabDocumentsRecursively(mountId, pathId);
 
         await mount.deletePath(pathId);
-        this.emitACLChange(folder, folder.acl, null);
+        await propagateACLChange(folder, folder.acl, null);
         
         if (isCollabType(folder.type)) {
             this.emit(SSEventType.DRIVE_FILE_DELETED, folder);
@@ -278,7 +278,7 @@ export default class Drive {
         }
 
         await mount.deletePath(pathId);
-        this.emitACLChange(file, file.acl, null);
+        await propagateACLChange(file, file.acl, null);
         this.emit(SSEventType.DRIVE_FILE_DELETED, file);
     }
 
@@ -319,7 +319,7 @@ export default class Drive {
         }
 
         await mount.updatePath(pathId, {name: newName});
-        this.emitACLChange(item, item.acl, item.acl);
+        await propagateACLChange(item, item.acl, item.acl);
         const renamedItem = await mount.getPath(pathId);
         if (renamedItem) this.emit(SSEventType.DRIVE_PATH_RENAMED, renamedItem, {extra: newName});
     }
@@ -390,7 +390,7 @@ export default class Drive {
 
         const normalizedACL = normalizeACL(acl);
         await mount.updatePath(pathId, {acl: normalizedACL});
-        await this.emitACLChange(item, item.acl, normalizedACL);
+        await propagateACLChange(item, item.acl, normalizedACL);
         const updatedItem = await mount.getPath(pathId);
         if (updatedItem) this.emit(SSEventType.DRIVE_ACL_UPDATED, updatedItem);
     }
@@ -442,7 +442,6 @@ export default class Drive {
         if (path) {
             const size = await mount.getTotalSize();
             await mount.updatePath(pathId, {size});
-            this.emitACLChange(path, path.acl, path.acl);
         }
     }
 
@@ -539,24 +538,6 @@ export default class Drive {
 
     private emit(type: Parameters<typeof buildDriveEvent>[0], path: DrivePath, options?: Parameters<typeof buildDriveEvent>[2]): void {
         this.home.notify(buildDriveEvent(type, path, options));
-    }
-
-    private async emitACLChange(path: DrivePath, oldACL: DriveACL[] | null, newACL: DriveACL[] | null): Promise<void> {
-        const users = new Set(oldACL?.map(acl => acl.email) || []);
-        newACL?.forEach(acl => users.add(acl.email));
-
-        for (const email of users) {
-            try {
-                const user = await getUserByEmail(email);
-                if (user) {
-                    const {getHome} = await import('../home/home');
-                    const home = await getHome(user as User);
-                    await home.drive.receiveACLChange(path, newACL);
-                }
-            } catch (error) {
-                console.error('Failed to emit ACL change:', error);
-            }
-        }
     }
 
     async destruct(): Promise<void> {
