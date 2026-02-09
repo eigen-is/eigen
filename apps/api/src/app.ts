@@ -24,21 +24,23 @@ export const app = new Elysia()
     }))
     .use(betterAuth)
     .use(setupRouter)
-    .use(adminRouter)
     .use(configRouter)
-    .onError(({error, set}) => {
-        console.error('API Error:', error);
-        set.status = 400;
-        return 'Uncertain state: API request failed to resolve';
-    })
-    .get("/", () => "eigen|api>")
-    .get("/health", () => "OK")
+
+    .use(adminRouter)
     .use(mailRouter)
     .use(contactsRouter)
     .use(spaceRouter)
     .use(driveRouter)
     .use(homeRouter)
     .use(collabRouter)
-    .use(sseRouter);
+    .use(sseRouter)
+
+    .onError(({error, set}) => {
+        console.error('API Error:', error);
+        set.status = 400;
+        return 'Uncertain state: API request failed to resolve';
+    })
+    .get("/", () => "eigen|api>")
+    .get("/health", () => "OK");
 
 export type App = typeof app;
