@@ -90,3 +90,11 @@ export type EmailDraft = Omit<Email, 'to' | 'cc' | 'bcc'> & {
     cc?: AddressObject;
     bcc?: AddressObject;
 };
+
+export type DraftInput = {
+    to?: AddressObject;
+    cc?: AddressObject;
+    bcc?: AddressObject;
+    subject?: string;
+    text?: string;
+};
