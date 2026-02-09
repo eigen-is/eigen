@@ -19,6 +19,7 @@ export const MOUNT_DB_CONFIG: DatabaseConfig<typeof schema> = {
                     size INTEGER DEFAULT 0,
                     thumbnail TEXT,
                     acl TEXT,
+                    details TEXT,
                     createdAt INTEGER DEFAULT (unixepoch()),
                     updatedAt INTEGER DEFAULT (unixepoch()),
                     FOREIGN KEY (parentId) REFERENCES paths(id) ON DELETE CASCADE
