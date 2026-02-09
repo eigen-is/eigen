@@ -1,7 +1,7 @@
 import {useCallback, useEffect, useRef} from 'react';
 import {useQueryClient} from '@tanstack/react-query';
 import {useAuth} from '@workspace/lib/auth';
-import {SSE_EVENTS_URL} from '../../api';
+import {getSSEEventsUrl} from '../../api';
 import {isSSEventNotification, type SSEvent, type SSEventNotification} from '@workspace/lib/types/sse';
 import {handleDriveSSEvent} from '@workspace/lib/drive';
 import {handleMailSSEvent} from '@workspace/lib/mail';
@@ -12,7 +12,7 @@ type UseSSEOptions = {
 };
 
 export function useSSE(options: UseSSEOptions = {}) {
-    const {isAuthenticated} = useAuth();
+    const {isAuthenticated, user} = useAuth();
     const queryClient = useQueryClient();
     const eventSourceRef = useRef<EventSource | null>(null);
     const {onNotification} = options;
@@ -28,9 +28,9 @@ export function useSSE(options: UseSSEOptions = {}) {
     }, [onNotification, queryClient]);
 
     useEffect(() => {
-        if (!isAuthenticated) return;
+        if (!isAuthenticated || !user?.id) return;
 
-        const url = SSE_EVENTS_URL;
+        const url = getSSEEventsUrl(user.id);
 
         const eventSource = new EventSource(url, {withCredentials: true});
         eventSourceRef.current = eventSource;
@@ -49,7 +49,7 @@ export function useSSE(options: UseSSEOptions = {}) {
             eventSource.close();
             eventSourceRef.current = null;
         };
-    }, [isAuthenticated, handleEvent]);
+    }, [isAuthenticated, user?.id, handleEvent]);
 
     return {
         isConnected: eventSourceRef.current?.readyState === EventSource.OPEN

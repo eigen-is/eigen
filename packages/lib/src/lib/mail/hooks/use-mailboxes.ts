@@ -1,5 +1,6 @@
 import {useQuery, type QueryClient} from '@tanstack/react-query';
 import {mailApi} from '@workspace/lib/api.ts';
+import {useAuth} from '@workspace/lib/auth';
 
 export const mailboxKeys = {
     all: ['mailboxes'] as const,
@@ -11,15 +12,19 @@ export const mailboxKeys = {
 };
 
 export function useMailboxes() {
+    const {user} = useAuth();
+    const ownerId = user?.id || '';
+
     return useQuery({
         queryKey: mailboxKeys.lists(),
         queryFn: async () => {
-            const response = await mailApi.mailboxes.get();
+            const response = await mailApi({ownerId}).mailboxes.get();
             return response.data || [];
         },
         staleTime: 1 * 60 * 1000, // 1 minute
         refetchOnWindowFocus: false,
         retry: 1,
+        enabled: !!ownerId,
     });
 }
 

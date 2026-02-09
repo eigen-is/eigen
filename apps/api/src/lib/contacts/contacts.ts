@@ -309,7 +309,7 @@ export class Contacts {
         const fileName = `${uuidv4()}.webp`;
         await this.storage.write(`${PATHS.CONTACTS.AVATARS}/${fileName}`, thumbnail);
 
-        return `contacts/avatar/${fileName}`;
+        return `contacts/${this.home.user.id}/avatar/${fileName}`;
     }
 
     public async downloadAvatar(filename: string) {

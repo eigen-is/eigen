@@ -2,6 +2,7 @@ import {useMutation, useQuery, useQueryClient, type QueryClient} from '@tanstack
 import {contactsApi} from '@workspace/lib/api.ts';
 import {type Contact} from '@workspace/lib/types/contact';
 import {invalidateHomeSize} from '../../home';
+import {useAuth} from '@workspace/lib/auth';
 
 // Query keys for contacts
 export const contactKeys = {
@@ -14,35 +15,45 @@ export const contactKeys = {
 
 // Fetch all contacts
 export function useContacts() {
+    const {user} = useAuth();
+    const ownerId = user?.id || '';
+
     return useQuery({
         queryKey: contactKeys.lists(),
         queryFn: async () => {
-            const response = await contactsApi.contacts.get();
+            const response = await contactsApi({ownerId}).contacts.get();
             return response.data || [];
         },
         staleTime: 5 * 60 * 1000, // 5 minutes
+        enabled: !!ownerId,
     });
 }
 
 // Fetch a contact by ID
 export function useContact(id: string) {
+    const {user} = useAuth();
+    const ownerId = user?.id || '';
+
     return useQuery({
         queryKey: contactKeys.detail(id),
         queryFn: async () => {
             if (!id) return null;
-            const response = await contactsApi.contacts({id}).get();
+            const response = await contactsApi({ownerId}).contacts({id}).get();
             return response.data;
         },
-        enabled: !!id,
+        enabled: !!id && !!ownerId,
     });
 }
 
 // Add a new contact
 export function useAddContact() {
     const queryClient = useQueryClient();
+    const {user} = useAuth();
+    const ownerId = user?.id || '';
+
     return useMutation({
         mutationFn: async (newContact: Omit<Contact, 'id'>) => {
-            const response = await contactsApi.contacts.post(newContact);
+            const response = await contactsApi({ownerId}).contacts.post(newContact);
             return response.data;
         },
         onSuccess: () => invalidateContactCreated(queryClient),
@@ -52,9 +63,12 @@ export function useAddContact() {
 // Update an existing contact
 export function useUpdateContact() {
     const queryClient = useQueryClient();
+    const {user} = useAuth();
+    const ownerId = user?.id || '';
+
     return useMutation({
         mutationFn: async ({id, ...data}: Contact) => {
-            const response = await contactsApi.contacts({id}).put(data);
+            const response = await contactsApi({ownerId}).contacts({id}).put(data);
             return response.data;
         },
         onSuccess: (_data, variables) => invalidateContactUpdated(queryClient, variables.id),
@@ -64,18 +78,20 @@ export function useUpdateContact() {
 // Delete a contact
 export function useDeleteContact() {
     const queryClient = useQueryClient();
+    const {user} = useAuth();
+    const ownerId = user?.id || '';
+
     return useMutation({
         mutationFn: async (id: string) => {
-            const response = await contactsApi.contacts({id}).delete();
+            const response = await contactsApi({ownerId}).contacts({id}).delete();
             return response.data;
         },
         onSuccess: (_data, id) => invalidateContactDeleted(queryClient, id),
     });
 }
 
-export async function getMeContact() {
-    const {data} = await contactsApi.me.get();
-    console.log(data);
+export async function getMeContact(ownerId: string) {
+    const {data} = await contactsApi({ownerId}).me.get();
     return data;
 }
 

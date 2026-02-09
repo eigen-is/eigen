@@ -12,7 +12,7 @@ export const collabRouter = new Elysia({
 })
     .use(betterAuth)
 
-    .get("/collab/access/:ownerId/:pathId", async ({params, user}) => {
+    .get("/collab/:ownerId/:pathId/access", async ({params, user}) => {
         const drive = await getSharedDrive(params.ownerId, user);
         const canRead = await drive.canRead(params.pathId, user);
         const canWrite = await drive.canWrite(params.pathId, user);
