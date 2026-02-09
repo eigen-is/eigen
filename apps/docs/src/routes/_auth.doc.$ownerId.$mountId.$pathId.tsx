@@ -1,7 +1,6 @@
 import {createFileRoute, useNavigate} from '@tanstack/react-router'
 import {CollaborativeEditor} from '../components/docs/editor'
-import {useDocumentAccess} from '@workspace/lib/docs'
-import {usePathInfo} from '@workspace/lib/drive'
+import {useCollabDocumentInfo} from '@workspace/lib/collab'
 import {EigenLoader} from '@workspace/ui'
 import {useApp} from '@workspace/ui/components/layout/app-context'
 import {useCallback, useEffect, useState} from 'react'
@@ -14,8 +13,7 @@ export const Route = createFileRoute('/_auth/doc/$ownerId/$mountId/$pathId')({
 
 function CollaborativeTextEditor() {
     const {ownerId, mountId, pathId} = Route.useParams();
-    const {data: access, isLoading} = useDocumentAccess(ownerId, mountId, pathId);
-    const {data: path, isLoading: pathLoading} = usePathInfo(ownerId, mountId, pathId);
+    const {data: docInfo, isLoading} = useCollabDocumentInfo(ownerId, mountId, pathId);
     const {appName, setAppName} = useApp();
     const [originalAppName] = useState(appName);
     const [accessDialogOpen, setAccessDialogOpen] = useState(false);
@@ -24,16 +22,13 @@ function CollaborativeTextEditor() {
 
     // Always call hooks at the top level, before any conditional logic
     useEffect(() => {
-        // Only change the app name if we have a valid path
-        if (path?.name) {
-            setAppName?.(path.name.replace('.eigendoc', ''));
+        if (docInfo?.path?.name) {
+            setAppName?.(docInfo.path.name.replace('.eigendoc', ''));
         }
-
-        // Restore original app name when component unmounts
         return () => {
             setAppName?.(originalAppName);
         };
-    }, [path, originalAppName, setAppName]);
+    }, [docInfo?.path, originalAppName, setAppName]);
 
     const handleAccessDialogOpen = useCallback(() => {
         setAccessDialogOpen(true);
@@ -41,11 +36,11 @@ function CollaborativeTextEditor() {
 
 
     // Handle loading states
-    if (isLoading || pathLoading) {
+    if (isLoading) {
         return <EigenLoader/>
     }
 
-    if (!access?.canRead || !path) {
+    if (!docInfo?.canRead || !docInfo.path) {
         return (
             <div className="flex items-center justify-center h-full w-full">
                 <p className="text-muted-foreground">Encountering the null vector: a rendezvous with nothing at all.</p>
@@ -56,16 +51,16 @@ function CollaborativeTextEditor() {
     return (
         <>
             <div className="bg-muted flex-1 overflow-hidden">
-                <CollaborativeEditor path={path} access={access}
+                <CollaborativeEditor path={docInfo.path} access={docInfo}
                                      onAccessDialogOpen={handleAccessDialogOpen}
                                      onDeleteDialogOpen={setDeleteDialogOpen}/>
             </div>
             <DriveAccessDialog
                 open={accessDialogOpen}
                 onOpenChange={setAccessDialogOpen}
-                path={path}
+                path={docInfo.path}
             /><DriveDeleteItem
-            path={path}
+            path={docInfo.path}
             open={deleteDialogOpen}
             onOpenChange={setDeleteDialogOpen}
             onAfterAction={() => {
