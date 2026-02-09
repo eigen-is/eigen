@@ -5,7 +5,7 @@ import {eq} from 'drizzle-orm';
 import {type DatabaseConfig, type ManagedDatabase, type SchemaType} from '../core/managed-database';
 import {createDefaultMountConfig, Mount} from '../mount';
 import type {MountConfig, MountInfo} from '@workspace/lib/types';
-import {type DriveACL, type DrivePath, isContainerType} from '@workspace/lib/types/drive';
+import {type DriveACL, type DrivePath, isContainerType, isCollabType} from '@workspace/lib/types/drive';
 import {canRead, canWrite, normalizeACL} from './acl';
 import {deleteThumbnail, getThumbnail, saveThumbnail} from '../shared/thumbnails';
 import CollabDocument from '../collab/collabDocument';
@@ -224,7 +224,7 @@ export default class Drive {
             throw new Error('No write permission');
         }
 
-        if (folder.type === 'doc' || folder.type === 'stickies') {
+        if (isCollabType(folder.type)) {
             try {
                 await this.closeCollabDocument(mountId, pathId);
             } catch (error) {
@@ -235,7 +235,7 @@ export default class Drive {
         await mount.deletePath(pathId);
         this.emitACLChange(folder, folder.acl, null);
         
-        if (folder.type === 'doc' || folder.type === 'stickies') {
+        if (isCollabType(folder.type)) {
             this.emit(SSEventType.DRIVE_FILE_DELETED, folder);
         } else {
             this.emit(SSEventType.DRIVE_FOLDER_DELETED, folder);
@@ -249,7 +249,7 @@ export default class Drive {
             throw new Error('File not found');
         }
 
-        if (file.type === 'doc' || file.type === 'stickies') {
+        if (isCollabType(file.type)) {
             return this.deleteFolder(mountId, pathId);
         }
 
