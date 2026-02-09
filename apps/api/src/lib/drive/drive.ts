@@ -7,7 +7,7 @@ import {createDefaultMountConfig, Mount} from '../mount';
 import type {MountConfig, MountInfo} from '@workspace/lib/types';
 import {type DriveACL, type DrivePath, isContainerType, isCollabType} from '@workspace/lib/types/drive';
 import {canRead, canWrite, normalizeACL} from './acl';
-import {deleteThumbnail, extractImageDetails, getThumbnail, saveThumbnail} from '../shared/thumbnails';
+import {extractImageDetails, getThumbnail, saveThumbnail} from '../shared/thumbnails';
 import CollabDocument from '../collab/collabDocument';
 import {getSharedDatabase} from './shared';
 import * as sharedSchema from './sharedschema';
@@ -231,13 +231,7 @@ export default class Drive {
             throw new Error('No write permission');
         }
 
-        if (isCollabType(folder.type)) {
-            try {
-                await this.closeCollabDocument(mountId, pathId);
-            } catch (error) {
-                console.error('Failed to close collab document:', error);
-            }
-        }
+        await this.closeCollabDocumentsRecursively(mountId, pathId);
 
         await mount.deletePath(pathId);
         this.emitACLChange(folder, folder.acl, null);
@@ -246,6 +240,25 @@ export default class Drive {
             this.emit(SSEventType.DRIVE_FILE_DELETED, folder);
         } else {
             this.emit(SSEventType.DRIVE_FOLDER_DELETED, folder);
+        }
+    }
+
+    private async closeCollabDocumentsRecursively(mountId: string, pathId: string): Promise<void> {
+        const mount = this.getMount(mountId);
+        const path = await mount.getPath(pathId);
+        if (!path) return;
+
+        if (isCollabType(path.type)) {
+            try {
+                await this.closeCollabDocument(mountId, pathId);
+            } catch (error) {
+                console.error(`Failed to close collab document ${pathId}:`, error);
+            }
+        } else if (isContainerType(path.type)) {
+            const children = await mount.listFolder(pathId);
+            for (const child of children) {
+                await this.closeCollabDocumentsRecursively(mountId, child.id);
+            }
         }
     }
 
@@ -264,7 +277,6 @@ export default class Drive {
             throw new Error('No write permission');
         }
 
-        await deleteThumbnail(mount.thumbsDir, pathId);
         await mount.deletePath(pathId);
         this.emitACLChange(file, file.acl, null);
         this.emit(SSEventType.DRIVE_FILE_DELETED, file);
