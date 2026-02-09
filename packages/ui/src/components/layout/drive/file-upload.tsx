@@ -18,7 +18,7 @@ export type FileUploadOptions = {
 }
 
 // Custom hook for file upload functionality
-export function useFileUpload(ownerId: string, folderId: string, options: FileUploadOptions = {}) {
+export function useFileUpload(ownerId: string, mountId: string, folderId: string, options: FileUploadOptions = {}) {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const upload = useUpload();
 
@@ -37,8 +37,8 @@ export function useFileUpload(ownerId: string, folderId: string, options: FileUp
 
         // Use custom URLs if provided, otherwise use default URLs
         const url = multipleFiles
-            ? (options.multipleFilesUrl || getDriveFilesUploadUrl(ownerId, folderId))
-            : (options.singleFileUrl || getDriveFileUploadUrl(ownerId, folderId));
+            ? (options.multipleFilesUrl || getDriveFilesUploadUrl(ownerId, mountId, folderId))
+            : (options.singleFileUrl || getDriveFileUploadUrl(ownerId, mountId, folderId));
 
         const name = multipleFiles ? 'multiple files' : files[0].name;
         const uploadHandler = upload.createUpload(name);

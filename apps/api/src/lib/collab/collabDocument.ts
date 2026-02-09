@@ -120,16 +120,16 @@ export default class CollabDocument {
     public async init() {
         console.log(`[CollabDocument] init for path: ${this.path.name}`);
 
-        let dataDbPath = await this.drive.getChildByName(this.path.id, 'data.db');
+        let dataDbPath = await this.drive.getChildByName(this.path.mountId, this.path.id, 'data.db');
         if (!dataDbPath) {
-            const dataDbId = await this.drive.touchFile(this.path.id, 'data.db', 'application/x-sqlite3');
-            dataDbPath = await this.drive.getPath(dataDbId);
+            const dataDbId = await this.drive.touchFile(this.path.mountId, this.path.id, 'data.db', 'application/x-sqlite3');
+            dataDbPath = await this.drive.getPath(this.path.mountId, dataDbId);
             if (!dataDbPath) {
                 throw new Error(`Failed to create data.db in ${this.path.name}`);
             }
         }
 
-        const managedDb = await this.drive.openDatabase(COLLAB_DB_CONFIG, dataDbPath.id);
+        const managedDb = await this.drive.openDatabase(this.path.mountId, COLLAB_DB_CONFIG, dataDbPath.id);
 
         this.doc = new Y.Doc();
         this.doc.gc = true;
@@ -174,7 +174,7 @@ export default class CollabDocument {
         console.log(`Remaining connections: ${this.connections.size}`);
         // check if this.connections is empty
         if (this.connections.size <= 0) {
-            this.drive.closeCollabDocument(this.path.id);
+            this.drive.closeCollabDocument(this.path.mountId, this.path.id);
         }
     }
 

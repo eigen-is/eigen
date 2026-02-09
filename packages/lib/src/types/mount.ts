@@ -1,3 +1,5 @@
+export const DEFAULT_MOUNT_ID = 'default';
+
 export type S3Config = {
     endpoint: string;
     bucket: string;

@@ -20,7 +20,7 @@ export function DriveCreateDoc({
                                    onCancel,
                                    onAfterAction,
                                }: DriveCreateDocProps) {
-    const createDocMutation = useCreateDoc(path.ownerId);
+    const createDocMutation = useCreateDoc(path.ownerId, path.mountId);
 
     const handleOpenChange = (nextOpen: boolean) => {
         onOpenChange(nextOpen);
@@ -42,7 +42,7 @@ export function DriveCreateDoc({
 
             // Open the document in a new window
             if (newPath) {
-                const url = `${import.meta.env.VITE_APP_DOCS_URL}/doc/${path.ownerId}/${newPath}`;
+                const url = `${import.meta.env.VITE_APP_DOCS_URL}/doc/${path.ownerId}/${path.mountId}/${newPath}`;
                 window.open(url, '_blank');
             }
 

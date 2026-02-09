@@ -5,11 +5,12 @@ import {BoardData, ColumnItem, TaskItem} from '../types';
 import {nanoid} from 'nanoid';
 import {useInitializeBoard} from './useInitializeBoard';
 import {normalizeBoard} from '../normalizeBoard';
+import {getCollabWebSocketUrl} from "@workspace/lib/api";
 
 /**
  * Minimal Yjs-powered Kanban board hook for collaborative editing
  */
-export const useYjsKanbanBoard = (ownerId: string, pathId: string) => {
+export const useYjsKanbanBoard = (ownerId: string, mountId: string, pathId: string) => {
     // Board state mirrors Yjs document
     const [board, setBoard] = useState<BoardData>({
         tasks: {},
@@ -42,7 +43,7 @@ export const useYjsKanbanBoard = (ownerId: string, pathId: string) => {
         undoManager.current = new Y.UndoManager([columnsMap, tasksMap, columnOrderArray]);
 
         // Connect to WebSocket provider
-        const wsUrl = `${import.meta.env.VITE_API_HOST}/ws/collab/${ownerId}/${pathId}`;
+        const wsUrl = getCollabWebSocketUrl(ownerId, mountId, pathId);
         const wsProvider = new WebsocketProvider(wsUrl, '', doc, {
             resyncInterval: 5000,
             connect: true,

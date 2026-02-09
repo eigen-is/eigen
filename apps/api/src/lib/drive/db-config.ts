@@ -11,6 +11,7 @@ export const SHARED_DB_CONFIG: DatabaseConfig<typeof schema> = {
             up: (db) => db.exec(`
                 CREATE TABLE IF NOT EXISTS shared_paths (
                     id TEXT PRIMARY KEY,
+                    mountId TEXT NOT NULL,
                     name TEXT NOT NULL,
                     type TEXT NOT NULL,
                     parentId TEXT,

@@ -21,9 +21,9 @@ function DriveRoute() {
     const {pid} = Route.useSearch();
     const auth = useAuth();
     const ownerId = auth.user!.id;
-    const {data: selectedPath = null} = usePathInfo(ownerId, pid);
+    const {rootPath, mountId} = useContext(DriveContext);
+    const {data: selectedPath = null} = usePathInfo(ownerId, mountId, pid);
     const isMobile = useIsMobile();
-    const {rootPath} = useContext(DriveContext);
 
     // Fetch folder content and path information
     const {
@@ -48,10 +48,10 @@ function DriveRoute() {
 
     const onRowActivate = (path: DrivePath) => {
         if (path.type === 'doc') {
-            const url = `${import.meta.env.VITE_APP_DOCS_URL}/doc/${path.ownerId}/${path.id}`;
+            const url = `${import.meta.env.VITE_APP_DOCS_URL}/doc/${path.ownerId}/${path.mountId}/${path.id}`;
             document.location.href = url;
         } else if (path.type === 'stickies') {
-            const url = `${import.meta.env.VITE_APP_STICKIES_URL}/board/${path.ownerId}/${path.id}`;
+            const url = `${import.meta.env.VITE_APP_STICKIES_URL}/board/${path.ownerId}/${path.mountId}/${path.id}`;
             document.location.href = url;
         }
     };
@@ -77,6 +77,7 @@ function DriveRoute() {
             pid={pid}
             selectedPath={selectedPath}
             ownerId={ownerId}
+            mountId={mountId}
             folderContents={folderContents}
             isLoading={isFolderContentLoading}
             error={isFolderContentLoadingError}

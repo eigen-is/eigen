@@ -1,6 +1,6 @@
 import {toast} from "sonner";
 import type {DrivePath} from "@workspace/lib/types/drive";
-import {useDeleteFile, useDeleteFolder} from "@workspace/lib/drive";
+import {useDeleteFile, useDeleteFolder, DEFAULT_MOUNT_ID} from "@workspace/lib/drive";
 import {DeleteDialog} from "@workspace/ui/components/layout/delete/delete-dialog";
 
 export type DriveDeleteItemProps = {
@@ -16,8 +16,8 @@ export function DriveDeleteItem({
                                     onOpenChange,
                                     onAfterAction,
                                 }: DriveDeleteItemProps) {
-    const deleteFileMutation = useDeleteFile(path?.ownerId || '', path?.parentId || undefined, path?.mimeType || undefined);
-    const deleteFolderMutation = useDeleteFolder(path?.ownerId || '', path?.parentId || undefined, path?.mimeType || undefined);
+    const deleteFileMutation = useDeleteFile(path?.ownerId || '', path?.mountId || DEFAULT_MOUNT_ID, path?.parentId || undefined, path?.mimeType || undefined);
+    const deleteFolderMutation = useDeleteFolder(path?.ownerId || '', path?.mountId || DEFAULT_MOUNT_ID, path?.parentId || undefined, path?.mimeType || undefined);
 
     const handleDelete = () => {
         if (!path) return;

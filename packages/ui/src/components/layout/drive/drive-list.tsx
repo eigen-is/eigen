@@ -39,6 +39,7 @@ interface DriveListProps {
     onCreateStickies?: () => void;
     onDownload?: (path: DrivePath) => void;
     ownerId: string;
+    mountId: string;
     pathId: string;
     showBreadcrumb?: boolean;
     allowDelete?: boolean;
@@ -65,6 +66,7 @@ export function DriveList({
                               onCreateStickies,
                               onDownload,
                               ownerId,
+                              mountId,
                               pathId,
                               showBreadcrumb = true,
                               allowDelete = false,
@@ -75,7 +77,7 @@ export function DriveList({
                           }: DriveListProps) {
     const [isDragging, setIsDragging] = useState(false);
     const dragCounter = useRef(0);
-    const {data: breadcrumbPaths = []} = showBreadcrumb ? useBreadcrumb(ownerId, pathId) : {data: []};
+    const {data: breadcrumbPaths = []} = showBreadcrumb ? useBreadcrumb(ownerId, mountId, pathId) : {data: []};
     const isMobile = useIsMobile();
 
     // Handle row click with two different behaviors

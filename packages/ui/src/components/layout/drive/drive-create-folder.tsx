@@ -20,7 +20,7 @@ export function DriveCreateFolder({
                                       onCancel,
                                       onAfterAction,
                                   }: DriveCreateFolderProps) {
-    const createFolderMutation = useCreateFolder(path.ownerId);
+    const createFolderMutation = useCreateFolder(path.ownerId, path.mountId);
 
     const handleOpenChange = (nextOpen: boolean) => {
         onOpenChange(nextOpen);

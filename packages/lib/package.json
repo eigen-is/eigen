@@ -33,6 +33,7 @@
     "./types/label": "./src/types/label.ts",
     "./types/mail": "./src/types/mail.ts",
     "./types/sse": "./src/types/sse.ts",
-    "./types/public": "./src/types/public.ts"
+    "./types/public": "./src/types/public.ts",
+    "./types/mount": "./src/types/mount.ts"
   }
 }

@@ -8,14 +8,14 @@ import {useCallback, useEffect, useState} from 'react'
 import {DriveAccessDialog} from '@workspace/ui/components/layout/drive/drive-access-dialog'
 import {DriveDeleteItem} from '@workspace/ui/components/layout/drive/drive-delete-item'
 
-export const Route = createFileRoute('/_auth/doc/$ownerId/$pathId')({
+export const Route = createFileRoute('/_auth/doc/$ownerId/$mountId/$pathId')({
     component: CollaborativeTextEditor,
 })
 
 function CollaborativeTextEditor() {
-    const {ownerId, pathId} = Route.useParams();
-    const {data: access, isLoading} = useDocumentAccess(ownerId, pathId);
-    const {data: path, isLoading: pathLoading} = usePathInfo(ownerId, pathId);
+    const {ownerId, mountId, pathId} = Route.useParams();
+    const {data: access, isLoading} = useDocumentAccess(ownerId, mountId, pathId);
+    const {data: path, isLoading: pathLoading} = usePathInfo(ownerId, mountId, pathId);
     const {appName, setAppName} = useApp();
     const [originalAppName] = useState(appName);
     const [accessDialogOpen, setAccessDialogOpen] = useState(false);

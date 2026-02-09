@@ -20,8 +20,14 @@ export const setupApi = api.setup;
 
 export const getSSEEventsUrl = (ownerId: string) => `${API_HOST}/sse/${ownerId}/events`;
 export const getContactsAvatarUploadUrl = (ownerId: string) => `${API_HOST}/contacts/${ownerId}/avatar`;
-export const getDriveFileUploadUrl = (ownerId: string, pathId: string) => `${API_HOST}/drive/${ownerId}/file/${pathId}`;
-export const getDriveFilesUploadUrl = (ownerId: string, pathId: string) => `${API_HOST}/drive/${ownerId}/files/${pathId}`;
-export const getDriveDownloadUrl = (ownerId: string, pathId: string) => `${API_HOST}/drive/${ownerId}/file/${pathId}/download`;
-export const getDriveEmbedUrl = (ownerId: string, pathId: string, fileName: string) => `${API_HOST}/drive/${ownerId}/file/${pathId}/embed/${fileName}`;
-export const getDriveThumbnailUrl = (ownerId: string, fileName: string) => `${API_HOST}/drive/${ownerId}/thumb/${fileName}`;
+export const getDriveFileUploadUrl = (ownerId: string, mountId: string, pathId: string) => `${API_HOST}/drive/${ownerId}/${mountId}/file/${pathId}`;
+export const getDriveFilesUploadUrl = (ownerId: string, mountId: string, pathId: string) => `${API_HOST}/drive/${ownerId}/${mountId}/files/${pathId}`;
+export const getDriveDownloadUrl = (ownerId: string, mountId: string, pathId: string) => `${API_HOST}/drive/${ownerId}/${mountId}/file/${pathId}/download`;
+export const getDriveEmbedUrl = (ownerId: string, mountId: string, pathId: string, fileName: string) => `${API_HOST}/drive/${ownerId}/${mountId}/file/${pathId}/embed/${fileName}`;
+export const getDriveThumbnailUrl = (ownerId: string, mountId: string, fileName: string) => `${API_HOST}/drive/${ownerId}/${mountId}/thumb/${fileName}`;
+export const getCollabAccessUrl = (ownerId: string, mountId: string, pathId: string) => `${API_HOST}/collab/${ownerId}/${mountId}/${pathId}/access`;
+export const getCollabWebSocketUrl = (ownerId: string, mountId: string, pathId: string) => `${API_HOST.replace('http', 'ws')}/ws/collab/${ownerId}/${mountId}/${pathId}`;
+
+export const getMailMessageDownloadUrl = (messageId: string) => `${API_HOST}/mail/message/download/${messageId}`;
+export const getMailAttachmentUrl = (messageId: string, attachmentIndex: number, fileName: string) => `${API_HOST}/mail/message/${messageId}/attachment/${attachmentIndex}/${encodeURIComponent(fileName)}`;
+export const getSpaceZipUrl = () => `${API_HOST}/space/zip`;

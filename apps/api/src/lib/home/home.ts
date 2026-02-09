@@ -112,7 +112,7 @@ export class Home {
         const [mail, contacts, drive] = await Promise.all([
             this.mail.size(),
             this.contacts.size(),
-            this.drive.size()
+            this.drive.size('default')
         ]);
         const maxMB = 50;
         const max = maxMB * 1024 * 1024;
