@@ -90,6 +90,13 @@ bun serve:docs
 bun serve:stickies
 ```
 
+### Type Checking
+
+```bash
+# Run TypeScript type check across all packages
+bun run typecheck
+```
+
 ### Building for Production
 
 ```bash
