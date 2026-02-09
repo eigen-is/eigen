@@ -1,5 +1,5 @@
 import {createFileRoute, useNavigate} from '@tanstack/react-router';
-import {useMimeContent, usePathInfo} from '@workspace/lib/drive';
+import {useMimeContent, usePathInfo, DEFAULT_MOUNT_ID} from '@workspace/lib/drive';
 import {DriveLayout} from "@workspace/ui/components/layout/drive/drive-layout";
 import {DrivePath, DriveSearchParams} from "@workspace/lib/types/drive";
 import {useAuth} from '@workspace/lib/auth';
@@ -22,7 +22,8 @@ function DriveRoute() {
     const {pid} = Route.useSearch();
     const auth = useAuth();
     const ownerId = auth.user!.id;
-    const {data: selectedPath = null} = usePathInfo(ownerId, pid);
+    const mountId = DEFAULT_MOUNT_ID;
+    const {data: selectedPath = null} = usePathInfo(ownerId, mountId, pid);
     const isMobile = useIsMobile();
     const [preview, setPreview] = useState<{ url: string; mimeType: string } | null>(null);
 
@@ -41,7 +42,7 @@ function DriveRoute() {
             // If a preview is already open
             if (fileMimeType.startsWith("image/") || fileMimeType.startsWith("video/")) {
                 // Update the preview if new selection is also previewable
-                const url = getDriveEmbedUrl(path.ownerId, path.id, path.name);
+                const url = getDriveEmbedUrl(path.ownerId, path.mountId, path.id, path.name);
                 setPreview({url, mimeType: fileMimeType});
             } else {
                 // Close the preview if the new selection isn't previewable
@@ -70,16 +71,16 @@ function DriveRoute() {
                 search: {pid: undefined}
             });
         } else if (path.type === 'doc') {
-            const url = `${import.meta.env.VITE_APP_DOCS_URL}/doc/${path.ownerId}/${path.id}`;
+            const url = `${import.meta.env.VITE_APP_DOCS_URL}/doc/${path.ownerId}/${path.mountId}/${path.id}`;
             document.location.href = url;
         } else if (path.type === 'stickies') {
-            const url = `${import.meta.env.VITE_APP_STICKIES_URL}/board/${path.ownerId}/${path.id}`;
+            const url = `${import.meta.env.VITE_APP_STICKIES_URL}/board/${path.ownerId}/${path.mountId}/${path.id}`;
             document.location.href = url;
         } else if (fileMimeType.startsWith("image/") || fileMimeType.startsWith("video/")) {
-            const url = getDriveEmbedUrl(path.ownerId, path.id, path.name);
+            const url = getDriveEmbedUrl(path.ownerId, path.mountId, path.id, path.name);
             setPreview({url, mimeType: fileMimeType});
         } else {
-            const url = getDriveDownloadUrl(path.ownerId, path.id);
+            const url = getDriveDownloadUrl(path.ownerId, path.mountId, path.id);
             window.open(url, "_blank");
         }
     };
@@ -112,6 +113,7 @@ function DriveRoute() {
                 pid={pid}
                 selectedPath={selectedPath}
                 ownerId={ownerId}
+                mountId={mountId}
                 folderContents={folderContents}
                 isLoading={isFolderContentLoading}
                 error={isFolderContentLoadingError}

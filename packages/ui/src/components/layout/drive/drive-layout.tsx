@@ -11,9 +11,11 @@ import {DriveCreateFolder} from "./drive-create-folder";
 import {DriveRenameItem} from "./drive-rename-item";
 import {useMovePath} from "@workspace/lib/drive";
 import {useDriveDialogs} from "./use-drive-dialogs";
+import {getDriveDownloadUrl} from "@workspace/lib/api";
 
 export type DriveLayoutProps = {
     ownerId: string;
+    mountId: string;
     pathId?: string;
     folderContents: DrivePath[];
     isLoading: boolean;
@@ -39,6 +41,7 @@ export type DriveLayoutProps = {
 
 export function DriveLayout({
                                 ownerId,
+                                mountId,
                                 folderContents,
                                 isLoading,
                                 error,
@@ -62,7 +65,7 @@ export function DriveLayout({
                                 showBreadcrumb = false,
                             }: DriveLayoutProps) {
     const dialogs = useDriveDialogs();
-    const movePath = useMovePath(ownerId, currentPath?.id);
+    const movePath = useMovePath(ownerId, mountId, currentPath?.id);
 
     const handleFileUpload = () => {
         if (allowUpload && currentPath) {
@@ -95,7 +98,7 @@ export function DriveLayout({
 
     const handleDownloadPath = (path: DrivePath) => {
         if (path?.type === 'file' && path.id) {
-            const downloadUrl = `${import.meta.env.VITE_API_HOST}/drive/download/${path.ownerId}/${path.id}`;
+            const downloadUrl = getDriveDownloadUrl(path.ownerId, path.mountId, path.id);
             const a = document.createElement('a');
             a.href = downloadUrl;
             a.download = path.name || 'download';
@@ -135,6 +138,7 @@ export function DriveLayout({
         onCreateStickies: allowCreateStickies ? dialogs.createStickies.openDialog : undefined,
         currentPath,
         ownerId,
+        mountId,
         pathId,
         showBreadcrumb,
         onDownload: handleDownloadPath,

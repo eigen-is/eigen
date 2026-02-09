@@ -11,6 +11,7 @@ import {EditorToolbar} from "./editor-toolbar";
 import {CustomElement} from "./editor.types";
 import {EigenLoader} from "@workspace/ui";
 import {DrivePath} from "@workspace/lib/types/drive";
+import {getCollabWebSocketUrl} from "@workspace/lib/api";
 
 // Define the initial value with proper typing
 const initialValue: CustomElement[] = [
@@ -35,7 +36,7 @@ export const CollaborativeEditor = ({path, access, onAccessDialogOpen, onDeleteD
 
     useEffect(() => {
         // Build WebSocket URL
-        const wsUrl = `${import.meta.env.VITE_API_HOST}/ws/collab/${path.ownerId}/${path.id}`;
+        const wsUrl = getCollabWebSocketUrl(path.ownerId, path.mountId, path.id);
 
         // Create WebSocket provider
         const yProvider = new WebsocketProvider(wsUrl, slug, yDoc, {

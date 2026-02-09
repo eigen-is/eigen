@@ -34,7 +34,7 @@ const StickiesBoard = ({ownerId, path, canWrite, onAccessDialogOpen}: StickiesBo
         handleAddColumn,
         yjsDoc,
         undoManager
-    } = useYjsKanbanBoard(ownerId, path.id);
+    } = useYjsKanbanBoard(ownerId, path.mountId, path.id);
 
     // Drag and drop functionality with Yjs awareness
     const {

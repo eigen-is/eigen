@@ -58,8 +58,8 @@ export function DriveUploadFiles({
 
         // Use URL based on number of files
         const url = multipleFiles
-            ? getDriveFilesUploadUrl(path.ownerId, path.id)
-            : getDriveFileUploadUrl(path.ownerId, path.id);
+            ? getDriveFilesUploadUrl(path.ownerId, path.mountId, path.id)
+            : getDriveFileUploadUrl(path.ownerId, path.mountId, path.id);
 
         const name = multipleFiles ? 'multiple files' : files[0].name;
         const uploadHandler = upload.createUpload(name);

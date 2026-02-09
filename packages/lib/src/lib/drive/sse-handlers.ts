@@ -25,24 +25,24 @@ export function handleDriveSSEvent(event: SSEvent, queryClient: QueryClient): bo
         case SSEventType.DRIVE_FOLDER_CREATED:
         case SSEventType.DRIVE_FILE_CREATED:    
         case SSEventType.DRIVE_FILE_UPLOADED:
-            invalidateItemCreated(queryClient, path.parentId, path.mimeType);
+            invalidateItemCreated(queryClient, path.mountId, path.parentId, path.mimeType);
             return true;
 
         case SSEventType.DRIVE_FOLDER_DELETED:
         case SSEventType.DRIVE_FILE_DELETED:
-            invalidateItemDeleted(queryClient, path.id, path.parentId, path.mimeType);
+            invalidateItemDeleted(queryClient, path.mountId, path.id, path.parentId, path.mimeType);
             return true;
 
         case SSEventType.DRIVE_PATH_RENAMED:
-            invalidatePathRenamed(queryClient, path.id, path.parentId, path.mimeType);
+            invalidatePathRenamed(queryClient, path.mountId, path.id, path.parentId, path.mimeType);
             return true;
 
         case SSEventType.DRIVE_PATH_MOVED:
-            invalidatePathMoved(queryClient, path.id, path.parentId, event.drive?.oldParentId);
+            invalidatePathMoved(queryClient, path.mountId, path.id, path.parentId, event.drive?.oldParentId);
             return true;
 
         case SSEventType.DRIVE_ACL_UPDATED:
-            invalidateAclUpdated(queryClient, path.id, path.parentId);
+            invalidateAclUpdated(queryClient, path.mountId, path.id, path.parentId);
             return true;
 
         default:

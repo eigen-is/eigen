@@ -50,8 +50,8 @@ export function DriveDetail({
         );
     }
 
-    const fullPath = getDriveDownloadUrl(path.ownerId, path.id);
-    const thumbnailPath = getDriveThumbnailUrl(path.ownerId, path.thumbnail || '');
+    const fullPath = getDriveDownloadUrl(path.ownerId, path.mountId, path.id);
+    const thumbnailPath = getDriveThumbnailUrl(path.ownerId, path.mountId, path.thumbnail || '');
 
     return (
 

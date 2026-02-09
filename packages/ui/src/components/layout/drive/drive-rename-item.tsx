@@ -22,7 +22,7 @@ export function DriveRenameItem({
                                 }: DriveRenameItemProps) {
     if (!path) return null;
 
-    const renamePathMutation = useRenamePath(path.ownerId, path.parentId || undefined, path.mimeType || undefined);
+    const renamePathMutation = useRenamePath(path.ownerId, path.mountId, path.parentId || undefined, path.mimeType || undefined);
 
     const handleOpenChange = (nextOpen: boolean) => {
         onOpenChange(nextOpen);

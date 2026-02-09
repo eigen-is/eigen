@@ -12,25 +12,25 @@ export const collabRouter = new Elysia({
 })
     .use(betterAuth)
 
-    .get("/collab/:ownerId/:pathId/access", async ({params, user}) => {
+    .get("/collab/:ownerId/:mountId/:pathId/access", async ({params, user}) => {
         const drive = await getSharedDrive(params.ownerId, user);
-        const canRead = await drive.canRead(params.pathId, user);
-        const canWrite = await drive.canWrite(params.pathId, user);
+        const canRead = await drive.canRead(params.mountId, params.pathId, user);
+        const canWrite = await drive.canWrite(params.mountId, params.pathId, user);
         return {canRead, canWrite};
     }, {auth: true})
 
     // WebSocket endpoint for collaborative editing
-    .ws("/ws/collab/:ownerId/:pathId", {
+    .ws("/ws/collab/:ownerId/:mountId/:pathId", {
         auth: true,
         params: t.Object({
             ownerId: t.String(),
+            mountId: t.String(),
             pathId: t.String(),
         }),
 
         async open(ws) {
             console.log('WebSocket connection opened');
 
-            // Get user from ws.data (provided by betterAuth)
             // @ts-ignore
             const user = ws.data?.user;
             if (!user) {
@@ -39,15 +39,16 @@ export const collabRouter = new Elysia({
             }
 
             const ownerId = ws.data.params.ownerId;
+            const mountId = ws.data.params.mountId;
             const pathId = ws.data.params.pathId;
 
             const drive = await getSharedDrive(ownerId, user);
-            if (!drive || !(await drive.canRead(pathId, user))) {
+            if (!drive || !(await drive.canRead(mountId, pathId, user))) {
                 ws.close(1008, "Authentication failed");
                 return;
             }
             try {
-                const document = await drive.getCollabDocument(pathId);
+                const document = await drive.getCollabDocument(mountId, pathId);
 
                 document.subscribe(user, ws as unknown as ServerWebSocket<any>);
 
@@ -73,6 +74,7 @@ export const collabRouter = new Elysia({
             }
 
             const ownerId = ws.data.params.ownerId;
+            const mountId = ws.data.params.mountId;
             const pathId = ws.data.params.pathId;
 
             if (typeof message === 'string') {
@@ -86,13 +88,13 @@ export const collabRouter = new Elysia({
                 const update = message instanceof Uint8Array ? message : new Uint8Array(message as Buffer);
 
                 const drive = await getSharedDrive(ownerId, user);
-                if (!drive || !(await drive.canRead(pathId, user))) {
+                if (!drive || !(await drive.canRead(mountId, pathId, user))) {
                     console.error('canRead failed');
                     ws.close(1008, "Authentication failed");
                     return;
                 }
-                const document = await drive.getCollabDocument(pathId);
-                document.handleMessage(ws as unknown as ServerWebSocket<any>, update, await drive.canWrite(pathId, user));
+                const document = await drive.getCollabDocument(mountId, pathId);
+                document.handleMessage(ws as unknown as ServerWebSocket<any>, update, await drive.canWrite(mountId, pathId, user));
             } catch (err) {
                 console.error('Error processing message:', err);
             }
@@ -108,11 +110,12 @@ export const collabRouter = new Elysia({
                 }
 
                 const ownerId = ws.data.params.ownerId;
+                const mountId = ws.data.params.mountId;
                 const pathId = ws.data.params.pathId;
 
                 try {
                     const drive = await getSharedDrive(ownerId, user);
-                    const document = await drive.getCollabDocument(pathId);
+                    const document = await drive.getCollabDocument(mountId, pathId);
                     document.unsubscribe(user, ws as unknown as ServerWebSocket<any>);
                 } catch (err) {
                     console.error('Error handling WebSocket close:', err);
