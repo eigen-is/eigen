@@ -121,7 +121,7 @@ export default class Drive {
         }));
     }
 
-    async createFolder(mountId: string, parentId: string, folderName: string): Promise<string | undefined> {
+    async createFolder(mountId: string, parentId: string, folderName: string): Promise<DrivePath> {
         const mount = this.getMount(mountId);
         const parent = await mount.getPath(parentId);
         if (!parent || !isContainerType(parent.type)) {
@@ -133,38 +133,41 @@ export default class Drive {
         }
 
         const safeName = folderName.replace(/[/\\]/g, '_');
-        const folderId = await mount.createFolder(parentId, safeName);
-        const folder = await mount.getPath(folderId);
-        if (folder) this.emit(SSEventType.DRIVE_FOLDER_CREATED, folder);
-        return folderId;
+        const pathId = await mount.createFolder(parentId, safeName);
+        const folder = await mount.getPath(pathId);
+        if (!folder) throw new Error('Failed to create folder');
+        this.emit(SSEventType.DRIVE_FOLDER_CREATED, folder);
+        return folder;
     }
 
-    async createDoc(mountId: string, parentId: string, docName: string): Promise<string | undefined> {
+    async createDoc(mountId: string, parentId: string, docName: string): Promise<DrivePath> {
         const mount = this.getMount(mountId);
         if (!(await this.canWrite(mountId, parentId, this.owner))) {
             throw new Error('No write permission');
         }
 
         const safeName = `${docName}.eigendoc`;
-        const docId = await mount.createFolder(parentId, safeName, 'doc');
-        await CollabDocument.create(this, mountId, docId);
-        const doc = await mount.getPath(docId);
-        if (doc) this.emit(SSEventType.DRIVE_FILE_CREATED, doc);
-        return docId;
+        const pathId = await mount.createFolder(parentId, safeName, 'doc');
+        await CollabDocument.create(this, mountId, pathId);
+        const doc = await mount.getPath(pathId);
+        if (!doc) throw new Error('Failed to create doc');
+        this.emit(SSEventType.DRIVE_FILE_CREATED, doc);
+        return doc;
     }
 
-    async createStickies(mountId: string, parentId: string, stickiesName: string): Promise<string | undefined> {
+    async createStickies(mountId: string, parentId: string, stickiesName: string): Promise<DrivePath> {
         const mount = this.getMount(mountId);
         if (!(await this.canWrite(mountId, parentId, this.owner))) {
             throw new Error('No write permission');
         }
 
         const safeName = `${stickiesName}.eigenstickies`;
-        const stickiesId = await mount.createFolder(parentId, safeName, 'stickies');
-        await CollabDocument.create(this, mountId, stickiesId);
-        const stickies = await mount.getPath(stickiesId);
-        if (stickies) this.emit(SSEventType.DRIVE_FILE_CREATED, stickies);
-        return stickiesId;
+        const pathId = await mount.createFolder(parentId, safeName, 'stickies');
+        await CollabDocument.create(this, mountId, pathId);
+        const stickies = await mount.getPath(pathId);
+        if (!stickies) throw new Error('Failed to create stickies');
+        this.emit(SSEventType.DRIVE_FILE_CREATED, stickies);
+        return stickies;
     }
 
     async uploadFile(mountId: string, parentId: string, file: File): Promise<DrivePath> {
@@ -264,7 +267,7 @@ export default class Drive {
         this.emit(SSEventType.DRIVE_FILE_DELETED, file);
     }
 
-    async movePath(mountId: string, pathId: string, targetParentId: string): Promise<void> {
+    async movePath(mountId: string, pathId: string, targetParentId: string): Promise<DrivePath> {
         const mount = this.getMount(mountId);
         const path = await mount.getPath(pathId);
         if (!path) {
@@ -284,7 +287,9 @@ export default class Drive {
 
         await mount.updatePath(pathId, {parentId: targetParentId});
         const movedPath = await mount.getPath(pathId);
-        if (movedPath) this.emit(SSEventType.DRIVE_PATH_MOVED, movedPath, {oldParentId: oldParentId ?? undefined});
+        if (!movedPath) throw new Error('Failed to move path');
+        this.emit(SSEventType.DRIVE_PATH_MOVED, movedPath, {oldParentId: oldParentId ?? undefined});
+        return movedPath;
     }
 
     async renamePath(mountId: string, pathId: string, newName: string): Promise<void> {

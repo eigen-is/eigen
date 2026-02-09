@@ -96,8 +96,11 @@ export default class SharedDrive extends Drive {
         return this.withReadPermission(mountId, pathId, () => this.sharedDrive.closeCollabDocument(mountId, pathId), undefined);
     }
 
-    public async createFolder(mountId: string, parentId: string, folderName: string) {
-        return this.withWritePermission(mountId, parentId, () => this.sharedDrive.createFolder(mountId, parentId, folderName), undefined);
+    public async createFolder(mountId: string, parentId: string, folderName: string): Promise<DrivePath> {
+        if (!(await this.canWrite(mountId, parentId, this.user))) {
+            throw new Error('No write permission');
+        }
+        return this.sharedDrive.createFolder(mountId, parentId, folderName);
     }
 
     public async uploadFile(mountId: string, parentId: string, file: File): Promise<DrivePath> {
@@ -114,12 +117,18 @@ export default class SharedDrive extends Drive {
         return this.sharedDrive.uploadFiles(mountId, parentId, files);
     }
 
-    public async createStickies(mountId: string, parentId: string, stickiesName: string): Promise<string | undefined> {
-        return this.withWritePermission(mountId, parentId, () => this.sharedDrive.createStickies(mountId, parentId, stickiesName), undefined);
+    public async createStickies(mountId: string, parentId: string, stickiesName: string): Promise<DrivePath> {
+        if (!(await this.canWrite(mountId, parentId, this.user))) {
+            throw new Error('No write permission');
+        }
+        return this.sharedDrive.createStickies(mountId, parentId, stickiesName);
     }
 
-    public async createDoc(mountId: string, parentId: string, docName: string): Promise<string | undefined> {
-        return this.withWritePermission(mountId, parentId, () => this.sharedDrive.createDoc(mountId, parentId, docName), undefined);
+    public async createDoc(mountId: string, parentId: string, docName: string): Promise<DrivePath> {
+        if (!(await this.canWrite(mountId, parentId, this.user))) {
+            throw new Error('No write permission');
+        }
+        return this.sharedDrive.createDoc(mountId, parentId, docName);
     }
 
     public async updateACL(mountId: string, pathId: string, acl: DriveACL[]) {
@@ -138,8 +147,11 @@ export default class SharedDrive extends Drive {
         return this.withParentWritePermission(mountId, pathId, () => this.sharedDrive.renamePath(mountId, pathId, newName), undefined);
     }
 
-    public async movePath(mountId: string, pathId: string, targetParentId: string) {
-        return this.withWritePermission(mountId, pathId, () => this.sharedDrive.movePath(mountId, pathId, targetParentId), undefined);
+    public async movePath(mountId: string, pathId: string, targetParentId: string): Promise<DrivePath> {
+        if (!(await this.canWrite(mountId, pathId, this.user))) {
+            throw new Error('No write permission');
+        }
+        return this.sharedDrive.movePath(mountId, pathId, targetParentId);
     }
 
     public async breadCrumb(mountId: string, pathId: string) {
