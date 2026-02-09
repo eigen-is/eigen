@@ -123,7 +123,20 @@ export class ManagedDatabase<S extends SchemaType> {
         this.rawDb = null;
         this.drizzleDb = null;
 
+        this.deleteJournalFiles();
+
         await this.callbacks.onClose?.();
+    }
+
+    private deleteJournalFiles(): void {
+        const shmPath = `${this.localPath}-shm`;
+        const walPath = `${this.localPath}-wal`;
+        try {
+            if (fs.existsSync(shmPath)) fs.unlinkSync(shmPath);
+            if (fs.existsSync(walPath)) fs.unlinkSync(walPath);
+        } catch (error) {
+            console.warn(`Failed to delete journal files for ${this.localPath}:`, error);
+        }
     }
 
     get db(): BunSQLiteDatabase<S> {
