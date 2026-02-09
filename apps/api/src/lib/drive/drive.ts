@@ -167,7 +167,7 @@ export default class Drive {
         return stickiesId;
     }
 
-    async uploadFile(mountId: string, parentId: string, file: File): Promise<string> {
+    async uploadFile(mountId: string, parentId: string, file: File): Promise<DrivePath> {
         const mount = this.getMount(mountId);
         const parent = await mount.getPath(parentId);
         if (!parent || parent.type !== 'folder') {
@@ -180,7 +180,7 @@ export default class Drive {
 
         const safeName = file.name.replace(/[/\\]/g, '_');
         const buffer = await file.arrayBuffer();
-        const fileId = await mount.createFile(
+        const pathId = await mount.createFile(
             parentId,
             safeName,
             file.type || 'application/octet-stream',
@@ -190,21 +190,22 @@ export default class Drive {
 
         const thumbnail = await saveThumbnail(
             mount.thumbsDir,
-            fileId,
+            pathId,
             Buffer.from(buffer),
             file.type
         );
 
         if (thumbnail) {
-            await mount.updatePath(fileId, {thumbnail});
+            await mount.updatePath(pathId, {thumbnail});
         }
 
-        const uploadedFile = await mount.getPath(fileId);
-        if (uploadedFile) this.emit(SSEventType.DRIVE_FILE_UPLOADED, uploadedFile);
-        return fileId;
+        const uploadedFile = await mount.getPath(pathId);
+        if (!uploadedFile) throw new Error('Failed to get uploaded file');
+        this.emit(SSEventType.DRIVE_FILE_UPLOADED, uploadedFile);
+        return uploadedFile;
     }
 
-    async uploadFiles(mountId: string, parentId: string, files: File[]): Promise<string[]> {
+    async uploadFiles(mountId: string, parentId: string, files: File[]): Promise<DrivePath[]> {
         const results = await Promise.all(files.map(f => this.uploadFile(mountId, parentId, f)));
         return results;
     }
