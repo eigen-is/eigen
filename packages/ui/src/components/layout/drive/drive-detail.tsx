@@ -151,6 +151,7 @@ export function DriveDetail({
                             src={thumbnailPath}
                             alt={`Thumbnail for ${path.name}`}
                             className="max-w-full max-h-[25%] object-contain"
+                            style={path.details?.width && path.details?.height ? {aspectRatio: path.details.width / path.details.height} : undefined}
                         />
                     </div>
                 )}
@@ -161,6 +162,7 @@ export function DriveDetail({
                             className="w-full max-h-[25%] object-contain"
                             autoPlay={false}
                             controls
+                            style={path.details?.width && path.details?.height ? {aspectRatio: path.details.width / path.details.height} : undefined}
                         />
                     </div>
                 )}
@@ -175,6 +177,39 @@ export function DriveDetail({
                     </div>
                 )}
 
+                {path.details && (path.details.width || path.details.height || path.details.duration || path.details.pageCount) && (
+                    <Table className="mt-4">
+                        <TableBody>
+                            {path.details.width && path.details.height && (
+                                <TableRow>
+                                    <TableCell className="font-medium px-0 w-20">Dimensions</TableCell>
+                                    <TableCell className="px">{path.details.width} × {path.details.height}</TableCell>
+                                </TableRow>
+                            )}
+                            {path.details.duration && (
+                                <TableRow>
+                                    <TableCell className="font-medium px-0 w-20">Duration</TableCell>
+                                    <TableCell className="px">{Math.floor(path.details.duration / 60)}:{String(Math.floor(path.details.duration % 60)).padStart(2, '0')}</TableCell>
+                                </TableRow>
+                            )}
+                            {path.details.pageCount && (
+                                <TableRow>
+                                    <TableCell className="font-medium px-0 w-20">Pages</TableCell>
+                                    <TableCell className="px">{path.details.pageCount}</TableCell>
+                                </TableRow>
+                            )}
+                            {Object.entries(path.details)
+                                .filter(([key]) => !['width', 'height', 'duration', 'pageCount'].includes(key))
+                                .map(([key, value]) => (
+                                    <TableRow key={key}>
+                                        <TableCell className="font-medium px-0 w-20 capitalize">{key}</TableCell>
+                                        <TableCell className="px truncate">{String(value)}</TableCell>
+                                    </TableRow>
+                                ))
+                            }
+                        </TableBody>
+                    </Table>
+                )}
 
                 <div className="mt-4">
                     <DriveAccessList

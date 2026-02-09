@@ -109,6 +109,24 @@ export async function saveThumbnail(
     return `${pathId}.${opts.format}`;
 }
 
+export async function extractImageDetails(
+    source: Buffer,
+    mimeType: string
+): Promise<{ width: number; height: number } | null> {
+    if (!isThumbnailSupported(mimeType)) {
+        return null;
+    }
+
+    try {
+        const metadata = await sharp(source).metadata();
+        if (metadata.width && metadata.height) {
+            return { width: metadata.width, height: metadata.height };
+        }
+    } catch {
+    }
+    return null;
+}
+
 export async function deleteThumbnail(thumbsDir: string, pathId: string): Promise<void> {
     const webpPath = getThumbnailPath(thumbsDir, pathId, 'webp');
     const jpegPath = getThumbnailPath(thumbsDir, pathId, 'jpeg');

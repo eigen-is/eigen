@@ -16,6 +16,8 @@ export type TextAlignment = 'left' | 'center' | 'right';
 export type ImageElement = {
     type: 'image';
     pathId: string;
+    width?: number;
+    height?: number;
     children: CustomText[];
     align?: TextAlignment;
 }
@@ -26,6 +28,8 @@ export type CustomElement = {
     checked?: boolean;
     align?: TextAlignment;
     pathId?: string;
+    width?: number;
+    height?: number;
 }
 
 export type CustomText = {

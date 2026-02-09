@@ -3,7 +3,7 @@
 
 import {sql} from 'drizzle-orm';
 import {integer, primaryKey, sqliteTable, text} from 'drizzle-orm/sqlite-core';
-import type {DriveACL} from '@workspace/lib/types/drive';
+import type {DriveACL, DrivePathDetails} from '@workspace/lib/types/drive';
 
 // Drive paths table
 export const drivePaths = sqliteTable('drive_paths', {
@@ -16,6 +16,7 @@ export const drivePaths = sqliteTable('drive_paths', {
     size: integer('size'),
     thumbnail: text('thumbnail'),
     acl: text('acl', {mode: 'json'}).$type<DriveACL[] | null>(),
+    details: text('details', {mode: 'json'}).$type<DrivePathDetails>(),
     createdAt: integer('createdAt', {mode: 'timestamp'}).default(sql`(unixepoch()
                                                                      )`),
     updatedAt: integer('updatedAt', {mode: 'timestamp'}).default(sql`(unixepoch()

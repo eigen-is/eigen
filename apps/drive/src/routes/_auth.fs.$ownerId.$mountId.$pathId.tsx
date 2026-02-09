@@ -23,7 +23,7 @@ function DriveRoute() {
     const navigate = useNavigate();
     const isMobile = useIsMobile();
     const {rootPath} = useContext(DriveContext);
-    const [preview, setPreview] = useState<{ url: string; mimeType: string } | null>(null);
+    const [preview, setPreview] = useState<{ url: string; mimeType: string; aspectRatio?: number } | null>(null);
 
     // If pathId is "root", navigate to the actual root folder ID when available
     useEffect(() => {
@@ -56,7 +56,8 @@ function DriveRoute() {
             if (mimeType.startsWith("image/") || mimeType.startsWith("video/")) {
                 // Update the preview if new selection is also previewable
                 const url = getDriveEmbedUrl(path.ownerId, path.mountId, path.id, path.name);
-                setPreview({url, mimeType});
+                const aspectRatio = path.details?.width && path.details?.height ? path.details.width / path.details.height : undefined;
+                setPreview({url, mimeType, aspectRatio});
             } else {
                 // Close the preview if the new selection isn't previewable
                 setPreview(null);
@@ -97,7 +98,8 @@ function DriveRoute() {
             document.location.href = url;
         } else if (mimeType.startsWith("image/") || mimeType.startsWith("video/")) {
             const url = getDriveEmbedUrl(path.ownerId, path.mountId, path.id, path.name);
-            setPreview({url, mimeType: mimeType});
+            const aspectRatio = path.details?.width && path.details?.height ? path.details.width / path.details.height : undefined;
+            setPreview({url, mimeType, aspectRatio});
         } else {
             const url = getDriveDownloadUrl(path.ownerId, path.mountId, path.id);
             window.open(url, "_blank");
@@ -149,6 +151,7 @@ function DriveRoute() {
                 mimeType={preview?.mimeType || ''}
                 onClose={() => setPreview(null)}
                 open={preview !== null}
+                aspectRatio={preview?.aspectRatio}
             />
             <DriveLayout
                 ownerId={ownerId}
