@@ -117,13 +117,18 @@ export default class CollabDocument {
         console.log(`[CollabDocument] Created for path: ${path.name}`);
     }
 
+    static async create(drive: Drive, mountId: string, docId: string): Promise<void> {
+        await drive.touchFile(mountId, docId, 'data.db', 'application/x-sqlite3');
+        await drive.createFolder(mountId, docId, 'media');
+    }
+
     public async init() {
         console.log(`[CollabDocument] init for path: ${this.path.name}`);
 
         let dataDbPath = await this.drive.getChildByName(this.path.mountId, this.path.id, 'data.db');
         if (!dataDbPath) {
-            const dataDbId = await this.drive.touchFile(this.path.mountId, this.path.id, 'data.db', 'application/x-sqlite3');
-            dataDbPath = await this.drive.getPath(this.path.mountId, dataDbId);
+            await CollabDocument.create(this.drive, this.path.mountId, this.path.id);
+            dataDbPath = await this.drive.getChildByName(this.path.mountId, this.path.id, 'data.db');
             if (!dataDbPath) {
                 throw new Error(`Failed to create data.db in ${this.path.name}`);
             }
