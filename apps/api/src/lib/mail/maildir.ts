@@ -447,7 +447,6 @@ export default class Maildir {
 
             return parsedMessage as EmailDraft;
         } catch (error) {
-            console.error('Error creating draft message:', error);
             throw error;
         }
     }
@@ -457,7 +456,21 @@ export default class Maildir {
         if (!mail) return null;
         try {
             const mailOptions = draftToMailOptions(mail, this.home.user.email);
-            const sent = await sendMail(mailOptions);
+            const isDev = Bun.env['PRODUCTION'] !== '1';
+            let sent = false;
+
+            if (isDev) {
+                console.log('[DEV MODE] Would send email:', {
+                    from: mailOptions.from,
+                    to: mailOptions.to,
+                    subject: mailOptions.subject,
+                    text: mailOptions.text?.substring(0, 200) + '...'
+                });
+                sent = true;
+            } else {
+                sent = await sendMail(mailOptions);
+            }
+
             if (sent) {
                 await this.messageMove(mail.id, 'sent');
                 this.emit(SSEventType.MAIL_SENT, {
