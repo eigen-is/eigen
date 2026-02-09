@@ -20,6 +20,7 @@ export const SHARED_DB_CONFIG: DatabaseConfig<typeof schema> = {
                     ownerId TEXT NOT NULL,
                     mimeType TEXT NOT NULL,
                     acl TEXT,
+                    details TEXT,
                     createdAt INTEGER DEFAULT (unixepoch()),
                     updatedAt INTEGER DEFAULT (unixepoch()),
                     FOREIGN KEY (parentId) REFERENCES shared_paths(id) ON DELETE CASCADE
