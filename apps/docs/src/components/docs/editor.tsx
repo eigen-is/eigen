@@ -290,7 +290,7 @@ const SlateEditor = ({
         
         const result = await uploadFile.mutateAsync({parentId: mediaFolderId, file});
         if (result) {
-            insertImage(result);
+            insertImage(result.id);
         }
     }, [mediaFolderId, uploadFile, insertImage]);
 
