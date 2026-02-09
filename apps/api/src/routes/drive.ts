@@ -108,8 +108,7 @@ export const driveRouter = new Elysia({name: "drive"})
     })
     .put("/drive/:ownerId/:mountId/path/:pathId/move", async ({params, body, user}) => {
         const drive = await getSharedDrive(params.ownerId, user);
-        await drive.movePath(params.mountId, params.pathId, body.targetParentId);
-        return {success: true};
+        return await drive.movePath(params.mountId, params.pathId, body.targetParentId);
     }, {
         body: t.Object({targetParentId: t.String()}),
         auth: true

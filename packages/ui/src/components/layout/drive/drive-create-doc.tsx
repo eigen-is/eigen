@@ -32,7 +32,7 @@ export function DriveCreateDoc({
             const newPath = await createDocMutation.mutateAsync({
                 parentId: path.id,
                 fileName: fileName,
-            }) as string | undefined;
+            });
             onOpenChange(false);
 
             // Call onAfterAction if provided
@@ -42,11 +42,11 @@ export function DriveCreateDoc({
 
             // Open the document in a new window
             if (newPath) {
-                const url = `${import.meta.env.VITE_APP_DOCS_URL}/doc/${path.ownerId}/${path.mountId}/${newPath}`;
+                const url = `${import.meta.env.VITE_APP_DOCS_URL}/doc/${path.ownerId}/${path.mountId}/${newPath.id}`;
                 window.open(url, '_blank');
             }
 
-            if (onSave) onSave(newPath || '');
+            if (onSave) onSave(newPath?.id || '');
         } catch (error: unknown) {
             toast.error(error instanceof Error ? error.message : "Failed to create document");
         }
