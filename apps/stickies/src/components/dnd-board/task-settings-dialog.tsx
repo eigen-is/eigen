@@ -71,7 +71,7 @@ export function TaskSettingsDialog({
 
             // Remove task from its column
             if (foundColumn && taskIndex !== -1) {
-                const taskIdsArray = foundColumn.get("taskIds") as Y.Array<any>;
+                const taskIdsArray = (foundColumn as Y.Map<any>).get("taskIds") as Y.Array<any>;
                 taskIdsArray.delete(taskIndex, 1);
             }
 

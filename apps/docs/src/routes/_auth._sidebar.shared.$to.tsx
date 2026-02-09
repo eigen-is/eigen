@@ -31,7 +31,7 @@ function DriveRoute() {
         data: unfilteredFolderContents = [],
         isLoading: isFolderContentLoading,
         error: isFolderContentLoadingError
-    } = useSharedPaths(to as 'by-me' | 'with-me');
+    } = useSharedPaths(ownerId, to as 'by-me' | 'with-me');
 
     const folderContents = unfilteredFolderContents?.filter(path => path.type === 'doc') || [];
 
