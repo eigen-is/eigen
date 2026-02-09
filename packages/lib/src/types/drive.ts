@@ -17,6 +17,14 @@ export function isCollabType(type: DrivePathType): type is DriveCollabType {
     return type === 'doc' || type === 'stickies';
 }
 
+export type DrivePathDetails = {
+    width?: number;
+    height?: number;
+    duration?: number;
+    pageCount?: number;
+    [key: string]: unknown;
+} | null;
+
 export type DrivePath = {
     id: string;
     mountId: string;
@@ -29,6 +37,7 @@ export type DrivePath = {
     size: number;
     thumbnail: string | null;
     acl: DriveACL[] | null;
+    details: DrivePathDetails;
     createdAt: Date;
     updatedAt: Date;
 }

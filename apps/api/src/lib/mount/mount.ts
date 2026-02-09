@@ -404,6 +404,7 @@ export class Mount {
             size: row.size ?? 0,
             thumbnail: row.thumbnail,
             acl: row.acl,
+            details: row.details ?? null,
             createdAt: row.createdAt ?? new Date(),
             updatedAt: row.updatedAt ?? new Date()
         };

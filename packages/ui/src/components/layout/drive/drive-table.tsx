@@ -86,6 +86,7 @@ export function DriveTable({
                 size: 0,
                 thumbnail: null,
                 acl: null,
+                details: null,
                 createdAt: new Date(),
                 updatedAt: new Date()
             });
@@ -182,6 +183,7 @@ export function DriveTable({
                                 size: 0,
                                 thumbnail: null,
                                 acl: null,
+                                details: null,
                                 createdAt: new Date(),
                                 updatedAt: new Date()
                             })}

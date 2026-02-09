@@ -7,7 +7,7 @@ import {createDefaultMountConfig, Mount} from '../mount';
 import type {MountConfig, MountInfo} from '@workspace/lib/types';
 import {type DriveACL, type DrivePath, isContainerType, isCollabType} from '@workspace/lib/types/drive';
 import {canRead, canWrite, normalizeACL} from './acl';
-import {deleteThumbnail, getThumbnail, saveThumbnail} from '../shared/thumbnails';
+import {deleteThumbnail, extractImageDetails, getThumbnail, saveThumbnail} from '../shared/thumbnails';
 import CollabDocument from '../collab/collabDocument';
 import {getSharedDatabase} from './shared';
 import * as sharedSchema from './sharedschema';
@@ -183,6 +183,7 @@ export default class Drive {
 
         const safeName = file.name.replace(/[/\\]/g, '_');
         const buffer = await file.arrayBuffer();
+        const bufferData = Buffer.from(buffer);
         const pathId = await mount.createFile(
             parentId,
             safeName,
@@ -191,15 +192,17 @@ export default class Drive {
             buffer
         );
 
-        const thumbnail = await saveThumbnail(
-            mount.thumbsDir,
-            pathId,
-            Buffer.from(buffer),
-            file.type
-        );
+        const [thumbnail, imageDetails] = await Promise.all([
+            saveThumbnail(mount.thumbsDir, pathId, bufferData, file.type),
+            extractImageDetails(bufferData, file.type)
+        ]);
 
-        if (thumbnail) {
-            await mount.updatePath(pathId, {thumbnail});
+        const updates: Partial<DrivePath> = {};
+        if (thumbnail) updates.thumbnail = thumbnail;
+        if (imageDetails) updates.details = imageDetails;
+
+        if (Object.keys(updates).length > 0) {
+            await mount.updatePath(pathId, updates);
         }
 
         const uploadedFile = await mount.getPath(pathId);
@@ -349,6 +352,7 @@ export default class Drive {
             size: r.size ?? 0,
             thumbnail: r.thumbnail,
             acl: r.acl as DriveACL[] | null,
+            details: r.details ?? null,
             createdAt: r.createdAt ?? new Date(),
             updatedAt: r.updatedAt ?? new Date()
         }));
@@ -467,6 +471,7 @@ export default class Drive {
             size: r.size ?? 0,
             thumbnail: r.thumbnail,
             acl: r.acl as DriveACL[] | null,
+            details: r.details ?? null,
             createdAt: r.createdAt ?? new Date(),
             updatedAt: r.updatedAt ?? new Date()
         }));
