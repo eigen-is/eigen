@@ -175,13 +175,14 @@ const SlateEditor = ({
                     </div>
                 );
             case 'image':
+                const aspectRatio = typedElement.width && typedElement.height ? typedElement.width / typedElement.height : undefined;
                 return (
                     <div {...attributes} contentEditable={false} className="my-2">
                         <img
                             src={getDriveEmbedUrl(path.ownerId, path.mountId, typedElement.pathId!, 'image')}
                             alt=""
                             className="max-w-full rounded"
-                            style={style}
+                            style={{...style, aspectRatio}}
                         />
                         {children}
                     </div>
@@ -259,10 +260,12 @@ const SlateEditor = ({
         }
     }, [editor]);
 
-    const insertImage = useCallback((pathId: string) => {
+    const insertImage = useCallback((pathId: string, width?: number, height?: number) => {
         const image: CustomElement = {
             type: 'image',
             pathId,
+            width,
+            height,
             children: [{text: ''}],
         };
         Transforms.insertNodes(editor, image);
@@ -274,7 +277,9 @@ const SlateEditor = ({
         
         const result = await uploadFile.mutateAsync({parentId: mediaFolderId, file});
         if (result) {
-            insertImage(result.id);
+            const width = result.details?.width as number | undefined;
+            const height = result.details?.height as number | undefined;
+            insertImage(result.id, width, height);
         }
     }, [mediaFolderId, uploadFile, insertImage]);
 
