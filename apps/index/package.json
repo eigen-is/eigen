@@ -7,7 +7,8 @@
     "dev": "bunx --bun vite",
     "build": "bunx --bun vite build",
     "prebuild": "bun run scripts/generate-blog-meta.ts",
-    "postbuild": "bun run scripts/post-build.ts"
+    "postbuild": "bun run scripts/post-build.ts",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@workspace/lib": "workspace:*",
