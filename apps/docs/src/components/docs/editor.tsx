@@ -1,5 +1,5 @@
-import {useCallback, useEffect, useMemo, useRef, useState} from "react";
-import {createEditor, Descendant, Editor, Element, Node, NodeEntry, Transforms} from "slate";
+import {useCallback, useEffect, useMemo, useState} from "react";
+import {createEditor, Editor, Node, NodeEntry, Transforms} from "slate";
 import {Editable, ReactEditor, RenderElementProps, RenderLeafProps, Slate, withReact} from "slate-react";
 import {withCursors, withYjs, YjsEditor} from "@slate-yjs/core";
 import * as Y from "yjs";
@@ -12,7 +12,7 @@ import {CustomElement} from "./editor.types";
 import {EigenLoader} from "@workspace/ui";
 import {DrivePath} from "@workspace/lib/types/drive";
 import {getCollabWebSocketUrl, getDriveEmbedUrl} from "@workspace/lib/api";
-import {useUploadFile, useDeleteFile} from "@workspace/lib/drive";
+import {useUploadFile} from "@workspace/lib/drive";
 
 // Define the initial value with proper typing
 const initialValue: CustomElement[] = [
@@ -92,22 +92,6 @@ const SlateEditor = ({
 }) => {
     const auth = useAuth();
     const uploadFile = useUploadFile(path.ownerId, path.mountId);
-    const deleteFile = useDeleteFile(path.ownerId, path.mountId, mediaFolderId ?? undefined);
-    const previousImageIds = useRef<Set<string>>(new Set());
-
-    const getImageIds = useCallback((nodes: Descendant[]): Set<string> => {
-        const ids = new Set<string>();
-        const traverse = (node: Descendant) => {
-            if (Element.isElement(node)) {
-                if (node.type === 'image' && (node as CustomElement).pathId) {
-                    ids.add((node as CustomElement).pathId!);
-                }
-                node.children.forEach(traverse);
-            }
-        };
-        nodes.forEach(traverse);
-        return ids;
-    }, []);
 
     const editor = useMemo(() => {
         const e = withReact(
@@ -312,20 +296,9 @@ const SlateEditor = ({
         }
     }, [mediaFolderId, handleImageUpload]);
 
-    const handleChange = useCallback((value: Descendant[]) => {
-        const currentImageIds = getImageIds(value);
-        const removedIds = [...previousImageIds.current].filter(id => !currentImageIds.has(id));
-        
-        for (const pathId of removedIds) {
-            deleteFile.mutate(pathId);
-        }
-        
-        previousImageIds.current = currentImageIds;
-    }, [getImageIds, deleteFile]);
-
     return (
         <>
-            <Slate editor={editor} initialValue={initialValue} onChange={handleChange}>
+            <Slate editor={editor} initialValue={initialValue}>
                 <div className="flex h-full w-full flex-col">
                     <EditorToolbar path={path} canWrite={access.canWrite} onDeleteDialogOpen={onDeleteDialogOpen}
                                    onAccessDialogOpen={onAccessDialogOpen}/>
