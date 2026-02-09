@@ -32,7 +32,7 @@ export function DriveCreateStickies({
             const newPath = await createStickiesMutation.mutateAsync({
                 parentId: path.id,
                 fileName: fileName,
-            }) as string | undefined;
+            });
             onOpenChange(false);
 
             // Call onAfterAction if provided
@@ -42,11 +42,11 @@ export function DriveCreateStickies({
 
             // Open the stickies board in a new window
             if (newPath) {
-                const url = `${import.meta.env.VITE_APP_STICKIES_URL}/board/${path.ownerId}/${path.mountId}/${newPath}`;
+                const url = `${import.meta.env.VITE_APP_STICKIES_URL}/board/${path.ownerId}/${path.mountId}/${newPath.id}`;
                 window.open(url, '_blank');
             }
 
-            if (onSave) onSave(newPath || '');
+            if (onSave) onSave(newPath?.id || '');
         } catch (error: unknown) {
             toast.error(error instanceof Error ? error.message : "Failed to create stickies");
         }

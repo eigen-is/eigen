@@ -32,7 +32,7 @@ export function DriveCreateFolder({
             const newPath = await createFolderMutation.mutateAsync({
                 parentId: path.id,
                 folderName: folderName,
-            }) as string | undefined;
+            });
             onOpenChange(false);
 
             // Call onAfterAction if provided
@@ -40,7 +40,7 @@ export function DriveCreateFolder({
                 onAfterAction('create', {name: folderName});
             }
 
-            if (onSave) onSave(newPath || '');
+            if (onSave) onSave(newPath?.id || '');
         } catch (error: unknown) {
             toast.error(error instanceof Error ? error.message : "Failed to create folder");
         }
