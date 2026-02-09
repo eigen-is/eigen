@@ -26,7 +26,8 @@ const defaultMailboxes = [
         icon: <Inbox className="h-4 w-4"/>,
         href: "/box/inbox",
         unread: 0,
-        flags: ['\\HasNoChildren', '\\Inbox']
+        flags: ['\\HasNoChildren', '\\Inbox'],
+        isStandard: true
     },
     {
         path: "Drafts",
@@ -34,7 +35,8 @@ const defaultMailboxes = [
         icon: <File className="h-4 w-4"/>,
         href: "/box/drafts",
         unread: 0,
-        flags: ['\\HasNoChildren', '\\Drafts']
+        flags: ['\\HasNoChildren', '\\Drafts'],
+        isStandard: true
     },
     {
         path: "Sent",
@@ -42,7 +44,8 @@ const defaultMailboxes = [
         icon: <Send className="h-4 w-4"/>,
         href: "/box/sent",
         unread: 0,
-        flags: ['\\HasNoChildren', '\\Sent']
+        flags: ['\\HasNoChildren', '\\Sent'],
+        isStandard: true
     },
     {
         path: "Spam",
@@ -50,7 +53,8 @@ const defaultMailboxes = [
         icon: <AlertTriangle className="h-4 w-4"/>,
         href: "/box/spam",
         unread: 0,
-        flags: ['\\HasNoChildren', '\\Junk']
+        flags: ['\\HasNoChildren', '\\Junk'],
+        isStandard: true
     },
     {
         path: "Trash",
@@ -58,7 +62,8 @@ const defaultMailboxes = [
         icon: <Trash2 className="h-4 w-4"/>,
         href: "/box/trash",
         unread: 0,
-        flags: ['\\HasNoChildren', '\\Trash']
+        flags: ['\\HasNoChildren', '\\Trash'],
+        isStandard: true
     },
     {
         path: "Archive",
@@ -66,7 +71,8 @@ const defaultMailboxes = [
         icon: <Archive className="h-4 w-4"/>,
         href: "/box/archive",
         unread: 0,
-        flags: ['\\HasNoChildren', '\\Archive']
+        flags: ['\\HasNoChildren', '\\Archive'],
+        isStandard: true
     },
 ];
 

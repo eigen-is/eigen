@@ -53,7 +53,7 @@ function MailRoute() {
     const {data: emails = [], isLoading: isEmailsLoading, error: isEmailsError} = useEmails(filterId);
     const {data: selectedEmail = null} = useEmail(mailId);
     const getEmailById = useEmailById();
-    const {data: mailboxes = [], isLoading: isMailboxesLoading, error: isMailboxesError} = useMailboxes();
+    const {data: mailboxes = []} = useMailboxes();
 
     const selectedEmailInData = emails.find(m => m.id === selectedEmail?.id);
     if (selectedEmailInData) selectedEmailInData.isRead = true;
@@ -116,13 +116,6 @@ function MailRoute() {
         const email = await getEmailById(emailId);
         if (email) {
             handleDeleteEmail(email);
-        }
-    };
-
-    const handleMoveEmailById = (mailbox: string) => async (emailId: string) => {
-        const email = await getEmailById(emailId);
-        if (email) {
-            handleMoveEmail(email, mailbox);
         }
     };
 

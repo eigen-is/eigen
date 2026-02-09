@@ -92,8 +92,8 @@ const SlateEditor = ({
                 withCursors(withYjs(createEditor(), sharedType!), provider!.awareness, {
                     // The current user's name and color
                     data: {
-                        name: auth.user.name,
-                        email: auth.user.email,
+                        name: auth.user!.name,
+                        email: auth.user!.email,
                         color: "#9810fa",
                     },
                 })

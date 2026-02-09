@@ -75,8 +75,8 @@ export function EmailDraft({
     // Set from email address
     email.from = {
         value: [{
-            name: auth.user.name || '',
-            address: auth.user.email || '',
+            name: auth.user!.name || '',
+            address: auth.user!.email || '',
         }],
         html: '',
         text: '',
