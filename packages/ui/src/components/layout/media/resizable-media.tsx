@@ -1,6 +1,10 @@
 import {useCallback, useEffect, useRef, useState} from "react";
 import {cn} from "@workspace/ui/lib/utils";
+import {Popover, PopoverContent, PopoverTrigger} from "@workspace/ui/components/popover";
+import {Button} from "@workspace/ui/components/button";
+import {Palette} from "lucide-react";
 import {type MediaStyleOptions, type ResizableMediaProps, defaultStyleOptions} from "./media.types";
+import {MediaStylePicker} from "./media-style-picker";
 
 type ResizeHandle = 'nw' | 'n' | 'ne' | 'w' | 'e' | 'sw' | 's' | 'se';
 
@@ -29,6 +33,7 @@ export function ResizableMedia({
     isSelected,
     styleOptions = defaultStyleOptions,
     onWidthChange,
+    onStyleChange,
     onSelect,
     onDeselect,
     onDelete,
@@ -99,7 +104,10 @@ export function ResizableMedia({
         if (!isSelected) return;
 
         const handleClickOutside = (e: MouseEvent) => {
-            if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+            const target = e.target as HTMLElement;
+            const isInsideContainer = containerRef.current?.contains(target);
+            const isInsidePopover = target.closest('[data-radix-popper-content-wrapper]');
+            if (!isInsideContainer && !isInsidePopover) {
                 onDeselect();
             }
         };
@@ -124,6 +132,7 @@ export function ResizableMedia({
 
     const radius = borderRadiusMap[styleOptions.borderRadius];
     const shadow = shadowMap[styleOptions.shadow];
+    const border = styleOptions.border ? 'ring-1 ring-border' : '';
 
     return (
         <div
@@ -136,7 +145,7 @@ export function ResizableMedia({
                 ref={imageRef}
                 src={src}
                 alt={alt}
-                className={cn("max-w-full block", radius, shadow)}
+                className={cn("max-w-full block", radius, shadow, border)}
                 style={{
                     width: width ? `${width}px` : undefined,
                     aspectRatio: aspectRatio ?? undefined,
@@ -150,6 +159,21 @@ export function ResizableMedia({
                         "absolute inset-0 border-2 border-dashed border-blue-500 bg-blue-500/10 pointer-events-none",
                         radius
                     )} />
+                    {onStyleChange && (
+                        <div className="absolute -top-10 left-1/2 -translate-x-1/2 z-10">
+                            <Popover>
+                                <PopoverTrigger asChild>
+                                    <Button size="sm" variant="secondary" className="shadow-md">
+                                        <Palette className="size-4" />
+                                        Style
+                                    </Button>
+                                </PopoverTrigger>
+                                <PopoverContent align="center" className="w-auto p-0">
+                                    <MediaStylePicker value={styleOptions} onChange={onStyleChange} />
+                                </PopoverContent>
+                            </Popover>
+                        </div>
+                    )}
                     <ResizeHandle position="nw" onMouseDown={(e) => handleResizeStart(e, 'nw')} />
                     <ResizeHandle position="n" onMouseDown={(e) => handleResizeStart(e, 'n')} />
                     <ResizeHandle position="ne" onMouseDown={(e) => handleResizeStart(e, 'ne')} />

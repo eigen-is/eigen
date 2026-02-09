@@ -1,6 +1,7 @@
 export type MediaStyleOptions = {
     borderRadius: 'none' | 'sm' | 'md' | 'lg' | 'xl' | 'full';
     shadow: 'none' | 'sm' | 'md' | 'lg' | 'xl';
+    border: boolean;
 };
 
 export type ResizableMediaProps = {
@@ -11,6 +12,7 @@ export type ResizableMediaProps = {
     isSelected: boolean;
     styleOptions?: MediaStyleOptions;
     onWidthChange: (width: number) => void;
+    onStyleChange?: (options: MediaStyleOptions) => void;
     onSelect: () => void;
     onDeselect: () => void;
     onDelete?: () => void;
@@ -19,4 +21,5 @@ export type ResizableMediaProps = {
 export const defaultStyleOptions: MediaStyleOptions = {
     borderRadius: 'sm',
     shadow: 'none',
+    border: false,
 };
