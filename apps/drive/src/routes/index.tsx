@@ -7,9 +7,10 @@ export const Route = createFileRoute('/')({
             throw redirect({to: '/login'});
         }
         throw redirect({
-            to: '/fs/$ownerId/$pathId',
+            to: '/fs/$ownerId/$mountId/$pathId',
             params: {
                 ownerId: userId,
+                mountId: 'default',
                 pathId: 'root'
             }
         });

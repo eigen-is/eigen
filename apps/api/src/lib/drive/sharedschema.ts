@@ -4,6 +4,7 @@ import type {DriveACL} from '@workspace/lib/types/drive';
 
 export const sharedPaths = sqliteTable('shared_paths', {
     id: text('id').primaryKey(),
+    mountId: text('mountId').notNull(),
     name: text('name').notNull(),
     type: text('type').notNull().$type<"folder" | "file" | "doc" | "stickies">(),
     parentId: text('parentId'),  // We'll reference this in the relations

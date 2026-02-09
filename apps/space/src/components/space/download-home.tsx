@@ -2,6 +2,7 @@ import {useState} from 'react';
 import {Download} from 'lucide-react';
 import {Button} from '@workspace/ui/components/button';
 import {toast} from 'sonner';
+import {getSpaceZipUrl} from '@workspace/lib/api';
 
 export function DownloadHome() {
     const [isDownloading, setIsDownloading] = useState(false);
@@ -12,7 +13,7 @@ export function DownloadHome() {
 
             // Create a hidden anchor element to trigger the download
             const downloadLink = document.createElement('a');
-            downloadLink.href = `${import.meta.env.VITE_API_HOST}/space/zip`;
+            downloadLink.href = getSpaceZipUrl();
             downloadLink.download = 'eigen-home.tar.gz'; // This will be overridden by the Content-Disposition header
 
             // Add credentials to ensure the auth cookie is sent

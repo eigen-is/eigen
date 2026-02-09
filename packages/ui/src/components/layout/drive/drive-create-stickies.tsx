@@ -20,7 +20,7 @@ export function DriveCreateStickies({
                                         onCancel,
                                         onAfterAction,
                                     }: DriveCreateStickiesProps) {
-    const createStickiesMutation = useCreateStickies(path.ownerId);
+    const createStickiesMutation = useCreateStickies(path.ownerId, path.mountId);
 
     const handleOpenChange = (nextOpen: boolean) => {
         onOpenChange(nextOpen);
@@ -42,7 +42,7 @@ export function DriveCreateStickies({
 
             // Open the stickies board in a new window
             if (newPath) {
-                const url = `${import.meta.env.VITE_APP_STICKIES_URL}/board/${path.ownerId}/${newPath}`;
+                const url = `${import.meta.env.VITE_APP_STICKIES_URL}/board/${path.ownerId}/${path.mountId}/${newPath}`;
                 window.open(url, '_blank');
             }
 

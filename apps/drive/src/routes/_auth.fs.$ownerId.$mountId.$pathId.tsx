@@ -9,7 +9,7 @@ import {DriveContext} from "./_auth";
 import {FilePreview} from '../components/drive/file-preview';
 import {getDriveDownloadUrl, getDriveEmbedUrl} from "@workspace/lib/api";
 
-export const Route = createFileRoute('/_auth/fs/$ownerId/$pathId')({
+export const Route = createFileRoute('/_auth/fs/$ownerId/$mountId/$pathId')({
     component: DriveRoute,
     validateSearch: (search: Record<string, unknown>) => {
         const pid = typeof search.pid === 'string' ? search.pid : undefined;
@@ -18,7 +18,7 @@ export const Route = createFileRoute('/_auth/fs/$ownerId/$pathId')({
 });
 
 function DriveRoute() {
-    const {ownerId, pathId} = Route.useParams();
+    const {ownerId, mountId, pathId} = Route.useParams();
     const {pid} = Route.useSearch();
     const navigate = useNavigate();
     const isMobile = useIsMobile();
@@ -30,7 +30,7 @@ function DriveRoute() {
         if (pathId === 'root' && rootPath) {
             navigate({
                 to: Route.fullPath,
-                params: {ownerId: rootPath.ownerId, pathId: rootPath.id}
+                params: {ownerId: rootPath.ownerId, mountId: rootPath.mountId, pathId: rootPath.id}
             });
         }
     }, [pathId, rootPath, navigate, ownerId]);
@@ -43,9 +43,9 @@ function DriveRoute() {
         data: folderContents = [],
         isLoading: isFolderContentLoading,
         error: isFolderContentLoadingError
-    } = useFolderContent(ownerId, skipDataFetch ? '' : pathId);
-    const {data: selectedPath = null} = usePathInfo(ownerId, pid);
-    const {data: currentPath = null} = usePathInfo(ownerId, pathId);
+    } = useFolderContent(ownerId, mountId, skipDataFetch ? '' : pathId);
+    const {data: selectedPath = null} = usePathInfo(ownerId, mountId, pid);
+    const {data: currentPath = null} = usePathInfo(ownerId, mountId, pathId);
 
     // Handle row click to show path details
     const onRowSelect = (path: DrivePath) => {
@@ -55,7 +55,7 @@ function DriveRoute() {
             // If a preview is already open
             if (mimeType.startsWith("image/") || mimeType.startsWith("video/")) {
                 // Update the preview if new selection is also previewable
-                const url = getDriveEmbedUrl(path.ownerId, path.id, path.name);
+                const url = getDriveEmbedUrl(path.ownerId, path.mountId, path.id, path.name);
                 setPreview({url, mimeType});
             } else {
                 // Close the preview if the new selection isn't previewable
@@ -68,13 +68,13 @@ function DriveRoute() {
         } else if (currentPath?.parentId === path.id) {
             navigate({
                 to: Route.fullPath,
-                params: {ownerId, pathId: path.id},
+                params: {ownerId, mountId, pathId: path.id},
                 search: {pid: undefined}
             });
         } else {
             navigate({
                 to: Route.fullPath,
-                params: {ownerId, pathId},
+                params: {ownerId, mountId, pathId},
                 search: {pid: path.id}
             });
         }
@@ -86,20 +86,20 @@ function DriveRoute() {
         if (path.type === 'folder') {
             navigate({
                 to: Route.fullPath,
-                params: {ownerId, pathId: path.id},
+                params: {ownerId, mountId, pathId: path.id},
                 search: {pid: undefined}
             });
         } else if (path.type === 'doc') {
-            const url = `${import.meta.env.VITE_APP_DOCS_URL}/doc/${path.ownerId}/${path.id}`;
+            const url = `${import.meta.env.VITE_APP_DOCS_URL}/doc/${path.ownerId}/${path.mountId}/${path.id}`;
             document.location.href = url;
         } else if (path.type === 'stickies') {
-            const url = `${import.meta.env.VITE_APP_STICKIES_URL}/board/${path.ownerId}/${path.id}`;
+            const url = `${import.meta.env.VITE_APP_STICKIES_URL}/board/${path.ownerId}/${path.mountId}/${path.id}`;
             document.location.href = url;
         } else if (mimeType.startsWith("image/") || mimeType.startsWith("video/")) {
-            const url = getDriveEmbedUrl(path.ownerId, path.id, path.name);
+            const url = getDriveEmbedUrl(path.ownerId, path.mountId, path.id, path.name);
             setPreview({url, mimeType: mimeType});
         } else {
-            const url = getDriveDownloadUrl(path.ownerId, path.id);
+            const url = getDriveDownloadUrl(path.ownerId, path.mountId, path.id);
             window.open(url, "_blank");
         }
     };
@@ -108,7 +108,7 @@ function DriveRoute() {
     const handleBackToList = () => {
         navigate({
             to: Route.fullPath,
-            params: {ownerId, pathId},
+            params: {ownerId, mountId, pathId},
             search: {pid: undefined}
         });
     };
@@ -119,7 +119,7 @@ function DriveRoute() {
         if (actionType === 'delete' && pid === data.id) {
             navigate({
                 to: Route.fullPath,
-                params: {ownerId, pathId},
+                params: {ownerId, mountId, pathId: pathId},
                 search: {pid: undefined}
             });
         }
@@ -152,6 +152,7 @@ function DriveRoute() {
             />
             <DriveLayout
                 ownerId={ownerId}
+                mountId={mountId}
                 pathId={pathId}
                 folderContents={folderContents}
                 isLoading={isFolderContentLoading}

@@ -13,9 +13,9 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthRouteImport } from './routes/_auth'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthSidebarRouteImport } from './routes/_auth._sidebar'
-import { Route as AuthBoardOwnerIdPathIdRouteImport } from './routes/_auth.board.$ownerId.$pathId'
 import { Route as AuthSidebarSharedToRouteImport } from './routes/_auth._sidebar.shared.$to'
 import { Route as AuthSidebarMimeMimeTypeRouteImport } from './routes/_auth._sidebar.mime.$mimeType'
+import { Route as AuthBoardOwnerIdMountIdPathIdRouteImport } from './routes/_auth.board.$ownerId.$mountId.$pathId'
 
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
@@ -35,11 +35,6 @@ const AuthSidebarRoute = AuthSidebarRouteImport.update({
   id: '/_sidebar',
   getParentRoute: () => AuthRoute,
 } as any)
-const AuthBoardOwnerIdPathIdRoute = AuthBoardOwnerIdPathIdRouteImport.update({
-  id: '/board/$ownerId/$pathId',
-  path: '/board/$ownerId/$pathId',
-  getParentRoute: () => AuthRoute,
-} as any)
 const AuthSidebarSharedToRoute = AuthSidebarSharedToRouteImport.update({
   id: '/shared/$to',
   path: '/shared/$to',
@@ -50,20 +45,26 @@ const AuthSidebarMimeMimeTypeRoute = AuthSidebarMimeMimeTypeRouteImport.update({
   path: '/mime/$mimeType',
   getParentRoute: () => AuthSidebarRoute,
 } as any)
+const AuthBoardOwnerIdMountIdPathIdRoute =
+  AuthBoardOwnerIdMountIdPathIdRouteImport.update({
+    id: '/board/$ownerId/$mountId/$pathId',
+    path: '/board/$ownerId/$mountId/$pathId',
+    getParentRoute: () => AuthRoute,
+  } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/mime/$mimeType': typeof AuthSidebarMimeMimeTypeRoute
   '/shared/$to': typeof AuthSidebarSharedToRoute
-  '/board/$ownerId/$pathId': typeof AuthBoardOwnerIdPathIdRoute
+  '/board/$ownerId/$mountId/$pathId': typeof AuthBoardOwnerIdMountIdPathIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/mime/$mimeType': typeof AuthSidebarMimeMimeTypeRoute
   '/shared/$to': typeof AuthSidebarSharedToRoute
-  '/board/$ownerId/$pathId': typeof AuthBoardOwnerIdPathIdRoute
+  '/board/$ownerId/$mountId/$pathId': typeof AuthBoardOwnerIdMountIdPathIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -73,7 +74,7 @@ export interface FileRoutesById {
   '/_auth/_sidebar': typeof AuthSidebarRouteWithChildren
   '/_auth/_sidebar/mime/$mimeType': typeof AuthSidebarMimeMimeTypeRoute
   '/_auth/_sidebar/shared/$to': typeof AuthSidebarSharedToRoute
-  '/_auth/board/$ownerId/$pathId': typeof AuthBoardOwnerIdPathIdRoute
+  '/_auth/board/$ownerId/$mountId/$pathId': typeof AuthBoardOwnerIdMountIdPathIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -82,14 +83,14 @@ export interface FileRouteTypes {
     | '/login'
     | '/mime/$mimeType'
     | '/shared/$to'
-    | '/board/$ownerId/$pathId'
+    | '/board/$ownerId/$mountId/$pathId'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
     | '/login'
     | '/mime/$mimeType'
     | '/shared/$to'
-    | '/board/$ownerId/$pathId'
+    | '/board/$ownerId/$mountId/$pathId'
   id:
     | '__root__'
     | '/'
@@ -98,7 +99,7 @@ export interface FileRouteTypes {
     | '/_auth/_sidebar'
     | '/_auth/_sidebar/mime/$mimeType'
     | '/_auth/_sidebar/shared/$to'
-    | '/_auth/board/$ownerId/$pathId'
+    | '/_auth/board/$ownerId/$mountId/$pathId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -137,13 +138,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthSidebarRouteImport
       parentRoute: typeof AuthRoute
     }
-    '/_auth/board/$ownerId/$pathId': {
-      id: '/_auth/board/$ownerId/$pathId'
-      path: '/board/$ownerId/$pathId'
-      fullPath: '/board/$ownerId/$pathId'
-      preLoaderRoute: typeof AuthBoardOwnerIdPathIdRouteImport
-      parentRoute: typeof AuthRoute
-    }
     '/_auth/_sidebar/shared/$to': {
       id: '/_auth/_sidebar/shared/$to'
       path: '/shared/$to'
@@ -157,6 +151,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/mime/$mimeType'
       preLoaderRoute: typeof AuthSidebarMimeMimeTypeRouteImport
       parentRoute: typeof AuthSidebarRoute
+    }
+    '/_auth/board/$ownerId/$mountId/$pathId': {
+      id: '/_auth/board/$ownerId/$mountId/$pathId'
+      path: '/board/$ownerId/$mountId/$pathId'
+      fullPath: '/board/$ownerId/$mountId/$pathId'
+      preLoaderRoute: typeof AuthBoardOwnerIdMountIdPathIdRouteImport
+      parentRoute: typeof AuthRoute
     }
   }
 }
@@ -177,12 +178,12 @@ const AuthSidebarRouteWithChildren = AuthSidebarRoute._addFileChildren(
 
 interface AuthRouteChildren {
   AuthSidebarRoute: typeof AuthSidebarRouteWithChildren
-  AuthBoardOwnerIdPathIdRoute: typeof AuthBoardOwnerIdPathIdRoute
+  AuthBoardOwnerIdMountIdPathIdRoute: typeof AuthBoardOwnerIdMountIdPathIdRoute
 }
 
 const AuthRouteChildren: AuthRouteChildren = {
   AuthSidebarRoute: AuthSidebarRouteWithChildren,
-  AuthBoardOwnerIdPathIdRoute: AuthBoardOwnerIdPathIdRoute,
+  AuthBoardOwnerIdMountIdPathIdRoute: AuthBoardOwnerIdMountIdPathIdRoute,
 }
 
 const AuthRouteWithChildren = AuthRoute._addFileChildren(AuthRouteChildren)

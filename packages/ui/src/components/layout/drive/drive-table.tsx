@@ -4,7 +4,7 @@ import {useTableDragDrop} from "./use-table-drag-drop";
 import {Table, TableBody, TableCell, TableHead, TableHeader, TableRow} from "@workspace/ui/components/table";
 import {cn} from "@workspace/ui/lib/utils";
 import {formatDistanceToNow} from "date-fns";
-import {DrivePath} from "@workspace/lib/types/drive";
+import {DrivePath, DEFAULT_MOUNT_ID} from "@workspace/lib/types";
 import {DriveShareSummary} from "./drive-share-summary";
 import {ArrowRight, ChevronLeft, Download, Pencil, Trash2, UserRoundPlus} from "lucide-react";
 import {
@@ -76,6 +76,7 @@ export function DriveTable({
         if (hasParentItem && currentPath?.parentId) {
             result.unshift({
                 id: currentPath.parentId,
+                mountId: currentPath.mountId || DEFAULT_MOUNT_ID,
                 name: '..',
                 type: 'folder',
                 parentId: null,
@@ -171,6 +172,7 @@ export function DriveTable({
                             )}
                             onClick={() => onItemClick?.({
                                 id: currentPath?.parentId || '',
+                                mountId: currentPath?.mountId || DEFAULT_MOUNT_ID,
                                 name: '..',
                                 type: 'folder',
                                 parentId: null,

@@ -26,7 +26,7 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
         const isMobile = useIsMobile();
 
         const routeMatch = useMatch({
-            from: '/_auth/board/$ownerId/$pathId',
+            from: '/_auth/board/$ownerId/$mountId/$pathId',
             shouldThrow: false,
         });
 

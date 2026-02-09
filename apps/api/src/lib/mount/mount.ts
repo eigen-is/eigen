@@ -395,6 +395,7 @@ export class Mount {
     private toDrivePath(row: typeof paths.$inferSelect): DrivePath {
         return {
             id: row.id,
+            mountId: this.id,
             name: row.name,
             type: row.type,
             parentId: row.parentId,

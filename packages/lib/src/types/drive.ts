@@ -7,6 +7,7 @@ export type DriveACL = {
 
 export type DrivePath = {
     id: string;
+    mountId: string;
     name: string;
     type: "folder" | "file" | "doc" | "stickies";
     parentId: string | null;
@@ -27,4 +28,5 @@ export type DriveSearchParams = {
 
 export type DriveContextType = {
     rootPath: DrivePath | null;
+    mountId: string;
 }

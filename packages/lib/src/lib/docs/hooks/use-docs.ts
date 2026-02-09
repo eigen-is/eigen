@@ -5,21 +5,21 @@ import {api} from "@workspace/lib/api";
 export const docsKeys = {
     all: ['docs'] as const,
     access: () => [...docsKeys.all, 'access'] as const,
-    document: (ownerId: string, pathId: string) =>
-        [...docsKeys.access(), ownerId, pathId] as const,
+    document: (ownerId: string, mountId: string, pathId: string) =>
+        [...docsKeys.access(), ownerId, mountId, pathId] as const,
 };
 
 /**
  * Hook to check if user has access to a document
  * Returns canRead and canWrite permissions
  */
-export function useDocumentAccess(ownerId: string, pathId: string | undefined) {
+export function useDocumentAccess(ownerId: string, mountId: string, pathId: string | undefined) {
     return useQuery({
-        queryKey: docsKeys.document(ownerId, pathId || ''),
+        queryKey: docsKeys.document(ownerId, mountId, pathId || ''),
         queryFn: async () => {
             if (!pathId) return {canRead: false, canWrite: false};
 
-            const response = await api.collab({ownerId})({pathId}).access.get();
+            const response = await api.collab({ownerId})({mountId})({pathId}).access.get();
 
             if (response.error) {
                 console.error('Error fetching document access:', response.error);

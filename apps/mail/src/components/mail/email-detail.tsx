@@ -18,6 +18,7 @@ import {ShadowContent} from "@workspace/ui/components/layout/shadow-content";
 import {UserItem} from "@workspace/ui/components/layout/user-item";
 import {TooltipButton} from "@workspace/ui";
 import {Separator} from "@workspace/ui/components/separator";
+import {getMailAttachmentUrl} from "@workspace/lib/api";
 import {EmailContextMenu} from "./email-context-menu";
 import {printDocument} from "@workspace/ui/lib/printElement";
 import {Table, TableBody, TableCell, TableRow} from "@workspace/ui/components/table";
@@ -321,7 +322,7 @@ export function EmailDetail({
                                         className="flex items-center p-3 border rounded-md hover:bg-muted/50 cursor-pointer select-none"
                                         onClick={() => {
                                             const fileName = attachment.filename || `Attachment ${index + 1}`;
-                                            const downloadUrl = `${import.meta.env.VITE_API_HOST}/mail/message/${email.id}/attachment/${index}/${encodeURIComponent(fileName)}`;
+                                            const downloadUrl = getMailAttachmentUrl(email.id, index, fileName);
 
                                             // Create a temporary anchor element to trigger the download
                                             const a = document.createElement('a');
