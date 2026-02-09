@@ -44,7 +44,6 @@ Technical documentation for the storage layer, mount system, and file management
 
 **Current Limitations:**
 
-- Single default mount (multi-mount architecture ready for future)
 - `Home.getZip()` not implemented
 
 ---
@@ -157,7 +156,7 @@ For S3 mounts: `metadata.db`, `tmp/`, and `thumbs/` stay local; file data goes t
 
 | Table          | Purpose                                      |
 |----------------|----------------------------------------------|
-| `shared_paths` | Paths shared with this user from other users |
+| `shared_paths` | Paths shared with this user from other users (includes `mountId` to identify source mount) |
 
 ### mail.db
 

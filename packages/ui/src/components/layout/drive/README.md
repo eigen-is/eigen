@@ -41,6 +41,7 @@ Main entry point. Handles dialogs, actions, and layout (mobile/desktop).
 ```tsx
 <DriveLayout
   ownerId={userId}
+  mountId={mountId}
   folderContents={items}
   isLoading={loading}
   onRowSelect={handleSelect}
