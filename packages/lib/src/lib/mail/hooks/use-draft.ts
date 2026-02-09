@@ -1,53 +1,17 @@
 import {useMutation} from '@tanstack/react-query';
 import {mailApi} from '@workspace/lib/api';
-import {EmailDraft} from '@workspace/lib/types/mail';
+import {DraftInput, EmailDraft} from '@workspace/lib/types/mail';
 import {useAuth} from '@workspace/lib/auth';
 
-export type EmailRecipient = {
-    name?: string;
-    address: string;
-};
-
-export type CreateDraftParams = {
-    subject?: string;
-    text?: string;
-    to?: EmailRecipient[];
-    cc?: EmailRecipient[];
-    bcc?: EmailRecipient[];
-};
-
-export function createDraftEmail(params: CreateDraftParams): EmailDraft {
-    // Create a properly formatted email object
+export function createDraftEmail(input: DraftInput): EmailDraft {
     const emailDraft: Partial<EmailDraft> = {
-        id: undefined, // Will be set by the server
-        subject: params.subject || '',
-        text: params.text || '',
-        // Format recipients in the structure expected by the API
-        from: undefined, // Will be set by the server
-        to: params.to?.length ? {
-            value: params.to.map(recipient => ({
-                name: recipient.name || recipient.address,
-                address: recipient.address
-            })),
-            html: params.to.map(r => r.name ? `${r.name} <${r.address}>` : r.address).join(', '),
-            text: params.to.map(r => r.name ? `${r.name} <${r.address}>` : r.address).join(', ')
-        } : undefined,
-        cc: params.cc?.length ? {
-            value: params.cc.map(recipient => ({
-                name: recipient.name || recipient.address,
-                address: recipient.address
-            })),
-            html: params.cc.map(r => r.name ? `${r.name} <${r.address}>` : r.address).join(', '),
-            text: params.cc.map(r => r.name ? `${r.name} <${r.address}>` : r.address).join(', ')
-        } : undefined,
-        bcc: params.bcc?.length ? {
-            value: params.bcc.map(recipient => ({
-                name: recipient.name || recipient.address,
-                address: recipient.address
-            })),
-            html: params.bcc.map(r => r.name ? `${r.name} <${r.address}>` : r.address).join(', '),
-            text: params.bcc.map(r => r.name ? `${r.name} <${r.address}>` : r.address).join(', ')
-        } : undefined,
+        id: undefined,
+        subject: input.subject || '',
+        text: input.text || '',
+        from: undefined,
+        to: input.to,
+        cc: input.cc,
+        bcc: input.bcc,
         isDraft: true,
         mailbox: 'Drafts'
     };

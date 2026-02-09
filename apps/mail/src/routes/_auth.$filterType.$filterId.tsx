@@ -14,6 +14,7 @@ import {
 } from '@workspace/lib/mail';
 import {EmailList} from "../components/mail/email-list";
 import {Email, EmailDraft as EmailDraftType} from "@workspace/lib/types/mail";
+import {createDraftEmail} from "@workspace/lib/mail";
 import {toast} from "sonner";
 import {useEffect, useState} from 'react';
 import {useIsMobile, useIsTablet} from "@workspace/lib/media";
@@ -67,11 +68,11 @@ function MailRoute() {
         }
 
         // Create a reply draft using the existing handleNewDraftEmail function
-        const draft: EmailDraftType = {
+        const draft: EmailDraftType = createDraftEmail({
             to: email.from,
             subject: `RE: ${email.subject}`,
             text: `\n\nOn ${format(new Date(email.date), "d MMM yyyy 'at' h:mm a")} ${email.from?.value[0]?.name} <${email.from?.value[0]?.address}> wrote:\n\n${email.text}`,
-        };
+        });
 
         handleNewDraftEmail(draft);
     };
@@ -85,11 +86,12 @@ function MailRoute() {
         }
 
         // Create a reply-all draft
-        const draft: EmailDraftType = {
-            to: {value: [...(email.from?.value || []), ...(email.cc?.value || [])]},
+        const ccValues = Array.isArray(email.cc) ? email.cc.flatMap(c => c.value) : (email.cc?.value || []);
+        const draft: EmailDraftType = createDraftEmail({
+            to: {value: [...(email.from?.value || []), ...ccValues], html: '', text: ''},
             subject: `RE: ${email.subject}`,
             text: `\n\nOn ${format(new Date(email.date), "d MMM yyyy 'at' h:mm a")} ${email.from?.value[0]?.name} <${email.from?.value[0]?.address}> wrote:\n\n${email.text}`,
-        };
+        });
 
         handleNewDraftEmail(draft);
     };
@@ -103,10 +105,10 @@ function MailRoute() {
         }
 
         // Create a forward draft
-        const draft: EmailDraftType = {
+        const draft: EmailDraftType = createDraftEmail({
             subject: `FW: ${email.subject}`,
             text: `\n\nOn ${format(new Date(email.date), "d MMM yyyy 'at' h:mm a")} ${email.from?.value[0]?.name} <${email.from?.value[0]?.address}> wrote:\n\n${email.text}`,
-        };
+        });
 
         handleNewDraftEmail(draft);
     };
