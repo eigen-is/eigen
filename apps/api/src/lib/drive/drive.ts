@@ -5,7 +5,7 @@ import {eq} from 'drizzle-orm';
 import {type DatabaseConfig, type ManagedDatabase, type SchemaType} from '../core/managed-database';
 import {createDefaultMountConfig, Mount} from '../mount';
 import type {MountConfig, MountInfo} from '@workspace/lib/types';
-import type {DriveACL, DrivePath} from '@workspace/lib/types/drive';
+import {type DriveACL, type DrivePath, isContainerType} from '@workspace/lib/types/drive';
 import {canRead, canWrite, normalizeACL} from './acl';
 import {deleteThumbnail, getThumbnail, saveThumbnail} from '../shared/thumbnails';
 import CollabDocument from '../collab/collabDocument';
@@ -104,7 +104,7 @@ export default class Drive {
     async getFolderContents(mountId: string, pathId: string): Promise<DrivePath[]> {
         const mount = this.getMount(mountId);
         const folder = await mount.getPath(pathId);
-        if (!folder || (folder.type !== 'folder' && folder.type !== 'doc' && folder.type !== 'stickies')) {
+        if (!folder || !isContainerType(folder.type)) {
             throw new Error('Folder not found');
         }
 
@@ -124,7 +124,7 @@ export default class Drive {
     async createFolder(mountId: string, parentId: string, folderName: string): Promise<string | undefined> {
         const mount = this.getMount(mountId);
         const parent = await mount.getPath(parentId);
-        if (!parent || (parent.type !== 'folder' && parent.type !== 'doc' && parent.type !== 'stickies')) {
+        if (!parent || !isContainerType(parent.type)) {
             throw new Error('Parent folder not found');
         }
 
@@ -212,7 +212,7 @@ export default class Drive {
     async deleteFolder(mountId: string, pathId: string): Promise<void> {
         const mount = this.getMount(mountId);
         const folder = await mount.getPath(pathId);
-        if (!folder || (folder.type !== 'folder' && folder.type !== 'doc' && folder.type !== 'stickies')) {
+        if (!folder || !isContainerType(folder.type)) {
             throw new Error('Folder not found');
         }
 
