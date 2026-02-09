@@ -130,6 +130,24 @@ export class Home {
     }
 
     private async destruct() {
+        try {
+            await this.drive.destruct();
+        } catch (error) {
+            console.error('Failed to destruct drive:', error);
+        }
+
+        try {
+            await this.contacts.destruct();
+        } catch (error) {
+            console.error('Failed to destruct contacts:', error);
+        }
+
+        try {
+            await this.mail.destruct();
+        } catch (error) {
+            console.error('Failed to destruct mail:', error);
+        }
+
         for (const [key, getter] of this.managedDatabases) {
             try {
                 const db = await getter();

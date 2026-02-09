@@ -677,4 +677,10 @@ export default class Maildir {
             return [];
         }
     }
+
+    async destruct(): Promise<void> {
+        if (this.db) {
+            await this.db.destruct();
+        }
+    }
 }
