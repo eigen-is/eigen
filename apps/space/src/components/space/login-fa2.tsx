@@ -19,7 +19,6 @@ import {InfoIcon} from "lucide-react"
 import {Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle} from "@workspace/ui/components/card"
 import {authClient} from "@workspace/lib/auth"
 import {toast} from "sonner"
-import {useNavigate, useRouter} from "@tanstack/react-router"
 import {Checkbox} from "@workspace/ui/components/checkbox"
 
 // Define form schema with validation
@@ -30,8 +29,6 @@ const formSchema = z.object({
 
 export function LoginFa2Form() {
     const [isLoading, setIsLoading] = React.useState<boolean>(false)
-    const navigate = useNavigate()
-    const router = useRouter();
 
     // Initialize form
     const form = useForm<z.infer<typeof formSchema>>({
