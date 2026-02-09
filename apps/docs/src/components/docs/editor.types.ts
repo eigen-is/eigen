@@ -8,15 +8,24 @@ export type CustomElementType =
     | 'bulleted-list'
     | 'numbered-list'
     | 'list-item'
-    | 'check-list';
+    | 'check-list'
+    | 'image';
 
 export type TextAlignment = 'left' | 'center' | 'right';
+
+export type ImageElement = {
+    type: 'image';
+    pathId: string;
+    children: CustomText[];
+    align?: TextAlignment;
+}
 
 export type CustomElement = {
     type: CustomElementType;
     children: CustomText[];
     checked?: boolean;
     align?: TextAlignment;
+    pathId?: string;
 }
 
 export type CustomText = {
