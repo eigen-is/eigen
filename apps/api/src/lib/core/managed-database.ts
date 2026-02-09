@@ -110,6 +110,8 @@ export class ManagedDatabase<S extends SchemaType> {
     }
 
     async close(): Promise<void> {
+        if (!this.rawDb) return;
+
         if (this.syncTimer) {
             clearInterval(this.syncTimer);
             this.syncTimer = null;

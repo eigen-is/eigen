@@ -17,9 +17,6 @@ import type {ManagedDatabase} from "../core/managed-database";
 
 export async function getContacts(user: User) {
     const home = await getHome(user);
-    // const contacts = new Contacts(home);
-    // await contacts.init();
-    // return contacts;
     return home.contacts;
 }
 
@@ -369,6 +366,12 @@ export class Contacts {
         } else {
             const addedId = await this.addYourself();
             return this.getContactById(addedId);
+        }
+    }
+
+    async destruct(): Promise<void> {
+        if (this.managedDb) {
+            await this.managedDb.close();
         }
     }
 }
