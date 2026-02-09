@@ -4,14 +4,12 @@ import * as path from 'path';
 import {type DatabaseConfig, ManagedDatabase, openLocalDatabase, type SchemaType} from '../core/managed-database';
 import {Contacts} from '../contacts/contacts';
 import Maildir from '../mail/maildir';
-import {getUserById} from '../users/users';
 import type {SSEvent} from '@workspace/lib/types/sse';
 import {createAsyncSingleton} from '../../utils/singleton';
+import {cleanupHomeFactory} from './get-home';
 import {getUserHomePath} from '../config/paths';
 import {LocalStorage} from '../storage';
-import Drive from '../drive/drive';
-
-const homeFactories: Map<string, () => Promise<Home>> = new Map();
+import {Drive} from '../drive';
 
 export class Home {
     public user: User;
@@ -102,7 +100,7 @@ export class Home {
             clearTimeout(this.timeout);
         }
         this.timeout = setTimeout(() => {
-            homeFactories.delete(this.user.id);
+            cleanupHomeFactory(this.user.id);
             this.destruct();
         }, 1000 * 60 * 5);
         return this;
@@ -158,21 +156,4 @@ export class Home {
         }
         this.managedDatabases.clear();
     }
-}
-
-export function getHome(user: User): Promise<Home> {
-    if (!homeFactories.has(user.id)) {
-        homeFactories.set(user.id, createAsyncSingleton(async () => {
-            const userExists = await getUserById(user.id);
-            if (!userExists) {
-                throw new Error('User not found');
-            }
-
-            const home = new Home(user);
-            await home.init();
-            return home.touch();
-        }));
-    }
-
-    return homeFactories.get(user.id)!();
 }

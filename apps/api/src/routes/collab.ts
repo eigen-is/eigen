@@ -1,7 +1,7 @@
 import {Elysia, t} from "elysia";
 import {betterAuth} from "./auth";
 import {type ServerWebSocket} from "bun";
-import {getSharedDrive} from "../lib/drive/sharedDrive.ts";
+import {getSharedDrive} from "../lib/drive";
 import {keepWebSocketAlive} from "../utils/websockets.ts";
 
 export const collabRouter = new Elysia({
