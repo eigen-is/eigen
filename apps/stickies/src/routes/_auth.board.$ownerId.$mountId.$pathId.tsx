@@ -1,6 +1,5 @@
 import {createFileRoute} from '@tanstack/react-router'
-import {useDocumentAccess} from '@workspace/lib/docs'
-import {usePathInfo} from '@workspace/lib/drive'
+import {useCollabDocumentInfo} from '@workspace/lib/collab'
 import {EigenLoader} from '@workspace/ui'
 import {useApp} from '@workspace/ui/components/layout/app-context'
 import {useCallback, useEffect, useState} from 'react'
@@ -13,23 +12,24 @@ export const Route = createFileRoute('/_auth/board/$ownerId/$mountId/$pathId')({
 
 function StickiesRoute() {
     const {ownerId, mountId, pathId} = Route.useParams();
-    const {data: access, isLoading} = useDocumentAccess(ownerId, mountId, pathId);
-    const {data: path, isLoading: pathLoading} = usePathInfo(ownerId, mountId, pathId);
+    const {data: docInfo, isLoading} = useCollabDocumentInfo(ownerId, mountId, pathId);
     const {appName, setAppName} = useApp();
     const [originalAppName] = useState(appName);
     const [accessDialogOpen, setAccessDialogOpen] = useState(false);
 
     useEffect(() => {
-        if (path?.name) setAppName?.(path.name.replace('.eigenstickies', ''));
+        if (docInfo?.path?.name) setAppName?.(docInfo.path.name.replace('.eigenstickies', ''));
         return () => setAppName?.(originalAppName);
-    }, [path, originalAppName, setAppName]);
+    }, [docInfo?.path, originalAppName, setAppName]);
 
     const handleAccessDialogOpen = useCallback(() => {
         setAccessDialogOpen(true);
     }, [setAccessDialogOpen]);
 
-    if (isLoading || pathLoading) return <EigenLoader/>
-    if (!access?.canRead || !path) {
+    console.log(docInfo);
+
+    if (isLoading) return <EigenLoader/>
+    if (!docInfo?.canRead || !docInfo.path) {
         return (
             <div className="flex items-center justify-center h-full w-full">
                 <p className="text-muted-foreground">Encountering the null vector: a rendezvous with nothing at all.</p>
@@ -39,12 +39,12 @@ function StickiesRoute() {
 
     return (
         <>
-            <StickiesBoard ownerId={ownerId} path={path} canWrite={access.canWrite}
+            <StickiesBoard ownerId={ownerId} path={docInfo.path} canWrite={docInfo.canWrite}
                            onAccessDialogOpen={handleAccessDialogOpen}/>
             <DriveAccessDialog
                 open={accessDialogOpen}
                 onOpenChange={setAccessDialogOpen}
-                path={path}
+                path={docInfo.path}
             />
         </>
     );

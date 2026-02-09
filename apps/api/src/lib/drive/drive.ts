@@ -124,7 +124,7 @@ export default class Drive {
     async createFolder(mountId: string, parentId: string, folderName: string): Promise<string | undefined> {
         const mount = this.getMount(mountId);
         const parent = await mount.getPath(parentId);
-        if (!parent || parent.type !== 'folder') {
+        if (!parent || (parent.type !== 'folder' && parent.type !== 'doc' && parent.type !== 'stickies')) {
             throw new Error('Parent folder not found');
         }
 
