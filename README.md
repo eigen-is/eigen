@@ -36,19 +36,42 @@ cd eigen
 bun install
 ```
 
-### Initial Setup
+### First Run Setup
 
-On first run, a setup wizard will guide you through the initial configuration:
+On first run, Eigen requires initial configuration through a setup wizard:
 
 1. Start the server:
    ```bash
    bun run serve
    ```
 
-2. Visit `http://localhost:3011/setup` to configure your instance:
-    - Set your domain
-    - Choose storage type (local or S3)
-    - Create your admin account
+2. Visit `http://localhost:3011/setup` in your browser
+
+3. Configure your instance:
+
+   **Domain Configuration**
+   - Enter your domain (e.g., `eigen.example.com` or `localhost` for development)
+
+   **Storage Type**
+   - `local-fullnames`: Files stored with original names (recommended for development)
+   - `local-id`: Files stored by ID (better for production)
+   - `s3`: Amazon S3 or compatible storage (for cloud deployment)
+
+   If using S3, you'll need:
+   - Bucket name
+   - Region
+   - Access Key ID
+   - Secret Access Key
+   - Endpoint URL (optional, for S3-compatible services like MinIO)
+
+   **Admin Account**
+   - Name
+   - Email address
+   - Password (minimum 8 characters)
+
+4. After setup completes, you'll be redirected to sign in with your admin account
+
+**Note:** Setup can only be completed once. The configuration is stored in the server data directory.
 
 ### Running Applications
 

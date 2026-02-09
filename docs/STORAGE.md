@@ -122,23 +122,24 @@ Business logic layer (~500 lines) providing:
 /data/home/{userId}/
 ├── mounts/
 │   ├── default/
-│   │   ├── metadata.db      # Paths + labels
-│   │   ├── data/            # Files (uuid names)
-│   │   ├── thumbs/          # Thumbnails
-│   │   ├── tmp/             # Collab temp
-│   │   └── docs/{pathId}/   # Collab document DBs
+│   │   ├── metadata.db      # Paths + labels (Drizzle ORM)
+│   │   ├── data/            # Files stored by UUID (includes collab data.db files)
+│   │   ├── thumbs/          # Thumbnails (WebP format)
+│   │   └── tmp/             # Temp files for remote sync
 │   └── shared.db            # Paths shared with this user
 │
 ├── eigen.mail/
-│   ├── mail.db
-│   └── Maildir/
+│   ├── mail.db              # Email metadata
+│   └── Maildir/             # Email files (Maildir format)
 │
 └── eigen.contacts/
-    ├── contacts.db
-    └── avatars/
+    ├── contacts.db          # Contact data
+    └── avatars/             # Avatar images
 ```
 
-For S3 mounts: `metadata.db`, `tmp/`, and `thumbs/` stay local; files go to S3.
+**Collab documents** (`.eigendoc`, `.eigenstickies`) are folders in metadata.db containing a `data.db` file. The `data.db` is stored via the storage backend using its own pathId as the key.
+
+For S3 mounts: `metadata.db`, `tmp/`, and `thumbs/` stay local; file data goes to S3.
 
 ---
 
