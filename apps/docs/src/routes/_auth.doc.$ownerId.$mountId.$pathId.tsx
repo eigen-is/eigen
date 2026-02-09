@@ -3,7 +3,7 @@ import {CollaborativeEditor} from '../components/docs/editor'
 import {useCollabDocumentInfo} from '@workspace/lib/collab'
 import {EigenLoader} from '@workspace/ui'
 import {useApp} from '@workspace/ui/components/layout/app-context'
-import {useCallback, useEffect, useState} from 'react'
+import {useCallback, useEffect, useMemo, useState} from 'react'
 import {DriveAccessDialog} from '@workspace/ui/components/layout/drive/drive-access-dialog'
 import {DriveDeleteItem} from '@workspace/ui/components/layout/drive/drive-delete-item'
 
@@ -34,6 +34,9 @@ function CollaborativeTextEditor() {
         setAccessDialogOpen(true);
     }, [setAccessDialogOpen]);
 
+    const mediaFolderId = useMemo(() => {
+        return docInfo?.folderContents?.find(item => item.name === 'media')?.id ?? null;
+    }, [docInfo?.folderContents]);
 
     // Handle loading states
     if (isLoading) {
@@ -52,6 +55,7 @@ function CollaborativeTextEditor() {
         <>
             <div className="bg-muted flex-1 overflow-hidden">
                 <CollaborativeEditor path={docInfo.path} access={docInfo}
+                                     mediaFolderId={mediaFolderId}
                                      onAccessDialogOpen={handleAccessDialogOpen}
                                      onDeleteDialogOpen={setDeleteDialogOpen}/>
             </div>
