@@ -219,14 +219,13 @@ export function ContactDetail({contact, onDelete, onBack, filterType, filterId, 
                                     </h4>
                                     {contact.email.map((email: string, index: number) => (
                                         <div key={index} className="pl-6">
-                                            <Link className="text-blue-600 hover:underline"
-                                                  to={''}
+                                            <button className="text-blue-600 hover:underline"
                                                   onClick={(e) => {
                                                       e.stopPropagation();
                                                       openWriteEmailTo(email);
                                                   }}>
                                                 {email}
-                                            </Link>
+                                            </button>
                                         </div>
                                     ))}
                                 </div>

@@ -99,8 +99,8 @@ export function TaskInfoDialog({
         if (textareaRef.current) textareaRef.current.value = "";
     };
 
-    // State to track textarea focus
-    const [textareaHasFocus, setTextareaHasFocus] = useState(false);
+    // State to track textarea focus (used for onFocus/onBlur handlers)
+    const [, setTextareaHasFocus] = useState(false);
 
     // Task edit state
     const [isTaskSettingsOpen, setIsTaskSettingsOpen] = useState(false);
@@ -201,7 +201,7 @@ export function TaskInfoDialog({
                             <UserAvatar
                                 name={user?.name || user?.email || ''}
                                 email={user?.email || ''}
-                                imageUrl={user?.avatar}
+                                imageUrl={user?.image ?? undefined}
                                 size="md"
                                 className="mt-1"
                             />
