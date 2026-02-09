@@ -5,7 +5,7 @@ import type {SSEvent} from "@workspace/lib/types/sse";
 
 export const sseRouter = new Elysia({name: "sse"})
     .use(betterAuth)
-    .get('/sse/events', async ({user}) => {
+    .get('/sse/:ownerId/events', async ({user}) => {
         if (!user) {
             return new Response('Unauthorized', {status: 401});
         }

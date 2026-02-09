@@ -1,6 +1,7 @@
 import {useMutation, useQuery, useQueryClient, type QueryClient} from '@tanstack/react-query';
 import {mailApi} from '@workspace/lib/api.ts';
 import {Email} from "@workspace/lib/types/mail";
+import {useAuth} from '@workspace/lib/auth';
 
 // Define query keys for reuse
 export const emailKeys = {
@@ -13,29 +14,36 @@ export const emailKeys = {
 
 // Hook to fetch emails for a specific mailbox
 export function useEmails(mailboxPath: string) {
+    const {user} = useAuth();
+    const ownerId = user?.id || '';
+
     return useQuery({
         queryKey: emailKeys.list(mailboxPath),
         queryFn: async () => {
-            mailboxPath = mailboxPath.toLowerCase();
-            mailboxPath = mailboxPath === 'inbox' ? '' : mailboxPath;
+            let path = mailboxPath.toLowerCase();
+            path = path === 'inbox' ? '' : path;
             // Wildcard route - use type assertion for dynamic path
-            const response = await (mailApi.mailbox as any)[mailboxPath].get();
+            const response = await (mailApi({ownerId}).mailbox as any)[path].get();
             return (response.data || []) as Email[];
         },
         staleTime: 1 * 60 * 1000, // 1 minute
+        enabled: !!ownerId,
     });
 }
 
 // Hook to fetch a specific email by ID
 export function useEmail(messageId: string | undefined) {
+    const {user} = useAuth();
+    const ownerId = user?.id || '';
+
     return useQuery({
         queryKey: emailKeys.detail(messageId || ''),
         queryFn: async () => {
             if (!messageId) return null;
-            const response = await mailApi.message({id: messageId}).get();
+            const response = await mailApi({ownerId}).message({id: messageId}).get();
             return response.data || null;
         },
-        enabled: !!messageId,
+        enabled: !!messageId && !!ownerId,
         staleTime: Infinity,
     });
 }
@@ -43,14 +51,17 @@ export function useEmail(messageId: string | undefined) {
 // Hook to fetch a specific email by ID
 export function useEmailById() {
     const queryClient = useQueryClient();
+    const {user} = useAuth();
+    const ownerId = user?.id || '';
 
     // Return a function that uses queryClient.fetchQuery
     return async (messageId: string): Promise<Email | null> => {
+        if (!ownerId) return null;
         try {
             return await queryClient.fetchQuery({
                 queryKey: emailKeys.detail(messageId),
                 queryFn: async () => {
-                    const response = await mailApi.message({id: messageId}).get();
+                    const response = await mailApi({ownerId}).message({id: messageId}).get();
                     return response.data || null;
                 },
                 staleTime: Infinity,
@@ -63,12 +74,15 @@ export function useEmailById() {
 
 export function useDeleteEmail() {
     const queryClient = useQueryClient();
+    const {user} = useAuth();
+    const ownerId = user?.id || '';
+
     return useMutation({
         mutationFn: async (email: Email) => {
             if (email.mailbox === 'trash') {
-                await mailApi.message({id: email.id}).delete();
+                await mailApi({ownerId}).message({id: email.id}).delete();
             } else {
-                await mailApi.message.moveToTrash.put({messageId: email.id});
+                await mailApi({ownerId}).message["move-to-trash"].put({messageId: email.id});
             }
             return email;
         },
@@ -84,13 +98,15 @@ export function useDeleteEmail() {
 
 export function useToggleReadEmail() {
     const queryClient = useQueryClient();
+    const {user} = useAuth();
+    const ownerId = user?.id || '';
+
     return useMutation({
         mutationFn: async ({email, isRead}: { email: Email, isRead: boolean }) => {
             if (isRead === email.isRead) {
                 return email;
             }
-            await mailApi.message.read.put({
-                messageId: email.id,
+            await mailApi({ownerId}).message({id: email.id}).read.put({
                 read: isRead
             });
             return email;
@@ -101,9 +117,12 @@ export function useToggleReadEmail() {
 
 export function useMoveEmail() {
     const queryClient = useQueryClient();
+    const {user} = useAuth();
+    const ownerId = user?.id || '';
+
     return useMutation({
         mutationFn: async ({email, mailbox}: { email: Email, mailbox: string }) => {
-            await mailApi.message.move.put({
+            await mailApi({ownerId}).message.move.put({
                 messageId: email.id,
                 targetMailbox: mailbox
             });

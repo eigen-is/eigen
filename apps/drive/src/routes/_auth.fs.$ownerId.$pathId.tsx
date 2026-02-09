@@ -7,6 +7,7 @@ import {DrivePath, DriveSearchParams} from "@workspace/lib/types/drive";
 import {useIsMobile} from "@workspace/lib/media";
 import {DriveContext} from "./_auth";
 import {FilePreview} from '../components/drive/file-preview';
+import {getDriveDownloadUrl, getDriveEmbedUrl} from "@workspace/lib/api";
 
 export const Route = createFileRoute('/_auth/fs/$ownerId/$pathId')({
     component: DriveRoute,
@@ -54,7 +55,7 @@ function DriveRoute() {
             // If a preview is already open
             if (mimeType.startsWith("image/") || mimeType.startsWith("video/")) {
                 // Update the preview if new selection is also previewable
-                const url = `${import.meta.env.VITE_API_HOST}/drive/embed/${path.ownerId}/${path.id}/${path.name}`;
+                const url = getDriveEmbedUrl(path.ownerId, path.id, path.name);
                 setPreview({url, mimeType});
             } else {
                 // Close the preview if the new selection isn't previewable
@@ -95,10 +96,10 @@ function DriveRoute() {
             const url = `${import.meta.env.VITE_APP_STICKIES_URL}/board/${path.ownerId}/${path.id}`;
             document.location.href = url;
         } else if (mimeType.startsWith("image/") || mimeType.startsWith("video/")) {
-            const url = `${import.meta.env.VITE_API_HOST}/drive/embed/${path.ownerId}/${path.id}/${path.name}`;
+            const url = getDriveEmbedUrl(path.ownerId, path.id, path.name);
             setPreview({url, mimeType: mimeType});
         } else {
-            const url = `${import.meta.env.VITE_API_HOST}/drive/download/${path.ownerId}/${path.id}`;
+            const url = getDriveDownloadUrl(path.ownerId, path.id);
             window.open(url, "_blank");
         }
     };

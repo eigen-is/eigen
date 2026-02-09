@@ -18,4 +18,10 @@ export const homeApi = api.home;
 export const adminApi = api.admin;
 export const setupApi = api.setup;
 
-export const SSE_EVENTS_URL = `${API_HOST}/sse/events`;
+export const getSSEEventsUrl = (ownerId: string) => `${API_HOST}/sse/${ownerId}/events`;
+export const getContactsAvatarUploadUrl = (ownerId: string) => `${API_HOST}/contacts/${ownerId}/avatar`;
+export const getDriveFileUploadUrl = (ownerId: string, pathId: string) => `${API_HOST}/drive/${ownerId}/file/${pathId}`;
+export const getDriveFilesUploadUrl = (ownerId: string, pathId: string) => `${API_HOST}/drive/${ownerId}/files/${pathId}`;
+export const getDriveDownloadUrl = (ownerId: string, pathId: string) => `${API_HOST}/drive/${ownerId}/file/${pathId}/download`;
+export const getDriveEmbedUrl = (ownerId: string, pathId: string, fileName: string) => `${API_HOST}/drive/${ownerId}/file/${pathId}/embed/${fileName}`;
+export const getDriveThumbnailUrl = (ownerId: string, fileName: string) => `${API_HOST}/drive/${ownerId}/thumb/${fileName}`;

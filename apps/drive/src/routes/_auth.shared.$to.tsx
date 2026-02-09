@@ -7,6 +7,7 @@ import {useIsMobile} from "@workspace/lib/media";
 import {EigenLoader} from '@workspace/ui';
 import {useState} from "react";
 import {FilePreview} from '../components/drive/file-preview';
+import {getDriveDownloadUrl, getDriveEmbedUrl} from "@workspace/lib/api";
 
 export const Route = createFileRoute('/_auth/shared/$to')({
     component: DriveRoute,
@@ -31,7 +32,7 @@ function DriveRoute() {
         data: folderContents = [],
         isLoading: isFolderContentLoading,
         error: isFolderContentLoadingError
-    } = useSharedPaths(to as 'by-me' | 'with-me');
+    } = useSharedPaths(ownerId, to as 'by-me' | 'with-me');
 
     // Handle row click to show path details
     const onRowSelect = (path: DrivePath) => {
@@ -41,7 +42,7 @@ function DriveRoute() {
             // If a preview is already open
             if (mimeType.startsWith("image/") || mimeType.startsWith("video/")) {
                 // Update the preview if new selection is also previewable
-                const url = `${import.meta.env.VITE_API_HOST}/drive/embed/${path.ownerId}/${path.id}/${path.name}`;
+                const url = getDriveEmbedUrl(path.ownerId, path.id, path.name);
                 setPreview({url, mimeType});
             } else {
                 // Close the preview if the new selection isn't previewable
@@ -75,10 +76,10 @@ function DriveRoute() {
             const url = `${import.meta.env.VITE_APP_STICKIES_URL}/board/${path.ownerId}/${path.id}`;
             document.location.href = url;
         } else if (mimeType.startsWith("image/") || mimeType.startsWith("video/")) {
-            const url = `${import.meta.env.VITE_API_HOST}/drive/embed/${path.ownerId}/${path.id}/${path.name}`;
+            const url = getDriveEmbedUrl(path.ownerId, path.id, path.name);
             setPreview({url, mimeType: mimeType});
         } else {
-            const url = `${import.meta.env.VITE_API_HOST}/drive/download/${path.ownerId}/${path.id}`;
+            const url = getDriveDownloadUrl(path.ownerId, path.id);
             window.open(url, "_blank");
         }
     };

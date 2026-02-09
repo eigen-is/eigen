@@ -3,6 +3,7 @@ import {toast} from "sonner";
 import type {DrivePath} from "@workspace/lib/types/drive";
 import {useUpload} from "../../layout/upload-provider/upload-provider";
 import {uploadWithProgress} from "../upload-provider/upload-with-progress";
+import {getDriveFileUploadUrl, getDriveFilesUploadUrl} from "@workspace/lib/api";
 import type {UploadResult} from "./file-upload";
 
 export type {UploadResult};
@@ -57,8 +58,8 @@ export function DriveUploadFiles({
 
         // Use URL based on number of files
         const url = multipleFiles
-            ? `${import.meta.env.VITE_API_HOST}/drive/files/${path.ownerId}/${path.id}`
-            : `${import.meta.env.VITE_API_HOST}/drive/file/${path.ownerId}/${path.id}`;
+            ? getDriveFilesUploadUrl(path.ownerId, path.id)
+            : getDriveFileUploadUrl(path.ownerId, path.id);
 
         const name = multipleFiles ? 'multiple files' : files[0].name;
         const uploadHandler = upload.createUpload(name);

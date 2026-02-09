@@ -1,6 +1,7 @@
 import {useRef} from 'react';
 import {useUpload} from "../../layout/upload-provider/upload-provider";
 import {uploadWithProgress} from "../upload-provider/upload-with-progress";
+import {getDriveFileUploadUrl, getDriveFilesUploadUrl} from "@workspace/lib/api";
 
 export type UploadResult = {
     success: boolean;
@@ -36,8 +37,8 @@ export function useFileUpload(ownerId: string, folderId: string, options: FileUp
 
         // Use custom URLs if provided, otherwise use default URLs
         const url = multipleFiles
-            ? (options.multipleFilesUrl || `${import.meta.env.VITE_API_HOST}/drive/files/${ownerId}/${folderId}`)
-            : (options.singleFileUrl || `${import.meta.env.VITE_API_HOST}/drive/file/${ownerId}/${folderId}`);
+            ? (options.multipleFilesUrl || getDriveFilesUploadUrl(ownerId, folderId))
+            : (options.singleFileUrl || getDriveFileUploadUrl(ownerId, folderId));
 
         const name = multipleFiles ? 'multiple files' : files[0].name;
         const uploadHandler = upload.createUpload(name);
