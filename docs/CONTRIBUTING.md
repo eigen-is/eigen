@@ -218,7 +218,7 @@ Three pluggable backends in `apps/api/src/lib/storage/`:
 - **LocalKeyStorage** - Flat UUID-based file storage (used by Drive mounts)
 - **S3Storage** - S3-compatible object storage (ready for use)
 
-For detailed storage architecture, see `apps/api/STORAGE.md`.
+For detailed storage architecture, see `docs/STORAGE.md`.
 
 ## Documentation
 
