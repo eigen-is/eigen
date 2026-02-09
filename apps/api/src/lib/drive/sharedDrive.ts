@@ -1,23 +1,9 @@
 import type {User} from "better-auth";
-import Drive, {getDrive} from "./drive";
-import {getUserById} from "../users/users";
-import {getHome, Home} from "../home/home";
+import Drive from "./drive";
+import type {Home} from "../home";
 import type {DriveACL, DrivePath} from "@workspace/lib/types/drive";
 import CollabDocument from "../collab/collabDocument.ts";
 import type {DatabaseConfig, ManagedDatabase, SchemaType} from "../core/managed-database";
-
-export async function getSharedDrive(ownerId: string, user: User) {
-    if (!user?.id) {
-        throw new Error('User is required');
-    }
-    if (ownerId !== user.id) {
-        const owner = await getUserById(ownerId);
-        const home = await getHome(owner as User);
-        return new SharedDrive(home, user);
-    } else {
-        return getDrive(user);
-    }
-}
 
 export default class SharedDrive extends Drive {
     private sharedDrive: Drive;

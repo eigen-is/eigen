@@ -6,7 +6,7 @@ import {createUniqueMessageId, getMailIDfromFileName, getStandardMailboxFlags} f
 import {welcomeMail} from "./welcome.ts";
 import DOMPurify from 'isomorphic-dompurify';
 import maildb from "./maildb.ts";
-import type {Home} from "../home/home";
+import type {Home} from "../home";
 import {draftToMailOptions, sendMail} from './sender';
 import {type SSEventMailData, SSEventType} from "@workspace/lib/types/sse";
 import {LocalStorage} from "../storage";

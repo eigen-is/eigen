@@ -2,7 +2,7 @@ import type {BunSQLiteDatabase} from "drizzle-orm/bun-sqlite";
 import {and, count, eq, sql} from "drizzle-orm";
 import * as schema from "./schema.ts";
 import type {EmailSummary} from "@workspace/lib/types/mail";
-import type {Home} from "../home/home";
+import type {Home} from "../home";
 import {MAIL_DB_CONFIG} from "./db-config";
 import type {ManagedDatabase} from "../core/managed-database";
 

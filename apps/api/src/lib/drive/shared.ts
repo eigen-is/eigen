@@ -1,4 +1,4 @@
-import type {Home} from "../home/home";
+import type {Home} from "../home";
 import {SHARED_DB_CONFIG} from "./db-config";
 
 export async function getSharedDatabase(home: Home) {
