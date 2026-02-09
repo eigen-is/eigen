@@ -24,13 +24,12 @@ export async function getDrive(user: User): Promise<Drive> {
     return home.drive;
 }
 
-const documents: Map<string, () => Promise<CollabDocument>> = new Map();
-
 export default class Drive {
     private home: Home;
     private owner: User;
     private mount!: Mount;
     private sharedDb!: BunSQLiteDatabase<typeof sharedSchema>;
+    private documents: Map<string, () => Promise<CollabDocument>> = new Map();
 
     constructor(home: Home) {
         this.home = home;
@@ -330,8 +329,8 @@ export default class Drive {
 
     async getCollabDocument(pathId: string): Promise<CollabDocument> {
         const key = `${this.owner.id}.${pathId}`;
-        if (!documents.has(key)) {
-            documents.set(key, createAsyncSingleton(async () => {
+        if (!this.documents.has(key)) {
+            this.documents.set(key, createAsyncSingleton(async () => {
                 const path = await this.mount.getPath(pathId);
                 if (!path || (path.type !== 'doc' && path.type !== 'stickies')) {
                     throw new Error('Document not found');
@@ -340,15 +339,15 @@ export default class Drive {
                 return (await document.init()) as CollabDocument;
             }));
         }
-        return await documents.get(key)!() as CollabDocument;
+        return await this.documents.get(key)!() as CollabDocument;
     }
 
     async closeCollabDocument(pathId: string): Promise<void> {
         const key = `${this.owner.id}.${pathId}`;
-        const document = documents.get(key);
+        const document = this.documents.get(key);
         if (document) {
             (await document()).destruct();
-            documents.delete(key);
+            this.documents.delete(key);
         }
 
         const path = await this.mount.getPath(pathId);
@@ -457,5 +456,17 @@ export default class Drive {
                 console.error('Failed to emit ACL change:', error);
             }
         }
+    }
+
+    async destruct(): Promise<void> {
+        for (const [key, getter] of this.documents) {
+            try {
+                const doc = await getter();
+                doc.destruct();
+            } catch (error) {
+                console.error(`Failed to close document ${key}:`, error);
+            }
+        }
+        this.documents.clear();
     }
 }

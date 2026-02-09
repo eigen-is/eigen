@@ -114,4 +114,10 @@ export default class maildb {
         mailbox = mailbox.toLowerCase();
         return this.db.select().from(schema.emails).where(eq(schema.emails.mailbox, mailbox));
     }
+
+    async destruct(): Promise<void> {
+        if (this.managedDb) {
+            await this.managedDb.close();
+        }
+    }
 }

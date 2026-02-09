@@ -96,7 +96,6 @@ class DbProvider {
     destroy(): void {
         console.log(`[DbProvider] Destroying provider for document ${this.docId}`);
         const update = Y.encodeStateAsUpdate(this.doc);
-        this.storeUpdate(update);
         this.db.delete(schema.docUpdates).run();
         this.storeUpdate(update);
     }
