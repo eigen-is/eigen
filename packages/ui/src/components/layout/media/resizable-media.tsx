@@ -2,8 +2,8 @@ import {useCallback, useEffect, useRef, useState} from "react";
 import {cn} from "@workspace/ui/lib/utils";
 import {Popover, PopoverContent, PopoverTrigger} from "@workspace/ui/components/popover";
 import {Button} from "@workspace/ui/components/button";
-import {Palette} from "lucide-react";
-import {type MediaStyleOptions, type ResizableMediaProps, defaultStyleOptions} from "./media.types";
+import {Palette, AlignLeft, AlignCenter, AlignRight} from "lucide-react";
+import {type MediaStyleOptions, type MediaAlignment, type ResizableMediaProps, defaultStyleOptions} from "./media.types";
 import {MediaStylePicker} from "./media-style-picker";
 
 type ResizeHandle = 'nw' | 'n' | 'ne' | 'w' | 'e' | 'sw' | 's' | 'se';
@@ -25,14 +25,22 @@ const shadowMap: Record<MediaStyleOptions['shadow'], string> = {
     xl: 'shadow-xl',
 };
 
+const alignmentStyles: Record<MediaAlignment, React.CSSProperties> = {
+    left: {float: 'left', margin: '0 1rem 1rem 0'},
+    center: {display: 'flex', justifyContent: 'center', width: '100%'},
+    right: {float: 'right', margin: '0 0 1rem 1rem'},
+};
+
 export function ResizableMedia({
     src,
     alt = "",
     width,
     minWidth = 50,
     isSelected,
+    alignment = 'center',
     styleOptions = defaultStyleOptions,
     onWidthChange,
+    onAlignmentChange,
     onStyleChange,
     onSelect,
     onDeselect,
@@ -133,13 +141,17 @@ export function ResizableMedia({
     const radius = borderRadiusMap[styleOptions.borderRadius];
     const shadow = shadowMap[styleOptions.shadow];
     const border = styleOptions.border ? 'ring-1 ring-border' : '';
+    const alignStyle = alignmentStyles[alignment];
 
     return (
         <div
             ref={containerRef}
             className="relative inline-block"
             onClick={handleClick}
-            style={{cursor: isResizing ? 'grabbing' : 'pointer'}}
+            style={{
+                cursor: isResizing ? 'grabbing' : 'pointer',
+                ...alignStyle,
+            }}
         >
             <img
                 ref={imageRef}
@@ -159,19 +171,48 @@ export function ResizableMedia({
                         "absolute inset-0 border-2 border-dashed border-blue-500 bg-blue-500/10 pointer-events-none",
                         radius
                     )} />
-                    {onStyleChange && (
-                        <div className="absolute -top-10 left-1/2 -translate-x-1/2 z-10">
-                            <Popover>
-                                <PopoverTrigger asChild>
-                                    <Button size="sm" variant="secondary" className="shadow-md">
-                                        <Palette className="size-4" />
-                                        Style
+                    {(onStyleChange || onAlignmentChange) && (
+                        <div className="absolute -top-10 left-1/2 -translate-x-1/2 z-10 flex gap-1 bg-background rounded-md shadow-md border p-1">
+                            {onAlignmentChange && (
+                                <>
+                                    <Button
+                                        size="icon"
+                                        variant={alignment === 'left' ? 'default' : 'ghost'}
+                                        className="size-7"
+                                        onClick={() => onAlignmentChange('left')}
+                                    >
+                                        <AlignLeft className="size-4" />
                                     </Button>
-                                </PopoverTrigger>
-                                <PopoverContent align="center" className="w-auto p-0">
-                                    <MediaStylePicker value={styleOptions} onChange={onStyleChange} />
-                                </PopoverContent>
-                            </Popover>
+                                    <Button
+                                        size="icon"
+                                        variant={alignment === 'center' ? 'default' : 'ghost'}
+                                        className="size-7"
+                                        onClick={() => onAlignmentChange('center')}
+                                    >
+                                        <AlignCenter className="size-4" />
+                                    </Button>
+                                    <Button
+                                        size="icon"
+                                        variant={alignment === 'right' ? 'default' : 'ghost'}
+                                        className="size-7"
+                                        onClick={() => onAlignmentChange('right')}
+                                    >
+                                        <AlignRight className="size-4" />
+                                    </Button>
+                                </>
+                            )}
+                            {onStyleChange && (
+                                <Popover>
+                                    <PopoverTrigger asChild>
+                                        <Button size="icon" variant="ghost" className="size-7">
+                                            <Palette className="size-4" />
+                                        </Button>
+                                    </PopoverTrigger>
+                                    <PopoverContent align="center" className="w-auto p-0">
+                                        <MediaStylePicker value={styleOptions} onChange={onStyleChange} />
+                                    </PopoverContent>
+                                </Popover>
+                            )}
                         </div>
                     )}
                     <ResizeHandle position="nw" onMouseDown={(e) => handleResizeStart(e, 'nw')} />

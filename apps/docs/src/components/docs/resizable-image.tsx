@@ -1,8 +1,8 @@
 import {useCallback} from "react";
 import {ReactEditor, useSlateStatic} from "slate-react";
 import {Transforms} from "slate";
-import {ResizableMedia, defaultStyleOptions, type MediaStyleOptions} from "@workspace/ui/components/layout/media";
-import {CustomElement} from "./editor.types";
+import {ResizableMedia, defaultStyleOptions, type MediaStyleOptions, type MediaAlignment} from "@workspace/ui/components/layout/media";
+import {CustomElement, TextAlignment} from "./editor.types";
 
 type ResizableImageProps = {
     element: CustomElement;
@@ -20,6 +20,11 @@ export function ResizableImage({element, src, isSelected, onSelect, onDeselect}:
         Transforms.setNodes(editor, {width}, {at: path});
     }, [editor, element]);
 
+    const handleAlignmentChange = useCallback((alignment: MediaAlignment) => {
+        const path = ReactEditor.findPath(editor, element);
+        Transforms.setNodes(editor, {align: alignment as TextAlignment}, {at: path});
+    }, [editor, element]);
+
     const handleStyleChange = useCallback((style: MediaStyleOptions) => {
         const path = ReactEditor.findPath(editor, element);
         Transforms.setNodes(editor, {style}, {at: path});
@@ -35,9 +40,11 @@ export function ResizableImage({element, src, isSelected, onSelect, onDeselect}:
         <ResizableMedia
             src={src}
             width={element.width}
+            alignment={element.align ?? 'center'}
             styleOptions={element.style ?? defaultStyleOptions}
             isSelected={isSelected}
             onWidthChange={handleWidthChange}
+            onAlignmentChange={handleAlignmentChange}
             onStyleChange={handleStyleChange}
             onSelect={onSelect}
             onDeselect={onDeselect}
