@@ -390,7 +390,7 @@ export default class Drive {
 
         const normalizedACL = normalizeACL(acl);
         await mount.updatePath(pathId, {acl: normalizedACL});
-        this.emitACLChange(item, item.acl, normalizedACL);
+        await this.emitACLChange(item, item.acl, normalizedACL);
         const updatedItem = await mount.getPath(pathId);
         if (updatedItem) this.emit(SSEventType.DRIVE_ACL_UPDATED, updatedItem);
     }
