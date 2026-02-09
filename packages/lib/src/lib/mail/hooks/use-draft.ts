@@ -1,6 +1,7 @@
 import {useMutation} from '@tanstack/react-query';
 import {mailApi} from '@workspace/lib/api';
 import {EmailDraft} from '@workspace/lib/types/mail';
+import {useAuth} from '@workspace/lib/auth';
 
 export type EmailRecipient = {
     name?: string;
@@ -57,12 +58,12 @@ export function createDraftEmail(params: CreateDraftParams): EmailDraft {
 /**
  * Updates an existing email draft
  * @param draft The draft email to update
+ * @param ownerId The owner ID for the API call
  * @returns Promise with the updated draft or null if failed
  */
-export async function updateDraftEmail(draft: EmailDraft): Promise<EmailDraft | null> {
+export async function updateDraftEmail(draft: EmailDraft, ownerId: string): Promise<EmailDraft | null> {
     try {
-        // Send the update to the server
-        const response = await mailApi.message.draft.put({
+        const response = await mailApi({ownerId}).message.draft.put({
             mail: draft
         });
 
@@ -76,13 +77,13 @@ export async function updateDraftEmail(draft: EmailDraft): Promise<EmailDraft | 
 /**
  * Sends an email draft
  * @param draft The draft email to send
+ * @param ownerId The owner ID for the API call
  * @returns Promise with the sent email ID or null if failed
  */
-export async function sendDraftEmail(draft: EmailDraft): Promise<EmailDraft | null> {
+export async function sendDraftEmail(draft: EmailDraft, ownerId: string): Promise<EmailDraft | null> {
     try {
-        // Send the email
         console.log(draft);
-        const response = await mailApi.message.send.post({
+        const response = await mailApi({ownerId}).message.send.post({
             mail: draft
         });
 
@@ -94,13 +95,19 @@ export async function sendDraftEmail(draft: EmailDraft): Promise<EmailDraft | nu
 }
 
 export function useUpdateDraft() {
+    const {user} = useAuth();
+    const ownerId = user?.id || '';
+
     return useMutation({
-        mutationFn: updateDraftEmail,
+        mutationFn: (draft: EmailDraft) => updateDraftEmail(draft, ownerId),
     });
 }
 
 export function useSendDraft() {
+    const {user} = useAuth();
+    const ownerId = user?.id || '';
+
     return useMutation({
-        mutationFn: sendDraftEmail,
+        mutationFn: (draft: EmailDraft) => sendDraftEmail(draft, ownerId),
     });
 }

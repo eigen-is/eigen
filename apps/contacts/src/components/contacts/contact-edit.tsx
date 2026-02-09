@@ -6,9 +6,11 @@ import {ArrowLeft, Calendar, Camera, Plus, Trash2} from 'lucide-react';
 import {format} from "date-fns";
 import {cn} from "@workspace/ui/lib/utils";
 import {useAddContact, useLabels, useUpdateContact} from '@workspace/lib/contacts';
+import {useAuth} from '@workspace/lib/auth';
 import {type Contact} from "@workspace/lib/types/contact";
 import {useUpload} from '@workspace/ui/components/layout/upload-provider/upload-provider';
 import {uploadWithProgress} from "@workspace/ui/components/layout/upload-provider/upload-with-progress";
+import {getContactsAvatarUploadUrl} from "@workspace/lib/api";
 import {Button} from "@workspace/ui/components/button";
 import {Input} from "@workspace/ui/components/input";
 import {Badge} from "@workspace/ui/components/badge";
@@ -67,6 +69,9 @@ export function ContactEdit({
                                 onSave,
                                 onCancel
                             }: ContactEditProps) {
+    // Get current user for API calls
+    const {user} = useAuth();
+
     // Gebruik useLabels hook voor het ophalen van labels
     const {data: labels = [], error: labelsError} = useLabels();
 
@@ -181,7 +186,7 @@ export function ContactEdit({
                                                 try {
                                                     // Use the uploadWithProgress helper with authentication
                                                     const response = await uploadWithProgress({
-                                                        url: `${import.meta.env.VITE_API_HOST}/contacts/avatar`,
+                                                        url: getContactsAvatarUploadUrl(user?.id || ''),
                                                         formData,
                                                         headers: {
                                                             'credentials': 'include'

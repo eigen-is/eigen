@@ -35,52 +35,38 @@ const LabelSchema = t.Object({
 
 export const contactsRouter = new Elysia({name: "contacts"})
     .use(betterAuth)
-    .get("/contacts/contacts", async ({user}) => await (await getContacts(user)).getContacts(), {
+    .get("/contacts/:ownerId/contacts", async ({user}) => await (await getContacts(user)).getContacts(), {
         auth: true
     })
-    .get("/contacts/contacts/:id", async ({
-                                              params,
-                                              user
-                                          }) => await (await getContacts(user)).getContactById(params.id), {
+    .get("/contacts/:ownerId/contacts/:id", async ({params, user}) => await (await getContacts(user)).getContactById(params.id), {
         auth: true
     })
-    .post("/contacts/contacts", async ({body, user}) => await (await getContacts(user)).addContact(body), {
+    .post("/contacts/:ownerId/contacts", async ({body, user}) => await (await getContacts(user)).addContact(body), {
         body: ContactSchema,
         auth: true
     })
-    .put("/contacts/contacts/:id", async ({
-                                              params,
-                                              body,
-                                              user
-                                          }) => await (await getContacts(user)).updateContact(params.id, body), {
+    .put("/contacts/:ownerId/contacts/:id", async ({params, body, user}) => await (await getContacts(user)).updateContact(params.id, body), {
         body: ContactSchema,
         auth: true
     })
-    .delete("/contacts/contacts/:id", async ({
-                                                 params,
-                                                 user
-                                             }) => await (await getContacts(user)).deleteContact(params.id), {
+    .delete("/contacts/:ownerId/contacts/:id", async ({params, user}) => await (await getContacts(user)).deleteContact(params.id), {
         auth: true
     })
-    .get("/contacts/labels", async ({user}) => await (await getContacts(user)).getLabels(), {
+    .get("/contacts/:ownerId/labels", async ({user}) => await (await getContacts(user)).getLabels(), {
         auth: true
     })
-    .post("/contacts/labels", async ({body, user}) => await (await getContacts(user)).addLabel(body), {
+    .post("/contacts/:ownerId/labels", async ({body, user}) => await (await getContacts(user)).addLabel(body), {
         body: LabelSchema,
         auth: true
     })
-    .put("/contacts/labels/:id", async ({
-                                            params,
-                                            body,
-                                            user
-                                        }) => await (await getContacts(user)).updateLabel(params.id, body), {
+    .put("/contacts/:ownerId/labels/:id", async ({params, body, user}) => await (await getContacts(user)).updateLabel(params.id, body), {
         body: LabelSchema,
         auth: true
     })
-    .delete("/contacts/labels/:id", async ({params, user}) => await (await getContacts(user)).deleteLabel(params.id), {
+    .delete("/contacts/:ownerId/labels/:id", async ({params, user}) => await (await getContacts(user)).deleteLabel(params.id), {
         auth: true
     })
-    .post("/contacts/avatar", async ({body, user}) => await (await getContacts(user)).uploadAvatar(body.file), {
+    .post("/contacts/:ownerId/avatar", async ({body, user}) => await (await getContacts(user)).uploadAvatar(body.file), {
         body: t.Object({
             file: t.File({
                 format: 'image/*',
@@ -89,7 +75,7 @@ export const contactsRouter = new Elysia({name: "contacts"})
         }),
         auth: true
     })
-    .get("/contacts/avatar/:filename", async ({params, user, set}) => {
+    .get("/contacts/:ownerId/avatar/:filename", async ({params, user, set}) => {
         try {
             const data = await (await getContacts(user)).downloadAvatar(params.filename);
             set.headers['Cache-Control'] = 'public, max-age=900';
@@ -103,6 +89,6 @@ export const contactsRouter = new Elysia({name: "contacts"})
     }, {
         auth: true
     })
-    .get("/contacts/me", async ({user}) => await (await getContacts(user)).getMe(), {
+    .get("/contacts/:ownerId/me", async ({user}) => await (await getContacts(user)).getMe(), {
         auth: true
     })

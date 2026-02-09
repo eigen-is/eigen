@@ -2,6 +2,7 @@ import {useMutation, useQuery, useQueryClient, type QueryClient} from '@tanstack
 import {contactsApi} from "@workspace/lib/api.ts";
 import type {Label} from "@workspace/lib/types/label";
 import {contactKeys} from './use-contacts';
+import {useAuth} from '@workspace/lib/auth';
 
 // Definieer query keys voor hergebruik
 export const labelKeys = {
@@ -12,36 +13,46 @@ export const labelKeys = {
     detail: (id: string) => [...labelKeys.details(), id] as const,
 };
 
-// Hook om alle labels op te halen
+// Hook to fetch all labels
 export function useLabels() {
+    const {user} = useAuth();
+    const ownerId = user?.id || '';
+
     return useQuery({
         queryKey: labelKeys.lists(),
         queryFn: async () => {
-            const response = await contactsApi.labels.get();
+            const response = await contactsApi({ownerId}).labels.get();
             return response.data || [];
         },
         staleTime: 5 * 60 * 1000, // 5 minutes
+        enabled: !!ownerId,
     });
 }
 
-// Hook om een label toe te voegen
+// Hook to add a label
 export function useAddLabel() {
     const queryClient = useQueryClient();
+    const {user} = useAuth();
+    const ownerId = user?.id || '';
+
     return useMutation({
         mutationFn: async (labelData: Omit<Label, 'id'>) => {
-            const response = await contactsApi.labels.post(labelData as any);
+            const response = await contactsApi({ownerId}).labels.post(labelData as any);
             return response.data;
         },
         onSuccess: () => invalidateLabelCreated(queryClient),
     });
 }
 
-// Hook om een label te bewerken
+// Hook to update a label
 export function useUpdateLabel() {
     const queryClient = useQueryClient();
+    const {user} = useAuth();
+    const ownerId = user?.id || '';
+
     return useMutation({
         mutationFn: async (updatedLabel: Label) => {
-            const response = await contactsApi.labels({id: updatedLabel.id}).put({
+            const response = await contactsApi({ownerId}).labels({id: updatedLabel.id}).put({
                 name: updatedLabel.name,
                 color: updatedLabel.color
             } as any);
@@ -51,12 +62,15 @@ export function useUpdateLabel() {
     });
 }
 
-// Hook om een label te verwijderen
+// Hook to delete a label
 export function useDeleteLabel() {
     const queryClient = useQueryClient();
+    const {user} = useAuth();
+    const ownerId = user?.id || '';
+
     return useMutation({
         mutationFn: async (labelId: string) => {
-            const response = await contactsApi.labels({id: labelId}).delete();
+            const response = await contactsApi({ownerId}).labels({id: labelId}).delete();
             return response.data;
         },
         onSuccess: (_data, labelId) => invalidateLabelDeleted(queryClient, labelId),

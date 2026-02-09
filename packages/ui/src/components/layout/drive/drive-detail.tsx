@@ -1,4 +1,5 @@
 import {cn} from "@workspace/ui/lib/utils";
+import {getDriveDownloadUrl, getDriveThumbnailUrl} from "@workspace/lib/api";
 import {ArrowLeft, ArrowRight, Download, MoreVertical, Pencil, Trash2, UserRoundPlus, X} from "lucide-react";
 import {
     DropdownMenu,
@@ -49,8 +50,8 @@ export function DriveDetail({
         );
     }
 
-    const fullPath = `${import.meta.env.VITE_API_HOST}/drive/download/${path.ownerId}/${path.id}`;
-    const thumbnailPath = `${import.meta.env.VITE_API_HOST}/drive/thumb/${path.ownerId}/${path.thumbnail}`;
+    const fullPath = getDriveDownloadUrl(path.ownerId, path.id);
+    const thumbnailPath = getDriveThumbnailUrl(path.ownerId, path.thumbnail || '');
 
     return (
 

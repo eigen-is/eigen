@@ -10,7 +10,7 @@ export async function getPublicInfo(mailOrId: string): Promise<PublicUser | null
     if (user && avatar) {
         // get filename from path
         const filename = avatar.split('/').pop();
-        avatar = `space/avatar/${user.id}/${filename}`;
+        avatar = `space/${user.id}/avatar/${filename}`;
     }
     return user ? {
         name: user?.name,
