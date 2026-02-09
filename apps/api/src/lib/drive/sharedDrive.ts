@@ -100,12 +100,18 @@ export default class SharedDrive extends Drive {
         return this.withWritePermission(mountId, parentId, () => this.sharedDrive.createFolder(mountId, parentId, folderName), undefined);
     }
 
-    public async uploadFile(mountId: string, parentId: string, file: File) {
-        return this.withWritePermission(mountId, parentId, () => this.sharedDrive.uploadFile(mountId, parentId, file), '');
+    public async uploadFile(mountId: string, parentId: string, file: File): Promise<DrivePath> {
+        if (!(await this.canWrite(mountId, parentId, this.user))) {
+            throw new Error('No write permission');
+        }
+        return this.sharedDrive.uploadFile(mountId, parentId, file);
     }
 
-    public async uploadFiles(mountId: string, parentId: string, files: File[]) {
-        return this.withWritePermission(mountId, parentId, () => this.sharedDrive.uploadFiles(mountId, parentId, files), []);
+    public async uploadFiles(mountId: string, parentId: string, files: File[]): Promise<DrivePath[]> {
+        if (!(await this.canWrite(mountId, parentId, this.user))) {
+            throw new Error('No write permission');
+        }
+        return this.sharedDrive.uploadFiles(mountId, parentId, files);
     }
 
     public async createStickies(mountId: string, parentId: string, stickiesName: string): Promise<string | undefined> {
