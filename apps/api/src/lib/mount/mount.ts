@@ -11,6 +11,7 @@ import {labels, paths, pathsToLabels} from './schema';
 import {MOUNT_DB_CONFIG} from './db-config';
 import {LocalKeyStorage, S3Storage, type StorageBackend} from '../storage';
 import {type DatabaseConfig, ManagedDatabase, type SchemaType} from '../core/managed-database';
+import {deleteThumbnail} from '../shared/thumbnails';
 import {createAsyncSingleton} from '../../utils/singleton';
 
 type LocalDatabaseGetter = <S extends SchemaType>(
@@ -201,6 +202,7 @@ export class Mount {
         if (!pathEntry) return;
 
         if (pathEntry.type === 'file') {
+            await deleteThumbnail(this.thumbsDir, pathId);
             await this.storage.delete(pathId);
         } else {
             const children = await this.listFolder(pathId);
