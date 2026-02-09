@@ -13,17 +13,11 @@ import {getSharedDatabase} from './shared';
 import * as sharedSchema from './sharedschema';
 import {propagateACLChange} from './acl-propagation';
 import {createAsyncSingleton} from '../../utils/singleton';
-import type {Home} from '../home/home';
+import type {Home} from '../home';
 import {SSEventType} from '@workspace/lib/types/sse';
 import {buildDriveEvent} from './sse-events';
 
 export type {DrivePath, DriveACL} from '@workspace/lib/types/drive';
-
-export async function getDrive(user: User): Promise<Drive> {
-    const {getHome} = await import('../home/home');
-    const home = await getHome(user);
-    return home.drive;
-}
 
 export default class Drive {
     private home: Home;

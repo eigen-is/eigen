@@ -1,6 +1,6 @@
 import {Elysia, sse} from "elysia";
 import {betterAuth} from "./auth";
-import {getHome} from "../lib/home/home";
+import {getHome} from "../lib/home";
 import type {SSEvent} from "@workspace/lib/types/sse";
 
 export const sseRouter = new Elysia({name: "sse"})

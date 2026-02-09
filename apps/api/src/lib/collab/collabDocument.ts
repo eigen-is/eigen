@@ -5,7 +5,7 @@ import {type ServerWebSocket} from "bun";
 import * as encoding from "lib0/encoding";
 import * as decoding from "lib0/decoding";
 import type {DrivePath} from "@workspace/lib/types/drive";
-import type Drive from "../drive/drive";
+import type {Drive} from "../drive";
 import type {ManagedDatabase} from "../core/managed-database";
 import {COLLAB_DB_CONFIG} from "./db-config";
 import * as schema from "./schema.ts";

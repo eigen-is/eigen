@@ -1,5 +1,5 @@
 import type {PublicUser} from "@workspace/lib/types/public";
-import {getHome} from "../home/home";
+import {getHome} from "../home";
 import {getUserByEmail, getUserById} from "../users/users";
 
 export async function getPublicInfo(mailOrId: string): Promise<PublicUser | null> {

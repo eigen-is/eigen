@@ -1,6 +1,6 @@
 import {Elysia} from "elysia";
 import {betterAuth} from "./auth.ts";
-import {getHome} from "../lib/home/home.ts";
+import {getHome} from "../lib/home";
 
 export const homeRouter = new Elysia({name: "home"})
     .use(betterAuth)

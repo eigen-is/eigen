@@ -1,6 +1,7 @@
 import type {DrivePath, DriveACL} from '@workspace/lib/types/drive';
 import type {User} from 'better-auth/types';
 import {getUserByEmail} from '../users/users';
+import {getHome} from '../home';
 
 /**
  * ACL Propagation Service
@@ -24,7 +25,6 @@ export async function propagateACLChange(path: DrivePath, oldACL: DriveACL[] | n
         try {
             const user = await getUserByEmail(email);
             if (user) {
-                const {getHome} = await import('../home/home');
                 const home = await getHome(user as User);
                 await home.drive.receiveACLChange(path, newACL);
             }
