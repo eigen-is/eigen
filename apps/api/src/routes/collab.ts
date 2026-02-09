@@ -12,11 +12,19 @@ export const collabRouter = new Elysia({
 })
     .use(betterAuth)
 
-    .get("/collab/:ownerId/:mountId/:pathId/access", async ({params, user}) => {
+    .get("/collab/:ownerId/:mountId/:pathId/info", async ({params, user}) => {
         const drive = await getSharedDrive(params.ownerId, user);
         const canRead = await drive.canRead(params.mountId, params.pathId, user);
         const canWrite = await drive.canWrite(params.mountId, params.pathId, user);
-        return {canRead, canWrite};
+
+        if (!canRead) {
+            return {canRead, canWrite, path: null, folderContents: null};
+        }
+
+        const path = await drive.getPath(params.mountId, params.pathId);
+        const folderContents = await drive.getFolderContents(params.mountId, params.pathId);
+
+        return {canRead, canWrite, path, folderContents};
     }, {auth: true})
 
     // WebSocket endpoint for collaborative editing

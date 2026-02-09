@@ -147,6 +147,7 @@ export default class Drive {
 
         const safeName = `${docName}.eigendoc`;
         const docId = await mount.createFolder(parentId, safeName, 'doc');
+        await CollabDocument.create(this, mountId, docId);
         const doc = await mount.getPath(docId);
         if (doc) this.emit(SSEventType.DRIVE_FILE_CREATED, doc);
         return docId;
@@ -160,6 +161,7 @@ export default class Drive {
 
         const safeName = `${stickiesName}.eigenstickies`;
         const stickiesId = await mount.createFolder(parentId, safeName, 'stickies');
+        await CollabDocument.create(this, mountId, stickiesId);
         const stickies = await mount.getPath(stickiesId);
         if (stickies) this.emit(SSEventType.DRIVE_FILE_CREATED, stickies);
         return stickiesId;
