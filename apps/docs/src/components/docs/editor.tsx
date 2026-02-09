@@ -13,6 +13,7 @@ import {EigenLoader} from "@workspace/ui";
 import {DrivePath} from "@workspace/lib/types/drive";
 import {getCollabWebSocketUrl, getDriveEmbedUrl} from "@workspace/lib/api";
 import {useUploadFile} from "@workspace/lib/drive";
+import {ResizableImage} from "./resizable-image";
 
 // Define the initial value with proper typing
 const initialValue: CustomElement[] = [
@@ -92,6 +93,7 @@ const SlateEditor = ({
 }) => {
     const auth = useAuth();
     const uploadFile = useUploadFile(path.ownerId, path.mountId);
+    const [selectedImageId, setSelectedImageId] = useState<string | null>(null);
 
     const editor = useMemo(() => {
         const e = withReact(
@@ -175,14 +177,14 @@ const SlateEditor = ({
                     </div>
                 );
             case 'image':
-                const aspectRatio = typedElement.width && typedElement.height ? typedElement.width / typedElement.height : undefined;
                 return (
                     <div {...attributes} contentEditable={false} className="my-2">
-                        <img
+                        <ResizableImage
+                            element={typedElement}
                             src={getDriveEmbedUrl(path.ownerId, path.mountId, typedElement.pathId!, 'image')}
-                            alt=""
-                            className="max-w-full rounded"
-                            style={{...style, aspectRatio}}
+                            isSelected={selectedImageId === typedElement.pathId}
+                            onSelect={() => setSelectedImageId(typedElement.pathId!)}
+                            onDeselect={() => setSelectedImageId(null)}
                         />
                         {children}
                     </div>
@@ -190,7 +192,7 @@ const SlateEditor = ({
             default:
                 return <p style={style} {...attributes}>{children}</p>;
         }
-    }, [editor]);
+    }, [editor, selectedImageId]);
 
     // Define custom leaf renderer
     const renderLeaf = useCallback((props: RenderLeafProps) => {
