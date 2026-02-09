@@ -49,6 +49,7 @@ export function ResizableMedia({
     const containerRef = useRef<HTMLDivElement>(null);
     const imageRef = useRef<HTMLImageElement>(null);
     const [isResizing, setIsResizing] = useState(false);
+    const [localWidth, setLocalWidth] = useState<number | null>(null);
     const [aspectRatio, setAspectRatio] = useState<number | null>(null);
 
     const handleImageLoad = useCallback(() => {
@@ -67,18 +68,18 @@ export function ResizableMedia({
         const startX = e.clientX;
         const startY = e.clientY;
         const startWidth = imageRef.current?.offsetWidth || width || 300;
+        let currentWidth = startWidth;
 
         const handleMouseMove = (moveEvent: MouseEvent) => {
             const deltaX = moveEvent.clientX - startX;
             const deltaY = moveEvent.clientY - startY;
-            let newWidth: number;
 
             if (handle === 'n' || handle === 's') {
                 const deltaHeight = handle === 'n' ? -deltaY : deltaY;
-                newWidth = Math.max(minWidth, startWidth + deltaHeight * aspectRatio!);
+                currentWidth = Math.max(minWidth, startWidth + deltaHeight * aspectRatio!);
             } else if (handle === 'w' || handle === 'e') {
                 const effectiveDelta = handle === 'w' ? -deltaX : deltaX;
-                newWidth = Math.max(minWidth, startWidth + effectiveDelta);
+                currentWidth = Math.max(minWidth, startWidth + effectiveDelta);
             } else {
                 const isLeft = handle === 'nw' || handle === 'sw';
                 const isTop = handle === 'nw' || handle === 'ne';
@@ -86,13 +87,15 @@ export function ResizableMedia({
                 const effectiveDeltaY = isTop ? -deltaY : deltaY;
                 const deltaFromY = effectiveDeltaY * aspectRatio!;
                 const avgDelta = (effectiveDeltaX + deltaFromY) / 2;
-                newWidth = Math.max(minWidth, startWidth + avgDelta);
+                currentWidth = Math.max(minWidth, startWidth + avgDelta);
             }
-            onWidthChange(Math.round(newWidth));
+            setLocalWidth(Math.round(currentWidth));
         };
 
         const handleMouseUp = () => {
             setIsResizing(false);
+            setLocalWidth(null);
+            onWidthChange(Math.round(currentWidth));
             document.removeEventListener('mousemove', handleMouseMove);
             document.removeEventListener('mouseup', handleMouseUp);
         };
@@ -100,6 +103,8 @@ export function ResizableMedia({
         document.addEventListener('mousemove', handleMouseMove);
         document.addEventListener('mouseup', handleMouseUp);
     }, [width, minWidth, aspectRatio, onWidthChange]);
+
+    const displayWidth = localWidth ?? width;
 
     const handleClick = useCallback((e: React.MouseEvent) => {
         e.stopPropagation();
@@ -159,7 +164,7 @@ export function ResizableMedia({
                 alt={alt}
                 className={cn("max-w-full block", radius, shadow, border)}
                 style={{
-                    width: width ? `${width}px` : undefined,
+                    width: displayWidth ? `${displayWidth}px` : undefined,
                     aspectRatio: aspectRatio ?? undefined,
                 }}
                 onLoad={handleImageLoad}
