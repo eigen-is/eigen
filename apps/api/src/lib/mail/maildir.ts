@@ -231,9 +231,9 @@ export default class Maildir {
                 const parsed = await this.parseMessage(messageId, cached.mailbox);
                 if (parsed !== null) {
                     // strip the attachment data for now
-                    parsed.attachments.forEach(a => {
+                    for(const a of parsed.attachments) {
                         a.content = new Buffer(0);
-                    });
+                    }
 
                     return {...parsed, ...cached} as Email;
                 }

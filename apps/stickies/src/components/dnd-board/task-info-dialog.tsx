@@ -53,11 +53,11 @@ export function TaskInfoDialog({
         // Initial load
         const loadComments = () => {
             const result: Record<string, CommentItem> = {};
-            commentsMap.forEach((value, key) => {
+            for(const [key, value] of commentsMap) {
                 if (value instanceof Y.Map) {
                     result[key] = mapToComment(value);
                 }
-            });
+            }
             setYjsComments(result);
         };
         loadComments();

@@ -57,9 +57,9 @@ export function ColumnSettingsDialog({
 
             // Delete all tasks in this column
             const taskIds = taskIdsArray.toArray() as string[];
-            taskIds.forEach(taskId => {
+            for(const taskId of taskIds) {
                 tasksMap.delete(taskId);
-            });
+            }
 
             // Remove from column order
             const columnOrder = columnOrderArray.toArray() as string[];

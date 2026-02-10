@@ -70,7 +70,7 @@ export function DriveAccessListEdit({
         const newAccessList = [ownerAccess]
 
         if (path.acl && path.acl.length > 0) {
-            path.acl.forEach((access) => {
+            for(const access of path.acl) {
                 if (access.public) {
                     setIsPublicEnabled(true)
                     setPublicAccessRights({
@@ -86,7 +86,7 @@ export function DriveAccessListEdit({
                         owner: false
                     })
                 }
-            })
+            }
         }
 
         setAccessList(newAccessList)
@@ -215,7 +215,7 @@ export function DriveAccessListEdit({
         const updatedAcl: DriveACL[] = []
 
         // Add all non-owner users that aren't removed
-        accessList.forEach(user => {
+        for(const user of accessList) {
             if (!user.owner && (user.read || user.write)) {
                 updatedAcl.push({
                     email: user.email,
@@ -224,7 +224,7 @@ export function DriveAccessListEdit({
                     public: false
                 })
             }
-        })
+        }
 
         // Add public access if enabled
         if (isPublicEnabled) {
