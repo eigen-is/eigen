@@ -1,6 +1,6 @@
 import {createFileRoute, useNavigate} from '@tanstack/react-router';
-import {EmailDetail} from "../components/mail/email-detail.tsx";
-import {EmailDraft} from "../components/mail/email-draft.tsx";
+import {EmailDetail} from "../components/mail/email-detail";
+import {EmailDraft} from "../components/mail/email-draft";
 import {
     useDeleteEmail,
     useEmail,
@@ -12,16 +12,16 @@ import {
     useToggleReadEmail,
     useUpdateDraft
 } from '@workspace/lib/mail';
-import {EmailList} from "@/components/mail/email-list.tsx";
-import {Email, EmailDraft as EmailDraftType} from "@apps/api-server/types/mail";
+import {EmailList} from "../components/mail/email-list";
+import {Email, EmailDraft as EmailDraftType} from "@workspace/lib/types/mail";
+import {createDraftEmail} from "@workspace/lib/mail";
 import {toast} from "sonner";
 import {useEffect, useState} from 'react';
 import {useIsMobile, useIsTablet} from "@workspace/lib/media";
 import {format} from "date-fns";
 import {DeleteDialog} from "@workspace/ui/components/layout/delete/delete-dialog";
 
-// Define search params type
-export interface MailSearchParams {
+export type MailSearchParams = {
     mailId?: string;
     mode?: string;
     to?: string;
@@ -54,7 +54,7 @@ function MailRoute() {
     const {data: emails = [], isLoading: isEmailsLoading, error: isEmailsError} = useEmails(filterId);
     const {data: selectedEmail = null} = useEmail(mailId);
     const getEmailById = useEmailById();
-    const {data: mailboxes = [], isLoading: isMailboxesLoading, error: isMailboxesError} = useMailboxes();
+    const {data: mailboxes = []} = useMailboxes();
 
     const selectedEmailInData = emails.find(m => m.id === selectedEmail?.id);
     if (selectedEmailInData) selectedEmailInData.isRead = true;
@@ -68,11 +68,11 @@ function MailRoute() {
         }
 
         // Create a reply draft using the existing handleNewDraftEmail function
-        const draft: EmailDraftType = {
+        const draft: EmailDraftType = createDraftEmail({
             to: email.from,
             subject: `RE: ${email.subject}`,
             text: `\n\nOn ${format(new Date(email.date), "d MMM yyyy 'at' h:mm a")} ${email.from?.value[0]?.name} <${email.from?.value[0]?.address}> wrote:\n\n${email.text}`,
-        };
+        });
 
         handleNewDraftEmail(draft);
     };
@@ -86,11 +86,12 @@ function MailRoute() {
         }
 
         // Create a reply-all draft
-        const draft: EmailDraftType = {
-            to: {value: [...(email.from?.value || []), ...(email.cc?.value || [])]},
+        const ccValues = Array.isArray(email.cc) ? email.cc.flatMap(c => c.value) : (email.cc?.value || []);
+        const draft: EmailDraftType = createDraftEmail({
+            to: {value: [...(email.from?.value || []), ...ccValues], html: '', text: ''},
             subject: `RE: ${email.subject}`,
             text: `\n\nOn ${format(new Date(email.date), "d MMM yyyy 'at' h:mm a")} ${email.from?.value[0]?.name} <${email.from?.value[0]?.address}> wrote:\n\n${email.text}`,
-        };
+        });
 
         handleNewDraftEmail(draft);
     };
@@ -104,10 +105,10 @@ function MailRoute() {
         }
 
         // Create a forward draft
-        const draft: EmailDraftType = {
+        const draft: EmailDraftType = createDraftEmail({
             subject: `FW: ${email.subject}`,
             text: `\n\nOn ${format(new Date(email.date), "d MMM yyyy 'at' h:mm a")} ${email.from?.value[0]?.name} <${email.from?.value[0]?.address}> wrote:\n\n${email.text}`,
-        };
+        });
 
         handleNewDraftEmail(draft);
     };
@@ -117,13 +118,6 @@ function MailRoute() {
         const email = await getEmailById(emailId);
         if (email) {
             handleDeleteEmail(email);
-        }
-    };
-
-    const handleMoveEmailById = (mailbox: string) => async (emailId: string) => {
-        const email = await getEmailById(emailId);
-        if (email) {
-            handleMoveEmail(email, mailbox);
         }
     };
 
@@ -175,8 +169,7 @@ function MailRoute() {
             setPendingDeleteMail(mail);
             setDeleteDialogOpen(true);
         } else {
-            await deleteMail(mail);
-            toast("Email deleted");
+            await deleteMail.mutateAsync(mail);
             navigate({
                 to: Route.fullPath,
                 params: {filterType, filterId},
@@ -187,8 +180,7 @@ function MailRoute() {
 
     const confirmDeleteEmail = async () => {
         if (pendingDeleteMail) {
-            await deleteMail(pendingDeleteMail);
-            toast("Email deleted");
+            await deleteMail.mutateAsync(pendingDeleteMail);
             setDeleteDialogOpen(false);
             setPendingDeleteMail(null);
             navigate({
@@ -200,9 +192,7 @@ function MailRoute() {
     };
 
     const handleSendEmail = async (mail: EmailDraftType) => {
-        console.log('send email', mail.id, mail)
         await sendDraft.mutateAsync(mail);
-        toast.success("Email sent");
         navigate({
             to: Route.fullPath,
             params: {filterType, filterId},
@@ -211,8 +201,7 @@ function MailRoute() {
     }
 
     const handleMoveEmail = async (mail: Email, mailbox: string) => {
-        await moveMail(mail, mailbox);
-        toast(`Email moved to ${mailbox}`);
+        await moveMail.mutateAsync({email: mail, mailbox});
         navigate({
             to: Route.fullPath,
             params: {filterType, filterId},
@@ -223,7 +212,6 @@ function MailRoute() {
     const handleNewDraftEmail = async (mail: EmailDraftType) => {
         const draft = await updateDraft.mutateAsync(mail);
         if (draft) {
-            toast("Email draft updated");
             navigate({
                 to: Route.fullPath,
                 params: {filterType, filterId},
@@ -269,7 +257,7 @@ function MailRoute() {
                                 isMobile={true}
                                 onBackClick={handleBackToList}
                                 onDelete={handleDeleteEmail}
-                                toggleMailRead={toggleMailRead}
+                                toggleMailRead={(email, isRead) => toggleMailRead.mutate({email, isRead})}
                                 sendDraft={handleSendEmail}
                                 to={to}
                                 updateDraft={updateDraft.mutateAsync}
@@ -279,7 +267,7 @@ function MailRoute() {
                                 email={selectedEmail}
                                 isMobile={true}
                                 onBackClick={handleBackToList}
-                                toggleMailRead={toggleMailRead}
+                                toggleMailRead={(email, isRead) => toggleMailRead.mutate({email, isRead})}
                                 onDelete={handleDeleteEmailById}
                                 onArchive={handleArchiveEmailById}
                                 onReportSpam={handleReportSpamById}
@@ -367,7 +355,7 @@ function MailRoute() {
                                 email={selectedEmail as EmailDraftType}
                                 className="border-none h-full"
                                 onDelete={handleDeleteEmail}
-                                toggleMailRead={toggleMailRead}
+                                toggleMailRead={(email, isRead) => toggleMailRead.mutate({email, isRead})}
                                 sendDraft={handleSendEmail}
                                 to={to}
                                 updateDraft={updateDraft.mutateAsync}
@@ -376,7 +364,7 @@ function MailRoute() {
                             <EmailDetail
                                 email={selectedEmail}
                                 className="border-none h-full"
-                                toggleMailRead={toggleMailRead}
+                                toggleMailRead={(email, isRead) => toggleMailRead.mutate({email, isRead})}
                                 onDelete={handleDeleteEmailById}
                                 onArchive={handleArchiveEmailById}
                                 onReportSpam={handleReportSpamById}

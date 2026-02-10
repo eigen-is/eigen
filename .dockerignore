@@ -12,6 +12,6 @@ coverage
 data/*.db
 data/*.db-shm
 data/*.db-wal
-apps/api-server/data
+apps/api/data
 apps/*/node_modules
 packages/*/node_modules

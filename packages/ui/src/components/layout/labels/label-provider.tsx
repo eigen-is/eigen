@@ -1,6 +1,6 @@
 import {createContext, ReactNode, useContext} from 'react';
 import {toast} from 'sonner';
-import type {Label} from '@apps/api-server/types/label';
+import type {Label} from '@workspace/lib/types/label';
 
 // Define the shape of our context
 interface LabelContextType {

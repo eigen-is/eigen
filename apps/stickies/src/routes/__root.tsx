@@ -24,12 +24,12 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
     component: () => {
         const [sidebarOpen, setSidebarOpen] = useState(false);
         const isMobile = useIsMobile();
-            
+
         const routeMatch = useMatch({
-            from: '/_auth/board/$ownerId/$pathId',
+            from: '/_auth/board/$ownerId/$mountId/$pathId',
             shouldThrow: false,
         });
-        
+
         return (
             <>
                 <SidebarContext.Provider value={{sidebarOpen, setSidebarOpen}}>

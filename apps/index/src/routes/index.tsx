@@ -1,12 +1,12 @@
 import {createFileRoute, Link} from '@tanstack/react-router'
 import React, {useCallback} from 'react';
 import {Button} from "@workspace/ui/components/button";
-import {apps} from "@workspace/lib/apps.ts";
+import {apps} from "@workspace/lib/apps";
 import {Input} from "@workspace/ui/components/input";
 import {Textarea} from "@workspace/ui/components/textarea";
 import {Card, CardContent, CardFooter, CardHeader, CardTitle} from "@workspace/ui/components/card";
 import {Label} from '@workspace/ui/components/label';
-import {spaceApi} from '@workspace/lib/api.js';
+import {spaceApi} from '@workspace/lib/api';
 import {toast} from "sonner";
 
 export const Route = createFileRoute('/')({

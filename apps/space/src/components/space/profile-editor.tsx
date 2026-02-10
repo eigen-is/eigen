@@ -3,13 +3,13 @@ import {useForm} from 'react-hook-form';
 import {zodResolver} from '@hookform/resolvers/zod';
 import {useEffect, useRef, useState} from 'react';
 import {Camera, InfoIcon} from 'lucide-react';
-import {Contact} from "@apps/api-server/types/contact";
+import {Contact} from "@workspace/lib/types/contact";
 import {getMeContact, useUpdateContact} from '@workspace/lib/contacts';
+import {useAuth} from '@workspace/lib/auth';
 import {toast} from 'sonner';
 import {useUpload} from '@workspace/ui/components/layout/upload-provider/upload-provider';
 import {uploadWithProgress} from "@workspace/ui/components/layout/upload-provider/upload-with-progress";
-import {useInvalidateAllAvatars} from "@workspace/lib/media";
-import {useQueryClient} from '@tanstack/react-query';
+import {getContactsAvatarUploadUrl} from "@workspace/lib/api";
 import {UserAvatar} from "@workspace/ui";
 import {Button} from "@workspace/ui/components/button";
 import {Input} from "@workspace/ui/components/input";
@@ -31,18 +31,15 @@ const formSchema = z.object({
 export type ProfileFormValues = z.infer<typeof formSchema>;
 
 export function ProfileEditor() {
+    const {user} = useAuth();
     const [contact, setContact] = useState<Contact | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const [avatar, setAvatar] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
-    const queryClient = useQueryClient();
 
     // Upload context for tracking upload progress
     const upload = useUpload();
-
-    // Hook to invalidate avatar cache
-    const invalidateAvatars = useInvalidateAllAvatars();
 
     // Mutation for updating contact
     const updateContactMutation = useUpdateContact();
@@ -50,9 +47,10 @@ export function ProfileEditor() {
     // Fetch the user's contact information
     useEffect(() => {
         const fetchContact = async () => {
+            if (!user?.id) return;
             try {
                 setIsLoading(true);
-                const userContact = await getMeContact();
+                const userContact = await getMeContact(user.id);
                 setContact(userContact);
                 setAvatar(userContact?.avatar || null);
                 setIsLoading(false);
@@ -64,7 +62,7 @@ export function ProfileEditor() {
         };
 
         fetchContact();
-    }, []);
+    }, [user?.id]);
 
     // Set up react-hook-form
     const form = useForm<ProfileFormValues>({
@@ -104,10 +102,6 @@ export function ProfileEditor() {
 
             // Update the contact
             await updateContactMutation.mutateAsync(updateData);
-
-            // Invalidate all relevant queries
-            queryClient.invalidateQueries({queryKey: ['contacts']});
-            invalidateAvatars();
 
             setError(null);
             setIsLoading(false);
@@ -175,7 +169,7 @@ export function ProfileEditor() {
                                         try {
                                             // Use the uploadWithProgress helper with authentication
                                             const response = await uploadWithProgress({
-                                                url: `${import.meta.env.VITE_API_HOST}/contacts/avatar`,
+                                                url: getContactsAvatarUploadUrl(user?.id || ''),
                                                 formData,
                                                 headers: {
                                                     'credentials': 'include'
@@ -184,11 +178,9 @@ export function ProfileEditor() {
                                                     // Update the progress in the UI
                                                     uploadHandler.updateProgress(progress);
                                                 },
-                                                onSuccess: async (response: Response) => {
-                                                    // Mark upload as complete
+                                                onSuccess: (response: string) => {
                                                     uploadHandler.complete();
-                                                    const responseData = await response.text();
-                                                    setAvatar(responseData);
+                                                    setAvatar(response);
                                                 },
                                                 onError: (err) => {
                                                     // Mark upload as failed
@@ -202,7 +194,7 @@ export function ProfileEditor() {
                                                 const responseData = await response.text();
                                                 setAvatar(responseData);
                                             }
-                                        } catch (err: any) {
+                                        } catch (err: unknown) {
                                             console.error('Error uploading file:', err);
                                             uploadHandler.error();
                                         }

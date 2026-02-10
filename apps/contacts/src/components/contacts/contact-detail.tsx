@@ -1,18 +1,7 @@
 import {useState} from 'react';
-import {
-    ArrowLeft,
-    Building,
-    Calendar,
-    Download,
-    Edit,
-    Mail,
-    MapPin,
-    MoreVertical,
-    Phone,
-    Printer,
-    Trash2
-} from 'lucide-react';
-import {type Contact} from "@apps/api-server/types/contact";
+import {ArrowLeft, Building, Calendar, Edit, Mail, MapPin, MoreVertical, Phone, Printer, Trash2} from 'lucide-react';
+import {type Address, type Contact} from "@workspace/lib/types/contact";
+import {type Label} from "@workspace/lib/types/label";
 import {Button} from "@workspace/ui/components/button";
 import {
     DropdownMenu,
@@ -28,7 +17,7 @@ import {useLabels} from '@workspace/lib/contacts';
 import {TooltipButton, UserAvatar} from "@workspace/ui";
 import {EigenLoader} from '@workspace/ui/components/layout/eigen-loader';
 import {useOpenWriteEmailTo} from "@workspace/lib/mail";
-import { printDocument } from '@workspace/ui/lib/printElement';
+import {printDocument} from '@workspace/ui/lib/printElement';
 
 interface ContactDetailProps {
     contact: Contact;
@@ -58,7 +47,7 @@ export function ContactDetail({contact, onDelete, onBack, filterType, filterId, 
         return phone; // You might want to add formatting logic here
     };
 
-    const formatAddress = (address: any) => {
+    const formatAddress = (address: Address) => {
         if (!address) return '';
 
         const parts = [
@@ -168,7 +157,7 @@ export function ContactDetail({contact, onDelete, onBack, filterType, filterId, 
                                 </Link>
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => setDeleteDialogOpen(true)}>
-                                <Trash2 className="mr-2" />
+                                <Trash2 className="mr-2"/>
                                 Delete
                             </DropdownMenuItem>
                         </DropdownMenuContent>
@@ -202,7 +191,7 @@ export function ContactDetail({contact, onDelete, onBack, filterType, filterId, 
 
                         <div className="flex flex-wrap gap-2 justify-center">
                             {contactLabels && contactLabels.length > 0 && !labelsLoading && !labelsError ? (
-                                contactLabels.map((label: any) => (
+                                contactLabels.map((label: Label) => (
                                     <Badge
                                         key={label.id}
                                         style={{backgroundColor: label.color, color: '#fff'}}
@@ -230,14 +219,13 @@ export function ContactDetail({contact, onDelete, onBack, filterType, filterId, 
                                     </h4>
                                     {contact.email.map((email: string, index: number) => (
                                         <div key={index} className="pl-6">
-                                            <Link className="text-blue-600 hover:underline"
-                                                  to={''}
+                                            <button className="text-blue-600 hover:underline"
                                                   onClick={(e) => {
                                                       e.stopPropagation();
                                                       openWriteEmailTo(email);
                                                   }}>
                                                 {email}
-                                            </Link>
+                                            </button>
                                         </div>
                                     ))}
                                 </div>
@@ -290,7 +278,7 @@ export function ContactDetail({contact, onDelete, onBack, filterType, filterId, 
                             <div className="space-y-4">
                                 <h3 className="text-lg font-semibold border-b pb-2">Addresses</h3>
 
-                                {contact.address.map((address: any, index: number) => (
+                                {contact.address.map((address: Address, index: number) => (
                                     <div key={index} className="space-y-2">
                                         <h4 className="text-sm font-medium text-muted-foreground flex items-center gap-2">
                                             <MapPin className="h-4 w-4"/>

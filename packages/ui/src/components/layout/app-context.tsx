@@ -1,6 +1,6 @@
 import {createContext, useContext} from 'react';
 
-export interface AppContextType {
+export type AppContextType = {
     appName: string;
     setAppName?: (name: string) => void;
 }

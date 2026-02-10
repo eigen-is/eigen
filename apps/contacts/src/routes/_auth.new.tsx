@@ -1,6 +1,6 @@
 import {createFileRoute, useNavigate} from '@tanstack/react-router';
 import {ContactEdit, type ContactFormValues} from '../components/contacts/contact-edit';
-import {type Contact} from "@apps/api-server/types/contact";
+import {type Contact} from "@workspace/lib/types/contact";
 import {useAddContact} from '@workspace/lib/contacts';
 
 export const Route = createFileRoute('/_auth/new')({
@@ -25,8 +25,19 @@ function NewContactRoute() {
     // Handle form submission
     const handleSave = async (data: ContactFormValues) => {
         try {
+            // Transform the data for API compatibility (avatar is added by ContactEdit component)
+            const formData = data as ContactFormValues & {avatar?: string | null};
+            const contactData = {
+                ...formData,
+                firstName: formData.firstName || '',
+                lastName: formData.lastName || '',
+                birthday: formData.birthday?.toISOString(),
+                labels: formData.labels || [],
+                avatar: formData.avatar || undefined
+            };
+
             // Save the contact data
-            await addContactMutation.mutateAsync(data);
+            await addContactMutation.mutateAsync(contactData);
 
             // Navigate back to the contacts list after saving
             navigate({

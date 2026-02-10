@@ -1,7 +1,8 @@
-import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
+import {useMutation, useQuery, useQueryClient, type QueryClient} from '@tanstack/react-query';
 import {contactsApi} from '@workspace/lib/api.ts';
-import {type Contact} from '@apps/api-server/types/contact';
+import {type Contact} from '@workspace/lib/types/contact';
 import {invalidateHomeSize} from '../../home';
+import {useAuth} from '@workspace/lib/auth';
 
 // Query keys for contacts
 export const contactKeys = {
@@ -14,94 +15,100 @@ export const contactKeys = {
 
 // Fetch all contacts
 export function useContacts() {
+    const {user} = useAuth();
+    const ownerId = user?.id || '';
+
     return useQuery({
         queryKey: contactKeys.lists(),
         queryFn: async () => {
-            const response = await contactsApi.contacts.get();
+            const response = await contactsApi({ownerId}).contacts.get();
             return response.data || [];
         },
         staleTime: 5 * 60 * 1000, // 5 minutes
+        enabled: !!ownerId,
     });
-}
-
-// Hook to invalidate contacts cache
-export function useInvalidateAllContacts() {
-    const queryClient = useQueryClient();
-
-    return () => {
-        queryClient.invalidateQueries({queryKey: contactKeys.lists()});
-    };
 }
 
 // Fetch a contact by ID
 export function useContact(id: string) {
+    const {user} = useAuth();
+    const ownerId = user?.id || '';
+
     return useQuery({
         queryKey: contactKeys.detail(id),
         queryFn: async () => {
             if (!id) return null;
-            const response = await contactsApi.contacts[id].get();
+            const response = await contactsApi({ownerId}).contacts({id}).get();
             return response.data;
         },
-        enabled: !!id,
+        enabled: !!id && !!ownerId,
     });
 }
 
 // Add a new contact
 export function useAddContact() {
     const queryClient = useQueryClient();
+    const {user} = useAuth();
+    const ownerId = user?.id || '';
 
     return useMutation({
         mutationFn: async (newContact: Omit<Contact, 'id'>) => {
-            const response = await contactsApi.contacts.post(newContact as any);
+            const response = await contactsApi({ownerId}).contacts.post(newContact);
             return response.data;
         },
-        onSuccess: () => {
-            // Invalidate and refetch contacts list
-            queryClient.invalidateQueries({queryKey: contactKeys.lists()});
-            invalidateHomeSize(queryClient);
-        },
+        onSuccess: () => invalidateContactCreated(queryClient),
     });
 }
 
 // Update an existing contact
 export function useUpdateContact() {
     const queryClient = useQueryClient();
+    const {user} = useAuth();
+    const ownerId = user?.id || '';
 
     return useMutation({
         mutationFn: async ({id, ...data}: Contact) => {
-            const response = await contactsApi.contacts[id].put(data as any);
+            const response = await contactsApi({ownerId}).contacts({id}).put(data);
             return response.data;
         },
-        onSuccess: (_, variables) => {
-            // Invalidate and refetch the specific contact and the contact list
-            queryClient.invalidateQueries({queryKey: contactKeys.detail(variables.id)});
-            queryClient.invalidateQueries({queryKey: contactKeys.lists()});
-            invalidateHomeSize(queryClient);
-        },
+        onSuccess: (_data, variables) => invalidateContactUpdated(queryClient, variables.id),
     });
 }
 
 // Delete a contact
 export function useDeleteContact() {
     const queryClient = useQueryClient();
+    const {user} = useAuth();
+    const ownerId = user?.id || '';
 
     return useMutation({
         mutationFn: async (id: string) => {
-            const response = await contactsApi.contacts[id].delete();
+            const response = await contactsApi({ownerId}).contacts({id}).delete();
             return response.data;
         },
-        onSuccess: (_, id) => {
-            // Invalidate and refetch contacts list
-            queryClient.invalidateQueries({queryKey: contactKeys.lists()});
-            // Remove the contact from the cache
-            queryClient.removeQueries({queryKey: contactKeys.detail(id)});
-            invalidateHomeSize(queryClient);
-        },
+        onSuccess: (_data, id) => invalidateContactDeleted(queryClient, id),
     });
 }
 
-export async function getMeContact() {
-    const {data} = await contactsApi.me.get();
-    console.log(data);
+export async function getMeContact(ownerId: string) {
+    const {data} = await contactsApi({ownerId}).me.get();
     return data;
+}
+
+// SSE invalidation functions
+export function invalidateContactCreated(queryClient: QueryClient): void {
+    queryClient.invalidateQueries({queryKey: contactKeys.lists()});
+    invalidateHomeSize(queryClient);
+}
+
+export function invalidateContactUpdated(queryClient: QueryClient, contactId: string): void {
+    queryClient.invalidateQueries({queryKey: contactKeys.detail(contactId)});
+    queryClient.invalidateQueries({queryKey: contactKeys.lists()});
+    invalidateHomeSize(queryClient);
+}
+
+export function invalidateContactDeleted(queryClient: QueryClient, contactId: string): void {
+    queryClient.removeQueries({queryKey: contactKeys.detail(contactId)});
+    queryClient.invalidateQueries({queryKey: contactKeys.lists()});
+    invalidateHomeSize(queryClient);
 }

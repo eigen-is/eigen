@@ -1,6 +1,6 @@
 import {createFileRoute} from '@tanstack/react-router'
 import {Shovel} from 'lucide-react'
-import {apps} from "@workspace/lib/apps.ts"
+import {apps} from "@workspace/lib/apps"
 import {Card, CardContent} from "@workspace/ui/components/card"
 
 export const Route = createFileRoute('/_auth/')({

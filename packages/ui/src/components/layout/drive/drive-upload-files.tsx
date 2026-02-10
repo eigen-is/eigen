@@ -1,19 +1,14 @@
 import React, {useEffect, useRef} from 'react';
 import {toast} from "sonner";
-import {DrivePath} from "@apps/api-server/types/drive";
-import {useInvalidateFolder} from "@workspace/lib/drive";
-import {invalidateHomeSize} from "@workspace/lib/home";
-import {useQueryClient} from "@tanstack/react-query";
+import type {DrivePath} from "@workspace/lib/types/drive";
 import {useUpload} from "../../layout/upload-provider/upload-provider";
-import {uploadWithProgress} from "../../layout/upload-provider/upload-with-progress";
+import {uploadWithProgress} from "../upload-provider/upload-with-progress";
+import {getDriveFileUploadUrl, getDriveFilesUploadUrl} from "@workspace/lib/api";
+import type {UploadResult} from "./file-upload";
 
-export interface UploadResult {
-    success: boolean;
-    fileName: string;
-    error?: any;
-}
+export type {UploadResult};
 
-export interface DriveUploadFilesProps {
+export type DriveUploadFilesProps = {
     path: DrivePath;
     open: boolean;
     onOpenChange: (open: boolean) => void;
@@ -31,8 +26,6 @@ export function DriveUploadFiles({
                                      onAfterUpload,
                                  }: DriveUploadFilesProps) {
     const fileInputRef = useRef<HTMLInputElement>(null);
-    const invalidateFolder = useInvalidateFolder();
-    const queryClient = useQueryClient();
     const upload = useUpload();
 
     // Process initial files when they're provided and component is opening
@@ -65,8 +58,8 @@ export function DriveUploadFiles({
 
         // Use URL based on number of files
         const url = multipleFiles
-            ? `${import.meta.env.VITE_API_HOST}/drive/files/${path.ownerId}/${path.id}`
-            : `${import.meta.env.VITE_API_HOST}/drive/file/${path.ownerId}/${path.id}`;
+            ? getDriveFilesUploadUrl(path.ownerId, path.mountId, path.id)
+            : getDriveFileUploadUrl(path.ownerId, path.mountId, path.id);
 
         const name = multipleFiles ? 'multiple files' : files[0].name;
         const uploadHandler = upload.createUpload(name);
@@ -99,13 +92,6 @@ export function DriveUploadFiles({
                     // Mark upload as complete
                     uploadHandler.complete();
 
-                    // Show success message
-                    toast.success(`${multipleFiles ? 'Files' : `File "${name}"`} uploaded successfully`);
-
-                    // Invalidate queries to refresh folder contents
-                    invalidateFolder(path.id);
-                    invalidateHomeSize(queryClient);
-
                     // Notify parent component
                     if (onAfterAction) {
                         onAfterAction('upload', {
@@ -127,9 +113,9 @@ export function DriveUploadFiles({
                     return {success: false, fileName: name, error: err};
                 }
             });
-        } catch (err: any) {
+        } catch (err: unknown) {
             uploadHandler.error();
-            toast.error(`Upload failed: ${err.message || 'Unknown error'}`);
+            toast.error(`Upload failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
         }
     };
 

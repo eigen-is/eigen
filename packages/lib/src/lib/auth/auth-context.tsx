@@ -3,18 +3,28 @@ import {authClient} from "./hooks/use-auth-client.ts";
 import {LoadingScreen} from '@workspace/ui/components/layout/loading-screen';
 import {useQueryClient} from '@tanstack/react-query';
 
+export type AuthUser = {
+    id: string;
+    email: string;
+    name: string;
+    image?: string | null;
+    emailVerified: boolean;
+    createdAt: Date;
+    updatedAt: Date;
+};
+
 export type AuthContextType = {
     isAuthenticated: boolean;
     isLoading: boolean;
-    user: any | null;
-    login: (email: string, password: string) => Promise<{ success: boolean; error?: any }>;
+    user: AuthUser | null;
+    login: (email: string, password: string) => Promise<{ success: boolean; error?: unknown }>;
     logout: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 export function AuthProvider({children}: { children: ReactNode }): React.ReactElement {
-    const [user, setUser] = useState<any | null>(null);
+    const [user, setUser] = useState<AuthUser | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const queryClient = useQueryClient();
 
@@ -26,8 +36,7 @@ export function AuthProvider({children}: { children: ReactNode }): React.ReactEl
                 if (session.data) {
                     setUser(session.data.user);
                 }
-            } catch (error) {
-                console.error('Authentication check failed:', error);
+            } catch {
             } finally {
                 setIsLoading(false);
             }
@@ -63,8 +72,7 @@ export function AuthProvider({children}: { children: ReactNode }): React.ReactEl
             await authClient.signOut();
             setUser(null);
             queryClient.removeQueries();
-        } catch (error) {
-            console.error('Logout failed:', error);
+        } catch {
         }
     };
 

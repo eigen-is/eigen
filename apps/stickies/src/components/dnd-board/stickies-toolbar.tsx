@@ -8,17 +8,16 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
-import {Separator} from '@workspace/ui/components/separator';
 import {TooltipButton} from '@workspace/ui';
 import {DocumentModeButton} from '@workspace/ui/components/layout/toolbar/DocumentModeButton';
 import * as Y from 'yjs';
 import {useNavigate} from '@tanstack/react-router';
-import {useAuth} from '@workspace/lib/auth/auth-context.js';
+import {useAuth} from '@workspace/lib/auth';
 import {useRootFolder} from '@workspace/lib/drive';
 import {DriveCreateStickies} from '@workspace/ui/components/layout/drive/drive-create-stickies';
 import {DriveDeleteItem} from '@workspace/ui/components/layout/drive/drive-delete-item';
-import {DrivePath} from '@apps/api-server/types/drive';
-import { DriveRenameItem } from '@workspace/ui/components/layout/drive/drive-rename-item';
+import {DrivePath} from '@workspace/lib/types/drive';
+import {DriveRenameItem} from '@workspace/ui/components/layout/drive/drive-rename-item';
 
 interface StickiesToolbarProps {
     canWrite: boolean;
@@ -76,21 +75,22 @@ export const StickiesToolbar = ({canWrite, undoManager, onAccessDialogOpen, path
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="start">
                         <DropdownMenuItem onClick={() => rootFolder && setCreateStickiesOpen(true)}>
-                            <FileText  className="w-4 h-4 mr-2"/> New stickies
+                            <FileText className="w-4 h-4 mr-2"/> New stickies
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => navigate({to: `/`})}>
                             <Folder className="w-4 h-4 mr-2"/> Open
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => path && setRenameDialogOpen(true)}>
-                            <Pencil  className="w-4 h-4 mr-2"/> Rename
+                            <Pencil className="w-4 h-4 mr-2"/> Rename
                         </DropdownMenuItem>
                         <DropdownMenuSeparator/>
-                        <DropdownMenuItem onClick={onAccessDialogOpen}><UserRoundPlus  className="w-4 h-4 mr-2"/> Edit access</DropdownMenuItem>
+                        <DropdownMenuItem onClick={onAccessDialogOpen}><UserRoundPlus className="w-4 h-4 mr-2"/> Edit
+                            access</DropdownMenuItem>
                         {canWrite && (
                             <>
                                 <DropdownMenuSeparator/>
                                 <DropdownMenuItem onClick={() => path && setDeleteDialogOpen(true)}>
-                                    <Trash2  className="w-4 h-4 mr-2"/> Delete
+                                    <Trash2 className="w-4 h-4 mr-2"/> Delete
                                 </DropdownMenuItem>
                             </>
                         )}

@@ -8,161 +8,65 @@
 // You should NOT make any changes in this file as it will be overwritten.
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
-// Import Routes
+import { Route as rootRouteImport } from './routes/__root'
+import { Route as Login2faRouteImport } from './routes/login-2fa'
+import { Route as LoginRouteImport } from './routes/login'
+import { Route as AuthRouteImport } from './routes/_auth'
+import { Route as AuthIndexRouteImport } from './routes/_auth.index'
+import { Route as AuthUserRouteImport } from './routes/_auth.user'
+import { Route as AuthDataRouteImport } from './routes/_auth.data'
+import { Route as AuthSecurityPasswordRouteImport } from './routes/_auth.security.password'
+import { Route as AuthSecurity2faRouteImport } from './routes/_auth.security.2fa'
 
-import { Route as rootRoute } from './routes/__root'
-import { Route as Login2faImport } from './routes/login-2fa'
-import { Route as LoginImport } from './routes/login'
-import { Route as AuthImport } from './routes/_auth'
-import { Route as AuthIndexImport } from './routes/_auth.index'
-import { Route as AuthUserImport } from './routes/_auth.user'
-import { Route as AuthDataImport } from './routes/_auth.data'
-import { Route as AuthSecurityPasswordImport } from './routes/_auth.security.password'
-import { Route as AuthSecurity2faImport } from './routes/_auth.security.2fa'
-
-// Create/Update Routes
-
-const Login2faRoute = Login2faImport.update({
+const Login2faRoute = Login2faRouteImport.update({
   id: '/login-2fa',
   path: '/login-2fa',
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => rootRouteImport,
 } as any)
-
-const LoginRoute = LoginImport.update({
+const LoginRoute = LoginRouteImport.update({
   id: '/login',
   path: '/login',
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => rootRouteImport,
 } as any)
-
-const AuthRoute = AuthImport.update({
+const AuthRoute = AuthRouteImport.update({
   id: '/_auth',
-  getParentRoute: () => rootRoute,
+  getParentRoute: () => rootRouteImport,
 } as any)
-
-const AuthIndexRoute = AuthIndexImport.update({
+const AuthIndexRoute = AuthIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => AuthRoute,
 } as any)
-
-const AuthUserRoute = AuthUserImport.update({
+const AuthUserRoute = AuthUserRouteImport.update({
   id: '/user',
   path: '/user',
   getParentRoute: () => AuthRoute,
 } as any)
-
-const AuthDataRoute = AuthDataImport.update({
+const AuthDataRoute = AuthDataRouteImport.update({
   id: '/data',
   path: '/data',
   getParentRoute: () => AuthRoute,
 } as any)
-
-const AuthSecurityPasswordRoute = AuthSecurityPasswordImport.update({
+const AuthSecurityPasswordRoute = AuthSecurityPasswordRouteImport.update({
   id: '/security/password',
   path: '/security/password',
   getParentRoute: () => AuthRoute,
 } as any)
-
-const AuthSecurity2faRoute = AuthSecurity2faImport.update({
+const AuthSecurity2faRoute = AuthSecurity2faRouteImport.update({
   id: '/security/2fa',
   path: '/security/2fa',
   getParentRoute: () => AuthRoute,
 } as any)
 
-// Populate the FileRoutesByPath interface
-
-declare module '@tanstack/react-router' {
-  interface FileRoutesByPath {
-    '/_auth': {
-      id: '/_auth'
-      path: ''
-      fullPath: ''
-      preLoaderRoute: typeof AuthImport
-      parentRoute: typeof rootRoute
-    }
-    '/login': {
-      id: '/login'
-      path: '/login'
-      fullPath: '/login'
-      preLoaderRoute: typeof LoginImport
-      parentRoute: typeof rootRoute
-    }
-    '/login-2fa': {
-      id: '/login-2fa'
-      path: '/login-2fa'
-      fullPath: '/login-2fa'
-      preLoaderRoute: typeof Login2faImport
-      parentRoute: typeof rootRoute
-    }
-    '/_auth/data': {
-      id: '/_auth/data'
-      path: '/data'
-      fullPath: '/data'
-      preLoaderRoute: typeof AuthDataImport
-      parentRoute: typeof AuthImport
-    }
-    '/_auth/user': {
-      id: '/_auth/user'
-      path: '/user'
-      fullPath: '/user'
-      preLoaderRoute: typeof AuthUserImport
-      parentRoute: typeof AuthImport
-    }
-    '/_auth/': {
-      id: '/_auth/'
-      path: '/'
-      fullPath: '/'
-      preLoaderRoute: typeof AuthIndexImport
-      parentRoute: typeof AuthImport
-    }
-    '/_auth/security/2fa': {
-      id: '/_auth/security/2fa'
-      path: '/security/2fa'
-      fullPath: '/security/2fa'
-      preLoaderRoute: typeof AuthSecurity2faImport
-      parentRoute: typeof AuthImport
-    }
-    '/_auth/security/password': {
-      id: '/_auth/security/password'
-      path: '/security/password'
-      fullPath: '/security/password'
-      preLoaderRoute: typeof AuthSecurityPasswordImport
-      parentRoute: typeof AuthImport
-    }
-  }
-}
-
-// Create and export the route tree
-
-interface AuthRouteChildren {
-  AuthDataRoute: typeof AuthDataRoute
-  AuthUserRoute: typeof AuthUserRoute
-  AuthIndexRoute: typeof AuthIndexRoute
-  AuthSecurity2faRoute: typeof AuthSecurity2faRoute
-  AuthSecurityPasswordRoute: typeof AuthSecurityPasswordRoute
-}
-
-const AuthRouteChildren: AuthRouteChildren = {
-  AuthDataRoute: AuthDataRoute,
-  AuthUserRoute: AuthUserRoute,
-  AuthIndexRoute: AuthIndexRoute,
-  AuthSecurity2faRoute: AuthSecurity2faRoute,
-  AuthSecurityPasswordRoute: AuthSecurityPasswordRoute,
-}
-
-const AuthRouteWithChildren = AuthRoute._addFileChildren(AuthRouteChildren)
-
 export interface FileRoutesByFullPath {
-  '': typeof AuthRouteWithChildren
+  '/': typeof AuthIndexRoute
   '/login': typeof LoginRoute
   '/login-2fa': typeof Login2faRoute
   '/data': typeof AuthDataRoute
   '/user': typeof AuthUserRoute
-  '/': typeof AuthIndexRoute
   '/security/2fa': typeof AuthSecurity2faRoute
   '/security/password': typeof AuthSecurityPasswordRoute
 }
-
 export interface FileRoutesByTo {
   '/login': typeof LoginRoute
   '/login-2fa': typeof Login2faRoute
@@ -172,9 +76,8 @@ export interface FileRoutesByTo {
   '/security/2fa': typeof AuthSecurity2faRoute
   '/security/password': typeof AuthSecurityPasswordRoute
 }
-
 export interface FileRoutesById {
-  __root__: typeof rootRoute
+  __root__: typeof rootRouteImport
   '/_auth': typeof AuthRouteWithChildren
   '/login': typeof LoginRoute
   '/login-2fa': typeof Login2faRoute
@@ -184,16 +87,14 @@ export interface FileRoutesById {
   '/_auth/security/2fa': typeof AuthSecurity2faRoute
   '/_auth/security/password': typeof AuthSecurityPasswordRoute
 }
-
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
-    | ''
+    | '/'
     | '/login'
     | '/login-2fa'
     | '/data'
     | '/user'
-    | '/'
     | '/security/2fa'
     | '/security/password'
   fileRoutesByTo: FileRoutesByTo
@@ -217,70 +118,96 @@ export interface FileRouteTypes {
     | '/_auth/security/password'
   fileRoutesById: FileRoutesById
 }
-
 export interface RootRouteChildren {
   AuthRoute: typeof AuthRouteWithChildren
   LoginRoute: typeof LoginRoute
   Login2faRoute: typeof Login2faRoute
 }
 
+declare module '@tanstack/react-router' {
+  interface FileRoutesByPath {
+    '/login-2fa': {
+      id: '/login-2fa'
+      path: '/login-2fa'
+      fullPath: '/login-2fa'
+      preLoaderRoute: typeof Login2faRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/login': {
+      id: '/login'
+      path: '/login'
+      fullPath: '/login'
+      preLoaderRoute: typeof LoginRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_auth': {
+      id: '/_auth'
+      path: ''
+      fullPath: '/'
+      preLoaderRoute: typeof AuthRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/_auth/': {
+      id: '/_auth/'
+      path: '/'
+      fullPath: '/'
+      preLoaderRoute: typeof AuthIndexRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/_auth/user': {
+      id: '/_auth/user'
+      path: '/user'
+      fullPath: '/user'
+      preLoaderRoute: typeof AuthUserRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/_auth/data': {
+      id: '/_auth/data'
+      path: '/data'
+      fullPath: '/data'
+      preLoaderRoute: typeof AuthDataRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/_auth/security/password': {
+      id: '/_auth/security/password'
+      path: '/security/password'
+      fullPath: '/security/password'
+      preLoaderRoute: typeof AuthSecurityPasswordRouteImport
+      parentRoute: typeof AuthRoute
+    }
+    '/_auth/security/2fa': {
+      id: '/_auth/security/2fa'
+      path: '/security/2fa'
+      fullPath: '/security/2fa'
+      preLoaderRoute: typeof AuthSecurity2faRouteImport
+      parentRoute: typeof AuthRoute
+    }
+  }
+}
+
+interface AuthRouteChildren {
+  AuthDataRoute: typeof AuthDataRoute
+  AuthUserRoute: typeof AuthUserRoute
+  AuthIndexRoute: typeof AuthIndexRoute
+  AuthSecurity2faRoute: typeof AuthSecurity2faRoute
+  AuthSecurityPasswordRoute: typeof AuthSecurityPasswordRoute
+}
+
+const AuthRouteChildren: AuthRouteChildren = {
+  AuthDataRoute: AuthDataRoute,
+  AuthUserRoute: AuthUserRoute,
+  AuthIndexRoute: AuthIndexRoute,
+  AuthSecurity2faRoute: AuthSecurity2faRoute,
+  AuthSecurityPasswordRoute: AuthSecurityPasswordRoute,
+}
+
+const AuthRouteWithChildren = AuthRoute._addFileChildren(AuthRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   AuthRoute: AuthRouteWithChildren,
   LoginRoute: LoginRoute,
   Login2faRoute: Login2faRoute,
 }
-
-export const routeTree = rootRoute
+export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-/* ROUTE_MANIFEST_START
-{
-  "routes": {
-    "__root__": {
-      "filePath": "__root.tsx",
-      "children": [
-        "/_auth",
-        "/login",
-        "/login-2fa"
-      ]
-    },
-    "/_auth": {
-      "filePath": "_auth.tsx",
-      "children": [
-        "/_auth/data",
-        "/_auth/user",
-        "/_auth/",
-        "/_auth/security/2fa",
-        "/_auth/security/password"
-      ]
-    },
-    "/login": {
-      "filePath": "login.tsx"
-    },
-    "/login-2fa": {
-      "filePath": "login-2fa.tsx"
-    },
-    "/_auth/data": {
-      "filePath": "_auth.data.tsx",
-      "parent": "/_auth"
-    },
-    "/_auth/user": {
-      "filePath": "_auth.user.tsx",
-      "parent": "/_auth"
-    },
-    "/_auth/": {
-      "filePath": "_auth.index.tsx",
-      "parent": "/_auth"
-    },
-    "/_auth/security/2fa": {
-      "filePath": "_auth.security.2fa.tsx",
-      "parent": "/_auth"
-    },
-    "/_auth/security/password": {
-      "filePath": "_auth.security.password.tsx",
-      "parent": "/_auth"
-    }
-  }
-}
-ROUTE_MANIFEST_END */

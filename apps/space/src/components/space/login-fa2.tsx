@@ -19,7 +19,6 @@ import {InfoIcon} from "lucide-react"
 import {Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle} from "@workspace/ui/components/card"
 import {authClient} from "@workspace/lib/auth"
 import {toast} from "sonner"
-import {useNavigate, useRouter} from "@tanstack/react-router"
 import {Checkbox} from "@workspace/ui/components/checkbox"
 
 // Define form schema with validation
@@ -30,8 +29,6 @@ const formSchema = z.object({
 
 export function LoginFa2Form() {
     const [isLoading, setIsLoading] = React.useState<boolean>(false)
-    const navigate = useNavigate()
-    const router = useRouter();
 
     // Initialize form
     const form = useForm<z.infer<typeof formSchema>>({
@@ -65,9 +62,9 @@ export function LoginFa2Form() {
             } else {
                 toast.error(result.error?.message || "Invalid verification code")
             }
-        } catch (error: any) {
+        } catch (error: unknown) {
             console.error("Error verifying 2FA:", error)
-            toast.error(error?.message || "Verification failed")
+            toast.error(error instanceof Error ? error.message : "Verification failed")
         } finally {
             setIsLoading(false)
         }

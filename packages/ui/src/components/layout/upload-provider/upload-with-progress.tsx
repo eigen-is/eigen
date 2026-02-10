@@ -6,7 +6,7 @@ interface UploadWithProgressOptions {
     url: string
     formData: FormData
     onProgress?: (progress: number) => void
-    onSuccess?: (resp: Response) => void
+    onSuccess?: (resp: string) => void
     onError?: (error: Error) => void
     headers?: Record<string, string>
 }
@@ -17,7 +17,7 @@ export async function uploadWithProgress({
                                              onProgress,
                                              onSuccess,
                                              onError,
-                                             headers = {}
+                                             headers: _headers = {}
                                          }: UploadWithProgressOptions): Promise<Response> {
     return new Promise((resolve, reject) => {
         const xhr = new XMLHttpRequest();

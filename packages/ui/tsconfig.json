@@ -1,17 +1,18 @@
 {
-  "extends": "../config/react-library.json",
+  "extends": "../../tsconfig.json",
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
+      "@workspace/lib/*": [
+        "../lib/src/*"
+      ],
       "@workspace/ui/*": [
         "./src/*"
       ]
     }
   },
   "include": [
-    "**/*.ts",
-    "**/*.tsx",
-    "."
+    "src"
   ],
   "exclude": [
     "node_modules",

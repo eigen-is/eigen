@@ -3,7 +3,7 @@ import {TanStackRouterDevtools} from '@tanstack/react-router-devtools'
 import {AuthContextType} from "@workspace/lib/auth";
 import {Topbar} from "@workspace/ui/components/layout/topbar";
 import {createContext, useState} from 'react';
-import {useIsMobile} from '@workspace/lib/media/index.js';
+import {useIsMobile} from '@workspace/lib/media';
 
 export const SidebarContext = createContext<{
     sidebarOpen: boolean;

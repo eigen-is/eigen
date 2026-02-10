@@ -1,4 +1,4 @@
-import {Settings, Users, LayoutDashboard, X, Server} from 'lucide-react';
+import {LayoutDashboard, Server, Settings, Users, X} from 'lucide-react';
 import {Link} from '@tanstack/react-router';
 import {Button} from "@workspace/ui/components/button";
 import {SidebarItem} from '@workspace/ui/components/layout/sidebar/sidebar-item';

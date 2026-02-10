@@ -2,36 +2,23 @@
 
 **Your personal workspace in the cloud. Simple and secure. You control your own data.**
 
-A modern Google Workspace-like application suite providing integrated productivity and collaboration tools.
+A modern workspace platform providing integrated productivity and collaboration tools.
 
-## Overview
-
-Eigen is your minimal, secure workspace in the cloud. It includes mail, calendar, docs, and drive — everything you need, nothing you don't. It is a comprehensive workspace platform that includes:
+## Apps
 
 - **Index**: Landing page and central hub
 - **Mail**: Email client with mailbox management
-- **Drive**: File storage and management system
+- **Drive**: File storage and management
 - **Docs**: Document editing and collaboration
-- **Calendar**: Schedule management
 - **Contacts**: Contact management
+- **Calendar**: Calendar and scheduling
 - **Space**: Team collaboration workspace
-
-## Project Structure
-
-This project follows a monorepo structure, managed via Bun workspaces:
-
-- `/apps`: Contains all applications
-    - `/api-server`: Backend API server that powers all applications
-    - `/index`, `/drive`, `/mail`, `/docs`, etc.: Frontend applications
-- `/packages`: Shared libraries and components
-    - `/ui`: Reusable UI components built with shadcn/ui
-    - `/lib`: Shared business logic and utilities
-    - `/config`: Shared configuration
+- **Stickies**: Kanban board
 
 ## Technology Stack
 
-- **Backend**: Bun + Elysia + Drizzle ORM
-- **Frontend**: React + TypeScript + TanStack Router + TanStack Query
+- **Backend**: Bun + Elysia + Drizzle ORM + SQLite
+- **Frontend**: React + TypeScript + TanStack Router
 - **Styling**: Tailwind CSS + shadcn/ui
 - **Authentication**: better-auth
 
@@ -43,53 +30,71 @@ This project follows a monorepo structure, managed via Bun workspaces:
 
 ### Installation
 
-1. Clone the repository:
-
 ```bash
-git clone https://github.com/<repository-owner>/eigen.git
+git clone https://github.com/eigen-foundation/eigen.git
 cd eigen
-```
-
-2. Install dependencies (this will install dependencies for all workspaces):
-
-```bash
 bun install
 ```
 
-### Running the Application
+### First Run Setup
 
-To run all applications simultaneously:
+On first run, Eigen requires initial configuration through a setup wizard:
+
+1. Start the server:
+   ```bash
+   bun run serve
+   ```
+
+2. Visit `http://localhost:3011/setup` in your browser
+
+3. Configure your instance:
+
+   **Domain Configuration**
+   - Enter your domain (e.g., `eigen.example.com` or `localhost` for development)
+
+   **Storage Type**
+   - `local-fullnames`: Files stored with original names (recommended for development)
+   - `local-id`: Files stored by ID (better for production)
+   - `s3`: Amazon S3 or compatible storage (for cloud deployment)
+
+   If using S3, you'll need:
+   - Bucket name
+   - Region
+   - Access Key ID
+   - Secret Access Key
+   - Endpoint URL (optional, for S3-compatible services like MinIO)
+
+   **Admin Account**
+   - Name
+   - Email address
+   - Password (minimum 8 characters)
+
+4. After setup completes, you'll be redirected to sign in with your admin account
+
+**Note:** Setup can only be completed once. The configuration is stored in the server data directory.
+
+### Running Applications
 
 ```bash
-bun serve
+# Run all applications
+bun run serve
+
+# Run specific app with API server
+bun serve:index
+bun serve:mail
+bun serve:drive
+bun serve:space
+bun serve:admin
+bun serve:contacts
+bun serve:docs
+bun serve:stickies
 ```
 
-To run specific applications:
+### Type Checking
 
 ```bash
-# Run index app with API server
-bun serve:index
-
-# Run mail app with API server
-bun serve:mail
-
-# Run drive app with API server
-bun serve:drive
-
-# Run space app with API server
-bun serve:space
-
-# Run calendar app with API server
-bun serve:calendar
-
-# Run contacts app with API server
-bun serve:contacts
-
-# Run docs app with API server
-bun serve:docs
-
-# Run stickies app with API server
-bun serve:stickies
+# Run TypeScript type check across all packages
+bun run typecheck
 ```
 
 ### Building for Production
@@ -98,20 +103,68 @@ bun serve:stickies
 bun build
 ```
 
-## Development
+## Docker Deployment
 
-The project uses TypeScript for type safety and follows a modular architecture. Each application in the `/apps`
-directory is self-contained but shares common components and utilities from the `/packages` directory.
+### Prerequisites
 
-### Adding Components
+- Docker
+- Docker Compose
 
-Components are built using shadcn/ui and Tailwind CSS. Shared components should be added to the `/packages/ui`
-directory.
+### Local Docker Deployment
 
-### API Development
+To run Eigen in Docker locally:
 
-API routes are organized by domain in the `/apps/api-server/src/routes` directory. Authentication is handled through
-better-auth.
+```bash
+./deploy.sh --local
+```
+
+This will:
+
+1. Build all frontend applications
+2. Create Docker images for nginx (frontend) and API server
+3. Start containers with Docker Compose
+4. Make all apps available at `http://localhost/`
+
+Access your applications:
+
+- Home: http://localhost/
+- Admin: http://localhost/admin
+- Mail: http://localhost/mail
+- Contacts: http://localhost/contacts
+- Calendar: http://localhost/calendar
+- Drive: http://localhost/drive
+- Docs: http://localhost/docs
+- Stickies: http://localhost/stickies
+- Space: http://localhost/space
+
+### Production Docker Deployment
+
+For production deployment:
+
+```bash
+./deploy.sh
+```
+
+**Docker management:**
+
+```bash
+# View logs
+docker-compose logs -f
+
+# Stop containers
+docker-compose down
+
+# Restart containers
+docker-compose restart
+```
+
+## Project Structure
+
+- `/apps`: All applications (api + frontend apps)
+- `/packages`: Shared code
+    - `/ui`: Reusable UI components (shadcn/ui)
+    - `/lib`: Shared business logic
+    - `/config`: Shared configuration
 
 ## License
 
