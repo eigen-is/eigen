@@ -1,8 +1,6 @@
-import {createFileRoute, Outlet, redirect} from '@tanstack/react-router'
+import {createFileRoute, redirect} from '@tanstack/react-router'
 import {AdminSidebar} from "../components/admin/admin-sidebar";
-import {useContext} from 'react';
-import {SidebarContext} from './__root';
-import {useIsMobile, useIsTablet} from "@workspace/lib/media";
+import {AppLayout} from "@workspace/ui/components/layout/app-layout";
 
 export const Route = createFileRoute('/_auth')({
     beforeLoad: ({context, location}) => {
@@ -19,36 +17,16 @@ export const Route = createFileRoute('/_auth')({
 })
 
 function AuthLayout() {
-    const {sidebarOpen, setSidebarOpen} = useContext(SidebarContext);
-    const isMobile = useIsMobile();
-    const isTablet = useIsTablet();
-
     return (
-        <div className="flex flex-1 w-full h-full overflow-hidden">
-            <div
-                className={`
-                        ${isMobile ? (sidebarOpen ? 'fixed inset-0 z-50 bg-background' : 'hidden') : 'block'}
-                        ${isTablet ? 'w-16' : 'w-64'} 
-                        border-r h-full min-h-full
-                    `}
-            >
+        <AppLayout
+            sidebar={({condensed, isMobile, onClose}) => (
                 <AdminSidebar
-                    condensed={isTablet}
+                    condensed={condensed}
                     isMobile={isMobile}
-                    onClose={() => setSidebarOpen(false)}
-                />
-            </div>
-
-            {isMobile && sidebarOpen && (
-                <div
-                    className="fixed inset-0 z-40 bg-background/80"
-                    onClick={() => setSidebarOpen(false)}
+                    onClose={onClose}
                 />
             )}
-
-            <main className="flex-1 flex flex-col h-full overflow-auto">
-                <Outlet/>
-            </main>
-        </div>
+            mainClassName="flex-1 flex flex-col h-full overflow-auto"
+        />
     );
 }
