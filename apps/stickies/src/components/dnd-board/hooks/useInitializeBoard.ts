@@ -62,7 +62,7 @@ export const useInitializeBoard = () => {
                 tasksMap.set(taskId, taskYMap);
 
                 // Create columns
-                DEFAULT_BOARD_STRUCTURE.columns.forEach((column, index) => {
+                for(const [index, column] of DEFAULT_BOARD_STRUCTURE.columns.entries()) {
                     const columnId = `column-${nanoid(6)}`;
                     columnIds.push(columnId);
 
@@ -81,7 +81,7 @@ export const useInitializeBoard = () => {
                     columnYMap.set('createdAt', now);
 
                     columnsMap.set(columnId, columnYMap);
-                });
+                }
 
                 // Add column order array
                 columnOrderArray.insert(0, columnIds);

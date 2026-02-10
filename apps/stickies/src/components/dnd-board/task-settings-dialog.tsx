@@ -56,7 +56,7 @@ export function TaskSettingsDialog({
             let foundColumn: Y.Map<any> | null = null;
             let taskIndex = -1;
 
-            columnsMap.forEach((columnMapValue: any) => {
+            for(const [, columnMapValue] of columnsMap) {
                 if (!(columnMapValue instanceof Y.Map)) return;
                 const columnMap = columnMapValue;
                 const taskIdsArray = columnMap.get("taskIds") as Y.Array<any>;
@@ -67,7 +67,7 @@ export function TaskSettingsDialog({
                     foundColumn = columnMap;
                     taskIndex = index;
                 }
-            });
+            }
 
             // Remove task from its column
             if (foundColumn && taskIndex !== -1) {
@@ -77,13 +77,13 @@ export function TaskSettingsDialog({
 
             // Delete comments associated with this task
             const commentsMap = yjsDoc.getMap("comments");
-            commentsMap.forEach((commentMapValue: any, commentId) => {
+            for(const [commentId, commentMapValue] of commentsMap) {
                 if (!(commentMapValue instanceof Y.Map)) return;
                 const commentMap = commentMapValue;
                 if (commentMap.get("taskId") === taskId) {
                     commentsMap.delete(commentId);
                 }
-            });
+            }
 
             // Delete the task itself
             tasksMap.delete(taskId);

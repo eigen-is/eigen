@@ -49,11 +49,11 @@ module.exports = (input, options, callback) => {
         }
 
         if (data.type === 'text') {
-            Object.keys(data).forEach(key => {
+            for(const key of Object.keys(data)) {
                 if (['text', 'html', 'textAsHtml'].includes(key)) {
                     mail[key] = data[key];
                 }
-            });
+            }
         }
 
         if (data.type === 'attachment') {
@@ -86,11 +86,11 @@ module.exports = (input, options, callback) => {
     });
 
     parser.on('end', () => {
-        ['subject', 'references', 'date', 'to', 'from', 'to', 'cc', 'bcc', 'message-id', 'in-reply-to', 'reply-to'].forEach(key => {
+        for(const key of ['subject', 'references', 'date', 'to', 'from', 'to', 'cc', 'bcc', 'message-id', 'in-reply-to', 'reply-to']) {
             if (mail.headers && mail.headers.has(key)) {
                 mail[key.replace(/-([a-z])/g, (m, c) => c.toUpperCase())] = mail.headers.get(key);
             }
-        });
+        }
 
         if (keepCidLinks) {
             return callback(null, mail);
