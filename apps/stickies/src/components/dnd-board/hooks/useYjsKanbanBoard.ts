@@ -60,7 +60,7 @@ export const useYjsKanbanBoard = (ownerId: string, mountId: string, pathId: stri
                 columnOrder: columnOrderArray.toArray() as string[],
                 comments: {},
             };
-            tasksMap.forEach((taskMapValue, taskId) => {
+            for(const [taskId, taskMapValue] of tasksMap) {
                 const taskMap = taskMapValue as Y.Map<any>;
                 newState.tasks[taskId] = {
                     id: taskId,
@@ -69,8 +69,8 @@ export const useYjsKanbanBoard = (ownerId: string, mountId: string, pathId: stri
                     creator: taskMap.get('creator') || '',
                     createdAt: taskMap.get('createdAt') || Date.now(),
                 };
-            });
-            columnsMap.forEach((columnMapValue, columnId) => {
+            }
+            for(const [columnId, columnMapValue] of columnsMap) {
                 const columnMap = columnMapValue as Y.Map<any>;
                 const taskIdsArray = columnMap.get('taskIds') as Y.Array<any>;
                 const taskIds = taskIdsArray ? taskIdsArray.toArray() as string[] : [];
@@ -81,10 +81,10 @@ export const useYjsKanbanBoard = (ownerId: string, mountId: string, pathId: stri
                     creator: columnMap.get('creator') || '',
                     createdAt: columnMap.get('createdAt') || Date.now()
                 };
-            });
+            }
             // Map Yjs comments if present (future-proofing)
             const commentsMap = doc.getMap('comments');
-            commentsMap.forEach((commentMapValue, commentId) => {
+            for(const [commentId, commentMapValue] of commentsMap) {
                 const commentMap = commentMapValue as Y.Map<any>;
                 newState.comments[commentId] = {
                     id: commentId,
@@ -93,7 +93,7 @@ export const useYjsKanbanBoard = (ownerId: string, mountId: string, pathId: stri
                     author: commentMap.get('author') || '',
                     createdAt: commentMap.get('createdAt') || Date.now(),
                 };
-            });
+            }
             setBoard(newState);
         };
 

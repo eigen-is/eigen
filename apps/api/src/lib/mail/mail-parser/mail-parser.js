@@ -296,7 +296,7 @@ class MailParser extends Transform {
 
     processHeaders(lines) {
         let headers = new Map();
-        (lines || []).forEach(line => {
+        for(const line of lines || []) {
             let key = line.key;
             let value = ((this.libmime.decodeHeader(line.line) || {}).value || '').toString().trim();
             value = Buffer.from(value, 'binary').toString();
@@ -308,13 +308,13 @@ class MailParser extends Transform {
                     if (value.value) {
                         value.value = this.libmime.decodeWords(value.value);
                     }
-                    Object.keys((value && value.params) || {}).forEach(key => {
+                    for(const key of Object.keys((value && value.params) || {})) {
                         try {
                             value.params[key] = this.libmime.decodeWords(value.params[key]);
                         } catch (E) {
                             // ignore, keep as is
                         }
-                    });
+                    }
                     break;
                 case 'date': {
                     let dateValue = new Date(value);
@@ -390,7 +390,7 @@ class MailParser extends Transform {
                     headers.get(key).push(value);
                 }
             }
-        });
+        }
 
         // keep only the first value
         let singleKeys = [
@@ -413,7 +413,7 @@ class MailParser extends Transform {
             'disposition-notification.ts-to'
         ];
 
-        headers.forEach((value, key) => {
+        for(const [key, value] of headers.entries()) {
             if (Array.isArray(value)) {
                 if (singleKeys.includes(key) && value.length) {
                     headers.set(key, value[value.length - 1]);
@@ -425,14 +425,14 @@ class MailParser extends Transform {
             if (key === 'list') {
                 // normalize List-* headers
                 let listValue = {};
-                [].concat(value || []).forEach(val => {
-                    Object.keys(val || {}).forEach(listKey => {
+                for(const val of [].concat(value || [])) {
+                    for(const listKey of Object.keys(val || {})) {
                         listValue[listKey] = val[listKey];
-                    });
-                });
+                    }
+                }
                 headers.set(key, listValue);
             }
-        });
+        }
 
         return headers;
     }
@@ -518,10 +518,10 @@ class MailParser extends Transform {
             if (!address.address && /^(=\?([^?]+)\?[Bb]\?[^?]*\?=)(\s*=\?([^?]+)\?[Bb]\?[^?]*\?=)*$/.test(address.name) && !processedAddress.has(address)) {
                 let parsed = addressparser(this.libmime.decodeWords(address.name));
                 if (parsed.length) {
-                    parsed.forEach(entry => {
+                    for(const entry of parsed) {
                         processedAddress.add(entry);
                         addresses.push(entry);
-                    });
+                    }
                 }
 
                 // remove current element
@@ -760,9 +760,9 @@ class MailParser extends Transform {
             }
             alternative = alternative || node.contentType === 'multipart/alternative';
             if (node.children) {
-                node.children.forEach(subNode => {
+                for(const subNode of node.children) {
                     processNode(alternative, level + 1, subNode);
-                });
+                }
             }
         };
 
@@ -790,11 +790,11 @@ class MailParser extends Transform {
             case 'node': {
                 let node = this.createNode(data);
                 if (node === this.tree) {
-                    ['subject', 'references', 'date', 'to', 'from', 'to', 'cc', 'bcc', 'message-id', 'in-reply-to', 'reply-to'].forEach(key => {
+                    for(const key of ['subject', 'references', 'date', 'to', 'from', 'to', 'cc', 'bcc', 'message-id', 'in-reply-to', 'reply-to']) {
                         if (node.headers.has(key)) {
                             this[key.replace(/-([a-z])/g, (m, c) => c.toUpperCase())] = node.headers.get(key);
                         }
-                    });
+                    }
                     this.emit('headers', node.headers);
 
                     if (node.headerLines) {
@@ -1064,9 +1064,9 @@ class MailParser extends Transform {
         });
 
         let cidList = [];
-        cids.forEach(entry => {
+        for(const entry of cids.values()) {
             cidList.push(entry);
-        });
+        }
 
         let pos = 0;
         let processNext = () => {
@@ -1109,7 +1109,7 @@ class MailParser extends Transform {
                     let result = [];
                     let last = 0;
 
-                    links.forEach(link => {
+                    for(const link of links) {
                         if (last < link.index) {
                             let textPart = he
                                 // encode special chars
@@ -1122,7 +1122,7 @@ class MailParser extends Transform {
                         result.push(`<a href="${link.url}">${link.text}</a>`);
 
                         last = link.lastIndex;
-                    });
+                    }
 
                     let textPart = he
                         // encode special chars

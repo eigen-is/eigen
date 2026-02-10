@@ -19,7 +19,9 @@ import {getHome} from '../home';
 
 export async function propagateACLChange(path: DrivePath, oldACL: DriveACL[] | null, newACL: DriveACL[] | null): Promise<void> {
     const users = new Set(oldACL?.map(acl => acl.email) || []);
-    newACL?.forEach(acl => users.add(acl.email));
+    for(const acl of newACL || []) {
+        users.add(acl.email);
+    }
 
     for (const email of users) {
         try {

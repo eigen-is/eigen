@@ -87,7 +87,7 @@ export function ContactsList({filterType = 'filter', filterId = 'all'}: Contacts
     const groupContactsByLetter = (contacts: Contact[]) => {
         const groups: Record<string, Contact[]> = {};
 
-        contacts.forEach(contact => {
+        for(const contact of contacts) {
             // Gebruik de eerste letter van firstname of lastname, afhankelijk van sorteermethode
             const firstChar = sortBy === 'firstName'
                 ? contact.firstName.charAt(0).toUpperCase()
@@ -98,7 +98,7 @@ export function ContactsList({filterType = 'filter', filterId = 'all'}: Contacts
             }
 
             groups[firstChar].push(contact);
-        });
+        }
 
         // Converteer het object naar een array van tuples [letter, contacts] en sorteer op letter
         return Object.entries(groups).sort((a, b) => a[0].localeCompare(b[0]));
