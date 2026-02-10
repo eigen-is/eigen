@@ -185,8 +185,12 @@ bun run serve
 bun serve:drive
 bun serve:mail
 # etc.
+
+# Run TypeScript type check across all packages and apps
+bun run typecheck
 ```
 
+- Run `bun run typecheck` to verify type safety across the entire monorepo
 - Update types when changing database schemas
 - Invalidate queries when mutating data
 - Create custom hooks for reusable data fetching
