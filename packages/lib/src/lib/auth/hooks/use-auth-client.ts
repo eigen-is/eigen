@@ -2,11 +2,6 @@ import {createAuthClient} from "better-auth/client";
 import {useQuery} from '@tanstack/react-query';
 import {adminClient, organizationClient, twoFactorClient} from "better-auth/client/plugins";
 
-console.log(import.meta.env.VITE_API_HOST);
-
-let f2aRedirect = () => {
-};
-
 export const authClient = createAuthClient({
     // baseURL: `https://eigen.is:8000`, // the base url of your auth server
     baseURL: import.meta.env.VITE_API_HOST + '/auth', // the base url of your auth server
@@ -19,8 +14,6 @@ export const authClient = createAuthClient({
     plugins: [
         twoFactorClient({
             onTwoFactorRedirect() {
-                // TODO: Reinder: ik snap dit niet
-                // window.location.href = import.meta.env.VITE_APP_SPACE_URL + '/login-fa2' + location.search;
                 history.replaceState(null, '', import.meta.env.VITE_APP_SPACE_URL + '/login-2fa' + location.search);
             }
         }),

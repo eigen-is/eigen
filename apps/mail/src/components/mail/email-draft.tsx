@@ -1,7 +1,7 @@
 import {ArrowLeft, Send, Trash2} from "lucide-react";
 import {cn} from "@workspace/ui/lib/utils";
 import {Button} from "@workspace/ui/components/button";
-import {EmailDraft as EmailDraftType} from "@apps/api-server/types/mail";
+import {EmailDraft as EmailDraftType} from "@workspace/lib/types/mail";
 import {ContactAutosuggest, TooltipButton} from "@workspace/ui";
 import {Input} from "@workspace/ui/components/input";
 import {Textarea} from "@workspace/ui/components/textarea";
@@ -75,8 +75,8 @@ export function EmailDraft({
     // Set from email address
     email.from = {
         value: [{
-            name: auth.user.name || '',
-            address: auth.user.email || '',
+            name: auth.user!.name || '',
+            address: auth.user!.email || '',
         }],
         html: '',
         text: '',

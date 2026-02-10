@@ -1,8 +1,8 @@
 "use client"
 
-import {useCallback, useEffect, useMemo, useRef, useState} from "react"
+import {useCallback, useEffect, useRef, useState} from "react"
 import {UserPublicItem} from "../user-item"
-import type {DriveACL, DrivePath} from "@apps/api-server/types/drive"
+import type {DriveACL, DrivePath} from "@workspace/lib/types/drive"
 import {cn} from "@workspace/ui/lib/utils"
 import {usePublicUser} from "@workspace/lib/public"
 import {Lock, Plus, Unlock} from "lucide-react"
@@ -13,7 +13,7 @@ import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from "@wo
 import {ContactAutosuggest} from "../contacts/contact-autosuggest"
 import {ContactSuggestion} from "../contacts/types"
 
-export interface DriveAccessListEditProps {
+export type DriveAccessListEditProps = {
     path: DrivePath
     onSave: (updatedAcl: DriveACL[]) => void
     onCancel?: () => void
@@ -56,8 +56,7 @@ export function DriveAccessListEdit({
         write: true
     })
 
-    // Initialize access list when owner data is available
-    useMemo(() => {
+    useEffect(() => {
         if (!owner.data) return
 
         const ownerAccess = {
@@ -70,7 +69,6 @@ export function DriveAccessListEdit({
 
         const newAccessList = [ownerAccess]
 
-        // Add non-owner users from ACL
         if (path.acl && path.acl.length > 0) {
             path.acl.forEach((access) => {
                 if (access.public) {
@@ -96,15 +94,10 @@ export function DriveAccessListEdit({
 
     // Handle adding a new user
     const handleAddUser = useCallback((suggestion: ContactSuggestion) => {
-        // Check if user already exists in list
         if (accessList.some(user => user.email.toLowerCase() === suggestion.email.toLowerCase())) {
-            console.log('User already exists in access list:', suggestion.email)
             return
         }
 
-        console.log('Adding user to access list:', suggestion)
-
-        // Create the new user object with edit permissions
         const newUser = {
             email: suggestion.email,
             read: true,
@@ -113,14 +106,7 @@ export function DriveAccessListEdit({
             owner: false
         }
 
-        console.log('New user object:', newUser)
-
-        // Add new user with default edit permissions
-        setAccessList(prevList => {
-            const newList = [...prevList, newUser]
-            console.log('Updated access list:', newList)
-            return newList
-        })
+        setAccessList(prevList => [...prevList, newUser])
 
         setPendingChanges(true)
         setNewContactInput("")
@@ -128,43 +114,31 @@ export function DriveAccessListEdit({
 
     // Parse contact suggestion from input and add user if valid
     const processContactInput = useCallback((value: string) => {
-        // First try to extract an email from a formatted string like "Name <email@eigen.is>"
         const emailMatch = value.match(/<(.+)>/)
         let email: string
         let displayName: string
 
         if (emailMatch) {
-            // It's a formatted suggestion with name and email
             email = emailMatch[1]
             displayName = value.split('<')[0].trim()
         } else {
-            // Check if the input itself is a valid email
             const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())
             if (isEmail) {
                 email = value.trim().toLowerCase();
-                displayName = email.split('@')[0]; // Use part before @ as display name
+                displayName = email.split('@')[0];
             } else {
-                // Not a valid email format
-                console.log('Invalid email format:', value)
                 return false;
             }
         }
 
-        // Check if it's an eigen.is email
         if (!email.toLowerCase().endsWith('@eigen.is')) {
-            // Not an eigen.is email
-            console.log('Not an eigen.is email:', email);
             return false;
         }
 
-        // Check if this email is already in the list
         if (accessList.some(user => user.email.toLowerCase() === email.toLowerCase())) {
-            // Already in the list
-            console.log('Email already in access list:', email);
             return false;
         }
 
-        // Valid eigen.is email not already in the list
         const suggestion: ContactSuggestion = {
             id: email.toLowerCase(),
             email: email.toLowerCase(),
@@ -172,7 +146,6 @@ export function DriveAccessListEdit({
             allEmails: [email.toLowerCase()]
         }
 
-        console.log('Valid eigen.is email, adding user:', suggestion)
         handleAddUser(suggestion)
         return true
     }, [accessList, handleAddUser])
@@ -193,11 +166,8 @@ export function DriveAccessListEdit({
         }
     }, [processContactInput])
 
-    // Handle the add button click
     const handleAddContactClick = useCallback(() => {
         if (!newContactInput) return
-
-        console.log('Add button clicked with input:', newContactInput)
         const added = processContactInput(newContactInput)
         if (added) {
             setNewContactInput("")
@@ -268,9 +238,6 @@ export function DriveAccessListEdit({
 
         onSave(updatedAcl)
     }, [accessList, isPublicEnabled, publicAccessRights, onSave])
-
-    useEffect(() => {
-    }, [accessList])
 
     return (
         <div className={cn("space-y-4", className)}>

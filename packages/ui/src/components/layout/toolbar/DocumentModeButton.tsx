@@ -3,7 +3,7 @@ import {Button} from "@workspace/ui/components/button";
 import {Tooltip, TooltipContent, TooltipTrigger,} from "@workspace/ui/components/tooltip";
 
 
-export interface DocumentModeButtonProps {
+export type DocumentModeButtonProps = {
     canWrite: boolean;
 }
 

@@ -7,8 +7,9 @@ import {
     DropdownMenuSubContent,
     DropdownMenuSubTrigger
 } from "@workspace/ui/components/dropdown-menu";
-import {MaildirMailbox} from "@apps/api-server/types/mail";
+import {MaildirMailbox} from "@workspace/lib/types/mail";
 import {ucfirst} from "@workspace/ui/lib/utils";
+import {getMailMessageDownloadUrl} from "@workspace/lib/api";
 import {CSSProperties} from "react";
 
 interface EmailContextMenuProps {
@@ -126,7 +127,7 @@ export function EmailContextMenu({
 
             <DropdownMenuItem
                 onClick={() => {
-                    const url = `${import.meta.env.VITE_API_HOST}/mail/message/download/${messageId}`;
+                    const url = getMailMessageDownloadUrl(messageId);
                     window.open(url, "_blank");
                     onClose();
                 }}

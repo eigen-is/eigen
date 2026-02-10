@@ -10,7 +10,10 @@ import {withHistory} from "slate-history";
 import {EditorToolbar} from "./editor-toolbar";
 import {CustomElement} from "./editor.types";
 import {EigenLoader} from "@workspace/ui";
-import { DrivePath } from "@apps/api-server/types/drive";
+import {DrivePath} from "@workspace/lib/types/drive";
+import {getCollabWebSocketUrl, getDriveEmbedUrl} from "@workspace/lib/api";
+import {useUploadFile} from "@workspace/lib/drive";
+import {ResizableImage} from "./resizable-image";
 
 // Define the initial value with proper typing
 const initialValue: CustomElement[] = [
@@ -20,11 +23,12 @@ const initialValue: CustomElement[] = [
     },
 ];
 
-export const CollaborativeEditor = ({path, access, onAccessDialogOpen, onDeleteDialogOpen}: {
-    path: DrivePath, access: {
-        canRead: boolean;
-        canWrite: boolean;
-    }, onAccessDialogOpen: () => void, onDeleteDialogOpen: (open: boolean) => void
+export const CollaborativeEditor = ({path, access, mediaFolderId, onAccessDialogOpen, onDeleteDialogOpen}: {
+    path: DrivePath,
+    access: { canRead: boolean; canWrite: boolean; },
+    mediaFolderId: string | null,
+    onAccessDialogOpen: () => void,
+    onDeleteDialogOpen: (open: boolean) => void
 }) => {
     const [connected, setConnected] = useState(false);
     const [provider, setProvider] = useState<WebsocketProvider>();
@@ -35,7 +39,7 @@ export const CollaborativeEditor = ({path, access, onAccessDialogOpen, onDeleteD
 
     useEffect(() => {
         // Build WebSocket URL
-        const wsUrl = `${import.meta.env.VITE_API_HOST}/ws/collab/${path.ownerId}/${path.id}`;
+        const wsUrl = getCollabWebSocketUrl(path.ownerId, path.mountId, path.id);
 
         // Create WebSocket provider
         const yProvider = new WebsocketProvider(wsUrl, slug, yDoc, {
@@ -63,6 +67,7 @@ export const CollaborativeEditor = ({path, access, onAccessDialogOpen, onDeleteD
 
     return <>
         <SlateEditor path={path} sharedType={sharedType} provider={provider} access={access}
+                     mediaFolderId={mediaFolderId}
                      onAccessDialogOpen={onAccessDialogOpen}
                      onDeleteDialogOpen={onDeleteDialogOpen}/>
     </>;
@@ -74,6 +79,7 @@ const SlateEditor = ({
                          provider,
                          path,
                          access,
+                         mediaFolderId,
                          onAccessDialogOpen,
                          onDeleteDialogOpen,
                      }: {
@@ -81,10 +87,13 @@ const SlateEditor = ({
     provider: WebsocketProvider | null;
     path: DrivePath;
     access: { canRead: boolean, canWrite: boolean };
+    mediaFolderId: string | null;
     onAccessDialogOpen: () => void;
     onDeleteDialogOpen: (open: boolean) => void;
 }) => {
     const auth = useAuth();
+    const uploadFile = useUploadFile(path.ownerId, path.mountId);
+    const [selectedImageId, setSelectedImageId] = useState<string | null>(null);
 
     const editor = useMemo(() => {
         const e = withReact(
@@ -92,8 +101,8 @@ const SlateEditor = ({
                 withCursors(withYjs(createEditor(), sharedType!), provider!.awareness, {
                     // The current user's name and color
                     data: {
-                        name: auth.user.name,
-                        email: auth.user.email,
+                        name: auth.user!.name,
+                        email: auth.user!.email,
                         color: "#9810fa",
                     },
                 })
@@ -155,11 +164,11 @@ const SlateEditor = ({
                             type="checkbox"
                             checked={typedElement.checked}
                             onChange={(event: React.ChangeEvent<HTMLInputElement>) => {
-                                const path = ReactEditor.findPath(editor, typedElement);
+                                const nodePath = ReactEditor.findPath(editor, typedElement);
                                 Transforms.setNodes(
                                     editor,
                                     {checked: event.target.checked},
-                                    {at: path}
+                                    {at: nodePath}
                                 );
                             }}
                             className="mt-1.5"
@@ -167,10 +176,23 @@ const SlateEditor = ({
                         <span className="flex-1">{children}</span>
                     </div>
                 );
+            case 'image':
+                return (
+                    <div {...attributes} contentEditable={false} className="my-2">
+                        <ResizableImage
+                            element={typedElement}
+                            src={getDriveEmbedUrl(path.ownerId, path.mountId, typedElement.pathId!, 'image')}
+                            isSelected={selectedImageId === typedElement.pathId}
+                            onSelect={() => setSelectedImageId(typedElement.pathId!)}
+                            onDeselect={() => setSelectedImageId(null)}
+                        />
+                        {children}
+                    </div>
+                );
             default:
                 return <p style={style} {...attributes}>{children}</p>;
         }
-    }, [editor]);
+    }, [editor, selectedImageId]);
 
     // Define custom leaf renderer
     const renderLeaf = useCallback((props: RenderLeafProps) => {
@@ -240,11 +262,53 @@ const SlateEditor = ({
         }
     }, [editor]);
 
+    const insertImage = useCallback((pathId: string, width?: number, height?: number) => {
+        const image: CustomElement = {
+            type: 'image',
+            pathId,
+            width,
+            height,
+            children: [{text: ''}],
+        };
+        Transforms.insertNodes(editor, image);
+        Transforms.insertNodes(editor, {type: 'paragraph', children: [{text: ''}]});
+    }, [editor]);
+
+    const handleImageUpload = useCallback(async (file: File) => {
+        if (!mediaFolderId || !file.type.startsWith('image/')) return;
+        
+        const result = await uploadFile.mutateAsync({parentId: mediaFolderId, file});
+        if (result) {
+            const width = result.details?.width as number | undefined;
+            const height = result.details?.height as number | undefined;
+            insertImage(result.id, width, height);
+        }
+    }, [mediaFolderId, uploadFile, insertImage]);
+
+    const handleDrop = useCallback((event: React.DragEvent<HTMLDivElement>) => {
+        const files = Array.from(event.dataTransfer.files);
+        const imageFile = files.find(f => f.type.startsWith('image/'));
+        if (imageFile && mediaFolderId) {
+            event.preventDefault();
+            handleImageUpload(imageFile);
+        }
+    }, [mediaFolderId, handleImageUpload]);
+
+    const handlePaste = useCallback((event: React.ClipboardEvent<HTMLDivElement>) => {
+        const files = Array.from(event.clipboardData.files);
+        const imageFile = files.find(f => f.type.startsWith('image/'));
+        if (imageFile && mediaFolderId) {
+            event.preventDefault();
+            handleImageUpload(imageFile);
+        }
+    }, [mediaFolderId, handleImageUpload]);
+
     return (
         <>
             <Slate editor={editor} initialValue={initialValue}>
                 <div className="flex h-full w-full flex-col">
-                    <EditorToolbar path={path} canWrite={access.canWrite} onDeleteDialogOpen={onDeleteDialogOpen}  onAccessDialogOpen={onAccessDialogOpen}/>
+                    <EditorToolbar path={path} canWrite={access.canWrite} onDeleteDialogOpen={onDeleteDialogOpen}
+                                   onAccessDialogOpen={onAccessDialogOpen}/>
                     <div className="h-full w-full overflow-y-scroll bg-gray-200 p-4">
                         <div data-document
                              className="grid p-[2cm] bg-white rounded-lg shadow-sm shadow-transparent min-h-full w-[210mm] m-auto print:shadow-none">
@@ -257,6 +321,8 @@ const SlateEditor = ({
                                     renderElement={renderElement}
                                     renderLeaf={renderLeaf}
                                     onKeyDown={handleKeyDown}
+                                    onDrop={handleDrop}
+                                    onPaste={handlePaste}
                                 />
                             </Cursors>
                         </div>

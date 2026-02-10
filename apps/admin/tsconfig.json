@@ -1,11 +1,17 @@
 {
-  "extends": "../../packages/config/base.json",
+  "extends": "../../tsconfig.json",
   "compilerOptions": {
     "baseUrl": ".",
     "paths": {
-      "@/*": ["./src/*"]
+      "@workspace/lib/*": ["../../packages/lib/src/*"],
+      "@workspace/ui/*": ["../../packages/ui/src/*"]
     }
   },
-  "include": ["src"],
-  "exclude": ["node_modules", "dist"]
+  "include": [
+    "src",
+    "css.d.ts"
+  ],
+  "exclude": [
+    "node_modules"
+  ]
 }

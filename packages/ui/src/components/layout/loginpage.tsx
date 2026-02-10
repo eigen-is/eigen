@@ -47,7 +47,8 @@ export function LoginPage() {
             const {success, error} = await login(values.email, values.password);
 
             if (!success && error) {
-                setError(error.message || 'Login failed');
+                const errorMessage = error instanceof Error ? error.message : 'Login failed';
+                setError(errorMessage);
                 return;
             }
 

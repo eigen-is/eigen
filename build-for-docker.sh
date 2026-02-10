@@ -33,14 +33,14 @@ bun --filter './apps/space' build
 # Build API server
 echo ""
 echo "⚙️  Building API server..."
-bun --filter './apps/api-server' buildfordocker
+bun --filter './apps/api' buildfordocker
 
 echo ""
 echo "✅ Build completed successfully!"
 echo ""
 echo "📊 Build artifacts:"
 echo "   - Frontend apps: ./dist/"
-echo "   - API server: ./apps/api-server/build/"
+echo "   - API server: ./apps/api/build/"
 echo ""
 echo "🐳 Next steps:"
 echo "   1. Build Docker images: docker-compose build"

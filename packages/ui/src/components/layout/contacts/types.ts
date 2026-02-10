@@ -1,10 +1,7 @@
 // TypeScript interfaces for the contact autosuggest component
 import {Ref} from 'react';
 
-/**
- * Properties for the ContactAutosuggest component
- */
-export interface ContactAutosuggestProps {
+export type ContactAutosuggestProps = {
     initialValue?: string;
     value?: string;
     onChange?: (value: string) => void;
@@ -24,10 +21,7 @@ export interface ContactAutosuggestProps {
     onSubmit?: (value: string) => void;
 }
 
-/**
- * A contact suggestion item
- */
-export interface ContactSuggestion {
+export type ContactSuggestion = {
     id: string;
     displayName: string;
     email: string;

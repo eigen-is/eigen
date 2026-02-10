@@ -5,18 +5,16 @@ import {EigenLoader} from "@workspace/ui";
 import {cn} from "@workspace/ui/lib/utils";
 import {formatFileSize} from "@workspace/ui/lib/formatFileSize";
 
-// Type definition for storage data
-export interface StorageData {
+export type StorageData = {
     used: number;
     max: number;
     drive?: number;
     mail?: number;
     contacts?: number;
-
     [key: string]: number | undefined;
 }
 
-interface StorageUsageProps {
+type StorageUsageProps = {
     className?: string;
     condensed?: boolean;
 }

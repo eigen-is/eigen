@@ -40,7 +40,10 @@ yarn-error.log*
 next-env.d.ts
 
 .idea
-/apps/api-server/data/home
-/apps/api-server/data/bucket
-/apps/api-server/data/users3.db
-/apps/api-server/data/config.db
+/apps/api/data/home
+/apps/api/data/bucket
+/apps/api/data/users3.db
+/apps/api/data/config.db
+/data/home
+/data/server
+.env

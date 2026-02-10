@@ -5,29 +5,32 @@ This project uses PHP for dynamic metadata on blog posts while remaining a stati
 ## How it works
 
 1. **Build process** (`bun run build`):
-   - First runs `scripts/generate-blog-meta.ts` to create `public/blog-meta.json`
-   - Then builds the static assets with Vite
+    - First runs `scripts/generate-blog-meta.ts` to create `public/blog-meta.json`
+    - Then builds the static assets with Vite
 
 2. **Runtime**:
-   - `index.php` serves the app and reads blog metadata from `blog-meta.json`
-   - Metadata (title, description, OG tags) is dynamically inserted based on the URL
-   - All routes are redirected to `index.php` via `.htaccess`
+    - `index.php` serves the app and reads blog metadata from `blog-meta.json`
+    - Metadata (title, description, OG tags) is dynamically inserted based on the URL
+    - All routes are redirected to `index.php` via `.htaccess`
 
 ## Deployment Steps
 
 ### 1. Build the project
+
 ```bash
 cd apps/index
 bun run build
 ```
 
 This creates:
+
 - `public/blog-meta.json` - Blog post metadata
 - `dist/` - Built static assets
 
 ### 2. Deploy to server
 
 Upload these files to your web server:
+
 - `index.php` - Main entry point
 - `.htaccess` - URL rewriting rules
 - `blog-meta.json` - Blog metadata (generated during build)
@@ -56,11 +59,13 @@ location ~ \.php$ {
 ## Local Development
 
 For local development, use Vite's dev server:
+
 ```bash
 bun run dev
 ```
 
-Note: During development, the dynamic metadata from PHP won't work. You'll see the default metadata from TanStack Router's `head` function instead.
+Note: During development, the dynamic metadata from PHP won't work. You'll see the default metadata from TanStack
+Router's `head` function instead.
 
 ## Notes
 

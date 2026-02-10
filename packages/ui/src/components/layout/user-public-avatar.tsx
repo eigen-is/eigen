@@ -4,7 +4,7 @@ import {Tooltip, TooltipContent, TooltipTrigger,} from "@workspace/ui/components
 import {UserAvatar, UserAvatarProps} from "./user-avatar"
 import {useAvatar} from "@workspace/lib/media"
 
-export interface UserPublicAvatarProps extends Omit<UserAvatarProps, 'name' | 'imageUrl'> {
+export type UserPublicAvatarProps = Omit<UserAvatarProps, 'name' | 'imageUrl'> & {
     email: string
     className?: string
     size?: "sm" | "md" | "lg"

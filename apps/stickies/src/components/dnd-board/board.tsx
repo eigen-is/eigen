@@ -11,7 +11,7 @@ import {useIsMobile} from "@workspace/lib/media";
 import {useYjsKanbanBoard} from './hooks/useYjsKanbanBoard';
 import {useYjsDragAndDrop} from './hooks/useYjsDragAndDrop';
 import {StickiesToolbar} from './stickies-toolbar';
-import {DrivePath} from '@apps/api-server/types/drive';
+import {DrivePath} from '@workspace/lib/types/drive';
 
 interface StickiesBoardProps {
     ownerId: string;
@@ -34,7 +34,7 @@ const StickiesBoard = ({ownerId, path, canWrite, onAccessDialogOpen}: StickiesBo
         handleAddColumn,
         yjsDoc,
         undoManager
-    } = useYjsKanbanBoard(ownerId, path.id);
+    } = useYjsKanbanBoard(ownerId, path.mountId, path.id);
 
     // Drag and drop functionality with Yjs awareness
     const {

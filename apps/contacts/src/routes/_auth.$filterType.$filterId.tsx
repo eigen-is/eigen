@@ -2,13 +2,11 @@ import {createFileRoute, useNavigate} from '@tanstack/react-router';
 import {ContactsList} from '../components/contacts/contacts-list';
 import {ContactDetail} from '../components/contacts/contact-detail';
 import {useContacts, useDeleteContact, useLabels} from '@workspace/lib/contacts';
-import {toast} from "sonner";
 import {EigenLoader} from '@workspace/ui/components/layout/eigen-loader';
 import {LabelFilterHeader} from "@workspace/ui/components/layout/labels/label-filter-header";
 import {useIsMobile} from "@workspace/lib/media";
 
-// Define search params type
-export interface ContactsSearchParams {
+export type ContactsSearchParams = {
     contactId?: string;
 }
 
@@ -35,9 +33,6 @@ function ContactsRoute() {
     const handleDeleteContact = async (id: string) => {
         try {
             await deleteMutation.mutateAsync(id);
-            toast.info("Contact deleted", {
-                description: "Moved to Trash"
-            });
             // Navigate back to the current filter without the contactId
             navigate({
                 to: Route.fullPath,

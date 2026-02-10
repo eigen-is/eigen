@@ -1,10 +1,10 @@
-import {useState, useEffect} from "react";
+import {useEffect, useState} from "react";
 import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,} from "@workspace/ui/components/dialog";
 import {Input} from "@workspace/ui/components/input";
 import {Label} from "@workspace/ui/components/label";
 import {Button} from "@workspace/ui/components/button";
 import {useBreadcrumb} from "@workspace/lib/drive";
-import {DrivePath} from "@apps/api-server/types/drive";
+import {DrivePath} from "@workspace/lib/types/drive";
 
 interface DriveCreateItemDialogProps {
     open: boolean;
@@ -30,7 +30,7 @@ export function DriveCreateItemDialog({
                                           confirmLabel,
                                       }: DriveCreateItemDialogProps) {
     const [itemName, setItemName] = useState(defaultValue);
-    const {data: breadcrumbPaths = []} = useBreadcrumb(path.ownerId, path.id);
+    const {data: breadcrumbPaths = []} = useBreadcrumb(path.ownerId, path.mountId, path.id);
 
     // Reset input value when dialog opens/closes or defaultValue changes
     useEffect(() => {

@@ -1,7 +1,7 @@
 import {createFileRoute, Outlet, redirect} from '@tanstack/react-router'
 import {useContext} from 'react';
 import {SidebarContext} from './__root';
-import {SpaceSidebar} from "@/components/space/space-sidebar.tsx";
+import {SpaceSidebar} from "../components/space/space-sidebar";
 import {useIsMobile, useIsTablet} from "@workspace/lib/media";
 
 

@@ -1,7 +1,7 @@
 import {Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,} from "./../../dialog";
 import {Button} from "./../../button";
 
-export interface DeleteDialogProps {
+export type DeleteDialogProps = {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     title: string;

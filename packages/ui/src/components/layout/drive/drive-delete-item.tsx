@@ -1,11 +1,9 @@
 import {toast} from "sonner";
-import {DrivePath} from "@apps/api-server/types/drive";
-import {useDeleteFile, useDeleteFolder, useInvalidateFolder} from "@workspace/lib/drive";
+import type {DrivePath} from "@workspace/lib/types/drive";
+import {useDeleteFile, useDeleteFolder, DEFAULT_MOUNT_ID} from "@workspace/lib/drive";
 import {DeleteDialog} from "@workspace/ui/components/layout/delete/delete-dialog";
-import {useQueryClient} from "@tanstack/react-query";
-import {invalidateHomeSize} from "@workspace/lib/home";
 
-export interface DriveDeleteItemProps {
+export type DriveDeleteItemProps = {
     path: DrivePath | null;
     open: boolean;
     onOpenChange: (open: boolean) => void;
@@ -18,25 +16,18 @@ export function DriveDeleteItem({
                                     onOpenChange,
                                     onAfterAction,
                                 }: DriveDeleteItemProps) {
-    const queryClient = useQueryClient();
-    const deleteFileMutation = useDeleteFile(path?.ownerId || '');
-    const deleteFolderMutation = useDeleteFolder(path?.ownerId || '');
-    const invalidateFolder = useInvalidateFolder();
+    const deleteFileMutation = useDeleteFile(path?.ownerId || '', path?.mountId || DEFAULT_MOUNT_ID, path?.parentId || undefined, path?.mimeType || undefined);
+    const deleteFolderMutation = useDeleteFolder(path?.ownerId || '', path?.mountId || DEFAULT_MOUNT_ID, path?.parentId || undefined, path?.mimeType || undefined);
 
     const handleDelete = () => {
         if (!path) return;
 
         // Use the appropriate mutation based on item type
-        const mutation = path.type !== 'file' ? deleteFolderMutation : deleteFileMutation;
+        const mutation = path.type === 'folder' ? deleteFolderMutation : deleteFileMutation;
 
         mutation.mutate(path.id, {
             onSuccess: () => {
-                toast.success(`${path.type === 'folder' ? 'Folder' : 'File'} deleted successfully`);
                 onOpenChange(false);
-
-                // Invalidate queries to refresh folder contents
-                invalidateFolder(path.parentId || '');
-                invalidateHomeSize(queryClient);
 
                 if (onAfterAction) {
                     onAfterAction('delete', path);

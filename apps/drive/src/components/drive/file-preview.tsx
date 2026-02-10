@@ -1,13 +1,14 @@
 import {useEffect} from "react";
 
-export interface FilePreviewProps {
+export type FilePreviewProps = {
     url: string;
     mimeType: string;
     onClose: () => void;
     open: boolean;
+    aspectRatio?: number;
 }
 
-export function FilePreview({url, mimeType, onClose, open}: FilePreviewProps) {
+export function FilePreview({url, mimeType, onClose, open, aspectRatio}: FilePreviewProps) {
     if (!open) return null;
 
     // Only handle Escape key, which is the standard for closing modals
@@ -37,10 +38,20 @@ export function FilePreview({url, mimeType, onClose, open}: FilePreviewProps) {
                 onClick={(e) => e.stopPropagation()} // Re-add this to prevent clicks inside from closing
             >
                 {mimeType.startsWith("image/") && (
-                    <img src={url} alt="Preview" className="max-w-full max-h-[80vh] rounded"/>
+                    <img 
+                        src={url} 
+                        alt="Preview" 
+                        className="max-w-full max-h-[80vh] rounded"
+                        style={aspectRatio ? {aspectRatio} : undefined}
+                    />
                 )}
                 {mimeType.startsWith("video/") && (
-                    <video src={url} controls className="max-w-full max-h-[80vh] rounded"/>
+                    <video 
+                        src={url} 
+                        controls 
+                        className="max-w-full max-h-[80vh] rounded"
+                        style={aspectRatio ? {aspectRatio} : undefined}
+                    />
                 )}
                 {mimeType === "application/pdf" && (
                     <iframe src={url} className="w-[80vw] h-[80vh] rounded bg-white"/>
