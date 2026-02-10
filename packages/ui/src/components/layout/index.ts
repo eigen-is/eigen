@@ -10,6 +10,7 @@ export {Topbar} from "./topbar"
 export {RootLayout, SidebarContext, useSidebar} from "./root-layout"
 export {AppLayout} from "./app-layout"
 export type {SidebarProps} from "./app-layout"
+export {createLoginRouteOptions} from "./login-route"
 
 // Media components
 export {ResizableMedia, MediaStylePicker, defaultStyleOptions} from "./media"
