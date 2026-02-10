@@ -1,11 +1,11 @@
 import {useState} from 'react';
 import {Pencil} from 'lucide-react';
-import {Label} from '@apps/api-server/types/label';
+import {Label} from '@workspace/lib/types/label';
 import {TooltipButton} from '@workspace/ui';
 import {LabelDialog} from './label-dialog';
 import {useLabels} from './label-provider';
 
-export interface LabelFilterHeaderProps {
+export type LabelFilterHeaderProps = {
     labels: Label[];
     labelId: string;
 }

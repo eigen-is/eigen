@@ -1,6 +1,6 @@
 "use client"
 import {UserPublicItem} from "../user-item"
-import type {DriveACL, DrivePath} from "@apps/api-server/types/drive"
+import type {DriveACL, DrivePath} from "@workspace/lib/types/drive"
 import {cn} from "@workspace/ui/lib/utils"
 import {useMemo} from "react"
 import {usePublicUser} from "@workspace/lib/public"
@@ -9,7 +9,7 @@ import {AvatarIcon} from "@workspace/ui/components/avatar"
 import {Separator} from "@workspace/ui/components/separator"
 import {TooltipButton} from "../tooltip-button"
 
-export interface DriveAccessListProps {
+export type DriveAccessListProps = {
     path: DrivePath
     className?: string
     onShareClick?: (path: DrivePath) => void

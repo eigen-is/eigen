@@ -1,17 +1,13 @@
 import {createFileRoute, useNavigate} from '@tanstack/react-router';
-import {usePathInfo, useSharedPaths} from '@workspace/lib/drive';
+import {usePathInfo, useSharedPaths, DEFAULT_MOUNT_ID} from '@workspace/lib/drive';
 import {DriveLayout} from "@workspace/ui/components/layout/drive/drive-layout";
-import {DrivePath} from "@apps/api-server/types/drive";
+import {DrivePath, DriveSearchParams} from "@workspace/lib/types/drive";
 import {useAuth} from '@workspace/lib/auth';
 import {useIsMobile} from "@workspace/lib/media";
 import {EigenLoader} from '@workspace/ui';
 import {useState} from "react";
 import {FilePreview} from '../components/drive/file-preview';
-
-export interface DriveSearchParams {
-    pid?: string;
-    uid?: string;
-}
+import {getDriveDownloadUrl, getDriveEmbedUrl} from "@workspace/lib/api";
 
 export const Route = createFileRoute('/_auth/shared/$to')({
     component: DriveRoute,
@@ -26,8 +22,9 @@ function DriveRoute() {
     const navigate = useNavigate();
     const {uid, pid} = Route.useSearch();
     const auth = useAuth();
-    const ownerId = auth?.user?.id;
-    const {data: selectedPath = null} = usePathInfo(uid || '', pid || '');
+    const ownerId = auth.user!.id;
+    const mountId = DEFAULT_MOUNT_ID;
+    const {data: selectedPath = null} = usePathInfo(uid || '', mountId, pid || '');
     const isMobile = useIsMobile();
     const [preview, setPreview] = useState<{ url: string; mimeType: string } | null>(null);
 
@@ -36,7 +33,7 @@ function DriveRoute() {
         data: folderContents = [],
         isLoading: isFolderContentLoading,
         error: isFolderContentLoadingError
-    } = useSharedPaths(to as 'by-me' | 'with-me');
+    } = useSharedPaths(ownerId, to as 'by-me' | 'with-me');
 
     // Handle row click to show path details
     const onRowSelect = (path: DrivePath) => {
@@ -46,7 +43,7 @@ function DriveRoute() {
             // If a preview is already open
             if (mimeType.startsWith("image/") || mimeType.startsWith("video/")) {
                 // Update the preview if new selection is also previewable
-                const url = `${import.meta.env.VITE_API_HOST}/drive/embed/${path.ownerId}/${path.id}/${path.name}`;
+                const url = getDriveEmbedUrl(path.ownerId, path.mountId, path.id, path.name);
                 setPreview({url, mimeType});
             } else {
                 // Close the preview if the new selection isn't previewable
@@ -70,20 +67,20 @@ function DriveRoute() {
 
         if (path.type === 'folder') {
             navigate({
-                to: '/fs/$ownerId/$pathId',
-                params: {ownerId: path.ownerId, pathId: path.id}
+                to: '/fs/$ownerId/$mountId/$pathId',
+                params: {ownerId: path.ownerId, mountId: path.mountId, pathId: path.id}
             });
         } else if (path.type === 'doc') {
-            const url = `${import.meta.env.VITE_APP_DOCS_URL}/doc/${path.ownerId}/${path.id}`;
+            const url = `${import.meta.env.VITE_APP_DOCS_URL}/doc/${path.ownerId}/${path.mountId}/${path.id}`;
             document.location.href = url;
         } else if (path.type === 'stickies') {
-            const url = `${import.meta.env.VITE_APP_STICKIES_URL}/board/${path.ownerId}/${path.id}`;
+            const url = `${import.meta.env.VITE_APP_STICKIES_URL}/board/${path.ownerId}/${path.mountId}/${path.id}`;
             document.location.href = url;
         } else if (mimeType.startsWith("image/") || mimeType.startsWith("video/")) {
-            const url = `${import.meta.env.VITE_API_HOST}/drive/embed/${path.ownerId}/${path.id}/${path.name}`;
+            const url = getDriveEmbedUrl(path.ownerId, path.mountId, path.id, path.name);
             setPreview({url, mimeType: mimeType});
         } else {
-            const url = `${import.meta.env.VITE_API_HOST}/drive/download/${path.ownerId}/${path.id}`;
+            const url = getDriveDownloadUrl(path.ownerId, path.mountId, path.id);
             window.open(url, "_blank");
         }
     };
@@ -120,6 +117,7 @@ function DriveRoute() {
                 pid={pid}
                 selectedPath={selectedPath}
                 ownerId={uid || ownerId}
+                mountId={mountId}
                 folderContents={folderContents ?? []}
                 isLoading={isFolderContentLoading}
                 error={isFolderContentLoadingError}

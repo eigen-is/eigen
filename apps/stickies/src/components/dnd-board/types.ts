@@ -1,28 +1,28 @@
-export interface CommentItem {
+export type CommentItem = {
     id: string;
-    taskId: string; // The task this comment belongs to
+    taskId: string;
     text: string;
-    author: string; // email address
-    createdAt: number; // timestamp
+    author: string;
+    createdAt: number;
 }
 
-export interface TaskItem {
+export type TaskItem = {
     id: string;
     title: string;
     description: string;
-    creator: string; // email address
-    createdAt: number; // timestamp
+    creator: string;
+    createdAt: number;
 }
 
-export interface ColumnItem {
+export type ColumnItem = {
     id: string;
     title: string;
     taskIds: string[];
-    creator: string; // email address
-    createdAt: number; // timestamp
+    creator: string;
+    createdAt: number;
 }
 
-export interface BoardData {
+export type BoardData = {
     tasks: Record<string, TaskItem>;
     columns: Record<string, ColumnItem>;
     columnOrder: string[];

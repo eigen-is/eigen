@@ -1,7 +1,7 @@
 import {useCallback} from 'react';
 import * as Y from 'yjs';
 import {nanoid} from 'nanoid';
-import {useAuth} from '@workspace/lib/auth/auth-context.tsx';
+import {useAuth} from '@workspace/lib/auth';
 
 // Default board structure with predefined columns and an example task
 const DEFAULT_BOARD_STRUCTURE = {

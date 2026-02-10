@@ -1,4 +1,5 @@
 import {AlertOctagon, AlertTriangle, Archive, File, Inbox, Send, Trash2, X} from 'lucide-react';
+import {MaildirMailbox} from "@workspace/lib/types/mail";
 import {Button} from "@workspace/ui/components/button";
 import {SidebarItem} from '@workspace/ui/components/layout/sidebar/sidebar-item';
 import {SidebarSection} from '@workspace/ui/components/layout/sidebar/sidebar-section';
@@ -8,7 +9,7 @@ import {EigenLoader, StorageUsage} from "@workspace/ui";
 import {EmailComposeButton} from "./email-compose-button";
 
 // Map of special mailbox flags to their icons and display names
-const standardMailboxes: Record<string, { icon: React.ComponentType<any>, name: string }> = {
+const standardMailboxes: Record<string, { icon: React.ComponentType<{ className?: string }>, name: string }> = {
     '\\Inbox': {icon: Inbox, name: 'Inbox'},
     '\\Drafts': {icon: File, name: 'Drafts'},
     '\\Sent': {icon: Send, name: 'Sent'},
@@ -25,7 +26,8 @@ const defaultMailboxes = [
         icon: <Inbox className="h-4 w-4"/>,
         href: "/box/inbox",
         unread: 0,
-        flags: ['\\HasNoChildren', '\\Inbox']
+        flags: ['\\HasNoChildren', '\\Inbox'],
+        isStandard: true
     },
     {
         path: "Drafts",
@@ -33,7 +35,8 @@ const defaultMailboxes = [
         icon: <File className="h-4 w-4"/>,
         href: "/box/drafts",
         unread: 0,
-        flags: ['\\HasNoChildren', '\\Drafts']
+        flags: ['\\HasNoChildren', '\\Drafts'],
+        isStandard: true
     },
     {
         path: "Sent",
@@ -41,7 +44,8 @@ const defaultMailboxes = [
         icon: <Send className="h-4 w-4"/>,
         href: "/box/sent",
         unread: 0,
-        flags: ['\\HasNoChildren', '\\Sent']
+        flags: ['\\HasNoChildren', '\\Sent'],
+        isStandard: true
     },
     {
         path: "Spam",
@@ -49,7 +53,8 @@ const defaultMailboxes = [
         icon: <AlertTriangle className="h-4 w-4"/>,
         href: "/box/spam",
         unread: 0,
-        flags: ['\\HasNoChildren', '\\Junk']
+        flags: ['\\HasNoChildren', '\\Junk'],
+        isStandard: true
     },
     {
         path: "Trash",
@@ -57,7 +62,8 @@ const defaultMailboxes = [
         icon: <Trash2 className="h-4 w-4"/>,
         href: "/box/trash",
         unread: 0,
-        flags: ['\\HasNoChildren', '\\Trash']
+        flags: ['\\HasNoChildren', '\\Trash'],
+        isStandard: true
     },
     {
         path: "Archive",
@@ -65,7 +71,8 @@ const defaultMailboxes = [
         icon: <Archive className="h-4 w-4"/>,
         href: "/box/archive",
         unread: 0,
-        flags: ['\\HasNoChildren', '\\Archive']
+        flags: ['\\HasNoChildren', '\\Archive'],
+        isStandard: true
     },
 ];
 
@@ -79,9 +86,9 @@ interface AppSidebarProps {
     condensed?: boolean;
     onClose?: () => void;
     isMobile?: boolean;
-    mailboxes?: any[];
+    mailboxes?: MaildirMailbox[];
     isLoading?: boolean;
-    error?: any;
+    error?: Error | null;
 }
 
 export function EmailSidebar({
@@ -90,7 +97,7 @@ export function EmailSidebar({
                                  isMobile = false,
                                  mailboxes = [],
                                  isLoading = false,
-                                 error = false
+                                 error = null
                              }: AppSidebarProps) {
 
     // Memoize the processed mailboxes to avoid unnecessary recalculations

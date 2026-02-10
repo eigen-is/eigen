@@ -6,7 +6,7 @@ import {LabelManagerProps} from './types';
 import {SidebarItem} from '../sidebar';
 import {TooltipButton} from "@workspace/ui";
 import {useLabels} from './label-provider';
-import type {Label} from "@apps/api-server/types/label";
+import type {Label} from "@workspace/lib/types/label";
 
 export function LabelManager({
                                  labels,

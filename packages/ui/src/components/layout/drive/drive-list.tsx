@@ -3,7 +3,7 @@ import {Button} from "@workspace/ui/components/button";
 import {EigenLoader} from "@workspace/ui";
 import {FileText, FolderPlus, Plus, StickyNote, UploadIcon} from "lucide-react";
 import {DriveTable, getFileIcon} from "@workspace/ui/components/layout/drive";
-import {type DrivePath} from "@apps/api-server/types/drive";
+import {type DrivePath} from "@workspace/lib/types/drive";
 import {cn} from "@workspace/ui/lib/utils";
 import {
     DropdownMenu,
@@ -39,6 +39,7 @@ interface DriveListProps {
     onCreateStickies?: () => void;
     onDownload?: (path: DrivePath) => void;
     ownerId: string;
+    mountId: string;
     pathId: string;
     showBreadcrumb?: boolean;
     allowDelete?: boolean;
@@ -65,6 +66,7 @@ export function DriveList({
                               onCreateStickies,
                               onDownload,
                               ownerId,
+                              mountId,
                               pathId,
                               showBreadcrumb = true,
                               allowDelete = false,
@@ -75,7 +77,7 @@ export function DriveList({
                           }: DriveListProps) {
     const [isDragging, setIsDragging] = useState(false);
     const dragCounter = useRef(0);
-    const {data: breadcrumbPaths = []} = showBreadcrumb ? useBreadcrumb(ownerId, pathId) : {data: []};
+    const {data: breadcrumbPaths = []} = showBreadcrumb ? useBreadcrumb(ownerId, mountId, pathId) : {data: []};
     const isMobile = useIsMobile();
 
     // Handle row click with two different behaviors

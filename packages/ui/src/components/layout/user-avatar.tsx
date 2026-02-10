@@ -6,7 +6,7 @@ import {Avatar, AvatarImage} from "@workspace/ui/components/avatar"
 import {useAvatar} from "@workspace/lib/media"
 import {AvatarDigiDoodle} from "eigen-avatar-generator/react"
 
-export interface UserAvatarProps extends HTMLAttributes<HTMLDivElement> {
+export type UserAvatarProps = HTMLAttributes<HTMLDivElement> & {
     name?: string
     email?: string
     imageUrl?: string
@@ -48,7 +48,7 @@ export function UserAvatar({
             {avatarImage ? (
                 <AvatarImage src={`${import.meta.env.VITE_API_HOST}/${avatarImage}`} alt={displayName}/>
             ) : (
-                <AvatarDigiDoodle id={userId || email || ''} background="#eeeeee" />
+                <AvatarDigiDoodle id={userId || email || ''} background="#eeeeee"/>
             )}
         </Avatar>
     );

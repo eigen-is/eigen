@@ -1,4 +1,5 @@
 import {cn} from "@workspace/ui/lib/utils";
+import {getDriveDownloadUrl, getDriveThumbnailUrl} from "@workspace/lib/api";
 import {ArrowLeft, ArrowRight, Download, MoreVertical, Pencil, Trash2, UserRoundPlus, X} from "lucide-react";
 import {
     DropdownMenu,
@@ -10,20 +11,20 @@ import {
 import {Button} from "@workspace/ui/components/button";
 import {EigenLoader, TooltipButton} from "@workspace/ui";
 import {DriveAccessList} from "@workspace/ui/components/layout/drive";
-import {type DrivePath} from "@apps/api-server/types/drive";
+import {type DrivePath} from "@workspace/lib/types/drive";
 import {formatFileSize} from "@workspace/ui/lib/formatFileSize";
 import {Table, TableBody, TableCell, TableRow} from "@workspace/ui/components/table";
 
 interface DriveDetailProps {
-    path: any | null;
+    path: DrivePath | null;
     isMobile?: boolean;
     className?: string;
     onBackClick?: () => void;
-    onDelete: (path: any) => void;
-    onShareClick?: (item: DrivePath) => void;
+    onDelete?: (path: DrivePath) => void;
+    onShareClick?: (path: DrivePath) => void;
     onDownload?: (path: DrivePath) => void;
-    onItemOpen?: (item: DrivePath) => void;
-    onRename?: (item: DrivePath) => void;
+    onItemOpen?: (path: DrivePath) => void;
+    onRename?: (path: DrivePath) => void;
     allowDelete?: boolean;
 }
 
@@ -49,8 +50,8 @@ export function DriveDetail({
         );
     }
 
-    const fullPath = `${import.meta.env.VITE_API_HOST}/drive/download/${path.ownerId}/${path.id}`;
-    const thumbnailPath = `${import.meta.env.VITE_API_HOST}/drive/thumb/${path.ownerId}/${path.thumbnail}`;
+    const fullPath = getDriveDownloadUrl(path.ownerId, path.mountId, path.id);
+    const thumbnailPath = getDriveThumbnailUrl(path.ownerId, path.mountId, path.thumbnail || '');
 
     return (
 
@@ -68,12 +69,13 @@ export function DriveDetail({
                 </div>
 
                 <div className="flex items-center gap-1">
-                    {/* Right side icons */}
-                    <TooltipButton
-                        icon={Trash2}
-                        tooltipText="Delete"
-                        onClick={() => onDelete(path)}
-                    />
+                    {onDelete && (
+                        <TooltipButton
+                            icon={Trash2}
+                            tooltipText="Delete"
+                            onClick={() => onDelete(path)}
+                        />
+                    )}
 
                     <div className="h-6 w-[1px] bg-border mx-1"></div>
 
@@ -149,6 +151,7 @@ export function DriveDetail({
                             src={thumbnailPath}
                             alt={`Thumbnail for ${path.name}`}
                             className="max-w-full max-h-[25%] object-contain"
+                            style={path.details?.width && path.details?.height ? {aspectRatio: path.details.width / path.details.height} : undefined}
                         />
                     </div>
                 )}
@@ -159,6 +162,7 @@ export function DriveDetail({
                             className="w-full max-h-[25%] object-contain"
                             autoPlay={false}
                             controls
+                            style={path.details?.width && path.details?.height ? {aspectRatio: path.details.width / path.details.height} : undefined}
                         />
                     </div>
                 )}
@@ -173,6 +177,39 @@ export function DriveDetail({
                     </div>
                 )}
 
+                {path.details && (path.details.width || path.details.height || path.details.duration || path.details.pageCount) && (
+                    <Table className="mt-4">
+                        <TableBody>
+                            {path.details.width && path.details.height && (
+                                <TableRow>
+                                    <TableCell className="font-medium px-0 w-20">Dimensions</TableCell>
+                                    <TableCell className="px">{path.details.width} × {path.details.height}</TableCell>
+                                </TableRow>
+                            )}
+                            {path.details.duration && (
+                                <TableRow>
+                                    <TableCell className="font-medium px-0 w-20">Duration</TableCell>
+                                    <TableCell className="px">{Math.floor(path.details.duration / 60)}:{String(Math.floor(path.details.duration % 60)).padStart(2, '0')}</TableCell>
+                                </TableRow>
+                            )}
+                            {path.details.pageCount && (
+                                <TableRow>
+                                    <TableCell className="font-medium px-0 w-20">Pages</TableCell>
+                                    <TableCell className="px">{path.details.pageCount}</TableCell>
+                                </TableRow>
+                            )}
+                            {Object.entries(path.details)
+                                .filter(([key]) => !['width', 'height', 'duration', 'pageCount'].includes(key))
+                                .map(([key, value]) => (
+                                    <TableRow key={key}>
+                                        <TableCell className="font-medium px-0 w-20 capitalize">{key}</TableCell>
+                                        <TableCell className="px truncate">{String(value)}</TableCell>
+                                    </TableRow>
+                                ))
+                            }
+                        </TableBody>
+                    </Table>
+                )}
 
                 <div className="mt-4">
                     <DriveAccessList

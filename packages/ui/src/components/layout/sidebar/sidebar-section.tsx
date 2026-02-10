@@ -1,7 +1,7 @@
 import {ReactNode} from 'react';
 import {cn} from "../../../lib/utils";
 
-export interface SidebarSectionProps {
+export type SidebarSectionProps = {
     title?: string;
     children: ReactNode;
     condensed?: boolean;

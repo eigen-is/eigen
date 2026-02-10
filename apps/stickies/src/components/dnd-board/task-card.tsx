@@ -67,7 +67,6 @@ export const TaskCard: React.FC<TaskCardProps> = ({task, isMobile, yjsDoc, owner
                 task={task}
                 yjsDoc={yjsDoc}
                 ownerId={ownerId}
-                comments={comments}
             />
         </>
     );

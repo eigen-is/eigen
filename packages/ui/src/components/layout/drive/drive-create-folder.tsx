@@ -1,9 +1,9 @@
 import {toast} from "sonner";
-import {DrivePath} from "@apps/api-server/types/drive";
-import {useCreateFolder, useInvalidateFolder} from "@workspace/lib/drive";
+import type {DrivePath} from "@workspace/lib/types/drive";
+import {useCreateFolder} from "@workspace/lib/drive";
 import {DriveCreateItemDialog} from "./drive-create-folder-item";
 
-export interface DriveCreateFolderProps {
+export type DriveCreateFolderProps = {
     path: DrivePath;
     open: boolean;
     onOpenChange: (open: boolean) => void;
@@ -20,8 +20,7 @@ export function DriveCreateFolder({
                                       onCancel,
                                       onAfterAction,
                                   }: DriveCreateFolderProps) {
-    const createFolderMutation = useCreateFolder(path.ownerId);
-    const invalidateFolder = useInvalidateFolder();
+    const createFolderMutation = useCreateFolder(path.ownerId, path.mountId);
 
     const handleOpenChange = (nextOpen: boolean) => {
         onOpenChange(nextOpen);
@@ -34,20 +33,16 @@ export function DriveCreateFolder({
                 parentId: path.id,
                 folderName: folderName,
             });
-            toast.success(`Folder "${folderName}" created successfully`);
             onOpenChange(false);
-
-            // Invalidate folder to refresh the folder contents
-            invalidateFolder(path.id);
 
             // Call onAfterAction if provided
             if (onAfterAction) {
                 onAfterAction('create', {name: folderName});
             }
 
-            if (onSave) onSave(newPath || '');
-        } catch (error: any) {
-            toast.error(error?.message || "Failed to create folder");
+            if (onSave) onSave(newPath?.id || '');
+        } catch (error: unknown) {
+            toast.error(error instanceof Error ? error.message : "Failed to create folder");
         }
     };
 

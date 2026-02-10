@@ -8,7 +8,7 @@ import {useAddLabel, useDeleteLabel, useUpdateLabel} from '@workspace/lib/contac
 import '@workspace/ui/globals.css';
 import './../css/globals.css';
 import {LabelProvider} from '@workspace/ui/components/layout/labels/label-provider';
-import {Label} from '@apps/api-server/types/label';
+import {Label} from '@workspace/lib/types/label';
 import {useCallback} from 'react';
 
 // Set up a Router instance

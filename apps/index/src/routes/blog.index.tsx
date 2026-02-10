@@ -48,7 +48,7 @@ function BlogOverviewComponent() {
                 </div>
 
                 {latestPost && (
-                    <BlogPost post={latestPost} />
+                    <BlogPost post={latestPost}/>
                 )}
 
                 {otherPosts.length > 0 && (
@@ -58,8 +58,8 @@ function BlogOverviewComponent() {
                             {otherPosts.map(post => (
                                 <article key={post.id}>
                                     <h3 className="text-xl font-semibold mb-1">
-                                        <Link 
-                                            to="/blog/$id" 
+                                        <Link
+                                            to="/blog/$id"
                                             params={{id: post.id}}
                                             className="hover:text-blue-600"
                                         >

@@ -1,27 +1,18 @@
-import {createFileRoute} from '@tanstack/react-router'
-import {useAuth} from '@workspace/lib/auth';
+import {createFileRoute, redirect} from '@tanstack/react-router'
 
 export const Route = createFileRoute('/')({
-    component: HomeComponent,
-})
-
-function HomeComponent() {
-    const navigate = Route.useNavigate();
-    const {user} = useAuth();
-
-    if (!user || !user.id) {
-        navigate({
-            to: '/login'
-        });
-    } else {
-        navigate({
-            to: '/fs/$ownerId/$pathId',
+    beforeLoad: ({context}) => {
+        const userId = context.auth?.user?.id;
+        if (!userId) {
+            throw redirect({to: '/login'});
+        }
+        throw redirect({
+            to: '/fs/$ownerId/$mountId/$pathId',
             params: {
-                ownerId: user.id,
+                ownerId: userId,
+                mountId: 'default',
                 pathId: 'root'
             }
         });
-    }
-
-    return null;
-}
+    },
+})

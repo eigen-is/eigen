@@ -1,4 +1,4 @@
-import {useState, useEffect} from "react";
+import {useEffect, useState} from "react";
 import {Calendar, FileText, HardDrive, LayoutDashboard, Mail, Menu, StickyNote, Users} from "lucide-react";
 import {useRouter} from "@tanstack/react-router";
 import {Button} from "@workspace/ui/components/button";
@@ -76,9 +76,9 @@ function UserDropdown({rootRoute}: { rootRoute: TopbarProps['rootRoute'] }) {
                     <Button variant="ghost"
                             className="relative h-8 w-8 rounded-full overflow-hidden p-0">
                         <UserAvatar
-                            name={auth.user.name}
-                            email={auth.user.email}
-                            userId={auth.user.id}
+                            name={auth.user?.name}
+                            email={auth.user?.email}
+                            userId={auth.user?.email}
                             size="sm"
                         />
                     </Button>
@@ -86,8 +86,8 @@ function UserDropdown({rootRoute}: { rootRoute: TopbarProps['rootRoute'] }) {
                 <DropdownMenuContent className="w-56" align="end" forceMount>
                     <DropdownMenuLabel className="font-normal">
                         <UserItem
-                            name={auth.user.name}
-                            email={auth.user.email}
+                            name={auth.user?.name}
+                            email={auth.user?.email}
                             className="p-0"
                         />
                     </DropdownMenuLabel>

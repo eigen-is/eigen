@@ -1,5 +1,5 @@
 import {createFileRoute, Outlet, redirect} from '@tanstack/react-router'
-import {AdminSidebar} from "../components/admin/admin-sidebar.tsx";
+import {AdminSidebar} from "../components/admin/admin-sidebar";
 import {useContext} from 'react';
 import {SidebarContext} from './__root';
 import {useIsMobile, useIsTablet} from "@workspace/lib/media";

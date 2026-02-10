@@ -2,8 +2,7 @@ import {createFileRoute, redirect, useNavigate} from '@tanstack/react-router';
 import {z} from 'zod';
 import {ContactEdit, ContactFormValues} from '../components/contacts/contact-edit';
 import {useAddContact, useContacts, useUpdateContact} from '@workspace/lib/contacts';
-import {type Contact} from "@apps/api-server/types/contact";
-import {toast} from "sonner";
+import {type Contact} from "@workspace/lib/types/contact";
 import {EigenLoader} from "@workspace/ui";
 
 // Define search params type with Zod schema
@@ -51,11 +50,15 @@ function EditContactRoute() {
     // Handle form submission
     const handleSave = async (data: ContactFormValues) => {
         try {
-            // Transformeer de data voor compatibiliteit met API
+            // Transform data for API compatibility (avatar is added by ContactEdit component)
+            const formData = data as ContactFormValues & {avatar?: string | null};
             const contactData: Omit<Contact, 'id'> = {
-                ...data,
-                birthday: data.birthday?.toISOString(),
-                labels: data.labels || []
+                ...formData,
+                firstName: formData.firstName || '',
+                lastName: formData.lastName || '',
+                birthday: formData.birthday?.toISOString(),
+                labels: formData.labels || [],
+                avatar: formData.avatar ?? ''
             };
 
             if (contactId) {
@@ -88,7 +91,6 @@ function EditContactRoute() {
                 params: {filterType, filterId},
                 search: contactId ? {contactId} : {},
             });
-            toast.success('Contact saved');
         } catch (error) {
             console.error('Error saving contact:', error);
             // Hier zou je een foutmelding kunnen tonen

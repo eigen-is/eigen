@@ -1,9 +1,9 @@
 import {toast} from "sonner";
-import {DrivePath} from "@apps/api-server/types/drive";
-import {useCreateStickies, useInvalidateFolder} from "@workspace/lib/drive";
+import type {DrivePath} from "@workspace/lib/types/drive";
+import {useCreateStickies} from "@workspace/lib/drive";
 import {DriveCreateItemDialog} from "./drive-create-folder-item";
 
-export interface DriveCreateStickiesProps {
+export type DriveCreateStickiesProps = {
     path: DrivePath;
     open: boolean;
     onOpenChange: (open: boolean) => void;
@@ -20,8 +20,7 @@ export function DriveCreateStickies({
                                         onCancel,
                                         onAfterAction,
                                     }: DriveCreateStickiesProps) {
-    const createStickiesMutation = useCreateStickies(path.ownerId);
-    const invalidateFolder = useInvalidateFolder();
+    const createStickiesMutation = useCreateStickies(path.ownerId, path.mountId);
 
     const handleOpenChange = (nextOpen: boolean) => {
         onOpenChange(nextOpen);
@@ -34,11 +33,7 @@ export function DriveCreateStickies({
                 parentId: path.id,
                 fileName: fileName,
             });
-            toast.success(`Stickies "${fileName}" created successfully`);
             onOpenChange(false);
-
-            // Invalidate folder to refresh the folder contents
-            invalidateFolder(path.id);
 
             // Call onAfterAction if provided
             if (onAfterAction) {
@@ -47,13 +42,13 @@ export function DriveCreateStickies({
 
             // Open the stickies board in a new window
             if (newPath) {
-                const url = `${import.meta.env.VITE_APP_STICKIES_URL}/board/${path.ownerId}/${newPath}`;
+                const url = `${import.meta.env.VITE_APP_STICKIES_URL}/board/${path.ownerId}/${path.mountId}/${newPath.id}`;
                 window.open(url, '_blank');
             }
 
-            if (onSave) onSave(newPath || '');
-        } catch (error: any) {
-            toast.error(error?.message || "Failed to create stickies");
+            if (onSave) onSave(newPath?.id || '');
+        } catch (error: unknown) {
+            toast.error(error instanceof Error ? error.message : "Failed to create stickies");
         }
     };
 

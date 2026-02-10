@@ -1,16 +1,15 @@
 import {useRef} from 'react';
 import {useUpload} from "../../layout/upload-provider/upload-provider";
-import {uploadWithProgress} from "../../layout/upload-provider/upload-with-progress";
+import {uploadWithProgress} from "../upload-provider/upload-with-progress";
+import {getDriveFileUploadUrl, getDriveFilesUploadUrl} from "@workspace/lib/api";
 
-// Interface for upload result
-export interface UploadResult {
+export type UploadResult = {
     success: boolean;
     fileName: string;
-    error?: any;
+    error?: unknown;
 }
 
-// Interface for upload options
-export interface FileUploadOptions {
+export type FileUploadOptions = {
     singleFileUrl?: string;
     multipleFilesUrl?: string;
     onSuccess?: (result: UploadResult) => void;
@@ -19,7 +18,7 @@ export interface FileUploadOptions {
 }
 
 // Custom hook for file upload functionality
-export function useFileUpload(ownerId: string, folderId: string, options: FileUploadOptions = {}) {
+export function useFileUpload(ownerId: string, mountId: string, folderId: string, options: FileUploadOptions = {}) {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const upload = useUpload();
 
@@ -38,8 +37,8 @@ export function useFileUpload(ownerId: string, folderId: string, options: FileUp
 
         // Use custom URLs if provided, otherwise use default URLs
         const url = multipleFiles
-            ? (options.multipleFilesUrl || `${import.meta.env.VITE_API_HOST}/drive/files/${ownerId}/${folderId}`)
-            : (options.singleFileUrl || `${import.meta.env.VITE_API_HOST}/drive/file/${ownerId}/${folderId}`);
+            ? (options.multipleFilesUrl || getDriveFilesUploadUrl(ownerId, mountId, folderId))
+            : (options.singleFileUrl || getDriveFileUploadUrl(ownerId, mountId, folderId));
 
         const name = multipleFiles ? 'multiple files' : files[0].name;
         const uploadHandler = upload.createUpload(name);
@@ -96,7 +95,7 @@ export function useFileUpload(ownerId: string, folderId: string, options: FileUp
                     return result;
                 }
             });
-        } catch (err: any) {
+        } catch (err: unknown) {
             uploadHandler.error();
 
             const result = {success: false, fileName: name, error: err};

@@ -15,7 +15,7 @@ import {SidebarSection} from '@workspace/ui/components/layout/sidebar/sidebar-se
 import {AppLogo} from '@workspace/ui/components/layout/app-logo';
 import {SidebarItem, StorageUsage} from "@workspace/ui";
 import {Separator} from '@workspace/ui/components/separator';
-import {DrivePath} from '@apps/api-server/types/drive';
+import {DrivePath} from '@workspace/lib/types/drive';
 import {useState} from 'react';
 import {useMatch, useNavigate} from '@tanstack/react-router';
 import {usePathInfo} from '@workspace/lib/drive';
@@ -55,17 +55,19 @@ export function DriveSidebar({
 
     // Check if we're in a filesystem route and get current path from URL
     const routeMatch = useMatch({
-        from: '/_auth/fs/$ownerId/$pathId',
+        from: '/_auth/fs/$ownerId/$mountId/$pathId',
         shouldThrow: false,
     });
 
     // Extract the parameters if we have a match
     const currentPathId = routeMatch?.params?.pathId;
     const currentOwnerId = routeMatch?.params?.ownerId;
+    const currentMountId = routeMatch?.params?.mountId;
 
     // Get path info for the current path
     const {data: currentPath} = usePathInfo(
         currentOwnerId || (rootPath?.ownerId || ''),
+        currentMountId || (rootPath?.mountId || 'default'),
         currentPathId || (rootPath?.id || '')
     );
 
@@ -83,9 +85,10 @@ export function DriveSidebar({
     // Define afterAction callback to refresh the content
     const handleAfterAction = () => {
         navigate({
-            to: '/fs/$ownerId/$pathId',
+            to: '/fs/$ownerId/$mountId/$pathId',
             params: {
                 ownerId: targetPath?.ownerId || '',
+                mountId: targetPath?.mountId || 'default',
                 pathId: targetPath?.id || '',
             }
         });
@@ -149,7 +152,7 @@ export function DriveSidebar({
             >
                 <SidebarItem
                     icon={<Home className="h-4 w-4"/>}
-                    to={rootPath ? `/fs/${rootPath.ownerId}/${rootPath.id}` : '/'}
+                    to={rootPath ? `/fs/${rootPath.ownerId}/${rootPath.mountId}/${rootPath.id}` : '/'}
                     label="Drive"
                     condensed={condensed}
                 />

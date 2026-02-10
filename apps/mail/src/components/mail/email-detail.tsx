@@ -2,33 +2,27 @@ import {
     AlertTriangle,
     Archive,
     ArrowLeft,
-    BadgeInfo,
-    BadgeInfoIcon,
     Forward,
-    InfoIcon,
-    Mail,
     MoreVertical,
     Paperclip,
-    Printer,
     Reply,
     ReplyAll,
     Trash2
 } from "lucide-react";
 import {cn} from "@workspace/ui/lib/utils";
 import {Button} from "@workspace/ui/components/button";
-import {DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger} from "@workspace/ui/components/dropdown-menu";
+import {DropdownMenu, DropdownMenuTrigger} from "@workspace/ui/components/dropdown-menu";
 import {format} from "date-fns";
-import {Email, MaildirMailbox} from "@apps/api-server/types/mail";
+import {AddressObject, Attachment, Email, MaildirMailbox} from "@workspace/lib/types/mail";
 import {ShadowContent} from "@workspace/ui/components/layout/shadow-content";
 import {UserItem} from "@workspace/ui/components/layout/user-item";
 import {TooltipButton} from "@workspace/ui";
 import {Separator} from "@workspace/ui/components/separator";
+import {getMailAttachmentUrl} from "@workspace/lib/api";
 import {EmailContextMenu} from "./email-context-menu";
-import { printDocument } from "@workspace/ui/lib/printElement";
-import { AddressObject } from "../../../../api-server/src/lib/mail/mailtypes";
-import { Table, TableBody, TableCell, TableRow } from "@workspace/ui/components/table";
-import path from "path";
-import { useCallback, useState } from "react";
+import {printDocument} from "@workspace/ui/lib/printElement";
+import {Table, TableBody, TableCell, TableRow} from "@workspace/ui/components/table";
+import {useEffect, useRef} from "react";
 
 interface EmailDetailProps {
     email: Email | null;
@@ -46,23 +40,28 @@ interface EmailDetailProps {
     mailboxes?: MaildirMailbox[];
 }
 
-export function MailLink({email, name, mailLink = true, compact = false}: {email?: string, name:string, mailLink?: boolean, compact?: boolean}) {
-    
+export function MailLink({email, name, mailLink = true, compact = false}: {
+    email?: string,
+    name: string,
+    mailLink?: boolean,
+    compact?: boolean
+}) {
+
     let label = name && email ? (<>{name} &lt;{email}&gt;</>) : (email ?? undefined);
     if (compact) {
         label = email ?? undefined;
     }
     return email && (
         <span className="text-xs text-gray-500">
-            {mailLink ? 
-                <a 
-                    className="hover:underline" 
-                    href={`${import.meta.env.VITE_APP_MAIL_URL}/box/inbox?mode=compose&to=${email}`} 
+            {mailLink ?
+                <a
+                    className="hover:underline"
+                    href={`${import.meta.env.VITE_APP_MAIL_URL}/box/inbox?mode=compose&to=${email}`}
                     title={email}
                 >
                     {label}
-                </a> 
-            : (label)}
+                </a>
+                : (label)}
         </span>)
 }
 
@@ -82,16 +81,22 @@ export function EmailDetail({
                                 mailboxes = [],
                                 ...props
                             }: EmailDetailProps) {
+    const hasMarkedAsRead = useRef<string | null>(null);
+
+    useEffect(() => {
+        if (email && !email.isRead && hasMarkedAsRead.current !== email.id) {
+            hasMarkedAsRead.current = email.id;
+            toggleMailRead(email, true);
+        }
+    }, [email, toggleMailRead]);
+
     if (!email) {
-        console.log('No email provided to EmailDetail component');
         return (
             <div className="flex h-full items-center justify-center text-muted-foreground">
                 Email data not available
             </div>
         );
     }
-
-    toggleMailRead(email, true);
 
     console.log('Rendering EmailDetail with email:', email);
 
@@ -119,13 +124,15 @@ export function EmailDetail({
 
     // Get email content
     const emailContent = email.html || email.textAsHtml || email.text || '';
-    
-    const formatContactObjects = (contacts: AddressObject | AddressObject[], compact:boolean = false) => {
-        return Array.isArray(contacts)? contacts.map((contact) => formatContactObject(contact, compact)) : formatContactObject(contacts, compact);
+
+    const formatContactObjects = (contacts: AddressObject | AddressObject[], compact: boolean = false) => {
+        return Array.isArray(contacts) ? contacts.map((contact) => formatContactObject(contact, compact)) : formatContactObject(contacts, compact);
     };
-    
-    const formatContactObject = (contact: AddressObject, compact:boolean = false) => {
-        return contact.value.map((address, idx, arr) => (<><MailLink email={address.address} name={address.name} mailLink={!compact} compact={compact} />{idx < arr.length - 1 ? ', ' : ''}</>));
+
+    const formatContactObject = (contact: AddressObject, compact: boolean = false) => {
+        return contact.value.map((address, idx, arr) => (<><MailLink email={address.address} name={address.name}
+                                                                     mailLink={!compact}
+                                                                     compact={compact}/>{idx < arr.length - 1 ? ', ' : ''}</>));
     };
 
     return (
@@ -230,57 +237,57 @@ export function EmailDetail({
                                 email={fromEmail}
                                 label={formattedDate}
                                 mailLink={true}
-                                />
+                            />
                         </div>
-                        
+
                     </div>
-                    
+
                     {needsToShowDetails && (
                         <details className="group">
                             <summary className="text-xs truncate p-1 cursor-pointer hover:bg-muted rounded-md">
                                 <span className="opacity-100 group-open:opacity-0">
-                                    {needsToShowTo && email.to && <> to: {formatContactObjects(email.to, true)}</>}  
-                                    {needsToShowCc && email.cc && <> cc: {formatContactObjects(email.cc,true)}</>}   
-                                    {needsToShowBcc && email.bcc && <> bcc: {formatContactObjects(email.bcc,true)}</>}
+                                    {needsToShowTo && email.to && <> to: {formatContactObjects(email.to, true)}</>}
+                                    {needsToShowCc && email.cc && <> cc: {formatContactObjects(email.cc, true)}</>}
+                                    {needsToShowBcc && email.bcc && <> bcc: {formatContactObjects(email.bcc, true)}</>}
                                 </span>
                             </summary>
-                        <div>
-                            <Table className="text-sm text-muted-foreground">
-                                <TableBody>
-                                    <TableRow className="border-none">
-                                        <TableCell className="text-xs w-10 px-1 py-1">From</TableCell>
-                                        <TableCell className="truncate px-1 py-1">
-                                            {email.from && formatContactObjects(email.from)}
-                                        </TableCell>
-                                    </TableRow>
-                                    {needsToShowTo ? (
-                                    <TableRow className="border-none">
-                                        <TableCell className="text-xs w-10 px-1 py-1">To</TableCell>
-                                        <TableCell className="truncate px-1 py-1">
-                                            {email.to && formatContactObjects(email.to)}
-                                        </TableCell>
-                                    </TableRow>
-                                    ) : null}
-                                    {(needsToShowCc && email.cc) ? (
+                            <div>
+                                <Table className="text-sm text-muted-foreground">
+                                    <TableBody>
                                         <TableRow className="border-none">
-                                            <TableCell className="text-xs px-1 py-1">Cc</TableCell>
+                                            <TableCell className="text-xs w-10 px-1 py-1">From</TableCell>
                                             <TableCell className="truncate px-1 py-1">
-                                                {email.cc && formatContactObjects(email.cc)}
+                                                {email.from && formatContactObjects(email.from)}
                                             </TableCell>
                                         </TableRow>
-                                    ) : null}
-                                    {(needsToShowBcc && email.bcc) ? (
-                                        <TableRow className="border-none">
-                                            <TableCell className="text-xs px-1 py-1">Bcc</TableCell>
-                                            <TableCell className="truncate px-1 py-1">
-                                                {formatContactObjects(email.bcc)}
-                                            </TableCell>
-                                        </TableRow>
-                                    ) : null}
-                                </TableBody>
-                            </Table>
-                        </div>
-                    </details>
+                                        {needsToShowTo ? (
+                                            <TableRow className="border-none">
+                                                <TableCell className="text-xs w-10 px-1 py-1">To</TableCell>
+                                                <TableCell className="truncate px-1 py-1">
+                                                    {email.to && formatContactObjects(email.to)}
+                                                </TableCell>
+                                            </TableRow>
+                                        ) : null}
+                                        {(needsToShowCc && email.cc) ? (
+                                            <TableRow className="border-none">
+                                                <TableCell className="text-xs px-1 py-1">Cc</TableCell>
+                                                <TableCell className="truncate px-1 py-1">
+                                                    {email.cc && formatContactObjects(email.cc)}
+                                                </TableCell>
+                                            </TableRow>
+                                        ) : null}
+                                        {(needsToShowBcc && email.bcc) ? (
+                                            <TableRow className="border-none">
+                                                <TableCell className="text-xs px-1 py-1">Bcc</TableCell>
+                                                <TableCell className="truncate px-1 py-1">
+                                                    {formatContactObjects(email.bcc)}
+                                                </TableCell>
+                                            </TableRow>
+                                        ) : null}
+                                    </TableBody>
+                                </Table>
+                            </div>
+                        </details>
                     )}
 
                     <Separator/>
@@ -309,13 +316,13 @@ export function EmailDetail({
                             </h3>
 
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                                {email.attachments.map((attachment: any, index: number) => (
+                                {email.attachments.map((attachment: Attachment, index: number) => (
                                     <div
                                         key={index}
                                         className="flex items-center p-3 border rounded-md hover:bg-muted/50 cursor-pointer select-none"
                                         onClick={() => {
                                             const fileName = attachment.filename || `Attachment ${index + 1}`;
-                                            const downloadUrl = `${import.meta.env.VITE_API_HOST}/mail/message/${email.id}/attachment/${index}/${encodeURIComponent(fileName)}`;
+                                            const downloadUrl = getMailAttachmentUrl(email.id, index, fileName);
 
                                             // Create a temporary anchor element to trigger the download
                                             const a = document.createElement('a');
