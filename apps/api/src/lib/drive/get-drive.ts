@@ -15,7 +15,10 @@ export async function getSharedDrive(ownerId: string, user: User) {
     }
     if (ownerId !== user.id) {
         const owner = await getUserById(ownerId);
-        const home = await getHome(owner as User);
+        if (!owner) {
+            throw new Error(`Owner not found: ${ownerId}`);
+        }
+        const home = await getHome(owner);
         return new SharedDrive(home, user);
     } else {
         return getDrive(user);
