@@ -68,13 +68,6 @@ function App() {
 }
 
 
-// Register things for typesafety
-declare module '@tanstack/react-router' {
-    interface Register {
-        router: typeof router
-    }
-}
-
 const rootElement = document.getElementById('app')!
 
 if (!rootElement.innerHTML) {

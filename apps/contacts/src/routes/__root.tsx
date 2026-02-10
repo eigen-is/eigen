@@ -1,46 +1,11 @@
-import {createRootRouteWithContext, Outlet} from '@tanstack/react-router'
-import {TanStackRouterDevtools} from '@tanstack/react-router-devtools'
+import {createRootRouteWithContext} from '@tanstack/react-router'
 import {AuthContextType} from "@workspace/lib/auth";
-import {Topbar} from "@workspace/ui/components/layout/topbar";
-import {createContext, useState} from 'react';
-import {useIsMobile} from '@workspace/lib/media';
-
-// Create a context for sidebar state
-export const SidebarContext = createContext<{
-    sidebarOpen: boolean;
-    setSidebarOpen: (open: boolean) => void;
-}>({
-    sidebarOpen: false,
-    setSidebarOpen: () => {
-    },
-});
+import {RootLayout} from "@workspace/ui/components/layout/root-layout";
 
 interface MyRouterContext {
     auth: AuthContextType;
 }
 
 export const Route = createRootRouteWithContext<MyRouterContext>()({
-    component: RootComponent
+    component: () => <RootLayout rootRoute={Route} outletWrapper="flex-1 overflow-hidden"/>,
 });
-
-function RootComponent() {
-    const [sidebarOpen, setSidebarOpen] = useState(false);
-    const isMobile = useIsMobile();
-
-    return (
-        <SidebarContext.Provider value={{sidebarOpen, setSidebarOpen}}>
-            <div className="flex flex-col h-dvh">
-                <Topbar
-                    rootRoute={Route}
-                    showMobileMenu={true}
-                    onMobileMenuClick={() => setSidebarOpen(true)}
-                    isMobile={isMobile}
-                />
-                <div className="flex-1 overflow-hidden">
-                    <Outlet/>
-                </div>
-            </div>
-            <TanStackRouterDevtools position="bottom-right"/>
-        </SidebarContext.Provider>
-    );
-}
