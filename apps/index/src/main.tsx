@@ -29,8 +29,9 @@ function InnerApp() {
     return <RouterProvider router={router} context={{auth}}/>
 }
 
+const queryClient = new QueryClient();
+
 function App() {
-    const queryClient = new QueryClient();
     return (
         <QueryClientProvider client={queryClient}>
             <AuthProvider>
@@ -39,14 +40,6 @@ function App() {
             </AuthProvider>
         </QueryClientProvider>
     )
-}
-
-
-// Register things for typesafety
-declare module '@tanstack/react-router' {
-    interface Register {
-        router: typeof router
-    }
 }
 
 const rootElement = document.getElementById('app')!
