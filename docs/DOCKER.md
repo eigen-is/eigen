@@ -27,7 +27,7 @@ The Docker setup uses a **local build approach** for optimal efficiency:
 
 ## Environment Configuration
 
-Update `.env.production` with your production URLs:
+Update `.env` with your production URLs (this file is gitignored). For local Docker testing, use `.env.docker.local` instead:
 
 ```env
 PRODUCTION=1
