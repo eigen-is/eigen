@@ -1,6 +1,6 @@
 import {DrivePath} from "@workspace/lib/types/drive";
 import {EigenLoader} from "@workspace/ui";
-import {DriveList} from "./drive-list";
+import {DriveList, DriveListToolbar} from "./drive-list";
 import {DriveDetail, DriveDetailToolbar} from "./drive-detail";
 import {DriveAccessDialog} from "./drive-access-dialog";
 import {DriveCreateDoc} from "./drive-create-doc";
@@ -149,6 +149,22 @@ export function DriveLayout({
         onMove: allowMove ? handleMovePath : undefined,
     };
 
+    const listToolbar = (
+        <DriveListToolbar
+            ownerId={ownerId}
+            mountId={mountId}
+            pathId={pathId}
+            showBreadcrumb={showBreadcrumb}
+            onRowSelect={onRowSelect}
+            onRowActivate={onRowActivate}
+            activeRowId={pid}
+            onCreateFolder={allowCreateFolder ? dialogs.createFolder.openDialog : undefined}
+            onUploadFile={allowUpload ? handleFileUpload : undefined}
+            onCreateDoc={allowCreateDoc ? dialogs.createDoc.openDialog : undefined}
+            onCreateStickies={allowCreateStickies ? dialogs.createStickies.openDialog : undefined}
+        />
+    );
+
     const detailPath = selectedPath || currentPath;
 
     const detailProps = {
@@ -181,10 +197,8 @@ export function DriveLayout({
     return (
         <>
             <ColumnLayout mobileColumn={mobileShowDetail ? 'detail' : 'list'}>
-                <Column id="list" width="flex">
-                    <div className="h-full overflow-hidden border-r">
-                        <DriveList {...listProps} />
-                    </div>
+                <Column id="list" width="flex" toolbar={listToolbar}>
+                    <DriveList {...listProps} />
                 </Column>
                 {showDetail && (
                     <Column id="detail" width={isMobile ? 'flex' : '400px'} onBack={onBackToList} toolbar={detailToolbar}>
