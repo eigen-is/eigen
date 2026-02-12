@@ -44,7 +44,7 @@ function MailRoute() {
     const {filterType, filterId} = Route.useParams();
     const {mailId, mode, to} = Route.useSearch();
     const navigate = useNavigate();
-    const {isMobile, isTablet, navigateToColumn} = useLayout();
+    const {isMobile, isTablet} = useLayout();
     const deleteMail = useDeleteEmail();
     const moveMail = useMoveEmail();
     const toggleMailRead = useToggleReadEmail();
@@ -236,11 +236,6 @@ function MailRoute() {
 
     const listWidth = isTablet ? '320px' : '400px';
     const showDetail = !!(selectedEmail || mode === "compose");
-    const activeCol = isMobile ? (showDetail ? 'detail' : 'list') : 'list';
-
-    useEffect(() => {
-        navigateToColumn(activeCol);
-    }, [activeCol, navigateToColumn]);
 
     const detailContent = showDetail ? (
         <div className="h-full">
@@ -293,7 +288,7 @@ function MailRoute() {
                 itemName={pendingDeleteMail?.subject || undefined}
                 onDelete={confirmDeleteEmail}
             />
-            <ColumnLayout>
+            <ColumnLayout mobileColumn={showDetail ? 'detail' : 'list'}>
                 <Column id="list" width={listWidth}>
                     <div className="flex flex-col border-r h-full overflow-hidden">
                         <EmailList
@@ -313,7 +308,7 @@ function MailRoute() {
                         />
                     </div>
                 </Column>
-                <Column id="detail" width="flex" backTo="list">
+                <Column id="detail" width="flex" onBack={handleBackToList}>
                     {detailContent}
                 </Column>
             </ColumnLayout>

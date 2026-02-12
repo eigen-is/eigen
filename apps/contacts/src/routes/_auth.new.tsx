@@ -3,8 +3,6 @@ import {ContactEdit, ContactEditToolbar, type ContactFormValues} from '../compon
 import {type Contact} from "@workspace/lib/types/contact";
 import {useAddContact} from '@workspace/lib/contacts';
 import {ColumnLayout, Column} from "@workspace/ui/components/layout/column-layout";
-import {useLayout} from "@workspace/ui/components/layout/layout-context";
-import {useEffect} from 'react';
 
 export const Route = createFileRoute('/_auth/new')({
     component: NewContactRoute,
@@ -13,11 +11,6 @@ export const Route = createFileRoute('/_auth/new')({
 function NewContactRoute() {
     const navigate = useNavigate();
     const addContactMutation = useAddContact();
-    const {navigateToColumn} = useLayout();
-
-    useEffect(() => {
-        navigateToColumn('editor');
-    }, [navigateToColumn]);
 
     // Empty contact object for new contacts
     const emptyContact: Contact = {
@@ -73,7 +66,7 @@ function NewContactRoute() {
     };
 
     return (
-        <ColumnLayout>
+        <ColumnLayout mobileColumn="editor">
             <Column id="editor" width="flex" onBack={handleCancel} toolbar={<ContactEditToolbar isNew={true}/>}>
                 <ContactEdit
                     contact={emptyContact}
