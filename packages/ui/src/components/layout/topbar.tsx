@@ -16,7 +16,7 @@ import {apps} from "@workspace/lib/apps.ts";
 import {UserItem} from "@workspace/ui/components/layout/user-item";
 import {AppLogo} from "./app-logo";
 import {UserAvatar} from "@workspace/ui";
-import {useApp} from "./app-context";
+import {useLayout} from "./layout-context";
 
 // Meer generieke definitie voor de Route parameter
 type NavigateFunction = (...args: any[]) => any;
@@ -25,16 +25,13 @@ interface TopbarProps {
     rootRoute: {
         useNavigate: () => NavigateFunction;
     };
-    showMobileMenu?: boolean;
-    onMobileMenuClick?: () => void;
-    isMobile?: boolean;
 }
 
 function UserDropdown({rootRoute}: { rootRoute: TopbarProps['rootRoute'] }) {
     const router = useRouter();
     const navigate = rootRoute.useNavigate();
     const auth = useAuth();
-    const {appName} = useApp();
+    const {appName} = useLayout();
     const [logoutDialogOpen, setLogoutDialogOpen] = useState(false);
 
     const handleLogout = () => {
@@ -136,29 +133,53 @@ function UserDropdown({rootRoute}: { rootRoute: TopbarProps['rootRoute'] }) {
         : null;
 }
 
-export function Topbar({rootRoute, showMobileMenu, onMobileMenuClick, isMobile}: TopbarProps) {
-    const {appName} = useApp();
+export function Topbar({rootRoute}: TopbarProps) {
+    const {appName, isMobile, isTablet, sidebarMode, setSidebarOpen, toolbars} = useLayout();
 
     useEffect(() => {
         document.title = `eigen|${appName}>`;
     }, [appName]);
 
+    const showBurger = isMobile && sidebarMode !== 'none';
+
+    const hasColumnToolbars = !isMobile && toolbars.length > 0;
+    const sidebarWidth = sidebarMode === 'none' ? '0px' : isTablet ? '64px' : '256px';
+
     return (
-        <header className="bg-app">
-            <div className="flex h-12 items-center px-4">
-                {isMobile && showMobileMenu && (
-                    <Button
-                        variant="ghost"
-                        size="icon"
-                        onClick={onMobileMenuClick}
-                        className="mr-2 text-white hover:bg-primary/20 hover:text-white"
-                    >
-                        <Menu className="h-5 w-5"/>
-                        <span className="sr-only">Open menu</span>
-                    </Button>
+        <header className="bg-app shrink-0">
+            <div className="flex h-12 items-center">
+                <div className="flex items-center px-4 shrink-0" style={hasColumnToolbars ? {width: sidebarWidth} : undefined}>
+                    {showBurger && (
+                        <Button
+                            variant="ghost"
+                            size="icon"
+                            onClick={() => setSidebarOpen(true)}
+                            className="mr-2 text-white hover:bg-primary/20 hover:text-white"
+                        >
+                            <Menu className="h-5 w-5"/>
+                            <span className="sr-only">Open menu</span>
+                        </Button>
+                    )}
+                    <AppLogo appName={appName.toLowerCase()}/>
+                </div>
+
+                {hasColumnToolbars ? (
+                    <>
+                        {toolbars.map(entry => (
+                            <div
+                                key={entry.columnId}
+                                className="flex items-center px-4 h-full border-l border-white/10"
+                                style={entry.width === 'flex' ? {flex: '1 1 auto', minWidth: 0} : {width: entry.width, flexShrink: 0}}
+                            >
+                                {entry.content}
+                            </div>
+                        ))}
+                    </>
+                ) : (
+                    <div className="flex-1"/>
                 )}
-                <AppLogo appName={appName.toLowerCase()}/>
-                <div className="ml-auto flex items-center space-x-4">
+
+                <div className="flex items-center px-4 shrink-0">
                     <UserDropdown rootRoute={rootRoute}/>
                 </div>
             </div>

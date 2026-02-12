@@ -3,7 +3,7 @@ import {usePathInfo, useSharedPaths, DEFAULT_MOUNT_ID} from '@workspace/lib/driv
 import {DriveLayout} from "@workspace/ui/components/layout/drive/drive-layout";
 import {DrivePath, DriveSearchParams} from "@workspace/lib/types/drive";
 import {useAuth} from '@workspace/lib/auth';
-import {useIsMobile} from "@workspace/lib/media";
+import {useLayout} from "@workspace/ui/components/layout/layout-context";
 import {EigenLoader} from '@workspace/ui';
 import {useState} from "react";
 import {FilePreview} from '../components/drive/file-preview';
@@ -25,7 +25,7 @@ function DriveRoute() {
     const ownerId = auth.user!.id;
     const mountId = DEFAULT_MOUNT_ID;
     const {data: selectedPath = null} = usePathInfo(uid || '', mountId, pid || '');
-    const isMobile = useIsMobile();
+    const {isMobile} = useLayout();
     const [preview, setPreview] = useState<{ url: string; mimeType: string } | null>(null);
 
     // Fetch folder content and path information

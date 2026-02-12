@@ -3,9 +3,9 @@ import {useMimeContent, usePathInfo} from '@workspace/lib/drive';
 import {DriveLayout} from "@workspace/ui/components/layout/drive/drive-layout";
 import {DrivePath, DriveSearchParams} from "@workspace/lib/types/drive";
 import {useAuth} from '@workspace/lib/auth';
-import {useIsMobile} from "@workspace/lib/media";
+import {useLayout} from "@workspace/ui/components/layout/layout-context";
 import {useContext} from 'react';
-import {DriveContext} from './_auth._sidebar';
+import {DriveContext} from './__root';
 
 export const Route = createFileRoute('/_auth/_sidebar/mime/$mimeType')({
     component: DriveRoute,
@@ -23,7 +23,7 @@ function DriveRoute() {
     const ownerId = auth.user!.id;
     const {rootPath, mountId} = useContext(DriveContext);
     const {data: selectedPath = null} = usePathInfo(ownerId, mountId, pid);
-    const isMobile = useIsMobile();
+    const {isMobile} = useLayout();
 
     // Fetch folder content and path information
     const {
