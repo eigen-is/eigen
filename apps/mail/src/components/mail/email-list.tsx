@@ -7,8 +7,28 @@ import {EmailSummary, MaildirMailbox} from "@workspace/lib/types/mail";
 import {DropdownMenu, DropdownMenuTrigger,} from "@workspace/ui/components/dropdown-menu";
 import {EmailContextMenu} from "./email-context-menu";
 
+interface EmailListToolbarProps {
+    searchQuery: string;
+    onSearchChange: (query: string) => void;
+}
+
+export function EmailListToolbar({searchQuery, onSearchChange}: EmailListToolbarProps) {
+    return (
+        <div className="relative flex-1 min-w-0">
+            <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"/>
+            <Input
+                placeholder="Search emails..."
+                value={searchQuery}
+                onChange={(e) => onSearchChange(e.target.value)}
+                className="pl-8 w-full h-8 bg-white"
+            />
+        </div>
+    );
+}
+
 interface EmailListProps {
     emails: EmailSummary[];
+    searchQuery: string;
     onRowClick: (emailId: string) => void;
     activeRowId?: string;
     isLoading?: boolean;
@@ -26,6 +46,7 @@ interface EmailListProps {
 
 export function EmailList({
                               emails,
+                              searchQuery,
                               isLoading,
                               activeRowId,
                               onRowClick,
@@ -39,8 +60,6 @@ export function EmailList({
                               mailboxes = [],
                               currentFolderId = ""
                           }: EmailListProps) {
-    // State for filtering
-    const [globalFilter, setGlobalFilter] = useState("");
     // State voor het bijhouden van de huidige geselecteerde index
     const [selectedIndex, setSelectedIndex] = useState<number>(-1);
     // State for the context menu
@@ -65,11 +84,10 @@ export function EmailList({
         }
     };
 
-    // Gefilterde e-mails voor gebruik met toetsenbord navigatie
     const filteredEmails = useMemo(() => {
-        const globalFilterLowerCase = globalFilter.toLowerCase();
-        return [...emails].filter(email => email.subject.toLowerCase().includes(globalFilterLowerCase) || email.fromShort.toLowerCase().includes(globalFilterLowerCase) || email.textShort.toLowerCase().includes(globalFilterLowerCase)).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    }, [emails, globalFilter]);
+        const queryLower = searchQuery.toLowerCase();
+        return [...emails].filter(email => email.subject.toLowerCase().includes(queryLower) || email.fromShort.toLowerCase().includes(queryLower) || email.textShort.toLowerCase().includes(queryLower)).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+    }, [emails, searchQuery]);
 
     // Effect om selectedIndex bij te werken wanneer activeRowId verandert
     useEffect(() => {
@@ -183,20 +201,7 @@ export function EmailList({
 
     return (
         <div className="w-full h-full flex flex-col overflow-hidden bg-white">
-            {/* Search header */}
-            <div className="flex items-center h-12 px-4 border-b">
-                <div className="relative w-full">
-                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"/>
-                    <Input
-                        placeholder="Search emails..."
-                        value={globalFilter}
-                        onChange={(e) => setGlobalFilter(e.target.value)}
-                        className="pl-8 w-full h-9"
-                    />
-                </div>
-            </div>
-
-            {/* Email list as single column with blocks */}
+            {/* Email list */}
             <div
                 className="flex-1 overflow-y-auto outline-none"
                 tabIndex={0}
