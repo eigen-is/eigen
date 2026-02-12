@@ -1,14 +1,8 @@
-import {createContext, ReactNode, useContext} from 'react';
+import {createContext, useContext} from 'react';
 
-type ToolbarEntry = {
+type ToolbarSlot = {
     columnId: string;
     width: string;
-    content: ReactNode;
-}
-
-type SecondaryToolbarEntry = {
-    columnId: string;
-    content: ReactNode;
 }
 
 export type LayoutContextType = {
@@ -23,12 +17,11 @@ export type LayoutContextType = {
     navigateToColumn: (id: string) => void;
     goBack: () => void;
     columnHistory: string[];
-    toolbars: ToolbarEntry[];
-    registerToolbar: (columnId: string, width: string, content: ReactNode) => void;
+    toolbarSlots: ToolbarSlot[];
+    registerToolbar: (columnId: string, width: string) => void;
     unregisterToolbar: (columnId: string) => void;
-    secondaryToolbars: SecondaryToolbarEntry[];
-    registerSecondaryToolbar: (columnId: string, content: ReactNode) => void;
-    unregisterSecondaryToolbar: (columnId: string) => void;
+    getToolbarPortalNode: (columnId: string) => HTMLElement | null;
+    getSecondaryToolbarPortalNode: () => HTMLElement | null;
 }
 
 export const LayoutContext = createContext<LayoutContextType>({
@@ -43,12 +36,11 @@ export const LayoutContext = createContext<LayoutContextType>({
     navigateToColumn: () => {},
     goBack: () => {},
     columnHistory: [],
-    toolbars: [],
+    toolbarSlots: [],
     registerToolbar: () => {},
     unregisterToolbar: () => {},
-    secondaryToolbars: [],
-    registerSecondaryToolbar: () => {},
-    unregisterSecondaryToolbar: () => {},
+    getToolbarPortalNode: () => null,
+    getSecondaryToolbarPortalNode: () => null,
 });
 
 export function useLayout() {

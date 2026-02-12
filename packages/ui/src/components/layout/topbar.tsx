@@ -134,7 +134,7 @@ function UserDropdown({rootRoute}: { rootRoute: TopbarProps['rootRoute'] }) {
 }
 
 export function Topbar({rootRoute}: TopbarProps) {
-    const {appName, isMobile, isTablet, sidebarMode, setSidebarOpen, toolbars} = useLayout();
+    const {appName, isMobile, isTablet, sidebarMode, setSidebarOpen, toolbarSlots} = useLayout();
 
     useEffect(() => {
         document.title = `eigen|${appName}>`;
@@ -142,7 +142,7 @@ export function Topbar({rootRoute}: TopbarProps) {
 
     const showBurger = isMobile && sidebarMode !== 'none';
 
-    const hasColumnToolbars = !isMobile && toolbars.length > 0;
+    const hasColumnToolbars = !isMobile && toolbarSlots.length > 0;
     const sidebarWidth = sidebarMode === 'none' ? '0px' : isTablet ? '64px' : '256px';
 
     return (
@@ -165,14 +165,13 @@ export function Topbar({rootRoute}: TopbarProps) {
 
                 {hasColumnToolbars ? (
                     <>
-                        {toolbars.map(entry => (
+                        {toolbarSlots.map(slot => (
                             <div
-                                key={entry.columnId}
+                                key={slot.columnId}
+                                data-toolbar-slot={slot.columnId}
                                 className="flex items-center px-4 h-full border-l border-white/10"
-                                style={entry.width === 'flex' ? {flex: '1 1 auto', minWidth: 0} : {width: entry.width, flexShrink: 0}}
-                            >
-                                {entry.content}
-                            </div>
+                                style={slot.width === 'flex' ? {flex: '1 1 auto', minWidth: 0} : {width: slot.width, flexShrink: 0}}
+                            />
                         ))}
                     </>
                 ) : (
