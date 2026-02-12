@@ -1,4 +1,5 @@
-import {ReactNode, useEffect} from 'react';
+import {ReactNode, useEffect, useState} from 'react';
+import {createPortal} from 'react-dom';
 import {useLayout} from './layout-context';
 
 type ColumnProps = {
@@ -10,29 +11,48 @@ type ColumnProps = {
     children: ReactNode;
 }
 
-function Column({id, width, toolbar, secondaryToolbar, children}: ColumnProps) {
+function ToolbarPortal({columnId, children}: {columnId: string; children: ReactNode}) {
+    const {isMobile, activeColumn, getToolbarPortalNode, getSecondaryToolbarPortalNode} = useLayout();
+    const [node, setNode] = useState<HTMLElement | null>(null);
+
+    useEffect(() => {
+        const findNode = () => {
+            if (isMobile) {
+                if (activeColumn === columnId) {
+                    return getSecondaryToolbarPortalNode();
+                }
+                return null;
+            }
+            return getToolbarPortalNode(columnId);
+        };
+
+        const target = findNode();
+        setNode(target);
+
+        if (!target) {
+            const timer = requestAnimationFrame(() => setNode(findNode()));
+            return () => cancelAnimationFrame(timer);
+        }
+    }, [columnId, isMobile, activeColumn, getToolbarPortalNode, getSecondaryToolbarPortalNode]);
+
+    if (!node || !children) return null;
+    return createPortal(children, node);
+}
+
+function Column({id, width, toolbar, children}: ColumnProps) {
     const {
         isMobile,
         activeColumn,
         registerToolbar,
         unregisterToolbar,
-        registerSecondaryToolbar,
-        unregisterSecondaryToolbar,
     } = useLayout();
 
     useEffect(() => {
-        if (toolbar) {
-            registerToolbar(id, width, toolbar);
+        if (toolbar !== undefined) {
+            registerToolbar(id, width);
         }
         return () => unregisterToolbar(id);
-    }, [id, width, toolbar]);
-
-    useEffect(() => {
-        if (secondaryToolbar) {
-            registerSecondaryToolbar(id, secondaryToolbar);
-        }
-        return () => unregisterSecondaryToolbar(id);
-    }, [id, secondaryToolbar]);
+    }, [id, width]);
 
     if (isMobile && activeColumn !== id) return null;
 
@@ -43,9 +63,12 @@ function Column({id, width, toolbar, secondaryToolbar, children}: ColumnProps) {
             : {width, flexShrink: 0};
 
     return (
-        <div className="h-full overflow-hidden" style={style}>
-            {children}
-        </div>
+        <>
+            <ToolbarPortal columnId={id}>{toolbar}</ToolbarPortal>
+            <div className="h-full overflow-hidden" style={style}>
+                {children}
+            </div>
+        </>
     );
 }
 
