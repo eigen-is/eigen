@@ -1,11 +1,22 @@
-import {createRootRouteWithContext} from '@tanstack/react-router'
+import {createRootRouteWithContext, Outlet} from '@tanstack/react-router'
 import {AuthContextType} from "@workspace/lib/auth";
-import {RootLayout} from "@workspace/ui/components/layout/root-layout";
+import {AppShell} from "@workspace/ui/components/layout/app-shell";
+import {ContactsSidebar} from "../components/contacts/contacts-sidebar";
 
 interface MyRouterContext {
     auth: AuthContextType;
 }
 
 export const Route = createRootRouteWithContext<MyRouterContext>()({
-    component: () => <RootLayout rootRoute={Route} outletWrapper="flex-1 overflow-hidden"/>,
+    component: () => (
+        <AppShell
+            appName="contacts"
+            rootRoute={Route}
+            sidebar={({condensed, isMobile, onClose}) => (
+                <ContactsSidebar condensed={condensed} isMobile={isMobile} onClose={onClose}/>
+            )}
+        >
+            <Outlet/>
+        </AppShell>
+    ),
 });

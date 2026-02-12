@@ -1,6 +1,4 @@
-import {createFileRoute, redirect} from '@tanstack/react-router'
-import {SpaceSidebar} from "../components/space/space-sidebar";
-import {AppLayout} from "@workspace/ui/components/layout/app-layout";
+import {createFileRoute, Outlet, redirect} from '@tanstack/react-router'
 
 export const Route = createFileRoute('/_auth')({
     beforeLoad: ({context, location}) => {
@@ -13,20 +11,5 @@ export const Route = createFileRoute('/_auth')({
             })
         }
     },
-    component: AuthLayout,
+    component: () => <Outlet/>,
 })
-
-function AuthLayout() {
-    return (
-        <AppLayout
-            sidebar={({condensed, isMobile, onClose}) => (
-                <SpaceSidebar
-                    condensed={condensed}
-                    isMobile={isMobile}
-                    onClose={onClose}
-                />
-            )}
-            mainClassName="flex-1 flex flex-col h-full overflow-hidden"
-        />
-    );
-}

@@ -1,7 +1,5 @@
 import {ReactNode} from 'react';
-import {Outlet} from '@tanstack/react-router';
-import {useSidebar} from './root-layout';
-import {useIsMobile, useIsTablet} from '@workspace/lib/media';
+import {useLayout} from '../layout-context';
 
 export type SidebarProps = {
     condensed: boolean;
@@ -9,23 +7,21 @@ export type SidebarProps = {
     onClose: () => void;
 }
 
-type AppLayoutProps = {
+type SidebarContainerProps = {
     sidebar: ReactNode | ((props: SidebarProps) => ReactNode);
-    children?: ReactNode;
-    mainClassName?: string;
 }
 
-export function AppLayout({sidebar, children, mainClassName = 'flex-1 flex h-full overflow-hidden'}: AppLayoutProps) {
-    const {sidebarOpen, setSidebarOpen} = useSidebar();
-    const isMobile = useIsMobile();
-    const isTablet = useIsTablet();
+export function SidebarContainer({sidebar}: SidebarContainerProps) {
+    const {sidebarOpen, setSidebarOpen, sidebarMode, isMobile, isTablet} = useLayout();
+
+    if (sidebarMode === 'none') return null;
 
     const sidebarContent = typeof sidebar === 'function'
         ? sidebar({condensed: isTablet, isMobile, onClose: () => setSidebarOpen(false)})
         : sidebar;
 
     return (
-        <div className="flex flex-1 w-full h-full overflow-hidden">
+        <>
             <div
                 className={`
                     ${isMobile ? (sidebarOpen ? 'fixed inset-0 z-50 bg-background' : 'hidden') : 'block'}
@@ -42,10 +38,6 @@ export function AppLayout({sidebar, children, mainClassName = 'flex-1 flex h-ful
                     onClick={() => setSidebarOpen(false)}
                 />
             )}
-
-            <main className={mainClassName}>
-                {children ?? <Outlet/>}
-            </main>
-        </div>
+        </>
     );
 }
