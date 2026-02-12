@@ -96,7 +96,6 @@ function DriveRoute() {
             allowUpload={false}
             allowCreateDoc={true}
             allowCreateStickies={false}
-            isMobile={isMobile}
             showBreadcrumb={false}
             currentPath={rootPath}
         />

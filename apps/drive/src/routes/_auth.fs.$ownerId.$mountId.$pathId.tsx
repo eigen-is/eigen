@@ -173,7 +173,6 @@ function DriveRoute() {
                 allowShare={true}
                 allowUpload={true}
                 allowMove={true}
-                isMobile={isMobile}
                 showBreadcrumb={true}
                 pid={pid}
             />

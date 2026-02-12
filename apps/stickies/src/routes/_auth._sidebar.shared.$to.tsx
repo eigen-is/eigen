@@ -102,7 +102,6 @@ function DriveRoute() {
             allowUpload={false}
             allowCreateDoc={false}
             allowCreateStickies={true}
-            isMobile={isMobile}
             showBreadcrumb={false}
             currentPath={rootPath}
             allowRename={to === 'by-me'}
