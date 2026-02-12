@@ -29,15 +29,15 @@ export function ContactsListToolbar({searchQuery, onSearchChange, sortBy, onSort
                 <Input
                     type="text"
                     placeholder="Search contacts..."
-                    className="pl-8 w-full h-8"
+                    className="pl-8 w-full h-8 bg-white"
                     value={searchQuery}
                     onChange={(e) => onSearchChange(e.target.value)}
                 />
             </div>
             <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                    <Button variant="outline" size="sm" className="gap-1 shrink-0">
-                        <ArrowUpDown className="h-3.5 w-3.5"/>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
+                        <ArrowUpDown className="h-4 w-4"/>
                     </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="end">

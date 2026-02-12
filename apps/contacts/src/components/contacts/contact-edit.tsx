@@ -2,7 +2,7 @@ import {z} from 'zod';
 import {useForm} from 'react-hook-form';
 import {zodResolver} from '@hookform/resolvers/zod';
 import React, {useState} from 'react';
-import {ArrowLeft, Calendar, Camera, Plus, Trash2} from 'lucide-react';
+import {Calendar, Camera, Plus, Trash2} from 'lucide-react';
 import {format} from "date-fns";
 import {cn} from "@workspace/ui/lib/utils";
 import {useAddContact, useLabels, useUpdateContact} from '@workspace/lib/contacts';
@@ -55,6 +55,16 @@ export const formSchema = z.object({
 );
 
 export type ContactFormValues = z.infer<typeof formSchema>;
+
+interface ContactEditToolbarProps {
+    isNew: boolean;
+}
+
+export function ContactEditToolbar({isNew}: ContactEditToolbarProps) {
+    return (
+        <h1 className="font-medium">{isNew ? 'Create Contact' : 'Edit Contact'}</h1>
+    );
+}
 
 interface ContactEditProps {
     contact: Contact;
@@ -131,14 +141,6 @@ export function ContactEdit({
 
     return (
         <div className="h-full flex flex-col overflow-hidden">
-            <div className="flex items-center h-12 px-4 border-b">
-                <Button variant="ghost" size="icon" onClick={onCancel} className="mr-2 h-8 w-8">
-                    <ArrowLeft className="h-4 w-4"/>
-                    <span className="sr-only">Back</span>
-                </Button>
-                <h1 className="font-medium">{contact.id ? 'Edit Contact' : 'Create Contact'}</h1>
-            </div>
-
             <div className="flex-1 overflow-y-auto p-6">
                 {error && (
                     <div className="bg-destructive/15 text-destructive px-4 py-2 rounded-md mb-4">

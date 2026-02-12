@@ -1,7 +1,10 @@
 import {createFileRoute, useNavigate} from '@tanstack/react-router';
-import {ContactEdit, type ContactFormValues} from '../components/contacts/contact-edit';
+import {ContactEdit, ContactEditToolbar, type ContactFormValues} from '../components/contacts/contact-edit';
 import {type Contact} from "@workspace/lib/types/contact";
 import {useAddContact} from '@workspace/lib/contacts';
+import {ColumnLayout, Column} from "@workspace/ui/components/layout/column-layout";
+import {useLayout} from "@workspace/ui/components/layout/layout-context";
+import {useEffect} from 'react';
 
 export const Route = createFileRoute('/_auth/new')({
     component: NewContactRoute,
@@ -10,6 +13,11 @@ export const Route = createFileRoute('/_auth/new')({
 function NewContactRoute() {
     const navigate = useNavigate();
     const addContactMutation = useAddContact();
+    const {navigateToColumn} = useLayout();
+
+    useEffect(() => {
+        navigateToColumn('editor');
+    }, [navigateToColumn]);
 
     // Empty contact object for new contacts
     const emptyContact: Contact = {
@@ -65,12 +73,16 @@ function NewContactRoute() {
     };
 
     return (
-        <ContactEdit
-            contact={emptyContact}
-            onSave={handleSave}
-            onCancel={handleCancel}
-            filterType="book"
-            filterId="all"
-        />
+        <ColumnLayout>
+            <Column id="editor" width="flex" onBack={handleCancel} toolbar={<ContactEditToolbar isNew={true}/>}>
+                <ContactEdit
+                    contact={emptyContact}
+                    onSave={handleSave}
+                    onCancel={handleCancel}
+                    filterType="book"
+                    filterId="all"
+                />
+            </Column>
+        </ColumnLayout>
     );
 }

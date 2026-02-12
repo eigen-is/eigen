@@ -46,6 +46,14 @@ function ContactsRoute() {
         }
     };
 
+    const handleBackToList = () => {
+        navigate({
+            to: Route.fullPath,
+            params: {filterType, filterId},
+            search: {},
+        });
+    };
+
     const contact = contactsLoading ? undefined : contacts.find(c => c.id === contactId);
     const targetCol = isMobile ? (contactId ? 'detail' : 'list') : 'list';
 
@@ -102,7 +110,7 @@ function ContactsRoute() {
                     <ContactsList filterType={filterType} filterId={filterId} searchQuery={searchQuery} sortBy={sortBy}/>
                 </div>
             </Column>
-            <Column id="detail" width="flex" backTo="list" toolbar={detailToolbar}>
+            <Column id="detail" width="flex" backTo="list" onBack={handleBackToList} toolbar={detailToolbar}>
                 {contact ? (
                     <ContactDetail
                         contact={contact}
