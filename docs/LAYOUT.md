@@ -1,24 +1,23 @@
 # Layout System
 
-Responsive multi-column layout with toolbar management across desktop and mobile.
+Responsive multi-column layout with per-column toolbars and declarative mobile column switching.
 
 ## Overview
 
 ```
 AppShell
-├── Topbar              (blue header bar, app logo, toolbar slots, user dropdown)
-├── SecondaryToolbar    (mobile only: back button + active column toolbar)
+├── Topbar              (blue header bar, app logo, user dropdown)
 └── Content Area
     ├── SidebarContainer (collapsible sidebar)
     └── Main
         └── ColumnLayout
-            ├── Column "list"    (fixed width, e.g. 350px)
-            └── Column "detail"  (flex, fills remaining space)
+            ├── Column "list"    (fixed width, toolbar + content)
+            └── Column "detail"  (flex width, toolbar + content)
 ```
 
-**Desktop:** All columns visible side-by-side. Toolbars render in the Topbar, aligned with their column widths.
+**Desktop:** All columns visible side-by-side. Each column renders its own toolbar (h-12) above its content.
 
-**Mobile:** Only the active column is visible. Toolbars render in the SecondaryToolbar below the Topbar.
+**Mobile:** Only the `mobileColumn` is visible. Its toolbar includes a ← back button when `onBack` is provided.
 
 ---
 
@@ -30,7 +29,6 @@ AppShell
 | LayoutContext | `packages/ui/src/components/layout/layout-context.tsx` |
 | Column / ColumnLayout | `packages/ui/src/components/layout/column-layout.tsx` |
 | Topbar | `packages/ui/src/components/layout/topbar.tsx` |
-| SecondaryToolbar | `packages/ui/src/components/layout/secondary-toolbar.tsx` |
 | SidebarContainer | `packages/ui/src/components/layout/sidebar/sidebar-container.tsx` |
 | TooltipButton | `packages/ui/src/components/layout/tooltip-button/tooltip-button.tsx` |
 
@@ -69,20 +67,12 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
 
 ## 2. ColumnLayout & Column
 
-Routes define their column structure using `ColumnLayout` and `Column`:
+Routes define their column structure using `ColumnLayout` and `Column`. The `mobileColumn` prop on `ColumnLayout` declaratively controls which column is visible on mobile:
 
 ```tsx
 function ContactsRoute() {
-    const {isMobile, navigateToColumn} = useLayout();
-
-    // Control which column is active on mobile
-    const targetCol = isMobile ? (contactId ? 'detail' : 'list') : 'list';
-    useEffect(() => {
-        navigateToColumn(targetCol);
-    }, [targetCol, navigateToColumn]);
-
     return (
-        <ColumnLayout>
+        <ColumnLayout mobileColumn={contactId ? 'detail' : 'list'}>
             <Column id="list" width="350px" toolbar={<ListToolbar/>}>
                 <ContactsList/>
             </Column>
@@ -94,30 +84,31 @@ function ContactsRoute() {
 }
 ```
 
+### ColumnLayout Props
+
+| Prop | Type | Description |
+|------|------|-------------|
+| `mobileColumn` | `string` | Which column to show on mobile. On desktop this is ignored (all columns visible). |
+| `children` | `ReactNode` | `Column` components |
+
 ### Column Props
 
 | Prop | Type | Description |
 |------|------|-------------|
-| `id` | `string` | Unique column identifier |
+| `id` | `string` | Unique column identifier (must match `mobileColumn` value to be visible on mobile) |
 | `width` | `string` | CSS width (`"350px"`) or `"flex"` to fill remaining space |
-| `toolbar` | `ReactNode` | Toolbar content rendered in Topbar (desktop) or SecondaryToolbar (mobile) |
-| `onBack` | `() => void` | Back navigation callback. Shown as ← button in SecondaryToolbar on mobile. |
+| `toolbar` | `ReactNode` | Toolbar content rendered as a h-12 bar above column content. On mobile, includes ← back button if `onBack` is set. |
+| `onBack` | `() => void` | Back navigation callback. Renders a ← button in the toolbar on mobile. Should navigate the URL. |
 | `children` | `ReactNode` | Column content |
 
 ### Single-Column Routes
 
-For routes like edit/create that don't need multiple columns, still use `ColumnLayout` for consistency:
+For routes like edit/create, use `ColumnLayout` with `mobileColumn` set to the single column's id:
 
 ```tsx
 function EditContactRoute() {
-    const {navigateToColumn} = useLayout();
-
-    useEffect(() => {
-        navigateToColumn('editor');
-    }, [navigateToColumn]);
-
     return (
-        <ColumnLayout>
+        <ColumnLayout mobileColumn="editor">
             <Column id="editor" width="flex" onBack={handleCancel} toolbar={<EditToolbar/>}>
                 <ContactEdit/>
             </Column>
@@ -138,24 +129,11 @@ contact-detail.tsx   → ContactDetail + ContactDetailToolbar
 contact-edit.tsx     → ContactEdit + ContactEditToolbar
 ```
 
-### How It Works (Portal-Based)
+### How It Works
 
-Toolbars use React portals to render content into the correct location:
+Each `Column` renders its `toolbar` prop as a `h-12 border-b` bar directly above its content. No portals, no registration — just a div.
 
-1. `Column` registers a **toolbar slot** (just `columnId` + `width`) on mount via `registerToolbar()`
-2. `Topbar` renders empty `<div data-toolbar-slot="{columnId}">` elements for each slot
-3. `ToolbarPortal` (inside `Column`) uses `createPortal()` to render toolbar content into the matching DOM node
-4. On mobile, toolbar content portals into `SecondaryToolbar`'s `<div data-secondary-toolbar-slot>` instead
-
-### Toolbar Styling
-
-The Topbar toolbar slots automatically apply white text and hover styles to all buttons:
-
-```
-[&_button]:text-white [&_button:hover]:bg-primary/20
-```
-
-This means toolbar components don't need to handle Topbar vs SecondaryToolbar color differences — they just render normal buttons and the container handles the styling.
+On mobile, when `onBack` is provided, a ← button is prepended to the toolbar bar.
 
 Use `TooltipButton` for icon buttons in toolbars:
 
@@ -180,69 +158,42 @@ For buttons that trigger a dropdown, use `Button` with the same sizing as `Toolt
 
 ## 4. Mobile Navigation
 
-On mobile, only one column is visible at a time. The route controls which column is active.
-
-### Pattern
+On mobile, only one column is visible at a time. The `mobileColumn` prop on `ColumnLayout` controls which one:
 
 ```tsx
-const targetCol = isMobile ? (hasSelection ? 'detail' : 'list') : 'list';
-
-useEffect(() => {
-    navigateToColumn(targetCol);
-}, [targetCol, navigateToColumn]);
+<ColumnLayout mobileColumn={contactId ? 'detail' : 'list'}>
 ```
+
+This is **declarative** — when the URL changes (e.g., `contactId` appears in search params), React re-renders and `mobileColumn` updates automatically. No `useEffect` or imperative navigation needed.
 
 ### Back Navigation
 
-The `onBack` prop on `Column` provides route-specific back navigation:
+The `onBack` prop on `Column` should navigate the URL to go "back" (e.g., clear the selected item):
 
 ```tsx
-<Column id="detail" width="flex" onBack={handleBackToList} toolbar={...}>
+<Column id="detail" width="flex" onBack={handleBackToList} toolbar={<DetailToolbar/>}>
 ```
 
-- `SecondaryToolbar` shows a ← button when the active column has an `onBack` registered
-- The callback should **navigate the URL** (e.g., clear the selected item from search params)
-- This ensures the URL and column state stay in sync
-
-### Single-Column Routes on Mobile
-
-Routes that render a single column (edit, create) must call `navigateToColumn()` on mount, otherwise the column won't be visible:
-
-```tsx
-useEffect(() => {
-    navigateToColumn('editor');
-}, [navigateToColumn]);
-```
+- A ← button appears in the column's toolbar on mobile when `onBack` is set
+- `onBack` should **navigate the URL** (e.g., clear search params) so the `mobileColumn` expression updates
 
 ---
 
-## 5. Pitfalls
+## 5. LayoutContext
 
-### Toolbar content must not be stored in state
+`useLayout()` provides:
 
-Early iterations stored toolbar JSX in React state (`useState`). This causes infinite re-render loops because JSX creates a new object reference every render → state update → re-render → new JSX → state update → ∞.
+| Field | Type | Description |
+|-------|------|-------------|
+| `appName` | `string` | Current app name |
+| `setAppName` | `(name) => void` | Update app name (for dual-mode apps like docs) |
+| `sidebarOpen` | `boolean` | Mobile sidebar overlay state |
+| `setSidebarOpen` | `(open) => void` | Toggle mobile sidebar |
+| `sidebarMode` | `string` | Current sidebar mode |
+| `isMobile` | `boolean` | Mobile breakpoint |
+| `isTablet` | `boolean` | Tablet breakpoint |
 
-**Solution:** The current system uses React portals. `Column` renders its toolbar content normally in the React tree, and `createPortal()` moves it to the correct DOM node. No state involved for content.
-
-### `onBack` must navigate the URL
-
-If `onBack` only calls `goBack()` (which pops column history), the URL retains stale params (e.g., `?contactId=...`). On the next navigation, the route computes the same `targetCol` as before, the `useEffect` doesn't fire, and the column doesn't switch.
-
-**Solution:** `onBack` should always navigate the URL to clear selection params. The URL change triggers a re-render, which updates `targetCol`, which triggers `navigateToColumn()`.
-
-### Single-column routes need `navigateToColumn()` on mount
-
-When navigating from a multi-column route (e.g., contacts list/detail) to a single-column route (e.g., edit), the `activeColumn` is still set to the previous route's column ID. The new route's `Column` has a different ID, so on mobile it's hidden.
-
-**Solution:** Always call `navigateToColumn('your-column-id')` in a `useEffect` on mount.
-
-### `navigateToColumn` skips if already active
-
-`navigateToColumn(id)` is a no-op if `activeColumn` is already `id`. This prevents duplicate history entries but means you can't "re-navigate" to the same column to force a re-render.
-
-### Portal timing on first render
-
-On the very first render, the Topbar slot DOM nodes don't exist yet when `Column` mounts. `ToolbarPortal` handles this with a `requestAnimationFrame` fallback to retry finding the node on the next frame.
+Convenience hooks: `useApp()` returns `{appName, setAppName}`. `useSidebar()` returns `{sidebarOpen, setSidebarOpen}`.
 
 ---
 
@@ -250,15 +201,15 @@ On the very first render, the Topbar slot DOM nodes don't exist yet when `Column
 
 | Component | Desktop | Mobile |
 |-----------|---------|--------|
-| `Topbar` | Logo + toolbar slots (aligned with columns) + user dropdown | Logo + burger menu + user dropdown |
-| `SecondaryToolbar` | Hidden | Back button (if `onBack`) + active column toolbar |
-| `Column` | All columns visible side-by-side | Only `activeColumn` visible |
-| `ColumnLayout` | Flex row container | Same, but only one child renders |
+| `Topbar` | Logo + user dropdown | Logo + burger menu + user dropdown |
+| `Column` toolbar | h-12 bar above column content | h-12 bar with ← back button (if `onBack`) |
+| `Column` | All columns visible side-by-side | Only `mobileColumn` visible |
+| `ColumnLayout` | Flex row container | Same, but only matching child renders |
 
 ### Adding a New App
 
 1. Create `__root.tsx` with `AppShell` wrapper
 2. Define routes with `ColumnLayout` and `Column`
-3. Export toolbar components alongside view components
-4. Call `navigateToColumn()` in `useEffect` to set the active column on mobile
+3. Set `mobileColumn` on `ColumnLayout` based on URL params
+4. Export toolbar components alongside view components
 5. Provide `onBack` on non-root columns for mobile back navigation

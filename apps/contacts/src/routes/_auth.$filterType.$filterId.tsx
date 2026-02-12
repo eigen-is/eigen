@@ -5,7 +5,6 @@ import {useContacts, useDeleteContact, useLabels} from '@workspace/lib/contacts'
 import {EigenLoader} from '@workspace/ui/components/layout/eigen-loader';
 import {LabelFilterHeader} from "@workspace/ui/components/layout/labels/label-filter-header";
 import {ColumnLayout, Column} from "@workspace/ui/components/layout/column-layout";
-import {useLayout} from "@workspace/ui/components/layout/layout-context";
 import {useEffect, useState} from 'react';
 
 export type ContactsSearchParams = {
@@ -24,7 +23,6 @@ function ContactsRoute() {
     const {filterType, filterId} = Route.useParams();
     const {contactId} = Route.useSearch();
     const navigate = useNavigate();
-    const {isMobile, navigateToColumn} = useLayout();
 
     const [searchQuery, setSearchQuery] = useState('');
     const [sortBy, setSortBy] = useState<'firstName' | 'lastName'>('firstName');
@@ -55,11 +53,6 @@ function ContactsRoute() {
     };
 
     const contact = contactsLoading ? undefined : contacts.find(c => c.id === contactId);
-    const targetCol = isMobile ? (contactId ? 'detail' : 'list') : 'list';
-
-    useEffect(() => {
-        navigateToColumn(targetCol);
-    }, [targetCol, navigateToColumn]);
 
     useEffect(() => {
         if (!contactsLoading && contactId && !contact) {
@@ -98,7 +91,7 @@ function ContactsRoute() {
     }
 
     return (
-        <ColumnLayout>
+        <ColumnLayout mobileColumn={contactId ? 'detail' : 'list'}>
             <Column id="list" width="350px" toolbar={listToolbar}>
                 <div className="flex h-full flex-col border-r overflow-y-auto">
                     {filterType === 'label' && (
@@ -110,7 +103,7 @@ function ContactsRoute() {
                     <ContactsList filterType={filterType} filterId={filterId} searchQuery={searchQuery} sortBy={sortBy}/>
                 </div>
             </Column>
-            <Column id="detail" width="flex" backTo="list" onBack={handleBackToList} toolbar={detailToolbar}>
+            <Column id="detail" width="flex" onBack={handleBackToList} toolbar={detailToolbar}>
                 {contact ? (
                     <ContactDetail
                         contact={contact}
