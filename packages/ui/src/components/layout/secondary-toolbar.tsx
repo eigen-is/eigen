@@ -6,21 +6,20 @@ export function SecondaryToolbar() {
     const {
         isMobile,
         toolbarSlots,
-        goBack,
-        columnHistory,
+        getActiveOnBack,
     } = useLayout();
 
     if (isMobile) {
+        const onBack = getActiveOnBack();
         const hasToolbars = toolbarSlots.length > 0;
-        const showBack = columnHistory.length > 1;
 
-        if (!hasToolbars && !showBack) return null;
+        if (!hasToolbars && !onBack) return null;
 
         return (
             <div className="bg-white h-12 flex items-center px-4 border-b shrink-0">
-                {showBack && (
+                {onBack && (
                     <>
-                        <Button variant="ghost" size="icon" className="h-8 w-8 mr-1" onClick={goBack}>
+                        <Button variant="ghost" size="icon" className="h-8 w-8 mr-1" onClick={onBack}>
                             <ArrowLeft className="h-4 w-4"/>
                         </Button>
                         <div className="h-6 w-[1px] bg-border mx-1"/>

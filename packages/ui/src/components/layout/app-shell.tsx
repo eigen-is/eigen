@@ -1,4 +1,4 @@
-import {ReactNode, useCallback, useState} from 'react';
+import {ReactNode, useCallback, useRef, useState} from 'react';
 import {Outlet} from '@tanstack/react-router';
 import {TanStackRouterDevtools} from '@tanstack/react-router-devtools';
 import {useIsMobile, useIsTablet} from '@workspace/lib/media';
@@ -72,6 +72,21 @@ export function AppShell({appName: initialAppName, rootRoute, sidebar, sidebarMo
         return document.querySelector('[data-secondary-toolbar-slot]');
     }, []);
 
+    const onBackMapRef = useRef<Map<string, () => void>>(new Map());
+
+    const registerOnBack = useCallback((columnId: string, onBack: () => void) => {
+        onBackMapRef.current.set(columnId, onBack);
+    }, []);
+
+    const unregisterOnBack = useCallback((columnId: string) => {
+        onBackMapRef.current.delete(columnId);
+    }, []);
+
+    const getActiveOnBack = useCallback((): (() => void) | null => {
+        if (!activeColumn) return null;
+        return onBackMapRef.current.get(activeColumn) ?? null;
+    }, [activeColumn]);
+
     const effectiveSidebarMode = sidebar ? sidebarMode : 'none';
 
     return (
@@ -92,6 +107,9 @@ export function AppShell({appName: initialAppName, rootRoute, sidebar, sidebarMo
             unregisterToolbar,
             getToolbarPortalNode,
             getSecondaryToolbarPortalNode,
+            registerOnBack,
+            unregisterOnBack,
+            getActiveOnBack,
         }}>
             <div className="flex flex-col h-dvh">
                 <Topbar rootRoute={rootRoute}/>

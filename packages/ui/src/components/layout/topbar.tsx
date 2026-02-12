@@ -169,7 +169,7 @@ export function Topbar({rootRoute}: TopbarProps) {
                             <div
                                 key={slot.columnId}
                                 data-toolbar-slot={slot.columnId}
-                                className="flex items-center px-4 h-full border-l border-white/10"
+                                className="flex items-center px-4 h-full border-l border-white/10 text-white [&_button]:text-white [&_button:hover]:bg-primary/20"
                                 style={slot.width === 'flex' ? {flex: '1 1 auto', minWidth: 0} : {width: slot.width, flexShrink: 0}}
                             />
                         ))}
