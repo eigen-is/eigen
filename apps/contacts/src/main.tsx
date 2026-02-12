@@ -61,7 +61,7 @@ function InnerApp() {
 
 function App() {
     return (
-        <EigenApp appName="contacts">
+        <EigenApp>
             <InnerApp/>
         </EigenApp>
     )

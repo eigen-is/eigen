@@ -1,7 +1,7 @@
 import {createFileRoute} from '@tanstack/react-router'
 import {useCollabDocumentInfo} from '@workspace/lib/collab'
 import {EigenLoader} from '@workspace/ui'
-import {useApp} from '@workspace/ui/components/layout/app-context'
+import {useApp} from '@workspace/ui/components/layout/layout-context'
 import {useCallback, useEffect, useState} from 'react'
 import {StickiesBoard} from "../components/dnd-board/board";
 import {DriveAccessDialog} from '@workspace/ui/components/layout/drive/drive-access-dialog'

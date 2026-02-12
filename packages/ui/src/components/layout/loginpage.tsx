@@ -8,7 +8,7 @@ import {Input} from "../input.tsx";
 import {Button} from "../button.tsx";
 import {Card, CardContent, CardDescription, CardHeader, CardTitle,} from "../card.tsx";
 import {Form, FormControl, FormField, FormItem, FormLabel, FormMessage,} from "../form.tsx";
-import {useApp} from "./app-context";
+import {useApp} from "./layout-context";
 
 // Define the login form schema with Zod
 const loginFormSchema = z.object({
