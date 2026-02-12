@@ -1,5 +1,4 @@
 import {ArrowLeft, Send, Trash2} from "lucide-react";
-import {cn} from "@workspace/ui/lib/utils";
 import {Button} from "@workspace/ui/components/button";
 import {EmailDraft as EmailDraftType} from "@workspace/lib/types/mail";
 import {ContactAutosuggest, TooltipButton} from "@workspace/ui";
@@ -9,6 +8,7 @@ import {useEffect, useMemo, useRef, useState} from "react";
 import {toast} from "sonner";
 import {createDraftEmail} from "@workspace/lib/mail";
 import {useAuth} from "@workspace/lib/auth";
+import {useLayout} from "@workspace/ui/components/layout/layout-context";
 
 /**
  * Checks the status of an email draft
@@ -35,10 +35,8 @@ export function getEmailDraftStatus(draft: EmailDraftType) {
 
 interface EmailDraftProps {
     email: EmailDraftType | null;
-    isMobile?: boolean;
-    className?: string;
     to?: string;
-    onBackClick?: () => void;
+    onBack?: () => void;
     onDelete: (mail: EmailDraftType) => void;
     toggleMailRead: (mail: EmailDraftType, isRead: boolean) => void;
     sendDraft: (mail: EmailDraftType) => Promise<any>;
@@ -47,13 +45,12 @@ interface EmailDraftProps {
 
 export function EmailDraft({
                                email,
-                               isMobile,
-                               className,
                                to,
-                               onBackClick,
+                               onBack,
                                onDelete,
                                sendDraft,
                            }: EmailDraftProps) {
+    const {isMobile} = useLayout();
     // Create refs for the input fields
     const toFieldRef = useRef<HTMLInputElement>(null);
     const subjectFieldRef = useRef<HTMLInputElement>(null);
@@ -187,16 +184,16 @@ export function EmailDraft({
     };
 
     return (
-        <div className={cn("flex flex-col h-full w-full", className)}>
-            {/* Header */}
-            <div className="flex items-center justify-between h-12 border-b px-4">
-                <div className="flex items-center">
-                    {isMobile && (
-                        <Button variant="ghost" size="icon" onClick={onBackClick}
-                                className="mr-2">
-                            <ArrowLeft className="h-5 w-5"/>
-                            <span className="sr-only">Back</span>
-                        </Button>
+        <div className="flex flex-col h-full w-full">
+            <div className="flex items-center h-12 border-b px-4">
+                <div className="flex items-center gap-1">
+                    {isMobile && onBack && (
+                        <>
+                            <Button variant="ghost" size="icon" className="h-8 w-8 mr-1" onClick={onBack}>
+                                <ArrowLeft className="h-4 w-4"/>
+                            </Button>
+                            <div className="h-6 w-[1px] bg-border mx-1"/>
+                        </>
                     )}
                     <TooltipButton
                         icon={Send}
@@ -211,8 +208,6 @@ export function EmailDraft({
                             onClick={() => onDelete(email)}
                             disabled={isSending}
                         />)}
-                </div>
-                <div className="flex items-center gap-2">
                 </div>
             </div>
 
