@@ -197,7 +197,33 @@ Convenience hooks: `useApp()` returns `{appName, setAppName}`. `useSidebar()` re
 
 ---
 
-## 6. Summary
+## 6. DriveLayout (Shared Component)
+
+`DriveLayout` is a shared component in `packages/ui/src/components/layout/drive/drive-layout.tsx` used by the drive, docs, and stickies apps. It internally uses `ColumnLayout` + `Column` and `useLayout()` for responsive behavior.
+
+```tsx
+<DriveLayout
+    ownerId={ownerId}
+    mountId={mountId}
+    folderContents={folderContents}
+    isLoading={isLoading}
+    error={error}
+    onRowSelect={onRowSelect}
+    onRowActivate={onRowActivate}
+    onBackToList={handleBackToList}
+    onAfterAction={handleAfterAction}
+    showBreadcrumb={true}
+    pid={pid}
+/>
+```
+
+- **No `isMobile` prop** — `DriveLayout` calls `useLayout()` internally
+- **List column**: `DriveList` renders its own internal toolbar (breadcrumb + "New" button on mobile)
+- **Detail column**: `DriveDetailToolbar` is extracted and passed to `Column` via `toolbar` prop
+- **Mobile**: `mobileColumn` switches between list and detail based on selection state
+- **Desktop**: detail Column conditionally renders when an item is selected
+
+## 7. Summary
 
 | Component | Desktop | Mobile |
 |-----------|---------|--------|

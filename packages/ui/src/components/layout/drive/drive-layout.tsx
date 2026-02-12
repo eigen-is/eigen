@@ -1,7 +1,7 @@
 import {DrivePath} from "@workspace/lib/types/drive";
 import {EigenLoader} from "@workspace/ui";
 import {DriveList} from "./drive-list";
-import {DriveDetail} from "./drive-detail";
+import {DriveDetail, DriveDetailToolbar} from "./drive-detail";
 import {DriveAccessDialog} from "./drive-access-dialog";
 import {DriveCreateDoc} from "./drive-create-doc";
 import {DriveCreateStickies} from "./drive-create-stickies";
@@ -12,6 +12,8 @@ import {DriveRenameItem} from "./drive-rename-item";
 import {useMovePath} from "@workspace/lib/drive";
 import {useDriveDialogs} from "./use-drive-dialogs";
 import {getDriveDownloadUrl} from "@workspace/lib/api";
+import {ColumnLayout, Column} from "../column-layout";
+import {useLayout} from "../layout-context";
 
 export type DriveLayoutProps = {
     ownerId: string;
@@ -35,7 +37,6 @@ export type DriveLayoutProps = {
     allowCreateStickies?: boolean;
     allowRename?: boolean;
     allowMove?: boolean;
-    isMobile?: boolean;
     pid?: string;
 }
 
@@ -60,10 +61,10 @@ export function DriveLayout({
                                 allowUpload = true,
                                 allowRename = true,
                                 allowMove = true,
-                                isMobile = false,
                                 pid = undefined,
                                 showBreadcrumb = false,
                             }: DriveLayoutProps) {
+    const {isMobile} = useLayout();
     const dialogs = useDriveDialogs();
     const movePath = useMovePath(ownerId, mountId, currentPath?.id);
 
@@ -148,10 +149,11 @@ export function DriveLayout({
         onMove: allowMove ? handleMovePath : undefined,
     };
 
+    const detailPath = selectedPath || currentPath;
+
     const detailProps = {
-        path: selectedPath || currentPath,
+        path: detailPath,
         onDelete: allowDelete ? handleDeletePath : undefined,
-        onBackClick: onBackToList,
         onShareClick: allowShare ? handleShareClick : undefined,
         onDownload: handleDownloadPath,
         onItemOpen: onRowActivate,
@@ -159,38 +161,37 @@ export function DriveLayout({
         onRename: allowRename ? handleRenamePath : undefined,
     };
 
-    const showDetail = isMobile
-        ? (selectedPath || (currentPath && currentPath?.type !== 'folder'))
-        : (pid || currentPath?.type !== 'folder');
+    const mobileShowDetail = !!(selectedPath || (currentPath && currentPath?.type !== 'folder'));
+    const desktopShowDetail = !!(pid || (currentPath && currentPath?.type !== 'folder'));
+    const showDetail = isMobile ? mobileShowDetail : desktopShowDetail;
 
-    const showList = isMobile
-        ? !showDetail
-        : (!currentPath || currentPath?.type === 'folder');
+    const detailToolbar = (showDetail && detailPath) ? (
+        <DriveDetailToolbar
+            path={detailPath}
+            onClose={onBackToList}
+            onDelete={allowDelete ? handleDeletePath : undefined}
+            onShareClick={allowShare ? handleShareClick : undefined}
+            onDownload={handleDownloadPath}
+            onItemOpen={onRowActivate}
+            onRename={allowRename ? handleRenamePath : undefined}
+            allowDelete={allowDelete}
+        />
+    ) : null;
 
     return (
         <>
-            {isMobile ? (
-                <div className="flex-1 h-full w-full">
-                    {showDetail ? (
-                        <DriveDetail {...detailProps} isMobile={true}/>
-                    ) : (
+            <ColumnLayout mobileColumn={mobileShowDetail ? 'detail' : 'list'}>
+                <Column id="list" width="flex">
+                    <div className="h-full overflow-hidden border-r">
                         <DriveList {...listProps} />
-                    )}
-                </div>
-            ) : (
-                <div className="flex h-full w-full">
-                    {showList && (
-                        <div className={`${pid ? 'w-2/3' : 'w-full'} h-full overflow-hidden border-r`}>
-                            <DriveList {...listProps} />
-                        </div>
-                    )}
-                    {showDetail && (
-                        <div className="flex-1 h-full overflow-hidden">
-                            <DriveDetail {...detailProps} className="border-none h-full"/>
-                        </div>
-                    )}
-                </div>
-            )}
+                    </div>
+                </Column>
+                {showDetail && (
+                    <Column id="detail" width={isMobile ? 'flex' : '400px'} onBack={onBackToList} toolbar={detailToolbar}>
+                        <DriveDetail {...detailProps} />
+                    </Column>
+                )}
+            </ColumnLayout>
 
             {allowCreateFolder && currentPath && (
                 <DriveCreateFolder
