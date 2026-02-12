@@ -1,4 +1,4 @@
-import {ReactNode, useEffect, useState} from 'react';
+import {ReactNode, useEffect, useRef, useState} from 'react';
 import {createPortal} from 'react-dom';
 import {useLayout} from './layout-context';
 
@@ -8,6 +8,7 @@ type ColumnProps = {
     toolbar?: ReactNode;
     secondaryToolbar?: ReactNode;
     backTo?: string;
+    onBack?: () => void;
     children: ReactNode;
 }
 
@@ -39,19 +40,30 @@ function ToolbarPortal({columnId, children}: {columnId: string; children: ReactN
     return createPortal(children, node);
 }
 
-function Column({id, width, toolbar, children}: ColumnProps) {
+function Column({id, width, toolbar, onBack, children}: ColumnProps) {
     const {
         isMobile,
         activeColumn,
         registerToolbar,
         unregisterToolbar,
+        registerOnBack,
+        unregisterOnBack,
     } = useLayout();
+
+    const onBackRef = useRef(onBack);
+    onBackRef.current = onBack;
 
     useEffect(() => {
         if (toolbar !== undefined) {
             registerToolbar(id, width);
         }
-        return () => unregisterToolbar(id);
+        if (onBack) {
+            registerOnBack(id, () => onBackRef.current?.());
+        }
+        return () => {
+            unregisterToolbar(id);
+            unregisterOnBack(id);
+        };
     }, [id, width]);
 
     if (isMobile && activeColumn !== id) return null;

@@ -57,7 +57,7 @@ export function ContactDetailToolbar({contact, filterType, filterId, onDeleteCli
 
             <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" className="w-full justify-start px-2 py-1.5" title="More actions">
+                    <Button variant="ghost" size="icon" className="h-8 w-8" title="More actions">
                         <MoreVertical className="h-4 w-4"/>
                     </Button>
                 </DropdownMenuTrigger>

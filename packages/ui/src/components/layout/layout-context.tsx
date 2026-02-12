@@ -22,6 +22,9 @@ export type LayoutContextType = {
     unregisterToolbar: (columnId: string) => void;
     getToolbarPortalNode: (columnId: string) => HTMLElement | null;
     getSecondaryToolbarPortalNode: () => HTMLElement | null;
+    registerOnBack: (columnId: string, onBack: () => void) => void;
+    unregisterOnBack: (columnId: string) => void;
+    getActiveOnBack: () => (() => void) | null;
 }
 
 export const LayoutContext = createContext<LayoutContextType>({
@@ -41,6 +44,9 @@ export const LayoutContext = createContext<LayoutContextType>({
     unregisterToolbar: () => {},
     getToolbarPortalNode: () => null,
     getSecondaryToolbarPortalNode: () => null,
+    registerOnBack: () => {},
+    unregisterOnBack: () => {},
+    getActiveOnBack: () => null,
 });
 
 export function useLayout() {
