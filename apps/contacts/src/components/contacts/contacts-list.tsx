@@ -1,6 +1,6 @@
-import {useMemo, useState} from 'react';
+import {useMemo} from 'react';
 import {Link} from '@tanstack/react-router';
-import {ArrowUpDown, Search} from 'lucide-react';
+import {Search, ArrowUpDown} from 'lucide-react';
 import {Button} from "@workspace/ui/components/button";
 import {Input} from "@workspace/ui/components/input";
 import {UserItem} from "@workspace/ui/components/layout/user-item";
@@ -14,14 +14,53 @@ import {
 } from "@workspace/ui/components/dropdown-menu";
 import {EigenLoader} from '@workspace/ui';
 
+interface ContactsListToolbarProps {
+    searchQuery: string;
+    onSearchChange: (query: string) => void;
+    sortBy: 'firstName' | 'lastName';
+    onSortChange: (sort: 'firstName' | 'lastName') => void;
+}
+
+export function ContactsListToolbar({searchQuery, onSearchChange, sortBy, onSortChange}: ContactsListToolbarProps) {
+    return (
+        <div className="flex items-center justify-between w-full gap-2">
+            <div className="relative flex-1 min-w-0">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"/>
+                <Input
+                    type="text"
+                    placeholder="Search contacts..."
+                    className="pl-8 w-full h-8"
+                    value={searchQuery}
+                    onChange={(e) => onSearchChange(e.target.value)}
+                />
+            </div>
+            <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                    <Button variant="outline" size="sm" className="gap-1 shrink-0">
+                        <ArrowUpDown className="h-3.5 w-3.5"/>
+                    </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                    <DropdownMenuItem onClick={() => onSortChange('firstName')}>
+                        First name
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => onSortChange('lastName')}>
+                        Last name
+                    </DropdownMenuItem>
+                </DropdownMenuContent>
+            </DropdownMenu>
+        </div>
+    );
+}
+
 interface ContactsListProps {
     filterType?: string;
     filterId?: string;
+    searchQuery: string;
+    sortBy: 'firstName' | 'lastName';
 }
 
-export function ContactsList({filterType = 'filter', filterId = 'all'}: ContactsListProps) {
-    const [sortBy, setSortBy] = useState<'firstName' | 'lastName'>('firstName');
-    const [searchQuery, setSearchQuery] = useState('');
+export function ContactsList({filterType = 'filter', filterId = 'all', searchQuery, sortBy}: ContactsListProps) {
 
     // Gebruik de useContacts hook om contacten op te halen
     const {data: contacts = [], isLoading, error} = useContacts();
@@ -122,37 +161,6 @@ export function ContactsList({filterType = 'filter', filterId = 'all'}: Contacts
 
     return (
         <div className="w-full flex flex-col flex-1 overflow-hidden">
-            <div className="flex items-center justify-between h-12 px-4 border-b">
-                <div className="relative w-full max-w-sm">
-                    <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"/>
-                    <Input
-                        type="text"
-                        placeholder="Search contacts..."
-                        className="pl-8 w-full h-8"
-                        value={searchQuery}
-                        onChange={(e) => setSearchQuery(e.target.value)}
-                    />
-                </div>
-                <div className="flex items-center gap-2">
-                    <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                            <Button variant="outline" size="sm" className="ml-2 gap-1">
-                                Sort by: {sortBy === 'firstName' ? 'First name' : 'Last name'}
-                                <ArrowUpDown className="h-3.5 w-3.5"/>
-                            </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                            <DropdownMenuItem onClick={() => setSortBy('firstName')}>
-                                First name
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => setSortBy('lastName')}>
-                                Last name
-                            </DropdownMenuItem>
-                        </DropdownMenuContent>
-                    </DropdownMenu>
-                </div>
-            </div>
-
             <div className="flex-1  overflow-y-auto">
                 {isLoading ? (
                     <div className="flex flex-col items-center justify-center h-full text-muted-foreground">

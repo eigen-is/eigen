@@ -7,15 +7,9 @@ import {Topbar} from './topbar';
 import {SecondaryToolbar} from './secondary-toolbar';
 import {SidebarContainer, SidebarProps} from './sidebar/sidebar-container';
 
-type ToolbarEntry = {
+type ToolbarSlot = {
     columnId: string;
     width: string;
-    content: ReactNode;
-}
-
-type SecondaryToolbarEntry = {
-    columnId: string;
-    content: ReactNode;
 }
 
 type AppShellProps = {
@@ -33,46 +27,49 @@ export function AppShell({appName: initialAppName, rootRoute, sidebar, sidebarMo
     const [sidebarOpen, setSidebarOpen] = useState(false);
     const [activeColumn, setActiveColumn] = useState<string | null>(null);
     const [columnHistory, setColumnHistory] = useState<string[]>([]);
-    const [toolbars, setToolbars] = useState<ToolbarEntry[]>([]);
-    const [secondaryToolbars, setSecondaryToolbars] = useState<SecondaryToolbarEntry[]>([]);
+    const [toolbarSlots, setToolbarSlots] = useState<ToolbarSlot[]>([]);
 
     const isMobile = useIsMobile();
     const isTablet = useIsTablet();
 
     const navigateToColumn = useCallback((id: string) => {
-        setColumnHistory(prev => [...prev, id]);
-        setActiveColumn(id);
+        setActiveColumn(prev => {
+            if (prev === id) return prev;
+            setColumnHistory(h => [...h, id]);
+            return id;
+        });
     }, []);
 
     const goBack = useCallback(() => {
         setColumnHistory(prev => {
             if (prev.length <= 1) return prev;
             const newHistory = prev.slice(0, -1);
-            setActiveColumn(newHistory[newHistory.length - 1] ?? null);
+            const newActive = newHistory[newHistory.length - 1] ?? null;
+            setActiveColumn(newActive);
             return newHistory;
         });
     }, []);
 
-    const registerToolbar = useCallback((columnId: string, width: string, content: ReactNode) => {
-        setToolbars(prev => {
-            const filtered = prev.filter(t => t.columnId !== columnId);
-            return [...filtered, {columnId, width, content}];
+    const registerToolbar = useCallback((columnId: string, width: string) => {
+        setToolbarSlots(prev => {
+            if (prev.some(s => s.columnId === columnId && s.width === width)) return prev;
+            return [...prev.filter(s => s.columnId !== columnId), {columnId, width}];
         });
     }, []);
 
     const unregisterToolbar = useCallback((columnId: string) => {
-        setToolbars(prev => prev.filter(t => t.columnId !== columnId));
-    }, []);
-
-    const registerSecondaryToolbar = useCallback((columnId: string, content: ReactNode) => {
-        setSecondaryToolbars(prev => {
-            const filtered = prev.filter(t => t.columnId !== columnId);
-            return [...filtered, {columnId, content}];
+        setToolbarSlots(prev => {
+            if (!prev.some(s => s.columnId === columnId)) return prev;
+            return prev.filter(s => s.columnId !== columnId);
         });
     }, []);
 
-    const unregisterSecondaryToolbar = useCallback((columnId: string) => {
-        setSecondaryToolbars(prev => prev.filter(t => t.columnId !== columnId));
+    const getToolbarPortalNode = useCallback((columnId: string): HTMLElement | null => {
+        return document.querySelector(`[data-toolbar-slot="${columnId}"]`);
+    }, []);
+
+    const getSecondaryToolbarPortalNode = useCallback((): HTMLElement | null => {
+        return document.querySelector('[data-secondary-toolbar-slot]');
     }, []);
 
     const effectiveSidebarMode = sidebar ? sidebarMode : 'none';
@@ -90,12 +87,11 @@ export function AppShell({appName: initialAppName, rootRoute, sidebar, sidebarMo
             navigateToColumn,
             goBack,
             columnHistory,
-            toolbars,
+            toolbarSlots,
             registerToolbar,
             unregisterToolbar,
-            secondaryToolbars,
-            registerSecondaryToolbar,
-            unregisterSecondaryToolbar,
+            getToolbarPortalNode,
+            getSecondaryToolbarPortalNode,
         }}>
             <div className="flex flex-col h-dvh">
                 <Topbar rootRoute={rootRoute}/>

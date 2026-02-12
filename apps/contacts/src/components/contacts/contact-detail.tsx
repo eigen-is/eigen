@@ -1,5 +1,5 @@
 import {useState} from 'react';
-import {ArrowLeft, Building, Calendar, Edit, Mail, MapPin, MoreVertical, Phone, Printer, Trash2} from 'lucide-react';
+import {Building, Calendar, Edit, Mail, MapPin, MoreVertical, Phone, Printer, Trash2} from 'lucide-react';
 import {type Address, type Contact} from "@workspace/lib/types/contact";
 import {type Label} from "@workspace/lib/types/label";
 import {Button} from "@workspace/ui/components/button";
@@ -19,16 +19,95 @@ import {EigenLoader} from '@workspace/ui/components/layout/eigen-loader';
 import {useOpenWriteEmailTo} from "@workspace/lib/mail";
 import {printDocument} from '@workspace/ui/lib/printElement';
 
+interface ContactDetailToolbarProps {
+    contact: Contact;
+    filterType?: string;
+    filterId?: string;
+    onDeleteClick: () => void;
+}
+
+export function ContactDetailToolbar({contact, filterType, filterId, onDeleteClick}: ContactDetailToolbarProps) {
+    const openWriteEmailTo = useOpenWriteEmailTo();
+
+    return (
+        <div className="flex items-center gap-1 ml-auto">
+            <Link
+                to="/edit/$filterType/$filterId"
+                params={{
+                    filterType: filterType || 'filter',
+                    filterId: filterId || 'all'
+                }}
+                search={{
+                    contactId: contact.id
+                }}
+            >
+                <TooltipButton
+                    icon={Edit}
+                    tooltipText="Edit"
+                    className="h-8 w-8"
+                />
+            </Link>
+            <TooltipButton
+                icon={Trash2}
+                tooltipText="Delete"
+                onClick={onDeleteClick}
+            />
+
+            <div className="h-6 w-[1px] bg-border mx-1"/>
+
+            <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" className="w-full justify-start px-2 py-1.5" title="More actions">
+                        <MoreVertical className="h-4 w-4"/>
+                    </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                    {contact.email && contact.email.length > 0 && (
+                        <DropdownMenuItem
+                            onClick={() => openWriteEmailTo(contact.email[0])}
+                        >
+                            <Mail className="mr-2"/>
+                            Send email
+                        </DropdownMenuItem>
+                    )}
+                    <DropdownMenuItem onClick={printDocument}>
+                        <Printer className="mr-2"/>
+                        Print
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator/>
+                    <DropdownMenuItem asChild className="cursor-pointer">
+                        <Link
+                            to="/edit/$filterType/$filterId"
+                            params={{
+                                filterType: filterType || 'filter',
+                                filterId: filterId || 'all'
+                            }}
+                            search={{
+                                contactId: contact.id
+                            }}
+                        >
+                            <Edit className="mr-2"/>
+                            Edit
+                        </Link>
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={onDeleteClick}>
+                        <Trash2 className="mr-2"/>
+                        Delete
+                    </DropdownMenuItem>
+                </DropdownMenuContent>
+            </DropdownMenu>
+        </div>
+    );
+}
+
 interface ContactDetailProps {
     contact: Contact;
     onDelete: (id: string) => void;
-    onBack?: () => void;
     filterType?: string;
     filterId?: string;
-    isMobile?: boolean;
 }
 
-export function ContactDetail({contact, onDelete, onBack, filterType, filterId, isMobile}: ContactDetailProps) {
+export function ContactDetail({contact, onDelete, filterType, filterId}: ContactDetailProps) {
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
     // Use TanStack Query hook only for fetching labels
@@ -81,90 +160,6 @@ export function ContactDetail({contact, onDelete, onBack, filterType, filterId, 
 
     return (
         <div className="h-full flex flex-col overflow-hidden" data-document>
-            <div className="flex items-center justify-between h-12 px-4 border-b no-print">
-                <div className="flex items-center">
-                    {isMobile && onBack && (
-                        <>
-                            <Button variant="ghost" size="icon" className="h-8 w-8 mr-1" onClick={onBack}
-                                    title="Back">
-                                <ArrowLeft className="h-4 w-4"/>
-                            </Button>
-                            <div className="h-6 w-[1px] bg-border mx-1"></div>
-                        </>
-                    )}
-                </div>
-
-                <div className="flex items-center">
-                    <div className="flex items-center gap-1 mr-2">
-                        <Link
-                            to="/edit/$filterType/$filterId"
-                            params={{
-                                filterType: filterType || 'filter',
-                                filterId: filterId || 'all'
-                            }}
-                            search={{
-                                contactId: contact.id
-                            }}
-                        >
-                            <TooltipButton
-                                icon={Edit}
-                                tooltipText="Edit"
-                                className="h-8 w-8"
-                            />
-                        </Link>
-                        <TooltipButton
-                            icon={Trash2}
-                            tooltipText="Delete"
-                            onClick={() => setDeleteDialogOpen(true)}
-                        />
-                    </div>
-
-                    <div className="h-6 w-[1px] bg-border mx-1"></div>
-
-                    <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" className="w-full justify-start px-2 py-1.5" title="More actions">
-                                <MoreVertical className="h-4 w-4"/>
-                            </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end">
-                            {contact.email && contact.email.length > 0 && (
-                                <DropdownMenuItem
-                                    onClick={() => openWriteEmailTo(contact.email[0])}
-                                >
-                                    <Mail className="mr-2"/>
-                                    Send email
-                                </DropdownMenuItem>
-                            )}
-                            <DropdownMenuItem onClick={printDocument}>
-                                <Printer className="mr-2"/>
-                                Print
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator/>
-                            <DropdownMenuItem asChild className="cursor-pointer">
-                                <Link
-                                    to="/edit/$filterType/$filterId"
-                                    params={{
-                                        filterType: filterType || 'filter',
-                                        filterId: filterId || 'all'
-                                    }}
-                                    search={{
-                                        contactId: contact.id
-                                    }}
-                                >
-                                    <Edit className="mr-2"/>
-                                    Edit
-                                </Link>
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => setDeleteDialogOpen(true)}>
-                                <Trash2 className="mr-2"/>
-                                Delete
-                            </DropdownMenuItem>
-                        </DropdownMenuContent>
-                    </DropdownMenu>
-                </div>
-            </div>
-
             <div className="flex-1 overflow-auto p-6">
                 <div className="flex flex-col md:flex-row gap-8">
                     <div className="flex flex-col items-center gap-4 w-50">
