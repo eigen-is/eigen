@@ -1,16 +1,10 @@
-import {ReactNode, useCallback, useRef, useState} from 'react';
+import {ReactNode, useState} from 'react';
 import {Outlet} from '@tanstack/react-router';
 import {TanStackRouterDevtools} from '@tanstack/react-router-devtools';
 import {useIsMobile, useIsTablet} from '@workspace/lib/media';
 import {LayoutContext} from './layout-context';
 import {Topbar} from './topbar';
-import {SecondaryToolbar} from './secondary-toolbar';
 import {SidebarContainer, SidebarProps} from './sidebar/sidebar-container';
-
-type ToolbarSlot = {
-    columnId: string;
-    width: string;
-}
 
 type AppShellProps = {
     appName: string;
@@ -25,67 +19,9 @@ type AppShellProps = {
 export function AppShell({appName: initialAppName, rootRoute, sidebar, sidebarMode = 'collapsible', children}: AppShellProps) {
     const [appName, setAppName] = useState(initialAppName);
     const [sidebarOpen, setSidebarOpen] = useState(false);
-    const [activeColumn, setActiveColumn] = useState<string | null>(null);
-    const [columnHistory, setColumnHistory] = useState<string[]>([]);
-    const [toolbarSlots, setToolbarSlots] = useState<ToolbarSlot[]>([]);
 
     const isMobile = useIsMobile();
     const isTablet = useIsTablet();
-
-    const navigateToColumn = useCallback((id: string) => {
-        setActiveColumn(prev => {
-            if (prev === id) return prev;
-            setColumnHistory(h => [...h, id]);
-            return id;
-        });
-    }, []);
-
-    const goBack = useCallback(() => {
-        setColumnHistory(prev => {
-            if (prev.length <= 1) return prev;
-            const newHistory = prev.slice(0, -1);
-            const newActive = newHistory[newHistory.length - 1] ?? null;
-            setActiveColumn(newActive);
-            return newHistory;
-        });
-    }, []);
-
-    const registerToolbar = useCallback((columnId: string, width: string) => {
-        setToolbarSlots(prev => {
-            if (prev.some(s => s.columnId === columnId && s.width === width)) return prev;
-            return [...prev.filter(s => s.columnId !== columnId), {columnId, width}];
-        });
-    }, []);
-
-    const unregisterToolbar = useCallback((columnId: string) => {
-        setToolbarSlots(prev => {
-            if (!prev.some(s => s.columnId === columnId)) return prev;
-            return prev.filter(s => s.columnId !== columnId);
-        });
-    }, []);
-
-    const getToolbarPortalNode = useCallback((columnId: string): HTMLElement | null => {
-        return document.querySelector(`[data-toolbar-slot="${columnId}"]`);
-    }, []);
-
-    const getSecondaryToolbarPortalNode = useCallback((): HTMLElement | null => {
-        return document.querySelector('[data-secondary-toolbar-slot]');
-    }, []);
-
-    const onBackMapRef = useRef<Map<string, () => void>>(new Map());
-
-    const registerOnBack = useCallback((columnId: string, onBack: () => void) => {
-        onBackMapRef.current.set(columnId, onBack);
-    }, []);
-
-    const unregisterOnBack = useCallback((columnId: string) => {
-        onBackMapRef.current.delete(columnId);
-    }, []);
-
-    const getActiveOnBack = useCallback((): (() => void) | null => {
-        if (!activeColumn) return null;
-        return onBackMapRef.current.get(activeColumn) ?? null;
-    }, [activeColumn]);
 
     const effectiveSidebarMode = sidebar ? sidebarMode : 'none';
 
@@ -98,22 +34,9 @@ export function AppShell({appName: initialAppName, rootRoute, sidebar, sidebarMo
             sidebarMode: effectiveSidebarMode,
             isMobile,
             isTablet,
-            activeColumn,
-            navigateToColumn,
-            goBack,
-            columnHistory,
-            toolbarSlots,
-            registerToolbar,
-            unregisterToolbar,
-            getToolbarPortalNode,
-            getSecondaryToolbarPortalNode,
-            registerOnBack,
-            unregisterOnBack,
-            getActiveOnBack,
         }}>
             <div className="flex flex-col h-dvh">
                 <Topbar rootRoute={rootRoute}/>
-                <SecondaryToolbar/>
                 <div className="flex flex-1 w-full overflow-hidden">
                     {sidebar && <SidebarContainer sidebar={sidebar}/>}
                     <main className="flex-1 flex h-full overflow-hidden">

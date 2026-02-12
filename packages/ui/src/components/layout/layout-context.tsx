@@ -1,10 +1,5 @@
 import {createContext, useContext} from 'react';
 
-type ToolbarSlot = {
-    columnId: string;
-    width: string;
-}
-
 export type LayoutContextType = {
     appName: string;
     setAppName: (name: string) => void;
@@ -13,18 +8,6 @@ export type LayoutContextType = {
     sidebarMode: 'collapsible' | 'hidden' | 'none';
     isMobile: boolean;
     isTablet: boolean;
-    activeColumn: string | null;
-    navigateToColumn: (id: string) => void;
-    goBack: () => void;
-    columnHistory: string[];
-    toolbarSlots: ToolbarSlot[];
-    registerToolbar: (columnId: string, width: string) => void;
-    unregisterToolbar: (columnId: string) => void;
-    getToolbarPortalNode: (columnId: string) => HTMLElement | null;
-    getSecondaryToolbarPortalNode: () => HTMLElement | null;
-    registerOnBack: (columnId: string, onBack: () => void) => void;
-    unregisterOnBack: (columnId: string) => void;
-    getActiveOnBack: () => (() => void) | null;
 }
 
 export const LayoutContext = createContext<LayoutContextType>({
@@ -35,18 +18,6 @@ export const LayoutContext = createContext<LayoutContextType>({
     sidebarMode: 'collapsible',
     isMobile: false,
     isTablet: false,
-    activeColumn: null,
-    navigateToColumn: () => {},
-    goBack: () => {},
-    columnHistory: [],
-    toolbarSlots: [],
-    registerToolbar: () => {},
-    unregisterToolbar: () => {},
-    getToolbarPortalNode: () => null,
-    getSecondaryToolbarPortalNode: () => null,
-    registerOnBack: () => {},
-    unregisterOnBack: () => {},
-    getActiveOnBack: () => null,
 });
 
 export function useLayout() {

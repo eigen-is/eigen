@@ -5,8 +5,6 @@ import {useAddContact, useContacts, useUpdateContact} from '@workspace/lib/conta
 import {type Contact} from "@workspace/lib/types/contact";
 import {EigenLoader} from "@workspace/ui";
 import {ColumnLayout, Column} from "@workspace/ui/components/layout/column-layout";
-import {useLayout} from "@workspace/ui/components/layout/layout-context";
-import {useEffect} from 'react';
 
 // Define search params type with Zod schema
 const searchSchema = z.object({
@@ -39,11 +37,6 @@ function EditContactRoute() {
     const {filterType, filterId} = Route.useParams();
     const {contactId} = Route.useSearch();
     const navigate = useNavigate();
-    const {navigateToColumn} = useLayout();
-
-    useEffect(() => {
-        navigateToColumn('editor');
-    }, [navigateToColumn]);
 
     // Gebruik TanStack Query hooks
     const {data: contacts = [], isLoading: contactsLoading} = useContacts();
@@ -147,7 +140,7 @@ function EditContactRoute() {
     const isNew = !contactId;
 
     return (
-        <ColumnLayout>
+        <ColumnLayout mobileColumn="editor">
             <Column id="editor" width="flex" onBack={handleCancel} toolbar={<ContactEditToolbar isNew={isNew}/>}>
                 <ContactEdit
                     contact={contact || emptyContact}

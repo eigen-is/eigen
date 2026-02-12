@@ -134,7 +134,7 @@ function UserDropdown({rootRoute}: { rootRoute: TopbarProps['rootRoute'] }) {
 }
 
 export function Topbar({rootRoute}: TopbarProps) {
-    const {appName, isMobile, isTablet, sidebarMode, setSidebarOpen, toolbarSlots} = useLayout();
+    const {appName, isMobile, sidebarMode, setSidebarOpen} = useLayout();
 
     useEffect(() => {
         document.title = `eigen|${appName}>`;
@@ -142,13 +142,10 @@ export function Topbar({rootRoute}: TopbarProps) {
 
     const showBurger = isMobile && sidebarMode !== 'none';
 
-    const hasColumnToolbars = !isMobile && toolbarSlots.length > 0;
-    const sidebarWidth = sidebarMode === 'none' ? '0px' : isTablet ? '64px' : '256px';
-
     return (
         <header className="bg-app shrink-0">
             <div className="flex h-12 items-center">
-                <div className="flex items-center px-4 shrink-0" style={hasColumnToolbars ? {width: sidebarWidth} : undefined}>
+                <div className="flex items-center px-4 shrink-0">
                     {showBurger && (
                         <Button
                             variant="ghost"
@@ -163,20 +160,7 @@ export function Topbar({rootRoute}: TopbarProps) {
                     <AppLogo appName={appName.toLowerCase()}/>
                 </div>
 
-                {hasColumnToolbars ? (
-                    <>
-                        {toolbarSlots.map(slot => (
-                            <div
-                                key={slot.columnId}
-                                data-toolbar-slot={slot.columnId}
-                                className="flex items-center px-4 h-full border-l border-white/10 text-white [&_button]:text-white [&_button:hover]:bg-primary/20"
-                                style={slot.width === 'flex' ? {flex: '1 1 auto', minWidth: 0} : {width: slot.width, flexShrink: 0}}
-                            />
-                        ))}
-                    </>
-                ) : (
-                    <div className="flex-1"/>
-                )}
+                <div className="flex-1"/>
 
                 <div className="flex items-center px-4 shrink-0">
                     <UserDropdown rootRoute={rootRoute}/>
