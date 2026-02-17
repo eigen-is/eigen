@@ -169,7 +169,7 @@ export function EmailList({
             </div>
 
             {/* Context menu using shared hook */}
-            <ContextMenuAnchor isOpen={isOpen} position={position} onClose={close}>
+            <ContextMenuAnchor isOpen={isOpen} onClose={close}>
                 <EmailContextMenu
                     style={{
                         position: 'absolute',

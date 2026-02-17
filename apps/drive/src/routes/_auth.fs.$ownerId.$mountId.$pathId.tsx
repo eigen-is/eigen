@@ -6,7 +6,7 @@ import {DriveLayout} from "@workspace/ui/components/layout/drive/drive-layout";
 import {DrivePath, DriveSearchParams} from "@workspace/lib/types/drive";
 import {useLayout} from "@workspace/ui/components/layout/layout-context";
 import {DriveContext} from "./__root";
-import {FilePreview} from '../components/drive/file-preview';
+import {FilePreview} from '@workspace/ui/components/layout/drive/file-preview';
 import {getDriveDownloadUrl, getDriveEmbedUrl} from "@workspace/lib/api";
 
 export const Route = createFileRoute('/_auth/fs/$ownerId/$mountId/$pathId')({

@@ -1,5 +1,4 @@
 import React, {useCallback, useEffect, useMemo, useRef, useState} from "react";
-import {useTableKeyboard} from "./use-table-keyboard";
 import {useTableDragDrop} from "./use-table-drag-drop";
 import {Table, TableBody, TableCell, TableHead, TableHeader, TableRow} from "@workspace/ui/components/table";
 import {cn} from "@workspace/ui/lib/utils";
@@ -7,13 +6,10 @@ import {formatDistanceToNow} from "date-fns";
 import {DrivePath, DEFAULT_MOUNT_ID} from "@workspace/lib/types";
 import {DriveShareSummary} from "./drive-share-summary";
 import {ArrowRight, ChevronLeft, Download, Pencil, Trash2, UserRoundPlus} from "lucide-react";
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuSeparator,
-    DropdownMenuTrigger
-} from "@workspace/ui/components/dropdown-menu";
+import {DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator} from "@workspace/ui/components/dropdown-menu";
+import {useContextMenu} from "../context-menu/use-context-menu";
+import {ContextMenuAnchor} from "../context-menu/context-menu-anchor";
+import {useKeyboardListNavigation} from "../../../hooks/use-keyboard-list-navigation";
 
 export type DriveTableProps = {
     items: DrivePath[];
@@ -48,20 +44,8 @@ export function DriveTable({
 
     const tableRef = useRef<HTMLTableElement>(null);
     const [hasFocus, setHasFocus] = useState(false);
-    const [selectedIndex, setSelectedIndex] = useState<number>(-1);
-    const [contextMenuPosition, setContextMenuPosition] = useState<{ x: number, y: number } | null>(null);
-    const [contextMenuItem, setContextMenuItem] = useState<DrivePath | null>(null);
 
     const hasParentItem = Boolean(currentPath?.parentId);
-
-    const scrollToRow = useCallback((index: number) => {
-        if (tableRef.current) {
-            const rows = tableRef.current.querySelectorAll('tbody tr');
-            if (rows[index]) {
-                rows[index].scrollIntoView({behavior: 'smooth', block: 'nearest'});
-            }
-        }
-    }, []);
 
     const sortedItems = useMemo(() => {
         return [...items].sort((a, b) => {
@@ -103,26 +87,20 @@ export function DriveTable({
         return () => clearTimeout(timer);
     }, []);
 
-    useEffect(() => {
-        if (activeItemId) {
-            const index = allItems.findIndex(item => item.id === activeItemId);
-            if (index !== -1) {
-                setSelectedIndex(index);
-            }
-        } else {
-            setSelectedIndex(-1);
-        }
-    }, [activeItemId, allItems]);
+    const handleItemSelect = useCallback((id: string) => {
+        const item = allItems.find(i => i.id === id);
+        if (item) onItemClick?.(item);
+    }, [allItems, onItemClick]);
 
-    const {handleKeyDown} = useTableKeyboard({
+    const {selectedIndex, handleKeyDown} = useKeyboardListNavigation<DrivePath>({
         items: allItems,
-        selectedIndex,
-        setSelectedIndex,
-        hasParentItem,
-        onItemClick,
+        activeId: activeItemId,
+        getId: (item) => item.id,
+        onSelect: handleItemSelect,
+        containerRef: tableRef,
+        itemSelector: 'tbody tr',
         onDelete,
-        scrollToRow,
-        hasFocus,
+        shouldNotify: (_item, index) => !hasParentItem || index > 0,
     });
 
     const {
@@ -136,16 +114,13 @@ export function DriveTable({
         handleDragEnd,
     } = useTableDragDrop({onMove});
 
-    const handleContextMenu = useCallback((e: React.MouseEvent, item: DrivePath) => {
-        e.preventDefault();
-        setContextMenuPosition({x: e.clientX, y: e.clientY});
-        setContextMenuItem(item);
-    }, []);
-
-    const closeContextMenu = useCallback(() => {
-        setContextMenuPosition(null);
-        setContextMenuItem(null);
-    }, []);
+    const {
+        item: contextMenuItem,
+        position: contextMenuPosition,
+        isOpen: contextMenuOpen,
+        handleContextMenu,
+        close: closeContextMenu
+    } = useContextMenu<DrivePath>();
 
     return (
         <div className="flex-1 overflow-auto">
@@ -263,19 +238,12 @@ export function DriveTable({
                 </TableBody>
             </Table>
 
-            <DropdownMenu
-                open={!!contextMenuPosition}
-                onOpenChange={(open) => !open && closeContextMenu()}
-            >
-                <DropdownMenuTrigger className="hidden">
-                    {/* Hidden trigger */}
-                </DropdownMenuTrigger>
-
+            <ContextMenuAnchor isOpen={contextMenuOpen} onClose={closeContextMenu}>
                 <DropdownMenuContent
                     style={{
                         position: 'absolute',
-                        top: `${contextMenuPosition?.y || -1000}px`,
-                        left: `${contextMenuPosition?.x || -1000}px`,
+                        top: `${contextMenuPosition.y}px`,
+                        left: `${contextMenuPosition.x}px`,
                     }}
                     className="w-48"
                 >
@@ -345,7 +313,7 @@ export function DriveTable({
                         </>
                     )}
                 </DropdownMenuContent>
-            </DropdownMenu>
+            </ContextMenuAnchor>
         </div>
     );
 }
