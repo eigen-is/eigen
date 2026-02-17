@@ -3,11 +3,15 @@ import {Link} from '@tanstack/react-router';
 import {SearchBar} from '@workspace/ui/components/layout/search-bar/search-bar';
 import {useContacts} from '@workspace/lib/contacts';
 import {Contact} from '@workspace/lib/types/contact';
-import {DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem} from '@workspace/ui/components/dropdown-menu';
-import {ArrowUpDown} from 'lucide-react';
+import {DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator} from '@workspace/ui/components/dropdown-menu';
+import {ArrowUpDown, Edit, Trash2} from 'lucide-react';
 import {Button} from '@workspace/ui/components/button';
 import {EigenLoader} from '@workspace/ui/components/layout/eigen-loader';
 import {UserItem} from '@workspace/ui/components/layout/user-item';
+import {useContextMenu} from '@workspace/ui/components/layout/context-menu/use-context-menu';
+import {ContextMenuAnchor} from '@workspace/ui/components/layout/context-menu/context-menu-anchor';
+import {LabelAssignSubMenu} from '@workspace/ui/components/layout/labels/label-assign-sub-menu';
+import type {Label} from '@workspace/lib/types/label';
 
 interface ContactsListToolbarProps {
     searchQuery: string;
@@ -50,46 +54,36 @@ interface ContactsListProps {
     filterId?: string;
     searchQuery: string;
     sortBy: 'firstName' | 'lastName';
+    labels?: Label[];
+    onEdit?: (contact: Contact) => void;
+    onDelete?: (contact: Contact) => void;
+    onToggleLabel?: (contact: Contact, labelId: string) => void;
 }
 
-export function ContactsList({filterType = 'filter', filterId = 'all', searchQuery, sortBy}: ContactsListProps) {
+export function ContactsList({filterType = 'filter', filterId = 'all', searchQuery, sortBy, labels = [], onEdit, onDelete, onToggleLabel}: ContactsListProps) {
+    const contextMenu = useContextMenu<Contact>();
 
-    // Gebruik de useContacts hook om contacten op te halen
     const {data: contacts = [], isLoading, error} = useContacts();
 
-    // Filter contacten op basis van filterType en filterId
     const applyFilters = (contacts: Contact[]) => {
         if (!contacts.length) return [];
 
-        // Eerste stap: filterType en filterId toepassen
         let filtered = [...contacts];
 
-        // Als filterType 'label' is, filter op label ID
         if (filterType === 'label' && filterId !== 'all') {
             filtered = filtered.filter(contact =>
                 contact.labels && contact.labels.includes(filterId)
             );
         }
-        // Als filterType 'filter' is, pas speciale filters toe
         else if (filterType === 'filter') {
-            if (filterId === 'frequent') {
-                // Hier zou je een frequentie-logica kunnen implementeren
-                // Voor nu tonen we gewoon alle contacten
-            } else if (filterId === 'recent') {
-                // Hier zou je recent toegevoegde/gewijzigde contacten kunnen filteren
-                // Voor nu tonen we gewoon alle contacten
-            }
+            // TODO: implement frequency/recency logic
         }
 
         return filtered;
     };
 
-    // Use memoization to prevent unnecessary recalculations
-    // Only recalculate when contacts, filterType, or filterId changes
     const filteredContacts = useMemo(() => applyFilters(contacts), [contacts, filterType, filterId]);
 
-    // Sorteer contacten op de geselecteerde sorteermethode
-    // Use memoization to prevent unnecessary sorting operations
     const sortedContacts = useMemo(() => {
         return [...filteredContacts].sort((a, b) => {
             if (sortBy === 'firstName') {
@@ -100,8 +94,6 @@ export function ContactsList({filterType = 'filter', filterId = 'all', searchQue
         });
     }, [filteredContacts, sortBy]);
 
-    // Filter contacten op basis van zoekopdracht
-    // Use memoization to prevent unnecessary filtering on each render
     const searchedContacts = useMemo(() => {
         return searchQuery.length === 0
             ? sortedContacts
@@ -114,12 +106,10 @@ export function ContactsList({filterType = 'filter', filterId = 'all', searchQue
             );
     }, [sortedContacts, searchQuery]);
 
-    // Groepeer contacten op eerste letter
     const groupContactsByLetter = (contacts: Contact[]) => {
         const groups: Record<string, Contact[]> = {};
 
         for(const contact of contacts) {
-            // Gebruik de eerste letter van firstname of lastname, afhankelijk van sorteermethode
             const firstChar = sortBy === 'firstName'
                 ? contact.firstName.charAt(0).toUpperCase()
                 : contact.lastName.charAt(0).toUpperCase();
@@ -131,12 +121,9 @@ export function ContactsList({filterType = 'filter', filterId = 'all', searchQue
             groups[firstChar].push(contact);
         }
 
-        // Converteer het object naar een array van tuples [letter, contacts] en sorteer op letter
         return Object.entries(groups).sort((a, b) => a[0].localeCompare(b[0]));
     };
 
-    // Use memoization for grouping to prevent unnecessary recalculations
-    // This intensive operation should only run when the sorted and filtered contacts change
     const groupedContacts = useMemo(() =>
             groupContactsByLetter(searchedContacts),
         [searchedContacts, sortBy]
@@ -145,15 +132,15 @@ export function ContactsList({filterType = 'filter', filterId = 'all', searchQue
     if (error) {
         return (
             <div className="w-full h-full flex flex-col items-center justify-center text-destructive">
-                <p>Er is een fout opgetreden bij het laden van contacten.</p>
-                <p className="text-sm">{error instanceof Error ? error.message : 'Onbekende fout'}</p>
+                <p>An error occurred while loading contacts.</p>
+                <p className="text-sm">{error instanceof Error ? error.message : 'Unknown error'}</p>
             </div>
         );
     }
 
     return (
         <div className="w-full flex flex-col flex-1 overflow-hidden">
-            <div className="flex-1  overflow-y-auto">
+            <div className="flex-1 overflow-y-auto">
                 {isLoading ? (
                     <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
                         <EigenLoader/>
@@ -182,6 +169,7 @@ export function ContactsList({filterType = 'filter', filterId = 'all', searchQue
                                             activeProps={{
                                                 className: "eigen-list-item-active",
                                             }}
+                                            onContextMenu={(e) => contextMenu.handleContextMenu(e, contact)}
                                         >
                                             <UserItem
                                                 name={sortBy === 'firstName'
@@ -198,6 +186,35 @@ export function ContactsList({filterType = 'filter', filterId = 'all', searchQue
                         ))}
                     </div>
                 )}
+
+                <ContextMenuAnchor isOpen={contextMenu.isOpen} onClose={contextMenu.close}>
+                    <DropdownMenuContent
+                        style={{position: 'fixed', left: contextMenu.position.x, top: contextMenu.position.y}}
+                    >
+                        {onEdit && contextMenu.item && (
+                            <DropdownMenuItem onClick={() => { onEdit(contextMenu.item!); contextMenu.close(); }}>
+                                <Edit className="w-4 h-4 mr-2"/> Edit
+                            </DropdownMenuItem>
+                        )}
+                        {onDelete && contextMenu.item && (
+                            <DropdownMenuItem onClick={() => { onDelete(contextMenu.item!); contextMenu.close(); }}>
+                                <Trash2 className="w-4 h-4 mr-2"/> Delete
+                            </DropdownMenuItem>
+                        )}
+                        {onToggleLabel && contextMenu.item && labels.length > 0 && (
+                            <>
+                                <DropdownMenuSeparator/>
+                                <LabelAssignSubMenu
+                                    labels={labels}
+                                    assignedLabelIds={contextMenu.item.labels || []}
+                                    onToggleLabel={(labelId) => {
+                                        onToggleLabel(contextMenu.item!, labelId);
+                                    }}
+                                />
+                            </>
+                        )}
+                    </DropdownMenuContent>
+                </ContextMenuAnchor>
             </div>
         </div>
     );

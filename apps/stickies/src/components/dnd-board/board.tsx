@@ -21,7 +21,6 @@ interface StickiesBoardProps {
 }
 
 const StickiesBoard = ({ownerId, path, canWrite, onAccessDialogOpen}: StickiesBoardProps) => {
-    // Core board state and operations with Yjs integration
     const {
         board,
         selectedColumnId,
@@ -36,27 +35,22 @@ const StickiesBoard = ({ownerId, path, canWrite, onAccessDialogOpen}: StickiesBo
         undoManager
     } = useYjsKanbanBoard(ownerId, path.mountId, path.id);
 
-    // Drag and drop functionality with Yjs awareness
     const {
         dragState,
         handleDragStart,
         handleDragEnd,
     } = useYjsDragAndDrop({board, yjsDoc});
 
-    // Refs and responsive hooks
     const isMobile = useIsMobile();
 
-    // State for column editing
     const [editColumnId, setEditColumnId] = useState<string | null>(null);
     const [isColumnSettingsOpen, setIsColumnSettingsOpen] = useState(false);
 
-    // Handle column edit button click
     const handleEditColumn = (columnId: string) => {
         setEditColumnId(columnId);
         setIsColumnSettingsOpen(true);
     };
 
-    // Sensors config - enables drag and drop functionality
     const sensors = useSensors(
         useSensor(PointerSensor, {
             activationConstraint: {
@@ -65,7 +59,6 @@ const StickiesBoard = ({ownerId, path, canWrite, onAccessDialogOpen}: StickiesBo
         })
     );
 
-    // Get active task or column for the drag overlay
     const getActiveComponent = () => {
         if (!dragState.activeId || !dragState.activeType || !dragState.activeItem) return null;
 
@@ -156,7 +149,6 @@ const StickiesBoard = ({ownerId, path, canWrite, onAccessDialogOpen}: StickiesBo
                                 })}
                             </SortableContext>
 
-                            {/* Add Column Button */}
                             <div
                                 className={`${isMobile ? 'mx-[4vw] min-w-[92vw] w-[92vw]' : 'mx-1.5 min-w-[280px] w-[280px]'} flex items-start h-full`}
                                 style={{
@@ -179,7 +171,6 @@ const StickiesBoard = ({ownerId, path, canWrite, onAccessDialogOpen}: StickiesBo
                         </DragOverlay>
                     </DndContext>
 
-                    {/* Dialogs */}
                     <AddTaskDialog
                         isOpen={isAddTaskDialogOpen}
                         onClose={() => setIsAddTaskDialogOpen(false)}
@@ -193,7 +184,6 @@ const StickiesBoard = ({ownerId, path, canWrite, onAccessDialogOpen}: StickiesBo
                         onAddColumn={handleAddColumn}
                     />
 
-                    {/* Column settings dialog */}
                     {editColumnId && (
                         <ColumnSettingsDialog
                             isOpen={isColumnSettingsOpen}

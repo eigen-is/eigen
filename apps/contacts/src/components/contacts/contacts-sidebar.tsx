@@ -17,21 +17,16 @@ interface ContactsSidebarProps {
 }
 
 export function ContactsSidebar({condensed = false, onClose, isMobile = false}: ContactsSidebarProps) {
-    // Use the useLabels hook from TanStack Query
     const {
         data: labels = [],
         isLoading: loading,
         error
     } = useLabels();
 
-    // Generate path for a label - this is still needed for routing
-
-    // Generate path for a label
     const getLabelPath = (label: Label) => `/label/${label.id.toLowerCase()}`;
 
     return (
         <div className="h-full flex flex-col bg-background">
-            {/* Mobile Header with Close Button */}
             {isMobile && (
                 <div className="flex items-center h-12 bg-app px-4">
                     <Button variant="ghost" size="icon" onClick={onClose}
@@ -80,10 +75,8 @@ export function ContactsSidebar({condensed = false, onClose, isMobile = false}: 
                     />
                 </SidebarSection>
 
-                {/* Horizontal separator */}
                 <Separator/>
 
-                {/* Status messages or labels */}
                 {error ? (
                     <div className="px-3 py-2 text-sm text-destructive">An error occurred while loading labels.</div>
                 ) : loading ? (
@@ -101,7 +94,6 @@ export function ContactsSidebar({condensed = false, onClose, isMobile = false}: 
                 )}
             </div>
 
-            {/* Storage usage indicator at the bottom of sidebar */}
             <StorageUsage
                 className="mt-auto"
                 condensed={condensed}

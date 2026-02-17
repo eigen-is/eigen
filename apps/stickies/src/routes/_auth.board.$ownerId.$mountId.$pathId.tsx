@@ -26,8 +26,6 @@ function StickiesRoute() {
         setAccessDialogOpen(true);
     }, [setAccessDialogOpen]);
 
-    console.log(docInfo);
-
     if (isLoading) return <EigenLoader/>
     if (!docInfo?.canRead || !docInfo.path) {
         return (

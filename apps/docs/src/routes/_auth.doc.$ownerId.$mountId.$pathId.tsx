@@ -20,7 +20,6 @@ function CollaborativeTextEditor() {
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
     const navigate = useNavigate();
 
-    // Always call hooks at the top level, before any conditional logic
     useEffect(() => {
         if (docInfo?.path?.name) {
             setAppName?.(docInfo.path.name.replace('.eigendoc', ''));
@@ -38,7 +37,6 @@ function CollaborativeTextEditor() {
         return docInfo?.folderContents?.find(item => item.name === 'media')?.id ?? null;
     }, [docInfo?.folderContents]);
 
-    // Handle loading states
     if (isLoading) {
         return <EigenLoader/>
     }
@@ -63,14 +61,15 @@ function CollaborativeTextEditor() {
                 open={accessDialogOpen}
                 onOpenChange={setAccessDialogOpen}
                 path={docInfo.path}
-            /><DriveDeleteItem
-            path={docInfo.path}
-            open={deleteDialogOpen}
-            onOpenChange={setDeleteDialogOpen}
-            onAfterAction={() => {
-                navigate({to: `/`});
-            }}
-        />
+            />
+            <DriveDeleteItem
+                path={docInfo.path}
+                open={deleteDialogOpen}
+                onOpenChange={setDeleteDialogOpen}
+                onAfterAction={() => {
+                    navigate({to: `/`});
+                }}
+            />
         </>
     )
 }
