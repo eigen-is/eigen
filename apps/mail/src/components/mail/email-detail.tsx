@@ -160,8 +160,6 @@ export function EmailDetail({email, toggleMailRead}: EmailDetailProps) {
         );
     }
 
-    console.log('Rendering EmailDetail with email:', email);
-
     const firstFrom = email.from?.value[0];
     const fromName = firstFrom?.name || firstFrom?.address || 'Unknown';
     const fromEmail = firstFrom?.address || 'unknown@example.com';
