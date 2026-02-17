@@ -27,7 +27,6 @@ export function ColumnSettingsDialog({
         e.preventDefault();
         if (!title.trim() || !yjsDoc || !columnId) return;
 
-        // Update column title in Yjs
         yjsDoc.transact(() => {
             const columnsMap = yjsDoc.getMap("columns");
             const columnMap = columnsMap.get(columnId) as Y.Map<any>;
@@ -43,32 +42,27 @@ export function ColumnSettingsDialog({
         if (!yjsDoc || !columnId) return;
 
         yjsDoc.transact(() => {
-            // Get all maps
             const columnsMap = yjsDoc.getMap("columns");
             const tasksMap = yjsDoc.getMap("tasks");
             const columnOrderArray = yjsDoc.getArray("columnOrder");
 
-            // Get the column and its tasks
             const columnMap = columnsMap.get(columnId) as Y.Map<any>;
             if (!columnMap) return;
 
             const taskIdsArray = columnMap.get("taskIds") as Y.Array<any>;
             if (!taskIdsArray) return;
 
-            // Delete all tasks in this column
             const taskIds = taskIdsArray.toArray() as string[];
             for(const taskId of taskIds) {
                 tasksMap.delete(taskId);
             }
 
-            // Remove from column order
             const columnOrder = columnOrderArray.toArray() as string[];
             const columnIndex = columnOrder.indexOf(columnId);
             if (columnIndex !== -1) {
                 columnOrderArray.delete(columnIndex, 1);
             }
 
-            // Delete the column itself
             columnsMap.delete(columnId);
         });
 
@@ -114,7 +108,6 @@ export function ColumnSettingsDialog({
                 </form>
             </DialogContent>
 
-            {/* Confirmation dialog for column deletion */}
             <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
                 <DialogContent>
                     <DialogHeader>

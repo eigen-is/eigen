@@ -110,7 +110,6 @@ interface ContactDetailProps {
 export function ContactDetail({contact, onDelete, filterType, filterId}: ContactDetailProps) {
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
-    // Use TanStack Query hook only for fetching labels
     const {
         data: labels = [],
         isLoading: labelsLoading,
@@ -151,7 +150,6 @@ export function ContactDetail({contact, onDelete, filterType, filterId}: Contact
         }).format(date);
     };
 
-    // Get contact's label objects
     const contactLabels = contact.labels
         ? labels.filter(label => contact.labels?.includes(label.id))
         : [];
@@ -202,7 +200,6 @@ export function ContactDetail({contact, onDelete, filterType, filterId}: Contact
                     </div>
 
                     <div className="flex-1 space-y-6">
-                        {/* Contact Information */}
                         <div className="space-y-4">
                             <h3 className="text-lg font-semibold border-b pb-2">Contact Information</h3>
 
@@ -268,7 +265,6 @@ export function ContactDetail({contact, onDelete, filterType, filterId}: Contact
                             )}
                         </div>
 
-                        {/* Addresses */}
                         {contact.address && contact.address.length > 0 && Object.keys(contact.address[0]).length > 0 && (
                             <div className="space-y-4">
                                 <h3 className="text-lg font-semibold border-b pb-2">Addresses</h3>
@@ -287,7 +283,6 @@ export function ContactDetail({contact, onDelete, filterType, filterId}: Contact
                             </div>
                         )}
 
-                        {/* Notes */}
                         {contact.notes && (
                             <div className="space-y-4">
                                 <h3 className="text-lg font-semibold border-b pb-2">Notes</h3>
@@ -300,7 +295,6 @@ export function ContactDetail({contact, onDelete, filterType, filterId}: Contact
                 </div>
             </div>
 
-            {/* Delete Confirmation Dialog */}
             <DeleteDialog
                 open={deleteDialogOpen}
                 onOpenChange={setDeleteDialogOpen}

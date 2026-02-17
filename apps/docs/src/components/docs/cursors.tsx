@@ -4,7 +4,6 @@ import styles from './cursors.module.css';
 import {UserAvatar} from '@workspace/ui';
 import {cn} from '@workspace/ui/lib/utils';
 
-// Define the structure of cursor data
 interface CursorData {
     name: string;
     email?: string;

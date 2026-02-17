@@ -38,20 +38,13 @@ function EditContactRoute() {
     const {contactId} = Route.useSearch();
     const navigate = useNavigate();
 
-    // Gebruik TanStack Query hooks
     const {data: contacts = [], isLoading: contactsLoading} = useContacts();
-
-    // Vind het huidige contact op basis van id
     const contact = contactId ? contacts.find((c): c is Contact => c.id === contactId) : undefined;
-
-    // Mutatie hooks voor het maken en bijwerken van contacten
     const updateContactMutation = useUpdateContact();
     const addContactMutation = useAddContact();
 
-    // Handle form submission
     const handleSave = async (data: ContactFormValues) => {
         try {
-            // Transform data for API compatibility (avatar is added by ContactEdit component)
             const formData = data as ContactFormValues & {avatar?: string | null};
             const contactData: Omit<Contact, 'id'> = {
                 ...formData,
@@ -63,19 +56,14 @@ function EditContactRoute() {
             };
 
             if (contactId) {
-                // Bestaand contact bijwerken
                 await updateContactMutation.mutateAsync({
                     id: contactId,
                     ...contactData
                 } as Contact);
             } else {
-                // Nieuw contact toevoegen
                 const result = await addContactMutation.mutateAsync(contactData);
-
-                // Type assertion als Contact, nadat we hebben geverifieerd dat het een object is met een id
                 const newContact = typeof result === 'object' && result !== null ? result as Contact : null;
 
-                // Navigeer naar het nieuwe contact als het is aangemaakt
                 if (newContact && newContact.id) {
                     navigate({
                         to: Route.fullPath,
@@ -86,7 +74,6 @@ function EditContactRoute() {
                 }
             }
 
-            // Navigeer terug naar het contactoverzicht of contactdetail
             navigate({
                 to: '/$filterType/$filterId',
                 params: {filterType, filterId},
@@ -94,7 +81,6 @@ function EditContactRoute() {
             });
         } catch (error) {
             console.error('Error saving contact:', error);
-            // Hier zou je een foutmelding kunnen tonen
         }
     };
 
@@ -106,7 +92,6 @@ function EditContactRoute() {
         });
     };
 
-    // Toon loading state als contacten worden geladen
     if (contactsLoading) {
         return (
             <div className="h-full flex items-center justify-center">
@@ -115,8 +100,6 @@ function EditContactRoute() {
         );
     }
 
-    // Als we een contactId hebben maar het contact is niet gevonden,
-    // navigeer terug naar de lijst
     if (contactId && !contact) {
         navigate({
             to: '/$filterType/$filterId',
@@ -126,7 +109,6 @@ function EditContactRoute() {
         return null;
     }
 
-    // Als er geen contactId is, maken we een nieuw contact
     const emptyContact: Contact = {
         id: '',
         firstName: '',

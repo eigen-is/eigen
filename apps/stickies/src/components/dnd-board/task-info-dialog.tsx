@@ -34,14 +34,12 @@ export function TaskInfoDialog({
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const {user} = useAuth();
 
-    // --- Yjs comments observer ---
     const [yjsComments, setYjsComments] = useState<Record<string, CommentItem>>({});
 
     useEffect(() => {
         if (!yjsDoc) return;
         const commentsMap = yjsDoc.getMap("comments");
 
-        // Helper to convert Y.Map to CommentItem
         const mapToComment = (map: Y.Map<any>): CommentItem => ({
             id: map.get("id"),
             taskId: map.get("taskId"),
@@ -50,7 +48,6 @@ export function TaskInfoDialog({
             createdAt: map.get("createdAt"),
         });
 
-        // Initial load
         const loadComments = () => {
             const result: Record<string, CommentItem> = {};
             for(const [key, value] of commentsMap) {
@@ -62,7 +59,6 @@ export function TaskInfoDialog({
         };
         loadComments();
 
-        // Observer
         const observer = () => {
             loadComments();
         };
@@ -74,7 +70,6 @@ export function TaskInfoDialog({
 
     if (!task) return null;
 
-    // Memoize taskComments to keep array reference stable for React.memo
     const taskComments = useMemo(() => {
         return Object.values(yjsComments)
             .filter((c) => c.taskId === task?.id)
@@ -99,25 +94,15 @@ export function TaskInfoDialog({
         if (textareaRef.current) textareaRef.current.value = "";
     };
 
-    // State to track textarea focus (used for onFocus/onBlur handlers)
-    const [, setTextareaHasFocus] = useState(false);
-
-    // Task edit state
     const [isTaskSettingsOpen, setIsTaskSettingsOpen] = useState(false);
 
-    const UserRow = React.memo(function UserRow({
-                                                    email,
-                                                    timeLabel,
-                                                    leftLabel,
-                                                    className,
-                                                    children,
-                                                }: {
+    const UserRow = ({email, timeLabel, leftLabel, className, children}: {
         email: string,
         timeLabel: string,
         leftLabel?: string,
         className?: string,
         children?: React.ReactNode,
-    }) {
+    }) => {
         const {data} = useAvatar(email, {enabled: true});
         return (
             <div className={cn("flex items-top", className)}>
@@ -136,42 +121,38 @@ export function TaskInfoDialog({
                 </div>
             </div>
         );
-    });
+    };
 
-    const CommentRow = React.memo(function CommentRow({comment}: { comment: CommentItem }) {
-        return (
-            <UserRow
-                email={comment.author}
-                timeLabel={formatDistanceToNow(comment.createdAt, {addSuffix: true})}
-            >
-                {comment.text}
-            </UserRow>
-        );
-    });
+    const CommentRow = ({comment}: { comment: CommentItem }) => (
+        <UserRow
+            email={comment.author}
+            timeLabel={formatDistanceToNow(comment.createdAt, {addSuffix: true})}
+        >
+            {comment.text}
+        </UserRow>
+    );
 
-    const TaskCommentList = React.memo(function TaskCommentList({taskComments, creator, createdAt}: {
+    const TaskCommentList = ({taskComments, creator, createdAt}: {
         taskComments: CommentItem[],
         creator: string,
         createdAt: Date
-    }) {
-        return (
-            <ScrollArea className="h-100 rounded-md p-2">
-                <div className="space-y-4">
-                    {taskComments.map((comment) => (
-                        <React.Fragment key={comment.id}>
-                            <CommentRow comment={comment}/>
-                            <Separator/>
-                        </React.Fragment>
-                    ))}
-                    <UserRow
-                        email={creator}
-                        timeLabel={formatDistanceToNow(createdAt, {addSuffix: true})}
-                        leftLabel="Created by"
-                    />
-                </div>
-            </ScrollArea>
-        );
-    });
+    }) => (
+        <ScrollArea className="h-100 rounded-md p-2">
+            <div className="space-y-4">
+                {taskComments.map((comment) => (
+                    <React.Fragment key={comment.id}>
+                        <CommentRow comment={comment}/>
+                        <Separator/>
+                    </React.Fragment>
+                ))}
+                <UserRow
+                    email={creator}
+                    timeLabel={formatDistanceToNow(createdAt, {addSuffix: true})}
+                    leftLabel="Created by"
+                />
+            </div>
+        </ScrollArea>
+    );
 
     return (
         <>
@@ -210,8 +191,6 @@ export function TaskInfoDialog({
                                     placeholder="Write a comment..."
                                     ref={textareaRef}
                                     className="min-h-20 mb-2"
-                                    onFocus={() => setTextareaHasFocus(true)}
-                                    onBlur={() => setTextareaHasFocus(false)}
                                     autoFocus={false}
                                 />
                                 <div className="flex justify-end">
