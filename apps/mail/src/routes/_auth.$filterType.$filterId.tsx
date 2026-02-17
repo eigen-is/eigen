@@ -1,6 +1,6 @@
 import {createFileRoute, useNavigate} from '@tanstack/react-router';
 import {EmailDetail, EmailDetailToolbar} from "../components/mail/email-detail";
-import {EmailDraft} from "../components/mail/email-draft";
+import {EmailDraft, EmailDraftToolbar} from "../components/mail/email-draft";
 import {
     useDeleteEmail,
     useEmail,
@@ -189,7 +189,14 @@ function MailRoute() {
         />
     );
 
-    const detailToolbar = (!isDraft && selectedEmail) ? (
+    const detailToolbar = isDraft ? (
+        <EmailDraftToolbar
+            onSend={() => handleSendEmail(selectedEmail as EmailDraftType)}
+            onDelete={() => handleDeleteEmail(selectedEmail as EmailDraftType)}
+            isSending={sendDraft.isPending}
+            hasId={!!selectedEmail?.id}
+        />
+    ) : selectedEmail ? (
         <EmailDetailToolbar
             email={selectedEmail}
             onDelete={handleDeleteEmailById}
@@ -242,7 +249,6 @@ function MailRoute() {
                         isDraft ? (
                             <EmailDraft
                                 email={selectedEmail as EmailDraftType}
-                                onBack={navigateToList}
                                 onDelete={handleDeleteEmail}
                                 toggleMailRead={(email, isRead) => toggleMailRead.mutate({email, isRead})}
                                 sendDraft={handleSendEmail}
