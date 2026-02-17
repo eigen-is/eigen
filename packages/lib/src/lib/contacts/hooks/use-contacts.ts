@@ -54,6 +54,7 @@ export function useAddContact() {
     return useMutation({
         mutationFn: async (newContact: Omit<Contact, 'id'>) => {
             const response = await contactsApi({ownerId}).contacts.post(newContact);
+            if (response.error) throw new Error(String(response.error));
             return response.data;
         },
         onSuccess: () => invalidateContactCreated(queryClient),
@@ -69,6 +70,7 @@ export function useUpdateContact() {
     return useMutation({
         mutationFn: async ({id, ...data}: Contact) => {
             const response = await contactsApi({ownerId}).contacts({id}).put(data);
+            if (response.error) throw new Error(String(response.error));
             return response.data;
         },
         onSuccess: (_data, variables) => invalidateContactUpdated(queryClient, variables.id),
@@ -84,6 +86,7 @@ export function useDeleteContact() {
     return useMutation({
         mutationFn: async (id: string) => {
             const response = await contactsApi({ownerId}).contacts({id}).delete();
+            if (response.error) throw new Error(String(response.error));
             return response.data;
         },
         onSuccess: (_data, id) => invalidateContactDeleted(queryClient, id),
