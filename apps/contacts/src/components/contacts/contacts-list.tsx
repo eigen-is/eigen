@@ -1,18 +1,13 @@
 import {useMemo} from 'react';
 import {Link} from '@tanstack/react-router';
-import {Search, ArrowUpDown} from 'lucide-react';
-import {Button} from "@workspace/ui/components/button";
-import {Input} from "@workspace/ui/components/input";
-import {UserItem} from "@workspace/ui/components/layout/user-item";
-import {type Contact} from "@workspace/lib/types/contact";
+import {SearchBar} from '@workspace/ui/components/layout/search-bar/search-bar';
 import {useContacts} from '@workspace/lib/contacts';
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuTrigger,
-} from "@workspace/ui/components/dropdown-menu";
-import {EigenLoader} from '@workspace/ui';
+import {Contact} from '@workspace/lib/types/contact';
+import {DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem} from '@workspace/ui/components/dropdown-menu';
+import {ArrowUpDown} from 'lucide-react';
+import {Button} from '@workspace/ui/components/button';
+import {EigenLoader} from '@workspace/ui/components/layout/eigen-loader';
+import {UserItem} from '@workspace/ui/components/layout/user-item';
 
 interface ContactsListToolbarProps {
     searchQuery: string;
@@ -24,16 +19,13 @@ interface ContactsListToolbarProps {
 export function ContactsListToolbar({searchQuery, onSearchChange, sortBy, onSortChange}: ContactsListToolbarProps) {
     return (
         <div className="flex items-center justify-between w-full gap-2">
-            <div className="relative flex-1 min-w-0">
-                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground"/>
-                <Input
-                    type="text"
-                    placeholder="Search contacts..."
-                    className="pl-8 w-full h-8 bg-white"
-                    value={searchQuery}
-                    onChange={(e) => onSearchChange(e.target.value)}
-                />
-            </div>
+            <SearchBar
+                placeholder="Search contacts..."
+                value={searchQuery}
+                onChange={onSearchChange}
+                maxWidth="full"
+                inputClassName="h-8 bg-white"
+            />
             <DropdownMenu>
                 <DropdownMenuTrigger asChild>
                     <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0">
