@@ -12,6 +12,7 @@ import {useContextMenu} from '@workspace/ui/components/layout/context-menu/use-c
 import {ContextMenuAnchor} from '@workspace/ui/components/layout/context-menu/context-menu-anchor';
 import {LabelAssignSubMenu} from '@workspace/ui/components/layout/labels/label-assign-sub-menu';
 import type {Label} from '@workspace/lib/types/label';
+import {useAuth} from '@workspace/lib/auth';
 
 interface ContactsListToolbarProps {
     searchQuery: string;
@@ -61,7 +62,9 @@ interface ContactsListProps {
 }
 
 export function ContactsList({filterType = 'filter', filterId = 'all', searchQuery, sortBy, labels = [], onEdit, onDelete, onToggleLabel}: ContactsListProps) {
+    const {user} = useAuth();
     const contextMenu = useContextMenu<Contact>();
+    const isMe = contextMenu.item?.eigenId === user?.id;
 
     const {data: contacts = [], isLoading, error} = useContacts();
 
@@ -196,7 +199,7 @@ export function ContactsList({filterType = 'filter', filterId = 'all', searchQue
                                 <Edit className="w-4 h-4 mr-2"/> Edit
                             </DropdownMenuItem>
                         )}
-                        {onDelete && contextMenu.item && (
+                        {onDelete && contextMenu.item && !isMe && (
                             <DropdownMenuItem onClick={() => { onDelete(contextMenu.item!); contextMenu.close(); }}>
                                 <Trash2 className="w-4 h-4 mr-2"/> Delete
                             </DropdownMenuItem>
@@ -209,6 +212,7 @@ export function ContactsList({filterType = 'filter', filterId = 'all', searchQue
                                     assignedLabelIds={contextMenu.item.labels || []}
                                     onToggleLabel={(labelId) => {
                                         onToggleLabel(contextMenu.item!, labelId);
+                                        contextMenu.close();
                                     }}
                                 />
                             </>
