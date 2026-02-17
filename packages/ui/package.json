@@ -49,6 +49,11 @@
       "./src/components/layout/drive/*.tsx",
       "./src/components/layout/drive/*.ts"
     ],
+    "./components/layout/context-menu": "./src/components/layout/context-menu/index.ts",
+    "./components/layout/context-menu/*": [
+      "./src/components/layout/context-menu/*.tsx",
+      "./src/components/layout/context-menu/*.ts"
+    ],
     "./hooks/*": "./src/hooks/*.ts"
   }
 }
