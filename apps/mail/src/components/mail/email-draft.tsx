@@ -61,9 +61,7 @@ interface EmailDraftProps {
     email: EmailDraftType | null;
     to?: string;
     onDelete: (mail: EmailDraftType) => void;
-    toggleMailRead: (mail: EmailDraftType, isRead: boolean) => void;
     sendDraft: (mail: EmailDraftType) => Promise<any>;
-    updateDraft: (mail: EmailDraftType) => Promise<any>;
 }
 
 export function EmailDraft({
