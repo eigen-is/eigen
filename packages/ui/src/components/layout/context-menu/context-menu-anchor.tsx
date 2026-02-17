@@ -3,12 +3,11 @@ import {DropdownMenu, DropdownMenuTrigger} from '@workspace/ui/components/dropdo
 
 interface ContextMenuAnchorProps {
     isOpen: boolean;
-    position: {x: number; y: number};
     onClose: () => void;
     children: ReactNode;
 }
 
-export function ContextMenuAnchor({isOpen, position, onClose, children}: ContextMenuAnchorProps) {
+export function ContextMenuAnchor({isOpen, onClose, children}: ContextMenuAnchorProps) {
     return (
         <DropdownMenu open={isOpen} onOpenChange={(open) => !open && onClose()}>
             <DropdownMenuTrigger className="hidden"/>

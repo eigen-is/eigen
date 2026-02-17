@@ -6,7 +6,9 @@ type UseKeyboardListNavigationOptions<T> = {
     getId: (item: T) => string;
     onSelect: (id: string) => void;
     containerRef: RefObject<HTMLElement | null>;
-    itemSelector?: string; // default: '.eigen-list-item'
+    itemSelector?: string;
+    onDelete?: (item: T) => void;
+    shouldNotify?: (item: T, index: number) => boolean;
 }
 
 export function useKeyboardListNavigation<T>({
@@ -15,11 +17,12 @@ export function useKeyboardListNavigation<T>({
     getId,
     onSelect,
     containerRef,
-    itemSelector = '.eigen-list-item'
+    itemSelector = '.eigen-list-item',
+    onDelete,
+    shouldNotify,
 }: UseKeyboardListNavigationOptions<T>) {
     const [selectedIndex, setSelectedIndex] = useState(-1);
 
-    // Sync selectedIndex with activeId
     useEffect(() => {
         if (activeId && items.length > 0) {
             const index = items.findIndex(item => getId(item) === activeId);
@@ -31,7 +34,6 @@ export function useKeyboardListNavigation<T>({
         }
     }, [activeId, items, getId]);
 
-    // Helper function to scroll to a specific row
     const scrollToRow = (index: number) => {
         if (containerRef.current) {
             const listItems = containerRef.current.querySelectorAll(itemSelector);
@@ -44,7 +46,12 @@ export function useKeyboardListNavigation<T>({
         }
     };
 
-    // Handle keyboard navigation
+    const notify = (item: T, index: number) => {
+        if (!shouldNotify || shouldNotify(item, index)) {
+            onSelect(getId(item));
+        }
+    };
+
     const handleKeyDown = (e: KeyboardEvent<HTMLElement>) => {
         if (items.length === 0) return;
 
@@ -53,10 +60,8 @@ export function useKeyboardListNavigation<T>({
                 e.preventDefault();
                 setSelectedIndex(prev => {
                     const newIndex = Math.min(prev + 1, items.length - 1);
-                    if (newIndex >= 0) {
-                        // Select item
-                        onSelect(getId(items[newIndex]));
-                        // Scroll to selected row
+                    if (newIndex >= 0 && newIndex !== prev) {
+                        notify(items[newIndex], newIndex);
                         scrollToRow(newIndex);
                     }
                     return newIndex;
@@ -67,47 +72,52 @@ export function useKeyboardListNavigation<T>({
                 e.preventDefault();
                 setSelectedIndex(prev => {
                     const newIndex = Math.max(prev - 1, 0);
-                    if (newIndex >= 0) {
-                        // Select item
-                        onSelect(getId(items[newIndex]));
-                        // Scroll to selected row
+                    if (newIndex >= 0 && newIndex !== prev) {
+                        notify(items[newIndex], newIndex);
                         scrollToRow(newIndex);
                     }
                     return newIndex;
                 });
                 break;
 
+            case ' ':
             case 'Enter':
                 e.preventDefault();
                 if (selectedIndex >= 0 && selectedIndex < items.length) {
-                    onSelect(getId(items[selectedIndex]));
-                    // Scroll to selected row
+                    notify(items[selectedIndex], selectedIndex);
                     scrollToRow(selectedIndex);
                 }
                 break;
 
+            case 'Delete':
+                e.preventDefault();
+                if (onDelete && selectedIndex >= 0 && selectedIndex < items.length) {
+                    onDelete(items[selectedIndex]);
+                }
+                break;
+
+            case 'PageUp':
             case 'Home':
                 e.preventDefault();
                 if (items.length > 0) {
                     setSelectedIndex(0);
-                    onSelect(getId(items[0]));
-                    // Scroll to first row
+                    notify(items[0], 0);
                     scrollToRow(0);
                 }
                 break;
 
+            case 'PageDown':
             case 'End':
                 e.preventDefault();
                 if (items.length > 0) {
                     const lastIndex = items.length - 1;
                     setSelectedIndex(lastIndex);
-                    onSelect(getId(items[lastIndex]));
-                    // Scroll to last row
+                    notify(items[lastIndex], lastIndex);
                     scrollToRow(lastIndex);
                 }
                 break;
         }
     };
 
-    return {selectedIndex, handleKeyDown};
+    return {selectedIndex, setSelectedIndex, handleKeyDown};
 }

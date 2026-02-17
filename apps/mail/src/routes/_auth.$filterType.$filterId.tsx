@@ -250,10 +250,8 @@ function MailRoute() {
                             <EmailDraft
                                 email={selectedEmail as EmailDraftType}
                                 onDelete={handleDeleteEmail}
-                                toggleMailRead={(email, isRead) => toggleMailRead.mutate({email, isRead})}
                                 sendDraft={handleSendEmail}
                                 to={to}
-                                updateDraft={updateDraft.mutateAsync}
                             />
                         ) : (
                             <EmailDetail

@@ -5,7 +5,7 @@ import {DrivePath, DriveSearchParams} from "@workspace/lib/types/drive";
 import {useAuth} from '@workspace/lib/auth';
 import {useLayout} from "@workspace/ui/components/layout/layout-context";
 import {useState} from "react";
-import {FilePreview} from '../components/drive/file-preview';
+import {FilePreview} from '@workspace/ui/components/layout/drive/file-preview';
 import {getDriveDownloadUrl, getDriveEmbedUrl} from "@workspace/lib/api";
 
 export const Route = createFileRoute('/_auth/mime/$mimeType')({
