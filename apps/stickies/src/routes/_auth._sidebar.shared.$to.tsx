@@ -26,7 +26,6 @@ function DriveRoute() {
     const {data: selectedPath = null} = usePathInfo(uid || '', mountId, pid || '');
     const {isMobile} = useLayout();
 
-    // Fetch folder content and path information
     const {
         data: unfilteredFolderContents = [],
         isLoading: isFolderContentLoading,
@@ -35,7 +34,6 @@ function DriveRoute() {
 
     const folderContents = unfilteredFolderContents?.filter((path) => path.type === 'stickies') || [];
 
-    // Handle row click to show path details
     const onRowSelect = (path: DrivePath) => {
         if (isMobile && (path.type === 'folder' || path.type === 'stickies')) {
             onRowActivate(path);
@@ -58,7 +56,6 @@ function DriveRoute() {
         }
     };
 
-    // Handle back navigation (mainly for mobile)
     const handleBackToList = () => {
         navigate({
             to: Route.fullPath,

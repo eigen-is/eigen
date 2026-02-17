@@ -65,6 +65,7 @@ See `docs/LAYOUT.md` for detailed architecture documentation.
 | `LabelDialog` | `labels/label-dialog.tsx` | Create/edit/delete label dialog with color picker |
 | `LabelFilterHeader` | `labels/label-filter-header.tsx` | Header bar showing active label name + color dot + edit button |
 | `LabelManager` | `labels/label-manager.tsx` | Sidebar label list with add/edit, uses `SidebarItem` for each label |
+| `LabelAssignSubMenu` | `labels/label-assign-sub-menu.tsx` | Dropdown sub-menu for toggling labels on an item, shows checkmarks for assigned labels |
 
 ---
 
@@ -174,6 +175,5 @@ The `drive/` subdirectory contains shared Drive components used by both the Driv
 
 4. **MailLink in email-detail** — `MailLink` is exported from `email-detail.tsx` (mail app) but creates hardcoded mail compose URLs. If other apps need this pattern, it should be shared.
 
-5. **Dutch comments** — Several files contain Dutch comments (`eigen-loader.tsx`, `contact-edit.tsx`). Should be English for consistency.
+5. **Dutch comments** — Cleaned up in contacts app. Check `eigen-loader.tsx` if any remain.
 
-6. **`useTableKeyboard` deprecated** — `drive/use-table-keyboard.ts` is no longer imported. `DriveTable` now uses the shared `useKeyboardListNavigation` hook. The file can be deleted.

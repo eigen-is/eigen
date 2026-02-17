@@ -79,25 +79,16 @@ export function ContactEdit({
                                 onSave,
                                 onCancel
                             }: ContactEditProps) {
-    // Get current user for API calls
     const {user} = useAuth();
 
-    // Gebruik useLabels hook voor het ophalen van labels
     const {data: labels = [], error: labelsError} = useLabels();
-
-    // Gebruik TanStack Query mutatie hooks voor het toevoegen/bijwerken van contacten
     const addContactMutation = useAddContact();
     const updateContactMutation = useUpdateContact();
-
-    // State voor loading en error
     const [error, setError] = useState<string | null>(null);
     const [avatar, setAvatar] = useState<string | null>(contact?.avatar || null);
     const fileInputRef = React.useRef<HTMLInputElement>(null);
 
-    // Upload context for tracking upload progress
     const upload = useUpload();
-
-    // Set up react-hook-form
     const form = useForm<ContactFormValues>({
         resolver: zodResolver(formSchema),
         defaultValues: {
@@ -114,29 +105,22 @@ export function ContactEdit({
         },
     });
 
-    // Get the handleSubmit function from react-hook-form
     const {handleSubmit: hookFormSubmit} = form;
-
-    // Function to handle form submission
     const handleSubmit = hookFormSubmit(async (data) => {
         setError(null);
         try {
-            // Add avatar to form data
             const formData = {
                 ...data,
                 avatar: avatar
             };
 
-            // Call the onSave callback with the form data
             await onSave(formData);
         } catch (e) {
-            // Handle any errors that might occur during save
             console.error("Error saving contact:", e);
             setError("An error occurred while saving the contact.");
         }
     });
 
-    // Status bepaling voor loading
     const isLoading = addContactMutation.isPending || updateContactMutation.isPending;
 
     return (
@@ -150,14 +134,13 @@ export function ContactEdit({
 
                 {labelsError && (
                     <div className="bg-destructive/15 text-destructive px-4 py-2 rounded-md mb-4">
-                        Er is een fout opgetreden bij het laden van labels.
+                        An error occurred while loading labels.
                     </div>
                 )}
 
                 <div className="space-y-8 pb-20">
                     <Form {...form}>
                         <form onSubmit={handleSubmit} className="space-y-8">
-                            {/* Avatar Section */}
                             <div className="flex justify-center mb-8">
                                 <div className="h-32 w-32 relative group">
                                     <UserAvatar
@@ -169,7 +152,6 @@ export function ContactEdit({
                                         size="lg"
                                     />
 
-                                    {/* Hidden file input element */}
                                     <input
                                         ref={fileInputRef}
                                         type="file"
@@ -178,15 +160,12 @@ export function ContactEdit({
                                         onChange={async (e) => {
                                             const file = e.target.files?.[0];
                                             if (file) {
-                                                // Upload the file using the API and track progress
                                                 const formData = new FormData();
                                                 formData.append('file', file);
 
-                                                // Create upload tracking object with the methods returned by createUpload
                                                 const uploadHandler = upload.createUpload(file.name);
 
                                                 try {
-                                                    // Use the uploadWithProgress helper with authentication
                                                     const response = await uploadWithProgress({
                                                         url: getContactsAvatarUploadUrl(user?.id || ''),
                                                         formData,
@@ -194,7 +173,6 @@ export function ContactEdit({
                                                             'credentials': 'include'
                                                         },
                                                         onProgress: (progress: number) => {
-                                                            // Update the progress in the UI
                                                             uploadHandler.updateProgress(progress);
                                                         },
                                                         onSuccess: (response: string) => {
@@ -202,13 +180,11 @@ export function ContactEdit({
                                                             setAvatar(response);
                                                         },
                                                         onError: (err) => {
-                                                            // Mark upload as failed
                                                             uploadHandler.error();
                                                             console.error('Upload error:', err);
                                                         }
                                                     });
 
-                                                    // Parse the response and update the avatar
                                                     if (response.ok) {
                                                         const responseData = await response.text();
                                                         setAvatar(responseData);
@@ -218,13 +194,11 @@ export function ContactEdit({
                                                     uploadHandler.error();
                                                 }
 
-                                                // Clean up the file input value so the same file can be selected again if needed
                                                 e.target.value = '';
                                             }
                                         }}
                                     />
 
-                                    {/* Camera icon with dropdown */}
                                     <DropdownMenu>
                                         <DropdownMenuTrigger asChild>
                                             <Button
@@ -237,14 +211,12 @@ export function ContactEdit({
                                         </DropdownMenuTrigger>
                                         <DropdownMenuContent align="end">
                                             <DropdownMenuItem onSelect={() => {
-                                                // Trigger file input click when menu item is selected
                                                 fileInputRef.current?.click();
                                             }}>
                                                 Upload from files
                                             </DropdownMenuItem>
                                             {avatar && (
                                                 <DropdownMenuItem onSelect={() => {
-                                                    // Remove avatar
                                                     setAvatar(null);
                                                 }}>
                                                     Remove avatar
@@ -255,7 +227,6 @@ export function ContactEdit({
                                 </div>
                             </div>
 
-                            {/* Basic Info Section */}
                             <div className="space-y-6">
                                 <div>
                                     <h3 className="text-lg font-medium">Basic Information</h3>
@@ -389,7 +360,6 @@ export function ContactEdit({
                                 </div>
                             </div>
 
-                            {/* Contact Information Section */}
                             <div className="space-y-6">
                                 <div>
                                     <h3 className="text-lg font-medium">Contact Information</h3>
@@ -399,7 +369,6 @@ export function ContactEdit({
                                 </div>
 
                                 <div className="grid gap-6">
-                                    {/* Email Fields */}
                                     <div>
                                         <div className="flex items-center justify-between">
                                             <FormLabel className="text-base">Email Addresses<span
@@ -457,7 +426,6 @@ export function ContactEdit({
                                         </div>
                                     </div>
 
-                                    {/* Phone Fields */}
                                     <div>
                                         <div className="flex items-center justify-between">
                                             <FormLabel className="text-base">Phone Numbers</FormLabel>
@@ -514,7 +482,6 @@ export function ContactEdit({
                                         </div>
                                     </div>
 
-                                    {/* Address Fields */}
                                     <div>
                                         <div className="flex items-center justify-between">
                                             <FormLabel className="text-base">Addresses</FormLabel>
@@ -638,7 +605,6 @@ export function ContactEdit({
                                 </div>
                             </div>
 
-                            {/* Additional Information Section */}
                             <div className="space-y-6">
                                 <div>
                                     <h3 className="text-lg font-medium">Additional Information</h3>
@@ -648,7 +614,6 @@ export function ContactEdit({
                                 </div>
 
                                 <div className="grid gap-4">
-                                    {/* Birthday */}
                                     <FormField
                                         control={form.control}
                                         name="birthday"
@@ -688,7 +653,6 @@ export function ContactEdit({
                                         )}
                                     />
 
-                                    {/* Notes */}
                                     <FormField
                                         control={form.control}
                                         name="notes"

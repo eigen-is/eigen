@@ -15,7 +15,6 @@ import {getCollabWebSocketUrl, getDriveEmbedUrl} from "@workspace/lib/api";
 import {useUploadFile} from "@workspace/lib/drive";
 import {ResizableImage} from "./resizable-image";
 
-// Define the initial value with proper typing
 const initialValue: CustomElement[] = [
     {
         type: "paragraph",
@@ -32,34 +31,25 @@ export const CollaborativeEditor = ({path, access, mediaFolderId, onAccessDialog
 }) => {
     const [connected, setConnected] = useState(false);
     const [provider, setProvider] = useState<WebsocketProvider>();
-    const slug = ``;
 
     const yDoc = useMemo(() => new Y.Doc(), []);
     const sharedType = useMemo(() => yDoc.get('slate', Y.XmlText), [yDoc]);
 
     useEffect(() => {
-        // Build WebSocket URL
         const wsUrl = getCollabWebSocketUrl(path.ownerId, path.mountId, path.id);
 
-        // Create WebSocket provider
-        const yProvider = new WebsocketProvider(wsUrl, slug, yDoc, {
+        const yProvider = new WebsocketProvider(wsUrl, '', yDoc, {
             resyncInterval: 5000,
             connect: true,
         });
         yProvider.on("sync", setConnected);
-        /*
-        yProvider.awareness.on('change', () => {
-            console.log(Array.from(yProvider.awareness.getStates().values()));
-        });
-        */
-
         setProvider(yProvider);
 
         return () => {
             yProvider?.off("sync", setConnected);
             yProvider?.destroy();
         };
-    }, [yDoc, path.ownerId, path.id]);
+    }, [yDoc, path.ownerId, path.mountId, path.id]);
 
     if (!connected || !sharedType || !provider) {
         return <div className="flex h-full items-center justify-center"><EigenLoader/></div>;
@@ -99,8 +89,7 @@ const SlateEditor = ({
         const e = withReact(
             withHistory(
                 withCursors(withYjs(createEditor(), sharedType!), provider!.awareness, {
-                    // The current user's name and color
-                    data: {
+                            data: {
                         name: auth.user!.name,
                         email: auth.user!.email,
                         color: "#9810fa",
@@ -109,7 +98,6 @@ const SlateEditor = ({
             )
         );
 
-        // Ensure editor always has at least 1 valid child
         const {normalizeNode} = e;
         e.normalizeNode = (entry: NodeEntry<Node>) => {
             const [node] = entry;
@@ -129,7 +117,6 @@ const SlateEditor = ({
         return () => YjsEditor.disconnect(editor);
     }, [editor]);
 
-    // Define custom element renderer
     const renderElement = useCallback((props: RenderElementProps) => {
         const {attributes, children, element} = props;
         const style: React.CSSProperties = {
@@ -194,7 +181,6 @@ const SlateEditor = ({
         }
     }, [editor, selectedImageId]);
 
-    // Define custom leaf renderer
     const renderLeaf = useCallback((props: RenderLeafProps) => {
         const {attributes, leaf} = props;
         let {children} = props;
@@ -235,12 +221,10 @@ const SlateEditor = ({
         return <span {...attributes}>{children}</span>;
     }, []);
 
-    // Handle keyboard shortcuts
     const handleKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
         const {key, ctrlKey, metaKey} = event;
         const isModKey = metaKey || ctrlKey;
 
-        // Handle keyboard shortcuts
         if (isModKey) {
             switch (key) {
                 case 'b': {

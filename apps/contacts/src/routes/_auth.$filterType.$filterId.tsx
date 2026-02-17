@@ -1,7 +1,8 @@
 import {createFileRoute, useNavigate} from '@tanstack/react-router';
 import {ContactsList, ContactsListToolbar} from '../components/contacts/contacts-list';
 import {ContactDetail, ContactDetailToolbar} from '../components/contacts/contact-detail';
-import {useContacts, useDeleteContact, useLabels} from '@workspace/lib/contacts';
+import {useContacts, useDeleteContact, useLabels, useUpdateContact} from '@workspace/lib/contacts';
+import {Contact} from '@workspace/lib/types/contact';
 import {EigenLoader} from '@workspace/ui/components/layout/eigen-loader';
 import {LabelFilterHeader} from "@workspace/ui/components/layout/labels/label-filter-header";
 import {ColumnLayout, Column} from "@workspace/ui/components/layout/column-layout";
@@ -30,6 +31,7 @@ function ContactsRoute() {
     const {data: contacts = [], isLoading: contactsLoading} = useContacts();
     const {data: labels = []} = useLabels();
     const deleteMutation = useDeleteContact();
+    const updateContactMutation = useUpdateContact();
 
     const handleDeleteContact = async (id: string) => {
         try {
@@ -100,7 +102,28 @@ function ContactsRoute() {
                             labelId={filterId}
                         />
                     )}
-                    <ContactsList filterType={filterType} filterId={filterId} searchQuery={searchQuery} sortBy={sortBy}/>
+                    <ContactsList
+                        filterType={filterType}
+                        filterId={filterId}
+                        searchQuery={searchQuery}
+                        sortBy={sortBy}
+                        labels={labels}
+                        onEdit={(contact) => {
+                            navigate({
+                                to: '/edit/$filterType/$filterId',
+                                params: {filterType, filterId},
+                                search: {contactId: contact.id},
+                            });
+                        }}
+                        onDelete={(contact) => handleDeleteContact(contact.id)}
+                        onToggleLabel={(contact, labelId) => {
+                            const currentLabels = contact.labels || [];
+                            const newLabels = currentLabels.includes(labelId)
+                                ? currentLabels.filter(id => id !== labelId)
+                                : [...currentLabels, labelId];
+                            updateContactMutation.mutate({...contact, labels: newLabels} as Contact);
+                        }}
+                    />
                 </div>
             </Column>
             <Column id="detail" width="flex" onBack={handleBackToList} toolbar={detailToolbar}>
