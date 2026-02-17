@@ -77,6 +77,23 @@ See `docs/LAYOUT.md` for detailed architecture documentation.
 
 ---
 
+## Context Menu
+
+| Component | File | Description |
+|-----------|------|-------------|
+| `useContextMenu` | `context-menu/use-context-menu.ts` | Hook for right-click context menus with position tracking and open/close state |
+| `ContextMenuAnchor` | `context-menu/context-menu-anchor.tsx` | Wrapper that renders hidden DropdownMenuTrigger and positions DropdownMenuContent |
+
+---
+
+## Hooks
+
+| Hook | File | Description |
+|------|------|-------------|
+| `useKeyboardListNavigation` | `hooks/use-keyboard-list-navigation.ts` | Hook for keyboard navigation in selectable lists (ArrowUp/Down, Enter, Home/End) with scroll-into-view |
+
+---
+
 ## Common UI
 
 | Component | File | Description |
@@ -149,7 +166,7 @@ The `drive/` subdirectory contains shared Drive components used by both the Driv
 
 ## Redundancy Notes
 
-1. **SearchBar not used by apps** — `SearchBar` (`search-bar/search-bar.tsx`) exists as a shared component but no app imports it. Both Contacts and Mail hand-roll their own search input with the same `<Search>` icon + `<Input>` pattern. Apps should use `SearchBar` instead.
+1. **SearchBar now used by apps** - `SearchBar` is now used by both Mail and Contacts apps, replacing hand-rolled search inputs.
 
 2. **DocumentModeButton uses inline Tooltip** — `DocumentModeButton` manually wraps `Button` in `Tooltip` instead of using `TooltipButton`. It also has an empty `onClick` handler.
 
