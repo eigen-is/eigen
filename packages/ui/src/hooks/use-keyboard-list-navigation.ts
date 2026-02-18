@@ -1,4 +1,4 @@
-import {useEffect, useState, RefObject, KeyboardEvent} from 'react';
+import {useEffect, useRef, useState, RefObject, KeyboardEvent} from 'react';
 import type {UseListSelectionReturn} from './use-list-selection';
 
 type UseKeyboardListNavigationOptions<T> = {
@@ -25,17 +25,19 @@ export function useKeyboardListNavigation<T>({
     selection,
 }: UseKeyboardListNavigationOptions<T>) {
     const [selectedIndex, setSelectedIndex] = useState(-1);
+    const getIdRef = useRef(getId);
+    useEffect(() => { getIdRef.current = getId; });
 
     useEffect(() => {
         if (activeId && items.length > 0) {
-            const index = items.findIndex(item => getId(item) === activeId);
+            const index = items.findIndex(item => getIdRef.current(item) === activeId);
             if (index !== -1) {
                 setSelectedIndex(index);
             }
         } else {
             setSelectedIndex(-1);
         }
-    }, [activeId, items, getId]);
+    }, [activeId, items]);
 
     useEffect(() => {
         const timer = setTimeout(() => {
@@ -117,7 +119,7 @@ export function useKeyboardListNavigation<T>({
             case 'Enter':
                 e.preventDefault();
                 if (selectedIndex >= 0 && selectedIndex < items.length) {
-                    notify(items[selectedIndex], selectedIndex);
+                    onSelect(getId(items[selectedIndex]));
                     scrollToRow(selectedIndex);
                 }
                 break;

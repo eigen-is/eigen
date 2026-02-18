@@ -207,11 +207,11 @@
         @apply bg-muted text-primary;
     }
 
-    .eigen-list-item-selected {
+    .eigen-list-item.eigen-list-item-selected {
         background-color: hsl(210 100% 93%);
     }
 
-    .eigen-list-item-selected:hover {
+    .eigen-list-item.eigen-list-item-selected:hover {
         background-color: hsl(210 100% 88%);
     }
 
