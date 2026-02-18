@@ -37,6 +37,15 @@ export function useKeyboardListNavigation<T>({
         }
     }, [activeId, items, getId]);
 
+    useEffect(() => {
+        const timer = setTimeout(() => {
+            if (containerRef.current && !containerRef.current.contains(document.activeElement)) {
+                containerRef.current.focus({preventScroll: true});
+            }
+        }, 100);
+        return () => clearTimeout(timer);
+    }, [containerRef]);
+
     const scrollToRow = (index: number) => {
         if (containerRef.current) {
             const listItems = containerRef.current.querySelectorAll(itemSelector);

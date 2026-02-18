@@ -211,6 +211,7 @@ export function ContactsList({filterType = 'filter', filterId = 'all', searchQue
                 <ContextMenuAnchor isOpen={contextMenu.isOpen} onClose={contextMenu.close}>
                     <DropdownMenuContent
                         style={{position: 'fixed', left: contextMenu.position.x, top: contextMenu.position.y}}
+                        className="min-w-[200px]"
                     >
                         {isSingleSelect && onEdit && contextMenu.item && (
                             <DropdownMenuItem onClick={() => { onEdit(contextMenu.item!); contextMenu.close(); }}>
@@ -223,19 +224,29 @@ export function ContactsList({filterType = 'filter', filterId = 'all', searchQue
                                 {isSingleSelect ? 'Delete' : `Delete ${contextItems.length} contacts`}
                             </DropdownMenuItem>
                         )}
-                        {onToggleLabel && contextItems.length > 0 && labels.length > 0 && (
-                            <>
-                                <DropdownMenuSeparator/>
-                                <LabelAssignSubMenu
-                                    labels={labels}
-                                    assignedLabelIds={isSingleSelect ? (contextMenu.item?.labels || []) : []}
-                                    onToggleLabel={(labelId) => {
-                                        onToggleLabel(contextItems, labelId);
-                                        contextMenu.close();
-                                    }}
-                                />
-                            </>
-                        )}
+                        {onToggleLabel && contextItems.length > 0 && labels.length > 0 && (() => {
+                            const allLabelIds = labels.map(l => l.id);
+                            const assignedToAll = allLabelIds.filter(lid =>
+                                contextItems.every(c => (c.labels || []).includes(lid))
+                            );
+                            const assignedToSome = allLabelIds.filter(lid =>
+                                !assignedToAll.includes(lid) && contextItems.some(c => (c.labels || []).includes(lid))
+                            );
+                            return (
+                                <>
+                                    <DropdownMenuSeparator/>
+                                    <LabelAssignSubMenu
+                                        labels={labels}
+                                        assignedLabelIds={assignedToAll}
+                                        partialLabelIds={assignedToSome}
+                                        onToggleLabel={(labelId) => {
+                                            onToggleLabel(contextItems, labelId);
+                                            contextMenu.close();
+                                        }}
+                                    />
+                                </>
+                            );
+                        })()}
                     </DropdownMenuContent>
                 </ContextMenuAnchor>
             </div>

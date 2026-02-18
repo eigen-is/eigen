@@ -1,4 +1,4 @@
-import {useCallback, useMemo, useState} from 'react';
+import {useCallback, useMemo, useRef, useState} from 'react';
 
 type UseListSelectionOptions<T> = {
     items: T[];
@@ -23,11 +23,17 @@ export type UseListSelectionReturn<T> = {
 export function useListSelection<T>({items, getId}: UseListSelectionOptions<T>): UseListSelectionReturn<T> {
     const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
     const [anchorId, setAnchorId] = useState<string | null>(null);
+    const anchorRef = useRef<string | null>(null);
+
+    const setAnchor = useCallback((id: string | null) => {
+        anchorRef.current = id;
+        setAnchorId(id);
+    }, []);
 
     const select = useCallback((id: string) => {
         setSelectedIds(new Set([id]));
-        setAnchorId(id);
-    }, []);
+        setAnchor(id);
+    }, [setAnchor]);
 
     const toggle = useCallback((id: string) => {
         setSelectedIds(prev => {
@@ -36,16 +42,17 @@ export function useListSelection<T>({items, getId}: UseListSelectionOptions<T>):
             else next.add(id);
             return next;
         });
-        setAnchorId(id);
-    }, []);
+        setAnchor(id);
+    }, [setAnchor]);
 
     const selectRange = useCallback((toId: string) => {
-        if (!anchorId) {
+        const anchor = anchorRef.current;
+        if (!anchor) {
             setSelectedIds(new Set([toId]));
-            setAnchorId(toId);
+            setAnchor(toId);
             return;
         }
-        const anchorIndex = items.findIndex(i => getId(i) === anchorId);
+        const anchorIndex = items.findIndex(i => getId(i) === anchor);
         const toIndex = items.findIndex(i => getId(i) === toId);
         if (anchorIndex === -1 || toIndex === -1) return;
 
@@ -56,7 +63,7 @@ export function useListSelection<T>({items, getId}: UseListSelectionOptions<T>):
             ids.add(getId(items[i]));
         }
         setSelectedIds(ids);
-    }, [anchorId, items, getId]);
+    }, [items, getId, setAnchor]);
 
     const selectAll = useCallback(() => {
         setSelectedIds(new Set(items.map(getId)));
@@ -64,8 +71,8 @@ export function useListSelection<T>({items, getId}: UseListSelectionOptions<T>):
 
     const clearSelection = useCallback(() => {
         setSelectedIds(new Set());
-        setAnchorId(null);
-    }, []);
+        setAnchor(null);
+    }, [setAnchor]);
 
     const handleItemClick = useCallback((id: string, e: React.MouseEvent) => {
         if (e.shiftKey) selectRange(id);

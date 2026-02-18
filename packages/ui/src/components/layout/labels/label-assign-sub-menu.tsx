@@ -1,4 +1,4 @@
-import {Check, Tag} from 'lucide-react';
+import {Check, Minus, Tag} from 'lucide-react';
 import {
     DropdownMenuSub,
     DropdownMenuSubContent,
@@ -10,10 +10,11 @@ import type {Label} from '@workspace/lib/types/label';
 type LabelAssignSubMenuProps = {
     labels: Label[];
     assignedLabelIds: string[];
+    partialLabelIds?: string[];
     onToggleLabel: (labelId: string) => void;
 }
 
-export function LabelAssignSubMenu({labels, assignedLabelIds, onToggleLabel}: LabelAssignSubMenuProps) {
+export function LabelAssignSubMenu({labels, assignedLabelIds, partialLabelIds = [], onToggleLabel}: LabelAssignSubMenuProps) {
     if (labels.length === 0) return null;
 
     return (
@@ -24,7 +25,8 @@ export function LabelAssignSubMenu({labels, assignedLabelIds, onToggleLabel}: La
             </DropdownMenuSubTrigger>
             <DropdownMenuSubContent>
                 {labels.map((label) => {
-                    const isAssigned = assignedLabelIds.includes(label.id);
+                    const isAllAssigned = assignedLabelIds.includes(label.id);
+                    const isPartial = partialLabelIds.includes(label.id);
                     return (
                         <DropdownMenuItem
                             key={label.id}
@@ -38,7 +40,8 @@ export function LabelAssignSubMenu({labels, assignedLabelIds, onToggleLabel}: La
                                 style={{backgroundColor: label.color}}
                             />
                             <span className="flex-1">{label.name}</span>
-                            {isAssigned && <Check className="w-4 h-4 ml-2 shrink-0"/>}
+                            {isAllAssigned && <Check className="w-4 h-4 ml-2 shrink-0"/>}
+                            {isPartial && !isAllAssigned && <Minus className="w-4 h-4 ml-2 shrink-0"/>}
                         </DropdownMenuItem>
                     );
                 })}
