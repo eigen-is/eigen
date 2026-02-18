@@ -1,4 +1,4 @@
-import React, {useCallback, useEffect, useMemo, useRef, useState} from "react";
+import React, {useCallback, useMemo, useRef, useState} from "react";
 import {Table, TableBody, TableCell, TableHead, TableHeader, TableRow} from "@workspace/ui/components/table";
 import {cn} from "@workspace/ui/lib/utils";
 import {formatDistanceToNow} from "date-fns";
@@ -80,15 +80,6 @@ export function DriveTable({
         return result;
     }, [sortedItems, hasParentItem, currentPath]);
 
-    useEffect(() => {
-        const timer = setTimeout(() => {
-            if (tableRef.current) {
-                tableRef.current.focus();
-            }
-        }, 100);
-        return () => clearTimeout(timer);
-    }, []);
-
     const handleItemSelect = useCallback((id: string) => {
         const item = allItems.find(i => i.id === id);
         if (item) onItemClick?.(item);
@@ -150,7 +141,8 @@ export function DriveTable({
                         <TableRow
                             className={cn(
                                 "eigen-list-item",
-                                (activeItemId === currentPath?.parentId || selectedIndex === 0) && "eigen-list-item-active"
+                                (activeItemId === currentPath?.parentId || selectedIndex === 0) && "eigen-list-item-active",
+                                currentPath?.parentId && selection.isSelected(currentPath.parentId) && "eigen-list-item-selected"
                             )}
                             onClick={() => onItemClick?.({
                                 id: currentPath?.parentId || '',

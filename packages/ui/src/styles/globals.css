@@ -208,11 +208,15 @@
     }
 
     .eigen-list-item-selected {
-        @apply bg-primary/10;
+        background-color: hsl(210 100% 93%);
+    }
+
+    .eigen-list-item-selected:hover {
+        background-color: hsl(210 100% 88%);
     }
 
     .eigen-list-item-selected.eigen-list-item-active {
-        @apply bg-primary/15;
+        background-color: hsl(210 100% 88%);
     }
 
     .eigen-list-item-unread {
