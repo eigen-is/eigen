@@ -14,9 +14,10 @@ interface ContactsSidebarProps {
     condensed?: boolean;
     onClose?: () => void;
     isMobile?: boolean;
+    onAssignLabel?: (contactIds: string[], labelId: string) => void;
 }
 
-export function ContactsSidebar({condensed = false, onClose, isMobile = false}: ContactsSidebarProps) {
+export function ContactsSidebar({condensed = false, onClose, isMobile = false, onAssignLabel}: ContactsSidebarProps) {
     const {
         data: labels = [],
         isLoading: loading,
@@ -90,6 +91,8 @@ export function ContactsSidebar({condensed = false, onClose, isMobile = false}: 
                         getLabelPath={getLabelPath}
                         className="px-3"
                         condensed={condensed}
+                        dropAcceptTypes={onAssignLabel ? ['contact'] : undefined}
+                        onItemDrop={onAssignLabel}
                     />
                 )}
             </div>

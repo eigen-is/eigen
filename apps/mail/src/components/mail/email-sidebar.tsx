@@ -2,6 +2,7 @@ import {AlertOctagon, AlertTriangle, Archive, File, Inbox, Send, Trash2, X} from
 import {MaildirMailbox} from "@workspace/lib/types/mail";
 import {Button} from "@workspace/ui/components/button";
 import {SidebarItem} from '@workspace/ui/components/layout/sidebar/sidebar-item';
+import {DroppableSidebarItem} from '@workspace/ui/components/layout/sidebar/droppable-sidebar-item';
 import {SidebarSection} from '@workspace/ui/components/layout/sidebar/sidebar-section';
 import {AppLogo} from '@workspace/ui/components/layout/app-logo';
 import React, {useMemo} from 'react';
@@ -89,6 +90,7 @@ interface AppSidebarProps {
     mailboxes?: MaildirMailbox[];
     isLoading?: boolean;
     error?: Error | null;
+    onMoveToFolder?: (emailIds: string[], folderId: string) => void;
 }
 
 export function EmailSidebar({
@@ -97,7 +99,8 @@ export function EmailSidebar({
                                  isMobile = false,
                                  mailboxes = [],
                                  isLoading = false,
-                                 error = null
+                                 error = null,
+                                 onMoveToFolder,
                              }: AppSidebarProps) {
 
     // Memoize the processed mailboxes to avoid unnecessary recalculations
@@ -169,15 +172,31 @@ export function EmailSidebar({
                         <EigenLoader/>
                     </div>
                 ) : (
-                    standardMailboxList.map((item) => (
-                        <SidebarItem
-                            key={item.path || item.name}
-                            icon={item.icon}
-                            label={item.unread > 0 ? `${item.name} (${item.unread})` : item.name}
-                            to={item.href}
-                            condensed={condensed}
-                        />
-                    ))
+                    standardMailboxList.map((item) => {
+                        const folderId = item.path?.toLowerCase() === 'inbox' ? '' : (item.path?.toLowerCase() || '');
+                        if (onMoveToFolder) {
+                            return (
+                                <DroppableSidebarItem
+                                    key={item.path || item.name}
+                                    icon={item.icon}
+                                    label={item.unread > 0 ? `${item.name} (${item.unread})` : item.name}
+                                    to={item.href}
+                                    condensed={condensed}
+                                    acceptTypes={['email']}
+                                    onDrop={(data) => onMoveToFolder(data.ids, folderId)}
+                                />
+                            );
+                        }
+                        return (
+                            <SidebarItem
+                                key={item.path || item.name}
+                                icon={item.icon}
+                                label={item.unread > 0 ? `${item.name} (${item.unread})` : item.name}
+                                to={item.href}
+                                condensed={condensed}
+                            />
+                        );
+                    })
                 )}
             </SidebarSection>
 

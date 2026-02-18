@@ -1,5 +1,4 @@
 import React, {useCallback, useEffect, useMemo, useRef, useState} from "react";
-import {useTableDragDrop} from "./use-table-drag-drop";
 import {Table, TableBody, TableCell, TableHead, TableHeader, TableRow} from "@workspace/ui/components/table";
 import {cn} from "@workspace/ui/lib/utils";
 import {formatDistanceToNow} from "date-fns";
@@ -10,6 +9,8 @@ import {DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator} from "@wor
 import {useContextMenu} from "../context-menu/use-context-menu";
 import {ContextMenuAnchor} from "../context-menu/context-menu-anchor";
 import {useKeyboardListNavigation} from "../../../hooks/use-keyboard-list-navigation";
+import {useListSelection} from "../../../hooks/use-list-selection";
+import {useListDrag} from "../../../hooks/use-list-drag";
 
 export type DriveTableProps = {
     items: DrivePath[];
@@ -20,7 +21,7 @@ export type DriveTableProps = {
     getFileIcon?: (mimeType: string, type: string, props?: any) => React.ReactNode;
     onShareClick?: (item: DrivePath) => void;
     onDownload?: (item: DrivePath) => void;
-    onDelete?: (item: DrivePath) => void;
+    onDelete?: (items: DrivePath[]) => void;
     onRename?: (item: DrivePath) => void;
     onMove?: (item: DrivePath, targetItemId: string) => void;
     allowDelete?: boolean;
@@ -44,6 +45,7 @@ export function DriveTable({
 
     const tableRef = useRef<HTMLTableElement>(null);
     const [hasFocus, setHasFocus] = useState(false);
+    const [dragOverItemId, setDragOverItemId] = useState<string | null>(null);
 
     const hasParentItem = Boolean(currentPath?.parentId);
 
@@ -92,6 +94,8 @@ export function DriveTable({
         if (item) onItemClick?.(item);
     }, [allItems, onItemClick]);
 
+    const selection = useListSelection({items: allItems, getId: (item) => item.id});
+
     const {selectedIndex, handleKeyDown} = useKeyboardListNavigation<DrivePath>({
         items: allItems,
         activeId: activeItemId,
@@ -99,28 +103,30 @@ export function DriveTable({
         onSelect: handleItemSelect,
         containerRef: tableRef,
         itemSelector: 'tbody tr',
-        onDelete,
         shouldNotify: (_item, index) => !hasParentItem || index > 0,
+        selection,
     });
 
-    const {
-        dragOverItem,
-        isValidDropTarget,
-        handleDragStart,
-        handleDragOver,
-        handleDragEnter,
-        handleDragLeave,
-        handleDrop,
-        handleDragEnd,
-    } = useTableDragDrop({onMove});
+    const drag = useListDrag({selection, getId: (item) => item.id, dragType: 'drive-item'});
 
-    const {
-        item: contextMenuItem,
-        position: contextMenuPosition,
-        isOpen: contextMenuOpen,
-        handleContextMenu,
-        close: closeContextMenu
-    } = useContextMenu<DrivePath>();
+    const contextMenu = useContextMenu<DrivePath>();
+
+    const handleContextMenu = (e: React.MouseEvent, item: DrivePath) => {
+        if (!selection.isSelected(item.id)) {
+            selection.select(item.id);
+        }
+        contextMenu.handleContextMenu(e, item);
+    };
+
+    const contextItems = contextMenu.item
+        ? (selection.selectedCount > 1 ? selection.selectedItems : [contextMenu.item])
+        : [];
+    const isSingleSelect = contextItems.length === 1;
+
+    const isValidFolderDrop = (targetItem: DrivePath) => {
+        if (targetItem.type !== 'folder') return false;
+        return !drag.draggedItems.some(d => d.id === targetItem.id);
+    };
 
     return (
         <div className="flex-1 overflow-auto">
@@ -183,17 +189,34 @@ export function DriveTable({
                                 className={cn(
                                     "eigen-list-item",
                                     (activeItemId === item.id || selectedIndex === adjustedIndex) && "eigen-list-item-active",
-                                    dragOverItem === item.id && isValidDropTarget && "bg-accent"
+                                    selection.isSelected(item.id) && "eigen-list-item-selected",
+                                    dragOverItemId === item.id && isValidFolderDrop(item) && "bg-accent"
                                 )}
-                                onClick={() => onItemClick?.(item)}
+                                onClick={(e) => {
+                                    selection.handleItemClick(item.id, e);
+                                    if (!e.shiftKey && !e.metaKey && !e.ctrlKey) {
+                                        onItemClick?.(item);
+                                    }
+                                }}
                                 onContextMenu={(e) => handleContextMenu(e, item)}
-                                draggable={true}
-                                onDragStart={(e) => handleDragStart(e, item)}
-                                onDragOver={(e) => handleDragOver(e, item)}
-                                onDragEnter={() => handleDragEnter(item)}
-                                onDragLeave={() => handleDragLeave()}
-                                onDrop={(e) => handleDrop(e, item)}
-                                onDragEnd={() => handleDragEnd()}
+                                {...drag.getDragProps(item)}
+                                onDragOver={(e) => {
+                                    e.preventDefault();
+                                    if (drag.isDragging && isValidFolderDrop(item)) {
+                                        e.dataTransfer.dropEffect = 'move';
+                                    }
+                                }}
+                                onDragEnter={() => {
+                                    if (drag.isDragging) setDragOverItemId(item.id);
+                                }}
+                                onDragLeave={() => {}}
+                                onDrop={(e) => {
+                                    e.preventDefault();
+                                    setDragOverItemId(null);
+                                    if (isValidFolderDrop(item) && onMove) {
+                                        drag.draggedItems.forEach(d => onMove(d, item.id));
+                                    }
+                                }}
                             >
                                 <TableCell>
                                     <div className="flex items-center max-w-full overflow-hidden">
@@ -238,20 +261,20 @@ export function DriveTable({
                 </TableBody>
             </Table>
 
-            <ContextMenuAnchor isOpen={contextMenuOpen} onClose={closeContextMenu}>
+            <ContextMenuAnchor isOpen={contextMenu.isOpen} onClose={contextMenu.close}>
                 <DropdownMenuContent
                     style={{
                         position: 'absolute',
-                        top: `${contextMenuPosition.y}px`,
-                        left: `${contextMenuPosition.x}px`,
+                        top: `${contextMenu.position.y}px`,
+                        left: `${contextMenu.position.x}px`,
                     }}
                     className="w-48"
                 >
-                    {contextMenuItem && contextMenuItem.type !== 'file' && onItemOpen && (
+                    {isSingleSelect && contextMenu.item && contextMenu.item.type !== 'file' && onItemOpen && (
                         <DropdownMenuItem
                             onClick={() => {
-                                onItemOpen?.(contextMenuItem!);
-                                closeContextMenu();
+                                onItemOpen?.(contextMenu.item!);
+                                contextMenu.close();
                             }}
                             className="flex items-center"
                         >
@@ -259,11 +282,11 @@ export function DriveTable({
                             Open
                         </DropdownMenuItem>
                     )}
-                    {onDownload && contextMenuItem?.type === 'file' && (
+                    {isSingleSelect && onDownload && contextMenu.item?.type === 'file' && (
                         <DropdownMenuItem
                             onClick={() => {
-                                onDownload?.(contextMenuItem);
-                                closeContextMenu();
+                                onDownload?.(contextMenu.item!);
+                                contextMenu.close();
                             }}
                             className="flex items-center"
                         >
@@ -272,11 +295,11 @@ export function DriveTable({
                         </DropdownMenuItem>
                     )}
 
-                    {onShareClick && (
+                    {isSingleSelect && onShareClick && (
                         <DropdownMenuItem
                             onClick={() => {
-                                onShareClick?.(contextMenuItem!);
-                                closeContextMenu();
+                                onShareClick?.(contextMenu.item!);
+                                contextMenu.close();
                             }}
                             className="flex items-center"
                         >
@@ -284,11 +307,11 @@ export function DriveTable({
                             Edit access
                         </DropdownMenuItem>
                     )}
-                    {onRename && (
+                    {isSingleSelect && onRename && (
                         <DropdownMenuItem
                             onClick={() => {
-                                onRename?.(contextMenuItem!);
-                                closeContextMenu();
+                                onRename?.(contextMenu.item!);
+                                contextMenu.close();
                             }}
                             className="flex items-center"
                         >
@@ -297,18 +320,18 @@ export function DriveTable({
                         </DropdownMenuItem>
                     )}
 
-                    {allowDelete && (
+                    {allowDelete && contextItems.length > 0 && (
                         <>
-                            {(onDownload || onShareClick || onRename) && <DropdownMenuSeparator/>}
+                            {isSingleSelect && (onDownload || onShareClick || onRename) && <DropdownMenuSeparator/>}
                             <DropdownMenuItem
                                 onClick={() => {
-                                    onDelete?.(contextMenuItem!);
-                                    closeContextMenu();
+                                    onDelete?.(contextItems);
+                                    contextMenu.close();
                                 }}
                                 className="flex items-center"
                             >
                                 <Trash2 className="h-4 w-4 mr-2"/>
-                                Delete
+                                {isSingleSelect ? 'Delete' : `Delete ${contextItems.length} items`}
                             </DropdownMenuItem>
                         </>
                     )}

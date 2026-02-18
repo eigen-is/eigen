@@ -8,6 +8,8 @@ import {EmailContextMenu} from "./email-context-menu";
 import {ContextMenuAnchor} from "@workspace/ui/components/layout/context-menu";
 import {useContextMenu} from "@workspace/ui/components/layout/context-menu";
 import {useKeyboardListNavigation} from "@workspace/ui/hooks/use-keyboard-list-navigation";
+import {useListSelection} from "@workspace/ui/hooks/use-list-selection";
+import {useListDrag} from "@workspace/ui/hooks/use-list-drag";
 
 interface EmailListToolbarProps {
     searchQuery: string;
@@ -36,10 +38,10 @@ interface EmailListProps {
     onReply?: (emailId: string) => void;
     onReplyAll?: (emailId: string) => void;
     onForward?: (emailId: string) => void;
-    onArchive?: (emailId: string) => void;
-    onReportSpam?: (emailId: string) => void;
-    onDelete?: (emailId: string) => void;
-    onMoveToFolder?: (emailId: string, folderId: string) => void;
+    onArchive?: (emailIds: string[]) => void;
+    onReportSpam?: (emailIds: string[]) => void;
+    onDelete?: (emailIds: string[]) => void;
+    onMoveToFolder?: (emailIds: string[], folderId: string) => void;
     mailboxes?: MaildirMailbox[];
     currentFolderId?: string;
 }
@@ -60,9 +62,7 @@ export function EmailList({
                               mailboxes = [],
                               currentFolderId = ""
                           }: EmailListProps) {
-    // Context menu hook
-    const {item: contextMenuEmail, position, isOpen, handleContextMenu, close} = useContextMenu<EmailSummary>();
-    // Ref for the table to scroll to selected rows
+    const contextMenu = useContextMenu<EmailSummary>();
     const tableRef = useRef<HTMLDivElement>(null);
 
     const filteredEmails = useMemo(() => {
@@ -70,16 +70,31 @@ export function EmailList({
         return [...emails].filter(email => email.subject.toLowerCase().includes(queryLower) || email.fromShort.toLowerCase().includes(queryLower) || email.textShort.toLowerCase().includes(queryLower)).sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
     }, [emails, searchQuery]);
 
-    // Keyboard navigation hook
+    const selection = useListSelection({items: filteredEmails, getId: (e) => e.id});
+
     const {selectedIndex, handleKeyDown} = useKeyboardListNavigation({
         items: filteredEmails,
         activeId: activeRowId,
         getId: (email) => email.id,
         onSelect: onRowClick,
         containerRef: tableRef,
+        selection,
     });
 
-    // Render loading state
+    const drag = useListDrag({selection, getId: (e) => e.id, dragType: 'email'});
+
+    const handleContextMenu = (e: React.MouseEvent, email: EmailSummary) => {
+        if (!selection.isSelected(email.id)) {
+            selection.select(email.id);
+        }
+        contextMenu.handleContextMenu(e, email);
+    };
+
+    const contextIds = contextMenu.item
+        ? (selection.selectedCount > 1 ? selection.selectedItems.map(e => e.id) : [contextMenu.item.id])
+        : [];
+    const isSingleSelect = contextIds.length === 1;
+
     if (isLoading || !emails) {
         return (
             <div className="flex h-full items-center justify-center">
@@ -90,7 +105,6 @@ export function EmailList({
 
     return (
         <div className="w-full h-full flex flex-col overflow-hidden bg-white">
-            {/* Email list */}
             <div
                 className="flex-1 overflow-y-auto outline-none"
                 tabIndex={0}
@@ -107,13 +121,11 @@ export function EmailList({
                                     const now = new Date();
                                     const isToday = date.toDateString() === now.toDateString();
                                     if (isToday) {
-                                        // Format as time if today
                                         formattedDate = date.toLocaleTimeString([], {
                                             hour: '2-digit',
                                             minute: '2-digit'
                                         });
                                     } else {
-                                        // Format as date otherwise
                                         formattedDate = date.toLocaleDateString([], {month: 'short', day: 'numeric'});
                                     }
                                 }
@@ -123,13 +135,18 @@ export function EmailList({
                                         key={email.id}
                                         className={cn(
                                             "flex items-start py-2 px-3 eigen-list-item",
-                                            // Selected: highlight background (matching sidebar active button)
                                             (activeRowId === email.id || selectedIndex === index) && "eigen-list-item-active",
-                                            // Unread emails get slightly darker background if not selected
-                                            !email.isRead && activeRowId !== email.id && selectedIndex !== index && "eigen-list-item-unread"
+                                            selection.isSelected(email.id) && "eigen-list-item-selected",
+                                            !email.isRead && activeRowId !== email.id && selectedIndex !== index && !selection.isSelected(email.id) && "eigen-list-item-unread"
                                         )}
-                                        onClick={() => onRowClick(email.id)}
+                                        onClick={(e) => {
+                                            selection.handleItemClick(email.id, e);
+                                            if (!e.shiftKey && !e.metaKey && !e.ctrlKey) {
+                                                onRowClick(email.id);
+                                            }
+                                        }}
                                         onContextMenu={(e) => handleContextMenu(e, email)}
+                                        {...drag.getDragProps(email)}
                                     >
                                         <div className="flex-1 min-w-0">
                                             <div className="flex justify-between items-baseline">
@@ -168,15 +185,15 @@ export function EmailList({
                 </div>
             </div>
 
-            {/* Context menu using shared hook */}
-            <ContextMenuAnchor isOpen={isOpen} onClose={close}>
+            <ContextMenuAnchor isOpen={contextMenu.isOpen} onClose={contextMenu.close}>
                 <EmailContextMenu
                     style={{
                         position: 'absolute',
-                        top: `${position.y}px`,
-                        left: `${position.x}px`,
+                        top: `${contextMenu.position.y}px`,
+                        left: `${contextMenu.position.x}px`,
                     }}
-                    messageId={contextMenuEmail?.id}
+                    messageIds={contextIds}
+                    isSingleSelect={isSingleSelect}
                     mailboxes={mailboxes}
                     currentMailboxId={currentFolderId}
                     onReply={onReply}
@@ -186,7 +203,7 @@ export function EmailList({
                     onReportSpam={onReportSpam}
                     onDelete={onDelete}
                     onMoveToFolder={onMoveToFolder}
-                    onClose={close}
+                    onClose={contextMenu.close}
                 />
             </ContextMenuAnchor>
         </div>

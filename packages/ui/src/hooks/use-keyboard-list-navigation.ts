@@ -1,4 +1,5 @@
 import {useEffect, useState, RefObject, KeyboardEvent} from 'react';
+import type {UseListSelectionReturn} from './use-list-selection';
 
 type UseKeyboardListNavigationOptions<T> = {
     items: T[];
@@ -9,6 +10,7 @@ type UseKeyboardListNavigationOptions<T> = {
     itemSelector?: string;
     onDelete?: (item: T) => void;
     shouldNotify?: (item: T, index: number) => boolean;
+    selection?: UseListSelectionReturn<T>;
 }
 
 export function useKeyboardListNavigation<T>({
@@ -20,6 +22,7 @@ export function useKeyboardListNavigation<T>({
     itemSelector = '.eigen-list-item',
     onDelete,
     shouldNotify,
+    selection,
 }: UseKeyboardListNavigationOptions<T>) {
     const [selectedIndex, setSelectedIndex] = useState(-1);
 
@@ -52,8 +55,27 @@ export function useKeyboardListNavigation<T>({
         }
     };
 
+    const updateSelection = (item: T, e: KeyboardEvent<HTMLElement>) => {
+        if (!selection) return;
+        const id = getId(item);
+        if (e.shiftKey) selection.selectRange(id);
+        else selection.select(id);
+    };
+
     const handleKeyDown = (e: KeyboardEvent<HTMLElement>) => {
         if (items.length === 0) return;
+
+        if (selection && (e.key === 'a' || e.key === 'A') && (e.metaKey || e.ctrlKey)) {
+            e.preventDefault();
+            selection.selectAll();
+            return;
+        }
+
+        if (selection && e.key === 'Escape') {
+            e.preventDefault();
+            selection.clearSelection();
+            return;
+        }
 
         switch (e.key) {
             case 'ArrowDown':
@@ -61,7 +83,8 @@ export function useKeyboardListNavigation<T>({
                 setSelectedIndex(prev => {
                     const newIndex = Math.min(prev + 1, items.length - 1);
                     if (newIndex >= 0 && newIndex !== prev) {
-                        notify(items[newIndex], newIndex);
+                        updateSelection(items[newIndex], e);
+                        if (!e.shiftKey) notify(items[newIndex], newIndex);
                         scrollToRow(newIndex);
                     }
                     return newIndex;
@@ -73,7 +96,8 @@ export function useKeyboardListNavigation<T>({
                 setSelectedIndex(prev => {
                     const newIndex = Math.max(prev - 1, 0);
                     if (newIndex >= 0 && newIndex !== prev) {
-                        notify(items[newIndex], newIndex);
+                        updateSelection(items[newIndex], e);
+                        if (!e.shiftKey) notify(items[newIndex], newIndex);
                         scrollToRow(newIndex);
                     }
                     return newIndex;
@@ -101,6 +125,7 @@ export function useKeyboardListNavigation<T>({
                 e.preventDefault();
                 if (items.length > 0) {
                     setSelectedIndex(0);
+                    if (selection) selection.select(getId(items[0]));
                     notify(items[0], 0);
                     scrollToRow(0);
                 }
@@ -112,6 +137,7 @@ export function useKeyboardListNavigation<T>({
                 if (items.length > 0) {
                     const lastIndex = items.length - 1;
                     setSelectedIndex(lastIndex);
+                    if (selection) selection.select(getId(items[lastIndex]));
                     notify(items[lastIndex], lastIndex);
                     scrollToRow(lastIndex);
                 }

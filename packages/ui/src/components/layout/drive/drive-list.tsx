@@ -152,7 +152,7 @@ interface DriveListProps {
     onUploadFile?: () => void;
     onUploadFiles?: (files: File[]) => void;
     currentPath?: DrivePath | null;
-    onDelete?: (path: DrivePath) => void;
+    onDelete?: (paths: DrivePath[]) => void;
     onShareClick?: (item: DrivePath) => void;
     onCreateDoc?: () => void;
     onCreateStickies?: () => void;

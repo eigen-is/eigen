@@ -3,7 +3,7 @@ import {Outlet} from '@tanstack/react-router'
 import {AuthContextType} from "@workspace/lib/auth";
 import {AppShell} from "@workspace/ui/components/layout/app-shell";
 import {EmailSidebar} from "../components/mail/email-sidebar";
-import {useMailboxes} from '@workspace/lib/mail';
+import {useMailboxes, useMoveEmail, useEmailById} from '@workspace/lib/mail';
 
 interface MyRouterContext {
     auth: AuthContextType
@@ -11,6 +11,15 @@ interface MyRouterContext {
 
 function MailRoot() {
     const {data: mailboxes = [], isLoading, error} = useMailboxes();
+    const moveMail = useMoveEmail();
+    const getEmailById = useEmailById();
+
+    const handleMoveByDrop = async (emailIds: string[], folderId: string) => {
+        for (const id of emailIds) {
+            const email = await getEmailById(id);
+            if (email) await moveMail.mutateAsync({email, mailbox: folderId});
+        }
+    };
 
     return (
         <AppShell
@@ -24,6 +33,7 @@ function MailRoot() {
                     mailboxes={mailboxes}
                     isLoading={isLoading}
                     error={error}
+                    onMoveToFolder={handleMoveByDrop}
                 />
             )}
         >
