@@ -129,12 +129,14 @@ function ContactsRoute() {
                             for (const c of selectedContacts) handleDeleteContact(c.id);
                         }}
                         onToggleLabel={(selectedContacts, labelId) => {
+                            const allHaveLabel = selectedContacts.every(c => (c.labels || []).includes(labelId));
                             for (const c of selectedContacts) {
                                 const currentLabels = c.labels || [];
-                                const newLabels = currentLabels.includes(labelId)
-                                    ? currentLabels.filter(id => id !== labelId)
-                                    : [...currentLabels, labelId];
-                                updateContactMutation.mutate({...c, labels: newLabels} as Contact);
+                                if (allHaveLabel) {
+                                    updateContactMutation.mutate({...c, labels: currentLabels.filter(id => id !== labelId)} as Contact);
+                                } else if (!currentLabels.includes(labelId)) {
+                                    updateContactMutation.mutate({...c, labels: [...currentLabels, labelId]} as Contact);
+                                }
                             }
                         }}
                     />
