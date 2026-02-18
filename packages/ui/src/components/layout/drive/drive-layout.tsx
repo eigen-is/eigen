@@ -178,7 +178,8 @@ export function DriveLayout({
     };
 
     const mobileShowDetail = !!(selectedPath || (currentPath && currentPath?.type !== 'folder'));
-    const desktopShowDetail = !!(pid || (currentPath && currentPath?.type !== 'folder'));
+    const pidInFolder = pid ? folderContents.some(p => p.id === pid) : false;
+    const desktopShowDetail = !!(pidInFolder || (currentPath && currentPath?.type !== 'folder'));
     const showDetail = isMobile ? mobileShowDetail : desktopShowDetail;
 
     const detailToolbar = (showDetail && detailPath) ? (
