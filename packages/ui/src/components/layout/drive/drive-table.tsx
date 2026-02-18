@@ -94,7 +94,7 @@ export function DriveTable({
         onSelect: handleItemSelect,
         containerRef: tableRef,
         itemSelector: 'tbody tr',
-        shouldNotify: (_item, index) => !hasParentItem || index > 0,
+        shouldNotify: (_item, index) => (!hasParentItem || index > 0) && !!activeItemId,
         selection,
     });
 
@@ -144,22 +144,13 @@ export function DriveTable({
                                 (activeItemId === currentPath?.parentId || selectedIndex === 0) && "eigen-list-item-active",
                                 currentPath?.parentId && selection.isSelected(currentPath.parentId) && "eigen-list-item-selected hover:bg-[hsl(210,100%,88%)]"
                             )}
-                            onClick={() => onItemClick?.({
-                                id: currentPath?.parentId || '',
-                                mountId: currentPath?.mountId || DEFAULT_MOUNT_ID,
-                                name: '..',
-                                type: 'folder',
-                                parentId: null,
-                                ownerId: currentPath?.ownerId || '',
-                                labels: [],
-                                mimeType: 'folder',
-                                size: 0,
-                                thumbnail: null,
-                                acl: null,
-                                details: null,
-                                createdAt: new Date(),
-                                updatedAt: new Date()
-                            })}
+                            onClick={(e) => {
+                                const parentId = currentPath?.parentId || '';
+                                selection.handleItemClick(parentId, e);
+                                if (!e.shiftKey && !e.metaKey && !e.ctrlKey) {
+                                    onItemClick?.(allItems[0]);
+                                }
+                            }}
                         >
                             <TableCell className="font-medium">
                                 <div className="flex items-center">
