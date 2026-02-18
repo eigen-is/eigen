@@ -1,5 +1,5 @@
-import {useMemo} from 'react';
-import {Link} from '@tanstack/react-router';
+import {useMemo, useRef} from 'react';
+import {cn} from '@workspace/ui/lib/utils';
 import {SearchBar} from '@workspace/ui/components/layout/search-bar/search-bar';
 import {useContacts} from '@workspace/lib/contacts';
 import {Contact} from '@workspace/lib/types/contact';
@@ -11,6 +11,9 @@ import {UserItem} from '@workspace/ui/components/layout/user-item';
 import {useContextMenu} from '@workspace/ui/components/layout/context-menu/use-context-menu';
 import {ContextMenuAnchor} from '@workspace/ui/components/layout/context-menu/context-menu-anchor';
 import {LabelAssignSubMenu} from '@workspace/ui/components/layout/labels/label-assign-sub-menu';
+import {useKeyboardListNavigation} from '@workspace/ui/hooks/use-keyboard-list-navigation';
+import {useListSelection} from '@workspace/ui/hooks/use-list-selection';
+import {useListDrag} from '@workspace/ui/hooks/use-list-drag';
 import type {Label} from '@workspace/lib/types/label';
 import {useAuth} from '@workspace/lib/auth';
 
@@ -55,82 +58,86 @@ interface ContactsListProps {
     filterId?: string;
     searchQuery: string;
     sortBy: 'firstName' | 'lastName';
+    activeContactId?: string;
     labels?: Label[];
     onEdit?: (contact: Contact) => void;
-    onDelete?: (contact: Contact) => void;
-    onToggleLabel?: (contact: Contact, labelId: string) => void;
+    onDelete?: (contacts: Contact[]) => void;
+    onToggleLabel?: (contacts: Contact[], labelId: string) => void;
+    onRowClick?: (contactId: string) => void;
 }
 
-export function ContactsList({filterType = 'filter', filterId = 'all', searchQuery, sortBy, labels = [], onEdit, onDelete, onToggleLabel}: ContactsListProps) {
+export function ContactsList({filterType = 'filter', filterId = 'all', searchQuery, sortBy, activeContactId, labels = [], onEdit, onDelete, onToggleLabel, onRowClick}: ContactsListProps) {
     const {user} = useAuth();
+    const listRef = useRef<HTMLDivElement>(null);
     const contextMenu = useContextMenu<Contact>();
-    const isMe = contextMenu.item?.eigenId === user?.id;
 
     const {data: contacts = [], isLoading, error} = useContacts();
 
-    const applyFilters = (contacts: Contact[]) => {
+    const filteredContacts = useMemo(() => {
         if (!contacts.length) return [];
-
         let filtered = [...contacts];
-
         if (filterType === 'label' && filterId !== 'all') {
             filtered = filtered.filter(contact =>
                 contact.labels && contact.labels.includes(filterId)
             );
         }
-        else if (filterType === 'filter') {
-            // TODO: implement frequency/recency logic
-        }
-
         return filtered;
-    };
-
-    const filteredContacts = useMemo(() => applyFilters(contacts), [contacts, filterType, filterId]);
+    }, [contacts, filterType, filterId]);
 
     const sortedContacts = useMemo(() => {
         return [...filteredContacts].sort((a, b) => {
-            if (sortBy === 'firstName') {
-                return a.firstName.localeCompare(b.firstName);
-            } else {
-                return a.lastName.localeCompare(b.lastName);
-            }
+            if (sortBy === 'firstName') return a.firstName.localeCompare(b.firstName);
+            return a.lastName.localeCompare(b.lastName);
         });
     }, [filteredContacts, sortBy]);
 
     const searchedContacts = useMemo(() => {
-        return searchQuery.length === 0
-            ? sortedContacts
-            : sortedContacts.filter(contact =>
-                contact.firstName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                contact.lastName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                (contact.email && contact.email.some((email: string) =>
-                    email.toLowerCase().includes(searchQuery.toLowerCase())
-                ))
-            );
+        if (searchQuery.length === 0) return sortedContacts;
+        const q = searchQuery.toLowerCase();
+        return sortedContacts.filter(contact =>
+            contact.firstName.toLowerCase().includes(q) ||
+            contact.lastName.toLowerCase().includes(q) ||
+            (contact.email && contact.email.some((email: string) => email.toLowerCase().includes(q)))
+        );
     }, [sortedContacts, searchQuery]);
 
-    const groupContactsByLetter = (contacts: Contact[]) => {
-        const groups: Record<string, Contact[]> = {};
+    const selection = useListSelection({items: searchedContacts, getId: (c) => c.id});
 
-        for(const contact of contacts) {
+    const {selectedIndex, handleKeyDown} = useKeyboardListNavigation({
+        items: searchedContacts,
+        activeId: activeContactId,
+        getId: (c) => c.id,
+        onSelect: (id) => onRowClick?.(id),
+        containerRef: listRef,
+        selection,
+    });
+
+    const drag = useListDrag({selection, getId: (c) => c.id, dragType: 'contact'});
+
+    const handleContextMenu = (e: React.MouseEvent, contact: Contact) => {
+        if (!selection.isSelected(contact.id)) {
+            selection.select(contact.id);
+        }
+        contextMenu.handleContextMenu(e, contact);
+    };
+
+    const contextItems = contextMenu.item
+        ? (selection.selectedCount > 1 ? selection.selectedItems : [contextMenu.item])
+        : [];
+    const isSingleSelect = contextItems.length === 1;
+    const hasMe = contextItems.some(c => c.eigenId === user?.id);
+
+    const groupedContacts = useMemo(() => {
+        const groups: Record<string, Contact[]> = {};
+        for (const contact of searchedContacts) {
             const firstChar = sortBy === 'firstName'
                 ? contact.firstName.charAt(0).toUpperCase()
                 : contact.lastName.charAt(0).toUpperCase();
-
-            if (!groups[firstChar]) {
-                groups[firstChar] = [];
-            }
-
+            if (!groups[firstChar]) groups[firstChar] = [];
             groups[firstChar].push(contact);
         }
-
         return Object.entries(groups).sort((a, b) => a[0].localeCompare(b[0]));
-    };
-
-    const groupedContacts = useMemo(() =>
-            groupContactsByLetter(searchedContacts),
-        [searchedContacts, sortBy]
-    );
+    }, [searchedContacts, sortBy]);
 
     if (error) {
         return (
@@ -143,7 +150,12 @@ export function ContactsList({filterType = 'filter', filterId = 'all', searchQue
 
     return (
         <div className="w-full flex flex-col flex-1 overflow-hidden">
-            <div className="flex-1 overflow-y-auto">
+            <div
+                className="flex-1 overflow-y-auto outline-none"
+                ref={listRef}
+                tabIndex={0}
+                onKeyDown={handleKeyDown}
+            >
                 {isLoading ? (
                     <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
                         <EigenLoader/>
@@ -156,34 +168,40 @@ export function ContactsList({filterType = 'filter', filterId = 'all', searchQue
                     <div>
                         {groupedContacts.map(([letter, contacts]) => (
                             <div key={letter} className="border-b last:border-b-0">
-                                <div
-                                    className="flex items-center px-6 py-2 bg-muted/50"
-                                >
+                                <div className="flex items-center px-6 py-2 bg-muted/50">
                                     <h2 className="text-sm font-semibold">{letter}</h2>
                                 </div>
                                 <div>
-                                    {contacts.map((contact) => (
-                                        <Link
-                                            key={contact.id}
-                                            to="/$filterType/$filterId"
-                                            params={{filterType, filterId}}
-                                            search={{contactId: contact.id}}
-                                            className="flex items-center gap-3 px-6 py-3 eigen-list-item"
-                                            activeProps={{
-                                                className: "eigen-list-item-active",
-                                            }}
-                                            onContextMenu={(e) => contextMenu.handleContextMenu(e, contact)}
-                                        >
-                                            <UserItem
-                                                name={sortBy === 'firstName'
-                                                    ? `${contact.firstName} ${contact.lastName}`
-                                                    : `${contact.lastName}, ${contact.firstName}`}
-                                                email={contact.email && contact.email.length > 0 ? contact.email[0] : undefined}
-                                                imageUrl={contact.avatar}
-                                                className="flex-1"
-                                            />
-                                        </Link>
-                                    ))}
+                                    {contacts.map((contact) => {
+                                        const flatIndex = searchedContacts.indexOf(contact);
+                                        return (
+                                            <div
+                                                key={contact.id}
+                                                className={cn(
+                                                    "flex items-center gap-3 px-6 py-3 eigen-list-item",
+                                                    (activeContactId === contact.id || selectedIndex === flatIndex) && "eigen-list-item-active",
+                                                    selection.isSelected(contact.id) && "eigen-list-item-selected",
+                                                )}
+                                                onClick={(e) => {
+                                                    selection.handleItemClick(contact.id, e);
+                                                    if (!e.shiftKey && !e.metaKey && !e.ctrlKey) {
+                                                        onRowClick?.(contact.id);
+                                                    }
+                                                }}
+                                                onContextMenu={(e) => handleContextMenu(e, contact)}
+                                                {...drag.getDragProps(contact)}
+                                            >
+                                                <UserItem
+                                                    name={sortBy === 'firstName'
+                                                        ? `${contact.firstName} ${contact.lastName}`
+                                                        : `${contact.lastName}, ${contact.firstName}`}
+                                                    email={contact.email && contact.email.length > 0 ? contact.email[0] : undefined}
+                                                    imageUrl={contact.avatar}
+                                                    className="flex-1"
+                                                />
+                                            </div>
+                                        );
+                                    })}
                                 </div>
                             </div>
                         ))}
@@ -194,24 +212,25 @@ export function ContactsList({filterType = 'filter', filterId = 'all', searchQue
                     <DropdownMenuContent
                         style={{position: 'fixed', left: contextMenu.position.x, top: contextMenu.position.y}}
                     >
-                        {onEdit && contextMenu.item && (
+                        {isSingleSelect && onEdit && contextMenu.item && (
                             <DropdownMenuItem onClick={() => { onEdit(contextMenu.item!); contextMenu.close(); }}>
                                 <Edit className="w-4 h-4 mr-2"/> Edit
                             </DropdownMenuItem>
                         )}
-                        {onDelete && contextMenu.item && !isMe && (
-                            <DropdownMenuItem onClick={() => { onDelete(contextMenu.item!); contextMenu.close(); }}>
-                                <Trash2 className="w-4 h-4 mr-2"/> Delete
+                        {onDelete && !hasMe && contextItems.length > 0 && (
+                            <DropdownMenuItem onClick={() => { onDelete(contextItems); contextMenu.close(); }}>
+                                <Trash2 className="w-4 h-4 mr-2"/>
+                                {isSingleSelect ? 'Delete' : `Delete ${contextItems.length} contacts`}
                             </DropdownMenuItem>
                         )}
-                        {onToggleLabel && contextMenu.item && labels.length > 0 && (
+                        {onToggleLabel && contextItems.length > 0 && labels.length > 0 && (
                             <>
                                 <DropdownMenuSeparator/>
                                 <LabelAssignSubMenu
                                     labels={labels}
-                                    assignedLabelIds={contextMenu.item.labels || []}
+                                    assignedLabelIds={isSingleSelect ? (contextMenu.item?.labels || []) : []}
                                     onToggleLabel={(labelId) => {
-                                        onToggleLabel(contextMenu.item!, labelId);
+                                        onToggleLabel(contextItems, labelId);
                                         contextMenu.close();
                                     }}
                                 />

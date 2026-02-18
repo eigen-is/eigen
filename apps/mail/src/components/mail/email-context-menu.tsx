@@ -14,23 +14,25 @@ import {CSSProperties} from "react";
 
 interface EmailContextMenuProps {
     style: CSSProperties;
-    messageId?: string;
+    messageIds: string[];
+    isSingleSelect: boolean;
     mailboxes: MaildirMailbox[];
     currentMailboxId: string;
     onReply?: (emailId: string) => void;
     onReplyAll?: (emailId: string) => void;
     onForward?: (emailId: string) => void;
-    onArchive?: (emailId: string) => void;
-    onReportSpam?: (emailId: string) => void;
-    onDelete?: (emailId: string) => void;
-    onMoveToFolder?: (emailId: string, folderId: string) => void;
+    onArchive?: (emailIds: string[]) => void;
+    onReportSpam?: (emailIds: string[]) => void;
+    onDelete?: (emailIds: string[]) => void;
+    onMoveToFolder?: (emailIds: string[], folderId: string) => void;
     onClose: () => void;
     onPrint?: (emailId: string) => void;
 }
 
 export function EmailContextMenu({
                                      style,
-                                     messageId = '',
+                                     messageIds,
+                                     isSingleSelect,
                                      mailboxes = [],
                                      currentMailboxId = '',
                                      onReply,
@@ -43,19 +45,16 @@ export function EmailContextMenu({
                                      onClose,
                                      onPrint
                                  }: EmailContextMenuProps) {
+    const firstId = messageIds[0] || '';
+
     return (
         <DropdownMenuContent
             style={style}
             className="w-56"
         >
-            {onPrint && (
+            {isSingleSelect && onPrint && (
                 <>
-                    <DropdownMenuItem
-                        onClick={() => {
-                            onPrint?.(messageId);
-                            onClose();
-                        }}
-                    >
+                    <DropdownMenuItem onClick={() => { onPrint(firstId); onClose(); }}>
                         <Printer className="mr-2"/>
                         Print
                     </DropdownMenuItem>
@@ -63,82 +62,53 @@ export function EmailContextMenu({
                 </>
             )}
 
-            {/* Reply options */}
-            <DropdownMenuItem
-                onClick={() => {
-                    onReply?.(messageId);
-                    onClose();
-                }}
-            >
-                <Reply className="mr-2"/>
-                Reply
-            </DropdownMenuItem>
-            <DropdownMenuItem
-                onClick={() => {
-                    onReplyAll?.(messageId);
-                    onClose();
-                }}
-            >
-                <ReplyAll className="mr-2"/>
-                Reply All
-            </DropdownMenuItem>
-            <DropdownMenuItem
-                onClick={() => {
-                    onForward?.(messageId);
-                    onClose();
-                }}
-            >
-                <Forward className="mr-2"/>
-                Forward
-            </DropdownMenuItem>
+            {isSingleSelect && (
+                <>
+                    <DropdownMenuItem onClick={() => { onReply?.(firstId); onClose(); }}>
+                        <Reply className="mr-2"/>
+                        Reply
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => { onReplyAll?.(firstId); onClose(); }}>
+                        <ReplyAll className="mr-2"/>
+                        Reply All
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => { onForward?.(firstId); onClose(); }}>
+                        <Forward className="mr-2"/>
+                        Forward
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator/>
+                </>
+            )}
 
-            <DropdownMenuSeparator/>
-
-            {/* Email actions */}
-            <DropdownMenuItem
-                onClick={() => {
-                    onArchive?.(messageId);
-                    onClose();
-                }}
-            >
+            <DropdownMenuItem onClick={() => { onArchive?.(messageIds); onClose(); }}>
                 <Archive className="mr-2"/>
-                Archive
+                {isSingleSelect ? 'Archive' : `Archive ${messageIds.length} emails`}
             </DropdownMenuItem>
-            <DropdownMenuItem
-                onClick={() => {
-                    onReportSpam?.(messageId);
-                    onClose();
-                }}
-            >
+            <DropdownMenuItem onClick={() => { onReportSpam?.(messageIds); onClose(); }}>
                 <AlertTriangle className="mr-2"/>
                 Report Spam
             </DropdownMenuItem>
-            <DropdownMenuItem
-                onClick={() => {
-                    onDelete?.(messageId);
-                    onClose();
-                }}
-            >
+            <DropdownMenuItem onClick={() => { onDelete?.(messageIds); onClose(); }}>
                 <Trash2 className="mr-2"/>
-                Delete
+                {isSingleSelect ? 'Delete' : `Delete ${messageIds.length} emails`}
             </DropdownMenuItem>
 
             <DropdownMenuSeparator/>
 
-            <DropdownMenuItem
-                onClick={() => {
-                    const url = getMailMessageDownloadUrl(messageId);
-                    window.open(url, "_blank");
-                    onClose();
-                }}
-            >
-                <Download className="mr-2"/>
-                Download
-            </DropdownMenuItem>
+            {isSingleSelect && (
+                <>
+                    <DropdownMenuItem onClick={() => {
+                        const url = getMailMessageDownloadUrl(firstId);
+                        window.open(url, "_blank");
+                        onClose();
+                    }}>
+                        <Download className="mr-2"/>
+                        Download
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator/>
+                </>
+            )}
 
-            <DropdownMenuSeparator/>
-
-            {/* Move to folder submenu */}
             <DropdownMenuSub>
                 <DropdownMenuSubTrigger>
                     Move to folder
@@ -150,7 +120,7 @@ export function EmailContextMenu({
                             <DropdownMenuItem
                                 key={ucfirst(mailbox.name)}
                                 onClick={() => {
-                                    onMoveToFolder?.(messageId, mailbox.name === 'INBOX' ? '' : mailbox.name);
+                                    onMoveToFolder?.(messageIds, mailbox.name === 'INBOX' ? '' : mailbox.name);
                                     onClose();
                                 }}
                             >

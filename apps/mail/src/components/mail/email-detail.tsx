@@ -93,16 +93,17 @@ export function EmailDetailToolbar({
                     </DropdownMenuTrigger>
                     <EmailContextMenu
                         style={{}}
-                        messageId={email.id}
+                        messageIds={[email.id]}
+                        isSingleSelect={true}
                         mailboxes={mailboxes}
                         currentMailboxId={email.mailbox}
                         onReply={onReply}
                         onReplyAll={onReplyAll}
                         onForward={onForward}
-                        onArchive={onArchive}
-                        onReportSpam={onReportSpam}
-                        onDelete={onDelete}
-                        onMoveToFolder={onMoveToFolder}
+                        onArchive={onArchive ? (ids) => ids.forEach(id => onArchive(id)) : undefined}
+                        onReportSpam={onReportSpam ? (ids) => ids.forEach(id => onReportSpam(id)) : undefined}
+                        onDelete={onDelete ? (ids) => ids.forEach(id => onDelete(id)) : undefined}
+                        onMoveToFolder={onMoveToFolder ? (ids, folderId) => ids.forEach(id => onMoveToFolder(id, folderId)) : undefined}
                         onClose={() => {}}
                         onPrint={() => printDocument()}
                     />

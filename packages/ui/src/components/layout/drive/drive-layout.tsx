@@ -80,9 +80,9 @@ export function DriveLayout({
         }
     };
 
-    const handleDeletePath = (path: DrivePath) => {
+    const handleDeletePaths = (paths: DrivePath[]) => {
         if (allowDelete) {
-            dialogs.delete.openDialog(path);
+            for (const path of paths) dialogs.delete.openDialog(path);
         }
     };
 
@@ -133,7 +133,7 @@ export function DriveLayout({
         onCreateFolder: allowCreateFolder ? dialogs.createFolder.openDialog : undefined,
         onUploadFile: allowUpload ? handleFileUpload : undefined,
         onUploadFiles: allowUpload ? handleUploadFiles : undefined,
-        onDelete: allowDelete ? handleDeletePath : undefined,
+        onDelete: allowDelete ? handleDeletePaths : undefined,
         onShareClick: allowShare ? handleShareClick : undefined,
         onCreateDoc: allowCreateDoc ? dialogs.createDoc.openDialog : undefined,
         onCreateStickies: allowCreateStickies ? dialogs.createStickies.openDialog : undefined,
@@ -169,7 +169,7 @@ export function DriveLayout({
 
     const detailProps = {
         path: detailPath,
-        onDelete: allowDelete ? handleDeletePath : undefined,
+        onDelete: allowDelete ? (p: DrivePath) => handleDeletePaths([p]) : undefined,
         onShareClick: allowShare ? handleShareClick : undefined,
         onDownload: handleDownloadPath,
         onItemOpen: onRowActivate,
@@ -185,7 +185,7 @@ export function DriveLayout({
         <DriveDetailToolbar
             path={detailPath}
             onClose={onBackToList}
-            onDelete={allowDelete ? handleDeletePath : undefined}
+            onDelete={allowDelete ? (p: DrivePath) => handleDeletePaths([p]) : undefined}
             onShareClick={allowShare ? handleShareClick : undefined}
             onDownload={handleDownloadPath}
             onItemOpen={onRowActivate}

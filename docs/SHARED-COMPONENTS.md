@@ -30,6 +30,7 @@ See `docs/LAYOUT.md` for detailed architecture documentation.
 | `SidebarContainer` | `sidebar/sidebar-container.tsx` | Responsive sidebar wrapper: full/condensed on desktop, sheet overlay on mobile |
 | `SidebarItem` | `sidebar/sidebar-item.tsx` | Navigation item: icon + label, renders as `Link` (if `to`) or `Button` |
 | `SidebarSection` | `sidebar/sidebar-section.tsx` | Grouped section with optional title, supports condensed mode |
+| `DroppableSidebarItem` | `sidebar/droppable-sidebar-item.tsx` | `SidebarItem` wrapped with `useListDropTarget` for drag-and-drop onto sidebar items |
 
 ---
 
@@ -91,7 +92,10 @@ See `docs/LAYOUT.md` for detailed architecture documentation.
 
 | Hook | File | Description |
 |------|------|-------------|
-| `useKeyboardListNavigation` | `hooks/use-keyboard-list-navigation.ts` | Hook for keyboard navigation in selectable lists (ArrowUp/Down, Enter, Home/End) with scroll-into-view |
+| `useKeyboardListNavigation` | `hooks/use-keyboard-list-navigation.ts` | Keyboard navigation for lists (ArrowUp/Down, Enter, Home/End), optional `selection` param for Shift+Arrow range select, Ctrl+A, Escape |
+| `useListSelection` | `hooks/use-list-selection.ts` | Multi-select state: click, Ctrl/Cmd+click toggle, Shift+click range, select all, clear |
+| `useListDrag` | `hooks/use-list-drag.ts` | Selection-aware drag source: sets `application/eigen-drag` data, shows badge for multi-drag |
+| `useListDropTarget` | `hooks/use-list-drop-target.ts` | Generic drop target: accepts `application/eigen-drag` data by type, provides `isOver` + `getDropProps()` |
 
 ---
 
@@ -160,7 +164,6 @@ The `drive/` subdirectory contains shared Drive components used by both the Driv
 | `FileUpload` | `drive/file-upload.tsx` | Low-level file upload component |
 | `fileIconHelper` | `drive/file-icon-helper.tsx` | Maps file types to icons |
 | `useDriveDialogs` | `drive/use-drive-dialogs.ts` | Hook managing open/close state for all drive dialogs |
-| `useTableDragDrop` | `drive/use-table-drag-drop.ts` | Hook for drag-and-drop in file tables |
 | `FilePreview` | `drive/file-preview.tsx` | Lightbox overlay for images, videos, and PDFs with Escape-to-close |
 
 ---

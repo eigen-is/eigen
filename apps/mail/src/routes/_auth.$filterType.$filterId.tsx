@@ -123,9 +123,17 @@ function MailRoute() {
         if (email) handleDeleteEmail(email);
     };
 
+    const handleDeleteEmailsByIds = async (emailIds: string[]) => {
+        for (const id of emailIds) await handleDeleteEmailById(id);
+    };
+
     const handleMoveEmailToFolderById = async (emailId: string, folderId: string) => {
         const email = await getEmailById(emailId);
         if (email) handleMoveEmail(email, folderId);
+    };
+
+    const handleMoveEmailsToFolderByIds = async (emailIds: string[], folderId: string) => {
+        for (const id of emailIds) await handleMoveEmailToFolderById(id, folderId);
     };
 
     const handleArchiveEmailById = async (emailId: string) => {
@@ -133,9 +141,17 @@ function MailRoute() {
         if (email) handleMoveEmail(email, 'archive');
     };
 
+    const handleArchiveEmailsByIds = async (emailIds: string[]) => {
+        for (const id of emailIds) await handleArchiveEmailById(id);
+    };
+
     const handleReportSpamById = async (emailId: string) => {
         const email = await getEmailById(emailId);
         if (email) handleMoveEmail(email, 'spam');
+    };
+
+    const handleReportSpamByIds = async (emailIds: string[]) => {
+        for (const id of emailIds) await handleReportSpamById(id);
     };
 
     const handleReplyEmail = async (emailId: string) => {
@@ -234,10 +250,10 @@ function MailRoute() {
                             onRowClick={handleRowClick}
                             activeRowId={mailId}
                             mailboxes={mailboxes}
-                            onDelete={handleDeleteEmailById}
-                            onArchive={handleArchiveEmailById}
-                            onReportSpam={handleReportSpamById}
-                            onMoveToFolder={handleMoveEmailToFolderById}
+                            onDelete={handleDeleteEmailsByIds}
+                            onArchive={handleArchiveEmailsByIds}
+                            onReportSpam={handleReportSpamByIds}
+                            onMoveToFolder={handleMoveEmailsToFolderByIds}
                             onReply={handleReplyEmail}
                             onReplyAll={handleReplyAllEmail}
                             onForward={handleForwardEmail}
