@@ -137,15 +137,15 @@ export function DriveTable({
                     </TableRow>
                 </TableHeader>
                 <TableBody>
-                    {hasParentItem && (
+                    {hasParentItem && currentPath && (
                         <TableRow
                             className={cn(
                                 "eigen-list-item",
-                                (activeItemId === currentPath?.parentId || selectedIndex === 0) && "eigen-list-item-active",
-                                currentPath?.parentId && selection.isSelected(currentPath.parentId) && "eigen-list-item-selected hover:bg-[hsl(210,100%,88%)]"
+                                (activeItemId === currentPath.parentId || selectedIndex === 0) && "eigen-list-item-active",
+                                currentPath.parentId && selection.isSelected(currentPath.parentId) && "eigen-list-item-selected hover:bg-[hsl(210,100%,88%)]"
                             )}
                             onClick={(e) => {
-                                const parentId = currentPath?.parentId || '';
+                                const parentId = currentPath.parentId || '';
                                 selection.handleItemClick(parentId, e);
                                 if (!e.shiftKey && !e.metaKey && !e.ctrlKey) {
                                     onItemClick?.(allItems[0]);
