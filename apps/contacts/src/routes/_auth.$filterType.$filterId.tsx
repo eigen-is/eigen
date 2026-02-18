@@ -54,6 +54,14 @@ function ContactsRoute() {
         });
     };
 
+    const handleRowClick = (id: string) => {
+        navigate({
+            to: Route.fullPath,
+            params: {filterType, filterId},
+            search: {contactId: id},
+        });
+    };
+
     const contact = contactsLoading ? undefined : contacts.find(c => c.id === contactId);
 
     useEffect(() => {
@@ -107,7 +115,9 @@ function ContactsRoute() {
                         filterId={filterId}
                         searchQuery={searchQuery}
                         sortBy={sortBy}
+                        activeContactId={contactId}
                         labels={labels}
+                        onRowClick={handleRowClick}
                         onEdit={(contact) => {
                             navigate({
                                 to: '/edit/$filterType/$filterId',
@@ -115,13 +125,17 @@ function ContactsRoute() {
                                 search: {contactId: contact.id},
                             });
                         }}
-                        onDelete={(contact) => handleDeleteContact(contact.id)}
-                        onToggleLabel={(contact, labelId) => {
-                            const currentLabels = contact.labels || [];
-                            const newLabels = currentLabels.includes(labelId)
-                                ? currentLabels.filter(id => id !== labelId)
-                                : [...currentLabels, labelId];
-                            updateContactMutation.mutate({...contact, labels: newLabels} as Contact);
+                        onDelete={(selectedContacts) => {
+                            for (const c of selectedContacts) handleDeleteContact(c.id);
+                        }}
+                        onToggleLabel={(selectedContacts, labelId) => {
+                            for (const c of selectedContacts) {
+                                const currentLabels = c.labels || [];
+                                const newLabels = currentLabels.includes(labelId)
+                                    ? currentLabels.filter(id => id !== labelId)
+                                    : [...currentLabels, labelId];
+                                updateContactMutation.mutate({...c, labels: newLabels} as Contact);
+                            }
                         }}
                     />
                 </div>

@@ -207,8 +207,28 @@
         @apply bg-muted text-primary;
     }
 
+    .eigen-list-item-selected {
+        @apply bg-primary/10;
+    }
+
+    .eigen-list-item-selected.eigen-list-item-active {
+        @apply bg-primary/15;
+    }
+
     .eigen-list-item-unread {
         @apply border-l-red-600 border-l-2 bg-red-600/5 text-primary;
+    }
+
+    .drag-badge {
+        position: absolute;
+        top: -9999px;
+        padding: 4px 12px;
+        background: hsl(var(--primary));
+        color: white;
+        border-radius: 9999px;
+        font-size: 13px;
+        font-weight: 500;
+        white-space: nowrap;
     }
 
 }

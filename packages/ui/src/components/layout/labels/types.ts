@@ -5,4 +5,6 @@ export type LabelManagerProps = {
     getLabelPath?: (label: Label) => string;
     className?: string;
     condensed?: boolean;
+    dropAcceptTypes?: string[];
+    onItemDrop?: (itemIds: string[], labelId: string) => void;
 }
