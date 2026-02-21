@@ -5,7 +5,6 @@ type EigenLoadingScreenProps = {
     className?: string;
 };
 
-// CSS animaties gebruikt als string literals
 const animationStyles = {
     moveLeftChevron: `
     @keyframes moveLeftChevron {
@@ -22,12 +21,9 @@ const animationStyles = {
 };
 
 export function EigenLoader({className}: EigenLoadingScreenProps) {
-    // State om bij te houden of de animatie is gestart
     const [animationStarted, setAnimationStarted] = useState(false);
 
-    // Start animatie effect
     useEffect(() => {
-        // Korte vertraging voordat we de animatie starten voor een betere visuele ervaring
         const timer = setTimeout(() => {
             setAnimationStarted(true);
         }, 300);
@@ -37,7 +33,6 @@ export function EigenLoader({className}: EigenLoadingScreenProps) {
 
     return (
         <>
-            {/* Voeg de keyframe animaties toe via een style tag */}
             <style>
                 {animationStyles.moveLeftChevron}
                 {animationStyles.moveRightChevron}
