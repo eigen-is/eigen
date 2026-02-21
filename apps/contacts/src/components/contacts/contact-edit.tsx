@@ -147,7 +147,6 @@ export function ContactEdit({
                                         name={`${contact.firstName} ${contact.lastName}`}
                                         email={contact.email?.[0]}
                                         imageUrl={avatar ?? undefined}
-                                        forceUseImageUrl={true}
                                         className="h-full w-full"
                                         size="lg"
                                     />

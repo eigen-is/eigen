@@ -6,6 +6,7 @@ import {mailRouter} from "./routes/mail";
 import {contactsRouter} from "./routes/contacts";
 import {trustedOrigins} from "./lib/auth/auth";
 import {spaceRouter} from "./routes/space";
+import {publicRouter} from "./routes/public";
 import {driveRouter} from "./routes/drive.ts";
 import {homeRouter} from "./routes/home.ts";
 import {collabRouter} from "./routes/collab";
@@ -30,6 +31,7 @@ export const app = new Elysia()
     .use(mailRouter)
     .use(contactsRouter)
     .use(spaceRouter)
+    .use(publicRouter)
     .use(driveRouter)
     .use(homeRouter)
     .use(collabRouter)
