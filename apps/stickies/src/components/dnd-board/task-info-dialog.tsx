@@ -8,7 +8,7 @@ import {nanoid} from "nanoid";
 import * as Y from "yjs";
 import {formatDistanceToNow} from "date-fns";
 import {useAuth} from "@workspace/lib/auth";
-import {useAvatar} from "@workspace/lib/media";
+import {usePublicUser} from "@workspace/lib/public";
 import {UserAvatar} from "@workspace/ui/components/layout/user-avatar";
 import {cn} from "@workspace/ui/lib/utils";
 import {Separator} from "@workspace/ui/components/separator";
@@ -103,10 +103,10 @@ export function TaskInfoDialog({
         className?: string,
         children?: React.ReactNode,
     }) => {
-        const {data} = useAvatar(email, {enabled: true});
+        const {data} = usePublicUser(email);
         return (
             <div className={cn("flex items-top", className)}>
-                <UserAvatar name={data?.name || email} email={data?.email || email} imageUrl={data?.avatar} size="md"/>
+                <UserAvatar name={data?.name || email} email={data?.email || email} size="md"/>
                 <div className="ml-3 flex-1">
                     <div className="flex justify-between items-baseline">
                         <p className="text-sm font-medium text-gray-900">
@@ -182,7 +182,6 @@ export function TaskInfoDialog({
                             <UserAvatar
                                 name={user?.name || user?.email || ''}
                                 email={user?.email || ''}
-                                imageUrl={user?.image ?? undefined}
                                 size="md"
                                 className="mt-1"
                             />
