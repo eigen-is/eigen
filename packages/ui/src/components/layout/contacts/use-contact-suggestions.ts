@@ -2,9 +2,6 @@ import {useMemo} from 'react';
 import {ContactSuggestion} from './types';
 import {useContacts} from '@workspace/lib/contacts';
 
-/**
- * Hook to get contact suggestions based on input query
- */
 export function useContactSuggestions(
     query: string,
     onlyEigenIsMails: boolean = false
@@ -17,10 +14,8 @@ export function useContactSuggestions(
         if (!lowerQuery || !contacts || lowerQuery.length < 2) return [];
 
         const results: ContactSuggestion[] = [];
-        // const addedIds = new Set<string>();
 
         for(const contact of contacts) {
-            // if (addedIds.has(contact.id)) return;
 
             const fullName = `${contact.firstName} ${contact.lastName}`.toLowerCase();
             const nameMatch = fullName.includes(lowerQuery);
@@ -49,8 +44,6 @@ export function useContactSuggestions(
                     email: bestEmail,
                     allEmails: contact.email
                 });
-
-                // addedIds.add(contact.id);
             }
         }
 

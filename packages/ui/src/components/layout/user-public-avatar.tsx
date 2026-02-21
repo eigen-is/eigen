@@ -27,6 +27,7 @@ export function UserPublicAvatar({
                     name={data?.name || email}
                     email={data?.email || email}
                     imageUrl={data?.avatar}
+                    forceUseImageUrl
                     size={size}
                     className={className}
                     {...props}
