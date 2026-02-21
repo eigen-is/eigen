@@ -95,10 +95,10 @@ const StickiesBoard = ({ownerId, path, canWrite, onAccessDialogOpen}: StickiesBo
     };
 
     return (
-        <>
+        <div className="flex flex-col h-full w-full">
             <StickiesToolbar path={path} canWrite={canWrite} undoManager={undoManager}
                              onAccessDialogOpen={onAccessDialogOpen}/>
-            <div className="h-full w-full flex bg-gray-200 overflow-hidden">
+            <div className="flex-1 w-full flex bg-gray-200 overflow-hidden">
                 <div
                     className="overflow-x-auto overflow-y-hidden flex-1"
                     style={board.columnOrder.length > 1 ? {
@@ -195,7 +195,7 @@ const StickiesBoard = ({ownerId, path, canWrite, onAccessDialogOpen}: StickiesBo
                     )}
                 </div>
             </div>
-        </>
+        </div>
     );
 }
 export {StickiesBoard};
