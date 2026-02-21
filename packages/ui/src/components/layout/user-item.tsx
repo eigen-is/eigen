@@ -3,7 +3,7 @@
 import {HTMLAttributes, ReactNode} from "react"
 import {cn} from "@workspace/ui/lib/utils"
 import {UserAvatar} from "./user-avatar"
-import {useAvatar} from "@workspace/lib/media"
+import {usePublicUser} from "@workspace/lib/public"
 import {EigenLoader} from "./eigen-loader"
 
 export type UserItemProps = HTMLAttributes<HTMLDivElement> & {
@@ -28,11 +28,10 @@ export function UserItem({
                              autoFetch = false,
                              ...props
                          }: UserItemProps) {
-    const {data, isLoading} = useAvatar(email || '', {enabled: autoFetch});
+    const {data, isLoading} = usePublicUser(email || '', {enabled: autoFetch});
 
     const resolvedName = autoFetch ? (data?.name || name || email) : (name || email || "");
     const resolvedEmail = autoFetch ? (data?.email || email) : email;
-    const resolvedImage = autoFetch ? (data?.avatar || imageUrl) : imageUrl;
     const displayName = resolvedName || "";
 
     if (autoFetch && isLoading) return <EigenLoader/>;
@@ -42,7 +41,7 @@ export function UserItem({
             <UserAvatar
                 name={resolvedName}
                 email={resolvedEmail}
-                imageUrl={resolvedImage}
+                imageUrl={imageUrl}
                 userId={userId}
             />
 
