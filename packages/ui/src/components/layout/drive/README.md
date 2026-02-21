@@ -24,10 +24,6 @@ dialogs.createFolder.openDialog();
 dialogs.delete.openDialog(path);
 ```
 
-### `useTableDragDrop`
-
-Drag-and-drop to move files between folders.
-
 ## Key Components
 
 ### `DriveLayout`
@@ -86,7 +82,6 @@ File/folder details: metadata, preview (images, video, audio), and access list.
 **Hooks:**
 
 - `use-drive-dialogs.ts` - Dialog state management
-- `use-table-drag-drop.ts` - Drag-drop for moving items
 
 **Helpers:**
 
