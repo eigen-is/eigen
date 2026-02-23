@@ -1,7 +1,7 @@
 import * as path from "path";
 import * as fs from "node:fs";
 
-const DATA_ROOT = './../../data';
+const DATA_ROOT = process.env['EIGEN_DATA_ROOT'] || './../../data';
 const SERVER_DATA = path.join(DATA_ROOT, 'server');
 const HOME_DATA = path.join(DATA_ROOT, 'home');
 
