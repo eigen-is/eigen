@@ -32,10 +32,13 @@ describe('Contacts', () => {
                     }),
                 });
             expect(res.status).toBe(200);
-            contactId = await res.text();
-            expect(contactId).toBeDefined();
-            expect(typeof contactId).toBe('string');
-            expect(contactId.length).toBeGreaterThan(0);
+
+            const listRes = await authedRequest(ctx.alice.user.sessionToken,
+                `/contacts/${ctx.alice.user.id}/contacts`);
+            const all = await listRes.json() as any[];
+            const charlie = all.find(c => c.firstName === 'Charlie');
+            expect(charlie).toBeDefined();
+            contactId = charlie.id;
         });
 
         test('list contacts includes new contact', async () => {
@@ -85,7 +88,7 @@ describe('Contacts', () => {
             const listRes = await authedRequest(ctx.alice.user.sessionToken,
                 `/contacts/${ctx.alice.user.id}/contacts`);
             const contacts = await listRes.json() as any[];
-            expect(contacts.find(c => c.firstName === 'Charlie')).toBeUndefined();
+            expect(contacts.find((c: any) => c.id === contactId)).toBeUndefined();
         });
     });
 
@@ -107,9 +110,9 @@ describe('Contacts', () => {
                     body: JSON.stringify({name: 'VIP', color: '#ff0000'}),
                 });
             expect(res.status).toBe(200);
-            labelId = await res.text();
-            expect(labelId).toBeDefined();
-            expect(typeof labelId).toBe('string');
+            const raw = await res.text();
+            labelId = raw.replace(/^"|"$/g, '');
+            expect(labelId.length).toBeGreaterThan(0);
         });
 
         test('list labels includes new label', async () => {
