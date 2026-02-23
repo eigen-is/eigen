@@ -29,6 +29,14 @@ function DocsRoot() {
 
     const isFullScreen = !!isEditorRoute;
 
+    if (!user) {
+        return (
+            <AppShell appName="docs" rootRoute={Route}>
+                <Outlet/>
+            </AppShell>
+        );
+    }
+
     return (
         <AppShell
             appName="docs"

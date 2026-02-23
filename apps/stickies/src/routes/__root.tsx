@@ -29,6 +29,14 @@ function StickiesRoot() {
 
     const isFullScreen = !!isBoardRoute;
 
+    if (!user) {
+        return (
+            <AppShell appName="stickies" rootRoute={Route}>
+                <Outlet/>
+            </AppShell>
+        );
+    }
+
     return (
         <AppShell
             appName="stickies"
