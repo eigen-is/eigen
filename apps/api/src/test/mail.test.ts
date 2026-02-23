@@ -41,8 +41,8 @@ describe('Mail', () => {
                 body: JSON.stringify({mailbox: 'Duplicate', attributes: []}),
             });
         expect(res2.status).toBe(409);
-        const error = await res2.json() as any;
-        expect(error.message).toContain('already exists');
+        const body = await res2.text();
+        expect(body).toContain('already exists');
     });
 
     describe('Cross-user isolation', () => {

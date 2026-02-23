@@ -93,7 +93,7 @@ export default class Maildir {
     }
 
     public async mailboxCreate(mailbox: string, attributes: string[] = []): Promise<void> {
-        const mailboxPath = await this.sanitizeDirName(mailbox);
+        const mailboxPath = this.sanitizeDirName(mailbox);
         const exists = await this.storage.dirExists(mailboxPath);
         if (exists) {
             throw new ApiError(409, `Mailbox '${mailbox}' already exists`);
