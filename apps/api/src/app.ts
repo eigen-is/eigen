@@ -42,11 +42,11 @@ export const app = new Elysia()
         const err = error as Error;
         if (err instanceof ApiError) {
             set.status = err.status;
-            return {message: err.message};
+            return err.message;
         }
         console.error('API Error:', err);
         set.status = 500;
-        return {message: 'Internal server error'};
+        return 'Internal server error';
     })
     .get("/", () => "eigen|api>")
     .get("/health", () => "OK");
