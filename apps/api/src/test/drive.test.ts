@@ -183,6 +183,17 @@ describe('Drive', () => {
             expect(data.name).toBe('test-image.png');
         });
 
+        test('upload invalid image has no thumbnail', async () => {
+            const invalidPng = Buffer.from('not-a-png', 'utf-8');
+            const imageFile = new File([invalidPng], 'invalid.png', {type: 'image/png'});
+            const data = await driveUpload(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                uploadFolderId, imageFile);
+
+            expect(data).toBeDefined();
+            expect(data.name).toBe('invalid.png');
+            expect(data.thumbnail).toBeNull(); // No thumbnail for invalid image
+        });
+
         test('rename file', async () => {
             const res = await authedRequest(ctx.alice.user.sessionToken,
                 `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${uploadedFileId}/rename`, {
