@@ -15,7 +15,9 @@
     "serve:setup": "bun --filter '@apps/api' --filter './apps/setup' dev",
     "build": "bun --filter '*' build",
     "build:prod": "bun --filter './apps/*' build && bun --filter '@apps/api' buildfordocker",
-    "typecheck": "bun --filter '*' typecheck"
+    "typecheck": "bun --filter '*' typecheck",
+    "test": "bun --filter '@apps/api' test",
+    "check": "bun run typecheck && bun run test"
   },
   "workspaces": [
     "packages/*",
