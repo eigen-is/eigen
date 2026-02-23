@@ -25,6 +25,29 @@ describe('Mail', () => {
         expect(res.status).toBe(200);
     });
 
+    test('create duplicate mailbox returns error', async () => {
+        // First creation succeeds
+        const res1 = await authedRequest(ctx.alice.user.sessionToken,
+            `/mail/${ctx.alice.user.id}/mailbox`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({mailbox: 'Duplicate', attributes: []}),
+            });
+        expect(res1.status).toBe(200);
+
+        // Second creation should fail with proper error status
+        const res2 = await authedRequest(ctx.alice.user.sessionToken,
+            `/mail/${ctx.alice.user.id}/mailbox`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({mailbox: 'Duplicate', attributes: []}),
+            });
+        // TODO: This should return 409 but currently returns 200 with false
+        expect(res2.status).toBe(409);
+        const error = await res2.json() as any;
+        expect(error.message).toContain('already exists');
+    });
+
     describe('Cross-user isolation', () => {
         test('Bob has his own mailboxes', async () => {
             const res = await authedRequest(ctx.bob.user.sessionToken,
