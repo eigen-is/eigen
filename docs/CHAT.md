@@ -23,7 +23,7 @@ Proposal for a unified messaging system that powers standalone chat rooms, docum
 
 ## 1. Overview
 
-Chat in Eigen is **not a separate service** — it is a Drive document type, just like `.eigendoc` and `.eigenstickies`. A chat instance is a folder on Drive containing a SQLite database for room configuration and per-room subfolders for message data and media uploads.
+Chat in Eigen is **not a separate service** — it is a Drive document type, just like `.eigendoc` and `.eigenstickies`. A chat instance is a folder on Drive containing room subfolders, where each room is fully self-contained with its own SQLite database and media folder.
 
 This means:
 
@@ -73,23 +73,23 @@ A chat is a folder on Drive with MIME type `application/eigenchat` and extension
 
 ```
 my-team-chat.eigenchat/                    (pathId: abc, mimeType: application/eigenchat)
-├── chat.db                                (pathId: def, mimeType: application/x-sqlite3)
-│   └── rooms table (room config, metadata)
-│   └── members table (room membership, presence)
-├── room-{roomId}/                         (pathId: ghi, type: folder)
-│   ├── messages.db                        (pathId: jkl, mimeType: application/x-sqlite3)
-│   │   └── messages table
-│   │   └── reactions table
-│   └── media/                             (pathId: mno, type: folder)
-│       ├── image1.png
-│       └── file1.pdf
-├── room-{roomId2}/
-│   ├── messages.db
-│   └── media/
-└── ...
+└── rooms/
+    ├── room-{roomId}/                     (pathId: def, type: folder)
+    │   ├── room.db                        (pathId: ghi, mimeType: application/x-sqlite3)
+    │   │   └── settings table (room metadata/context)
+    │   │   └── messages table
+    │   │   └── reactions table
+    │   │   └── read_state table
+    │   └── media/                         (pathId: jkl, type: folder)
+    │       ├── image1.png
+    │       └── file1.pdf
+    ├── room-{roomId2}/
+    │   ├── room.db
+    │   └── media/
+    └── ...
 ```
 
-This mirrors the eigendoc/eigenstickies pattern: a folder in `metadata.db` containing child entries, with SQLite databases stored via the storage backend using their `pathId` as the key.
+There is no mandatory chat-level `chat.db`. Room metadata lives with room messages in the same room database, so room ACL and room data stay aligned.
 
 ### 3.2 System Chat Folder
 
@@ -116,10 +116,10 @@ my-document.eigendoc/
 ├── data.db                    # Yjs document data (existing)
 ├── media/                     # Document media (existing)
 └── comments.eigenchat/        # Embedded chat for document comments
-    ├── chat.db
-    └── room-general/
-        ├── messages.db
-        └── media/
+    └── rooms/
+        └── room-general/
+            ├── room.db
+            └── media/
 ```
 
 The embedded chat inherits ACL from the parent document — anyone who can read the doc can read comments, anyone who can write can post.
@@ -128,41 +128,27 @@ The embedded chat inherits ACL from the parent document — anyone who can read 
 
 ## 4. Database Schemas
 
-### 4.1 chat.db (per chat document)
+### 4.1 room.db (per room)
 
-Manages rooms and membership within a single `.eigenchat` folder.
+Each room folder has one SQLite database (`room.db`) containing both room metadata and room activity.
 
-**rooms**
+**settings** (single-row table)
 
 | Column | Type | Description |
 |--------|------|-------------|
-| `id` | TEXT PK | UUID |
-| `name` | TEXT | Room display name (e.g., `#lounge`, `#dev`) |
+| `id` | TEXT PK | Room ID (UUID) |
+| `name` | TEXT | Room display name (e.g., `#lounge`, `Card: API migration`) |
 | `description` | TEXT | Optional room description |
-| `type` | TEXT | `open` / `private` / `dm` |
+| `type` | TEXT | `open` / `private` / `dm` / `comment-thread` |
 | `createdBy` | TEXT | User ID of creator |
 | `createdAt` | INTEGER | Timestamp |
 | `updatedAt` | INTEGER | Timestamp |
+| `contextKind` | TEXT | `standalone` / `doc-comment` / `sticky-card` |
+| `contextRef` | TEXT | JSON string with host reference data |
 
-**members**
-
-| Column | Type | Description |
-|--------|------|-------------|
-| `roomId` | TEXT FK | References rooms.id |
-| `userId` | TEXT | User ID |
-| `email` | TEXT | User email (for cross-user resolution) |
-| `role` | TEXT | `owner` / `member` / `readonly` |
-| `joinedAt` | INTEGER | Timestamp |
-| `lastReadAt` | INTEGER | Timestamp of last read message (for unread counts) |
-| `lastReadMessageId` | TEXT | ID of last read message |
-| `status` | TEXT | `active` / `away` / `offline` (presence) |
-| `currentRoom` | INTEGER | 1 if user is currently "in" this room |
-
-Indexes: `(roomId, userId)` unique, `(userId)` for listing user's rooms.
-
-### 4.2 messages.db (per room)
-
-Each room gets its own SQLite database, keeping room data isolated and independently manageable.
+`contextRef` examples:
+- Doc comment room: `{ "docPathId": "...", "threadId": "..." }`
+- Sticky card room: `{ "boardPathId": "...", "cardId": "..." }`
 
 **messages**
 
@@ -188,15 +174,37 @@ Each room gets its own SQLite database, keeping room data isolated and independe
 | `emoji` | TEXT | Emoji character |
 | `createdAt` | INTEGER | Timestamp |
 
-Indexes: `(createdAt)` for pagination, `(replyTo)` for thread queries, `(authorId)` for user message history, `(messageId, userId, emoji)` unique for reactions.
+**read_state**
 
-### Why Per-Room Databases?
+| Column | Type | Description |
+|--------|------|-------------|
+| `userId` | TEXT | User ID |
+| `lastReadAt` | INTEGER | Timestamp of last read message |
+| `lastReadMessageId` | TEXT | Last read message ID |
+| `muted` | INTEGER | 0/1 for per-user mute state |
 
-- **Isolation**: Deleting a room = deleting a folder + database file. No orphan cleanup.
-- **Performance**: Pagination queries scan only one room's data, not all rooms.
-- **Sharing granularity**: A room folder can have its own ACL (share one room, not the whole chat).
-- **Backup/export**: Each room is self-contained.
-- **Consistency**: Follows the eigendoc pattern where each document folder has its own data.db.
+Indexes:
+- `messages(createdAt)` for pagination
+- `messages(replyTo)` for thread queries
+- `messages(authorId)` for author history
+- `reactions(messageId, userId, emoji)` unique
+- `read_state(userId)` unique
+
+### 4.2 Why settings table in room.db (not room.json)?
+
+- **Transactional consistency**: update settings and message-related state atomically when needed.
+- **Schema safety**: Drizzle migrations and constraints are easier with SQL tables than JSON files.
+- **Queryability**: sorting/filtering rooms by `updatedAt`, `type`, or context fields is straightforward.
+- **Less file I/O complexity**: avoids parse/write races and partial writes on JSON files.
+
+### 4.3 No mandatory chat-level database
+
+The `.eigenchat` root has no required `chat.db`. Room discovery is:
+
+1. List child room folders under `rooms/` using Drive metadata.
+2. Open each accessible `room.db` and read its single `settings` row.
+
+ACL remains the source of truth for access; `room.db` stores room state, not authorization policy.
 
 ---
 
@@ -209,8 +217,8 @@ New domain class: `apps/api/src/lib/chat/chat.ts`
 ```
 apps/api/src/lib/chat/
 ├── chat.ts            # Chat business logic class
-├── schema.ts          # Drizzle schemas (chat.db + messages.db)
-├── db-config.ts       # CHAT_DB_CONFIG, MESSAGES_DB_CONFIG
+├── schema.ts          # Drizzle schemas (room.db: settings/messages/reactions/read_state)
+├── db-config.ts       # ROOM_DB_CONFIG + migrations
 ├── sse-events.ts      # SSE event builders
 └── index.ts           # Exports
 ```
@@ -250,6 +258,8 @@ POST   /chat/:ownerId/:mountId/:chatId/rooms/:roomId/upload
 
 All routes use full Drive paths (`ownerId/mountId/chatId/roomId`) so ACL checks work naturally through the existing Drive permission system.
 
+`GET /rooms` does not query a central `chat.db`. It enumerates `rooms/` subfolders and reads each room's `settings` row from `room.db`.
+
 ### 5.3 Embedded Chat Shorthand
 
 For document comments, a convenience endpoint resolves the embedded chat:
@@ -272,7 +282,7 @@ Chat uses the existing SSE system, **not** WebSockets. The flow:
 User posts message
   → API route handler
     → Chat.postMessage()
-      → Insert into messages.db
+      → Insert into room.db
       → Notify sender's Home (immediate local update)
       → Notify other room members' Homes (cross-user delivery)
         → Each Home.notify() → SSE stream → Client handler
@@ -303,7 +313,7 @@ When a message is posted, the server needs to notify all room members. This foll
 ```typescript
 // In Chat class
 async postMessage(roomId: string, content: string, type: MessageType): Promise<Message> {
-    // 1. Insert message into room's messages.db
+    // 1. Insert message into room.db
     const message = await this.insertMessage(roomId, content, type);
 
     // 2. Notify sender (immediate SSE to their tabs)
@@ -444,22 +454,23 @@ Same pattern for `.eigenstickies`:
 2. Optionally, per-card rooms could be created (room name = card title)
 3. The stickies UI shows a chat panel when a card is selected
 
-### 8.3 Thread Model for Comments
+### 8.3 Room Relation Model (Doc threads and Sticky cards)
 
-For document comments, the `replyTo` field in messages enables threaded discussions:
+For embedded chat, relation lookup should be **host-first**:
 
-- Top-level comments are messages with `replyTo: null`
-- Replies reference the top-level message ID
-- The UI renders these as collapsible threads (like Google Docs comments)
+- **Docs**: comment thread records store `roomId` and anchor metadata.
+- **Stickies**: card records store `discussionRoomId`.
 
-Optionally, a `contextAnchor` field could link a comment to a specific position/element in the document:
+This gives O(1) relation lookup from the UI object you already have (thread/card), instead of scanning all rooms.
 
-```
-messages table (extended for comments):
-  contextAnchor  TEXT    # JSON: { type: 'selection', from: 123, to: 456 } or { type: 'card', cardId: 'xxx' }
-```
+Each room still stores reverse context in `settings.contextKind` + `settings.contextRef` for validation and debugging.
 
-This is optional for v1 — simple room-level comments work without anchoring.
+For threaded comments inside a room, `replyTo` remains the thread mechanism:
+
+- Top-level comment: `replyTo: null`
+- Reply: `replyTo = topLevelMessageId`
+
+If needed, anchors can be stored in message content JSON (or a dedicated message metadata column), but the room relation itself should stay on the host object.
 
 ---
 
@@ -517,7 +528,7 @@ For the initial load (no `before`), return the most recent N messages.
 
 ### 10.2 Unread Counts
 
-Each member's `lastReadMessageId` in `chat.db` enables efficient unread counts:
+Each room stores per-user read progress in `read_state.lastReadMessageId`, enabling efficient unread counts:
 
 ```sql
 SELECT COUNT(*) FROM messages
@@ -528,7 +539,12 @@ This is a per-room query on an indexed column — fast even for large rooms.
 
 ### 10.3 Room List Performance
 
-The room list query joins `rooms` + `members` from `chat.db` (small, single database). Unread counts require opening each room's `messages.db` — for efficiency, cache unread counts in the `members` table and update them asynchronously.
+Without a central `chat.db`, room listing is a two-step process:
+
+1. List `rooms/` child folders from Drive metadata.
+2. Read the `settings` row from each accessible room's `room.db`.
+
+For typical room counts (tens, not thousands), this is acceptable and keeps ACL behavior simple and correct. If needed later, add an **optional cache/index** for faster room lists — but keep it rebuildable and non-authoritative.
 
 ---
 
@@ -651,17 +667,30 @@ Scroll up to load older messages. New messages arrive via SSE → append to the 
 
 ### Should rooms be folders or database rows?
 
-**Current proposal: Both.** Room config is in `chat.db` (fast listing), room data lives in a `room-{id}/` subfolder (isolation, media storage, per-room ACL).
+**Current proposal: folders + per-room database.**
 
-Trade-off: More entries in `metadata.db` per room. For a chat with 20 rooms, that's ~60 extra path entries (room folder + messages.db + media folder). This is negligible for SQLite.
+- Room identity and ACL come from the room folder in Drive.
+- Room metadata, messages, reactions, and read state live in that room's `room.db`.
+- No mandatory chat-level room catalog.
+
+Trade-off: Listing rooms requires reading multiple room DB files. Benefit: no ACL mismatch between root metadata and room visibility.
+
+### room.json or settings table in room.db?
+
+**Current proposal: settings table in `room.db`.**
+
+- Better transactional guarantees
+- Better schema evolution via migrations
+- Better filtering/sorting/query support
+- Fewer file consistency edge cases
 
 ### How to handle very active rooms?
 
 SQLite handles tens of thousands of messages per room well. For extremely active rooms (100k+ messages), the per-room database design means we can archive/compact individual rooms without affecting others.
 
-### Should `chat.db` include a message count cache?
+### Should room settings include a message count cache?
 
-Yes, probably. Avoids opening every room's `messages.db` just to show unread badges. Update the count on message post via a simple increment.
+Yes, probably. Store `messageCount` and `lastMessageAt` in each room's `settings` row and update on message insert.
 
 ### Typing indicators: SSE or separate endpoint?
 
@@ -693,9 +722,9 @@ This is a notification, not a new message delivery mechanism — the message is 
 
 - **SSE is one-directional**: Clients can't push through SSE. Every user action is an HTTP POST → server processes → SSE broadcast. This adds latency compared to WebSockets (one round trip per message vs. persistent bidirectional). For chat, this means ~50-200ms per message delivery. Acceptable for team chat, noticeable for rapid-fire conversations.
 
-- **No offline delivery queue**: If a user's SSE connection drops, they miss events. On reconnect, the client must re-fetch (query the room's messages.db for anything after `lastReadMessageId`). This is fine — same pattern as Drive/Mail SSE — but it means the client must be smart about reconnection.
+- **No offline delivery queue**: If a user's SSE connection drops, they miss events. On reconnect, the client must re-fetch (query `room.db` for anything after `lastReadMessageId`). This is fine — same pattern as Drive/Mail SSE — but it means the client must be smart about reconnection.
 
-- **Per-room database overhead**: Opening a SQLite database per room has a cost. If a user has 50 rooms across multiple chats, that's potentially 50 database connections. Mitigation: lazy-open databases only when the room is accessed, close idle ones (similar to `ManagedDatabase` with timeout cleanup).
+- **Room list cost without a root DB**: Listing rooms means opening multiple `room.db` files to read settings. This is the cost of keeping ACL boundaries clean. Mitigation: lazy-open with connection pooling, cache room cards in memory, and optionally add a rebuildable non-authoritative index later.
 
 - **Notification fanout**: For a room with 100 members, posting a message means 99 `getHome()` calls + SSE pushes. The monolith can handle this for small-to-medium teams. For large rooms, batching (Phase 2 in [6.5]) becomes necessary. The `notifyRoomMembers()` abstraction allows swapping implementations.
 
@@ -708,7 +737,7 @@ This is a notification, not a new message delivery mechanism — the message is 
 | **Yjs for chat** | Can't paginate, grows forever, overkill for append-only data |
 | **WebSocket server** | New infrastructure, new connection management, not needed for monolith scale |
 | **Separate chat database (not Drive)** | Loses ACL inheritance, storage accounting, sharing model. Duplicates concerns. |
-| **Single messages.db per chat** | All rooms in one DB → no per-room ACL, harder to delete/export rooms, larger query scans |
+| **Single database per chat** | All rooms in one DB → no per-room ACL, harder to delete/export rooms, larger query scans |
 | **External message broker (Redis)** | Premature infrastructure. Can be added in Phase 3 if needed. |
 
 ### Verdict
@@ -726,7 +755,7 @@ The main technical risk is notification fanout for large rooms, which is solvabl
 | File | Purpose |
 |------|---------|
 | `apps/api/src/lib/chat/chat.ts` | Chat business logic class |
-| `apps/api/src/lib/chat/schema.ts` | Drizzle schemas (chat.db + messages.db) |
+| `apps/api/src/lib/chat/schema.ts` | Drizzle schemas (`room.db`: settings/messages/reactions/read_state) |
 | `apps/api/src/lib/chat/db-config.ts` | Database configs with migrations |
 | `apps/api/src/lib/chat/sse-events.ts` | SSE event builders |
 | `apps/api/src/lib/chat/index.ts` | Exports |
