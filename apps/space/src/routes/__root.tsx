@@ -1,5 +1,5 @@
 import {createRootRouteWithContext, Outlet} from '@tanstack/react-router'
-import {AuthContextType} from "@workspace/lib/auth";
+import {AuthContextType, useAuth} from "@workspace/lib/auth";
 import {AppShell} from "@workspace/ui/components/layout/app-shell";
 import {SpaceSidebar} from "../components/space/space-sidebar";
 
@@ -7,8 +7,18 @@ interface MyRouterContext {
     auth: AuthContextType;
 }
 
-export const Route = createRootRouteWithContext<MyRouterContext>()({
-    component: () => (
+function SpaceRoot() {
+    const {user} = useAuth();
+
+    if (!user) {
+        return (
+            <AppShell appName="space" rootRoute={Route}>
+                <Outlet/>
+            </AppShell>
+        );
+    }
+
+    return (
         <AppShell
             appName="space"
             rootRoute={Route}
@@ -20,5 +30,9 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
                 <Outlet/>
             </div>
         </AppShell>
-    ),
+    );
+}
+
+export const Route = createRootRouteWithContext<MyRouterContext>()({
+    component: SpaceRoot,
 });
