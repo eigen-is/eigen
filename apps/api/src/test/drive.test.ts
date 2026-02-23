@@ -2,6 +2,7 @@ import {describe, expect, test, beforeAll} from 'bun:test';
 import {getTestContext, authedRequest} from './setup';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
+const BOB_EMAIL = 'bob@test.eigen.is';
 
 function driveUrl(ownerId: string, mountId: string, ...parts: string[]) {
     return `/drive/${ownerId}/${mountId}/${parts.join('/')}`;
@@ -234,6 +235,7 @@ describe('Drive', () => {
 
     describe('Sharing & ACL', () => {
         let sharedFolderId: string;
+        let bobSharedFileId: string;
 
         beforeAll(async () => {
             const data = await drivePost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
@@ -247,10 +249,19 @@ describe('Drive', () => {
             expect(contents).toEqual([]);
         });
 
+        test('Bob has no read/write permissions before sharing', async () => {
+            const read = await driveGet(ctx.bob.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `path/${sharedFolderId}/permissions/read`);
+            const write = await driveGet(ctx.bob.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `path/${sharedFolderId}/permissions/write`);
+            expect(read.canRead).toBe(false);
+            expect(write.canWrite).toBe(false);
+        });
+
         test('Alice shares folder with Bob (read)', async () => {
             const result = await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
                 `path/${sharedFolderId}/acl`, {
-                    acl: [{email: 'bob@test.eigen.is', read: true, write: false, public: false}],
+                    acl: [{email: BOB_EMAIL.toUpperCase(), read: true, write: false, public: false}],
                 });
             expect(result.success).toBe(true);
         });
@@ -261,12 +272,22 @@ describe('Drive', () => {
             expect(Array.isArray(contents)).toBe(true);
         });
 
-        test('Bob sees folder in shared-with-me', async () => {
+        test('Bob has read but no write permission on shared folder', async () => {
+            const read = await driveGet(ctx.bob.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `path/${sharedFolderId}/permissions/read`);
+            const write = await driveGet(ctx.bob.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `path/${sharedFolderId}/permissions/write`);
+            expect(read.canRead).toBe(true);
+            expect(write.canWrite).toBe(false);
+        });
+
+        test('Bob sees folder in shared-with-me with normalized ACL', async () => {
             const res = await authedRequest(ctx.bob.user.sessionToken,
                 `/drive/${ctx.bob.user.id}/shared/with-me`);
             const data = await res.json() as any[];
             const shared = data.find(item => item.id === sharedFolderId);
             expect(shared).toBeDefined();
+            expect(shared.acl).toEqual([{email: BOB_EMAIL, read: true, write: false, public: false}]);
         });
 
         test('Alice sees folder in shared-by-me', async () => {
@@ -277,12 +298,49 @@ describe('Drive', () => {
             expect(shared).toBeDefined();
         });
 
+        test('Bob cannot upload file while folder is read-only', async () => {
+            const formData = new FormData();
+            formData.append('file', new File(['no write'], 'read-only-blocked.txt', {type: 'text/plain'}));
+            const res = await authedRequest(ctx.bob.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/file/${sharedFolderId}`, {
+                    method: 'POST',
+                    body: formData,
+                });
+
+            expect(res.status).not.toBe(200);
+
+            const contents = await driveGet(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `folder/${sharedFolderId}`);
+            expect(contents.find((item: any) => item.name === 'read-only-blocked.txt')).toBeUndefined();
+        });
+
+        test('Bob cannot change ACL while read-only', async () => {
+            await authedRequest(ctx.bob.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${sharedFolderId}/acl`, {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        acl: [{email: BOB_EMAIL, read: true, write: true, public: false}],
+                    }),
+                });
+
+            const folder = await driveGet(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `path/${sharedFolderId}`);
+            expect(folder.acl).toEqual([{email: BOB_EMAIL, read: true, write: false, public: false}]);
+        });
+
         test('Alice upgrades Bob to write access', async () => {
             const result = await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
                 `path/${sharedFolderId}/acl`, {
-                    acl: [{email: 'bob@test.eigen.is', read: true, write: true, public: false}],
+                    acl: [{email: BOB_EMAIL, read: true, write: true, public: false}],
                 });
             expect(result.success).toBe(true);
+        });
+
+        test('Bob has write permission after upgrade', async () => {
+            const write = await driveGet(ctx.bob.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `path/${sharedFolderId}/permissions/write`);
+            expect(write.canWrite).toBe(true);
         });
 
         test('Bob can create folder inside shared folder', async () => {
@@ -296,6 +354,52 @@ describe('Drive', () => {
             const data = await driveUpload(ctx.bob.user.sessionToken, ctx.alice.user.id, aliceMountId,
                 sharedFolderId, file);
             expect(data.name).toBe('shared-file.txt');
+            bobSharedFileId = data.id;
+        });
+
+        test('Bob can change ACL of shared item when he has write access', async () => {
+            const result = await drivePut(ctx.bob.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `path/${sharedFolderId}/acl`, {
+                    acl: [{email: BOB_EMAIL, read: true, write: false, public: false}],
+                });
+            expect(result.success).toBe(true);
+        });
+
+        test('Bob loses write access after downgrading ACL', async () => {
+            const write = await driveGet(ctx.bob.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `path/${sharedFolderId}/permissions/write`);
+            expect(write.canWrite).toBe(false);
+        });
+
+        test('shared-with-me reflects ACL downgrade', async () => {
+            const res = await authedRequest(ctx.bob.user.sessionToken,
+                `/drive/${ctx.bob.user.id}/shared/with-me`);
+            const data = await res.json() as any[];
+            const shared = data.find(item => item.id === sharedFolderId);
+            expect(shared).toBeDefined();
+            expect(shared.acl).toEqual([{email: BOB_EMAIL, read: true, write: false, public: false}]);
+        });
+
+        test('Alice restores Bob write access', async () => {
+            const result = await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `path/${sharedFolderId}/acl`, {
+                    acl: [{email: BOB_EMAIL, read: true, write: true, public: false}],
+                });
+            expect(result.success).toBe(true);
+        });
+
+        test('Bob can rename shared file after write is restored', async () => {
+            const res = await authedRequest(ctx.bob.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${bobSharedFileId}/rename`, {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({newName: 'shared-file-renamed.txt'}),
+                });
+            expect(res.status).toBe(200);
+
+            const file = await driveGet(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `file/${bobSharedFileId}`);
+            expect(file.name).toBe('shared-file-renamed.txt');
         });
 
         test('Alice revokes sharing', async () => {
@@ -307,6 +411,97 @@ describe('Drive', () => {
         test('Bob can no longer access after revoke', async () => {
             const contents = await driveGet(ctx.bob.user.sessionToken, ctx.alice.user.id, aliceMountId,
                 `folder/${sharedFolderId}`);
+            expect(contents).toEqual([]);
+        });
+
+        test('Bob has no read permission after revoke', async () => {
+            const read = await driveGet(ctx.bob.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `path/${sharedFolderId}/permissions/read`);
+            expect(read.canRead).toBe(false);
+        });
+
+        test('Bob no longer sees folder in shared-with-me after revoke', async () => {
+            const res = await authedRequest(ctx.bob.user.sessionToken,
+                `/drive/${ctx.bob.user.id}/shared/with-me`);
+            const data = await res.json() as any[];
+            const shared = data.find(item => item.id === sharedFolderId);
+            expect(shared).toBeUndefined();
+        });
+    });
+
+    describe('ACL inheritance on nested paths', () => {
+        let inheritedParentId: string;
+        let inheritedChildFolderId: string;
+        let inheritedChildFileId: string;
+
+        beforeAll(async () => {
+            const parent = await drivePost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `folder/${aliceRootId}`, {folderName: 'Inherited ACL Parent'});
+            inheritedParentId = parent.id;
+
+            const childFolder = await drivePost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `folder/${inheritedParentId}`, {folderName: 'Inherited ACL Child'});
+            inheritedChildFolderId = childFolder.id;
+
+            const childFile = new File(['inheritance'], 'inherited.txt', {type: 'text/plain'});
+            const uploaded = await driveUpload(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                inheritedChildFolderId, childFile);
+            inheritedChildFileId = uploaded.id;
+        });
+
+        test('Bob cannot read nested file before parent is shared', async () => {
+            const read = await driveGet(ctx.bob.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `path/${inheritedChildFileId}/permissions/read`);
+            expect(read.canRead).toBe(false);
+        });
+
+        test('Alice shares parent folder with Bob (read-only)', async () => {
+            const result = await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `path/${inheritedParentId}/acl`, {
+                    acl: [{email: BOB_EMAIL, read: true, write: false, public: false}],
+                });
+            expect(result.success).toBe(true);
+        });
+
+        test('Bob can read nested folder and file through inherited ACL', async () => {
+            const folderRead = await driveGet(ctx.bob.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `path/${inheritedChildFolderId}/permissions/read`);
+            const fileRead = await driveGet(ctx.bob.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `path/${inheritedChildFileId}/permissions/read`);
+            expect(folderRead.canRead).toBe(true);
+            expect(fileRead.canRead).toBe(true);
+        });
+
+        test('Bob cannot write nested folder while inherited ACL is read-only', async () => {
+            const folderWrite = await driveGet(ctx.bob.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `path/${inheritedChildFolderId}/permissions/write`);
+            expect(folderWrite.canWrite).toBe(false);
+        });
+
+        test('Alice upgrades parent ACL to write', async () => {
+            const result = await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `path/${inheritedParentId}/acl`, {
+                    acl: [{email: BOB_EMAIL, read: true, write: true, public: false}],
+                });
+            expect(result.success).toBe(true);
+        });
+
+        test('Bob can create folder in nested folder through inherited write ACL', async () => {
+            const data = await drivePost(ctx.bob.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `folder/${inheritedChildFolderId}`, {folderName: 'Inherited ACL Writable Child'});
+            expect(data.name).toBe('Inherited ACL Writable Child');
+        });
+
+        test('Revoking parent ACL removes inherited access for Bob', async () => {
+            const result = await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `path/${inheritedParentId}/acl`, {acl: []});
+            expect(result.success).toBe(true);
+
+            const fileRead = await driveGet(ctx.bob.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `path/${inheritedChildFileId}/permissions/read`);
+            const contents = await driveGet(ctx.bob.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `folder/${inheritedChildFolderId}`);
+            expect(fileRead.canRead).toBe(false);
             expect(contents).toEqual([]);
         });
     });
