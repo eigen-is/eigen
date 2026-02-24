@@ -155,7 +155,7 @@ function ChatView() {
         <div className="flex items-center justify-between w-full">
             <span className="font-semibold text-sm truncate">{chatName}</span>
             <div className="flex items-center gap-2">
-                <RoomMembers ownerId={ownerId} acl={chatPath?.acl as DriveACL[] | null ?? null}/>
+                <RoomMembers ownerId={ownerId} acl={chatPath?.acl as DriveACL[] | null ?? null} onClick={() => setAccessDialogOpen(true)}/>
                 <TooltipButton
                     icon={Pencil}
                     tooltipText="Rename"

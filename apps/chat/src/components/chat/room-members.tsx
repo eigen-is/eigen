@@ -4,13 +4,14 @@ import type {DriveACL} from "@workspace/lib/types/drive";
 type RoomMembersProps = {
     ownerId: string;
     acl: DriveACL[] | null;
+    onClick?: () => void;
 }
 
-export function RoomMembers({ownerId, acl}: RoomMembersProps) {
+export function RoomMembers({ownerId, acl, onClick}: RoomMembersProps) {
     const members = acl?.filter(a => !a.public) || [];
 
     return (
-        <div className="flex items-center">
+        <button onClick={onClick} className="flex items-center cursor-pointer hover:opacity-80 transition-opacity">
             <UserPublicAvatar
                 email={ownerId}
                 size="sm"
@@ -30,6 +31,6 @@ export function RoomMembers({ownerId, acl}: RoomMembersProps) {
                     +{members.length - 3}
                 </span>
             )}
-        </div>
+        </button>
     );
 }

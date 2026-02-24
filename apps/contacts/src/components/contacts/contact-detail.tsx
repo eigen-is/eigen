@@ -155,8 +155,6 @@ export function ContactDetail({contact, onDelete, filterType, filterId}: Contact
         ? labels.filter(label => contact.labels?.includes(label.id))
         : [];
 
-    const openWriteEmailTo = useOpenWriteEmailTo();
-
     return (
         <div className="h-full flex flex-col overflow-hidden" data-document>
             <div className="flex-1 overflow-auto p-6">
