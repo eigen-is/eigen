@@ -66,9 +66,8 @@ export class ChatRoom {
                     whisperTo = cmd.target;
                     content = cmd.content;
                     break;
-                case 'message':
-                    content = cmd.content;
-                    break;
+                case 'error':
+                    throw new ApiError(400, cmd.error);
                 default:
                     break;
             }

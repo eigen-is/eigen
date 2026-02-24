@@ -23,6 +23,14 @@ function chatPost(token: string, ownerId: string, mountId: string, path: string,
     }).then(r => r.json());
 }
 
+function chatPostRaw(token: string, ownerId: string, mountId: string, path: string, body: Record<string, unknown>): Promise<Response> {
+    return authedRequest(token, `/chat/${ownerId}/${mountId}/${path}`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(body),
+    });
+}
+
 function chatGet(token: string, ownerId: string, mountId: string, path: string): Promise<any> {
     return authedRequest(token, `/chat/${ownerId}/${mountId}/${path}`).then(r => r.json());
 }
@@ -476,11 +484,12 @@ describe('Chat', () => {
             expect(whisper.whisperTo).toBe(ctx.bob.user.email);
         });
 
-        test('regular text starting with / but not a command posts as message', async () => {
-            const msg = await chatPost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+        test('invalid command returns 400 error', async () => {
+            const response = await chatPostRaw(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
                 `${chatId}/messages`, {content: '/unknown command here'});
-            expect(msg.type).toBe('message');
-            expect(msg.content).toBe('/unknown command here');
+            expect(response.status).toBe(400);
+            const error = await response.json() as {error: string};
+            expect(error.error).toContain('Unknown command: /unknown');
         });
 
         test('explicit type overrides command parsing', async () => {
