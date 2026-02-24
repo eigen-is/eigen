@@ -68,9 +68,7 @@ export function isUnknownCommand(raw: string): boolean {
     return !KNOWN_COMMANDS.includes(cmd);
 }
 
-export function isEmailAddress(value: string): boolean {
-    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
-}
+export {isEmailAddress, validateEmailTarget} from '@workspace/lib/validation';
 
 export function getAtSuggestQuery(text: string): string | null {
     const atIdx = text.lastIndexOf('@');
