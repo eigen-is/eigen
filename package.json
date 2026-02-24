@@ -28,7 +28,6 @@
     "react-dom": "^19.1.0",
     "@tanstack/react-router": "^1.140.0",
     "@tanstack/react-table": "^8.21.3",
-    "@tanstack/match-sorter-utils": "^8.19.4",
     "@tanstack/react-query": "^5.75.0",
     "@tanstack/react-query-devtools": "^5.75.0",
     "lucide-react": "^0.480.0",
