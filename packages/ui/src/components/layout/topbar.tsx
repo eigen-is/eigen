@@ -13,6 +13,7 @@ import {
 import {useAuth} from "@workspace/lib/auth/auth-context.tsx";
 import {Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,} from "../dialog";
 import {apps} from "@workspace/lib/apps.ts";
+import {getSpacePasswordUrl, getSpaceProfileUrl} from "@workspace/lib/api";
 import {UserItem} from "@workspace/ui/components/layout/user-item";
 import {AppLogo} from "./app-logo";
 import {UserAvatar} from "@workspace/ui";
@@ -111,13 +112,13 @@ function UserDropdown({rootRoute}: { rootRoute: TopbarProps['rootRoute'] }) {
                     })}
                     <DropdownMenuSeparator/>
                     <DropdownMenuItem>
-                        <a href={`${import.meta.env.VITE_APP_SPACE_URL}/user`}
+                        <a href={getSpaceProfileUrl()}
                            className={`flex items-center w-full`}>
                             Profile
                         </a>
                     </DropdownMenuItem>
                     <DropdownMenuItem>
-                        <a href={`${import.meta.env.VITE_APP_SPACE_URL}/security/password`}
+                        <a href={getSpacePasswordUrl()}
                            className={`flex items-center w-full`}>
                             Settings
                         </a>
