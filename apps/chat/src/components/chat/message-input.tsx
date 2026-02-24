@@ -27,17 +27,10 @@ export function MessageInput({onSend, disabled = false, readOnly = false, chatNa
 
     useEffect(() => {
         focusTextarea();
-    }, [focusTextarea]);
-
-    useEffect(() => {
-        focusTextarea();
-    }, [messageCount, focusTextarea]);
-
-    useEffect(() => {
         const onFocus = () => focusTextarea();
         window.addEventListener('focus', onFocus);
         return () => window.removeEventListener('focus', onFocus);
-    }, [focusTextarea]);
+    }, [messageCount, focusTextarea]);
 
     const handleSend = () => {
         if ((!content.trim() && files.length === 0) || disabled) return;
@@ -92,7 +85,7 @@ export function MessageInput({onSend, disabled = false, readOnly = false, chatNa
                 }
                 return;
             }
-            if (e.key === 'Enter') {
+            if (e.key === 'Enter' || e.key === 'Tab') {
                 e.preventDefault();
                 const email = suggestEmailsRef.current[selectedSuggestIdx];
                 if (email) {
