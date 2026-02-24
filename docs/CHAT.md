@@ -12,8 +12,9 @@ MUD-inspired, adapted to Eigen's architecture:
 
 - **Chat = Room**: Each `.eigenchat` is a single chat room with its own `data.db`
 - **Focus-first**: Notifications scoped to active chat (with @mention exceptions)
-- **Commands**: `/me` emotes, `/whisper` private messages
+- **Commands**: MUD-style slash commands (emotes, whisper, inspect, invite)
 - **Keyboard-first**: Command-driven interaction
+- **Validation**: Both client and server validate commands and targets
 - Chats are Drive folders → ACL works automatically
 - Real-time via SSE (existing) → no new infrastructure
 - History is paginated SQLite → efficient at any scale
@@ -139,11 +140,14 @@ Inherits from Drive's ACL system — no new permission logic.
 |-----------|----------------|
 | `read: true` | Read messages, see members |
 | `write: true` | Post messages, upload media |
+| `read: true, write: false` | Read-only — can view but not post, edit, or delete |
 | `owner` | Manage ACL |
 
 - **Share chat**: Set ACL on `.eigenchat` folder
 - **Embedded chat**: Inherits from parent `.eigendoc` / `.eigenstickies`
 - **DM**: Chat with ACL restricted to two users
+- **Write enforcement**: POST/PATCH/DELETE routes check `canWrite()` and return 403 if read-only
+- **Frontend**: `MessageInput` shows read-only notice when user lacks write permission
 
 ---
 
@@ -198,10 +202,59 @@ apps/chat/src/
 | `apps/chat/` | Standalone chat app (PoC) |
 | `packages/lib/src/lib/chat/` | FE hooks (useChats, useMessages, usePostMessage, useCreateChat) |
 
-### Remaining
+## 8. Slash Commands
+
+Parsed on backend (`apps/api/src/lib/chat/commands.ts`) and locally on frontend (`apps/chat/src/lib/commands.ts`).
+
+### Backend Commands (stored as messages)
+
+| Command | Aliases | Type | Description |
+|---------|---------|------|-------------|
+| `/dance` | — | emote | Built-in dance emote |
+| `/cheer` | — | emote | Built-in cheer emote |
+| `/taunt` | — | emote | Built-in taunt emote |
+| `/greet` | — | emote | Built-in greet emote |
+| `/allthethings` | — | emote | ALL THE THINGS! |
+| `/facepalm` | — | emote | Facepalm emote |
+| `/shrug` | — | emote | Shrug with kaomoji |
+| `/flip` | — | emote | Table flip |
+| `/me [action]` | — | emote | Custom emote |
+| `/whisper [email] [msg]` | `/w`, `/tell`, `/t`, `/send` | whisper | Private message |
+
+### Frontend-Only Commands (local system messages)
+
+| Command | Aliases | Description |
+|---------|---------|-------------|
+| `/help` | `/?`, `/h` | Show available commands |
+| `/time` | — | Show local and server time |
+| `/inspect [email]` | `/look`, `/finger` | Show user info card |
+| `/invite [email]` | `/i`, `/inv` | Invite user to room (updates ACL) |
+| `/reply [msg]` | `/r` | Reply to last whisper |
+
+### Validation
+
+- **Unknown commands**: Client-side check prevents sending messages starting with `/` that don't match known commands
+- **Whisper targets**: Must be valid email addresses (validated both client and server). Server returns 400 for non-email targets, 404 for non-existent users
+- **Invite targets**: Must be valid email addresses (client-side validation)
+
+## 9. Message Display
+
+- **Emotes**: Shown with ✦ marker, italic text. Built-in emotes show first/third person text
+- **Whispers**: Orange background, "whisper" badge. Author sees "whispers to X", recipient sees "whispers to you", others see "[a few hushed words]"
+- **Email rendering**: Email addresses in message content are replaced with inline avatar + name (clickable, opens mail compose)
+- **Inspect card**: Shows user avatar, name, email (clickable), company/job, phone from public user data and contacts
+- **Deleted messages**: Content cleared to `''` in database, displayed as "This message was deleted"
+
+## 10. @ Mention Trigger
+
+Typing `@` after whitespace, comma, dot, or at start of line opens a player suggestion dropdown. Selecting a suggestion replaces from the `@` to cursor with the selected email. Mid-word `@` (e.g., in email addresses) does not trigger the dropdown.
+
+---
+
+## 11. Remaining
 
 | Phase | Scope |
 |-------|-------|
 | **Presence** | Heartbeat endpoint, in-memory tracking, enter/leave system messages |
 | **Embedding UI** | Chat panel in docs/stickies editors |
-| **Polish** | @mentions, search, infinite scroll, typing indicators |
+| **Polish** | @mentions (full), search, infinite scroll, typing indicators |

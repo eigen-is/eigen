@@ -54,6 +54,7 @@ export function MessageInput({onSend, disabled = false, readOnly = false, chatNa
         setContent(prev => {
             const atIdx = prev.lastIndexOf('@');
             if (atIdx === -1) return prev;
+            if (atIdx > 0 && !/[\s,.]/.test(prev[atIdx - 1])) return prev;
             return prev.slice(0, atIdx) + email + ' ';
         });
         setSelectedSuggestIdx(0);

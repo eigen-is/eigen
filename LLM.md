@@ -37,7 +37,7 @@ A self-hosted Google Workspace alternative. Monorepo with multiple integrated ap
 │   ├── admin/        # Admin dashboard (port 3010)
 │   ├── setup/        # First-run setup wizard (port 3011)
 │   ├── index/        # Landing page (port 3000)
-│   └── chat/         # Chat (planned, not yet implemented)
+│   └── chat/         # Chat — MUD-style slash commands, whispers, emotes (port 3008)
 │
 ├── packages/
 │   ├── lib/          # @workspace/lib — shared hooks, types, API client, SSE handlers
@@ -113,6 +113,7 @@ All in `apps/api/src/routes/`. Each domain has its own Elysia router:
 | `homeRouter` | `home.ts` | `/home/` | yes |
 | `spaceRouter` | `space.ts` | `/space/` | yes |
 | `adminRouter` | `admin.ts` | `/admin/` | yes |
+| `chatRouter` | `chat.ts` | `/chat/` | yes |
 | `collabRouter` | `collab.ts` | `/collab/`, `/ws/collab/` | yes (incl. WebSocket) |
 | `sseRouter` | `sse.ts` | `/sse/` | yes |
 | `publicRouter` | `public.ts` | `/p/` | **no** (public endpoints) |
@@ -374,6 +375,7 @@ Tests are API integration tests in `apps/api/src/test/`. Run with: `bun run test
 | `drive.test.ts` | Mounts, folders, files, sharing/ACL, docs, stickies, breadcrumb, permissions |
 | `home.test.ts` | Storage size |
 | `contacts.test.ts` | Contact CRUD, labels, isolation, me endpoint |
+| `chat.test.ts` | Chat creation, messages, whisper visibility, slash commands, read-only ACL, backend validation |
 | `mail.test.ts` | Mailbox listing, creation, duplicate (409), isolation |
 
 **Important**: Tests run with `--concurrency 1` because test files share SQLite connections via the Home singleton.
