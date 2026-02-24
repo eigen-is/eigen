@@ -46,7 +46,11 @@ export async function messageGetFile(user: User, messageId: string) {
 
 export async function messageGet(user: User, messageId: string) {
     const mail = await getMailClient(user);
-    return await mail.messageGet(messageId);
+    const message = await mail.messageGet(messageId);
+    if (!message) {
+        throw new ApiError(404, `Message '${messageId}' not found`);
+    }
+    return message;
 }
 
 export async function messageDelete(user: User, messageId: string) {
