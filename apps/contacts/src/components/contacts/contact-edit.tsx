@@ -2,9 +2,8 @@ import {z} from 'zod';
 import {useForm} from 'react-hook-form';
 import {zodResolver} from '@hookform/resolvers/zod';
 import React, {useState} from 'react';
-import {Calendar, Camera, Plus, Trash2} from 'lucide-react';
+import {Camera, Plus, Trash2} from 'lucide-react';
 import {format} from "date-fns";
-import {cn} from "@workspace/ui/lib/utils";
 import {useAddContact, useLabels, useUpdateContact} from '@workspace/lib/contacts';
 import {useAuth} from '@workspace/lib/auth';
 import {type Contact} from "@workspace/lib/types/contact";
@@ -16,8 +15,6 @@ import {Input} from "@workspace/ui/components/input";
 import {Badge} from "@workspace/ui/components/badge";
 import {Textarea} from "@workspace/ui/components/textarea";
 import {Form, FormControl, FormField, FormItem, FormLabel, FormMessage} from "@workspace/ui/components/form";
-import {Popover, PopoverContent, PopoverTrigger} from "@workspace/ui/components/popover";
-import {Calendar as CalendarComponent} from "@workspace/ui/components/calendar";
 import {UserAvatar} from "@workspace/ui";
 import {
     DropdownMenu,
@@ -619,34 +616,17 @@ export function ContactEdit({
                                         render={({field}) => (
                                             <FormItem className="flex flex-col">
                                                 <FormLabel>Birthday</FormLabel>
-                                                <Popover>
-                                                    <PopoverTrigger asChild>
-                                                        <FormControl>
-                                                            <Button
-                                                                variant="outline"
-                                                                className={cn(
-                                                                    "w-full justify-start text-left font-normal",
-                                                                    !field.value && "text-muted-foreground"
-                                                                )}
-                                                            >
-                                                                <Calendar className="mr-2 h-4 w-4"/>
-                                                                {field.value ? (
-                                                                    format(field.value, "PPP")
-                                                                ) : (
-                                                                    <span>Pick a date</span>
-                                                                )}
-                                                            </Button>
-                                                        </FormControl>
-                                                    </PopoverTrigger>
-                                                    <PopoverContent className="w-auto p-0" align="start">
-                                                        <CalendarComponent
-                                                            mode="single"
-                                                            selected={field.value || undefined}
-                                                            onSelect={field.onChange}
-                                                            initialFocus
-                                                        />
-                                                    </PopoverContent>
-                                                </Popover>
+                                                
+                                                <FormControl>
+                                                    <Input
+                                                        type="date"
+                                                        value={field.value ? format(field.value, 'yyyy-MM-dd') : ''}
+                                                        onChange={(e) => {
+                                                            const val = e.target.value;
+                                                            field.onChange(val ? new Date(val + 'T00:00:00') : null);
+                                                        }}
+                                                    />
+                                                </FormControl>
                                                 <FormMessage/>
                                             </FormItem>
                                         )}
