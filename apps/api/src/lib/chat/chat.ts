@@ -11,8 +11,8 @@ import * as schema from './schema';
 import {buildChatEvent} from './sse-events';
 import {SSEventType} from '@workspace/lib/types/sse';
 import type {Home} from '../home';
-import {parseCommand, formatEmoteForViewer} from './commands';
-import {getUserByEmail, getUserById} from '../users/users';
+import {parseCommand, formatEmoteForViewer, isEmailAddress} from './commands';
+import {getUserByEmail} from '../users/users';
 import {ApiError} from '../core/errors';
 
 export class ChatRoom {
@@ -74,10 +74,10 @@ export class ChatRoom {
         }
 
         if (type === 'whisper' && whisperTo) {
-            const isEmail = whisperTo.includes('@');
-            const targetUser = isEmail
-                ? await getUserByEmail(whisperTo)
-                : await getUserById(whisperTo);
+            if (!isEmailAddress(whisperTo)) {
+                throw new ApiError(400, `Invalid whisper target '${whisperTo}': must be a valid email address`);
+            }
+            const targetUser = await getUserByEmail(whisperTo);
             if (!targetUser) {
                 throw new ApiError(404, `User '${whisperTo}' not found`);
             }
@@ -200,7 +200,7 @@ export class ChatRoom {
 
         const now = new Date();
         await this.db.update(schema.messages)
-            .set({deletedAt: now})
+            .set({deletedAt: now, content: ''})
             .where(eq(schema.messages.id, messageId));
 
         if (existing.attachments) {
