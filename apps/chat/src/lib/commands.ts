@@ -1,3 +1,5 @@
+import {validateCommand} from '@workspace/lib/validation';
+
 export const COMMANDS_HELP = [
     {cmd: '/?, /h, /help', desc: 'List of available slash commands'},
     {cmd: '/time', desc: 'Provides server as well as local time'},
@@ -22,33 +24,43 @@ export type LocalCommand =
     | { kind: 'inspect'; target: string }
     | { kind: 'invite'; target: string }
     | { kind: 'reply'; content: string }
+    | { kind: 'error'; error: string }
     | null;
 
 export function getLocalCommand(raw: string): LocalCommand {
     const trimmed = raw.trim();
+    const validation = validateCommand(trimmed);
+    
+    if (!validation.valid) {
+        return { kind: 'error', error: validation.error };
+    }
 
-    if (trimmed === '/?' || trimmed === '/h' || trimmed === '/help') {
+    if (validation.kind === 'help') {
         return {kind: 'help'};
     }
-    if (trimmed === '/time') {
+    if (validation.kind === 'time') {
         return {kind: 'time'};
     }
+    
     for (const cmd of ['/inspect ', '/look ', '/finger ']) {
         if (trimmed.startsWith(cmd)) {
             const target = trimmed.slice(cmd.length).trim();
             if (target) return {kind: 'inspect', target};
         }
     }
+    
     for (const cmd of ['/invite ', '/i ', '/inv ']) {
         if (trimmed.startsWith(cmd)) {
             const target = trimmed.slice(cmd.length).trim();
             if (target) return {kind: 'invite', target};
         }
     }
+    
     if (trimmed.startsWith('/reply ') || trimmed.startsWith('/r ')) {
         const cmd = trimmed.startsWith('/reply ') ? '/reply ' : '/r ';
         return {kind: 'reply', content: trimmed.slice(cmd.length)};
     }
+    
     return null;
 }
 
