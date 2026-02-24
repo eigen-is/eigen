@@ -7,32 +7,33 @@ This plan outlines the steps to enable external users (guests) to authenticate v
 ## 1. Authentication & Role Enforcement
 - **Goal**: Allow public sign-up via OTP (for guests) but force `role: 'guest'`. Allow public sign-up via Password (for normal users) *only if* allowed by config.
 - **Action**:
+    - Create custom endpoints in `apps/api/src/routes/guest-auth.ts` (not hooks - better-auth hooks don't preserve request metadata):
+        - `POST /guest-auth/request-otp` - Validate ACL access, generate/send OTP
+        - `POST /guest-auth/verify` - Verify OTP, create guest user
     - Modify `apps/api/src/lib/auth/auth.ts`:
-        - Import/Register `emailOTP` plugin.
-        - Add a `database` hook (or core hook) for `user.create`.
-        - **Logic in Hook**:
-            1. Check `system_config.allowRegistration`.
-            2. Identify creation source (Password vs OTP) via request path or body keys (OTP body has `otp`, Password body has `password`).
-            3. **If OTP**: 
-                - Extract `ownerId`, `mountId`, `pathId` from request metadata (sent from frontend when user clicks shared link)
-                - Validate email has ACL access to this specific resource before allowing OTP
-                - Force `role: 'guest'`. (Always allowed, even if registration is closed, as this is ad-hoc sharing).
-            4. **If Password**: 
-                - If `allowRegistration` is `false`, throw error (block creation).
-                - If `allowRegistration` is `true`, set `role: 'user'` (default).
+        - Import/Register `emailOTP` plugin (for the sendVerificationOTP flow).
+        - Add `before` hook using `createAuthMiddleware` for `/sign-up/email`:
+            - Check `system_config.allowRegistration`
+            - If disabled, throw `APIError`
+            - If enabled, ensure `role: 'user'`
+    - **Guest OTP Logic** (custom endpoint, not plugin):
+        1. Extract `ownerId`, `mountId`, `pathId` from request body
+        2. Validate email has ACL access to this specific resource before allowing OTP
+        3. Create user with `role: 'guest'` via `auth.api` directly
+    - **If Password**: Use better-auth built-in with `before` hook to enforce registration settings
 - **Security**: This ensures no one can create a full account via the OTP route and prevents spam creation of guest accounts by validating specific ACL access.
 
 ## 2. Guest Home Implementation (Stateless)
-- **Goal**: `GuestHome` must not persist data.
+- **Goal**: `GuestHome` must not persist data to disk.
 - **Action**:
     - Create `apps/api/src/lib/storage/memory-storage.ts` (minimal implementation of `StorageBackend`).
     - Create `apps/api/src/lib/home/guest-home.ts`:
-        - Extends/Implements `Home`.
-        - `fs`: `MemoryStorage`.
-        - `drive`: `GuestDrive`.
-        - `mail`, `contacts`: `null` or throw "Not Implemented".
-        - `init()`: Ready immediately.
-        - `destruct()`: No-op.
+        - Extends `Home` (reuse base initialization, override storage).
+        - `fs`: `MemoryStorage` (in-memory only).
+        - `drive`: `GuestDrive` (placeholder, delegates to SharedDrive).
+        - `mail`, `contacts`: Return empty/mock implementations or throw "Not Implemented".
+        - `init()`: Ready immediately, no folder creation.
+        - `destruct()`: No-op (nothing to clean up).
 
 ## 3. Guest Drive Implementation
 - **Goal**: Guests have no personal storage, only access to what's shared.
@@ -45,18 +46,22 @@ This plan outlines the steps to enable external users (guests) to authenticate v
 ## 4. API & Auth Flow
 - **Access Pattern**:
     - Guest clicks link: `https://eigen.is/drive/s/alice/default/file-uuid?email=bob@gmail.com`
-    - Frontend (`_auth` guard) redirects to `/login?redirect=...&email=bob@gmail.com`.
+    - Frontend (`_auth` guard) redirects to `/login?redirect=...&email=bob@gmail.com&ownerId=alice&mountId=default&pathId=file-uuid`.
     - **Frontend Implementation**:
-        - Modify `packages/ui/src/components/layout/login-route.tsx`: Update `loginSearchSchema` to accept `email` (optional).
+        - Modify `packages/ui/src/components/layout/login-route.tsx`: Update `loginSearchSchema` to accept `email`, `ownerId`, `mountId`, `pathId` (all optional).
         - Modify `packages/ui/src/components/layout/loginpage.tsx`:
-            - Add `mode` state: `'password'` vs `'otp'`.
-            - If `email` param exists, default to `'otp'` mode and pre-fill email.
-            - **OTP UI**: 
-                - Step 1: Input Email -> Button "Send Login Code" (includes `ownerId`, `mountId`, `pathId` from URL in request)
+            - Add `mode` state: `'password'` vs `'guest-otp'`.
+            - If `email` param exists, default to `'guest-otp'` mode and pre-fill email.
+            - **Guest OTP UI**: 
+                - Step 1: Show email (read-only if from URL) -> Button "Send Login Code" 
+                    - Calls `POST /guest-auth/request-otp` with `{email, ownerId, mountId, pathId}`
+                    - Backend validates ACL before sending OTP
                 - Step 2: Input Code -> Button "Verify & Sign In".
-            - Use better-auth client: `authClient.signIn.emailOtp(...)`. Check if ACL has email based on metadata first.
+                    - Calls `POST /guest-auth/verify` with `{email, otp}`
+                    - Backend creates user with `role: 'guest'` and returns session
+            - Regular users use standard `authClient.signIn.email()` for password login
     - **Back to Flow**:
-        - User enters OTP -> Logged in (as Guest).
+        - Guest enters OTP -> Verified via custom endpoint -> Logged in (as Guest).
         - Redirects back to `redirect` URL.
         - FE requests file: `GET /drive/alice/default/file/file-uuid`.
         - BE `driveRouter`: `getSharedDrive('alice', guestUser)` -> returns `SharedDrive(AliceHome, GuestUser)`.
@@ -81,3 +86,21 @@ This plan outlines the steps to enable external users (guests) to authenticate v
         - Alice shares file with Guest email.
         - Guest accesses file via `getSharedDrive`.
         - Verify success.
+
+## Rationale: Why Custom Endpoints?
+
+Better-auth's plugin architecture has limitations that make the naive approach (hooks) impossible:
+
+1. **Database hooks don't receive request context** — The `databaseHooks.user.create.before` hook only sees the sanitized user data, not the original HTTP request with `ownerId`, `mountId`, `pathId` metadata.
+
+2. **Before hooks (`createAuthMiddleware`) can read context but can't pass data to user creation** — While `ctx.path` and `ctx.body` are available, there's no built-in mechanism to attach metadata that survives to the user creation step.
+
+3. **emailOTP plugin auto-creates users** — The plugin's `signIn.emailOtp()` auto-registers unknown users. The `disableSignUp` option blocks ALL sign-ups, not just password-based ones.
+
+4. **ACL validation must happen BEFORE OTP is sent** — To prevent spam, we need to verify the email has access to the resource before generating/sending an OTP. This requires a custom flow.
+
+**Solution**: Custom `/guest-auth/*` endpoints that:
+- Handle OTP generation/verification outside better-auth's plugin flow
+- Create users via `auth.api` directly with `role: 'guest'`
+- Validate ACL before any state change
+- Still use better-auth for session management (cookies, tokens)
