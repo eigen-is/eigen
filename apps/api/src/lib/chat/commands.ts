@@ -20,6 +20,22 @@ const BUILT_IN_EMOTES: Record<string, EmoteDefinition> = {
         firstPerson: "You greet everyone in the room.",
         thirdPerson: "{name} greets everyone, including you.",
     },
+    allthethings: {
+        firstPerson: "You raise your arms dramatically and declare: ALL THE THINGS! \\o/",
+        thirdPerson: "{name} raises their arms dramatically and declares: ALL THE THINGS! \\o/",
+    },
+    facepalm: {
+        firstPerson: "You drag your hand slowly down your face.",
+        thirdPerson: "{name} drags their hand slowly down their face.",
+    },
+    shrug: {
+        firstPerson: "You shrug. ¯\\_(ツ)_/¯",
+        thirdPerson: "{name} shrugs. ¯\\_(ツ)_/¯",
+    },
+    flip: {
+        firstPerson: "You flip the table! (╯°□°)╯︵ ┻━┻",
+        thirdPerson: "{name} flips the table! (╯°□°)╯︵ ┻━┻",
+    },
 };
 
 export type ParsedCommand =
@@ -37,6 +53,10 @@ export function parseCommand(raw: string): ParsedCommand {
     if (trimmed === '/cheer') return {kind: 'builtin-emote', emoteKey: 'cheer'};
     if (trimmed === '/taunt') return {kind: 'builtin-emote', emoteKey: 'taunt'};
     if (trimmed === '/greet') return {kind: 'builtin-emote', emoteKey: 'greet'};
+    if (trimmed === '/allthethings') return {kind: 'builtin-emote', emoteKey: 'allthethings'};
+    if (trimmed === '/facepalm') return {kind: 'builtin-emote', emoteKey: 'facepalm'};
+    if (trimmed === '/shrug') return {kind: 'builtin-emote', emoteKey: 'shrug'};
+    if (trimmed === '/flip') return {kind: 'builtin-emote', emoteKey: 'flip'};
 
     if (trimmed.startsWith('/me ')) {
         return {kind: 'emote', content: trimmed.slice(4)};
