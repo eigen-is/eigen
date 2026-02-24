@@ -135,10 +135,15 @@ export class Mount {
         return result ? this.toDrivePath(result) : null;
     }
 
-    async createFolder(parentId: string, name: string, type: 'folder' | 'doc' | 'stickies' = 'folder'): Promise<string> {
+    async createFolder(parentId: string, name: string, type: 'folder' | 'doc' | 'stickies' | 'chat' = 'folder'): Promise<string> {
         const folderId = randomUUID();
-        const mimeType = type === 'folder' ? 'folder' :
-            type === 'doc' ? 'application/eigendoc' : 'application/eigenstickies';
+        const mimeTypeMap: Record<string, string> = {
+            folder: 'folder',
+            doc: 'application/eigendoc',
+            stickies: 'application/eigenstickies',
+            chat: 'application/eigenchat',
+        };
+        const mimeType = mimeTypeMap[type] ?? 'folder';
 
         await this.db.insert(paths).values({
             id: folderId,

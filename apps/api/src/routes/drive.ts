@@ -53,6 +53,13 @@ export const driveRouter = new Elysia({name: "drive"})
         body: t.Object({fileName: t.String()}),
         auth: true
     })
+    .post("/drive/:ownerId/:mountId/folder/:pathId/chat", async ({params, body, user}) => {
+        const drive = await getSharedDrive(params.ownerId, user);
+        return await drive.createChat(params.mountId, params.pathId, body.fileName);
+    }, {
+        body: t.Object({fileName: t.String()}),
+        auth: true
+    })
     // File operations
     .get("/drive/:ownerId/:mountId/file/:pathId", async ({params, user}) => {
         const drive = await getSharedDrive(params.ownerId, user);

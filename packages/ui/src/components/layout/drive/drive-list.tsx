@@ -1,7 +1,7 @@
 import {Fragment, useRef, useState} from 'react';
 import {Button} from "@workspace/ui/components/button";
 import {EigenLoader} from "@workspace/ui";
-import {FileText, FolderPlus, Plus, StickyNote, UploadIcon} from "lucide-react";
+import {FileText, FolderPlus, MessageSquare, Plus, StickyNote, UploadIcon} from "lucide-react";
 import {DriveTable, getFileIcon} from "@workspace/ui/components/layout/drive";
 import {type DrivePath} from "@workspace/lib/types/drive";
 import {cn} from "@workspace/ui/lib/utils";
@@ -34,6 +34,7 @@ type DriveListToolbarProps = {
     onUploadFile?: () => void;
     onCreateDoc?: () => void;
     onCreateStickies?: () => void;
+    onCreateChat?: () => void;
 }
 
 export function DriveListToolbar({
@@ -48,6 +49,7 @@ export function DriveListToolbar({
                                      onUploadFile,
                                      onCreateDoc,
                                      onCreateStickies,
+                                     onCreateChat,
                                  }: DriveListToolbarProps) {
     const {data: breadcrumbPaths = []} = showBreadcrumb ? useBreadcrumb(ownerId, mountId, pathId) : {data: []};
     const {isMobile} = useLayout();
@@ -60,9 +62,9 @@ export function DriveListToolbar({
         }
     };
 
-    const numberOfDropDownItems = (onCreateFolder ? 1 : 0) + (onUploadFile ? 1 : 0) + (onCreateDoc ? 1 : 0) + (onCreateStickies ? 1 : 0);
+    const numberOfDropDownItems = (onCreateFolder ? 1 : 0) + (onUploadFile ? 1 : 0) + (onCreateDoc ? 1 : 0) + (onCreateStickies ? 1 : 0) + (onCreateChat ? 1 : 0);
 
-    const newItemButton = (onCreateFolder || onUploadFile || onCreateDoc || onCreateStickies) ? (
+    const newItemButton = (onCreateFolder || onUploadFile || onCreateDoc || onCreateStickies || onCreateChat) ? (
         (numberOfDropDownItems === 1 ? (
                     onCreateDoc ? <Button size="default" onClick={onCreateDoc}>
                         <Plus/>
@@ -103,6 +105,12 @@ export function DriveListToolbar({
                             <DropdownMenuItem onClick={onCreateStickies}>
                                 <StickyNote className="h-4 w-4 mr-2"/>
                                 Create stickies
+                            </DropdownMenuItem>
+                        )}
+                        {onCreateChat && (
+                            <DropdownMenuItem onClick={onCreateChat}>
+                                <MessageSquare className="h-4 w-4 mr-2"/>
+                                Create chat
                             </DropdownMenuItem>
                         )}
                     </DropdownMenuContent>
@@ -156,6 +164,7 @@ interface DriveListProps {
     onShareClick?: (item: DrivePath) => void;
     onCreateDoc?: () => void;
     onCreateStickies?: () => void;
+    onCreateChat?: () => void;
     onDownload?: (path: DrivePath) => void;
     ownerId: string;
     mountId: string;
@@ -183,6 +192,7 @@ export function DriveList({
                               onShareClick,
                               onCreateDoc,
                               onCreateStickies,
+                              onCreateChat,
                               onDownload,
                               ownerId,
                               mountId,

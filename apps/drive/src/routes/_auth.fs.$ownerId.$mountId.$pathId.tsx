@@ -64,7 +64,7 @@ function DriveRoute() {
             }
         }
 
-        if (isMobile && (path.type === 'folder' || path.type === 'doc' || path.type === 'stickies')) {
+        if (isMobile && (path.type === 'folder' || path.type === 'doc' || path.type === 'stickies' || path.type === 'chat')) {
             onRowActivate(path);
         } else if (currentPath?.parentId === path.id) {
             navigate({
@@ -95,6 +95,9 @@ function DriveRoute() {
             document.location.href = url;
         } else if (path.type === 'stickies') {
             const url = `${import.meta.env.VITE_APP_STICKIES_URL}/board/${path.ownerId}/${path.mountId}/${path.id}`;
+            document.location.href = url;
+        } else if (path.type === 'chat') {
+            const url = `${import.meta.env.VITE_APP_CHAT_URL}/${path.ownerId}/${path.mountId}/${path.id}`;
             document.location.href = url;
         } else if (mimeType.startsWith("image/") || mimeType.startsWith("video/")) {
             const url = getDriveEmbedUrl(path.ownerId, path.mountId, path.id, path.name);
