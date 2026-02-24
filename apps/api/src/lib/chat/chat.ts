@@ -11,6 +11,7 @@ import * as schema from './schema';
 import {buildChatEvent} from './sse-events';
 import {SSEventType} from '@workspace/lib/types/sse';
 import type {Home} from '../home';
+import {parseCommand, formatEmoteForViewer} from './commands';
 
 export class ChatRoom {
     private drive: Drive;
@@ -46,6 +47,30 @@ export class ChatRoom {
     }
 
     async postMessage(authorId: string, authorEmail: string, content: string, type: ChatMessage['type'] = 'message', whisperTo?: string, replyTo?: string, attachments?: string[]): Promise<ChatMessage> {
+        if (content.startsWith('/') && type === 'message') {
+            const cmd = parseCommand(content);
+            switch (cmd.kind) {
+                case 'builtin-emote':
+                    type = 'emote';
+                    content = `$${cmd.emoteKey}`;
+                    break;
+                case 'emote':
+                    type = 'emote';
+                    content = cmd.content;
+                    break;
+                case 'whisper':
+                    type = 'whisper';
+                    whisperTo = cmd.target;
+                    content = cmd.content;
+                    break;
+                case 'message':
+                    content = cmd.content;
+                    break;
+                default:
+                    break;
+            }
+        }
+
         const id = randomUUID();
         const now = new Date();
         const attachmentData = attachments && attachments.length > 0 ? attachments : null;
@@ -106,18 +131,24 @@ export class ChatRoom {
         return rows.map(r => this.toMessage(r)).reverse();
     }
 
-    async getMessagesForUser(userId: string, limit: number = 50, beforeId?: string): Promise<ChatMessage[]> {
+    async getMessagesForUser(userId: string, userEmail: string, limit: number = 50, beforeId?: string): Promise<ChatMessage[]> {
         const allMessages = await this.getMessages(limit, beforeId);
 
         return allMessages.map(msg => {
             if (msg.type === 'whisper') {
-                if (msg.authorId === userId || msg.whisperTo === userId) {
+                if (msg.authorId === userId || msg.whisperTo === userId || msg.whisperTo === userEmail) {
                     return msg;
                 }
                 return {
                     ...msg,
                     content: '',
                     whisperTo: null,
+                };
+            }
+            if (msg.type === 'emote' && !msg.deletedAt) {
+                return {
+                    ...msg,
+                    content: formatEmoteForViewer(msg.content, msg.authorEmail, msg.authorId, userId),
                 };
             }
             return msg;

@@ -1,42 +1,24 @@
 import {useRef, useState} from 'react';
 import {Button} from "@workspace/ui/components/button";
 import {Paperclip, Send, X} from "lucide-react";
-
-type ParsedCommand = {
-    content: string;
-    type?: 'message' | 'emote' | 'whisper';
-    whisperTo?: string;
-}
-
-function parseCommand(raw: string): ParsedCommand {
-    if (raw.startsWith('/me ')) {
-        return {content: raw.slice(4), type: 'emote'};
-    }
-    if (raw.startsWith('/whisper ')) {
-        const rest = raw.slice(8);
-        const spaceIdx = rest.indexOf(' ');
-        if (spaceIdx > 0) {
-            return {content: rest.slice(spaceIdx + 1), type: 'whisper', whisperTo: rest.slice(0, spaceIdx)};
-        }
-    }
-    return {content: raw};
-}
+import {getAtSuggestQuery} from "../../lib/commands";
+import {PlayerSuggest, type RoomMember} from "./player-suggest";
 
 type MessageInputProps = {
-    onSend: (content: string, files?: File[], type?: 'message' | 'emote' | 'whisper', whisperTo?: string) => void;
+    onSend: (rawContent: string, files?: File[]) => void;
     disabled?: boolean;
     chatName?: string;
+    roomMembers?: RoomMember[];
 }
 
-export function MessageInput({onSend, disabled = false, chatName}: MessageInputProps) {
+export function MessageInput({onSend, disabled = false, chatName, roomMembers = []}: MessageInputProps) {
     const [content, setContent] = useState('');
     const [files, setFiles] = useState<File[]>([]);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const handleSend = () => {
         if ((!content.trim() && files.length === 0) || disabled) return;
-        const parsed = parseCommand(content.trim());
-        onSend(parsed.content, files.length > 0 ? files : undefined, parsed.type, parsed.whisperTo);
+        onSend(content.trim(), files.length > 0 ? files : undefined);
         setContent('');
         setFiles([]);
     };
@@ -59,6 +41,14 @@ export function MessageInput({onSend, disabled = false, chatName}: MessageInputP
         setFiles(prev => prev.filter((_, i) => i !== index));
     };
 
+    const atQuery = getAtSuggestQuery(content);
+
+    const handlePlayerSelect = (email: string) => {
+        const atIdx = content.lastIndexOf('@');
+        if (atIdx === -1) return;
+        setContent(content.slice(0, atIdx) + email + ' ');
+    };
+
     return (
         <div className="border-t px-5 py-3">
             {files.length > 0 && (
@@ -74,7 +64,7 @@ export function MessageInput({onSend, disabled = false, chatName}: MessageInputP
                     ))}
                 </div>
             )}
-            <div className="flex items-end gap-2">
+            <div className="flex items-end gap-2 relative">
                 <input
                     ref={fileInputRef}
                     type="file"
@@ -91,15 +81,23 @@ export function MessageInput({onSend, disabled = false, chatName}: MessageInputP
                 >
                     <Paperclip className="h-4 w-4"/>
                 </Button>
-                <textarea
-                    value={content}
-                    onChange={(e) => setContent(e.target.value)}
-                    onKeyDown={handleKeyDown}
-                    placeholder={chatName ? `Message ${chatName}` : 'Type a message...'}
-                    disabled={disabled}
-                    rows={1}
-                    className="flex-1 resize-none rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring min-h-[40px] max-h-[120px]"
-                />
+                <div className="flex-1 relative">
+                    <PlayerSuggest
+                        query={atQuery || ''}
+                        roomMembers={roomMembers}
+                        onSelect={handlePlayerSelect}
+                        visible={atQuery !== null}
+                    />
+                    <textarea
+                        value={content}
+                        onChange={(e) => setContent(e.target.value)}
+                        onKeyDown={handleKeyDown}
+                        placeholder={chatName ? `Message ${chatName}` : 'Type a message...'}
+                        disabled={disabled}
+                        rows={1}
+                        className="w-full resize-none rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring min-h-[40px] max-h-[120px]"
+                    />
+                </div>
                 <Button
                     size="icon"
                     onClick={handleSend}

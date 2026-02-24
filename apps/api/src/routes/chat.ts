@@ -9,7 +9,7 @@ export const chatRouter = new Elysia({name: "chat"})
         const drive = await getSharedDrive(params.ownerId, user);
         const chat = await drive.getChat(params.mountId, params.chatId);
         const limit = query.limit ? parseInt(query.limit) : 50;
-        return await chat.getMessagesForUser(user.id, limit, query.before || undefined);
+        return await chat.getMessagesForUser(user.id, user.email, limit, query.before || undefined);
     }, {
         query: t.Object({
             before: t.Optional(t.String()),
