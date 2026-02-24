@@ -1,8 +1,8 @@
 import {createFileRoute} from '@tanstack/react-router'
-import {useState} from 'react';
+import {useCallback, useMemo, useRef, useState} from 'react';
 import {useAuth} from "@workspace/lib/auth";
 import {useMessages, usePostMessage} from "@workspace/lib/chat";
-import {usePathInfo, useUploadFile} from "@workspace/lib/drive";
+import {usePathInfo, useUploadFile, useUpdateACL} from "@workspace/lib/drive";
 import {ColumnLayout, Column} from "@workspace/ui/components/layout/column-layout";
 import {MessageList} from "../components/chat/message-list";
 import {MessageInput} from "../components/chat/message-input";
@@ -10,7 +10,14 @@ import {TooltipButton} from "@workspace/ui";
 import {Pencil, UserRoundPlus} from "lucide-react";
 import {DriveAccessDialog} from "@workspace/ui/components/layout/drive/drive-access-dialog";
 import {DriveRenameItem} from "@workspace/ui/components/layout/drive/drive-rename-item";
-import type {DrivePath} from "@workspace/lib/types/drive";
+import type {DrivePath, DriveACL} from "@workspace/lib/types/drive";
+import type {ChatMessage} from "@workspace/lib/types/chat";
+import {RoomMembers} from "../components/chat/room-members";
+import type {RoomMember} from "../components/chat/player-suggest";
+import {getLocalCommand, COMMANDS_HELP} from "../lib/commands";
+import {toast} from "sonner";
+
+let localIdCounter = 0;
 
 function ChatView() {
     const {user} = useAuth();
@@ -20,14 +27,52 @@ function ChatView() {
     const postMessage = usePostMessage(ownerId, mountId, chatId);
     const uploadFile = useUploadFile(ownerId, mountId);
     const {data: chatPath} = usePathInfo(ownerId, mountId, chatId);
+    const updateACL = useUpdateACL(ownerId);
 
     const [accessDialogOpen, setAccessDialogOpen] = useState(false);
     const [renameDialogOpen, setRenameDialogOpen] = useState(false);
+    const [localMessages, setLocalMessages] = useState<ChatMessage[]>([]);
+    const lastWhisperFromRef = useRef<string | null>(null);
 
     const chatName = chatPath?.name?.replace('.eigenchat', '') || 'Chat';
 
-    const handleSendMessage = async (content: string, files?: File[], type?: 'message' | 'emote' | 'whisper', whisperTo?: string) => {
-        if (!content.trim() && (!files || files.length === 0)) return;
+    const roomMembers: RoomMember[] = useMemo(() => {
+        if (!chatPath?.acl) return [];
+        return chatPath.acl
+            .filter(a => !a.public && a.email)
+            .map(a => ({email: a.email, displayName: a.email.split('@')[0]}));
+    }, [chatPath?.acl]);
+
+    const addLocalMessage = useCallback((content: string) => {
+        const msg: ChatMessage = {
+            id: `local-${++localIdCounter}`,
+            authorId: 'system',
+            authorEmail: 'system',
+            type: 'system',
+            content,
+            attachments: null,
+            whisperTo: null,
+            replyTo: null,
+            editedAt: null,
+            deletedAt: null,
+            createdAt: new Date(),
+        };
+        setLocalMessages(prev => [...prev, msg]);
+    }, []);
+
+    const findLastWhisperFrom = useCallback(() => {
+        if (lastWhisperFromRef.current) return lastWhisperFromRef.current;
+        for (let i = messages.length - 1; i >= 0; i--) {
+            const msg = messages[i];
+            if (msg.type === 'whisper' && msg.whisperTo === user?.email && msg.authorEmail) {
+                return msg.authorEmail;
+            }
+        }
+        return null;
+    }, [messages, user?.email]);
+
+    const handleSendMessage = async (rawContent: string, files?: File[]) => {
+        if (!rawContent.trim() && (!files || files.length === 0)) return;
 
         let attachments: string[] | undefined;
         if (files && files.length > 0 && chatPath) {
@@ -40,13 +85,66 @@ function ChatView() {
             }
         }
 
-        await postMessage.mutateAsync({content: content || '', attachments, type, whisperTo});
+        const local = getLocalCommand(rawContent);
+        if (local) {
+            switch (local.kind) {
+                case 'help': {
+                    const lines = COMMANDS_HELP.map(c => `  ${c.cmd}  —  ${c.desc}`).join('\n');
+                    addLocalMessage(`Available commands:\n${lines}`);
+                    return;
+                }
+                case 'time': {
+                    const now = new Date();
+                    addLocalMessage(`Local time: ${now.toLocaleString()}\nServer time: ${now.toUTCString()}`);
+                    return;
+                }
+                case 'inspect': {
+                    addLocalMessage(`Inspecting ${local.target}...`);
+                    return;
+                }
+                case 'reply': {
+                    const target = findLastWhisperFrom();
+                    if (!target) {
+                        addLocalMessage('No one has whispered to you yet.');
+                        return;
+                    }
+                    lastWhisperFromRef.current = target;
+                    await postMessage.mutateAsync({content: local.content, type: 'whisper', whisperTo: target, attachments});
+                    return;
+                }
+                case 'invite': {
+                    if (!chatPath) return;
+                    const currentAcl = chatPath.acl || [];
+                    if (currentAcl.some(a => a.email.toLowerCase() === local.target.toLowerCase())) {
+                        addLocalMessage(`${local.target} already has access to this room.`);
+                        return;
+                    }
+                    const newAcl: DriveACL[] = [...currentAcl, {email: local.target, read: true, write: true, public: false}];
+                    try {
+                        await updateACL.mutateAsync({path: chatPath as DrivePath, acl: newAcl});
+                        addLocalMessage(`You invited ${local.target} to the room.`);
+                    } catch {
+                        toast.error(`Failed to invite ${local.target}`);
+                    }
+                    return;
+                }
+            }
+        }
+
+        await postMessage.mutateAsync({content: rawContent, attachments});
     };
+
+    const allMessages = useMemo(() => {
+        return [...messages, ...localMessages].sort(
+            (a, b) => new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime()
+        );
+    }, [messages, localMessages]);
 
     const toolbar = (
         <div className="flex items-center justify-between w-full">
             <span className="font-semibold text-sm truncate">{chatName}</span>
-            <div className="flex items-center gap-1">
+            <div className="flex items-center gap-2">
+                <RoomMembers ownerId={ownerId} acl={chatPath?.acl as DriveACL[] | null ?? null}/>
                 <TooltipButton
                     icon={Pencil}
                     tooltipText="Rename"
@@ -69,7 +167,7 @@ function ChatView() {
                 <Column id="messages" width="flex" toolbar={toolbar}>
                     <div className="flex flex-col h-full bg-background">
                         <MessageList
-                            messages={messages}
+                            messages={allMessages}
                             isLoading={messagesLoading}
                             currentUserId={user?.id || ''}
                             ownerId={ownerId}
@@ -79,6 +177,7 @@ function ChatView() {
                             onSend={handleSendMessage}
                             disabled={postMessage.isPending || uploadFile.isPending}
                             chatName={chatName}
+                            roomMembers={roomMembers}
                         />
                     </div>
                 </Column>
