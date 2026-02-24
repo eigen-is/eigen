@@ -94,8 +94,8 @@ export function MessageList({messages, isLoading, currentUserId, ownerId, mountI
 
                 if (isSystem) {
                     return (
-                        <div key={message.id} className="flex justify-center py-2">
-                            <span className="text-xs text-muted-foreground italic">{message.content}</span>
+                        <div key={message.id} className="px-5 py-2">
+                            <p className="text-sm text-muted-foreground italic whitespace-pre-wrap">{message.content}</p>
                         </div>
                     );
                 }
@@ -105,8 +105,8 @@ export function MessageList({messages, isLoading, currentUserId, ownerId, mountI
                 if (isEmote && !isDeleted) {
                     return (
                         <div key={message.id} className="px-5 py-1">
-                            <p className="text-sm text-muted-foreground italic">
-                                {displayName} {message.content}
+                            <p className="text-sm text-muted-foreground italic whitespace-pre-wrap">
+                                {message.content}
                             </p>
                         </div>
                     );
