@@ -4,6 +4,7 @@ import {
     FolderPlus,
     Home,
     Image,
+    MessageSquare,
     Plus,
     StickyNote,
     Upload as UploadIcon,
@@ -31,6 +32,7 @@ import {DriveCreateFolder} from '@workspace/ui/components/layout/drive/drive-cre
 import {DriveCreateDoc} from '@workspace/ui/components/layout/drive/drive-create-doc';
 import {DriveCreateStickies} from '@workspace/ui/components/layout/drive/drive-create-stickies';
 import {DriveUploadFiles} from '@workspace/ui/components/layout/drive/drive-upload-files';
+import {DriveCreateChat} from '@workspace/ui/components/layout/drive/drive-create-chat';
 
 interface DriveSidebarProps {
     condensed?: boolean;
@@ -49,6 +51,7 @@ export function DriveSidebar({
     const [createFolderOpen, setCreateFolderOpen] = useState(false);
     const [createDocOpen, setCreateDocOpen] = useState(false);
     const [createStickiesOpen, setCreateStickiesOpen] = useState(false);
+    const [createChatOpen, setCreateChatOpen] = useState(false);
     const [uploadOpen, setUploadOpen] = useState(false);
     const [uploadFiles, setUploadFiles] = useState<File[]>([]);
     const navigate = useNavigate();
@@ -134,6 +137,10 @@ export function DriveSidebar({
                             <StickyNote className="h-4 w-4 mr-2"/>
                             Create stickies
                         </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setCreateChatOpen(true)}>
+                            <MessageSquare className="h-4 w-4 mr-2"/>
+                            Create chat
+                        </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => setUploadOpen(true)}>
                             <UploadIcon className="h-4 w-4 mr-2"/>
                             Upload file
@@ -173,6 +180,12 @@ export function DriveSidebar({
                     icon={<StickyNote className="h-4 w-4"/>}
                     to="/mime/application-eigenstickies"
                     label="All stickies"
+                    condensed={condensed}
+                />
+                <SidebarItem
+                    icon={<StickyNote className="h-4 w-4"/>}
+                    to="/mime/application-eigenchat"
+                    label="All chats"
                     condensed={condensed}
                 />
 
@@ -235,7 +248,19 @@ export function DriveSidebar({
                     onOpenChange={setCreateStickiesOpen}
                     onSave={() => {
                     }}
-                    onCancel={() => setCreateStickiesOpen(false)}
+                    onAfterAction={handleAfterAction}
+                />
+            )}
+
+            {/* Create Chat Dialog */}
+            {targetPath && (
+                <DriveCreateChat
+                    path={targetPath}
+                    open={createChatOpen}
+                    onOpenChange={setCreateChatOpen}
+                    onSave={() => {
+                    }}
+                    onCancel={() => setCreateChatOpen(false)}
                     onAfterAction={handleAfterAction}
                 />
             )}

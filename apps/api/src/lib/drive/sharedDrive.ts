@@ -3,6 +3,7 @@ import Drive from "./drive";
 import type {Home} from "../home";
 import type {DriveACL, DrivePath} from "@workspace/lib/types/drive";
 import CollabDocument from "../collab/collabDocument.ts";
+import type {ChatRoom} from "../chat";
 import type {DatabaseConfig, ManagedDatabase, SchemaType} from "../core/managed-database";
 
 export default class SharedDrive extends Drive {
@@ -115,6 +116,20 @@ export default class SharedDrive extends Drive {
             throw new Error('No write permission');
         }
         return this.sharedDrive.createDoc(mountId, parentId, docName);
+    }
+
+    public async createChat(mountId: string, parentId: string, chatName: string): Promise<DrivePath> {
+        if (!(await this.canWrite(mountId, parentId, this.user))) {
+            throw new Error('No write permission');
+        }
+        return this.sharedDrive.createChat(mountId, parentId, chatName);
+    }
+
+    public async getChat(mountId: string, chatId: string): Promise<ChatRoom> {
+        if (!(await this.canRead(mountId, chatId, this.user))) {
+            throw new Error('No read permission');
+        }
+        return this.sharedDrive.getChat(mountId, chatId);
     }
 
     public async updateACL(mountId: string, pathId: string, acl: DriveACL[]) {

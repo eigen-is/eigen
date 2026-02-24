@@ -45,7 +45,7 @@ A self-hosted Google Workspace alternative. Monorepo with multiple integrated ap
 │
 ├── data/             # Runtime data (gitignored). Server DBs + per-user home dirs
 ├── docs/             # Architecture documentation (12 files, see §14)
-├── types/            # External type declarations (eigen-avatar-generator)
+├── types/            # External type declarations
 ├── .env.dev.local    # Local dev env vars
 ├── .env.eigen        # Production env vars
 └── vite.shared.config.ts  # Shared Vite config factory for all frontend apps
@@ -341,7 +341,8 @@ Events are namespaced: `drive:`, `mail:`, `contacts:`. Each domain handler check
 |------|-----------|-----------|---------|
 | Document | `application/eigendoc` | `.eigendoc` | Folder in metadata.db with `data.db` child (Yjs) |
 | Stickies | `application/eigenstickies` | `.eigenstickies` | Same as above |
-| Chat | `application/eigenchat` | `.eigenchat` | Planned, not yet implemented |
+| Chat | `application/eigenchat` | `.eigenchat` | Room container (see `docs/CHAT.md`) |
+| Chat room | `application/eigenchatroom` | `.eigenchatroom` | Per-room `data.db` (messages + read_state) |
 
 **Quirk**: URL params use hyphens (`application-eigendoc`), database uses slashes (`application/eigendoc`).
 
@@ -354,7 +355,7 @@ Tests are API integration tests in `apps/api/src/test/`. Run with: `bun run test
 ### Setup
 
 - `preload.ts` — registered via `--preload`, imports setup and registers `afterAll` cleanup
-- `setup.ts` — sets `EIGEN_DATA_ROOT` to a temp dir, creates auth DB schema, then dynamically imports `app` and `auth` (dynamic imports ensure env var is set before module load)
+- `setup.ts` — sets `EIGEN_DATA_ROOT` to a temp dir, calls the `/setup/complete` endpoint to initialize the auth DB and create Alice as admin, then dynamically imports `auth` (dynamic imports ensure env var is set before module load)
 - Tests call `app.handle()` directly (no HTTP server) or use Eden Treaty
 - Data isolation: each test run gets `data/test-{timestamp}/`, cleaned up after
 
@@ -525,7 +526,7 @@ For deep-dives, read the relevant file in `docs/`:
 - **Collab documents** are folders (not files) in metadata.db containing a `data.db` child. The `data.db` pathId is used as the storage key
 - **ACL inheritance**: If a path has no ACL, it inherits from its parent recursively up the tree
 - **Home singleton timeout**: 5 minutes of inactivity → auto-destruct (closes all DBs, removes from factory cache)
-- **Auth DB schema**: better-auth with drizzle adapter does NOT auto-create tables. The test setup manually creates them with raw SQL. Production relies on the DB existing from initial setup
+- **Auth DB schema**: better-auth with drizzle adapter does NOT auto-create tables. The setup flow (`/setup/complete`) creates them via `initializeDatabaseSchema()`. Tests use this same setup endpoint rather than manual SQL
 - **Import hoisting**: `paths.ts` reads `EIGEN_DATA_ROOT` lazily (via function call) because ES module static imports are hoisted before any code runs. This is critical for test isolation
 - **Test concurrency**: Must be 1 because Home singletons share SQLite connections across test files
 - **Sidebar Ctrl+B conflict**: The sidebar toggle shortcut conflicts with Bold in the Docs editor. Known issue documented in `docs/HOTKEYS.md`

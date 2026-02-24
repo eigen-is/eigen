@@ -5,6 +5,7 @@ import {DriveDetail, DriveDetailToolbar} from "./drive-detail";
 import {DriveAccessDialog} from "./drive-access-dialog";
 import {DriveCreateDoc} from "./drive-create-doc";
 import {DriveCreateStickies} from "./drive-create-stickies";
+import {DriveCreateChat} from "./drive-create-chat";
 import {DriveDeleteItem} from "./drive-delete-item";
 import {DriveUploadFiles} from "./drive-upload-files";
 import {DriveCreateFolder} from "./drive-create-folder";
@@ -35,6 +36,7 @@ export type DriveLayoutProps = {
     allowUpload?: boolean;
     allowCreateDoc?: boolean;
     allowCreateStickies?: boolean;
+    allowCreateChat?: boolean;
     allowRename?: boolean;
     allowMove?: boolean;
     pid?: string;
@@ -58,6 +60,7 @@ export function DriveLayout({
                                 allowShare = true,
                                 allowCreateDoc = true,
                                 allowCreateStickies = true,
+                                allowCreateChat = true,
                                 allowUpload = true,
                                 allowRename = true,
                                 allowMove = true,
@@ -137,6 +140,7 @@ export function DriveLayout({
         onShareClick: allowShare ? handleShareClick : undefined,
         onCreateDoc: allowCreateDoc ? dialogs.createDoc.openDialog : undefined,
         onCreateStickies: allowCreateStickies ? dialogs.createStickies.openDialog : undefined,
+        onCreateChat: allowCreateChat ? dialogs.createChat.openDialog : undefined,
         currentPath,
         ownerId,
         mountId,
@@ -162,6 +166,7 @@ export function DriveLayout({
             onUploadFile={allowUpload ? handleFileUpload : undefined}
             onCreateDoc={allowCreateDoc ? dialogs.createDoc.openDialog : undefined}
             onCreateStickies={allowCreateStickies ? dialogs.createStickies.openDialog : undefined}
+            onCreateChat={allowCreateChat ? dialogs.createChat.openDialog : undefined}
         />
     );
 
@@ -237,6 +242,17 @@ export function DriveLayout({
                     onOpenChange={dialogs.createStickies.setOpen}
                     onSave={dialogs.createStickies.closeDialog}
                     onCancel={dialogs.createStickies.closeDialog}
+                    onAfterAction={onAfterAction}
+                />
+            )}
+
+            {allowCreateChat && currentPath && (
+                <DriveCreateChat
+                    path={currentPath}
+                    open={dialogs.createChat.open}
+                    onOpenChange={dialogs.createChat.setOpen}
+                    onSave={dialogs.createChat.closeDialog}
+                    onCancel={dialogs.createChat.closeDialog}
                     onAfterAction={onAfterAction}
                 />
             )}

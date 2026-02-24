@@ -5,7 +5,8 @@ import {eq} from 'drizzle-orm';
 import {type DatabaseConfig, type ManagedDatabase, type SchemaType} from '../core/managed-database';
 import {createDefaultMountConfig, Mount} from '../mount';
 import type {MountConfig, MountInfo} from '@workspace/lib/types';
-import {type DriveACL, type DrivePath, isContainerType, isCollabType} from '@workspace/lib/types/drive';
+import {type DriveACL, type DrivePath, isContainerType, isCollabType, isChatType} from '@workspace/lib/types/drive';
+import {ChatRoom} from '../chat';
 import {canRead, canWrite, normalizeACL} from './acl';
 import {extractImageDetails, getThumbnail, saveThumbnail} from '../shared/thumbnails';
 import CollabDocument from '../collab/collabDocument';
@@ -144,6 +145,9 @@ export default class Drive {
         const safeName = `${docName}.eigendoc`;
         const pathId = await mount.createFolder(parentId, safeName, 'doc');
         await CollabDocument.create(this, mountId, pathId);
+        const chatFolderId = await mount.createFolder(pathId, 'chat');
+        const generalChatId = await mount.createFolder(chatFolderId, 'General.eigenchat', 'chat');
+        await ChatRoom.create(this, mountId, generalChatId);
         const doc = await mount.getPath(pathId);
         if (!doc) throw new ApiError(500, 'Failed to create doc');
         this.emit(SSEventType.DRIVE_FILE_CREATED, doc);
@@ -159,10 +163,38 @@ export default class Drive {
         const safeName = `${stickiesName}.eigenstickies`;
         const pathId = await mount.createFolder(parentId, safeName, 'stickies');
         await CollabDocument.create(this, mountId, pathId);
+        const chatFolderId = await mount.createFolder(pathId, 'chat');
+        const generalChatId = await mount.createFolder(chatFolderId, 'General.eigenchat', 'chat');
+        await ChatRoom.create(this, mountId, generalChatId);
         const stickies = await mount.getPath(pathId);
         if (!stickies) throw new ApiError(500, 'Failed to create stickies');
         this.emit(SSEventType.DRIVE_FILE_CREATED, stickies);
         return stickies;
+    }
+
+    async createChat(mountId: string, parentId: string, chatName: string): Promise<DrivePath> {
+        const mount = this.getMount(mountId);
+        if (!(await this.canWrite(mountId, parentId, this.owner))) {
+            throw new ApiError(403, 'No write permission');
+        }
+
+        const safeName = `${chatName}.eigenchat`;
+        const pathId = await mount.createFolder(parentId, safeName, 'chat');
+        await ChatRoom.create(this, mountId, pathId);
+        const chat = await mount.getPath(pathId);
+        if (!chat) throw new ApiError(500, 'Failed to create chat');
+        this.emit(SSEventType.DRIVE_FILE_CREATED, chat);
+        return chat;
+    }
+
+    async getChat(mountId: string, chatId: string): Promise<ChatRoom> {
+        const mount = this.getMount(mountId);
+        const path = await mount.getPath(chatId);
+        if (!path || path.type !== 'chat') {
+            throw new ApiError(404, 'Chat not found');
+        }
+        const chatRoom = new ChatRoom(this, this.home, path);
+        return chatRoom.init();
     }
 
     async uploadFile(mountId: string, parentId: string, file: File): Promise<DrivePath> {
@@ -231,7 +263,7 @@ export default class Drive {
         await mount.deletePath(pathId);
         await propagateACLChange(folder, folder.acl, null);
         
-        if (isCollabType(folder.type)) {
+        if (isCollabType(folder.type) || isChatType(folder.type)) {
             this.emit(SSEventType.DRIVE_FILE_DELETED, folder);
         } else {
             this.emit(SSEventType.DRIVE_FOLDER_DELETED, folder);

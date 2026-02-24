@@ -15,6 +15,7 @@ export const spaceApi = api.space;
 export const publicApi = api.p;
 export const driveApi = api.drive;
 export const homeApi = api.home;
+export const chatApi = api.chat;
 
 export const getPublicAvatarUrl = (emailOrId: string) => `${API_HOST}/p/avatar/${encodeURIComponent(emailOrId)}`;
 
