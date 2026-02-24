@@ -26,7 +26,7 @@ function ChatView() {
 
     const chatName = chatPath?.name?.replace('.eigenchat', '') || 'Chat';
 
-    const handleSendMessage = async (content: string, files?: File[]) => {
+    const handleSendMessage = async (content: string, files?: File[], type?: 'message' | 'emote' | 'whisper', whisperTo?: string) => {
         if (!content.trim() && (!files || files.length === 0)) return;
 
         let attachments: string[] | undefined;
@@ -40,7 +40,7 @@ function ChatView() {
             }
         }
 
-        await postMessage.mutateAsync({content: content || '', attachments});
+        await postMessage.mutateAsync({content: content || '', attachments, type, whisperTo});
     };
 
     const toolbar = (
