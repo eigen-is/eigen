@@ -5,7 +5,7 @@ import type {DriveACL, DrivePathDetails} from '@workspace/lib/types/drive';
 export const paths = sqliteTable('paths', {
     id: text('id').primaryKey(),
     name: text('name').notNull(),
-    type: text('type').notNull().$type<'folder' | 'file' | 'doc' | 'stickies'>(),
+    type: text('type').notNull().$type<'folder' | 'file' | 'doc' | 'stickies' | 'chat' | 'chatroom'>(),
     parentId: text('parentId'),
     ownerId: text('ownerId').notNull(),
     mimeType: text('mimeType').notNull(),
