@@ -1,6 +1,7 @@
 import {toast} from "sonner";
 import type {DrivePath} from "@workspace/lib/types/drive";
 import {useCreateDoc} from "@workspace/lib/drive";
+import {getDocUrl} from "@workspace/lib/api";
 import {DriveCreateItemDialog} from "./drive-create-folder-item";
 
 export type DriveCreateDocProps = {
@@ -42,7 +43,7 @@ export function DriveCreateDoc({
 
             // Open the document in a new window
             if (newPath) {
-                const url = `${import.meta.env.VITE_APP_DOCS_URL}/doc/${path.ownerId}/${path.mountId}/${newPath.id}`;
+                const url = getDocUrl(path.ownerId, path.mountId, newPath.id);
                 window.open(url, '_blank');
             }
 

@@ -4,6 +4,7 @@ import {HTMLAttributes, ReactNode} from "react"
 import {cn} from "@workspace/ui/lib/utils"
 import {UserAvatar} from "./user-avatar"
 import {usePublicUser} from "@workspace/lib/public"
+import {getMailComposeUrl} from "@workspace/lib/api"
 import {EigenLoader} from "./eigen-loader"
 
 export type UserItemProps = HTMLAttributes<HTMLDivElement> & {
@@ -49,7 +50,7 @@ export function UserItem({
                 <p className="text-sm font-medium text-gray-900">{displayName}</p>
                 <div className="flex justify-between items-center">
                     {resolvedEmail && resolvedName && resolvedName !== resolvedEmail && <p className="text-xs text-gray-500">{mailLink ? <a className="hover:underline"
-                                                                                          href={`${import.meta.env.VITE_APP_MAIL_URL}/box/inbox?mode=compose&to=${resolvedEmail}`}>{resolvedEmail}</a> : resolvedEmail}</p>}
+                                                                                          href={getMailComposeUrl(resolvedEmail)}>{resolvedEmail}</a> : resolvedEmail}</p>}
                     {label && (
                         <p className="text-xs text-gray-500 whitespace-nowrap ml-auto">
                             {label}
