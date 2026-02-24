@@ -12,6 +12,8 @@ import {buildChatEvent} from './sse-events';
 import {SSEventType} from '@workspace/lib/types/sse';
 import type {Home} from '../home';
 import {parseCommand, formatEmoteForViewer} from './commands';
+import {getUserByEmail, getUserById} from '../users/users';
+import {ApiError} from '../core/errors';
 
 export class ChatRoom {
     private drive: Drive;
@@ -68,6 +70,16 @@ export class ChatRoom {
                     break;
                 default:
                     break;
+            }
+        }
+
+        if (type === 'whisper' && whisperTo) {
+            const isEmail = whisperTo.includes('@');
+            const targetUser = isEmail
+                ? await getUserByEmail(whisperTo)
+                : await getUserById(whisperTo);
+            if (!targetUser) {
+                throw new ApiError(404, `User '${whisperTo}' not found`);
             }
         }
 
@@ -136,12 +148,18 @@ export class ChatRoom {
 
         return allMessages.map(msg => {
             if (msg.type === 'whisper') {
-                if (msg.authorId === userId || msg.whisperTo === userId || msg.whisperTo === userEmail) {
-                    return msg;
+                const isAuthor = msg.authorId === userId;
+                const isRecipient = msg.whisperTo === userId || msg.whisperTo === userEmail;
+                if (isAuthor) {
+                    const targetName = msg.whisperTo?.split('@')[0] || msg.whisperTo || 'someone';
+                    return {...msg, content: `whispers to ${targetName}: ${msg.content}`};
+                }
+                if (isRecipient) {
+                    return {...msg, content: `whispers to you: ${msg.content}`};
                 }
                 return {
                     ...msg,
-                    content: '',
+                    content: '*some whisper sounds*',
                     whisperTo: null,
                 };
             }
