@@ -8,6 +8,7 @@ import type {MountConfig, MountInfo} from '@workspace/lib/types';
 import {type DriveACL, type DrivePath, isContainerType, isCollabType, isChatType} from '@workspace/lib/types/drive';
 import {ChatRoom} from '../chat';
 import {canRead, canWrite, normalizeACL} from './acl';
+import {validateACLEmails} from '@workspace/lib/validation';
 import {extractImageDetails, getThumbnail, saveThumbnail} from '../shared/thumbnails';
 import CollabDocument from '../collab/collabDocument';
 import {getSharedDatabase} from './shared';
@@ -413,6 +414,11 @@ export default class Drive {
 
         if (!(await this.canWrite(mountId, pathId, this.owner))) {
             throw new ApiError(403, 'No write permission');
+        }
+
+        if (acl && acl.length > 0) {
+            const aclError = validateACLEmails(acl);
+            if (aclError) throw new ApiError(400, aclError);
         }
 
         const normalizedACL = normalizeACL(acl);

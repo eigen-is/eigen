@@ -11,7 +11,8 @@ import * as schema from './schema';
 import {buildChatEvent} from './sse-events';
 import {SSEventType} from '@workspace/lib/types/sse';
 import type {Home} from '../home';
-import {parseCommand, formatEmoteForViewer, isEmailAddress} from './commands';
+import {parseCommand, formatEmoteForViewer} from './commands';
+import {isEmailAddress} from '@workspace/lib/validation';
 import {getUserByEmail} from '../users/users';
 import {ApiError} from '../core/errors';
 

@@ -531,6 +531,105 @@ describe('Drive', () => {
         });
     });
 
+    describe('ACL Email Validation', () => {
+        let folderId: string;
+
+        beforeAll(async () => {
+            const folder = await drivePost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `folder/${aliceRootId}`, {folderName: 'ACL Validation Folder'});
+            folderId = folder.id;
+        });
+
+        test('ACL with valid email succeeds', async () => {
+            const res = await authedRequest(ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${folderId}/acl`, {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        acl: [{email: BOB_EMAIL, read: true, write: false, public: false}],
+                    }),
+                });
+            expect(res.status).toBe(200);
+        });
+
+        test('ACL with invalid email returns 400', async () => {
+            const res = await authedRequest(ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${folderId}/acl`, {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        acl: [{email: 'not-an-email', read: true, write: false, public: false}],
+                    }),
+                });
+            expect(res.status).toBe(400);
+        });
+
+        test('ACL with missing @ returns 400', async () => {
+            const res = await authedRequest(ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${folderId}/acl`, {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        acl: [{email: 'justausername', read: true, write: false, public: false}],
+                    }),
+                });
+            expect(res.status).toBe(400);
+        });
+
+        test('ACL with empty email returns 400', async () => {
+            const res = await authedRequest(ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${folderId}/acl`, {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        acl: [{email: '', read: true, write: false, public: false}],
+                    }),
+                });
+            expect(res.status).toBe(400);
+        });
+
+        test('ACL with one valid and one invalid email returns 400', async () => {
+            const res = await authedRequest(ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${folderId}/acl`, {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        acl: [
+                            {email: BOB_EMAIL, read: true, write: false, public: false},
+                            {email: 'bad-entry', read: true, write: false, public: false},
+                        ],
+                    }),
+                });
+            expect(res.status).toBe(400);
+        });
+
+        test('invalid ACL does not overwrite existing valid ACL', async () => {
+            await authedRequest(ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${folderId}/acl`, {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        acl: [{email: BOB_EMAIL, read: true, write: true, public: false}],
+                    }),
+                });
+
+            await authedRequest(ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${folderId}/acl`, {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        acl: [{email: 'garbage', read: true, write: true, public: false}],
+                    }),
+                });
+
+            const path = await driveGet(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `path/${folderId}`);
+            expect(path.acl).toBeDefined();
+            expect(path.acl.length).toBe(1);
+            expect(path.acl[0].email).toBe(BOB_EMAIL.toLowerCase());
+        });
+    });
+
     describe('Permissions', () => {
         test('Alice has read permission on root', async () => {
             const data = await driveGet(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
