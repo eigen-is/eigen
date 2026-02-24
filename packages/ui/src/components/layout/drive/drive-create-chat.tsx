@@ -1,6 +1,7 @@
 import {toast} from "sonner";
 import type {DrivePath} from "@workspace/lib/types/drive";
 import {useCreateChat} from "@workspace/lib/chat";
+import {getChatRoomUrl} from "@workspace/lib/api";
 import {DriveCreateItemDialog} from "./drive-create-folder-item";
 
 export type DriveCreateChatProps = {
@@ -40,7 +41,7 @@ export function DriveCreateChat({
             }
 
             if (newPath) {
-                const url = `${import.meta.env.VITE_APP_CHAT_URL}/${path.ownerId}/${path.mountId}/${newPath.id}`;
+                const url = getChatRoomUrl(path.ownerId, path.mountId, newPath.id);
                 window.open(url, '_blank');
             }
 
