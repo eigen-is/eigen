@@ -7,7 +7,7 @@ import {DrivePath, DriveSearchParams} from "@workspace/lib/types/drive";
 import {useLayout} from "@workspace/ui/components/layout/layout-context";
 import {DriveContext} from "./__root";
 import {FilePreview} from '@workspace/ui/components/layout/drive/file-preview';
-import {getDriveDownloadUrl, getDriveEmbedUrl} from "@workspace/lib/api";
+import {getChatRoomUrl, getDocUrl, getDriveDownloadUrl, getDriveEmbedUrl, getStickiesBoardUrl} from "@workspace/lib/api";
 
 export const Route = createFileRoute('/_auth/fs/$ownerId/$mountId/$pathId')({
     component: DriveRoute,
@@ -91,13 +91,13 @@ function DriveRoute() {
                 search: {pid: undefined}
             });
         } else if (path.type === 'doc') {
-            const url = `${import.meta.env.VITE_APP_DOCS_URL}/doc/${path.ownerId}/${path.mountId}/${path.id}`;
+            const url = getDocUrl(path.ownerId, path.mountId, path.id);
             document.location.href = url;
         } else if (path.type === 'stickies') {
-            const url = `${import.meta.env.VITE_APP_STICKIES_URL}/board/${path.ownerId}/${path.mountId}/${path.id}`;
+            const url = getStickiesBoardUrl(path.ownerId, path.mountId, path.id);
             document.location.href = url;
         } else if (path.type === 'chat') {
-            const url = `${import.meta.env.VITE_APP_CHAT_URL}/${path.ownerId}/${path.mountId}/${path.id}`;
+            const url = getChatRoomUrl(path.ownerId, path.mountId, path.id);
             document.location.href = url;
         } else if (mimeType.startsWith("image/") || mimeType.startsWith("video/")) {
             const url = getDriveEmbedUrl(path.ownerId, path.mountId, path.id, path.name);
