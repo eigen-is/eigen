@@ -231,9 +231,10 @@ export function MessageList({messages, isLoading, currentUserId, ownerId, mountI
                                         <span className="text-xs text-orange-500 font-medium italic">whisper</span>
                                     </div>
                                 )}
-                                <p className="text-sm text-muted-foreground italic whitespace-pre-wrap break-words">
-                                    {message.content}
-                                </p>
+                                <RichContent
+                                    text={message.content}
+                                    className="text-sm text-muted-foreground italic whitespace-pre-wrap break-words"
+                                />
                             </div>
                         </div>
                     );
@@ -274,9 +275,10 @@ export function MessageList({messages, isLoading, currentUserId, ownerId, mountI
                             {isDeleted ? (
                                 <p className="text-sm text-muted-foreground italic">This message was deleted.</p>
                             ) : (
-                                <p className="text-sm text-foreground whitespace-pre-wrap break-words">
-                                    {message.content}
-                                </p>
+                                <RichContent
+                                    text={message.content}
+                                    className="text-sm text-foreground whitespace-pre-wrap break-words"
+                                />
                             )}
                             {message.attachments && message.attachments.length > 0 && !isDeleted && ownerId && mountId && (
                                 <div className="flex flex-wrap gap-2 mt-1">
