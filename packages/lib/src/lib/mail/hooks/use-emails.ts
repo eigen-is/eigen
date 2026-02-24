@@ -132,9 +132,13 @@ export function useMoveEmail() {
     });
 }
 
+export function getWriteEmailHrefTo(address: string) {
+    return `${import.meta.env.VITE_APP_MAIL_URL}/box/inbox?mode=compose&to=${address}`;
+}
+
 export function useOpenWriteEmailTo() {
     return (address: string) => {
-        window.location.href = `${import.meta.env.VITE_APP_MAIL_URL}/box/inbox?mode=compose&to=${address}`;
+        window.location.href = getWriteEmailHrefTo(address)
     }
 }
 
