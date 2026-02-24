@@ -133,7 +133,7 @@ export function MessageInput({onSend, disabled = false, readOnly = false, chatNa
                     ))}
                 </div>
             )}
-            <div className="flex items-end gap-2 relative">
+            <div className="flex items-center gap-2 relative">
                 <input
                     ref={fileInputRef}
                     type="file"
@@ -144,7 +144,7 @@ export function MessageInput({onSend, disabled = false, readOnly = false, chatNa
                 <Button
                     variant="ghost"
                     size="icon"
-                    className="shrink-0 h-9 w-9 text-muted-foreground hover:text-foreground"
+                    className="shrink-0 h-10 w-10 text-muted-foreground hover:text-foreground"
                     onClick={() => fileInputRef.current?.click()}
                     disabled={disabled}
                 >
@@ -167,14 +167,14 @@ export function MessageInput({onSend, disabled = false, readOnly = false, chatNa
                         placeholder={chatName ? `Message ${chatName}` : 'Type a message...'}
                         disabled={disabled}
                         rows={1}
-                        className="w-full resize-none rounded-lg border bg-background px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-ring min-h-[40px] max-h-[120px]"
+                        className="w-full resize-none rounded-lg border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring min-h-[40px] max-h-[120px] leading-[1.125]"
                     />
                 </div>
                 <Button
                     size="icon"
                     onClick={handleSend}
                     disabled={(!content.trim() && files.length === 0) || disabled}
-                    className="shrink-0 h-9 w-9"
+                    className="shrink-0 h-10 w-10"
                 >
                     <Send className="h-4 w-4"/>
                 </Button>
