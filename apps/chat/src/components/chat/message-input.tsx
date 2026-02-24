@@ -48,7 +48,7 @@ export function MessageInput({onSend, disabled = false, readOnly = false, chatNa
     };
 
     const atQuery = getAtSuggestQuery(content);
-    const suggestVisible = atQuery !== null && suggestCountRef.current > 0;
+    const suggestOpen = atQuery !== null;
 
     const handlePlayerSelect = useCallback((email: string) => {
         setContent(prev => {
@@ -68,29 +68,43 @@ export function MessageInput({onSend, disabled = false, readOnly = false, chatNa
         if (count > 0) setSelectedSuggestIdx(prev => Math.min(prev, count - 1));
     }, []);
 
+    const closeSuggest = useCallback(() => {
+        setContent(prev => {
+            const atIdx = prev.lastIndexOf('@');
+            return atIdx === -1 ? prev : prev.slice(0, atIdx);
+        });
+        setSelectedSuggestIdx(0);
+    }, []);
+
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-        if (suggestVisible) {
+        if (suggestOpen) {
             if (e.key === 'ArrowDown') {
                 e.preventDefault();
-                setSelectedSuggestIdx(i => Math.min(i + 1, suggestCountRef.current - 1));
+                if (suggestCountRef.current > 0) {
+                    setSelectedSuggestIdx(i => Math.min(i + 1, suggestCountRef.current - 1));
+                }
                 return;
             }
             if (e.key === 'ArrowUp') {
                 e.preventDefault();
-                setSelectedSuggestIdx(i => Math.max(i - 1, 0));
+                if (suggestCountRef.current > 0) {
+                    setSelectedSuggestIdx(i => Math.max(i - 1, 0));
+                }
                 return;
             }
             if (e.key === 'Enter') {
                 e.preventDefault();
                 const email = suggestEmailsRef.current[selectedSuggestIdx];
-                if (email) handlePlayerSelect(email);
+                if (email) {
+                    handlePlayerSelect(email);
+                } else {
+                    closeSuggest();
+                }
                 return;
             }
             if (e.key === 'Escape') {
-                setContent(prev => {
-                    const atIdx = prev.lastIndexOf('@');
-                    return atIdx === -1 ? prev : prev.slice(0, atIdx);
-                });
+                e.preventDefault();
+                closeSuggest();
                 return;
             }
         }
