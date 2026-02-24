@@ -5,7 +5,7 @@ import {SidebarItem} from '@workspace/ui/components/layout/sidebar/sidebar-item'
 import {AppLogo} from '@workspace/ui/components/layout/app-logo';
 import {useCreateChat} from '@workspace/lib/chat';
 import {useQuery} from "@tanstack/react-query";
-import {driveApi} from "@workspace/lib/api";
+import {driveApi, getChatRoomUrl} from "@workspace/lib/api";
 import {driveKeys} from "@workspace/lib/drive";
 import {EigenLoader} from "@workspace/ui";
 import {DriveCreateItemDialog} from "@workspace/ui/components/layout/drive/drive-create-folder-item";
@@ -64,7 +64,7 @@ export function ChatSidebar({
             });
             setCreateChatOpen(false);
             if (newPath) {
-                window.location.href = `/${ownerId}/${mountId}/${newPath.id}`;
+                window.location.href = getChatRoomUrl(ownerId, mountId, newPath.id);
             }
         } catch (error: unknown) {
             toast.error(error instanceof Error ? error.message : "Failed to create chat");

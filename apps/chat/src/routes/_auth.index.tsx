@@ -8,6 +8,7 @@ import {DriveCreateItemDialog} from "@workspace/ui/components/layout/drive/drive
 import {useState} from "react";
 import type {DrivePath} from "@workspace/lib/types/drive";
 import {toast} from "sonner";
+import {getChatRoomUrl} from "@workspace/lib/api";
 
 function ChatIndex() {
     const {user} = useAuth();
@@ -26,7 +27,7 @@ function ChatIndex() {
             });
             setCreateChatOpen(false);
             if (newPath) {
-                window.location.href = `/${user?.id}/${mountId}/${newPath.id}`;
+                window.location.href = getChatRoomUrl(user?.id || '', mountId, newPath.id);
             }
         } catch (error: unknown) {
             toast.error(error instanceof Error ? error.message : "Failed to create chat");

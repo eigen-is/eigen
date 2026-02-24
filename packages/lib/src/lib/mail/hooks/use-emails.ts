@@ -1,5 +1,5 @@
 import {useMutation, useQuery, useQueryClient, type QueryClient} from '@tanstack/react-query';
-import {mailApi} from '@workspace/lib/api.ts';
+import {getMailComposeUrl, mailApi} from '@workspace/lib/api.ts';
 import {Email} from "@workspace/lib/types/mail";
 import {useAuth} from '@workspace/lib/auth';
 
@@ -132,13 +132,9 @@ export function useMoveEmail() {
     });
 }
 
-export function getWriteEmailHrefTo(address: string) {
-    return `${import.meta.env.VITE_APP_MAIL_URL}/box/inbox?mode=compose&to=${address}`;
-}
-
 export function useOpenWriteEmailTo() {
     return (address: string) => {
-        window.location.href = getWriteEmailHrefTo(address)
+        window.location.href = getMailComposeUrl(address)
     }
 }
 

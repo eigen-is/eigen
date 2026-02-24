@@ -16,8 +16,9 @@ import {DeleteDialog} from "@workspace/ui/components/layout/delete/delete-dialog
 import {useLabels} from '@workspace/lib/contacts';
 import {TooltipButton, UserAvatar} from "@workspace/ui";
 import {EigenLoader} from '@workspace/ui/components/layout/eigen-loader';
-import {getWriteEmailHrefTo, useOpenWriteEmailTo} from "@workspace/lib/mail";
+import {useOpenWriteEmailTo} from "@workspace/lib/mail";
 import {printDocument} from '@workspace/ui/lib/printElement';
+import {getMailComposeUrl} from "@workspace/lib/api";
 
 interface ContactDetailToolbarProps {
     contact: Contact;
@@ -212,7 +213,7 @@ export function ContactDetail({contact, onDelete, filterType, filterId}: Contact
                                     {contact.email.map((email: string, index: number) => (
                                         <div key={index} className="pl-6">
                                             <a className="text-blue-600 hover:underline"
-                                                href={getWriteEmailHrefTo(email)}>
+                                                href={getMailComposeUrl(email)}>
                                                 {email}
                                             </a>
                                         </div>
