@@ -1,46 +1,38 @@
 import {createRootRouteWithContext, Outlet} from '@tanstack/react-router'
-import {TanStackRouterDevtools} from '@tanstack/react-router-devtools'
-import {AuthContextType} from "@workspace/lib/auth";
-import {Topbar} from "@workspace/ui/components/layout/topbar";
-import {createContext, useState} from 'react';
-import {useIsMobile} from "@workspace/lib/media";
-
-// Create a context for sidebar state
-export const SidebarContext = createContext<{
-    sidebarOpen: boolean;
-    setSidebarOpen: (open: boolean) => void;
-}>({
-    sidebarOpen: false,
-    setSidebarOpen: () => {
-    },
-});
+import {AuthContextType, useAuth} from "@workspace/lib/auth";
+import {AppShell} from "@workspace/ui/components/layout/app-shell";
+import {SpaceSidebar} from "../components/space/space-sidebar";
 
 interface MyRouterContext {
     auth: AuthContextType;
 }
 
-export const Route = createRootRouteWithContext<MyRouterContext>()({
-    component: RootComponent
-});
+function SpaceRoot() {
+    const {user} = useAuth();
 
-function RootComponent() {
-    const [sidebarOpen, setSidebarOpen] = useState(false);
-    const isMobile = useIsMobile();
+    if (!user) {
+        return (
+            <AppShell appName="space" rootRoute={Route}>
+                <Outlet/>
+            </AppShell>
+        );
+    }
 
     return (
-        <SidebarContext.Provider value={{sidebarOpen, setSidebarOpen}}>
-            <div className="flex flex-col h-dvh">
-                <Topbar
-                    rootRoute={Route}
-                    showMobileMenu={true}
-                    onMobileMenuClick={() => setSidebarOpen(true)}
-                    isMobile={isMobile}
-                />
-                <div className="flex-1 overflow-auto">
-                    <Outlet/>
-                </div>
+        <AppShell
+            appName="space"
+            rootRoute={Route}
+            sidebar={({condensed, isMobile, onClose}) => (
+                <SpaceSidebar condensed={condensed} isMobile={isMobile} onClose={onClose}/>
+            )}
+        >
+            <div className="flex-1 overflow-auto">
+                <Outlet/>
             </div>
-            <TanStackRouterDevtools position="bottom-right"/>
-        </SidebarContext.Provider>
+        </AppShell>
     );
 }
+
+export const Route = createRootRouteWithContext<MyRouterContext>()({
+    component: SpaceRoot,
+});

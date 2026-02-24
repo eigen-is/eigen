@@ -1,44 +1,61 @@
-import {createRootRouteWithContext, Outlet} from '@tanstack/react-router'
-import {TanStackRouterDevtools} from '@tanstack/react-router-devtools'
-import {AuthContextType} from "@workspace/lib/auth";
-import {Topbar} from "@workspace/ui/components/layout/topbar";
-import {createContext, useState} from 'react';
-import {useIsMobile} from "@workspace/lib/media";
-
-// Create sidebar context to manage sidebar visibility
-export const SidebarContext = createContext<{
-    sidebarOpen: boolean;
-    setSidebarOpen: (open: boolean) => void;
-}>({
-    sidebarOpen: false,
-    setSidebarOpen: () => {
-    },
-});
+import {createRootRouteWithContext} from '@tanstack/react-router'
+import {Outlet} from '@tanstack/react-router'
+import {AuthContextType, useAuth} from "@workspace/lib/auth";
+import {AppShell} from "@workspace/ui/components/layout/app-shell";
+import {EmailSidebar} from "../components/mail/email-sidebar";
+import {useMailboxes, useMoveEmail, useEmailById} from '@workspace/lib/mail';
 
 interface MyRouterContext {
     auth: AuthContextType
 }
 
+function MailRoot() {
+    const {user} = useAuth();
+
+    if (!user) {
+        return (
+            <AppShell appName="mail" rootRoute={Route}>
+                <Outlet/>
+            </AppShell>
+        );
+    }
+
+    return <AuthenticatedMailRoot/>;
+}
+
+function AuthenticatedMailRoot() {
+    const {data: mailboxes = [], isLoading, error} = useMailboxes();
+    const moveMail = useMoveEmail();
+    const getEmailById = useEmailById();
+
+    const handleMoveByDrop = async (emailIds: string[], folderId: string) => {
+        for (const id of emailIds) {
+            const email = await getEmailById(id);
+            if (email) await moveMail.mutateAsync({email, mailbox: folderId});
+        }
+    };
+
+    return (
+        <AppShell
+            appName="mail"
+            rootRoute={Route}
+            sidebar={({condensed, isMobile, onClose}) => (
+                <EmailSidebar
+                    condensed={condensed}
+                    isMobile={isMobile}
+                    onClose={onClose}
+                    mailboxes={mailboxes}
+                    isLoading={isLoading}
+                    error={error}
+                    onMoveToFolder={handleMoveByDrop}
+                />
+            )}
+        >
+            <Outlet/>
+        </AppShell>
+    );
+}
 
 export const Route = createRootRouteWithContext<MyRouterContext>()({
-    component: () => {
-        const [sidebarOpen, setSidebarOpen] = useState(false);
-        const isMobile = useIsMobile();
-
-        return (
-            <>
-                <SidebarContext.Provider value={{sidebarOpen, setSidebarOpen}}>
-                    <div className="flex flex-col h-dvh">
-                        <Topbar
-                            rootRoute={Route}
-                            showMobileMenu={isMobile}
-                            onMobileMenuClick={() => setSidebarOpen(true)}
-                            isMobile={isMobile}
-                        />
-                        <Outlet/>
-                    </div>
-                </SidebarContext.Provider>
-                <TanStackRouterDevtools position="bottom-right"/>
-            </>)
-    }
+    component: MailRoot,
 });

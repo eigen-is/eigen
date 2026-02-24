@@ -1,49 +1,63 @@
 import {createRootRouteWithContext, Outlet, useMatch} from '@tanstack/react-router'
-import {TanStackRouterDevtools} from '@tanstack/react-router-devtools'
 import {AuthContextType} from "@workspace/lib/auth";
-import {Topbar} from "@workspace/ui/components/layout/topbar";
-import {createContext, useState} from 'react';
-import {useIsMobile} from "@workspace/lib/media";
+import {AppShell} from "@workspace/ui/components/layout/app-shell";
+import {StickiesSidebar} from "../components/dnd-board/stickies-sidebar";
+import {useRootFolder, DEFAULT_MOUNT_ID} from '@workspace/lib/drive';
+import {useAuth} from '@workspace/lib/auth';
+import {createContext} from 'react';
+import {DriveContextType} from '@workspace/lib/types/drive';
 
-// Create sidebar context to manage sidebar visibility
-export const SidebarContext = createContext<{
-    sidebarOpen: boolean;
-    setSidebarOpen: (open: boolean) => void;
-}>({
-    sidebarOpen: false,
-    setSidebarOpen: () => {
-    },
+export const DriveContext = createContext<DriveContextType>({
+    rootPath: null,
+    mountId: DEFAULT_MOUNT_ID
 });
 
 interface MyRouterContext {
     auth: AuthContextType
 }
 
+function StickiesRoot() {
+    const {user} = useAuth();
+    const mountId = DEFAULT_MOUNT_ID;
+    const {data: root} = useRootFolder(user?.id || '', mountId);
+    const rootPath = root || null;
+
+    const isBoardRoute = useMatch({
+        from: '/_auth/board/$ownerId/$mountId/$pathId',
+        shouldThrow: false,
+    });
+
+    const isFullScreen = !!isBoardRoute;
+
+    if (!user) {
+        return (
+            <AppShell appName="stickies" rootRoute={Route}>
+                <Outlet/>
+            </AppShell>
+        );
+    }
+
+    return (
+        <AppShell
+            appName="stickies"
+            rootRoute={Route}
+            sidebarMode={isFullScreen ? 'none' : 'collapsible'}
+            sidebar={!isFullScreen ? ({condensed, isMobile, onClose}) => (
+                <StickiesSidebar
+                    condensed={condensed}
+                    isMobile={isMobile}
+                    onClose={onClose}
+                    rootPath={rootPath}
+                />
+            ) : undefined}
+        >
+            <DriveContext.Provider value={{rootPath, mountId}}>
+                <Outlet/>
+            </DriveContext.Provider>
+        </AppShell>
+    );
+}
 
 export const Route = createRootRouteWithContext<MyRouterContext>()({
-    component: () => {
-        const [sidebarOpen, setSidebarOpen] = useState(false);
-        const isMobile = useIsMobile();
-
-        const routeMatch = useMatch({
-            from: '/_auth/board/$ownerId/$mountId/$pathId',
-            shouldThrow: false,
-        });
-
-        return (
-            <>
-                <SidebarContext.Provider value={{sidebarOpen, setSidebarOpen}}>
-                    <div className="flex flex-col h-dvh">
-                        <Topbar
-                            rootRoute={Route}
-                            showMobileMenu={isMobile && !routeMatch}
-                            onMobileMenuClick={() => setSidebarOpen(true)}
-                            isMobile={isMobile}
-                        />
-                        <Outlet/>
-                    </div>
-                </SidebarContext.Provider>
-                <TanStackRouterDevtools position="bottom-right"/>
-            </>)
-    }
+    component: StickiesRoot,
 });

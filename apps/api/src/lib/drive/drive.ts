@@ -16,6 +16,7 @@ import {createAsyncSingleton} from '../../utils/singleton';
 import type {Home} from '../home';
 import {SSEventType} from '@workspace/lib/types/sse';
 import {buildDriveEvent} from './sse-events';
+import {ApiError} from '../core/errors';
 
 export type {DrivePath, DriveACL} from '@workspace/lib/types/drive';
 
@@ -40,7 +41,7 @@ export default class Drive {
 
     private getMount(mountId: string): Mount {
         const mount = this.mounts.get(mountId);
-        if (!mount) throw new Error(`Mount not found: ${mountId}`);
+        if (!mount) throw new ApiError(404, `Mount not found: ${mountId}`);
         return mount;
     }
 
@@ -60,7 +61,7 @@ export default class Drive {
 
     async removeMount(mountId: string): Promise<void> {
         if (mountId === this.defaultMountId) {
-            throw new Error('Cannot remove default mount');
+            throw new ApiError(400, 'Cannot remove default mount');
         }
         this.mounts.delete(mountId);
     }
@@ -99,11 +100,11 @@ export default class Drive {
         const mount = this.getMount(mountId);
         const folder = await mount.getPath(pathId);
         if (!folder || !isContainerType(folder.type)) {
-            throw new Error('Folder not found');
+            throw new ApiError(404, 'Folder not found');
         }
 
         if (!(await this.canRead(mountId, pathId, this.owner))) {
-            throw new Error('No read permission');
+            throw new ApiError(403, 'No read permission');
         }
 
         const contents = await mount.listFolder(pathId);
@@ -119,17 +120,17 @@ export default class Drive {
         const mount = this.getMount(mountId);
         const parent = await mount.getPath(parentId);
         if (!parent || !isContainerType(parent.type)) {
-            throw new Error('Parent folder not found');
+            throw new ApiError(404, 'Parent folder not found');
         }
 
         if (!(await this.canWrite(mountId, parentId, this.owner))) {
-            throw new Error('No write permission');
+            throw new ApiError(403, 'No write permission');
         }
 
         const safeName = folderName.replace(/[/\\]/g, '_');
         const pathId = await mount.createFolder(parentId, safeName);
         const folder = await mount.getPath(pathId);
-        if (!folder) throw new Error('Failed to create folder');
+        if (!folder) throw new ApiError(500, 'Failed to create folder');
         this.emit(SSEventType.DRIVE_FOLDER_CREATED, folder);
         return folder;
     }
@@ -137,14 +138,14 @@ export default class Drive {
     async createDoc(mountId: string, parentId: string, docName: string): Promise<DrivePath> {
         const mount = this.getMount(mountId);
         if (!(await this.canWrite(mountId, parentId, this.owner))) {
-            throw new Error('No write permission');
+            throw new ApiError(403, 'No write permission');
         }
 
         const safeName = `${docName}.eigendoc`;
         const pathId = await mount.createFolder(parentId, safeName, 'doc');
         await CollabDocument.create(this, mountId, pathId);
         const doc = await mount.getPath(pathId);
-        if (!doc) throw new Error('Failed to create doc');
+        if (!doc) throw new ApiError(500, 'Failed to create doc');
         this.emit(SSEventType.DRIVE_FILE_CREATED, doc);
         return doc;
     }
@@ -152,14 +153,14 @@ export default class Drive {
     async createStickies(mountId: string, parentId: string, stickiesName: string): Promise<DrivePath> {
         const mount = this.getMount(mountId);
         if (!(await this.canWrite(mountId, parentId, this.owner))) {
-            throw new Error('No write permission');
+            throw new ApiError(403, 'No write permission');
         }
 
         const safeName = `${stickiesName}.eigenstickies`;
         const pathId = await mount.createFolder(parentId, safeName, 'stickies');
         await CollabDocument.create(this, mountId, pathId);
         const stickies = await mount.getPath(pathId);
-        if (!stickies) throw new Error('Failed to create stickies');
+        if (!stickies) throw new ApiError(500, 'Failed to create stickies');
         this.emit(SSEventType.DRIVE_FILE_CREATED, stickies);
         return stickies;
     }
@@ -168,11 +169,11 @@ export default class Drive {
         const mount = this.getMount(mountId);
         const parent = await mount.getPath(parentId);
         if (!parent || parent.type !== 'folder') {
-            throw new Error('Parent folder not found');
+            throw new ApiError(404, 'Parent folder not found');
         }
 
         if (!(await this.canWrite(mountId, parentId, this.owner))) {
-            throw new Error('No write permission');
+            throw new ApiError(403, 'No write permission');
         }
 
         const safeName = file.name.replace(/[/\\]/g, '_');
@@ -200,7 +201,7 @@ export default class Drive {
         }
 
         const uploadedFile = await mount.getPath(pathId);
-        if (!uploadedFile) throw new Error('Failed to get uploaded file');
+        if (!uploadedFile) throw new ApiError(500, 'Failed to get uploaded file');
         this.emit(SSEventType.DRIVE_FILE_UPLOADED, uploadedFile);
         return uploadedFile;
     }
@@ -214,15 +215,15 @@ export default class Drive {
         const mount = this.getMount(mountId);
         const folder = await mount.getPath(pathId);
         if (!folder || !isContainerType(folder.type)) {
-            throw new Error('Folder not found');
+            throw new ApiError(404, 'Folder not found');
         }
 
         if (folder.parentId === null) {
-            throw new Error('Cannot delete root folder');
+            throw new ApiError(400, 'Cannot delete root folder');
         }
 
         if (!(await this.canWrite(mountId, pathId, this.owner))) {
-            throw new Error('No write permission');
+            throw new ApiError(403, 'No write permission');
         }
 
         await this.closeCollabDocumentsRecursively(mountId, pathId);
@@ -260,7 +261,7 @@ export default class Drive {
         const mount = this.getMount(mountId);
         const file = await mount.getPath(pathId);
         if (!file) {
-            throw new Error('File not found');
+            throw new ApiError(404, 'File not found');
         }
 
         if (isCollabType(file.type)) {
@@ -268,7 +269,7 @@ export default class Drive {
         }
 
         if (!(await this.canWrite(mountId, pathId, this.owner))) {
-            throw new Error('No write permission');
+            throw new ApiError(403, 'No write permission');
         }
 
         await mount.deletePath(pathId);
@@ -280,23 +281,23 @@ export default class Drive {
         const mount = this.getMount(mountId);
         const path = await mount.getPath(pathId);
         if (!path) {
-            throw new Error('Path not found');
+            throw new ApiError(404, 'Path not found');
         }
 
         const oldParentId = path.parentId;
 
         const targetParent = await mount.getPath(targetParentId);
         if (!targetParent || targetParent.type !== 'folder') {
-            throw new Error('Target parent is not a folder');
+            throw new ApiError(404, 'Target parent is not a folder');
         }
 
         if (!(await this.canWrite(mountId, pathId, this.owner))) {
-            throw new Error('No write permission');
+            throw new ApiError(403, 'No write permission');
         }
 
         await mount.updatePath(pathId, {parentId: targetParentId});
         const movedPath = await mount.getPath(pathId);
-        if (!movedPath) throw new Error('Failed to move path');
+        if (!movedPath) throw new ApiError(500, 'Failed to move path');
         this.emit(SSEventType.DRIVE_PATH_MOVED, movedPath, {oldParentId: oldParentId ?? undefined});
         return movedPath;
     }
@@ -305,11 +306,11 @@ export default class Drive {
         const mount = this.getMount(mountId);
         const item = await mount.getPath(pathId);
         if (!item) {
-            throw new Error('Path not found');
+            throw new ApiError(404, 'Path not found');
         }
 
         if (!(await this.canWrite(mountId, pathId, this.owner))) {
-            throw new Error('No write permission');
+            throw new ApiError(403, 'No write permission');
         }
 
         await mount.updatePath(pathId, {name: newName});
@@ -375,11 +376,11 @@ export default class Drive {
         const mount = this.getMount(mountId);
         const item = await mount.getPath(pathId);
         if (!item) {
-            throw new Error('Path not found');
+            throw new ApiError(404, 'Path not found');
         }
 
         if (!(await this.canWrite(mountId, pathId, this.owner))) {
-            throw new Error('No write permission');
+            throw new ApiError(403, 'No write permission');
         }
 
         const normalizedACL = normalizeACL(acl);

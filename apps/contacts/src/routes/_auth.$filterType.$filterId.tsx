@@ -1,10 +1,12 @@
 import {createFileRoute, useNavigate} from '@tanstack/react-router';
-import {ContactsList} from '../components/contacts/contacts-list';
-import {ContactDetail} from '../components/contacts/contact-detail';
-import {useContacts, useDeleteContact, useLabels} from '@workspace/lib/contacts';
+import {ContactsList, ContactsListToolbar} from '../components/contacts/contacts-list';
+import {ContactDetail, ContactDetailToolbar} from '../components/contacts/contact-detail';
+import {useContacts, useDeleteContact, useLabels, useUpdateContact} from '@workspace/lib/contacts';
+import {Contact} from '@workspace/lib/types/contact';
 import {EigenLoader} from '@workspace/ui/components/layout/eigen-loader';
 import {LabelFilterHeader} from "@workspace/ui/components/layout/labels/label-filter-header";
-import {useIsMobile} from "@workspace/lib/media";
+import {ColumnLayout, Column} from "@workspace/ui/components/layout/column-layout";
+import {useEffect, useState} from 'react';
 
 export type ContactsSearchParams = {
     contactId?: string;
@@ -22,18 +24,18 @@ function ContactsRoute() {
     const {filterType, filterId} = Route.useParams();
     const {contactId} = Route.useSearch();
     const navigate = useNavigate();
-    const isMobile = useIsMobile();
 
-    // Use TanStack Query hooks for contacts and labels
+    const [searchQuery, setSearchQuery] = useState('');
+    const [sortBy, setSortBy] = useState<'firstName' | 'lastName'>('firstName');
+
     const {data: contacts = [], isLoading: contactsLoading} = useContacts();
     const {data: labels = []} = useLabels();
     const deleteMutation = useDeleteContact();
+    const updateContactMutation = useUpdateContact();
 
-    // Handle contact deletion
     const handleDeleteContact = async (id: string) => {
         try {
             await deleteMutation.mutateAsync(id);
-            // Navigate back to the current filter without the contactId
             navigate({
                 to: Route.fullPath,
                 params: {filterType, filterId},
@@ -44,7 +46,6 @@ function ContactsRoute() {
         }
     };
 
-    // Handle back navigation (mainly for mobile)
     const handleBackToList = () => {
         navigate({
             to: Route.fullPath,
@@ -53,7 +54,44 @@ function ContactsRoute() {
         });
     };
 
-    // Show loading status
+    const handleRowClick = (id: string) => {
+        navigate({
+            to: Route.fullPath,
+            params: {filterType, filterId},
+            search: {contactId: id},
+        });
+    };
+
+    const contact = contactsLoading ? undefined : contacts.find(c => c.id === contactId);
+
+    useEffect(() => {
+        if (!contactsLoading && contactId && !contact) {
+            navigate({
+                to: Route.fullPath,
+                params: {filterType, filterId},
+                search: {},
+            });
+        }
+    }, [contactsLoading, contactId, contact, navigate, filterType, filterId]);
+
+    const listToolbar = (
+        <ContactsListToolbar
+            searchQuery={searchQuery}
+            onSearchChange={setSearchQuery}
+            sortBy={sortBy}
+            onSortChange={setSortBy}
+        />
+    );
+
+    const detailToolbar = contact ? (
+        <ContactDetailToolbar
+            contact={contact}
+            filterType={filterType}
+            filterId={filterId}
+            onDeleteClick={() => handleDeleteContact(contact.id)}
+        />
+    ) : null;
+
     if (contactsLoading) {
         return (
             <div className="h-full flex items-center justify-center">
@@ -62,73 +100,62 @@ function ContactsRoute() {
         );
     }
 
-    const contact = contacts.find(c => c.id === contactId);
-    if (contactId && !contact) {
-        // If contact not found, navigate back to the list
-        navigate({
-            to: Route.fullPath,
-            params: {filterType, filterId},
-            search: {},
-        });
-    }
-
-    // On mobile: If a contactId is provided, show only the contact detail view
-    if (isMobile && contact) {
-        return (
-            <div className="flex flex-col h-full">
-                <ContactDetail
-                    contact={contact}
-                    onDelete={handleDeleteContact}
-                    filterType={filterType}
-                    filterId={filterId}
-                    onBack={handleBackToList}
-                    isMobile={isMobile}
-                />
-            </div>
-        );
-    }
-
-    // Label operations are now handled by the LabelProvider in _auth.tsx
-
-    // Desktop/Tablet: Three-column layout (sidebar already handled in _auth.tsx)
     return (
-        <div className="flex h-full w-full">
-            {/* Middle column: Contacts list (hidden on mobile when viewing a contact) */}
-            <div className={`
-        ${isMobile && contactId ? 'hidden' : 'block'}
-        w-full md:w-[350px] border-r h-full overflow-y-auto
-      `}>
-                <div className="flex h-full flex-col">
+        <ColumnLayout mobileColumn={contactId ? 'detail' : 'list'}>
+            <Column id="list" width="350px" toolbar={listToolbar}>
+                <div className="flex h-full flex-col border-r overflow-y-auto">
                     {filterType === 'label' && (
                         <LabelFilterHeader
                             labels={labels}
                             labelId={filterId}
                         />
                     )}
-                    <ContactsList filterType={filterType} filterId={filterId}/>
+                    <ContactsList
+                        filterType={filterType}
+                        filterId={filterId}
+                        searchQuery={searchQuery}
+                        sortBy={sortBy}
+                        activeContactId={contactId}
+                        labels={labels}
+                        onRowClick={handleRowClick}
+                        onEdit={(contact) => {
+                            navigate({
+                                to: '/edit/$filterType/$filterId',
+                                params: {filterType, filterId},
+                                search: {contactId: contact.id},
+                            });
+                        }}
+                        onDelete={(selectedContacts) => {
+                            for (const c of selectedContacts) handleDeleteContact(c.id);
+                        }}
+                        onToggleLabel={(selectedContacts, labelId) => {
+                            const allHaveLabel = selectedContacts.every(c => (c.labels || []).includes(labelId));
+                            for (const c of selectedContacts) {
+                                const currentLabels = c.labels || [];
+                                if (allHaveLabel) {
+                                    updateContactMutation.mutate({...c, labels: currentLabels.filter(id => id !== labelId)} as Contact);
+                                } else if (!currentLabels.includes(labelId)) {
+                                    updateContactMutation.mutate({...c, labels: [...currentLabels, labelId]} as Contact);
+                                }
+                            }
+                        }}
+                    />
                 </div>
-            </div>
-
-            {/* Right column: Contact details or empty state */}
-            <div className={`
-        ${isMobile && !contactId ? 'hidden' : 'block'}
-        flex-1 h-full overflow-y-auto
-      `}>
+            </Column>
+            <Column id="detail" width="flex" onBack={handleBackToList} toolbar={detailToolbar}>
                 {contact ? (
                     <ContactDetail
                         contact={contact}
                         onDelete={handleDeleteContact}
                         filterType={filterType}
                         filterId={filterId}
-                        onBack={handleBackToList}
-                        isMobile={isMobile}
                     />
                 ) : (
                     <div className="h-full w-full flex items-center justify-center">
                         <p className="text-muted-foreground">Select a contact to view details</p>
                     </div>
                 )}
-            </div>
-        </div>
+            </Column>
+        </ColumnLayout>
     );
 }

@@ -56,10 +56,8 @@ import {useNavigate} from '@tanstack/react-router';
 import {useIsMobile} from "@workspace/lib/media";
 import {DriveRenameItem} from "@workspace/ui/components/layout/drive/drive-rename-item";
 
-// Define custom editor type
 type CustomEditor = BaseEditor & ReactEditor & HistoryEditor;
 
-// Declare module augmentations to extend Slate's types
 declare module 'slate' {
     interface CustomTypes {
         Editor: CustomEditor;
@@ -68,7 +66,6 @@ declare module 'slate' {
     }
 }
 
-// Helper functions for formatting
 const isMarkActive = (editor: CustomEditor, format: keyof Omit<CustomText, 'text'>) => {
     const marks = Editor.marks(editor);
     return marks ? marks[format] === true : false;
@@ -135,7 +132,6 @@ const toggleBlock = (editor: CustomEditor, format: CustomElementType) => {
     }
 };
 
-// Check if alignment is active
 const isAlignmentActive = (editor: CustomEditor, alignment: TextAlignment) => {
     const {selection} = editor;
     if (!selection) return false;
@@ -153,7 +149,6 @@ const isAlignmentActive = (editor: CustomEditor, alignment: TextAlignment) => {
     return !!match;
 };
 
-// Toggle alignment
 const toggleAlignment = (editor: CustomEditor, alignment: TextAlignment) => {
     const isActive = isAlignmentActive(editor, alignment);
 
@@ -164,7 +159,6 @@ const toggleAlignment = (editor: CustomEditor, alignment: TextAlignment) => {
     );
 };
 
-// Mark Button Component
 interface MarkButtonProps {
     format: keyof Omit<CustomText, 'text'>;
     icon: LucideIcon;
@@ -184,14 +178,12 @@ const MarkButton = ({format, icon, tooltipText}: MarkButtonProps) => {
     );
 };
 
-// Block Button Component
 interface BlockButtonProps {
     format: CustomElementType;
     icon: LucideIcon;
     tooltipText: string;
 }
 
-// Alignment Button Component
 interface AlignmentButtonProps {
     alignment: TextAlignment;
     icon: LucideIcon;
@@ -244,34 +236,28 @@ export const EditorToolbar = ({path, canWrite, onAccessDialogOpen, onDeleteDialo
 
     const ToolbarSeparator = () => (<div className="h-6 w-[1px] bg-border mx-1"></div>);
 
-    // Handle adding or removing links
     const handleLinkOperation = () => {
         const selection = editor.selection;
         if (!selection) return;
 
-        // Check if we already have a link at the current selection
         const [link] = Editor.nodes(editor, {
             match: n => 'link' in (n as any),
             universal: true,
         });
 
         if (link) {
-            // If we have a link, remove it
             Transforms.select(editor, selection);
             Editor.removeMark(editor, 'link');
         } else {
-            // If we don't have a link, open the dialog to add one
             setLinkDialogOpen(true);
         }
     };
 
-    // Apply the link to the selected text
     const applyLink = () => {
         if (!linkUrl) return;
 
         const selection = editor.selection;
         if (selection) {
-            // Apply link to selected text
             Editor.addMark(editor, 'link', linkUrl);
         }
 
@@ -280,14 +266,12 @@ export const EditorToolbar = ({path, canWrite, onAccessDialogOpen, onDeleteDialo
     };
 
     const clearFormatting = () => {
-        // Remove all marks
         Editor.removeMark(editor, 'bold');
         Editor.removeMark(editor, 'italic');
         Editor.removeMark(editor, 'underline');
         Editor.removeMark(editor, 'strikethrough');
         Editor.removeMark(editor, 'link');
 
-        // Convert to paragraph
         Transforms.setNodes<CustomElement>(
             editor,
             {type: 'paragraph'},
@@ -478,7 +462,6 @@ export const EditorToolbar = ({path, canWrite, onAccessDialogOpen, onDeleteDialo
                 </>}
                 {canWrite && !isMobile && (
                     <>
-                        {/* Separator */}
                         <ToolbarSeparator/>
 
                         <TooltipButton
@@ -578,7 +561,6 @@ export const EditorToolbar = ({path, canWrite, onAccessDialogOpen, onDeleteDialo
                 )}
             </div>
 
-            {/* Document Rename Dialog */}
             {path && (
                 <DriveRenameItem
                     path={path}
@@ -586,7 +568,6 @@ export const EditorToolbar = ({path, canWrite, onAccessDialogOpen, onDeleteDialo
                     onOpenChange={setRenameDialogOpen}
                 />
             )}
-            {/* Document Creation Dialog */}
             {rootFolder && (
                 <DriveCreateDoc
                     path={rootFolder}

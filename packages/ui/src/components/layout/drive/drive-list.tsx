@@ -20,7 +20,126 @@ import {
     BreadcrumbSeparator
 } from "@workspace/ui/components/breadcrumb";
 import {useBreadcrumb} from "@workspace/lib/drive";
-import {useIsMobile} from '@workspace/lib/media/index.js';
+import {useLayout} from "../layout-context";
+
+type DriveListToolbarProps = {
+    ownerId: string;
+    mountId: string;
+    pathId: string;
+    showBreadcrumb?: boolean;
+    onRowSelect?: (path: DrivePath) => void;
+    onRowActivate?: (path: DrivePath) => void;
+    activeRowId?: string;
+    onCreateFolder?: () => void;
+    onUploadFile?: () => void;
+    onCreateDoc?: () => void;
+    onCreateStickies?: () => void;
+}
+
+export function DriveListToolbar({
+                                     ownerId,
+                                     mountId,
+                                     pathId,
+                                     showBreadcrumb = true,
+                                     onRowSelect,
+                                     onRowActivate,
+                                     activeRowId,
+                                     onCreateFolder,
+                                     onUploadFile,
+                                     onCreateDoc,
+                                     onCreateStickies,
+                                 }: DriveListToolbarProps) {
+    const {data: breadcrumbPaths = []} = showBreadcrumb ? useBreadcrumb(ownerId, mountId, pathId) : {data: []};
+    const {isMobile} = useLayout();
+
+    const handleBreadcrumbClick = (path: DrivePath) => {
+        if (path.id === activeRowId && onRowActivate) {
+            onRowActivate(path);
+        } else if (onRowSelect) {
+            onRowSelect(path);
+        }
+    };
+
+    const numberOfDropDownItems = (onCreateFolder ? 1 : 0) + (onUploadFile ? 1 : 0) + (onCreateDoc ? 1 : 0) + (onCreateStickies ? 1 : 0);
+
+    const newItemButton = (onCreateFolder || onUploadFile || onCreateDoc || onCreateStickies) ? (
+        (numberOfDropDownItems === 1 ? (
+                    onCreateDoc ? <Button size="default" onClick={onCreateDoc}>
+                        <Plus/>
+                        <span className="mr-2">New document</span>
+                    </Button> : onCreateStickies ?
+                        <Button size="default" onClick={onCreateStickies}>
+                            <Plus/>
+                            <span className="mr-2">New stickies</span>
+                        </Button> : null
+                ) :
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button size="default">
+                            <Plus/>
+                            <span className="mr-2">New</span>
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end">
+                        {onCreateFolder && (
+                            <DropdownMenuItem onClick={onCreateFolder}>
+                                <FolderPlus className="h-4 w-4 mr-2"/>
+                                Create folder
+                            </DropdownMenuItem>
+                        )}
+                        {onUploadFile && (
+                            <DropdownMenuItem onClick={onUploadFile}>
+                                <UploadIcon className="h-4 w-4 mr-2"/>
+                                Upload file
+                            </DropdownMenuItem>
+                        )}
+                        {onCreateDoc && (
+                            <DropdownMenuItem onClick={onCreateDoc}>
+                                <FileText className="h-4 w-4 mr-2"/>
+                                Create document
+                            </DropdownMenuItem>
+                        )}
+                        {onCreateStickies && (
+                            <DropdownMenuItem onClick={onCreateStickies}>
+                                <StickyNote className="h-4 w-4 mr-2"/>
+                                Create stickies
+                            </DropdownMenuItem>
+                        )}
+                    </DropdownMenuContent>
+                </DropdownMenu>
+        )) : null;
+
+    return (
+        <div className="flex items-center justify-between w-full">
+            {showBreadcrumb ? <Breadcrumb className="overflow-hidden">
+                <BreadcrumbList>
+                    {breadcrumbPaths.map((path, index) => (
+                        <Fragment key={path.id}>
+                            {index > 0 && <BreadcrumbSeparator/>}
+                            <BreadcrumbItem>
+                                {index === breadcrumbPaths.length - 1 ? (
+                                    <BreadcrumbPage className="flex items-center">
+                                        {path.name}
+                                    </BreadcrumbPage>
+                                ) : (
+                                    <BreadcrumbLink
+                                        onClick={() => handleBreadcrumbClick(path)}
+                                        className="flex items-center cursor-pointer"
+                                    >
+                                        {path.name}
+                                    </BreadcrumbLink>
+                                )}
+                            </BreadcrumbItem>
+                        </Fragment>
+                    ))}
+                </BreadcrumbList>
+            </Breadcrumb> : <div className="flex-1"/>}
+            <div className="flex gap-1">
+                {isMobile && newItemButton}
+            </div>
+        </div>
+    );
+}
 
 interface DriveListProps {
     items: DrivePath[];
@@ -33,7 +152,7 @@ interface DriveListProps {
     onUploadFile?: () => void;
     onUploadFiles?: (files: File[]) => void;
     currentPath?: DrivePath | null;
-    onDelete?: (path: DrivePath) => void;
+    onDelete?: (paths: DrivePath[]) => void;
     onShareClick?: (item: DrivePath) => void;
     onCreateDoc?: () => void;
     onCreateStickies?: () => void;
@@ -77,8 +196,6 @@ export function DriveList({
                           }: DriveListProps) {
     const [isDragging, setIsDragging] = useState(false);
     const dragCounter = useRef(0);
-    const {data: breadcrumbPaths = []} = showBreadcrumb ? useBreadcrumb(ownerId, mountId, pathId) : {data: []};
-    const isMobile = useIsMobile();
 
     // Handle row click with two different behaviors
     const handleRowClick = (path: DrivePath) => {
@@ -167,59 +284,10 @@ export function DriveList({
         );
     }
 
-    const numberOfDropDownItems = (onCreateFolder ? 1 : 0) + (onUploadFile ? 1 : 0) + (onCreateDoc ? 1 : 0) + (onCreateStickies ? 1 : 0);
-
-    const newItemButton = (onCreateFolder || onUploadFile || onCreateDoc || onCreateStickies) ? (
-        (numberOfDropDownItems === 1 ? (
-                    onCreateDoc ? <Button size="default" onClick={onCreateDoc}>
-                        <Plus/>
-                        <span className="mr-2">New document</span>
-                    </Button> : onCreateStickies ?
-                        <Button size="default" onClick={onCreateStickies}>
-                            <Plus/>
-                            <span className="mr-2">New stickies</span>
-                        </Button> : null
-                ) :
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button size="default">
-                            <Plus/>
-                            <span className="mr-2">New</span>
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                        {onCreateFolder && (
-                            <DropdownMenuItem onClick={onCreateFolder}>
-                                <FolderPlus className="h-4 w-4 mr-2"/>
-                                Create folder
-                            </DropdownMenuItem>
-                        )}
-                        {onUploadFile && (
-                            <DropdownMenuItem onClick={onUploadFile}>
-                                <UploadIcon className="h-4 w-4 mr-2"/>
-                                Upload file
-                            </DropdownMenuItem>
-                        )}
-                        {onCreateDoc && (
-                            <DropdownMenuItem onClick={onCreateDoc}>
-                                <FileText className="h-4 w-4 mr-2"/>
-                                Create document
-                            </DropdownMenuItem>
-                        )}
-                        {onCreateStickies && (
-                            <DropdownMenuItem onClick={onCreateStickies}>
-                                <StickyNote className="h-4 w-4 mr-2"/>
-                                Create stickies
-                            </DropdownMenuItem>
-                        )}
-                    </DropdownMenuContent>
-                </DropdownMenu>
-        )) : null;
-
     return (
         <div
             className={cn(
-                "h-full flex flex-col relative",
+                "h-full flex flex-col relative border-r",
                 isDragging && "bg-secondary/30"
             )}
             onDragOver={handleDragOver}
@@ -238,36 +306,6 @@ export function DriveList({
                     </div>
                 </div>
             )}
-
-            {/* Actions toolbar */}
-            <div className="h-12 flex items-center justify-between border-b px-2">
-                {showBreadcrumb ? <Breadcrumb className="overflow-hidden">
-                    <BreadcrumbList>
-                        {breadcrumbPaths.map((path, index) => (
-                            <Fragment key={path.id}>
-                                {index > 0 && <BreadcrumbSeparator/>}
-                                <BreadcrumbItem>
-                                    {index === breadcrumbPaths.length - 1 ? (
-                                        <BreadcrumbPage className="flex items-center">
-                                            {path.name}
-                                        </BreadcrumbPage>
-                                    ) : (
-                                        <BreadcrumbLink
-                                            onClick={() => handleRowClick(path)}
-                                            className="flex items-center cursor-pointer"
-                                        >
-                                            {path.name}
-                                        </BreadcrumbLink>
-                                    )}
-                                </BreadcrumbItem>
-                            </Fragment>
-                        ))}
-                    </BreadcrumbList>
-                </Breadcrumb> : <div className="flex-1"/>}
-                <div className="flex gap-1">
-                    {isMobile && newItemButton}
-                </div>
-            </div>
 
             {/* Drive table */}
             <DriveTable

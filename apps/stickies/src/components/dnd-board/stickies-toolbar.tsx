@@ -26,9 +26,6 @@ interface StickiesToolbarProps {
     path: DrivePath;
 }
 
-/**
- * Toolbar component for the Stickies application
- */
 export const StickiesToolbar = ({canWrite, undoManager, onAccessDialogOpen, path}: StickiesToolbarProps) => {
     const commandKey = window.navigator.platform.includes('Mac') ? '⌘' : 'Ctrl';
     const [canUndo, setCanUndo] = useState(false);
@@ -61,7 +58,6 @@ export const StickiesToolbar = ({canWrite, undoManager, onAccessDialogOpen, path
         };
     }, [undoManager, canWrite]);
 
-    // Helper component for toolbar separator
     const ToolbarSeparator = () => <div className="h-4 w-px bg-gray-200 mx-1"/>;
 
     return (
@@ -98,7 +94,6 @@ export const StickiesToolbar = ({canWrite, undoManager, onAccessDialogOpen, path
                 </DropdownMenu>
                 {canWrite && (
                     <>
-                        {/* Separator */}
                         <ToolbarSeparator/>
 
                         <TooltipButton
@@ -130,7 +125,6 @@ export const StickiesToolbar = ({canWrite, undoManager, onAccessDialogOpen, path
                 )}
             </div>
 
-            {/* Stickies Creation Dialog */}
             {rootFolder && (
                 <DriveCreateStickies
                     path={rootFolder}
@@ -139,7 +133,6 @@ export const StickiesToolbar = ({canWrite, undoManager, onAccessDialogOpen, path
                 />
             )}
 
-            {/* Stickies Delete Dialog */}
             {path && (
                 <DriveDeleteItem
                     path={path}
@@ -153,7 +146,6 @@ export const StickiesToolbar = ({canWrite, undoManager, onAccessDialogOpen, path
                 />
             )}
 
-            {/* Stickies Rename Dialog */}
             {path && (
                 <DriveRenameItem
                     path={path}

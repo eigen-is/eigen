@@ -4,9 +4,9 @@ import {useFolderContent, usePathInfo} from '@workspace/lib/drive';
 import {useContext, useEffect, useState} from "react";
 import {DriveLayout} from "@workspace/ui/components/layout/drive/drive-layout";
 import {DrivePath, DriveSearchParams} from "@workspace/lib/types/drive";
-import {useIsMobile} from "@workspace/lib/media";
-import {DriveContext} from "./_auth";
-import {FilePreview} from '../components/drive/file-preview';
+import {useLayout} from "@workspace/ui/components/layout/layout-context";
+import {DriveContext} from "./__root";
+import {FilePreview} from '@workspace/ui/components/layout/drive/file-preview';
 import {getDriveDownloadUrl, getDriveEmbedUrl} from "@workspace/lib/api";
 
 export const Route = createFileRoute('/_auth/fs/$ownerId/$mountId/$pathId')({
@@ -21,7 +21,7 @@ function DriveRoute() {
     const {ownerId, mountId, pathId} = Route.useParams();
     const {pid} = Route.useSearch();
     const navigate = useNavigate();
-    const isMobile = useIsMobile();
+    const {isMobile} = useLayout();
     const {rootPath} = useContext(DriveContext);
     const [preview, setPreview] = useState<{ url: string; mimeType: string; aspectRatio?: number } | null>(null);
 
@@ -173,7 +173,6 @@ function DriveRoute() {
                 allowShare={true}
                 allowUpload={true}
                 allowMove={true}
-                isMobile={isMobile}
                 showBreadcrumb={true}
                 pid={pid}
             />

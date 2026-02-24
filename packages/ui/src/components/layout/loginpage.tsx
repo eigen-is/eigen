@@ -1,6 +1,6 @@
 import {useAuth} from "@workspace/lib/auth/auth-context.tsx";
 import {useRouter} from "@tanstack/react-router";
-import {useState} from "react";
+import {useEffect, useState} from "react";
 import {zodResolver} from "@hookform/resolvers/zod";
 import {useForm} from "react-hook-form";
 import {z} from "zod";
@@ -8,7 +8,7 @@ import {Input} from "../input.tsx";
 import {Button} from "../button.tsx";
 import {Card, CardContent, CardDescription, CardHeader, CardTitle,} from "../card.tsx";
 import {Form, FormControl, FormField, FormItem, FormLabel, FormMessage,} from "../form.tsx";
-import {useApp} from "./app-context";
+import {useApp} from "./layout-context";
 
 // Define the login form schema with Zod
 const loginFormSchema = z.object({
@@ -20,7 +20,7 @@ const loginFormSchema = z.object({
 type LoginFormValues = z.infer<typeof loginFormSchema>;
 
 export function LoginPage() {
-    const {login} = useAuth();
+    const {login, isAuthenticated} = useAuth();
     const router = useRouter();
     const {appName} = useApp();
     const [error, setError] = useState('');
@@ -49,21 +49,22 @@ export function LoginPage() {
             if (!success && error) {
                 const errorMessage = error instanceof Error ? error.message : 'Login failed';
                 setError(errorMessage);
-                return;
             }
-
-            // On success, TanStack Router will automatically navigate to the home page
-            // due to the redirect in the root route's loader
         } catch (err) {
             setError('An unexpected error occurred');
         } finally {
             setIsLoading(false);
-            await router.invalidate();
         }
     };
 
+    useEffect(() => {
+        if (isAuthenticated) {
+            router.invalidate();
+        }
+    }, [isAuthenticated, router]);
+
     return (
-        <div className="flex h-[calc(100vh-64px)] items-center justify-center">
+        <div className="flex w-full h-[calc(100vh-64px)] items-center justify-center">
             <Card className="w-full max-w-md">
                 <CardHeader className="text-center">
                     <CardTitle className="text-2xl">

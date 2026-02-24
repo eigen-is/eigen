@@ -1,6 +1,3 @@
-import {ArrowLeft, Send, Trash2} from "lucide-react";
-import {cn} from "@workspace/ui/lib/utils";
-import {Button} from "@workspace/ui/components/button";
 import {EmailDraft as EmailDraftType} from "@workspace/lib/types/mail";
 import {ContactAutosuggest, TooltipButton} from "@workspace/ui";
 import {Input} from "@workspace/ui/components/input";
@@ -9,6 +6,7 @@ import {useEffect, useMemo, useRef, useState} from "react";
 import {toast} from "sonner";
 import {createDraftEmail} from "@workspace/lib/mail";
 import {useAuth} from "@workspace/lib/auth";
+import {Send, Trash2} from "lucide-react";
 
 /**
  * Checks the status of an email draft
@@ -33,24 +31,42 @@ export function getEmailDraftStatus(draft: EmailDraftType) {
     return {isSendable, isSaveable};
 }
 
+export function EmailDraftToolbar({onSend, onDelete, isSending, hasId}: {
+    onSend: () => void;
+    onDelete: () => void;
+    isSending: boolean;
+    hasId: boolean;
+}) {
+    return (
+        <div className="flex items-center gap-1">
+            <TooltipButton
+                icon={Send}
+                tooltipText="Send"
+                onClick={onSend}
+                disabled={isSending}
+            />
+            {hasId && (
+                <TooltipButton
+                    icon={Trash2}
+                    tooltipText="Delete"
+                    onClick={onDelete}
+                    disabled={isSending}
+                />
+            )}
+        </div>
+    );
+}
+
 interface EmailDraftProps {
     email: EmailDraftType | null;
-    isMobile?: boolean;
-    className?: string;
     to?: string;
-    onBackClick?: () => void;
     onDelete: (mail: EmailDraftType) => void;
-    toggleMailRead: (mail: EmailDraftType, isRead: boolean) => void;
     sendDraft: (mail: EmailDraftType) => Promise<any>;
-    updateDraft: (mail: EmailDraftType) => Promise<any>;
 }
 
 export function EmailDraft({
                                email,
-                               isMobile,
-                               className,
                                to,
-                               onBackClick,
                                onDelete,
                                sendDraft,
                            }: EmailDraftProps) {
@@ -62,12 +78,11 @@ export function EmailDraft({
     const bccFieldRef = useRef<HTMLInputElement>(null);
     const [isSending, setIsSending] = useState(false);
 
+    const auth = useAuth();
+
     if (!email) {
         email = createDraftEmail({});
     }
-    const auth = useAuth();
-
-    console.log('Rendering EmailDraft with email:', email);
 
     // Get the draft status (sendable/saveable)
     // const { isSendable } = getEmailDraftStatus(email);
@@ -187,35 +202,7 @@ export function EmailDraft({
     };
 
     return (
-        <div className={cn("flex flex-col h-full w-full", className)}>
-            {/* Header */}
-            <div className="flex items-center justify-between h-12 border-b px-4">
-                <div className="flex items-center">
-                    {isMobile && (
-                        <Button variant="ghost" size="icon" onClick={onBackClick}
-                                className="mr-2">
-                            <ArrowLeft className="h-5 w-5"/>
-                            <span className="sr-only">Back</span>
-                        </Button>
-                    )}
-                    <TooltipButton
-                        icon={Send}
-                        tooltipText="Send"
-                        onClick={handleSendEmail}
-                        disabled={isSending}
-                    />
-                    {email.id && (
-                        <TooltipButton
-                            icon={Trash2}
-                            tooltipText="Delete"
-                            onClick={() => onDelete(email)}
-                            disabled={isSending}
-                        />)}
-                </div>
-                <div className="flex items-center gap-2">
-                </div>
-            </div>
-
+        <div className="flex flex-col h-full w-full">
             {/* Email Form */}
             <div className="flex-1 overflow-auto">
                 <form className="flex flex-col h-full" onSubmit={(e) => {
@@ -230,7 +217,7 @@ export function EmailDraft({
                             <ContactAutosuggest
                                 initialValue={email.to?.text || ""}
                                 onChange={() => {
-                                    // We halen de waarde op via de ref bij het verzenden
+                                    // Value is read from ref on submit
                                 }}
                                 appendMode={true}
                                 className="flex-1"
@@ -248,7 +235,7 @@ export function EmailDraft({
                             <ContactAutosuggest
                                 initialValue={email.cc?.text || ""}
                                 onChange={() => {
-                                    // We halen de waarde op via de ref bij het verzenden
+                                    // Value is read from ref on submit
                                 }}
                                 appendMode={true}
                                 className="flex-1"
@@ -266,7 +253,7 @@ export function EmailDraft({
                             <ContactAutosuggest
                                 initialValue={email.bcc?.text || ""}
                                 onChange={() => {
-                                    // We halen de waarde op via de ref bij het verzenden
+                                    // Value is read from ref on submit
                                 }}
                                 appendMode={true}
                                 className="flex-1"

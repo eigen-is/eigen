@@ -62,12 +62,12 @@ class DbProvider {
 
         // apply all changes from database to document
         this.db.select().from(schema.docUpdates).then((updates) => {
-            updates.forEach((update) => {
+            for(const update of updates) {
                 // Apply each update to the document
                 const data = update.updateData as Uint8Array;
                 console.log(`[DbProvider] Applying update for document ${this.docId}, size: ${data.length} bytes`);
                 Y.applyUpdate(doc, data);
-            });
+            }
         }).catch((error) => {
             console.error(`[DbProvider] Error fetching updates for document ${this.docId}:`, error);
         });
@@ -147,10 +147,10 @@ export default class CollabDocument {
     public destruct() {
         this.closed = true;
         // destroy all connections
-        this.connections.forEach((conn) => {
+        for(const conn of this.connections) {
             conn.close();
             this.connections.delete(conn);
-        });
+        }
         this.provider.destroy();
         this.awareness.destroy();
         this.doc.destroy();
@@ -171,11 +171,11 @@ export default class CollabDocument {
         }
         this.connections.delete(conn);
         console.log(`User ${user.id} disconnected from document ${this.path.name}`);
-        this.connections.forEach((connection) => {
+        for(const connection of this.connections) {
             if (connection.readyState > 1) { // CLOSING or CLOSED
                 this.connections.delete(connection);
             }
-        });
+        }
         console.log(`Remaining connections: ${this.connections.size}`);
         // check if this.connections is empty
         if (this.connections.size <= 0) {

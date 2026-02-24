@@ -1,7 +1,8 @@
 import {createFileRoute, useNavigate} from '@tanstack/react-router';
-import {ContactEdit, type ContactFormValues} from '../components/contacts/contact-edit';
+import {ContactEdit, ContactEditToolbar, type ContactFormValues} from '../components/contacts/contact-edit';
 import {type Contact} from "@workspace/lib/types/contact";
 import {useAddContact} from '@workspace/lib/contacts';
+import {ColumnLayout, Column} from "@workspace/ui/components/layout/column-layout";
 
 export const Route = createFileRoute('/_auth/new')({
     component: NewContactRoute,
@@ -65,12 +66,16 @@ function NewContactRoute() {
     };
 
     return (
-        <ContactEdit
-            contact={emptyContact}
-            onSave={handleSave}
-            onCancel={handleCancel}
-            filterType="book"
-            filterId="all"
-        />
+        <ColumnLayout mobileColumn="editor">
+            <Column id="editor" width="flex" onBack={handleCancel} toolbar={<ContactEditToolbar isNew={true}/>}>
+                <ContactEdit
+                    contact={emptyContact}
+                    onSave={handleSave}
+                    onCancel={handleCancel}
+                    filterType="book"
+                    filterId="all"
+                />
+            </Column>
+        </ColumnLayout>
     );
 }
