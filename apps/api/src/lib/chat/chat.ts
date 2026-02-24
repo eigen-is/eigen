@@ -45,9 +45,10 @@ export class ChatRoom {
         return this;
     }
 
-    async postMessage(authorId: string, authorEmail: string, content: string, type: ChatMessage['type'] = 'message', whisperTo?: string, replyTo?: string): Promise<ChatMessage> {
+    async postMessage(authorId: string, authorEmail: string, content: string, type: ChatMessage['type'] = 'message', whisperTo?: string, replyTo?: string, attachments?: string[]): Promise<ChatMessage> {
         const id = randomUUID();
         const now = new Date();
+        const attachmentData = attachments && attachments.length > 0 ? attachments : null;
 
         await this.db.insert(schema.messages).values({
             id,
@@ -55,6 +56,7 @@ export class ChatRoom {
             authorEmail,
             type,
             content,
+            attachments: attachmentData,
             whisperTo: whisperTo ?? null,
             replyTo: replyTo ?? null,
             createdAt: now,
@@ -66,7 +68,7 @@ export class ChatRoom {
             authorEmail,
             type,
             content,
-            attachments: null,
+            attachments: attachmentData,
             whisperTo: whisperTo ?? null,
             replyTo: replyTo ?? null,
             editedAt: null,
@@ -151,6 +153,17 @@ export class ChatRoom {
         await this.db.update(schema.messages)
             .set({deletedAt: now})
             .where(eq(schema.messages.id, messageId));
+
+        if (existing.attachments) {
+            const attachmentIds = existing.attachments as string[];
+            for (const attachmentId of attachmentIds) {
+                try {
+                    await this.drive.deleteFile(this.path.mountId, attachmentId);
+                } catch {
+                    // attachment may already be deleted
+                }
+            }
+        }
 
         this.home.notify(buildChatEvent(SSEventType.CHAT_MESSAGE_DELETED, {
             chatId: this.path.id,

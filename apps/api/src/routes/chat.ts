@@ -28,6 +28,7 @@ export const chatRouter = new Elysia({name: "chat"})
             body.type || 'message',
             body.whisperTo,
             body.replyTo,
+            body.attachments,
         );
     }, {
         body: t.Object({
@@ -40,6 +41,7 @@ export const chatRouter = new Elysia({name: "chat"})
             ])),
             whisperTo: t.Optional(t.String()),
             replyTo: t.Optional(t.String()),
+            attachments: t.Optional(t.Array(t.String())),
         }),
         auth: true
     })
