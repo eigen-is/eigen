@@ -80,6 +80,7 @@ export function ContactAutosuggest({
                 break;
 
             case 'Enter':
+            case 'Tab':
                 e.preventDefault();
                 if (displayedSuggestions[selectedIndex]) {
                     handleSelect(displayedSuggestions[selectedIndex]);
