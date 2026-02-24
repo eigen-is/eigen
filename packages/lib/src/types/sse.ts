@@ -1,4 +1,5 @@
 import type {DrivePath} from './drive';
+import type {ChatMessage} from './chat';
 
 // Lightweight mail event data (IDs and minimal fields)
 export type SSEventMailData = {
@@ -40,6 +41,13 @@ export const SSEventType = {
     DRIVE_ACL_UPDATED: 'drive:acl-updated',
     DRIVE_ACL_SHARED: 'drive:acl-shared',
     DRIVE_ACL_UNSHARED: 'drive:acl-unshared',
+    // Chat events
+    CHAT_MESSAGE_POSTED: 'chat:message-posted',
+    CHAT_MESSAGE_EDITED: 'chat:message-edited',
+    CHAT_MESSAGE_DELETED: 'chat:message-deleted',
+    CHAT_MEMBER_ENTERED: 'chat:member-entered',
+    CHAT_MEMBER_LEFT: 'chat:member-left',
+    CHAT_TYPING: 'chat:typing',
     // Contact events
     CONTACT_CREATED: 'contacts:contact-created',
     CONTACT_UPDATED: 'contacts:contact-updated',
@@ -98,8 +106,23 @@ type SSEventContactLabelNotification = SSEventBase & SSEventNotification & {
 
 type SSEventContacts = SSEventContactNotification | SSEventContactLabelNotification;
 
+// Chat event data
+export type SSEventChatData = {
+    roomId: string;
+    ownerId: string;
+    mountId: string;
+    message?: ChatMessage;
+    userId?: string;
+    userEmail?: string;
+};
+
+type SSEventChat = SSEventBase & SSEventNotification & {
+    type: typeof SSEventType[keyof typeof SSEventType] & `chat:${string}`;
+    chat: SSEventChatData;
+};
+
 // Union of all events
-export type SSEvent = SSEventDrive | SSEventMail | SSEventContacts;
+export type SSEvent = SSEventDrive | SSEventMail | SSEventContacts | SSEventChat;
 
 // Type guard to check if event is a notification (has body, should show toast)
 export function isSSEventNotification(event: SSEvent): event is SSEvent & SSEventNotification {
@@ -107,4 +130,4 @@ export function isSSEventNotification(event: SSEvent): event is SSEvent & SSEven
 }
 
 // Export individual types for consumers
-export type {SSEventBase, SSEventDrive, SSEventMail, SSEventContacts};
+export type {SSEventBase, SSEventDrive, SSEventMail, SSEventContacts, SSEventChat};

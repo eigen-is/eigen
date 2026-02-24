@@ -15,6 +15,7 @@ import {adminRouter} from "./routes/admin";
 import {configRouter} from "./routes/config";
 import {sseRouter} from "./routes/sse";
 import {setupRouter} from "./routes/setup";
+import {chatRouter} from "./routes/chat";
 
 export const app = new Elysia()
     .use(swagger())
@@ -36,6 +37,7 @@ export const app = new Elysia()
     .use(driveRouter)
     .use(homeRouter)
     .use(collabRouter)
+    .use(chatRouter)
     .use(sseRouter)
 
     .onError(({error, set}) => {
