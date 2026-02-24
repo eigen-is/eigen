@@ -7,28 +7,24 @@ process.env['EIGEN_DATA_ROOT'] = TEST_DATA_DIR;
 mkdirSync(join(TEST_DATA_DIR, 'server'), {recursive: true});
 mkdirSync(join(TEST_DATA_DIR, 'home'), {recursive: true});
 
-Bun.write(join(TEST_DATA_DIR, 'server', 'config.json'), JSON.stringify({
-    domain: 'test.eigen.is',
-    storage: {type: 'local-id'},
-    setupCompleted: true,
-    setupCompletedAt: new Date().toISOString(),
-}));
-
-import {Database} from 'bun:sqlite';
-const authDb = new Database(join(TEST_DATA_DIR, 'server', 'users3.db'));
-authDb.exec(`
-    CREATE TABLE IF NOT EXISTS user (id TEXT PRIMARY KEY, name TEXT NOT NULL, email TEXT NOT NULL UNIQUE, email_verified INTEGER NOT NULL, image TEXT, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, two_factor_enabled INTEGER, role TEXT, banned INTEGER, ban_reason TEXT, ban_expires INTEGER);
-    CREATE TABLE IF NOT EXISTS session (id TEXT PRIMARY KEY, expires_at INTEGER NOT NULL, token TEXT NOT NULL UNIQUE, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL, ip_address TEXT, user_agent TEXT, user_id TEXT NOT NULL REFERENCES user(id) ON DELETE CASCADE, impersonated_by TEXT, active_organization_id TEXT);
-    CREATE TABLE IF NOT EXISTS account (id TEXT PRIMARY KEY, account_id TEXT NOT NULL, provider_id TEXT NOT NULL, user_id TEXT NOT NULL REFERENCES user(id) ON DELETE CASCADE, access_token TEXT, refresh_token TEXT, id_token TEXT, access_token_expires_at INTEGER, refresh_token_expires_at INTEGER, scope TEXT, password TEXT, created_at INTEGER NOT NULL, updated_at INTEGER NOT NULL);
-    CREATE TABLE IF NOT EXISTS verification (id TEXT PRIMARY KEY, identifier TEXT NOT NULL, value TEXT NOT NULL, expires_at INTEGER NOT NULL, created_at INTEGER, updated_at INTEGER);
-    CREATE TABLE IF NOT EXISTS two_factor (id TEXT PRIMARY KEY, secret TEXT NOT NULL, backup_codes TEXT NOT NULL, user_id TEXT NOT NULL REFERENCES user(id) ON DELETE CASCADE);
-    CREATE TABLE IF NOT EXISTS organization (id TEXT PRIMARY KEY, name TEXT NOT NULL, slug TEXT UNIQUE, logo TEXT, created_at INTEGER NOT NULL, metadata TEXT);
-    CREATE TABLE IF NOT EXISTS member (id TEXT PRIMARY KEY, organization_id TEXT NOT NULL REFERENCES organization(id) ON DELETE CASCADE, user_id TEXT NOT NULL REFERENCES user(id) ON DELETE CASCADE, role TEXT NOT NULL, created_at INTEGER NOT NULL);
-    CREATE TABLE IF NOT EXISTS invitation (id TEXT PRIMARY KEY, organization_id TEXT NOT NULL REFERENCES organization(id) ON DELETE CASCADE, email TEXT NOT NULL, role TEXT, status TEXT NOT NULL, expires_at INTEGER NOT NULL, inviter_id TEXT NOT NULL REFERENCES user(id) ON DELETE CASCADE);
-`);
-authDb.close();
-
 const {app} = await import('../app');
+
+const setupResponse = await app.handle(new Request('http://localhost/setup/complete', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({
+        domain: 'test.eigen.is',
+        storageType: 'local-id',
+        adminEmail: 'alice@test.eigen.is',
+        adminPassword: 'testpassword123',
+        adminName: 'Alice Test',
+    }),
+}));
+const setupResult = await setupResponse.json() as {success: boolean; error?: string};
+if (!setupResult.success) {
+    throw new Error(`Setup failed: ${setupResult.error}`);
+}
+
 const {auth} = await import('../lib/auth/auth');
 const {treaty} = await import('@elysiajs/eden');
 
@@ -44,6 +40,7 @@ type TestUser = {
 type TestContext = {
     alice: {user: TestUser; api: ReturnType<typeof treaty<App>>};
     bob: {user: TestUser; api: ReturnType<typeof treaty<App>>};
+    charlie: {user: TestUser; api: ReturnType<typeof treaty<App>>};
     app: App;
 };
 
@@ -107,6 +104,7 @@ export async function getTestContext(): Promise<TestContext> {
 
     const alice = await createTestUser('alice@test.eigen.is', 'testpassword123', 'Alice Test');
     const bob = await createTestUser('bob@test.eigen.is', 'testpassword123', 'Bob Test');
+    const charlie = await createTestUser('charlie@test.eigen.is', 'testpassword123', 'Charlie Test');
 
     context = {
         alice: {
@@ -116,6 +114,10 @@ export async function getTestContext(): Promise<TestContext> {
         bob: {
             user: bob,
             api: createAuthenticatedClient(bob.sessionToken),
+        },
+        charlie: {
+            user: charlie,
+            api: createAuthenticatedClient(charlie.sessionToken),
         },
         app,
     };

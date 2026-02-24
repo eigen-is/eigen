@@ -1,5 +1,5 @@
 import {useEffect, useState} from "react";
-import {Calendar, FileText, HardDrive, LayoutDashboard, Mail, Menu, StickyNote, Users} from "lucide-react";
+import {Calendar, FileText, HardDrive, LayoutDashboard, Mail, Menu, MessageSquare, StickyNote, Users} from "lucide-react";
 import {useRouter} from "@tanstack/react-router";
 import {Button} from "@workspace/ui/components/button";
 import {
@@ -102,6 +102,7 @@ function UserDropdown({rootRoute}: { rootRoute: TopbarProps['rootRoute'] }) {
                                     {app.icon === 'hard-drive' && <HardDrive className="h-4 w-4"/>}
                                     {app.icon === 'file-text' && <FileText className="h-4 w-4"/>}
                                     {app.icon === 'sticky-note' && <StickyNote className="h-4 w-4"/>}
+                                    {app.icon === 'message-square' && <MessageSquare className="h-4 w-4"/>}
                                     <span
                                         className={isActive ? "text-foreground font-medium" : "text-muted-foreground"}>{app.name}</span>
                                 </a>
