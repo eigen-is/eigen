@@ -159,7 +159,7 @@ export class ChatRoom {
                 }
                 return {
                     ...msg,
-                    content: '*some whisper sounds*',
+                    content: '[a few hushed words]',
                     whisperTo: null,
                 };
             }

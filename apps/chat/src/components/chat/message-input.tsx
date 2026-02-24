@@ -1,4 +1,4 @@
-import {useCallback, useRef, useState} from 'react';
+import {useCallback, useEffect, useRef, useState} from 'react';
 import {Button} from "@workspace/ui/components/button";
 import {Paperclip, Send, X} from "lucide-react";
 import {getAtSuggestQuery} from "../../lib/commands";
@@ -17,12 +17,18 @@ export function MessageInput({onSend, disabled = false, chatName, roomMembers = 
     const [selectedSuggestIdx, setSelectedSuggestIdx] = useState(0);
     const suggestCountRef = useRef(0);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+    useEffect(() => {
+        textareaRef.current?.focus();
+    }, []);
 
     const handleSend = () => {
         if ((!content.trim() && files.length === 0) || disabled) return;
         onSend(content.trim(), files.length > 0 ? files : undefined);
         setContent('');
         setFiles([]);
+        setTimeout(() => textareaRef.current?.focus(), 0);
     };
 
     const atQuery = getAtSuggestQuery(content);
@@ -130,6 +136,7 @@ export function MessageInput({onSend, disabled = false, chatName, roomMembers = 
                         onItemsChange={handleSuggestItemsChange}
                     />
                     <textarea
+                        ref={textareaRef}
                         value={content}
                         onChange={(e) => setContent(e.target.value)}
                         onKeyDown={handleKeyDown}
