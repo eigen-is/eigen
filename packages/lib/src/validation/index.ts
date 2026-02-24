@@ -1,4 +1,5 @@
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+export {EMAIL_REGEX};
 
 export function isEmailAddress(value: string): boolean {
     return EMAIL_REGEX.test(value);
@@ -19,6 +20,9 @@ export function validateACLEmails(acl: { email: string; public?: boolean }[]): s
     }
     return null;
 }
+
+// Email regex for finding emails in text (global flag for multiple matches)
+export const EMAIL_FIND_REGEX = /[^\s@]+@[^\s@]+\.[^\s@]+/g;
 
 export type CommandValidationResult = 
     | { valid: true; kind: 'builtin-emote' | 'emote' | 'whisper' | 'reply' | 'invite' | 'help' | 'time' | 'inspect' }

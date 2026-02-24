@@ -9,6 +9,8 @@ import {useContacts} from "@workspace/lib/contacts";
 import {Mail, Paperclip} from "lucide-react";
 import {useFileInfo} from "@workspace/lib/chat";
 import {getDriveDownloadUrl, getDriveThumbnailUrl, getMailComposeUrl} from "@workspace/lib/api";
+import {formatTime} from "@workspace/lib/lib/date";
+import {EMAIL_FIND_REGEX} from "@workspace/lib/validation";
 import type {Contact} from "@workspace/lib/types/contact";
 
 type MessageListProps = {
@@ -17,10 +19,6 @@ type MessageListProps = {
     currentUserId: string;
     ownerId?: string;
     mountId?: string;
-}
-
-function formatTime(date: Date): string {
-    return new Date(date).toLocaleTimeString([], {hour: '2-digit', minute: '2-digit'});
 }
 
 function isSameAuthorAndClose(prev: ChatMessage, curr: ChatMessage): boolean {
@@ -55,8 +53,6 @@ function AttachmentChip({pathId, ownerId, mountId}: { pathId: string; ownerId: s
     );
 }
 
-const EMAIL_REGEX = /[^\s@]+@[^\s@]+\.[^\s@]+/g;
-
 function InlineEmail({email}: { email: string }) {
     const {data} = usePublicUser(email);
     const name = data?.name || email.split('@')[0];
@@ -75,7 +71,7 @@ function RichContent({text, className}: { text: string; className?: string }) {
     const parts: ReactNode[] = [];
     let lastIdx = 0;
     let match: RegExpExecArray | null;
-    const regex = new RegExp(EMAIL_REGEX);
+    const regex = new RegExp(EMAIL_FIND_REGEX);
     while ((match = regex.exec(text)) !== null) {
         if (match.index > lastIdx) {
             parts.push(text.slice(lastIdx, match.index));
