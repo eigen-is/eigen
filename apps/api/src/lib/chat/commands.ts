@@ -1,3 +1,5 @@
+import {validateCommand} from '@workspace/lib/validation';
+
 type EmoteDefinition = {
     firstPerson: string;
     thirdPerson: string;
@@ -44,11 +46,19 @@ export type ParsedCommand =
     | { kind: 'builtin-emote'; emoteKey: string }
     | { kind: 'whisper'; target: string; content: string }
     | { kind: 'reply'; content: string }
-    | { kind: 'invite'; target: string };
+    | { kind: 'invite'; target: string }
+    | { kind: 'error'; error: string };
 
 export function parseCommand(raw: string): ParsedCommand {
     const trimmed = raw.trim();
 
+    // Validate command first
+    const validation = validateCommand(trimmed);
+    if (!validation.valid) {
+        return { kind: 'error', error: validation.error };
+    }
+
+    // Built-in emotes
     if (trimmed === '/dance') return {kind: 'builtin-emote', emoteKey: 'dance'};
     if (trimmed === '/cheer') return {kind: 'builtin-emote', emoteKey: 'cheer'};
     if (trimmed === '/taunt') return {kind: 'builtin-emote', emoteKey: 'taunt'};
@@ -58,10 +68,12 @@ export function parseCommand(raw: string): ParsedCommand {
     if (trimmed === '/shrug') return {kind: 'builtin-emote', emoteKey: 'shrug'};
     if (trimmed === '/flip') return {kind: 'builtin-emote', emoteKey: 'flip'};
 
+    // Custom emote: /me [action]
     if (trimmed.startsWith('/me ')) {
         return {kind: 'emote', content: trimmed.slice(4)};
     }
 
+    // Whisper commands: /whisper [email] [message]
     for (const cmd of ['/whisper ', '/w ', '/tell ', '/t ', '/send ']) {
         if (trimmed.startsWith(cmd)) {
             const rest = trimmed.slice(cmd.length);
@@ -72,22 +84,25 @@ export function parseCommand(raw: string): ParsedCommand {
         }
     }
 
+    // Reply commands: /reply [message]
     if (trimmed.startsWith('/reply ') || trimmed.startsWith('/r ')) {
         const cmd = trimmed.startsWith('/reply ') ? '/reply ' : '/r ';
         return {kind: 'reply', content: trimmed.slice(cmd.length)};
     }
 
+    // Invite commands: /invite [email]
     for (const cmd of ['/invite ', '/i ', '/inv ']) {
         if (trimmed.startsWith(cmd)) {
             const target = trimmed.slice(cmd.length).trim();
-            if (target) return {kind: 'invite', target};
+            return {kind: 'invite', target};
         }
     }
 
-    return {kind: 'message', content: trimmed};
+    // Should never reach here due to validation
+    return {kind: 'error', error: 'Unknown command'};
 }
 
-export {isEmailAddress, validateEmailTarget} from '@workspace/lib/validation';
+export {isEmailAddress, validateEmailTarget, validateCommand} from '@workspace/lib/validation';
 
 export function formatEmoteForViewer(content: string, authorEmail: string, authorId: string, viewerId: string): string {
     const authorName = authorEmail.split('@')[0] || authorEmail;
