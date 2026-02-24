@@ -42,9 +42,8 @@ describe('Chat', () => {
         aliceRootId = root.id;
     });
 
-    describe('Chat & Room Creation', () => {
+    describe('Chat Creation', () => {
         let chatId: string;
-        let roomId: string;
 
         test('create chat', async () => {
             const data = await drivePost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
@@ -63,18 +62,9 @@ describe('Chat', () => {
             expect(chat.type).toBe('chat');
         });
 
-        test('create room in chat', async () => {
-            const data = await chatPost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
-                `${chatId}/rooms`, {roomName: 'general'});
-            expect(data.name).toBe('general.eigenchatroom');
-            expect(data.type).toBe('chatroom');
-            expect(data.mimeType).toBe('application/eigenchatroom');
-            roomId = data.id;
-        });
-
-        test('room has data.db and media subfolder', async () => {
+        test('chat has data.db and media subfolder', async () => {
             const contents = await driveGet(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
-                `folder/${roomId}`);
+                `folder/${chatId}`);
             expect(Array.isArray(contents)).toBe(true);
             const dataDb = contents.find((item: any) => item.name === 'data.db');
             const media = contents.find((item: any) => item.name === 'media');
@@ -82,40 +72,48 @@ describe('Chat', () => {
             expect(media).toBeDefined();
             expect(media.type).toBe('folder');
         });
+    });
 
-        test('room appears in chat folder listing', async () => {
+    describe('Embedded Chat in Doc', () => {
+        let docId: string;
+
+        test('create doc creates chat/ subfolder with General chat', async () => {
+            const doc = await drivePost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `folder/${aliceRootId}/doc`, {fileName: 'Test Doc'});
+            docId = doc.id;
+
             const contents = await driveGet(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
-                `folder/${chatId}`);
-            const room = contents.find((item: any) => item.id === roomId);
-            expect(room).toBeDefined();
-            expect(room.type).toBe('chatroom');
-        });
+                `folder/${docId}`);
+            const chatFolder = contents.find((item: any) => item.name === 'chat');
+            expect(chatFolder).toBeDefined();
+            expect(chatFolder.type).toBe('folder');
 
-        test('create second room', async () => {
-            const data = await chatPost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
-                `${chatId}/rooms`, {roomName: 'random'});
-            expect(data.name).toBe('random.eigenchatroom');
+            const chatContents = await driveGet(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `folder/${chatFolder.id}`);
+            const generalChat = chatContents.find((item: any) => item.name === 'General.eigenchat');
+            expect(generalChat).toBeDefined();
+            expect(generalChat.type).toBe('chat');
+
+            const chatInternals = await driveGet(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `folder/${generalChat.id}`);
+            const dataDb = chatInternals.find((item: any) => item.name === 'data.db');
+            expect(dataDb).toBeDefined();
         });
     });
 
     describe('Messages', () => {
         let chatId: string;
-        let roomId: string;
         let messageId: string;
 
         beforeAll(async () => {
             const chat = await drivePost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
                 `folder/${aliceRootId}/chat`, {fileName: 'Message Test Chat'});
             chatId = chat.id;
-
-            const room = await chatPost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
-                `${chatId}/rooms`, {roomName: 'messages'});
-            roomId = room.id;
         });
 
         test('post message', async () => {
             const data = await chatPost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
-                `${chatId}/rooms/${roomId}/messages`, {content: 'Hello, world!'});
+                `${chatId}/messages`, {content: 'Hello, world!'});
             expect(data.id).toBeDefined();
             expect(data.content).toBe('Hello, world!');
             expect(data.type).toBe('message');
@@ -126,7 +124,7 @@ describe('Chat', () => {
 
         test('get messages returns posted message', async () => {
             const data = await chatGet(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
-                `${chatId}/rooms/${roomId}/messages`);
+                `${chatId}/messages`);
             expect(Array.isArray(data)).toBe(true);
             expect(data.length).toBe(1);
             expect(data[0].content).toBe('Hello, world!');
@@ -134,14 +132,14 @@ describe('Chat', () => {
 
         test('post emote message', async () => {
             const data = await chatPost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
-                `${chatId}/rooms/${roomId}/messages`, {content: 'waves', type: 'emote'});
+                `${chatId}/messages`, {content: 'waves', type: 'emote'});
             expect(data.type).toBe('emote');
             expect(data.content).toBe('waves');
         });
 
         test('edit message', async () => {
             const res = await authedRequest(ctx.alice.user.sessionToken,
-                `/chat/${ctx.alice.user.id}/${aliceMountId}/${chatId}/rooms/${roomId}/messages/${messageId}`, {
+                `/chat/${ctx.alice.user.id}/${aliceMountId}/${chatId}/messages/${messageId}`, {
                     method: 'PATCH',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({content: 'Hello, edited!'}),
@@ -154,7 +152,7 @@ describe('Chat', () => {
 
         test('delete message (soft delete)', async () => {
             const res = await authedRequest(ctx.alice.user.sessionToken,
-                `/chat/${ctx.alice.user.id}/${aliceMountId}/${chatId}/rooms/${roomId}/messages/${messageId}`, {
+                `/chat/${ctx.alice.user.id}/${aliceMountId}/${chatId}/messages/${messageId}`, {
                     method: 'DELETE',
                 });
             const data = await res.json() as any;
@@ -163,34 +161,32 @@ describe('Chat', () => {
 
         test('mark as read', async () => {
             const msgs = await chatGet(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
-                `${chatId}/rooms/${roomId}/messages`);
+                `${chatId}/messages`);
             const lastMsg = msgs[msgs.length - 1];
 
             const data = await chatPost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
-                `${chatId}/rooms/${roomId}/read`, {messageId: lastMsg.id});
+                `${chatId}/read`, {messageId: lastMsg.id});
             expect(data.success).toBe(true);
         });
 
         test('reply to message', async () => {
             const original = await chatPost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
-                `${chatId}/rooms/${roomId}/messages`, {content: 'Original message'});
+                `${chatId}/messages`, {content: 'Original message'});
 
             const reply = await chatPost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
-                `${chatId}/rooms/${roomId}/messages`, {content: 'This is a reply', replyTo: original.id});
+                `${chatId}/messages`, {content: 'This is a reply', replyTo: original.id});
             expect(reply.replyTo).toBe(original.id);
         });
     });
 
     describe('Whisper Visibility', () => {
         let chatId: string;
-        let roomId: string;
 
         beforeAll(async () => {
             const chat = await drivePost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
                 `folder/${aliceRootId}/chat`, {fileName: 'Whisper Test Chat'});
             chatId = chat.id;
 
-            // Share chat with Bob and Charlie (read+write)
             const BOB_EMAIL = 'bob@test.eigen.is';
             const CHARLIE_EMAIL = 'charlie@test.eigen.is';
             await authedRequest(ctx.alice.user.sessionToken,
@@ -204,15 +200,11 @@ describe('Chat', () => {
                         ],
                     }),
                 });
-
-            const room = await chatPost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
-                `${chatId}/rooms`, {roomName: 'whispers'});
-            roomId = room.id;
         });
 
         test('Alice whispers to Bob', async () => {
             const msg = await chatPost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
-                `${chatId}/rooms/${roomId}/messages`, {
+                `${chatId}/messages`, {
                     content: 'Secret message for Bob only',
                     type: 'whisper',
                     whisperTo: ctx.bob.user.id,
@@ -224,12 +216,12 @@ describe('Chat', () => {
 
         test('Alice posts a normal message', async () => {
             await chatPost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
-                `${chatId}/rooms/${roomId}/messages`, {content: 'Public message from Alice'});
+                `${chatId}/messages`, {content: 'Public message from Alice'});
         });
 
         test('Alice sees whisper content (she is the author)', async () => {
             const msgs = await chatGet(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
-                `${chatId}/rooms/${roomId}/messages`);
+                `${chatId}/messages`);
             const whisper = msgs.find((m: any) => m.type === 'whisper');
             expect(whisper).toBeDefined();
             expect(whisper.content).toBe('Secret message for Bob only');
@@ -238,7 +230,7 @@ describe('Chat', () => {
 
         test('Bob sees whisper content (he is the recipient)', async () => {
             const msgs = await chatGet(ctx.bob.user.sessionToken, ctx.alice.user.id, aliceMountId,
-                `${chatId}/rooms/${roomId}/messages`);
+                `${chatId}/messages`);
             const whisper = msgs.find((m: any) => m.type === 'whisper');
             expect(whisper).toBeDefined();
             expect(whisper.content).toBe('Secret message for Bob only');
@@ -247,7 +239,7 @@ describe('Chat', () => {
 
         test('Charlie sees whisper exists but content is hidden', async () => {
             const msgs = await chatGet(ctx.charlie.user.sessionToken, ctx.alice.user.id, aliceMountId,
-                `${chatId}/rooms/${roomId}/messages`);
+                `${chatId}/messages`);
             const whisper = msgs.find((m: any) => m.type === 'whisper');
             expect(whisper).toBeDefined();
             expect(whisper.content).toBe('');
@@ -256,7 +248,7 @@ describe('Chat', () => {
 
         test('Charlie sees normal messages normally', async () => {
             const msgs = await chatGet(ctx.charlie.user.sessionToken, ctx.alice.user.id, aliceMountId,
-                `${chatId}/rooms/${roomId}/messages`);
+                `${chatId}/messages`);
             const normal = msgs.find((m: any) => m.type === 'message');
             expect(normal).toBeDefined();
             expect(normal.content).toBe('Public message from Alice');
@@ -264,24 +256,18 @@ describe('Chat', () => {
     });
 
     describe('Delete Chat', () => {
-        let chatId: string;
-
         test('create and delete chat', async () => {
             const chat = await drivePost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
                 `folder/${aliceRootId}/chat`, {fileName: 'Deletable Chat'});
-            chatId = chat.id;
-
-            await chatPost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
-                `${chatId}/rooms`, {roomName: 'temp'});
 
             const res = await authedRequest(ctx.alice.user.sessionToken,
-                `/drive/${ctx.alice.user.id}/${aliceMountId}/folder/${chatId}`, {method: 'DELETE'});
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/folder/${chat.id}`, {method: 'DELETE'});
             const data = await res.json() as any;
             expect(data.success).toBe(true);
 
             const contents = await driveGet(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
                 `folder/${aliceRootId}`);
-            const deleted = contents.find((item: any) => item.id === chatId);
+            const deleted = contents.find((item: any) => item.id === chat.id);
             expect(deleted).toBeUndefined();
         });
     });

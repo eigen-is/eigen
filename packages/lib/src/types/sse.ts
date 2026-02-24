@@ -108,7 +108,7 @@ type SSEventContacts = SSEventContactNotification | SSEventContactLabelNotificat
 
 // Chat event data
 export type SSEventChatData = {
-    roomId: string;
+    chatId: string;
     ownerId: string;
     mountId: string;
     message?: ChatMessage;

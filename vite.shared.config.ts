@@ -14,6 +14,7 @@ const APP_PORTS: Record<string, number> = {
     calendar: 3005,
     docs: 3006,
     stickies: 3007,
+    chat: 3008,
     admin: 3010,
     setup: 3011,
 }

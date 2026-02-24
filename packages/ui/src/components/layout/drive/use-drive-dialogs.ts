@@ -15,6 +15,7 @@ export function useDriveDialogs() {
     const [createFolderOpen, setCreateFolderOpen] = useState(false);
     const [createDocOpen, setCreateDocOpen] = useState(false);
     const [createStickiesOpen, setCreateStickiesOpen] = useState(false);
+    const [createChatOpen, setCreateChatOpen] = useState(false);
 
     const [deleteOpen, setDeleteOpen] = useState(false);
     const [deleteItem, setDeleteItem] = useState<DrivePath | null>(null);
@@ -36,6 +37,9 @@ export function useDriveDialogs() {
 
     const openCreateStickies = useCallback(() => setCreateStickiesOpen(true), []);
     const closeCreateStickies = useCallback(() => setCreateStickiesOpen(false), []);
+
+    const openCreateChat = useCallback(() => setCreateChatOpen(true), []);
+    const closeCreateChat = useCallback(() => setCreateChatOpen(false), []);
 
     const openDelete = useCallback((item: DrivePath) => {
         setDeleteItem(item);
@@ -91,6 +95,12 @@ export function useDriveDialogs() {
             setOpen: setCreateStickiesOpen,
             openDialog: openCreateStickies,
             closeDialog: closeCreateStickies,
+        },
+        createChat: {
+            open: createChatOpen,
+            setOpen: setCreateChatOpen,
+            openDialog: openCreateChat,
+            closeDialog: closeCreateChat,
         },
         delete: {
             open: deleteOpen,

@@ -41,6 +41,13 @@ const apps = [
         icon: 'sticky-note',
         description: 'Map out your ideas',
     },
+    {
+        name: 'Chat',
+        className: 'text-orange-600',
+        href: import.meta.env.VITE_APP_CHAT_URL,
+        icon: 'message-square',
+        description: 'Chat with your team',
+    },
     // {
     //     name: 'Calendar',
     //     className: 'text-blue-600',

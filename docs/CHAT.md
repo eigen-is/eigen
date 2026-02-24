@@ -1,6 +1,6 @@
 # Chat System
 
-Chat is a Drive document type (`application/eigenchat`), like `.eigendoc` and `.eigenstickies`. A chat contains room folders (`application/eigenchatroom`), each with its own SQLite database. ACL, storage, and sharing are all inherited from Drive.
+A chat is a Drive document type (`application/eigenchat`), like `.eigendoc` and `.eigenstickies`. **A chat IS a room** — each `.eigenchat` has its own SQLite database and media folder. No nesting of rooms inside chats. ACL, storage, and sharing are all inherited from Drive.
 
 **Why not Yjs?** Chat is append-only messages, not collaborative editing. SQLite gives pagination, indexing, and efficient queries. Yjs documents grow forever and can't be paginated.
 
@@ -10,11 +10,11 @@ Chat is a Drive document type (`application/eigenchat`), like `.eigendoc` and `.
 
 MUD-inspired, adapted to Eigen's architecture:
 
-- **Room-based**: You are "in" a room. Presence is visible. Entering/leaving is an event
-- **Focus-first**: Notifications scoped to active room (with @mention exceptions)
+- **Chat = Room**: Each `.eigenchat` is a single chat room with its own `data.db`
+- **Focus-first**: Notifications scoped to active chat (with @mention exceptions)
 - **Commands**: `/me` emotes, `/whisper` private messages
 - **Keyboard-first**: Command-driven interaction
-- Rooms are Drive folders → ACL works automatically
+- Chats are Drive folders → ACL works automatically
 - Real-time via SSE (existing) → no new infrastructure
 - History is paginated SQLite → efficient at any scale
 
@@ -22,61 +22,47 @@ MUD-inspired, adapted to Eigen's architecture:
 
 ## 2. Storage Architecture
 
-### MIME Types
+### MIME Type
 
 | Type | MIME | Extension |
 |------|------|-----------|
 | Chat | `application/eigenchat` | `.eigenchat` |
-| Room | `application/eigenchatroom` | `.eigenchatroom` |
 
-These extend the existing type system in `packages/lib/src/types/drive.ts`. Chat/chatroom are **not** collab types (not Yjs-based), so they don't join `DriveCollabType`. Instead, add a new `DriveChatType = "chat" | "chatroom"` and extend `DriveContainerType` to include it. Update `isContainerType()` accordingly. `mount.ts` `createFolder()` maps them to MIME types (same pattern as `doc` → `application/eigendoc`).
+Extends `packages/lib/src/types/drive.ts` with `DriveChatType = "chat"` added to `DriveContainerType`. `mount.ts` `createFolder()` maps `chat` → `application/eigenchat`.
 
 ### Standalone Chat
 
 ```
 my-team-chat.eigenchat/              (type: chat)
-├── general.eigenchatroom/           (type: chatroom, name = "general")
-│   ├── data.db                      (messages + read state)
-│   └── media/                       (uploaded attachments)
-│       ├── screenshot.png
-│       └── report.pdf
-├── random.eigenchatroom/
-│   ├── data.db
-│   └── media/
-└── dev.eigenchatroom/
-    ├── data.db
-    └── media/
+├── data.db                          (messages + read state)
+└── media/                           (uploaded attachments)
+    ├── screenshot.png
+    └── report.pdf
 ```
 
-**Room name = folder name.** Renaming a room is a Drive rename operation. No separate metadata needed.
-
-`ChatRoom.create()` creates both `data.db` and a `media/` subfolder (same pattern as `CollabDocument.create()` for docs/stickies). The client uploads attachments to the media folder and resolves media URLs through standard Drive file endpoints.
+**Chat name = folder name.** Renaming is a Drive rename operation. `ChatRoom.create()` creates both `data.db` and a `media/` subfolder.
 
 ### Embedded Chat (Docs & Stickies)
 
-**Auto-created** when a doc or stickies is created — `createDoc()` and `createStickies()` in `drive.ts` create a `comments.eigenchat` child with a default `general.eigenchatroom`:
+When a doc or stickies is created, `createDoc()`/`createStickies()` in `drive.ts` also create a `chat/` subfolder with a default "General" chat:
 
 ```
 my-document.eigendoc/
 ├── data.db                          (Yjs document data)
-└── comments.eigenchat/
-    └── general.eigenchatroom/
-        └── data.db
+├── media/                           (doc media)
+└── chat/                            (chat subfolder)
+    └── General.eigenchat/
+        ├── data.db
+        └── media/
 ```
 
-The embedded chat inherits ACL from the parent document. No backwards compatibility needed — existing data can be recreated.
-
-The collab info endpoint (`GET /collab/:ownerId/:mountId/:pathId/info`) already returns `folderContents`, which includes the `comments.eigenchat` child. No separate endpoint needed — the client uses the chat pathId from folder contents to access chat routes.
-
-### System Chat Folder
-
-Each user gets an `eigen.chat/` folder in Drive (a metadata.db entry in the default mount, same as how docs/stickies are stored). Created on first use when the chat app opens. Users can also create `.eigenchat` documents anywhere in Drive.
+The embedded chats inherit ACL from the parent document. The collab info endpoint returns `folderContents` which includes the `chat/` subfolder. Users can create additional chats in the `chat/` subfolder.
 
 ---
 
 ## 3. Database Schema
 
-Each `.eigenchatroom` contains a `data.db` (same naming as eigendoc/eigenstickies) with two tables.
+Each `.eigenchat` contains a `data.db` with two tables.
 
 ### messages
 
@@ -94,8 +80,6 @@ Each `.eigenchatroom` contains a `data.db` (same naming as eigendoc/eigenstickie
 | `deletedAt` | INTEGER | Soft delete |
 | `createdAt` | INTEGER | Timestamp |
 
-System messages (`type: system`) are used for enter/leave events, stored in the same table for a unified history.
-
 ### read_state
 
 | Column | Type | Description |
@@ -110,28 +94,9 @@ System messages (`type: system`) are used for enter/leave events, stored in the 
 - `messages(replyTo)` — thread queries
 - `messages(authorId)` — author filter
 
-### No settings table
-
-Room metadata comes from Drive: name (folder name), creator (folder owner), created at (folder timestamp), ACL (folder ACL). Room type is derived from context — embedded in a doc? It's a comment room. ACL restricted to two users? It's a DM. No separate settings table needed.
-
 ---
 
-## 4. Presence
-
-Presence is tracked via **heartbeat polling**, not explicit enter/leave calls.
-
-1. Client sends `POST /chat/:ownerId/:mountId/:roomId/heartbeat` every **30 seconds** while a room is open
-2. The `ChatRoom` object tracks `activeUsers: Map<userId, lastHeartbeat>` **in memory only**
-3. When a heartbeat arrives for a user not previously active → **enter** (system message in `data.db` + SSE)
-4. Background check every 60s: if `lastHeartbeat > 2 min ago` → **leave** (system message + SSE + remove from map)
-
-This handles browser closes and disconnects naturally — heartbeats stop, timeout fires, leave event emitted. No state to clean up on disconnect.
-
-The `ChatRoom` object auto-destructs when no users are active (same pattern as Home's 5-minute timeout), closing its `data.db` connection.
-
----
-
-## 5. API Design
+## 4. API Design
 
 ### Chat Creation (Drive route)
 
@@ -139,70 +104,34 @@ The `ChatRoom` object auto-destructs when no users are active (same pattern as H
 POST /drive/:ownerId/:mountId/folder/:pathId/chat   {fileName: string}
 ```
 
-Creates an `.eigenchat` folder (same pattern as `/doc` and `/stickies` routes).
-
-### Room Management
-
-- **List rooms**: Drive `getFolderContents` on the `.eigenchat` folder (filter by `chatroom` type)
-- **Rename room**: Drive rename (folder name = room name)
-- **Delete room**: Drive delete
+Creates an `.eigenchat` folder with `data.db` and `media/` subfolder.
 
 ### Chat Routes
 
-New router: `apps/api/src/routes/chat.ts`, prefix `/chat/`, all `auth: true`.
-
-Routes are nested under the chat: `/chat/:ownerId/:mountId/:chatId/rooms/...`. The `chatId` is the Drive pathId of the `.eigenchat` folder, `roomId` of the `.eigenchatroom` folder. ACL is checked via `getSharedDrive()` → `drive.canRead()`/`canWrite()`.
+Router: `apps/api/src/routes/chat.ts`, prefix `/chat/`, all `auth: true`. The `chatId` is the Drive pathId of the `.eigenchat` folder.
 
 ```
-POST   /chat/:ownerId/:mountId/:chatId/rooms                              {roomName}
-GET    /chat/:ownerId/:mountId/:chatId/rooms/:roomId/messages?before=&limit=
-POST   /chat/:ownerId/:mountId/:chatId/rooms/:roomId/messages
-PATCH  /chat/:ownerId/:mountId/:chatId/rooms/:roomId/messages/:messageId
-DELETE /chat/:ownerId/:mountId/:chatId/rooms/:roomId/messages/:messageId
-POST   /chat/:ownerId/:mountId/:chatId/rooms/:roomId/read
+GET    /chat/:ownerId/:mountId/:chatId/messages?before=&limit=
+POST   /chat/:ownerId/:mountId/:chatId/messages
+PATCH  /chat/:ownerId/:mountId/:chatId/messages/:messageId
+DELETE /chat/:ownerId/:mountId/:chatId/messages/:messageId
+POST   /chat/:ownerId/:mountId/:chatId/read
 ```
-
-**Message pagination**: Cursor-based with `?before={messageId}&limit=50`. Initial load returns most recent messages. Client scrolls up to load older.
-
-**Whisper visibility**: `getMessagesForUser()` filters whisper content — only the author and recipient see the content. Other users see that a whisper exists (type=whisper) but with empty content and null whisperTo.
 
 ### Backend Class
 
 ```
 apps/api/src/lib/chat/
-├── chat.ts       # ChatRoom class (per room, manages data.db + presence)
+├── chat.ts       # ChatRoom class (per chat, manages data.db)
 ├── schema.ts     # Drizzle schemas (messages, read_state)
-├── db-config.ts  # ROOM_DB_CONFIG + migrations
+├── db-config.ts  # CHAT_DB_CONFIG + migrations
 ├── sse-events.ts # SSE event builders
 └── index.ts
 ```
 
-`ChatRoom` is instantiated per room (similar to `CollabDocument`). It manages `data.db`, tracks active users via heartbeats, and auto-destructs when idle.
-
 ---
 
-## 6. Real-Time (SSE)
-
-Uses the existing SSE system. New event types in `packages/lib/src/types/sse.ts`:
-
-```
-chat:message_posted
-chat:message_edited
-chat:message_deleted
-chat:member_entered
-chat:member_left
-chat:typing
-```
-
-**Cross-user notification** follows the ACL propagation pattern: resolve all users with ACL access to the room, then notify those who have an active Home instance (online users). This ensures offline users get unread counts on next load, while online users get real-time SSE delivery. For the monolith with <100 concurrent users, iterating ACL entries is sufficient.
-
-**Typing indicators** are fire-and-forget — no persistence. Client debounces (max once per 2s). Server broadcasts `chat:typing` SSE to other members.
-
-**@mentions**: When a message contains `@email`, the server sends a targeted SSE notification to that user's Home regardless of their active room. The client shows a badge + optional toast.
-
----
-
-## 7. ACL & Permissions
+## 5. ACL & Permissions
 
 Inherits from Drive's ACL system — no new permission logic.
 
@@ -210,61 +139,47 @@ Inherits from Drive's ACL system — no new permission logic.
 |-----------|----------------|
 | `read: true` | Read messages, see members |
 | `write: true` | Post messages, upload media |
-| `owner` | Create/delete rooms, manage ACL |
+| `owner` | Manage ACL |
 
-- **Share entire chat**: Set ACL on `.eigenchat` folder → access to all rooms
-- **Share single room**: Set ACL on `.eigenchatroom` folder → access to that room only
+- **Share chat**: Set ACL on `.eigenchat` folder
 - **Embedded chat**: Inherits from parent `.eigendoc` / `.eigenstickies`
-- **DM rooms**: Rooms with ACL restricted to two users (no special type field)
+- **DM**: Chat with ACL restricted to two users
 
 ---
 
-## 8. Frontend Architecture
+## 6. Frontend Architecture
 
-### Standalone App
+### Standalone App (`apps/chat/`)
+
+Two-column layout: sidebar (my chats + shared with me) and messages.
 
 ```
 apps/chat/src/
 ├── components/chat/
-│   ├── room-list.tsx           # Sidebar: rooms with unread badges
-│   ├── room-detail.tsx         # Message stream + input
-│   ├── message-list.tsx        # Paginated messages (useInfiniteQuery)
-│   ├── message-input.tsx       # Input with /commands + file upload
-│   ├── message-item.tsx        # Single message with reply
-│   ├── member-list.tsx         # Room members with presence
-│   └── typing-indicator.tsx
+│   ├── chat-sidebar.tsx        # My chats + shared with me
+│   ├── message-list.tsx        # Messages display
+│   └── message-input.tsx       # Input with send button
 ├── routes/
+│   ├── __root.tsx
+│   ├── login.tsx
+│   ├── _auth.tsx
+│   ├── _auth.index.tsx         # Empty state / create first chat
+│   └── _auth.$ownerId.$mountId.$chatId.tsx
 └── main.tsx
 ```
 
-### Shared Components (for embedding in Docs/Stickies)
+### Hooks (`packages/lib/src/lib/chat/`)
 
-```
-packages/ui/src/components/layout/chat/
-├── chat-panel.tsx              # Self-contained panel (rooms + messages)
-├── chat-input.tsx              # Message input
-└── chat-message.tsx            # Message rendering
-```
-
-Accept a `chatPath` prop (Drive path to `.eigenchat`) and handle everything internally.
-
-### Hooks
-
-```
-packages/lib/src/lib/chat/
-├── hooks/
-│   ├── use-rooms.ts            # Room listing
-│   ├── use-messages.ts         # Messages (infinite scroll)
-│   └── use-presence.ts         # Heartbeat + active users
-├── sse-handlers.ts
-└── index.ts
-```
+- `useChats(ownerId, mountId)` — own + shared chats (filtered by `application/eigenchat`)
+- `useMessages(ownerId, mountId, chatId)` — GET messages with polling
+- `usePostMessage(ownerId, mountId, chatId)` — POST message mutation
+- `useCreateChat(ownerId, mountId)` — create chat via drive
 
 ---
 
-## 9. Implementation
+## 7. Implementation Status
 
-### Implemented (Phase 1)
+### Implemented
 
 | File | Purpose |
 |------|----------|
@@ -272,33 +187,21 @@ packages/lib/src/lib/chat/
 | `apps/api/src/lib/chat/schema.ts` | Drizzle schemas (messages, read_state) |
 | `apps/api/src/lib/chat/db-config.ts` | Database config + migrations |
 | `apps/api/src/lib/chat/sse-events.ts` | SSE event builders |
-| `apps/api/src/routes/chat.ts` | Chat API routes (rooms, messages, read) |
+| `apps/api/src/routes/chat.ts` | Chat API routes (messages, read) |
 | `packages/lib/src/types/chat.ts` | Chat types (ChatMessage, ChatReadState) |
 | `packages/lib/src/types/drive.ts` | `DriveChatType`, `isChatType()`, updated `DriveContainerType` |
-| `packages/lib/src/types/sse.ts` | Chat SSE event types + `SSEventChatData` |
-| `apps/api/src/lib/mount/mount.ts` | `createFolder()` supports `chat`/`chatroom` types |
-| `apps/api/src/lib/mount/schema.ts` | `chat`/`chatroom` in paths type union |
-| `apps/api/src/lib/drive/drive.ts` | `createChat()`, `createChatRoom()`, `getChatRoom()` |
-| `apps/api/src/lib/drive/sharedDrive.ts` | Delegated `createChat()`, `createChatRoom()`, `getChatRoom()` |
-| `apps/api/src/lib/drive/sharedschema.ts` | `chat`/`chatroom` in shared paths type union |
+| `packages/lib/src/types/sse.ts` | Chat SSE event types |
+| `apps/api/src/lib/drive/drive.ts` | `createChat()`, `getChat()`, chat/ subfolder in createDoc/createStickies |
+| `apps/api/src/lib/drive/sharedDrive.ts` | Delegated `createChat()`, `getChat()` |
 | `apps/api/src/routes/drive.ts` | `POST .../folder/:pathId/chat` route |
 | `apps/api/src/test/chat.test.ts` | Tests: creation, messages, whisper visibility (3 users) |
+| `apps/chat/` | Standalone chat app (PoC) |
+| `packages/lib/src/lib/chat/` | FE hooks (useChats, useMessages, usePostMessage, useCreateChat) |
 
-### Remaining Phases
+### Remaining
 
 | Phase | Scope |
 |-------|-------|
 | **Presence** | Heartbeat endpoint, in-memory tracking, enter/leave system messages |
-| **Frontend hooks** | `packages/lib/src/lib/chat/` — use-rooms, use-messages, use-presence, sse-handlers |
-| **Standalone app** | `apps/chat/` — room list, messages, presence, /commands |
-| **Embedding** | Auto-create in docs/stickies, shared components, chat panel in editors |
-| **Polish** | @mentions, search, message pinning, file-icon-helper |
-
-### Pending Files
-
-| File | Purpose |
-|------|----------|
-| `packages/lib/src/lib/chat/` | Hooks + SSE handlers |
-| `packages/ui/src/components/layout/chat/` | Shared chat components |
-| `packages/ui/.../file-icon-helper.tsx` | Icons for `.eigenchat` / `.eigenchatroom` |
-| `apps/chat/` | Standalone chat app |
+| **Embedding UI** | Chat panel in docs/stickies editors |
+| **Polish** | @mentions, search, infinite scroll, typing indicators |
