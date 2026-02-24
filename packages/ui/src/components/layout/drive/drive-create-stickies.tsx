@@ -1,6 +1,7 @@
 import {toast} from "sonner";
 import type {DrivePath} from "@workspace/lib/types/drive";
 import {useCreateStickies} from "@workspace/lib/drive";
+import {getStickiesBoardUrl} from "@workspace/lib/api";
 import {DriveCreateItemDialog} from "./drive-create-folder-item";
 
 export type DriveCreateStickiesProps = {
@@ -42,7 +43,7 @@ export function DriveCreateStickies({
 
             // Open the stickies board in a new window
             if (newPath) {
-                const url = `${import.meta.env.VITE_APP_STICKIES_URL}/board/${path.ownerId}/${path.mountId}/${newPath.id}`;
+                const url = getStickiesBoardUrl(path.ownerId, path.mountId, newPath.id);
                 window.open(url, '_blank');
             }
 
