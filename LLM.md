@@ -9,17 +9,15 @@ A self-hosted Google Workspace alternative. Monorepo with multiple integrated ap
 | Layer | Technology | Version |
 |-------|-----------|---------|
 | Runtime | **Bun** (server + client) | latest |
-| Backend framework | **Elysia** | 1.4 |
-| ORM | **Drizzle ORM** (SQLite) | 0.44 |
-| Frontend | **React 19** + TypeScript | 19.1 |
-| Routing | **TanStack Router** (file-based) | 1.140 |
-| Data fetching | **TanStack Query** | 5.75 |
-| Styling | **Tailwind CSS 4** + **shadcn/ui** (Radix primitives) | 4.1 |
+| Backend | **Elysia** + **Drizzle ORM** (SQLite) | 1.4 + 0.44 |
+| Frontend | **React 19** + **TypeScript** + **TanStack Router** | 19.1 + 1.140 |
+| Data | **TanStack Query** + **Eden Treaty** (type-safe client) | 5.75 |
+| UI | **Tailwind CSS 4** + **shadcn/ui** + **Lucide React** | 4.1 |
 | Auth | **better-auth** | 1.4 |
-| Icons | **Lucide React** | |
 | Forms | **react-hook-form** + **zod** | |
-| Collab editing | **Yjs** + WebSocket | |
-| API client | **Eden Treaty** (type-safe Elysia client) | |
+| Real-time | **Yjs** + **WebSocket** + **SSE** | |
+| Notifications | **sonner** + **next-themes** | |
+| Specialized | **@dnd-kit** (drag-drop), **slate** (editor), **react-markdown** | |
 
 ---
 
