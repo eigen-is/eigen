@@ -1,12 +1,16 @@
-import {useEffect, useRef} from 'react';
+import {useEffect, useRef, type ReactNode} from 'react';
 import {EigenLoader} from "@workspace/ui";
 import type {ChatMessage} from "@workspace/lib/types/chat";
 import {cn} from "@workspace/ui/lib/utils";
 import {UserAvatar} from "@workspace/ui";
-import {Paperclip} from "lucide-react";
+import {UserPublicAvatar} from "@workspace/ui/components/layout/user-public-avatar";
+import {usePublicUser} from "@workspace/lib/public";
+import {useContacts} from "@workspace/lib/contacts";
+import {Mail, Paperclip} from "lucide-react";
 import {useQuery} from "@tanstack/react-query";
-import {driveApi, getDriveDownloadUrl, getDriveThumbnailUrl} from "@workspace/lib/api";
+import {driveApi, getDriveDownloadUrl, getDriveThumbnailUrl, getMailComposeUrl} from "@workspace/lib/api";
 import type {DrivePath} from "@workspace/lib/types/drive";
+import type {Contact} from "@workspace/lib/types/contact";
 
 type MessageListProps = {
     messages: ChatMessage[];
@@ -59,6 +63,79 @@ function AttachmentChip({pathId, ownerId, mountId}: { pathId: string; ownerId: s
     );
 }
 
+const EMAIL_REGEX = /[^\s@]+@[^\s@]+\.[^\s@]+/g;
+
+function InlineEmail({email}: { email: string }) {
+    const {data} = usePublicUser(email);
+    const name = data?.name || email.split('@')[0];
+    return (
+        <a
+            href={getMailComposeUrl(email)}
+            className="inline-flex items-baseline gap-1 text-blue-600 hover:underline"
+        >
+            <UserPublicAvatar email={email} size="sm" className="h-4 w-4 inline-block relative top-0.5"/>
+            <span>{name}</span>
+        </a>
+    );
+}
+
+function RichContent({text, className}: { text: string; className?: string }) {
+    const parts: ReactNode[] = [];
+    let lastIdx = 0;
+    let match: RegExpExecArray | null;
+    const regex = new RegExp(EMAIL_REGEX);
+    while ((match = regex.exec(text)) !== null) {
+        if (match.index > lastIdx) {
+            parts.push(text.slice(lastIdx, match.index));
+        }
+        parts.push(<InlineEmail key={match.index} email={match[0]}/>);
+        lastIdx = regex.lastIndex;
+    }
+    if (lastIdx < text.length) {
+        parts.push(text.slice(lastIdx));
+    }
+    return <p className={className}>{parts}</p>;
+}
+
+function InspectCard({target}: { target: string }) {
+    const {data: publicUser, isLoading: pubLoading} = usePublicUser(target);
+    const {data: contacts = []} = useContacts();
+    const contact = (contacts as Contact[]).find(c =>
+        c.email?.some(e => e.toLowerCase() === target.toLowerCase())
+    );
+
+    const name = publicUser?.name || contact?.firstName
+        ? `${contact?.firstName || ''} ${contact?.lastName || ''}`.trim()
+        : target.split('@')[0];
+
+    return (
+        <div className="flex gap-4 p-4 rounded-lg border bg-card max-w-sm">
+            <div className="shrink-0">
+                <UserPublicAvatar email={target} size="lg" className="h-16 w-16"/>
+            </div>
+            <div className="flex-1 min-w-0 space-y-1">
+                <p className="text-sm font-bold text-foreground truncate">{name}</p>
+                <a
+                    href={getMailComposeUrl(target)}
+                    className="flex items-center gap-1.5 text-xs text-blue-600 hover:underline"
+                >
+                    <Mail className="h-3 w-3"/>
+                    {target}
+                </a>
+                {contact?.company && (
+                    <p className="text-xs text-muted-foreground">{contact.jobTitle ? `${contact.jobTitle} at ` : ''}{contact.company}</p>
+                )}
+                {contact?.phone && contact.phone.length > 0 && contact.phone[0] && (
+                    <p className="text-xs text-muted-foreground">{contact.phone[0]}</p>
+                )}
+                {!publicUser && !contact && !pubLoading && (
+                    <p className="text-xs text-muted-foreground italic">No additional info available</p>
+                )}
+            </div>
+        </div>
+    );
+}
+
 export function MessageList({messages, isLoading, currentUserId, ownerId, mountId}: MessageListProps) {
     const bottomRef = useRef<HTMLDivElement>(null);
 
@@ -93,8 +170,18 @@ export function MessageList({messages, isLoading, currentUserId, ownerId, mountI
                 const grouped = prev && !isSystem && !prev.deletedAt && prev.type !== 'system' && isSameAuthorAndClose(prev, message);
 
                 if (isSystem) {
+                    if (message.content.startsWith('inspect:')) {
+                        const target = message.content.slice(8);
+                        return (
+                            <div key={message.id} className="flex gap-3 px-5 py-2">
+                                <div className="w-9 shrink-0"/>
+                                <InspectCard target={target}/>
+                            </div>
+                        );
+                    }
                     return (
-                        <div key={message.id} className="px-5 py-2">
+                        <div key={message.id} className="flex gap-3 px-5 py-2">
+                            <div className="w-9 shrink-0"/>
                             <p className="text-sm text-muted-foreground italic whitespace-pre-wrap">{message.content}</p>
                         </div>
                     );
@@ -104,10 +191,14 @@ export function MessageList({messages, isLoading, currentUserId, ownerId, mountI
 
                 if (isEmote && !isDeleted) {
                     return (
-                        <div key={message.id} className="px-5 py-1">
-                            <p className="text-sm text-muted-foreground italic whitespace-pre-wrap">
-                                {message.content}
-                            </p>
+                        <div key={message.id} className="flex gap-3 px-5 py-1">
+                            <div className="w-9 shrink-0 flex items-start justify-center pt-0.5">
+                                <span className="text-muted-foreground text-xs">✦</span>
+                            </div>
+                            <RichContent
+                                text={message.content}
+                                className="text-sm text-muted-foreground italic whitespace-pre-wrap"
+                            />
                         </div>
                     );
                 }
