@@ -11,6 +11,7 @@ import {
     FileType,
     FileVideo,
     Folder,
+    MessageSquare,
     Presentation,
     StickyNote
 } from 'lucide-react';
@@ -35,6 +36,9 @@ export function getFileIcon(mimeType: string, type: string, props?: FileIconProp
     // Return folder icon for folders
     if (type === 'stickies') {
         return <StickyNote {...props} />;
+    }
+    if (type === 'chat') {
+        return <MessageSquare {...props} />;
     }
 
     // Handle different file types based on MIME type

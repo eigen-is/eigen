@@ -125,18 +125,11 @@ export default class SharedDrive extends Drive {
         return this.sharedDrive.createChat(mountId, parentId, chatName);
     }
 
-    public async createChatRoom(mountId: string, chatId: string, roomName: string): Promise<DrivePath> {
-        if (!(await this.canWrite(mountId, chatId, this.user))) {
-            throw new Error('No write permission');
-        }
-        return this.sharedDrive.createChatRoom(mountId, chatId, roomName);
-    }
-
-    public async getChatRoom(mountId: string, roomId: string): Promise<ChatRoom> {
-        if (!(await this.canRead(mountId, roomId, this.user))) {
+    public async getChat(mountId: string, chatId: string): Promise<ChatRoom> {
+        if (!(await this.canRead(mountId, chatId, this.user))) {
             throw new Error('No read permission');
         }
-        return this.sharedDrive.getChatRoom(mountId, roomId);
+        return this.sharedDrive.getChat(mountId, chatId);
     }
 
     public async updateACL(mountId: string, pathId: string, acl: DriveACL[]) {

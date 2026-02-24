@@ -6,12 +6,12 @@ export type DriveACL = {
 }
 
 export type DriveCollabType = "doc" | "stickies";
-export type DriveChatType = "chat" | "chatroom";
+export type DriveChatType = "chat";
 export type DriveContainerType = "folder" | DriveCollabType | DriveChatType;
 export type DrivePathType = "file" | DriveContainerType;
 
 export function isContainerType(type: DrivePathType): type is DriveContainerType {
-    return type === 'folder' || type === 'doc' || type === 'stickies' || type === 'chat' || type === 'chatroom';
+    return type === 'folder' || type === 'doc' || type === 'stickies' || type === 'chat';
 }
 
 export function isCollabType(type: DrivePathType): type is DriveCollabType {
@@ -19,7 +19,7 @@ export function isCollabType(type: DrivePathType): type is DriveCollabType {
 }
 
 export function isChatType(type: DrivePathType): type is DriveChatType {
-    return type === 'chat' || type === 'chatroom';
+    return type === 'chat';
 }
 
 export type DrivePathDetails = {

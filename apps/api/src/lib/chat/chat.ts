@@ -75,7 +75,7 @@ export class ChatRoom {
         };
 
         this.home.notify(buildChatEvent(SSEventType.CHAT_MESSAGE_POSTED, {
-            roomId: this.path.id,
+            chatId: this.path.id,
             ownerId: this.path.ownerId,
             mountId: this.path.mountId,
             message,
@@ -134,7 +134,7 @@ export class ChatRoom {
         const updated = this.toMessage({...existing, content, editedAt: now});
 
         this.home.notify(buildChatEvent(SSEventType.CHAT_MESSAGE_EDITED, {
-            roomId: this.path.id,
+            chatId: this.path.id,
             ownerId: this.path.ownerId,
             mountId: this.path.mountId,
             message: updated,
@@ -153,7 +153,7 @@ export class ChatRoom {
             .where(eq(schema.messages.id, messageId));
 
         this.home.notify(buildChatEvent(SSEventType.CHAT_MESSAGE_DELETED, {
-            roomId: this.path.id,
+            chatId: this.path.id,
             ownerId: this.path.ownerId,
             mountId: this.path.mountId,
             message: this.toMessage({...existing, deletedAt: now}),

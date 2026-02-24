@@ -92,6 +92,14 @@
         "@workspace/ui": "workspace:*",
       },
     },
+    "apps/chat": {
+      "name": "@apps/chat",
+      "version": "0.0.1",
+      "dependencies": {
+        "@workspace/lib": "workspace:*",
+        "@workspace/ui": "workspace:*",
+      },
+    },
     "apps/contacts": {
       "name": "@apps/contacts",
       "version": "0.0.1",
@@ -222,6 +230,8 @@
     "@apps/api": ["@apps/api@workspace:apps/api"],
 
     "@apps/calendar": ["@apps/calendar@workspace:apps/calendar"],
+
+    "@apps/chat": ["@apps/chat@workspace:apps/chat"],
 
     "@apps/contacts": ["@apps/contacts@workspace:apps/contacts"],
 

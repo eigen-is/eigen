@@ -23,6 +23,7 @@
     "./media": "./src/lib/media/index.ts",
     "./auth": "./src/lib/auth/index.ts",
     "./home": "./src/lib/home/index.ts",
+    "./chat": "./src/lib/chat/index.ts",
     "./collab": "./src/lib/collab/index.ts",
     "./public": "./src/lib/public/index.ts",
     "./auth/hooks": "./src/lib/auth/hooks/index.ts",
