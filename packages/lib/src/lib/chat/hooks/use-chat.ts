@@ -58,7 +58,7 @@ export function useMessages(ownerId: string, mountId: string, chatId: string | u
 export function usePostMessage(ownerId: string, mountId: string, chatId: string) {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: async (body: { content: string; type?: 'message' | 'emote' | 'whisper' | 'system'; whisperTo?: string; replyTo?: string }) => {
+        mutationFn: async (body: { content: string; type?: 'message' | 'emote' | 'whisper' | 'system'; whisperTo?: string; replyTo?: string; attachments?: string[] }) => {
             const response = await chatApi({ownerId})({mountId})({chatId}).messages.post(body);
             return response.data;
         },
