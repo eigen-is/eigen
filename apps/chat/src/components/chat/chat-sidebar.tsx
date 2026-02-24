@@ -75,7 +75,7 @@ export function ChatSidebar({
         <SidebarItem
             key={chat.id}
             icon={<MessageSquare className="h-4 w-4"/>}
-            label={chat.name || 'Unnamed chat'}
+            label={(chat.name || 'Unnamed chat').replace(/\.eigenchat$/, '')}
             to={`/${chat.ownerId}/${chat.mountId}/${chat.id}`}
             condensed={condensed}
         />
