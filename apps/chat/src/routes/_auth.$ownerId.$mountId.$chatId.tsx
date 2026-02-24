@@ -14,7 +14,7 @@ import type {DrivePath, DriveACL} from "@workspace/lib/types/drive";
 import type {ChatMessage} from "@workspace/lib/types/chat";
 import {RoomMembers} from "../components/chat/room-members";
 import type {RoomMember} from "../components/chat/player-suggest";
-import {getLocalCommand, COMMANDS_HELP} from "../lib/commands";
+import {getLocalCommand, COMMANDS_HELP, isUnknownCommand, isEmailAddress} from "../lib/commands";
 import {toast} from "sonner";
 
 let localIdCounter = 0;
@@ -87,6 +87,11 @@ function ChatView() {
             }
         }
 
+        if (isUnknownCommand(rawContent)) {
+            addLocalMessage(`Unknown command: ${rawContent.split(' ')[0]}\nType /help to see available commands.`);
+            return;
+        }
+
         const local = getLocalCommand(rawContent);
         if (local) {
             switch (local.kind) {
@@ -101,7 +106,7 @@ function ChatView() {
                     return;
                 }
                 case 'inspect': {
-                    addLocalMessage(`Inspecting ${local.target}...`);
+                    addLocalMessage(`inspect:${local.target}`);
                     return;
                 }
                 case 'reply': {
@@ -116,6 +121,10 @@ function ChatView() {
                 }
                 case 'invite': {
                     if (!chatPath) return;
+                    if (!isEmailAddress(local.target)) {
+                        addLocalMessage(`'${local.target}' is not a valid email address. Use /invite user@example.com`);
+                        return;
+                    }
                     const currentAcl = chatPath.acl || [];
                     if (currentAcl.some(a => a.email.toLowerCase() === local.target.toLowerCase())) {
                         addLocalMessage(`${local.target} already has access to this room.`);
