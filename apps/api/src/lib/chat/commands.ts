@@ -87,6 +87,10 @@ export function parseCommand(raw: string): ParsedCommand {
     return {kind: 'message', content: trimmed};
 }
 
+export function isEmailAddress(value: string): boolean {
+    return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+}
+
 export function formatEmoteForViewer(content: string, authorEmail: string, authorId: string, viewerId: string): string {
     const authorName = authorEmail.split('@')[0] || authorEmail;
 

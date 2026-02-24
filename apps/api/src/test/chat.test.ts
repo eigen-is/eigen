@@ -207,10 +207,10 @@ describe('Chat', () => {
                 `${chatId}/messages`, {
                     content: 'Secret message for Bob only',
                     type: 'whisper',
-                    whisperTo: ctx.bob.user.id,
+                    whisperTo: ctx.bob.user.email,
                 });
             expect(msg.type).toBe('whisper');
-            expect(msg.whisperTo).toBe(ctx.bob.user.id);
+            expect(msg.whisperTo).toBe(ctx.bob.user.email);
             expect(msg.content).toBe('Secret message for Bob only');
         });
 
@@ -226,7 +226,7 @@ describe('Chat', () => {
             expect(whisper).toBeDefined();
             expect(whisper.content).toContain('whispers to');
             expect(whisper.content).toContain('Secret message for Bob only');
-            expect(whisper.whisperTo).toBe(ctx.bob.user.id);
+            expect(whisper.whisperTo).toBe(ctx.bob.user.email);
         });
 
         test('Bob sees whisper content (he is the recipient)', async () => {
@@ -235,7 +235,7 @@ describe('Chat', () => {
             const whisper = msgs.find((m: any) => m.type === 'whisper');
             expect(whisper).toBeDefined();
             expect(whisper.content).toBe('whispers to you: Secret message for Bob only');
-            expect(whisper.whisperTo).toBe(ctx.bob.user.id);
+            expect(whisper.whisperTo).toBe(ctx.bob.user.email);
         });
 
         test('Charlie sees whisper exists but content is hidden', async () => {
@@ -668,6 +668,113 @@ describe('Chat', () => {
             const emote = msgs.find((m: any) => m.type === 'emote' && m.content.includes('flip'));
             expect(emote).toBeDefined();
             expect(emote.content).toContain('(╯°□°)╯︵ ┻━┻');
+        });
+    });
+
+    describe('Backend Validation', () => {
+        let chatId: string;
+
+        beforeAll(async () => {
+            const chat = await drivePost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `folder/${aliceRootId}/chat`, {fileName: 'Validation Chat'});
+            chatId = chat.id;
+
+            await authedRequest(ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${chatId}/acl`, {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        acl: [
+                            {email: 'bob@test.eigen.is', read: true, write: true, public: false},
+                        ],
+                    }),
+                });
+        });
+
+        test('whisper to non-email target returns 400', async () => {
+            const res = await authedRequest(ctx.alice.user.sessionToken,
+                `/chat/${ctx.alice.user.id}/${aliceMountId}/${chatId}/messages`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({content: '/whisper bob hello there'}),
+                });
+            expect(res.status).toBe(400);
+        });
+
+        test('whisper via type field with non-email target returns 400', async () => {
+            const res = await authedRequest(ctx.alice.user.sessionToken,
+                `/chat/${ctx.alice.user.id}/${aliceMountId}/${chatId}/messages`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({content: 'hello', type: 'whisper', whisperTo: 'justAUsername'}),
+                });
+            expect(res.status).toBe(400);
+        });
+
+        test('whisper to non-email does not store message', async () => {
+            const msgs = await chatGet(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `${chatId}/messages`);
+            const leaked = msgs.find((m: any) => m.content.includes('hello there') || m.whisperTo === 'bob');
+            expect(leaked).toBeUndefined();
+        });
+
+        test('whisper with valid email to existing user succeeds', async () => {
+            const msg = await chatPost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `${chatId}/messages`, {content: `/whisper ${ctx.bob.user.email} valid whisper`});
+            expect(msg.type).toBe('whisper');
+            expect(msg.content).toBe('valid whisper');
+        });
+
+        test('delete message clears content in database', async () => {
+            const msg = await chatPost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `${chatId}/messages`, {content: 'This will be deleted'});
+            expect(msg.id).toBeDefined();
+
+            const delRes = await authedRequest(ctx.alice.user.sessionToken,
+                `/chat/${ctx.alice.user.id}/${aliceMountId}/${chatId}/messages/${msg.id}`, {
+                    method: 'DELETE',
+                });
+            const delData = await delRes.json() as any;
+            expect(delData.success).toBe(true);
+
+            const msgs = await chatGet(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `${chatId}/messages`);
+            const deleted = msgs.find((m: any) => m.id === msg.id);
+            expect(deleted).toBeDefined();
+            expect(deleted.deletedAt).not.toBeNull();
+            expect(deleted.content).toBe('');
+        });
+
+        test('delete message by non-owner fails', async () => {
+            const msg = await chatPost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `${chatId}/messages`, {content: 'Alice message'});
+
+            const delRes = await authedRequest(ctx.bob.user.sessionToken,
+                `/chat/${ctx.alice.user.id}/${aliceMountId}/${chatId}/messages/${msg.id}`, {
+                    method: 'DELETE',
+                });
+            const delData = await delRes.json() as any;
+            expect(delData.success).toBe(false);
+        });
+
+        test('/w alias with non-email target returns 400', async () => {
+            const res = await authedRequest(ctx.alice.user.sessionToken,
+                `/chat/${ctx.alice.user.id}/${aliceMountId}/${chatId}/messages`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({content: '/w notAnEmail secret'}),
+                });
+            expect(res.status).toBe(400);
+        });
+
+        test('/tell alias with non-email target returns 400', async () => {
+            const res = await authedRequest(ctx.alice.user.sessionToken,
+                `/chat/${ctx.alice.user.id}/${aliceMountId}/${chatId}/messages`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({content: '/tell noEmail hi'}),
+                });
+            expect(res.status).toBe(400);
         });
     });
 
