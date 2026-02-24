@@ -6,7 +6,7 @@ export const COMMANDS_HELP = [
     {cmd: '/cheer', desc: 'Performs the cheer emote'},
     {cmd: '/taunt', desc: 'Performs the taunt emote'},
     {cmd: '/greet', desc: 'Performs the greet emote'},
-    {cmd: '/allthethings', desc: 'ALL THE THINGS! ᕕ( ᐛ )ᕗ'},
+    {cmd: '/allthethings', desc: 'ALL THE THINGS! \\o/'},
     {cmd: '/facepalm', desc: 'Drags hand down face'},
     {cmd: '/shrug', desc: '¯\\_(ツ)_/¯'},
     {cmd: '/flip', desc: '(╯°□°)╯︵ ┻━┻'},
