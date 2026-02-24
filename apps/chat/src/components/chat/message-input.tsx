@@ -2,8 +2,28 @@ import {useRef, useState} from 'react';
 import {Button} from "@workspace/ui/components/button";
 import {Paperclip, Send, X} from "lucide-react";
 
+type ParsedCommand = {
+    content: string;
+    type?: 'message' | 'emote' | 'whisper';
+    whisperTo?: string;
+}
+
+function parseCommand(raw: string): ParsedCommand {
+    if (raw.startsWith('/me ')) {
+        return {content: raw.slice(4), type: 'emote'};
+    }
+    if (raw.startsWith('/whisper ')) {
+        const rest = raw.slice(8);
+        const spaceIdx = rest.indexOf(' ');
+        if (spaceIdx > 0) {
+            return {content: rest.slice(spaceIdx + 1), type: 'whisper', whisperTo: rest.slice(0, spaceIdx)};
+        }
+    }
+    return {content: raw};
+}
+
 type MessageInputProps = {
-    onSend: (content: string, files?: File[]) => void;
+    onSend: (content: string, files?: File[], type?: 'message' | 'emote' | 'whisper', whisperTo?: string) => void;
     disabled?: boolean;
     chatName?: string;
 }
@@ -15,7 +35,8 @@ export function MessageInput({onSend, disabled = false, chatName}: MessageInputP
 
     const handleSend = () => {
         if ((!content.trim() && files.length === 0) || disabled) return;
-        onSend(content.trim(), files.length > 0 ? files : undefined);
+        const parsed = parseCommand(content.trim());
+        onSend(parsed.content, files.length > 0 ? files : undefined, parsed.type, parsed.whisperTo);
         setContent('');
         setFiles([]);
     };
