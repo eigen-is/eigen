@@ -255,6 +255,78 @@ describe('Chat', () => {
         });
     });
 
+    describe('Attachments', () => {
+        let chatId: string;
+        let mediaFolderId: string;
+
+        beforeAll(async () => {
+            const chat = await drivePost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `folder/${aliceRootId}/chat`, {fileName: 'Attachment Test Chat'});
+            chatId = chat.id;
+
+            const contents = await driveGet(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `folder/${chatId}`);
+            const media = contents.find((item: any) => item.name === 'media');
+            mediaFolderId = media.id;
+        });
+
+        test('upload file to media and post message with attachment', async () => {
+            const file = new File(['attachment content'], 'test-attachment.txt', {type: 'text/plain'});
+            const formData = new FormData();
+            formData.append('file', file);
+            const uploadRes = await authedRequest(ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/file/${mediaFolderId}`, {
+                    method: 'POST',
+                    body: formData,
+                });
+            const uploaded = await uploadRes.json() as any;
+            expect(uploaded.id).toBeDefined();
+            expect(uploaded.name).toBe('test-attachment.txt');
+
+            const msg = await chatPost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `${chatId}/messages`, {content: 'Message with attachment', attachments: [uploaded.id]});
+            expect(msg.id).toBeDefined();
+            expect(msg.content).toBe('Message with attachment');
+            expect(msg.attachments).toEqual([uploaded.id]);
+        });
+
+        test('get messages returns attachment pathIds', async () => {
+            const msgs = await chatGet(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `${chatId}/messages`);
+            const withAttachment = msgs.find((m: any) => m.attachments && m.attachments.length > 0);
+            expect(withAttachment).toBeDefined();
+            expect(withAttachment.attachments.length).toBe(1);
+        });
+
+        test('deleting message also deletes attachment file', async () => {
+            const file = new File(['delete-me'], 'delete-me.txt', {type: 'text/plain'});
+            const formData = new FormData();
+            formData.append('file', file);
+            const uploadRes = await authedRequest(ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/file/${mediaFolderId}`, {
+                    method: 'POST',
+                    body: formData,
+                });
+            const uploaded = await uploadRes.json() as any;
+            const attachmentId = uploaded.id;
+
+            const msg = await chatPost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `${chatId}/messages`, {content: 'Will be deleted', attachments: [attachmentId]});
+
+            const deleteRes = await authedRequest(ctx.alice.user.sessionToken,
+                `/chat/${ctx.alice.user.id}/${aliceMountId}/${chatId}/messages/${msg.id}`, {
+                    method: 'DELETE',
+                });
+            const deleteData = await deleteRes.json() as any;
+            expect(deleteData.success).toBe(true);
+
+            const mediaContents = await driveGet(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `folder/${mediaFolderId}`);
+            const deletedFile = mediaContents.find((item: any) => item.id === attachmentId);
+            expect(deletedFile).toBeUndefined();
+        });
+    });
+
     describe('Delete Chat', () => {
         test('create and delete chat', async () => {
             const chat = await drivePost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
