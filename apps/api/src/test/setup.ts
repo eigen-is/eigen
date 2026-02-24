@@ -40,6 +40,7 @@ type TestUser = {
 type TestContext = {
     alice: {user: TestUser; api: ReturnType<typeof treaty<App>>};
     bob: {user: TestUser; api: ReturnType<typeof treaty<App>>};
+    charlie: {user: TestUser; api: ReturnType<typeof treaty<App>>};
     app: App;
 };
 
@@ -103,6 +104,7 @@ export async function getTestContext(): Promise<TestContext> {
 
     const alice = await createTestUser('alice@test.eigen.is', 'testpassword123', 'Alice Test');
     const bob = await createTestUser('bob@test.eigen.is', 'testpassword123', 'Bob Test');
+    const charlie = await createTestUser('charlie@test.eigen.is', 'testpassword123', 'Charlie Test');
 
     context = {
         alice: {
@@ -112,6 +114,10 @@ export async function getTestContext(): Promise<TestContext> {
         bob: {
             user: bob,
             api: createAuthenticatedClient(bob.sessionToken),
+        },
+        charlie: {
+            user: charlie,
+            api: createAuthenticatedClient(charlie.sessionToken),
         },
         app,
     };

@@ -5,7 +5,8 @@ import {eq} from 'drizzle-orm';
 import {type DatabaseConfig, type ManagedDatabase, type SchemaType} from '../core/managed-database';
 import {createDefaultMountConfig, Mount} from '../mount';
 import type {MountConfig, MountInfo} from '@workspace/lib/types';
-import {type DriveACL, type DrivePath, isContainerType, isCollabType} from '@workspace/lib/types/drive';
+import {type DriveACL, type DrivePath, isContainerType, isCollabType, isChatType} from '@workspace/lib/types/drive';
+import {ChatRoom} from '../chat';
 import {canRead, canWrite, normalizeACL} from './acl';
 import {extractImageDetails, getThumbnail, saveThumbnail} from '../shared/thumbnails';
 import CollabDocument from '../collab/collabDocument';
@@ -165,6 +166,50 @@ export default class Drive {
         return stickies;
     }
 
+    async createChat(mountId: string, parentId: string, chatName: string): Promise<DrivePath> {
+        const mount = this.getMount(mountId);
+        if (!(await this.canWrite(mountId, parentId, this.owner))) {
+            throw new ApiError(403, 'No write permission');
+        }
+
+        const safeName = `${chatName}.eigenchat`;
+        const pathId = await mount.createFolder(parentId, safeName, 'chat');
+        const chat = await mount.getPath(pathId);
+        if (!chat) throw new ApiError(500, 'Failed to create chat');
+        this.emit(SSEventType.DRIVE_FILE_CREATED, chat);
+        return chat;
+    }
+
+    async createChatRoom(mountId: string, chatId: string, roomName: string): Promise<DrivePath> {
+        const mount = this.getMount(mountId);
+        const chat = await mount.getPath(chatId);
+        if (!chat || chat.type !== 'chat') {
+            throw new ApiError(404, 'Chat not found');
+        }
+
+        if (!(await this.canWrite(mountId, chatId, this.owner))) {
+            throw new ApiError(403, 'No write permission');
+        }
+
+        const safeName = `${roomName}.eigenchatroom`;
+        const pathId = await mount.createFolder(chatId, safeName, 'chatroom');
+        await ChatRoom.create(this, mountId, pathId);
+        const room = await mount.getPath(pathId);
+        if (!room) throw new ApiError(500, 'Failed to create chat room');
+        this.emit(SSEventType.DRIVE_FILE_CREATED, room);
+        return room;
+    }
+
+    async getChatRoom(mountId: string, roomId: string): Promise<ChatRoom> {
+        const mount = this.getMount(mountId);
+        const path = await mount.getPath(roomId);
+        if (!path || path.type !== 'chatroom') {
+            throw new ApiError(404, 'Chat room not found');
+        }
+        const chatRoom = new ChatRoom(this, this.home, path);
+        return chatRoom.init();
+    }
+
     async uploadFile(mountId: string, parentId: string, file: File): Promise<DrivePath> {
         const mount = this.getMount(mountId);
         const parent = await mount.getPath(parentId);
@@ -231,7 +276,7 @@ export default class Drive {
         await mount.deletePath(pathId);
         await propagateACLChange(folder, folder.acl, null);
         
-        if (isCollabType(folder.type)) {
+        if (isCollabType(folder.type) || isChatType(folder.type)) {
             this.emit(SSEventType.DRIVE_FILE_DELETED, folder);
         } else {
             this.emit(SSEventType.DRIVE_FOLDER_DELETED, folder);

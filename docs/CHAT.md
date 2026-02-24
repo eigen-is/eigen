@@ -37,17 +37,20 @@ These extend the existing type system in `packages/lib/src/types/drive.ts`. Chat
 my-team-chat.eigenchat/              (type: chat)
 ├── general.eigenchatroom/           (type: chatroom, name = "general")
 │   ├── data.db                      (messages + read state)
-│   ├── screenshot.png               (uploaded attachment)
-│   └── report.pdf                   (uploaded attachment)
+│   └── media/                       (uploaded attachments)
+│       ├── screenshot.png
+│       └── report.pdf
 ├── random.eigenchatroom/
-│   └── data.db
+│   ├── data.db
+│   └── media/
 └── dev.eigenchatroom/
-    └── data.db
+    ├── data.db
+    └── media/
 ```
 
 **Room name = folder name.** Renaming a room is a Drive rename operation. No separate metadata needed.
 
-Uploaded files (attachments) are children of the room folder, alongside `data.db`. The client resolves media URLs through standard Drive file endpoints.
+`ChatRoom.create()` creates both `data.db` and a `media/` subfolder (same pattern as `CollabDocument.create()` for docs/stickies). The client uploads attachments to the media folder and resolves media URLs through standard Drive file endpoints.
 
 ### Embedded Chat (Docs & Stickies)
 
@@ -130,11 +133,16 @@ The `ChatRoom` object auto-destructs when no users are active (same pattern as H
 
 ## 5. API Design
 
+### Chat Creation (Drive route)
+
+```
+POST /drive/:ownerId/:mountId/folder/:pathId/chat   {fileName: string}
+```
+
+Creates an `.eigenchat` folder (same pattern as `/doc` and `/stickies` routes).
+
 ### Room Management
 
-Room CRUD uses **existing Drive operations** — no special chat endpoints needed:
-
-- **Create room**: Drive `createFolder` with type `chatroom` under the `.eigenchat` parent
 - **List rooms**: Drive `getFolderContents` on the `.eigenchat` folder (filter by `chatroom` type)
 - **Rename room**: Drive rename (folder name = room name)
 - **Delete room**: Drive delete
@@ -143,20 +151,20 @@ Room CRUD uses **existing Drive operations** — no special chat endpoints neede
 
 New router: `apps/api/src/routes/chat.ts`, prefix `/chat/`, all `auth: true`.
 
-The `roomId` is the Drive pathId of the `.eigenchatroom` folder. ACL is checked via `drive.canRead()`/`canWrite()`.
+Routes are nested under the chat: `/chat/:ownerId/:mountId/:chatId/rooms/...`. The `chatId` is the Drive pathId of the `.eigenchat` folder, `roomId` of the `.eigenchatroom` folder. ACL is checked via `getSharedDrive()` → `drive.canRead()`/`canWrite()`.
 
 ```
-GET    /chat/:ownerId/:mountId/:roomId/messages?before=&limit=
-POST   /chat/:ownerId/:mountId/:roomId/messages
-PATCH  /chat/:ownerId/:mountId/:roomId/messages/:messageId
-DELETE /chat/:ownerId/:mountId/:roomId/messages/:messageId
-POST   /chat/:ownerId/:mountId/:roomId/read
-POST   /chat/:ownerId/:mountId/:roomId/heartbeat
-POST   /chat/:ownerId/:mountId/:roomId/typing
-POST   /chat/:ownerId/:mountId/:roomId/upload
+POST   /chat/:ownerId/:mountId/:chatId/rooms                              {roomName}
+GET    /chat/:ownerId/:mountId/:chatId/rooms/:roomId/messages?before=&limit=
+POST   /chat/:ownerId/:mountId/:chatId/rooms/:roomId/messages
+PATCH  /chat/:ownerId/:mountId/:chatId/rooms/:roomId/messages/:messageId
+DELETE /chat/:ownerId/:mountId/:chatId/rooms/:roomId/messages/:messageId
+POST   /chat/:ownerId/:mountId/:chatId/rooms/:roomId/read
 ```
 
 **Message pagination**: Cursor-based with `?before={messageId}&limit=50`. Initial load returns most recent messages. Client scrolls up to load older.
+
+**Whisper visibility**: `getMessagesForUser()` filters whisper content — only the author and recipient see the content. Other users see that a whisper exists (type=whisper) but with empty content and null whisperTo.
 
 ### Backend Class
 
@@ -256,35 +264,41 @@ packages/lib/src/lib/chat/
 
 ## 9. Implementation
 
-### New Files
+### Implemented (Phase 1)
 
 | File | Purpose |
-|------|---------|
-| `apps/api/src/lib/chat/chat.ts` | ChatRoom class |
+|------|----------|
+| `apps/api/src/lib/chat/chat.ts` | ChatRoom class (messages, read state, whisper filtering) |
 | `apps/api/src/lib/chat/schema.ts` | Drizzle schemas (messages, read_state) |
 | `apps/api/src/lib/chat/db-config.ts` | Database config + migrations |
 | `apps/api/src/lib/chat/sse-events.ts` | SSE event builders |
-| `apps/api/src/routes/chat.ts` | Chat API routes |
-| `packages/lib/src/types/chat.ts` | Chat types |
+| `apps/api/src/routes/chat.ts` | Chat API routes (rooms, messages, read) |
+| `packages/lib/src/types/chat.ts` | Chat types (ChatMessage, ChatReadState) |
+| `packages/lib/src/types/drive.ts` | `DriveChatType`, `isChatType()`, updated `DriveContainerType` |
+| `packages/lib/src/types/sse.ts` | Chat SSE event types + `SSEventChatData` |
+| `apps/api/src/lib/mount/mount.ts` | `createFolder()` supports `chat`/`chatroom` types |
+| `apps/api/src/lib/mount/schema.ts` | `chat`/`chatroom` in paths type union |
+| `apps/api/src/lib/drive/drive.ts` | `createChat()`, `createChatRoom()`, `getChatRoom()` |
+| `apps/api/src/lib/drive/sharedDrive.ts` | Delegated `createChat()`, `createChatRoom()`, `getChatRoom()` |
+| `apps/api/src/lib/drive/sharedschema.ts` | `chat`/`chatroom` in shared paths type union |
+| `apps/api/src/routes/drive.ts` | `POST .../folder/:pathId/chat` route |
+| `apps/api/src/test/chat.test.ts` | Tests: creation, messages, whisper visibility (3 users) |
+
+### Remaining Phases
+
+| Phase | Scope |
+|-------|-------|
+| **Presence** | Heartbeat endpoint, in-memory tracking, enter/leave system messages |
+| **Frontend hooks** | `packages/lib/src/lib/chat/` — use-rooms, use-messages, use-presence, sse-handlers |
+| **Standalone app** | `apps/chat/` — room list, messages, presence, /commands |
+| **Embedding** | Auto-create in docs/stickies, shared components, chat panel in editors |
+| **Polish** | @mentions, search, message pinning, file-icon-helper |
+
+### Pending Files
+
+| File | Purpose |
+|------|----------|
 | `packages/lib/src/lib/chat/` | Hooks + SSE handlers |
 | `packages/ui/src/components/layout/chat/` | Shared chat components |
-| `apps/chat/` | Standalone chat app |
-
-### Modified Files
-
-| File | Change |
-|------|--------|
-| `packages/lib/src/types/drive.ts` | Add `chat`/`chatroom` to type unions, `isContainerType` |
-| `packages/lib/src/types/sse.ts` | Add `chat:` event types |
-| `packages/lib/src/lib/sse/hooks/use-sse.ts` | Register chat SSE handler |
-| `apps/api/src/lib/mount/mount.ts` | `createFolder()` supports `chat`/`chatroom` types → MIME mapping |
-| `apps/api/src/lib/mount/schema.ts` | Add `chat`/`chatroom` to paths type union |
-| `apps/api/src/lib/drive/drive.ts` | Add `createChat()`, `createChatRoom()`. Modify `createDoc()`/`createStickies()` to auto-create embedded chat |
 | `packages/ui/.../file-icon-helper.tsx` | Icons for `.eigenchat` / `.eigenchatroom` |
-
-### Phases
-
-1. **Core**: MIME types in Drive type system, ChatRoom class, schema, API routes, SSE events
-2. **Standalone app**: `apps/chat/` — room list, messages, presence, /commands
-3. **Embedding**: Auto-create in docs/stickies, shared components, chat panel in editors
-4. **Polish**: @mentions, search, message pinning
+| `apps/chat/` | Standalone chat app |
