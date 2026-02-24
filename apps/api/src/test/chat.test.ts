@@ -224,7 +224,8 @@ describe('Chat', () => {
                 `${chatId}/messages`);
             const whisper = msgs.find((m: any) => m.type === 'whisper');
             expect(whisper).toBeDefined();
-            expect(whisper.content).toBe('Secret message for Bob only');
+            expect(whisper.content).toContain('whispers to');
+            expect(whisper.content).toContain('Secret message for Bob only');
             expect(whisper.whisperTo).toBe(ctx.bob.user.id);
         });
 
@@ -233,7 +234,7 @@ describe('Chat', () => {
                 `${chatId}/messages`);
             const whisper = msgs.find((m: any) => m.type === 'whisper');
             expect(whisper).toBeDefined();
-            expect(whisper.content).toBe('Secret message for Bob only');
+            expect(whisper.content).toBe('whispers to you: Secret message for Bob only');
             expect(whisper.whisperTo).toBe(ctx.bob.user.id);
         });
 
@@ -242,7 +243,7 @@ describe('Chat', () => {
                 `${chatId}/messages`);
             const whisper = msgs.find((m: any) => m.type === 'whisper');
             expect(whisper).toBeDefined();
-            expect(whisper.content).toBe('');
+            expect(whisper.content).toBe('*some whisper sounds*');
             expect(whisper.whisperTo).toBeNull();
         });
 
