@@ -7,11 +7,13 @@ import {PlayerSuggest, type RoomMember} from "./player-suggest";
 type MessageInputProps = {
     onSend: (rawContent: string, files?: File[]) => void;
     disabled?: boolean;
+    readOnly?: boolean;
     chatName?: string;
     roomMembers?: RoomMember[];
+    messageCount?: number;
 }
 
-export function MessageInput({onSend, disabled = false, chatName, roomMembers = []}: MessageInputProps) {
+export function MessageInput({onSend, disabled = false, readOnly = false, chatName, roomMembers = [], messageCount = 0}: MessageInputProps) {
     const [content, setContent] = useState('');
     const [files, setFiles] = useState<File[]>([]);
     const [selectedSuggestIdx, setSelectedSuggestIdx] = useState(0);
@@ -19,16 +21,30 @@ export function MessageInput({onSend, disabled = false, chatName, roomMembers = 
     const fileInputRef = useRef<HTMLInputElement>(null);
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
+    const focusTextarea = useCallback(() => {
+        if (!readOnly) textareaRef.current?.focus();
+    }, [readOnly]);
+
     useEffect(() => {
-        textareaRef.current?.focus();
-    }, []);
+        focusTextarea();
+    }, [focusTextarea]);
+
+    useEffect(() => {
+        focusTextarea();
+    }, [messageCount, focusTextarea]);
+
+    useEffect(() => {
+        const onFocus = () => focusTextarea();
+        window.addEventListener('focus', onFocus);
+        return () => window.removeEventListener('focus', onFocus);
+    }, [focusTextarea]);
 
     const handleSend = () => {
         if ((!content.trim() && files.length === 0) || disabled) return;
         onSend(content.trim(), files.length > 0 ? files : undefined);
         setContent('');
         setFiles([]);
-        setTimeout(() => textareaRef.current?.focus(), 0);
+        setTimeout(focusTextarea, 0);
     };
 
     const atQuery = getAtSuggestQuery(content);
@@ -93,6 +109,14 @@ export function MessageInput({onSend, disabled = false, chatName, roomMembers = 
     const removeFile = (index: number) => {
         setFiles(prev => prev.filter((_, i) => i !== index));
     };
+
+    if (readOnly) {
+        return (
+            <div className="border-t px-5 py-3">
+                <p className="text-xs text-muted-foreground text-center py-2">You have read-only access to this chat</p>
+            </div>
+        );
+    }
 
     return (
         <div className="border-t px-5 py-3">

@@ -1,6 +1,7 @@
 import {Elysia, t} from "elysia";
 import {betterAuth} from "./auth";
 import {getSharedDrive} from "../lib/drive";
+import {ApiError} from "../lib/core/errors";
 
 export const chatRouter = new Elysia({name: "chat"})
     .use(betterAuth)
@@ -20,6 +21,9 @@ export const chatRouter = new Elysia({name: "chat"})
 
     .post("/chat/:ownerId/:mountId/:chatId/messages", async ({params, body, user}) => {
         const drive = await getSharedDrive(params.ownerId, user);
+        if (!(await drive.canWrite(params.mountId, params.chatId, user))) {
+            throw new ApiError(403, 'No write permission');
+        }
         const chat = await drive.getChat(params.mountId, params.chatId);
         return await chat.postMessage(
             user.id,
@@ -48,6 +52,9 @@ export const chatRouter = new Elysia({name: "chat"})
 
     .patch("/chat/:ownerId/:mountId/:chatId/messages/:messageId", async ({params, body, user}) => {
         const drive = await getSharedDrive(params.ownerId, user);
+        if (!(await drive.canWrite(params.mountId, params.chatId, user))) {
+            throw new ApiError(403, 'No write permission');
+        }
         const chat = await drive.getChat(params.mountId, params.chatId);
         const result = await chat.editMessage(params.messageId, body.content, user.id);
         if (!result) return {success: false, error: 'Message not found or not owned by user'};
@@ -59,6 +66,9 @@ export const chatRouter = new Elysia({name: "chat"})
 
     .delete("/chat/:ownerId/:mountId/:chatId/messages/:messageId", async ({params, user}) => {
         const drive = await getSharedDrive(params.ownerId, user);
+        if (!(await drive.canWrite(params.mountId, params.chatId, user))) {
+            throw new ApiError(403, 'No write permission');
+        }
         const chat = await drive.getChat(params.mountId, params.chatId);
         const result = await chat.deleteMessage(params.messageId, user.id);
         return {success: result};

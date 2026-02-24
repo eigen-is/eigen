@@ -2,7 +2,7 @@ import {createFileRoute} from '@tanstack/react-router'
 import {useCallback, useMemo, useRef, useState} from 'react';
 import {useAuth} from "@workspace/lib/auth";
 import {useMessages, usePostMessage} from "@workspace/lib/chat";
-import {usePathInfo, useUploadFile, useUpdateACL} from "@workspace/lib/drive";
+import {usePathInfo, useUploadFile, useUpdateACL, useCheckWritePermission} from "@workspace/lib/drive";
 import {ColumnLayout, Column} from "@workspace/ui/components/layout/column-layout";
 import {MessageList} from "../components/chat/message-list";
 import {MessageInput} from "../components/chat/message-input";
@@ -28,6 +28,8 @@ function ChatView() {
     const uploadFile = useUploadFile(ownerId, mountId);
     const {data: chatPath} = usePathInfo(ownerId, mountId, chatId);
     const updateACL = useUpdateACL(ownerId);
+    const {data: writePermission} = useCheckWritePermission(ownerId, mountId, chatId);
+    const readOnly = writePermission ? !writePermission.canWrite : false;
 
     const [accessDialogOpen, setAccessDialogOpen] = useState(false);
     const [renameDialogOpen, setRenameDialogOpen] = useState(false);
@@ -176,8 +178,10 @@ function ChatView() {
                         <MessageInput
                             onSend={handleSendMessage}
                             disabled={postMessage.isPending || uploadFile.isPending}
+                            readOnly={readOnly}
                             chatName={chatName}
                             roomMembers={roomMembers}
+                            messageCount={allMessages.length}
                         />
                     </div>
                 </Column>
