@@ -7,9 +7,8 @@ import {UserPublicAvatar} from "@workspace/ui/components/layout/user-public-avat
 import {usePublicUser} from "@workspace/lib/public";
 import {useContacts} from "@workspace/lib/contacts";
 import {Mail, Paperclip} from "lucide-react";
-import {useQuery} from "@tanstack/react-query";
-import {driveApi, getDriveDownloadUrl, getDriveThumbnailUrl, getMailComposeUrl} from "@workspace/lib/api";
-import type {DrivePath} from "@workspace/lib/types/drive";
+import {useFileInfo} from "@workspace/lib/chat";
+import {getDriveDownloadUrl, getDriveThumbnailUrl, getMailComposeUrl} from "@workspace/lib/api";
 import type {Contact} from "@workspace/lib/types/contact";
 
 type MessageListProps = {
@@ -31,14 +30,7 @@ function isSameAuthorAndClose(prev: ChatMessage, curr: ChatMessage): boolean {
 }
 
 function AttachmentChip({pathId, ownerId, mountId}: { pathId: string; ownerId: string; mountId: string }) {
-    const {data: fileInfo} = useQuery({
-        queryKey: ['drive', 'file', pathId],
-        queryFn: async () => {
-            const res = await driveApi({ownerId})({mountId}).file({pathId}).get();
-            return res.data as DrivePath | null;
-        },
-        staleTime: 60_000,
-    });
+    const {data: fileInfo} = useFileInfo(ownerId, mountId, pathId);
 
     const name = fileInfo?.name || pathId;
     const downloadUrl = getDriveDownloadUrl(ownerId, mountId, pathId);
