@@ -15,6 +15,7 @@ import {buildContactEvent, buildLabelEvent} from "./sse-events";
 import {SSEventType} from "@workspace/lib/types/sse";
 import {CONTACTS_DB_CONFIG} from "./db-config";
 import type {ManagedDatabase} from "../core/managed-database";
+import {ApiError} from '../core/errors';
 
 export async function getContacts(user: User) {
     const home = await getHome(user);
@@ -153,7 +154,7 @@ export class Contacts {
     public async deleteContact(id: string) {
         // you can't delete yourself!
         if (await this.you(id)) {
-            throw new Error('You cannot delete yourself');
+            throw new ApiError(400, 'You cannot delete yourself');
         } else {
             const contact = await this.getContactById(id);
             await this.db.delete(schema.contacts).where(eq(schema.contacts.id, id));
@@ -304,7 +305,7 @@ export class Contacts {
         });
 
         if (!thumbnail) {
-            throw new Error('Failed to generate avatar thumbnail');
+            throw new ApiError(400, 'Failed to generate avatar thumbnail');
         }
 
         const fileName = `${uuidv4()}.webp`;

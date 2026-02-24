@@ -11,6 +11,7 @@ import {draftToMailOptions, sendMail} from './sender';
 import {type SSEventMailData, SSEventType} from "@workspace/lib/types/sse";
 import {LocalStorage} from "../storage";
 import {buildMailEvent} from './sse-events';
+import {ApiError} from '../core/errors';
 
 export default class Maildir {
     private basePath: string;
@@ -91,34 +92,21 @@ export default class Maildir {
         }
     }
 
-    public async mailboxCreate(mailbox: string, attributes: string[] = []): Promise<boolean> {
-        try {
-            // Check if mailbox already exists
-            const mailboxPath = await this.sanitizeDirName(mailbox);
-            const mailboxExists = await this.storage.dirExists(mailboxPath);
-            if (mailboxExists) {
-                console.error(`Cannot create: mailbox ${mailbox} already exists`);
-                return false;
-            }
+    public async mailboxCreate(mailbox: string, attributes: string[] = []): Promise<void> {
+        const mailboxPath = this.sanitizeDirName(mailbox);
+        const exists = await this.storage.dirExists(mailboxPath);
+        if (exists) {
+            throw new ApiError(409, `Mailbox '${mailbox}' already exists`);
+        }
 
-            // Create the mailbox directory structure
-            await this.storage.mkdir(mailboxPath);
+        await this.storage.mkdir(mailboxPath);
+        await this.storage.mkdir(this.storage.pathJoin(mailboxPath, 'cur'));
+        await this.storage.mkdir(this.storage.pathJoin(mailboxPath, 'new'));
+        await this.storage.mkdir(this.storage.pathJoin(mailboxPath, 'tmp'));
 
-            // Create the cur, new, and tmp subdirectories
-            await this.storage.mkdir(this.storage.pathJoin(mailboxPath, 'cur'));
-            await this.storage.mkdir(this.storage.pathJoin(mailboxPath, 'new'));
-            await this.storage.mkdir(this.storage.pathJoin(mailboxPath, 'tmp'));
-
-            // Store attributes if provided
-            if (attributes.length > 0) {
-                const attributesPath = this.sanitizeDirName(mailbox, '.attributes');
-                await this.storage.file(attributesPath).write(JSON.stringify(attributes));
-            }
-
-            return true;
-        } catch (error) {
-            console.error(`Error creating mailbox ${mailbox}:`, error);
-            return false;
+        if (attributes.length > 0) {
+            const attributesPath = this.sanitizeDirName(mailbox, '.attributes');
+            await this.storage.file(attributesPath).write(JSON.stringify(attributes));
         }
     }
 
@@ -157,66 +145,59 @@ export default class Maildir {
         }
     }
 
-    public async mailboxGet(mailbox: string): Promise<EmailSummary[] | false> {
-        try {
-            const mailboxPath = await this.sanitizeDirName(mailbox);
-            const mailboxInfo = await this.mailboxExists(mailbox);
+    public async mailboxGet(mailbox: string): Promise<EmailSummary[]> {
+        const mailboxPath = await this.sanitizeDirName(mailbox);
+        const mailboxInfo = await this.mailboxExists(mailbox);
 
-            // Check if mailbox exists
-            if (!mailboxInfo) {
-                console.error(`Cannot get messages: mailbox ${mailbox} does not exist`);
-                return false;
-            }
-
-            const messages: EmailSummary[] = [];
-            const curPath = this.storage.pathJoin(mailboxPath, 'cur');
-            const newPath = this.storage.pathJoin(mailboxPath, 'new');
-
-            // Get messages from new directory (unread)
-            if (await this.storage.dirExists(newPath)) {
-                const newFiles = await this.storage.readdir(newPath);
-                for (const fileName of newFiles) {
-                    // move to cur (skip if file no longer exists)
-                    const srcPath = this.storage.pathJoin(newPath, fileName);
-                    if (await this.storage.fileExists(srcPath)) {
-                        await this.storage.rename(srcPath, this.storage.pathJoin(curPath, fileName));
-                    }
-                }
-            }
-
-            // Get all messages stored in db form dir
-            const dbMessages = await this.db.getAllEmails(mailbox);
-
-            // Get messages from cur directory (read)
-            if (await this.storage.dirExists(curPath)) {
-                const curFiles = await this.storage.readdir(curPath);
-                for (const fileName of curFiles) {
-                    // is parsed?
-                    const cachedMessage = dbMessages.find((m) => m.id === getMailIDfromFileName(fileName));
-                    if (cachedMessage) {
-                        messages.push(cachedMessage);
-
-                    } else {
-                        const message = await this.parseMessage(getMailIDfromFileName(fileName), mailbox);
-                        if (message) {
-                            messages.push(message);
-                            await this.db.addEmail(message);
-                        }
-                    }
-                }
-            }
-
-            return messages;
-        } catch (error) {
-            console.error(`Error getting messages from mailbox ${mailbox}:`, error);
-            return [];
+        if (!mailboxInfo) {
+            throw new ApiError(404, `Mailbox '${mailbox}' not found`);
         }
+
+        const messages: EmailSummary[] = [];
+        const curPath = this.storage.pathJoin(mailboxPath, 'cur');
+        const newPath = this.storage.pathJoin(mailboxPath, 'new');
+
+        // Get messages from new directory (unread)
+        if (await this.storage.dirExists(newPath)) {
+            const newFiles = await this.storage.readdir(newPath);
+            for (const fileName of newFiles) {
+                // move to cur (skip if file no longer exists)
+                const srcPath = this.storage.pathJoin(newPath, fileName);
+                if (await this.storage.fileExists(srcPath)) {
+                    await this.storage.rename(srcPath, this.storage.pathJoin(curPath, fileName));
+                }
+            }
+        }
+
+        // Get all messages stored in db form dir
+        const dbMessages = await this.db.getAllEmails(mailbox);
+
+        // Get messages from cur directory (read)
+        if (await this.storage.dirExists(curPath)) {
+            const curFiles = await this.storage.readdir(curPath);
+            for (const fileName of curFiles) {
+                // is parsed?
+                const cachedMessage = dbMessages.find((m) => m.id === getMailIDfromFileName(fileName));
+                if (cachedMessage) {
+                    messages.push(cachedMessage);
+
+                } else {
+                    const message = await this.parseMessage(getMailIDfromFileName(fileName), mailbox);
+                    if (message) {
+                        messages.push(message);
+                        await this.db.addEmail(message);
+                    }
+                }
+            }
+        }
+
+        return messages;
     }
 
     public async messageGetFile(messageId: string): Promise<ArrayBuffer> {
         const email = await this.db.getEmail(messageId);
         if (!email) {
-            throw new Error('Email not found');
+            throw new ApiError(404, `Email '${messageId}' not found`);
         }
         const filePath = this.getFullPath({id: messageId, mailbox: email.mailbox});
         const file = this.storage.file(filePath);
@@ -231,9 +212,9 @@ export default class Maildir {
                 const parsed = await this.parseMessage(messageId, cached.mailbox);
                 if (parsed !== null) {
                     // strip the attachment data for now
-                    parsed.attachments.forEach(a => {
+                    for(const a of parsed.attachments) {
                         a.content = new Buffer(0);
-                    });
+                    }
 
                     return {...parsed, ...cached} as Email;
                 }
@@ -247,120 +228,76 @@ export default class Maildir {
         }
     }
 
-    public async messageDelete(messageId: string): Promise<boolean> {
-        try {
-            // Find the message
-            const message = await this.messageGet(messageId);
-            if (!message) {
-                console.error(`Cannot delete: message ${messageId} not found`);
-                return false;
-            }
+    public async messageDelete(messageId: string): Promise<void> {
+        const message = await this.messageGet(messageId);
+        if (!message) {
+            throw new ApiError(404, `Message '${messageId}' not found`);
+        }
 
-            // delete from db
-            await this.db.deleteEmail(messageId);
+        await this.db.deleteEmail(messageId);
 
-            // Delete the file
-            const filePath = this.getFullPath(message);
-
-            if (!await this.storage.fileExists(filePath)) {
-                console.error(`Cannot delete: file for message ${messageId} not found`);
-                return false;
-            }
-
+        const filePath = this.getFullPath(message);
+        if (await this.storage.fileExists(filePath)) {
             await this.storage.unlink(filePath);
-
-            this.emit(SSEventType.MAIL_DELETED, {
-                messageId,
-                mailbox: message.mailbox || 'inbox',
-                subject: message.subject,
-            });
-
-            return true;
-        } catch (error) {
-            console.error(`Error deleting message ${messageId}:`, error);
-            return false;
         }
+
+        this.emit(SSEventType.MAIL_DELETED, {
+            messageId,
+            mailbox: message.mailbox || 'inbox',
+            subject: message.subject,
+        });
     }
 
-    public async messageMove(messageId: string, targetMailbox: string): Promise<boolean> {
-        try {
-            // Find the message
-            const message = await this.messageGet(messageId);
-            if (!message) {
-                console.error(`Cannot move: message ${messageId} not found`);
-                return false;
-            }
-
-            // Check if target mailbox exists
-            const target = await this.mailboxExists(targetMailbox);
-            if (!target) {
-                console.error(`Cannot move: target mailbox ${targetMailbox} does not exist`);
-                return false;
-            }
-
-            // Move the file
-            const sourcePath = this.getFullPath(message);
-            const targetFilePath = this.getFullPath({id: message.id, mailbox: targetMailbox});
-
-            if (!await this.storage.fileExists(sourcePath)) {
-                console.error(`Cannot move: file for message ${messageId} not found`);
-                return false;
-            }
-
-            const sourceMailbox = message.mailbox || 'inbox';
-            this.db.moveEmail(messageId, targetMailbox);
-            // use fs move function to move
-            await this.storage.rename(sourcePath, targetFilePath);
-
-            this.emit(SSEventType.MAIL_MOVED, {
-                messageId,
-                mailbox: sourceMailbox,
-                toMailbox: targetMailbox,
-                subject: message.subject,
-            });
-
-            return true;
-        } catch (error) {
-            console.error(`Error moving message ${messageId} to mailbox ${targetMailbox}:`, error);
-            return false;
+    public async messageMove(messageId: string, targetMailbox: string): Promise<void> {
+        const message = await this.messageGet(messageId);
+        if (!message) {
+            throw new ApiError(404, `Message '${messageId}' not found`);
         }
+
+        const target = await this.mailboxExists(targetMailbox);
+        if (!target) {
+            throw new ApiError(404, `Target mailbox '${targetMailbox}' not found`);
+        }
+
+        const sourcePath = this.getFullPath(message);
+        const targetFilePath = this.getFullPath({id: message.id, mailbox: targetMailbox});
+
+        if (!await this.storage.fileExists(sourcePath)) {
+            throw new ApiError(404, `File for message '${messageId}' not found`);
+        }
+
+        const sourceMailbox = message.mailbox || 'inbox';
+        this.db.moveEmail(messageId, targetMailbox);
+        await this.storage.rename(sourcePath, targetFilePath);
+
+        this.emit(SSEventType.MAIL_MOVED, {
+            messageId,
+            mailbox: sourceMailbox,
+            toMailbox: targetMailbox,
+            subject: message.subject,
+        });
     }
 
-    public async messageCopy(messageId: string, targetMailbox: string): Promise<boolean> {
-        try {
-            // Find the message
-            const message = await this.messageGet(messageId);
-            if (!message) {
-                console.error(`Cannot copy: message ${messageId} not found`);
-                return false;
-            }
-
-            // Check if target mailbox exists
-            const targetMailboxInfo = await this.mailboxExists(targetMailbox);
-            if (!targetMailboxInfo) {
-                console.error(`Cannot copy: target mailbox ${targetMailbox} does not exist`);
-                return false;
-            }
-            // Move the file
-            const sourcePath = this.getFullPath(message);
-            const targetFilePath = this.getFullPath({id: message.id, mailbox: targetMailbox});
-
-            if (!await this.storage.fileExists(sourcePath)) {
-                console.error(`Cannot copy: file for message ${messageId} not found`);
-                return false;
-            }
-
-            // Read the file content using home.fs
-            const content = await this.storage.file(sourcePath).text();
-
-            // Write to the target location using home.fs
-            await this.storage.file(targetFilePath).write(content);
-
-            return true;
-        } catch (error) {
-            console.error(`Error copying message ${messageId} to mailbox ${targetMailbox}:`, error);
-            return false;
+    public async messageCopy(messageId: string, targetMailbox: string): Promise<void> {
+        const message = await this.messageGet(messageId);
+        if (!message) {
+            throw new ApiError(404, `Message '${messageId}' not found`);
         }
+
+        const targetMailboxInfo = await this.mailboxExists(targetMailbox);
+        if (!targetMailboxInfo) {
+            throw new ApiError(404, `Target mailbox '${targetMailbox}' not found`);
+        }
+
+        const sourcePath = this.getFullPath(message);
+        const targetFilePath = this.getFullPath({id: message.id, mailbox: targetMailbox});
+
+        if (!await this.storage.fileExists(sourcePath)) {
+            throw new ApiError(404, `File for message '${messageId}' not found`);
+        }
+
+        const content = await this.storage.file(sourcePath).text();
+        await this.storage.file(targetFilePath).write(content);
     }
 
     public async messageHandleDraft(email: EmailDraft): Promise<EmailDraft> {
@@ -486,41 +423,30 @@ export default class Maildir {
         return mail;
     }
 
-    public async messageSetRead(messageId: string, read: boolean): Promise<boolean> {
+    public async messageSetRead(messageId: string, read: boolean): Promise<void> {
         const message = await this.db.getEmail(messageId);
-        const result = await this.db.setRead(messageId, read);
-        if (result !== null && message) {
-            this.emit(SSEventType.MAIL_READ_CHANGED, {
-                messageId,
-                mailbox: message.mailbox || 'inbox',
-            });
+        if (!message) {
+            throw new ApiError(404, `Message '${messageId}' not found`);
         }
-        return result !== null;
+        await this.db.setRead(messageId, read);
+        this.emit(SSEventType.MAIL_READ_CHANGED, {
+            messageId,
+            mailbox: message.mailbox || 'inbox',
+        });
     }
 
     public async messageGetAttachment(messageId: string, index: number): Promise<Attachment | null> {
-        try {
-            // Find the message
-            const message = await this.messageGet(messageId);
-            if (!message) {
-                console.error(`Cannot get attachment: message ${messageId} not found`);
-                return null;
-            }
-
-            // Check if attachment exists
-            if (!message.attachments || index >= message.attachments.length) {
-                console.error(`Attachment index ${index} out of bounds for message ${messageId}`);
-                return null;
-            }
-
-            // parse the message to get the attachment
-            const parsedMessage = await this.parseMessage(messageId, message.mailbox);
-
-            return parsedMessage?.attachments[index] || null;
-        } catch (error) {
-            console.error(`Error getting attachment ${index} from message ${messageId}:`, error);
-            return null;
+        const message = await this.messageGet(messageId);
+        if (!message) {
+            throw new ApiError(404, `Message '${messageId}' not found`);
         }
+
+        if (!message.attachments || index >= message.attachments.length) {
+            throw new ApiError(404, `Attachment ${index} not found for message '${messageId}'`);
+        }
+
+        const parsedMessage = await this.parseMessage(messageId, message.mailbox);
+        return parsedMessage?.attachments[index] || null;
     }
 
     /**

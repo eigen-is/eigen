@@ -1,7 +1,6 @@
 import {
     AlertTriangle,
     Archive,
-    ArrowLeft,
     Forward,
     MoreVertical,
     Paperclip,
@@ -9,7 +8,6 @@ import {
     ReplyAll,
     Trash2
 } from "lucide-react";
-import {cn} from "@workspace/ui/lib/utils";
 import {Button} from "@workspace/ui/components/button";
 import {DropdownMenu, DropdownMenuTrigger} from "@workspace/ui/components/dropdown-menu";
 import {format} from "date-fns";
@@ -24,12 +22,8 @@ import {printDocument} from "@workspace/ui/lib/printElement";
 import {Table, TableBody, TableCell, TableRow} from "@workspace/ui/components/table";
 import {useEffect, useRef} from "react";
 
-interface EmailDetailProps {
-    email: Email | null;
-    isMobile?: boolean;
-    className?: string;
-    onBackClick?: () => void;
-    toggleMailRead: (mail: Email, isRead: boolean) => void;
+interface EmailDetailToolbarProps {
+    email: Email;
     onReply?: (emailId: string) => void;
     onReplyAll?: (emailId: string) => void;
     onForward?: (emailId: string) => void;
@@ -38,6 +32,90 @@ interface EmailDetailProps {
     onDelete?: (emailId: string) => void;
     onMoveToFolder?: (emailId: string, folderId: string) => void;
     mailboxes?: MaildirMailbox[];
+}
+
+export function EmailDetailToolbar({
+                                       email,
+                                       onReply,
+                                       onReplyAll,
+                                       onForward,
+                                       onArchive,
+                                       onReportSpam,
+                                       onDelete,
+                                       onMoveToFolder,
+                                       mailboxes = [],
+                                   }: EmailDetailToolbarProps) {
+    return (
+        <div className="flex items-center justify-between w-full">
+            <div className="flex items-center gap-1">
+                {email.mailbox !== 'archive' && (
+                    <TooltipButton
+                        icon={Archive}
+                        tooltipText="Archive"
+                        onClick={() => onArchive && onArchive(email.id)}
+                    />
+                )}
+                {email.mailbox !== 'spam' && (
+                    <TooltipButton
+                        icon={AlertTriangle}
+                        tooltipText="Report Spam"
+                        onClick={() => onReportSpam && onReportSpam(email.id)}
+                    />
+                )}
+                <TooltipButton
+                    icon={Trash2}
+                    tooltipText="Delete"
+                    onClick={() => onDelete && onDelete(email.id)}
+                />
+            </div>
+            <div className="flex items-center gap-1">
+                <TooltipButton
+                    icon={Reply}
+                    tooltipText="Reply"
+                    onClick={() => onReply && onReply(email.id)}
+                />
+                <TooltipButton
+                    icon={ReplyAll}
+                    tooltipText="Reply All"
+                    onClick={() => onReplyAll && onReplyAll(email.id)}
+                />
+                <TooltipButton
+                    icon={Forward}
+                    tooltipText="Forward"
+                    onClick={() => onForward && onForward(email.id)}
+                />
+                <div className="h-6 w-[1px] bg-border mx-1"/>
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-8 w-8" title="More actions">
+                            <MoreVertical className="h-4 w-4"/>
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <EmailContextMenu
+                        style={{}}
+                        messageIds={[email.id]}
+                        isSingleSelect={true}
+                        mailboxes={mailboxes}
+                        currentMailboxId={email.mailbox}
+                        onReply={onReply}
+                        onReplyAll={onReplyAll}
+                        onForward={onForward}
+                        onArchive={onArchive ? (ids) => ids.forEach(id => onArchive(id)) : undefined}
+                        onReportSpam={onReportSpam ? (ids) => ids.forEach(id => onReportSpam(id)) : undefined}
+                        onDelete={onDelete ? (ids) => ids.forEach(id => onDelete(id)) : undefined}
+                        onMoveToFolder={onMoveToFolder ? (ids, folderId) => ids.forEach(id => onMoveToFolder(id, folderId)) : undefined}
+                        onClose={() => {}}
+                        onPrint={() => printDocument()}
+                    />
+                </DropdownMenu>
+            </div>
+        </div>
+    );
+}
+
+interface EmailDetailProps {
+    email: Email | null;
+    toggleMailRead: (mail: Email, isRead: boolean) => void;
 }
 
 export function MailLink({email, name, mailLink = true, compact = false}: {
@@ -65,22 +143,7 @@ export function MailLink({email, name, mailLink = true, compact = false}: {
         </span>)
 }
 
-export function EmailDetail({
-                                email,
-                                isMobile,
-                                className,
-                                onBackClick,
-                                toggleMailRead,
-                                onReply,
-                                onReplyAll,
-                                onForward,
-                                onArchive,
-                                onReportSpam,
-                                onDelete,
-                                onMoveToFolder,
-                                mailboxes = [],
-                                ...props
-                            }: EmailDetailProps) {
+export function EmailDetail({email, toggleMailRead}: EmailDetailProps) {
     const hasMarkedAsRead = useRef<string | null>(null);
 
     useEffect(() => {
@@ -97,8 +160,6 @@ export function EmailDetail({
             </div>
         );
     }
-
-    console.log('Rendering EmailDetail with email:', email);
 
     const firstFrom = email.from?.value[0];
     const fromName = firstFrom?.name || firstFrom?.address || 'Unknown';
@@ -136,93 +197,7 @@ export function EmailDetail({
     };
 
     return (
-        <div className={cn("flex flex-col h-full bg-white", className)} {...props}>
-            {/* Action toolbar */}
-            <div className="h-12 flex items-center justify-between px-4 border-b">
-                <div className="flex items-center gap-1">
-                    {/* Mobile back button when needed */}
-                    {isMobile && onBackClick && (
-                        <>
-                            <Button variant="ghost" size="icon" className="h-8 w-8 mr-1" onClick={onBackClick}
-                                    title="Back">
-                                <ArrowLeft className="h-4 w-4"/>
-                            </Button>
-                            <div className="h-6 w-[1px] bg-border mx-1"></div>
-                        </>
-                    )}
-
-                    {/* Left side icons */}
-                    {email.mailbox !== 'archive' && (
-                        <TooltipButton
-                            icon={Archive}
-                            tooltipText="Archive"
-                            onClick={() => onArchive && onArchive(email.id)}
-                        />
-                    )}
-                    {email.mailbox !== 'spam' && (
-                        <TooltipButton
-                            icon={AlertTriangle}
-                            tooltipText="Report Spam"
-                            onClick={() => onReportSpam && onReportSpam(email.id)}
-                        />
-                    )}
-                    <TooltipButton
-                        icon={Trash2}
-                        tooltipText="Delete"
-                        onClick={() => onDelete && onDelete(email.id)}
-                    />
-                </div>
-
-                <div className="flex items-center gap-1">
-                    {/* Right side icons */}
-                    <TooltipButton
-                        icon={Reply}
-                        tooltipText="Reply"
-                        onClick={() => onReply && onReply(email.id)}
-                    />
-                    <TooltipButton
-                        icon={ReplyAll}
-                        tooltipText="Reply All"
-                        onClick={() => onReplyAll && onReplyAll(email.id)}
-                    />
-                    <TooltipButton
-                        icon={Forward}
-                        tooltipText="Forward"
-                        onClick={() => onForward && onForward(email.id)}
-                    />
-
-                    <div className="h-6 w-[1px] bg-border mx-1"></div>
-
-                    <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" className="w-full justify-start px-2 py-1.5" title="More actions">
-                                <MoreVertical className="h-4 w-4"/>
-                            </Button>
-                        </DropdownMenuTrigger>
-                        <EmailContextMenu
-                            style={{}}
-                            messageId={email.id}
-                            mailboxes={mailboxes}
-                            currentMailboxId={email.mailbox}
-                            onReply={onReply}
-                            onReplyAll={onReplyAll}
-                            onForward={onForward}
-                            onArchive={onArchive}
-                            onReportSpam={onReportSpam}
-                            onDelete={onDelete}
-                            onMoveToFolder={onMoveToFolder}
-                            onClose={() => {
-                            }}
-                            onPrint={(emailId) => {
-                                console.log('Printing email:', emailId);
-                                printDocument();
-                            }}
-                        />
-                    </DropdownMenu>
-                </div>
-            </div>
-
-            {/* Email content */}
+        <div className="flex flex-col h-full bg-white">
             <div className="p-4 flex-1 overflow-auto" data-document>
                 {/* Email header */}
                 <div className="space-y-4 mb-6">

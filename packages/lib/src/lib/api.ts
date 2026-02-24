@@ -12,8 +12,11 @@ export const api = treaty<app>(API_HOST, {
 export const contactsApi = api.contacts;
 export const mailApi = api.mail;
 export const spaceApi = api.space;
+export const publicApi = api.p;
 export const driveApi = api.drive;
 export const homeApi = api.home;
+
+export const getPublicAvatarUrl = (emailOrId: string) => `${API_HOST}/p/avatar/${encodeURIComponent(emailOrId)}`;
 
 export const adminApi = api.admin;
 export const setupApi = api.setup;

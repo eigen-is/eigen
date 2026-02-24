@@ -61,7 +61,6 @@ export function LabelDialog({
     // Reset form values when selectedLabel changes
     useEffect(() => {
         if (selectedLabel) {
-            console.log('Resetting form with label data:', selectedLabel);
             form.reset({
                 name: selectedLabel.name,
                 color: selectedLabel.color

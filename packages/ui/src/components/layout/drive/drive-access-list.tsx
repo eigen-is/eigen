@@ -40,7 +40,7 @@ export function DriveAccessList({
 
         if (path.acl && path.acl.length > 0) {
             // Add only non-owner users from ACL
-            path.acl.forEach((access) => {
+            for(const access of path.acl) {
                 if (access.public) {
                     hasPublicAccess = true;
                 } else if (access.email !== owner.data?.email) {
@@ -52,7 +52,7 @@ export function DriveAccessList({
                         owner: false
                     })
                 }
-            })
+            }
         }
 
         return [accessList, hasPublicAccess];

@@ -164,7 +164,15 @@ docker-compose restart
 - `/packages`: Shared code
     - `/ui`: Reusable UI components (shadcn/ui)
     - `/lib`: Shared business logic
-    - `/config`: Shared configuration
+- `/docs`: Architecture documentation
+
+## Documentation
+
+- [Contributing Guide](docs/CONTRIBUTING.md) - Development conventions and architecture patterns
+- [Database Architecture](docs/DATABASE.md) - SQLite databases, migrations, and access patterns
+- [Storage & Mount System](docs/STORAGE.md) - Storage backends and file management
+- [SSE Architecture](docs/SSE.md) - Real-time updates and cache invalidation
+- [Docker Deployment](docs/DOCKER.md) - Building and deploying with Docker
 
 ## License
 

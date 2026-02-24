@@ -61,19 +61,12 @@ function InnerApp() {
 
 function App() {
     return (
-        <EigenApp appName="contacts">
+        <EigenApp>
             <InnerApp/>
         </EigenApp>
     )
 }
 
-
-// Register things for typesafety
-declare module '@tanstack/react-router' {
-    interface Register {
-        router: typeof router
-    }
-}
 
 const rootElement = document.getElementById('app')!
 
