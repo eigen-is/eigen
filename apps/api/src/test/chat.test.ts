@@ -491,6 +491,186 @@ describe('Chat', () => {
         });
     });
 
+    describe('Read-Only Access', () => {
+        let chatId: string;
+
+        beforeAll(async () => {
+            const chat = await drivePost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `folder/${aliceRootId}/chat`, {fileName: 'Read Only Chat'});
+            chatId = chat.id;
+
+            await authedRequest(ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${chatId}/acl`, {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        acl: [
+                            {email: 'bob@test.eigen.is', read: true, write: false, public: false},
+                        ],
+                    }),
+                });
+
+            await chatPost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `${chatId}/messages`, {content: 'Hello from Alice'});
+        });
+
+        test('Bob can read messages with read-only access', async () => {
+            const msgs = await chatGet(ctx.bob.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `${chatId}/messages`);
+            expect(msgs.length).toBeGreaterThanOrEqual(1);
+            const aliceMsg = msgs.find((m: any) => m.content === 'Hello from Alice');
+            expect(aliceMsg).toBeDefined();
+        });
+
+        test('Bob cannot post message with read-only access', async () => {
+            const res = await authedRequest(ctx.bob.user.sessionToken,
+                `/chat/${ctx.alice.user.id}/${aliceMountId}/${chatId}/messages`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({content: 'Bob tries to post'}),
+                });
+            expect(res.status).toBe(403);
+        });
+
+        test('Bob cannot edit messages with read-only access', async () => {
+            const msgs = await chatGet(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `${chatId}/messages`);
+            const msg = msgs[0];
+            const res = await authedRequest(ctx.bob.user.sessionToken,
+                `/chat/${ctx.alice.user.id}/${aliceMountId}/${chatId}/messages/${msg.id}`, {
+                    method: 'PATCH',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({content: 'Bob edits'}),
+                });
+            expect(res.status).toBe(403);
+        });
+
+        test('Bob cannot delete messages with read-only access', async () => {
+            const msgs = await chatGet(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `${chatId}/messages`);
+            const msg = msgs[0];
+            const res = await authedRequest(ctx.bob.user.sessionToken,
+                `/chat/${ctx.alice.user.id}/${aliceMountId}/${chatId}/messages/${msg.id}`, {
+                    method: 'DELETE',
+                });
+            expect(res.status).toBe(403);
+        });
+
+        test('Bob cannot use slash commands with read-only access', async () => {
+            const res = await authedRequest(ctx.bob.user.sessionToken,
+                `/chat/${ctx.alice.user.id}/${aliceMountId}/${chatId}/messages`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({content: '/dance'}),
+                });
+            expect(res.status).toBe(403);
+        });
+
+        test('Bob cannot whisper with read-only access', async () => {
+            const res = await authedRequest(ctx.bob.user.sessionToken,
+                `/chat/${ctx.alice.user.id}/${aliceMountId}/${chatId}/messages`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({content: `/whisper ${ctx.alice.user.email} secret`}),
+                });
+            expect(res.status).toBe(403);
+        });
+
+        test('Alice can still post (owner has write access)', async () => {
+            const msg = await chatPost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `${chatId}/messages`, {content: 'Alice can still write'});
+            expect(msg.type).toBe('message');
+            expect(msg.content).toBe('Alice can still write');
+        });
+
+        test('Bob read-only messages not leaked from failed posts', async () => {
+            const msgs = await chatGet(ctx.bob.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `${chatId}/messages`);
+            const bobMsg = msgs.find((m: any) => m.content === 'Bob tries to post');
+            expect(bobMsg).toBeUndefined();
+        });
+
+        test('upgrading Bob to write allows posting', async () => {
+            await authedRequest(ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${chatId}/acl`, {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        acl: [
+                            {email: 'bob@test.eigen.is', read: true, write: true, public: false},
+                        ],
+                    }),
+                });
+
+            const msg = await chatPost(ctx.bob.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `${chatId}/messages`, {content: 'Bob can now write!'});
+            expect(msg.type).toBe('message');
+            expect(msg.content).toBe('Bob can now write!');
+        });
+    });
+
+    describe('New Emote Commands', () => {
+        let chatId: string;
+
+        beforeAll(async () => {
+            const chat = await drivePost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `folder/${aliceRootId}/chat`, {fileName: 'Emote Chat'});
+            chatId = chat.id;
+        });
+
+        test('/allthethings creates emote', async () => {
+            const msg = await chatPost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `${chatId}/messages`, {content: '/allthethings'});
+            expect(msg.type).toBe('emote');
+            expect(msg.content).toBe('$allthethings');
+        });
+
+        test('/facepalm creates emote', async () => {
+            const msg = await chatPost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `${chatId}/messages`, {content: '/facepalm'});
+            expect(msg.type).toBe('emote');
+            expect(msg.content).toBe('$facepalm');
+        });
+
+        test('/shrug creates emote', async () => {
+            const msg = await chatPost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `${chatId}/messages`, {content: '/shrug'});
+            expect(msg.type).toBe('emote');
+            expect(msg.content).toBe('$shrug');
+        });
+
+        test('/flip creates emote', async () => {
+            const msg = await chatPost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `${chatId}/messages`, {content: '/flip'});
+            expect(msg.type).toBe('emote');
+            expect(msg.content).toBe('$flip');
+        });
+
+        test('allthethings emote shows correct first person text', async () => {
+            const msgs = await chatGet(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `${chatId}/messages`);
+            const emote = msgs.find((m: any) => m.type === 'emote' && m.content.includes('ALL THE THINGS'));
+            expect(emote).toBeDefined();
+            expect(emote.content).toContain('\\o/');
+        });
+
+        test('shrug emote shows kaomoji', async () => {
+            const msgs = await chatGet(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `${chatId}/messages`);
+            const emote = msgs.find((m: any) => m.type === 'emote' && m.content.includes('shrug'));
+            expect(emote).toBeDefined();
+            expect(emote.content).toContain('¯\\_(ツ)_/¯');
+        });
+
+        test('flip emote shows table flip', async () => {
+            const msgs = await chatGet(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `${chatId}/messages`);
+            const emote = msgs.find((m: any) => m.type === 'emote' && m.content.includes('flip'));
+            expect(emote).toBeDefined();
+            expect(emote.content).toContain('(╯°□°)╯︵ ┻━┻');
+        });
+    });
+
     describe('Delete Chat', () => {
         test('create and delete chat', async () => {
             const chat = await drivePost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
