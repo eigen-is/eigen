@@ -6,7 +6,7 @@ import {Input} from "@workspace/ui/components/input";
 import {Textarea} from "@workspace/ui/components/textarea";
 import {Card, CardContent, CardFooter, CardHeader, CardTitle} from "@workspace/ui/components/card";
 import {Label} from '@workspace/ui/components/label';
-import {spaceApi} from '@workspace/lib/api';
+import {publicApi} from '@workspace/lib/api';
 import {toast} from "sonner";
 
 export const Route = createFileRoute('/')({
@@ -49,7 +49,7 @@ export function HomeComponent() {
         setIsSubmitting(true);
 
         const time = new Date().getTime();
-        const waitlistResult = await spaceApi.waitlist.post({email, notes});
+        const waitlistResult = await publicApi.waitlist.post({email, notes});
         const duration = new Date().getTime() - time;
         // Make sure it takes a bit
         await new Promise(resolve => setTimeout(resolve, Math.max(350 - duration, 0)));
@@ -63,7 +63,7 @@ export function HomeComponent() {
             toast.error('Failed to sign up', {description: 'Signing up currently not available, please try again'});
         }
 
-    }, [spaceApi.waitlist]);
+    }, []);
 
     return (
         <div className="flex flex-col items-center justify-center min-h-screen p-4">

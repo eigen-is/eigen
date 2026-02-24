@@ -7,7 +7,6 @@ import {DrivePath} from '@workspace/lib/types/drive';
 import {useState} from 'react';
 import {useNavigate} from '@tanstack/react-router';
 
-// Import the create stickies component
 import {DriveCreateStickies} from '@workspace/ui/components/layout/drive/drive-create-stickies';
 
 interface StickiesSidebarProps {
@@ -24,13 +23,9 @@ export function StickiesSidebar({
                                     rootPath = null,
                                 }: StickiesSidebarProps) {
     const navigate = useNavigate();
-    // Add state for tracking dialog open state
     const [createStickiesOpen, setCreateStickiesOpen] = useState(false);
-
-    // Determine the target path for stickies creation
     const targetPath = rootPath;
 
-    // Define afterAction callback to redirect to stickies mime type
     const handleAfterAction = () => {
         navigate({
             to: '/mime/$mimeType',
@@ -52,8 +47,6 @@ export function StickiesSidebar({
                     <AppLogo appName="stickies"/>
                 </div>
             )}
-
-
             <div className="px-3 py-2">
                 <Button
                     variant="default"
@@ -90,13 +83,11 @@ export function StickiesSidebar({
                 />
             </SidebarSection>
 
-            {/* Storage usage indicator at the bottom of sidebar */}
             <StorageUsage
                 className="mt-auto"
                 condensed={condensed}
             />
 
-            {/* Create Stickies Dialog */}
             {targetPath && (
                 <DriveCreateStickies
                     path={targetPath}

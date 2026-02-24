@@ -45,10 +45,8 @@ export const Column: React.FC<ColumnProps> = ({
         },
     });
 
-    // Get task IDs for SortableContext
     const taskIds = tasks.map(task => task.id);
 
-    // Set width based on mobile or desktop
     const columnWidth = isMobile ? 'w-[92vw] min-w-[92vw]' : 'w-[280px] min-w-[280px]';
     const columnMargin = isMobile ? 'mx-[4vw]' : 'mx-1.5';
 
@@ -63,7 +61,6 @@ export const Column: React.FC<ColumnProps> = ({
                 scrollSnapStop: 'normal'
             }}
         >
-            {/* Column header */}
             <div
                 className="h-10 px-2 cursor-grab touch-none font-medium text-sm border-b bg-gray-50 flex-shrink-0 flex items-center justify-between"
                 {...attributes}
@@ -86,21 +83,18 @@ export const Column: React.FC<ColumnProps> = ({
                 </div>
             </div>
 
-            {/* Column content area */}
             <div
                 className={`flex-grow overflow-y-auto overflow-x-hidden flex flex-col p-1.5 ${
                     isDropAnimating ? 'bg-blue-50/10' : 'bg-white'
                 }`}
             >
                 {tasks.length === 0 ? (
-                    /* Special empty column state - this is crucial for dropping */
                     <div
                         className="flex-grow min-h-[150px] flex items-center justify-center"
-                        data-column-id={column.id} // Add data attribute to help identify this element
+                        data-column-id={column.id}
                     >
                     </div>
                 ) : (
-                    /* Normal column with tasks */
                     <div className="flex-grow">
                         <SortableContext items={taskIds} strategy={verticalListSortingStrategy}>
                             {tasks.map((task) => (
@@ -117,7 +111,6 @@ export const Column: React.FC<ColumnProps> = ({
                     </div>
                 )}
 
-                {/* Add task button */}
                 <button
                     onClick={() => onAddTask(column.id)}
                     className="mt-2 flex items-center gap-1 text-sm text-gray-600 hover:bg-gray-100 px-2 py-1.5 rounded-sm w-full"

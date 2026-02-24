@@ -22,6 +22,7 @@ export class Home {
 
     private initialized: boolean = false;
     private initializationStarted: boolean = false;
+    private initWaiters: ((home: Home) => void)[] = [];
     private timeout: Timer | undefined;
     private managedDatabases: Map<string, () => Promise<ManagedDatabase<any>>> = new Map();
     private sseListeners: ((event: SSEvent) => void)[] = [];
@@ -40,12 +41,7 @@ export class Home {
         }
         if (this.initializationStarted) {
             return new Promise<Home>((resolve) => {
-                const interval = setInterval(() => {
-                    if (this.initialized) {
-                        clearInterval(interval);
-                        resolve(this);
-                    }
-                }, 1);
+                this.initWaiters.push(resolve);
             });
         }
         this.initializationStarted = true;
@@ -57,6 +53,10 @@ export class Home {
         await this.mail.init();
 
         this.initialized = true;
+        for (const resolve of this.initWaiters) {
+            resolve(this);
+        }
+        this.initWaiters = [];
         return this;
     }
 

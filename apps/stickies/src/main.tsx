@@ -32,7 +32,7 @@ function InnerApp() {
 
 function App() {
     return (
-        <EigenApp appName="stickies">
+        <EigenApp>
             <InnerApp/>
         </EigenApp>
     )

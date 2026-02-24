@@ -2,7 +2,7 @@
 
 import {Tooltip, TooltipContent, TooltipTrigger,} from "@workspace/ui/components/tooltip";
 import {UserAvatar, UserAvatarProps} from "./user-avatar"
-import {useAvatar} from "@workspace/lib/media"
+import {usePublicUser} from "@workspace/lib/public"
 
 export type UserPublicAvatarProps = Omit<UserAvatarProps, 'name' | 'imageUrl'> & {
     email: string
@@ -16,17 +16,14 @@ export function UserPublicAvatar({
                                      size = "md",
                                      ...props
                                  }: UserPublicAvatarProps) {
-    // Fetch user data based on email
-    const {data} = useAvatar(email || '', {enabled: true});
+    const {data} = usePublicUser(email || '');
 
-    // Once data is loaded, render UserAvatar with the fetched data
     return (
         <Tooltip delayDuration={300}>
             <TooltipTrigger asChild>
                 <UserAvatar
                     name={data?.name || email}
-                    email={data?.email || email}
-                    imageUrl={data?.avatar}
+                    email={email}
                     size={size}
                     className={className}
                     {...props}

@@ -4,6 +4,7 @@ import {cn} from "../../../lib/utils";
 import {LabelDialog} from './label-dialog';
 import {LabelManagerProps} from './types';
 import {SidebarItem} from '../sidebar';
+import {DroppableSidebarItem} from '../sidebar/droppable-sidebar-item';
 import {TooltipButton} from "@workspace/ui";
 import {useLabels} from './label-provider';
 import type {Label} from "@workspace/lib/types/label";
@@ -13,6 +14,8 @@ export function LabelManager({
                                  getLabelPath = (label) => `/label/${label.id.toLowerCase()}`,
                                  className,
                                  condensed = false,
+                                 dropAcceptTypes,
+                                 onItemDrop,
                              }: LabelManagerProps) {
     const [selectedLabel, setSelectedLabel] = useState<Label | null>(null);
     const [dialogOpen, setDialogOpen] = useState(false);
@@ -80,30 +83,46 @@ export function LabelManager({
             </div>
 
             <div className="space-y-1">
-                {labels.map((label) => (
-                    <SidebarItem
-                        key={label.id}
-                        icon={<></>}
-                        label={label.name}
-                        colorDot={label.color}
-                        to={getLabelPath(label)}
-                        condensed={condensed}
-                        className={!condensed ? "pr-8 relative group" : ""}
-                    >
-                        {!condensed && (
-                            <div
-                                className="editButton absolute right-2 opacity-0 group-hover:opacity-80 hover:opacity-100">
-                                <TooltipButton
-                                    icon={Pencil}
-                                    tooltipText={`Edit label`}
-                                    variant="ghost"
-                                    size="icon"
-                                    onClick={() => handleEditClick(label)}
-                                />
-                            </div>
-                        )}
-                    </SidebarItem>
-                ))}
+                {labels.map((label) => {
+                    const editButton = !condensed && (
+                        <div className="editButton absolute right-2 opacity-0 group-hover:opacity-80 hover:opacity-100">
+                            <TooltipButton
+                                icon={Pencil}
+                                tooltipText={`Edit label`}
+                                variant="ghost"
+                                size="icon"
+                                onClick={() => handleEditClick(label)}
+                            />
+                        </div>
+                    );
+                    const itemProps = {
+                        icon: <></>,
+                        label: label.name,
+                        colorDot: label.color,
+                        to: getLabelPath(label),
+                        condensed,
+                        className: !condensed ? "pr-8 relative group" : "",
+                    };
+
+                    if (dropAcceptTypes && onItemDrop) {
+                        return (
+                            <DroppableSidebarItem
+                                key={label.id}
+                                acceptTypes={dropAcceptTypes}
+                                onDrop={(data) => onItemDrop(data.ids, label.id)}
+                                {...itemProps}
+                            >
+                                {editButton}
+                            </DroppableSidebarItem>
+                        );
+                    }
+
+                    return (
+                        <SidebarItem key={label.id} {...itemProps}>
+                            {editButton}
+                        </SidebarItem>
+                    );
+                })}
             </div>
 
             <LabelDialog

@@ -76,7 +76,7 @@ export async function generateThumbnail(
             return await resized.jpeg({quality: opts.quality}).toBuffer();
         }
     } catch (error) {
-        console.error('Failed to generate thumbnail:', error);
+        // console.error('Failed to generate thumbnail:', error);
         return null;
     }
 }

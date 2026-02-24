@@ -1,45 +1,24 @@
 import {createRootRouteWithContext, Outlet} from '@tanstack/react-router'
-import {TanStackRouterDevtools} from '@tanstack/react-router-devtools'
 import {AuthContextType} from "@workspace/lib/auth";
-import {Topbar} from "@workspace/ui/components/layout/topbar";
-import {createContext, useState} from 'react';
-import {useIsMobile} from '@workspace/lib/media';
-
-export const SidebarContext = createContext<{
-    sidebarOpen: boolean;
-    setSidebarOpen: (open: boolean) => void;
-}>({
-    sidebarOpen: false,
-    setSidebarOpen: () => {
-    },
-});
+import {AppShell} from "@workspace/ui/components/layout/app-shell";
+import {AdminSidebar} from "../components/admin/admin-sidebar";
 
 interface MyRouterContext {
     auth: AuthContextType;
 }
 
 export const Route = createRootRouteWithContext<MyRouterContext>()({
-    component: RootComponent
-});
-
-function RootComponent() {
-    const [sidebarOpen, setSidebarOpen] = useState(false);
-    const isMobile = useIsMobile();
-
-    return (
-        <SidebarContext.Provider value={{sidebarOpen, setSidebarOpen}}>
-            <div className="flex flex-col h-dvh">
-                <Topbar
-                    rootRoute={Route}
-                    showMobileMenu={true}
-                    onMobileMenuClick={() => setSidebarOpen(true)}
-                    isMobile={isMobile}
-                />
-                <div className="flex-1 overflow-hidden">
-                    <Outlet/>
-                </div>
+    component: () => (
+        <AppShell
+            appName="admin"
+            rootRoute={Route}
+            sidebar={({condensed, isMobile, onClose}) => (
+                <AdminSidebar condensed={condensed} isMobile={isMobile} onClose={onClose}/>
+            )}
+        >
+            <div className="flex-1 overflow-auto">
+                <Outlet/>
             </div>
-            <TanStackRouterDevtools position="bottom-right"/>
-        </SidebarContext.Provider>
-    );
-}
+        </AppShell>
+    ),
+});

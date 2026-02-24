@@ -1,6 +1,5 @@
-import {cn} from "@workspace/ui/lib/utils";
 import {getDriveDownloadUrl, getDriveThumbnailUrl} from "@workspace/lib/api";
-import {ArrowLeft, ArrowRight, Download, MoreVertical, Pencil, Trash2, UserRoundPlus, X} from "lucide-react";
+import {ArrowRight, Download, MoreVertical, Pencil, Trash2, UserRoundPlus, X} from "lucide-react";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -14,12 +13,88 @@ import {DriveAccessList} from "@workspace/ui/components/layout/drive";
 import {type DrivePath} from "@workspace/lib/types/drive";
 import {formatFileSize} from "@workspace/ui/lib/formatFileSize";
 import {Table, TableBody, TableCell, TableRow} from "@workspace/ui/components/table";
+import {useLayout} from "../layout-context";
 
-interface DriveDetailProps {
+type DriveDetailToolbarProps = {
+    path: DrivePath;
+    onClose?: () => void;
+    onDelete?: (path: DrivePath) => void;
+    onShareClick?: (path: DrivePath) => void;
+    onDownload?: (path: DrivePath) => void;
+    onItemOpen?: (path: DrivePath) => void;
+    onRename?: (path: DrivePath) => void;
+    allowDelete?: boolean;
+}
+
+export function DriveDetailToolbar({
+                                       path,
+                                       onClose,
+                                       onDelete,
+                                       onShareClick,
+                                       onDownload,
+                                       onItemOpen,
+                                       onRename,
+                                       allowDelete,
+                                   }: DriveDetailToolbarProps) {
+    const {isMobile} = useLayout();
+
+    return (
+        <div className="flex items-center justify-between w-full">
+            <div className="flex items-center gap-1">
+                {!isMobile && onClose && (
+                    <TooltipButton onClick={onClose} tooltipText="Close" icon={X}/>
+                )}
+            </div>
+            <div className="flex items-center gap-1">
+                {onDelete && (
+                    <TooltipButton
+                        icon={Trash2}
+                        tooltipText="Delete"
+                        onClick={() => onDelete(path)}
+                    />
+                )}
+                <div className="h-6 w-[1px] bg-border mx-1"/>
+                <DropdownMenu>
+                    <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-8 w-8" title="More actions">
+                            <MoreVertical className="h-4 w-4"/>
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent>
+                        <DropdownMenuItem onClick={() => onItemOpen?.(path)} className="flex items-center">
+                            <ArrowRight className="h-4 w-4 mr-2"/>
+                            Open
+                        </DropdownMenuItem>
+                        {path.type === 'file' && (
+                            <DropdownMenuItem onClick={() => onDownload?.(path)} className="flex items-center">
+                                <Download className="h-4 w-4 mr-2"/>
+                                Download
+                            </DropdownMenuItem>
+                        )}
+                        <DropdownMenuItem onClick={() => onShareClick?.(path)} className="flex items-center">
+                            <UserRoundPlus className="h-4 w-4 mr-2"/>
+                            Edit access
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => onRename?.(path)} className="flex items-center">
+                            <Pencil className="h-4 w-4 mr-2"/>
+                            Rename
+                        </DropdownMenuItem>
+                        <DropdownMenuSeparator/>
+                        {allowDelete && (
+                            <DropdownMenuItem onClick={() => onDelete?.(path)} className="flex items-center">
+                                <Trash2 className="h-4 w-4 mr-2"/>
+                                Delete
+                            </DropdownMenuItem>
+                        )}
+                    </DropdownMenuContent>
+                </DropdownMenu>
+            </div>
+        </div>
+    );
+}
+
+type DriveDetailProps = {
     path: DrivePath | null;
-    isMobile?: boolean;
-    className?: string;
-    onBackClick?: () => void;
     onDelete?: (path: DrivePath) => void;
     onShareClick?: (path: DrivePath) => void;
     onDownload?: (path: DrivePath) => void;
@@ -30,16 +105,12 @@ interface DriveDetailProps {
 
 export function DriveDetail({
                                 path,
-                                isMobile,
-                                className,
-                                onBackClick,
                                 onDelete,
                                 onShareClick,
                                 onDownload,
                                 onItemOpen,
                                 onRename,
                                 allowDelete,
-                                ...props
                             }: DriveDetailProps) {
 
     if (!path) {
@@ -54,68 +125,7 @@ export function DriveDetail({
     const thumbnailPath = getDriveThumbnailUrl(path.ownerId, path.mountId, path.thumbnail || '');
 
     return (
-
-        <div className={cn("flex flex-col h-full bg-white", className)} {...props}>
-            {/* Action toolbar */}
-            <div className="h-12 flex items-center justify-between px-4 border-b">
-                <div className="flex items-center gap-1">
-                    {/* Mobile back button when needed */}
-                    {onBackClick && (
-                        <TooltipButton onClick={onBackClick}
-                                       tooltipText={isMobile ? "Back" : "Close"}
-                                       icon={isMobile ? ArrowLeft : X}
-                        />
-                    )}
-                </div>
-
-                <div className="flex items-center gap-1">
-                    {onDelete && (
-                        <TooltipButton
-                            icon={Trash2}
-                            tooltipText="Delete"
-                            onClick={() => onDelete(path)}
-                        />
-                    )}
-
-                    <div className="h-6 w-[1px] bg-border mx-1"></div>
-
-                    <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="icon" className="h-8 w-8" title="More actions">
-                                <MoreVertical className="h-4 w-4"/>
-                            </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent>
-                            <DropdownMenuItem onClick={() => onItemOpen?.(path)} className="flex items-center">
-                                <ArrowRight className="h-4 w-4 mr-2"/>
-                                Open
-                            </DropdownMenuItem>
-                            {path.type === 'file' && (
-                                <DropdownMenuItem onClick={() => onDownload?.(path)} className="flex items-center">
-                                    <Download className="h-4 w-4 mr-2"/>
-                                    Download
-                                </DropdownMenuItem>
-                            )}
-                            <DropdownMenuItem onClick={() => onShareClick?.(path)} className="flex items-center">
-                                <UserRoundPlus className="h-4 w-4 mr-2"/>
-                                Edit access
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => onRename?.(path)} className="flex items-center">
-                                <Pencil className="h-4 w-4 mr-2"/>
-                                Rename
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator/>
-                            {allowDelete && (
-                                <DropdownMenuItem onClick={() => onDelete?.(path)} className="flex items-center">
-                                    <Trash2 className="h-4 w-4 mr-2"/>
-                                    Delete
-                                </DropdownMenuItem>
-                            )}
-                        </DropdownMenuContent>
-                    </DropdownMenu>
-                </div>
-            </div>
-
+        <div className="flex flex-col h-full bg-white">
             <div className="p-4 flex-1 overflow-auto">
                 <h2 className="text-xl font-medium mb-2 flex items-center">
                     <span className="truncate overflow-hidden min-w-0 flex-1">{path.name}</span>

@@ -2,6 +2,7 @@ import {type User} from "better-auth/types";
 import type {EmailDraft} from "@workspace/lib/types/mail";
 import {getUserByEmail} from "../users/users.ts";
 import {getHome} from "../home";
+import {ApiError} from '../core/errors';
 
 async function getMailClient(user: User) {
     const home = await getHome(user);
@@ -30,15 +31,12 @@ export async function mailboxExists(user: User, mailbox: string) {
 
 export async function mailboxDeliver(to: string, file: ArrayBuffer) {
     const user = await getUserByEmail(to);
-    console.log('Delivering message to:', to, user, file);
-    if (user) {
-        const mail = await getMailClient(user);
-        // convert file to string
-        const message = new TextDecoder().decode(new Uint8Array(file));
-        return await mail.mailboxDeliver(message);
-    } else {
-        return false;
+    if (!user) {
+        throw new ApiError(404, `Recipient '${to}' not found`);
     }
+    const mail = await getMailClient(user);
+    const message = new TextDecoder().decode(new Uint8Array(file));
+    return await mail.mailboxDeliver(message);
 }
 
 export async function messageGetFile(user: User, messageId: string) {
@@ -64,9 +62,10 @@ export async function messageMove(user: User, messageId: string, targetMailbox: 
 async function messageMoveToSpecial(user: User, messageId: string, flag: string) {
     const mailboxes = await mailboxesList(user);
     const target = mailboxes.find(mailbox => mailbox.flags.includes(flag));
-    if (target) {
-        return await messageMove(user, messageId, target.path);
+    if (!target) {
+        throw new ApiError(404, `Mailbox with flag '${flag}' not found`);
     }
+    return await messageMove(user, messageId, target.path);
 }
 
 export async function messageMoveToInbox(user: User, messageId: string) {

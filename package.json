@@ -15,7 +15,9 @@
     "serve:setup": "bun --filter '@apps/api' --filter './apps/setup' dev",
     "build": "bun --filter '*' build",
     "build:prod": "bun --filter './apps/*' build && bun --filter '@apps/api' buildfordocker",
-    "typecheck": "bun --filter '*' typecheck"
+    "typecheck": "bun --filter '*' typecheck",
+    "test": "bun --filter '@apps/api' test",
+    "check": "bun run typecheck && bun run test"
   },
   "workspaces": [
     "packages/*",
@@ -26,7 +28,6 @@
     "react-dom": "^19.1.0",
     "@tanstack/react-router": "^1.140.0",
     "@tanstack/react-table": "^8.21.3",
-    "@tanstack/match-sorter-utils": "^8.19.4",
     "@tanstack/react-query": "^5.75.0",
     "@tanstack/react-query-devtools": "^5.75.0",
     "lucide-react": "^0.480.0",

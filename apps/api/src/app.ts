@@ -1,4 +1,5 @@
 import Elysia from "elysia";
+import {ApiError} from "./lib/core/errors";
 import swagger from "@elysiajs/swagger";
 import cors from "@elysiajs/cors";
 import {betterAuth} from "./routes/auth";
@@ -6,6 +7,7 @@ import {mailRouter} from "./routes/mail";
 import {contactsRouter} from "./routes/contacts";
 import {trustedOrigins} from "./lib/auth/auth";
 import {spaceRouter} from "./routes/space";
+import {publicRouter} from "./routes/public";
 import {driveRouter} from "./routes/drive.ts";
 import {homeRouter} from "./routes/home.ts";
 import {collabRouter} from "./routes/collab";
@@ -30,15 +32,21 @@ export const app = new Elysia()
     .use(mailRouter)
     .use(contactsRouter)
     .use(spaceRouter)
+    .use(publicRouter)
     .use(driveRouter)
     .use(homeRouter)
     .use(collabRouter)
     .use(sseRouter)
 
     .onError(({error, set}) => {
-        console.error('API Error:', error);
-        set.status = 400;
-        return 'Uncertain state: API request failed to resolve';
+        const err = error as Error;
+        if (err instanceof ApiError) {
+            set.status = err.status;
+            return err.message;
+        }
+        console.error('API Error:', err);
+        set.status = 500;
+        return 'Internal server error';
     })
     .get("/", () => "eigen|api>")
     .get("/health", () => "OK");

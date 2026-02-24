@@ -1,6 +1,6 @@
 import {Button} from "@workspace/ui/components/button";
 import {MailPlus} from "lucide-react";
-import {useNavigate, useParams} from "@tanstack/react-router";
+import {useMatch, useNavigate} from "@tanstack/react-router";
 
 // Import route to get correct path information
 import {Route as FilterRoute} from '../../routes/_auth.$filterType.$filterId';
@@ -10,10 +10,13 @@ interface EmailComposeButtonProps {
 }
 
 export function EmailComposeButton({condensed}: EmailComposeButtonProps) {
-    // Get the current route parameters using useParams
-    const {filterType, filterId} = useParams({
+    const match = useMatch({
         from: '/_auth/$filterType/$filterId',
+        shouldThrow: false,
     });
+
+    const filterType = match?.params?.filterType ?? 'box';
+    const filterId = match?.params?.filterId ?? 'inbox';
 
     const navigate = useNavigate();
 

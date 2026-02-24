@@ -7,7 +7,6 @@ import {DrivePath} from "@workspace/lib/types/drive";
 import {useState} from 'react';
 import {useNavigate} from '@tanstack/react-router';
 
-// Import the doc creation component directly
 import {DriveCreateDoc} from '@workspace/ui/components/layout/drive/drive-create-doc';
 
 interface DocsSidebarProps {
@@ -23,14 +22,11 @@ export function DocsSidebar({
                                 isMobile = false,
                                 rootPath = null,
                             }: DocsSidebarProps) {
-    // Dialog open state
     const [createDocOpen, setCreateDocOpen] = useState(false);
     const navigate = useNavigate();
 
-    // Determine the target path for document creation
     const targetPath = rootPath;
 
-    // Define afterAction callback to redirect to docs mime type
     const handleAfterAction = () => {
         navigate({
             to: '/mime/$mimeType',
@@ -88,13 +84,11 @@ export function DocsSidebar({
                 />
             </SidebarSection>
 
-            {/* Storage usage indicator at the bottom of sidebar */}
             <StorageUsage
                 className="mt-auto"
                 condensed={condensed}
             />
 
-            {/* Create Doc Dialog */}
             {targetPath && (
                 <DriveCreateDoc
                     path={targetPath}

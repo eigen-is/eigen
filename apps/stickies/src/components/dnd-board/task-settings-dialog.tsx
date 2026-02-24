@@ -31,7 +31,6 @@ export function TaskSettingsDialog({
         e.preventDefault();
         if (!title.trim() || !yjsDoc || !taskId) return;
 
-        // Update task in Yjs
         yjsDoc.transact(() => {
             const tasksMap = yjsDoc.getMap("tasks");
             const taskMap = tasksMap.get(taskId) as Y.Map<any>;
@@ -48,15 +47,13 @@ export function TaskSettingsDialog({
         if (!yjsDoc || !taskId) return;
 
         yjsDoc.transact(() => {
-            // First, find which column contains this task
             const columnsMap = yjsDoc.getMap("columns");
             const tasksMap = yjsDoc.getMap("tasks");
 
-            // Search all columns to find the task
             let foundColumn: Y.Map<any> | null = null;
             let taskIndex = -1;
 
-            columnsMap.forEach((columnMapValue: any) => {
+            for(const [, columnMapValue] of columnsMap) {
                 if (!(columnMapValue instanceof Y.Map)) return;
                 const columnMap = columnMapValue;
                 const taskIdsArray = columnMap.get("taskIds") as Y.Array<any>;
@@ -67,25 +64,22 @@ export function TaskSettingsDialog({
                     foundColumn = columnMap;
                     taskIndex = index;
                 }
-            });
+            }
 
-            // Remove task from its column
             if (foundColumn && taskIndex !== -1) {
                 const taskIdsArray = (foundColumn as Y.Map<any>).get("taskIds") as Y.Array<any>;
                 taskIdsArray.delete(taskIndex, 1);
             }
 
-            // Delete comments associated with this task
             const commentsMap = yjsDoc.getMap("comments");
-            commentsMap.forEach((commentMapValue: any, commentId) => {
+            for(const [commentId, commentMapValue] of commentsMap) {
                 if (!(commentMapValue instanceof Y.Map)) return;
                 const commentMap = commentMapValue;
                 if (commentMap.get("taskId") === taskId) {
                     commentsMap.delete(commentId);
                 }
-            });
+            }
 
-            // Delete the task itself
             tasksMap.delete(taskId);
         });
 
@@ -142,7 +136,6 @@ export function TaskSettingsDialog({
                 </DialogContent>
             </Dialog>
 
-            {/* Confirmation dialog for task deletion */}
             <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
                 <DialogContent>
                     <DialogHeader>

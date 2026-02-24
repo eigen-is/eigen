@@ -1,17 +1,4 @@
-import {createFileRoute, redirect} from '@tanstack/react-router';
-import {z} from 'zod'
-import {LoginPage} from "@workspace/ui/components/layout/loginpage";
+import {createFileRoute} from '@tanstack/react-router';
+import {createLoginRouteOptions} from "@workspace/ui/components/layout/login-route";
 
-const fallback = '/';
-
-export const Route = createFileRoute('/login')({
-    component: () => <LoginPage />,
-    validateSearch: z.object({
-        redirect: z.string().optional().catch(''),
-    }),
-    beforeLoad: async ({context, search}) => {
-        if (context.auth.isAuthenticated) {
-            throw redirect({to: search.redirect || fallback})
-        }
-    },
-});
+export const Route = createFileRoute('/login')(createLoginRouteOptions());

@@ -44,7 +44,7 @@
 - UI Components: Place reusable components in /packages/ui
 - Authentication: All protected routes should include the auth: true property
 - Hooks: Place in `packages/lib/src/lib/[domain]/hooks/use-[name].ts`
-- Backend Domain Classes: Business logic in `apps/api/src/lib/[domain]/[domain].ts`, accessed via [Home](cci:2://file:///c:/git/eigen/apps/api/src/lib/home/home.ts:18:0-173:1) singleton
+- Backend Domain Classes: Business logic in `apps/api/src/lib/[domain]/[domain].ts`, accessed via `Home` singleton (see `apps/api/src/lib/home/home.ts`)
 
 ## Real-Time Updates (SSE)
 - Use Server-Sent Events for real-time cache invalidation across tabs/devices
@@ -55,7 +55,7 @@
   - Mutation onSuccess callbacks (for optimistic updates)
 
 ## API Client
-- Use Treaty client from [packages/lib/src/lib/api.ts] for type-safe API calls (exports `driveApi`, `mailApi`, `contactsApi`, etc.)
+- Use Treaty client from `packages/lib/src/lib/api.ts` for type-safe API calls (exports `driveApi`, `mailApi`, `contactsApi`, etc.)
 - API clients are generated from Elysia route types
 
 ## Query Key Patterns
@@ -64,7 +64,7 @@
 - Export invalidation functions alongside hooks for reuse
 
 ## Module Exports
-- Each domain module has an [index.ts] that re-exports public API
+- Each domain module has an `index.ts` that re-exports public API
 - Import from `@workspace/lib/[domain]` not deep paths
 
 ## File Types
@@ -76,6 +76,8 @@
 - Use bun scripts defined in root package.json for development:
   - serve: Run all applications
   - serve:[appname]: Run specific app with API server
+  - typecheck: Run TypeScript type check across all packages and apps (`bun run typecheck`)
+- Run `bun run typecheck` after making changes to verify type safety across the monorepo
 - Always update types when changing database schemas
 - Remember to invalidate queries when mutating data
 - Create custom hooks for reusable data fetching logic
