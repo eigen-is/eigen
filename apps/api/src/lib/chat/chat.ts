@@ -150,8 +150,8 @@ export class ChatRoom {
             if (msg.type === 'whisper') {
                 const isAuthor = msg.authorId === userId;
                 const isRecipient = msg.whisperTo === userId || msg.whisperTo === userEmail;
+                const targetName = msg.whisperTo?.split('@')[0] || msg.whisperTo || 'someone';
                 if (isAuthor) {
-                    const targetName = msg.whisperTo?.split('@')[0] || msg.whisperTo || 'someone';
                     return {...msg, content: `whispers to ${targetName}: ${msg.content}`};
                 }
                 if (isRecipient) {
@@ -159,7 +159,7 @@ export class ChatRoom {
                 }
                 return {
                     ...msg,
-                    content: '[a few hushed words]',
+                    content: `whispers to ${targetName}: [a few hushed words]`,
                     whisperTo: null,
                 };
             }

@@ -243,7 +243,7 @@ describe('Chat', () => {
                 `${chatId}/messages`);
             const whisper = msgs.find((m: any) => m.type === 'whisper');
             expect(whisper).toBeDefined();
-            expect(whisper.content).toBe('[a few hushed words]');
+            expect(whisper.content).toContain('[a few hushed words]');
             expect(whisper.whisperTo).toBeNull();
         });
 
