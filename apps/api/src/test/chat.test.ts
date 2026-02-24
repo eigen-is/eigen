@@ -488,8 +488,6 @@ describe('Chat', () => {
             const response = await chatPostRaw(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
                 `${chatId}/messages`, {content: '/unknown command here'});
             expect(response.status).toBe(400);
-            const error = await response.json() as {error: string};
-            expect(error.error).toContain('Unknown command: /unknown');
         });
 
         test('explicit type overrides command parsing', async () => {

@@ -223,7 +223,7 @@ export default class Maildir {
             }
             return null;
         } catch (error) {
-            console.error(`Error getting message ${messageId}:`, error);
+            // console.error(`Error getting message ${messageId}:`, error);
             return null;
         }
     }
