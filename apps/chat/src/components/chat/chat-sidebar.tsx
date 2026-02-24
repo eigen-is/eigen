@@ -3,10 +3,8 @@ import {Button} from "@workspace/ui/components/button";
 import {SidebarSection} from '@workspace/ui/components/layout/sidebar/sidebar-section';
 import {SidebarItem} from '@workspace/ui/components/layout/sidebar/sidebar-item';
 import {AppLogo} from '@workspace/ui/components/layout/app-logo';
-import {useCreateChat} from '@workspace/lib/chat';
-import {useQuery} from "@tanstack/react-query";
-import {driveApi, getChatRoomUrl} from "@workspace/lib/api";
-import {driveKeys} from "@workspace/lib/drive";
+import {useChats, useCreateChat} from '@workspace/lib/chat';
+import {getChatRoomUrl} from "@workspace/lib/api";
 import {EigenLoader} from "@workspace/ui";
 import {DriveCreateItemDialog} from "@workspace/ui/components/layout/drive/drive-create-folder-item";
 import {useState} from "react";
@@ -30,30 +28,9 @@ export function ChatSidebar({
                                 mountId,
                                 rootPath,
                             }: ChatSidebarProps) {
-    const ownChats = useQuery({
-        queryKey: [...driveKeys.mime('application-eigenchat'), 'own'],
-        queryFn: async () => {
-            const response = await driveApi({ownerId}).mime({mimeType: 'application-eigenchat'}).get();
-            return (response.data || []) as DrivePath[];
-        },
-        enabled: !!ownerId,
-    });
-
-    const sharedChats = useQuery({
-        queryKey: [...driveKeys.shared('with-me'), 'chats'],
-        queryFn: async () => {
-            const response = await driveApi({ownerId}).shared['with-me'].get();
-            const all = (response.data || []) as DrivePath[];
-            return all.filter(p => p.mimeType === 'application/eigenchat');
-        },
-        enabled: !!ownerId,
-    });
-
+    const {myChats, sharedChats: shared, isLoading} = useChats(ownerId);
     const [createChatOpen, setCreateChatOpen] = useState(false);
     const createChatMutation = useCreateChat(ownerId, mountId);
-    const isLoading = ownChats.isLoading || sharedChats.isLoading;
-    const myChats = ownChats.data || [];
-    const shared = sharedChats.data || [];
 
     const handleCreateChat = async (fileName: string) => {
         if (!rootPath) return;

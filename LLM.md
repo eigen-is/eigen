@@ -392,6 +392,8 @@ Tests are API integration tests in `apps/api/src/test/`. Run with: `bun run test
 - **Imports**: Use `@workspace/lib/[domain]` and `@workspace/ui/components/layout/[component]`, not deep paths
 - **UI**: Use shadcn defaults. Keep HTML clean and simple
 - **State**: TanStack Query for server state, React hooks for local UI state
+- **Hooks rule**: **NEVER** use `useQuery`/`useMutation` directly in frontend apps (`apps/*/src/`). All data-fetching logic MUST live in hooks in `packages/lib/src/lib/[domain]/hooks/`. FE components only import and call these hooks
+- **Validation rule**: All email/target validation MUST use shared functions from `packages/lib/src/validation/`. Never duplicate validation logic in FE or BE
 - **Package installation**: Do NOT install packages automatically. Ask the user to run the install command
 
 ---

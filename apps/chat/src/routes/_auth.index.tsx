@@ -13,7 +13,8 @@ import {getChatRoomUrl} from "@workspace/lib/api";
 function ChatIndex() {
     const {user} = useAuth();
     const mountId = DEFAULT_MOUNT_ID;
-    const {data: chats = []} = useChats(user?.id || '', mountId);
+    const {myChats, sharedChats} = useChats(user?.id || '');
+    const chats = [...myChats, ...sharedChats];
     const {data: root} = useRootFolder(user?.id || '', mountId);
     const [createChatOpen, setCreateChatOpen] = useState(false);
     const createChatMutation = useCreateChat(user?.id || '', mountId);

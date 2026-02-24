@@ -8,19 +8,23 @@ export const chatKeys = {
     all: ['chat'] as const,
     messages: (ownerId: string, mountId: string, chatId: string) =>
         [...chatKeys.all, 'messages', ownerId, mountId, chatId] as const,
+    file: (pathId: string) => [...chatKeys.all, 'file', pathId] as const,
 };
 
-export function useChats(ownerId: string, mountId: string) {
-    const ownChats = useQuery({
+export function useOwnChats(ownerId: string) {
+    return useQuery({
         queryKey: [...driveKeys.mime('application-eigenchat'), 'own'],
         queryFn: async () => {
             const response = await driveApi({ownerId}).mime({mimeType: 'application-eigenchat'}).get();
-            return (response.data || []) as DrivePath[];
+            const all = (response.data || []) as DrivePath[];
+            return all.filter(p => p.ownerId === ownerId);
         },
         enabled: !!ownerId,
     });
+}
 
-    const sharedChats = useQuery({
+export function useSharedChats(ownerId: string) {
+    return useQuery({
         queryKey: [...driveKeys.shared('with-me'), 'chats'],
         queryFn: async () => {
             const response = await driveApi({ownerId}).shared['with-me'].get();
@@ -29,16 +33,18 @@ export function useChats(ownerId: string, mountId: string) {
         },
         enabled: !!ownerId,
     });
+}
 
-    const allChats = [
-        ...(ownChats.data || []),
-        ...(sharedChats.data || []),
-    ];
+export function useChats(ownerId: string) {
+    const own = useOwnChats(ownerId);
+    const shared = useSharedChats(ownerId);
+    const sharedIds = new Set((shared.data || []).map(c => c.id));
+    const myChats = (own.data || []).filter(c => !sharedIds.has(c.id));
 
     return {
-        data: allChats,
-        isLoading: ownChats.isLoading || sharedChats.isLoading,
-        error: ownChats.error || sharedChats.error,
+        myChats,
+        sharedChats: shared.data || [],
+        isLoading: own.isLoading || shared.isLoading,
     };
 }
 
@@ -65,6 +71,18 @@ export function usePostMessage(ownerId: string, mountId: string, chatId: string)
         onSuccess: () => {
             queryClient.invalidateQueries({queryKey: chatKeys.messages(ownerId, mountId, chatId)});
         },
+    });
+}
+
+export function useFileInfo(ownerId: string, mountId: string, pathId: string) {
+    return useQuery({
+        queryKey: chatKeys.file(pathId),
+        queryFn: async () => {
+            const res = await driveApi({ownerId})({mountId}).file({pathId}).get();
+            return res.data as DrivePath | null;
+        },
+        staleTime: 60_000,
+        enabled: !!pathId && !!ownerId && !!mountId,
     });
 }
 
