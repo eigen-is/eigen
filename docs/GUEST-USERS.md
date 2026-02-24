@@ -2,7 +2,7 @@
 
 This plan outlines the steps to enable external users (guests) to authenticate via Email OTP and access shared resources via direct links, while strictly enforcing that OTP-created users are "Guests" (stateless) and Password-created users are "Users" (stateful).
 
-**Why**: Eigen's ACL system allows sharing resources with external email addresses (users outside the Eigen instance). Currently, these external users cannot authenticate to access their shared resources. This plan enables them to sign in via Email OTP to access specifically shared content while preventing full account creation.
+**Why**: Eigen's ACL system allows sharing resources with email addresses. We want to support guest users (users outside the Eigen instance, with email addresses from another domain). Currently, these external users cannot authenticate to access their shared resources. This plan enables them to sign in via Email OTP to access specifically shared content while preventing full account creation.
 
 ## 1. Authentication & Role Enforcement
 - **Goal**: Allow public sign-up via OTP (for guests) but force `role: 'guest'`. Allow public sign-up via Password (for normal users) *only if* allowed by config.
@@ -54,7 +54,7 @@ This plan outlines the steps to enable external users (guests) to authenticate v
             - **OTP UI**: 
                 - Step 1: Input Email -> Button "Send Login Code" (includes `ownerId`, `mountId`, `pathId` from URL in request)
                 - Step 2: Input Code -> Button "Verify & Sign In".
-            - Use better-auth client: `authClient.signIn.emailOtp(...)` with metadata.
+            - Use better-auth client: `authClient.signIn.emailOtp(...)`. Check if ACL has email based on metadata first.
     - **Back to Flow**:
         - User enters OTP -> Logged in (as Guest).
         - Redirects back to `redirect` URL.
