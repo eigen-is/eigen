@@ -243,7 +243,7 @@ describe('Chat', () => {
                 `${chatId}/messages`);
             const whisper = msgs.find((m: any) => m.type === 'whisper');
             expect(whisper).toBeDefined();
-            expect(whisper.content).toBe('*some whisper sounds*');
+            expect(whisper.content).toBe('[a few hushed words]');
             expect(whisper.whisperTo).toBeNull();
         });
 
@@ -471,7 +471,7 @@ describe('Chat', () => {
         test('Bob sees whisper sent via /whisper command', async () => {
             const msgs = await chatGet(ctx.bob.user.sessionToken, ctx.alice.user.id, aliceMountId,
                 `${chatId}/messages`);
-            const whisper = msgs.find((m: any) => m.type === 'whisper' && m.content === 'secret hello');
+            const whisper = msgs.find((m: any) => m.type === 'whisper' && m.content === 'whispers to you: secret hello');
             expect(whisper).toBeDefined();
             expect(whisper.whisperTo).toBe(ctx.bob.user.email);
         });
