@@ -182,6 +182,12 @@ export function DriveSidebar({
                     label="All stickies"
                     condensed={condensed}
                 />
+                <SidebarItem
+                    icon={<StickyNote className="h-4 w-4"/>}
+                    to="/mime/application-eigenchat"
+                    label="All chats"
+                    condensed={condensed}
+                />
 
             </SidebarSection>
             <Separator/>

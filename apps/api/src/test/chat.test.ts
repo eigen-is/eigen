@@ -327,6 +327,169 @@ describe('Chat', () => {
         });
     });
 
+    describe('Slash Commands', () => {
+        let chatId: string;
+
+        beforeAll(async () => {
+            const chat = await drivePost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `folder/${aliceRootId}/chat`, {fileName: 'Slash Command Chat'});
+            chatId = chat.id;
+
+            await authedRequest(ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${chatId}/acl`, {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        acl: [
+                            {email: 'bob@test.eigen.is', read: true, write: true, public: false},
+                        ],
+                    }),
+                });
+        });
+
+        test('/dance creates built-in emote', async () => {
+            const msg = await chatPost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `${chatId}/messages`, {content: '/dance'});
+            expect(msg.type).toBe('emote');
+            expect(msg.content).toBe('$dance');
+        });
+
+        test('/cheer creates built-in emote', async () => {
+            const msg = await chatPost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `${chatId}/messages`, {content: '/cheer'});
+            expect(msg.type).toBe('emote');
+            expect(msg.content).toBe('$cheer');
+        });
+
+        test('/taunt creates built-in emote', async () => {
+            const msg = await chatPost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `${chatId}/messages`, {content: '/taunt'});
+            expect(msg.type).toBe('emote');
+            expect(msg.content).toBe('$taunt');
+        });
+
+        test('/greet creates built-in emote', async () => {
+            const msg = await chatPost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `${chatId}/messages`, {content: '/greet'});
+            expect(msg.type).toBe('emote');
+            expect(msg.content).toBe('$greet');
+        });
+
+        test('/me creates custom emote', async () => {
+            const msg = await chatPost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `${chatId}/messages`, {content: '/me tips hat'});
+            expect(msg.type).toBe('emote');
+            expect(msg.content).toBe('tips hat');
+        });
+
+        test('emote first person for author', async () => {
+            const msgs = await chatGet(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `${chatId}/messages`);
+            const dance = msgs.find((m: any) => m.type === 'emote' && m.content === 'You dance around the room.');
+            expect(dance).toBeDefined();
+        });
+
+        test('emote third person for other user', async () => {
+            const msgs = await chatGet(ctx.bob.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `${chatId}/messages`);
+            const dance = msgs.find((m: any) => m.type === 'emote' && m.content.includes('dances around the room.'));
+            expect(dance).toBeDefined();
+        });
+
+        test('custom emote formatted with author name for other user', async () => {
+            const msgs = await chatGet(ctx.bob.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `${chatId}/messages`);
+            const me = msgs.find((m: any) => m.type === 'emote' && m.content.includes('tips hat'));
+            expect(me).toBeDefined();
+            expect(me.content).toContain(ctx.alice.user.email.split('@')[0]);
+        });
+
+        test('/whisper creates whisper message', async () => {
+            const msg = await chatPost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `${chatId}/messages`, {content: `/whisper ${ctx.bob.user.email} secret hello`});
+            expect(msg.type).toBe('whisper');
+            expect(msg.whisperTo).toBe(ctx.bob.user.email);
+            expect(msg.content).toBe('secret hello');
+        });
+
+        test('/w alias works for whisper', async () => {
+            const msg = await chatPost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `${chatId}/messages`, {content: `/w ${ctx.bob.user.email} short whisper`});
+            expect(msg.type).toBe('whisper');
+            expect(msg.content).toBe('short whisper');
+        });
+
+        test('/tell alias works for whisper', async () => {
+            const msg = await chatPost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `${chatId}/messages`, {content: `/tell ${ctx.bob.user.email} tell msg`});
+            expect(msg.type).toBe('whisper');
+            expect(msg.content).toBe('tell msg');
+        });
+
+        test('/t alias works for whisper', async () => {
+            const msg = await chatPost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `${chatId}/messages`, {content: `/t ${ctx.bob.user.email} t msg`});
+            expect(msg.type).toBe('whisper');
+            expect(msg.content).toBe('t msg');
+        });
+
+        test('/send alias works for whisper', async () => {
+            const msg = await chatPost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `${chatId}/messages`, {content: `/send ${ctx.bob.user.email} send msg`});
+            expect(msg.type).toBe('whisper');
+            expect(msg.content).toBe('send msg');
+        });
+
+        test('whisper to non-existent user returns error', async () => {
+            const res = await authedRequest(ctx.alice.user.sessionToken,
+                `/chat/${ctx.alice.user.id}/${aliceMountId}/${chatId}/messages`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({content: '/whisper nobody@fake.eigen.is hello'}),
+                });
+            expect(res.status).toBe(404);
+        });
+
+        test('whisper to non-existent user does not create a message', async () => {
+            const msgs = await chatGet(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `${chatId}/messages`);
+            const leaked = msgs.find((m: any) => m.content === 'hello' && m.whisperTo === 'nobody@fake.eigen.is');
+            expect(leaked).toBeUndefined();
+        });
+
+        test('whisper via type field to non-existent user returns error', async () => {
+            const res = await authedRequest(ctx.alice.user.sessionToken,
+                `/chat/${ctx.alice.user.id}/${aliceMountId}/${chatId}/messages`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({content: 'direct whisper', type: 'whisper', whisperTo: 'ghost@fake.eigen.is'}),
+                });
+            expect(res.status).toBe(404);
+        });
+
+        test('Bob sees whisper sent via /whisper command', async () => {
+            const msgs = await chatGet(ctx.bob.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `${chatId}/messages`);
+            const whisper = msgs.find((m: any) => m.type === 'whisper' && m.content === 'secret hello');
+            expect(whisper).toBeDefined();
+            expect(whisper.whisperTo).toBe(ctx.bob.user.email);
+        });
+
+        test('regular text starting with / but not a command posts as message', async () => {
+            const msg = await chatPost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `${chatId}/messages`, {content: '/unknown command here'});
+            expect(msg.type).toBe('message');
+            expect(msg.content).toBe('/unknown command here');
+        });
+
+        test('explicit type overrides command parsing', async () => {
+            const msg = await chatPost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `${chatId}/messages`, {content: 'explicit emote', type: 'emote'});
+            expect(msg.type).toBe('emote');
+            expect(msg.content).toBe('explicit emote');
+        });
+    });
+
     describe('Delete Chat', () => {
         test('create and delete chat', async () => {
             const chat = await drivePost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,

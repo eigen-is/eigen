@@ -1,4 +1,4 @@
-import {useRef, useState} from 'react';
+import {useCallback, useRef, useState} from 'react';
 import {Button} from "@workspace/ui/components/button";
 import {Paperclip, Send, X} from "lucide-react";
 import {getAtSuggestQuery} from "../../lib/commands";
@@ -14,6 +14,8 @@ type MessageInputProps = {
 export function MessageInput({onSend, disabled = false, chatName, roomMembers = []}: MessageInputProps) {
     const [content, setContent] = useState('');
     const [files, setFiles] = useState<File[]>([]);
+    const [selectedSuggestIdx, setSelectedSuggestIdx] = useState(0);
+    const suggestCountRef = useRef(0);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     const handleSend = () => {
@@ -23,7 +25,52 @@ export function MessageInput({onSend, disabled = false, chatName, roomMembers = 
         setFiles([]);
     };
 
+    const atQuery = getAtSuggestQuery(content);
+    const suggestVisible = atQuery !== null && suggestCountRef.current > 0;
+
+    const handlePlayerSelect = useCallback((email: string) => {
+        setContent(prev => {
+            const atIdx = prev.lastIndexOf('@');
+            if (atIdx === -1) return prev;
+            return prev.slice(0, atIdx) + email + ' ';
+        });
+        setSelectedSuggestIdx(0);
+    }, []);
+
+    const suggestEmailsRef = useRef<string[]>([]);
+
+    const handleSuggestItemsChange = useCallback((count: number, emails: string[]) => {
+        suggestCountRef.current = count;
+        suggestEmailsRef.current = emails;
+        if (count > 0) setSelectedSuggestIdx(prev => Math.min(prev, count - 1));
+    }, []);
+
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+        if (suggestVisible) {
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                setSelectedSuggestIdx(i => Math.min(i + 1, suggestCountRef.current - 1));
+                return;
+            }
+            if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                setSelectedSuggestIdx(i => Math.max(i - 1, 0));
+                return;
+            }
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                const email = suggestEmailsRef.current[selectedSuggestIdx];
+                if (email) handlePlayerSelect(email);
+                return;
+            }
+            if (e.key === 'Escape') {
+                setContent(prev => {
+                    const atIdx = prev.lastIndexOf('@');
+                    return atIdx === -1 ? prev : prev.slice(0, atIdx);
+                });
+                return;
+            }
+        }
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
             handleSend();
@@ -39,14 +86,6 @@ export function MessageInput({onSend, disabled = false, chatName, roomMembers = 
 
     const removeFile = (index: number) => {
         setFiles(prev => prev.filter((_, i) => i !== index));
-    };
-
-    const atQuery = getAtSuggestQuery(content);
-
-    const handlePlayerSelect = (email: string) => {
-        const atIdx = content.lastIndexOf('@');
-        if (atIdx === -1) return;
-        setContent(content.slice(0, atIdx) + email + ' ');
     };
 
     return (
@@ -87,6 +126,8 @@ export function MessageInput({onSend, disabled = false, chatName, roomMembers = 
                         roomMembers={roomMembers}
                         onSelect={handlePlayerSelect}
                         visible={atQuery !== null}
+                        selectedIndex={selectedSuggestIdx}
+                        onItemsChange={handleSuggestItemsChange}
                     />
                     <textarea
                         value={content}
