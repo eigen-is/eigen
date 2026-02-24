@@ -27,6 +27,7 @@
     "./collab": "./src/lib/collab/index.ts",
     "./public": "./src/lib/public/index.ts",
     "./auth/hooks": "./src/lib/auth/hooks/index.ts",
+    "./validation": "./src/validation/index.ts",
     "./sse": "./src/lib/sse/index.ts",
     "./types": "./src/types/index.ts",
     "./types/drive": "./src/types/drive.ts",

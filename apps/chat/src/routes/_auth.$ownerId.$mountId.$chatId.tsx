@@ -14,7 +14,7 @@ import type {DrivePath, DriveACL} from "@workspace/lib/types/drive";
 import type {ChatMessage} from "@workspace/lib/types/chat";
 import {RoomMembers} from "../components/chat/room-members";
 import type {RoomMember} from "../components/chat/player-suggest";
-import {getLocalCommand, COMMANDS_HELP, isUnknownCommand, isEmailAddress} from "../lib/commands";
+import {getLocalCommand, COMMANDS_HELP, isUnknownCommand, validateEmailTarget} from "../lib/commands";
 import {toast} from "sonner";
 
 let localIdCounter = 0;
@@ -121,8 +121,9 @@ function ChatView() {
                 }
                 case 'invite': {
                     if (!chatPath) return;
-                    if (!isEmailAddress(local.target)) {
-                        addLocalMessage(`'${local.target}' is not a valid email address. Use /invite user@example.com`);
+                    const inviteError = validateEmailTarget(local.target, 'Invite');
+                    if (inviteError) {
+                        addLocalMessage(inviteError);
                         return;
                     }
                     const currentAcl = chatPath.acl || [];
