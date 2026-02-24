@@ -5,19 +5,11 @@ import {getSharedDrive} from "../lib/drive";
 export const chatRouter = new Elysia({name: "chat"})
     .use(betterAuth)
 
-    .post("/chat/:ownerId/:mountId/:chatId/rooms", async ({params, body, user}) => {
+    .get("/chat/:ownerId/:mountId/:chatId/messages", async ({params, query, user}) => {
         const drive = await getSharedDrive(params.ownerId, user);
-        return await drive.createChatRoom(params.mountId, params.chatId, body.roomName);
-    }, {
-        body: t.Object({roomName: t.String()}),
-        auth: true
-    })
-
-    .get("/chat/:ownerId/:mountId/:chatId/rooms/:roomId/messages", async ({params, query, user}) => {
-        const drive = await getSharedDrive(params.ownerId, user);
-        const chatRoom = await drive.getChatRoom(params.mountId, params.roomId);
+        const chat = await drive.getChat(params.mountId, params.chatId);
         const limit = query.limit ? parseInt(query.limit) : 50;
-        return await chatRoom.getMessagesForUser(user.id, limit, query.before || undefined);
+        return await chat.getMessagesForUser(user.id, limit, query.before || undefined);
     }, {
         query: t.Object({
             before: t.Optional(t.String()),
@@ -26,10 +18,10 @@ export const chatRouter = new Elysia({name: "chat"})
         auth: true
     })
 
-    .post("/chat/:ownerId/:mountId/:chatId/rooms/:roomId/messages", async ({params, body, user}) => {
+    .post("/chat/:ownerId/:mountId/:chatId/messages", async ({params, body, user}) => {
         const drive = await getSharedDrive(params.ownerId, user);
-        const chatRoom = await drive.getChatRoom(params.mountId, params.roomId);
-        return await chatRoom.postMessage(
+        const chat = await drive.getChat(params.mountId, params.chatId);
+        return await chat.postMessage(
             user.id,
             user.email,
             body.content,
@@ -52,10 +44,10 @@ export const chatRouter = new Elysia({name: "chat"})
         auth: true
     })
 
-    .patch("/chat/:ownerId/:mountId/:chatId/rooms/:roomId/messages/:messageId", async ({params, body, user}) => {
+    .patch("/chat/:ownerId/:mountId/:chatId/messages/:messageId", async ({params, body, user}) => {
         const drive = await getSharedDrive(params.ownerId, user);
-        const chatRoom = await drive.getChatRoom(params.mountId, params.roomId);
-        const result = await chatRoom.editMessage(params.messageId, body.content, user.id);
+        const chat = await drive.getChat(params.mountId, params.chatId);
+        const result = await chat.editMessage(params.messageId, body.content, user.id);
         if (!result) return {success: false, error: 'Message not found or not owned by user'};
         return {success: true, message: result};
     }, {
@@ -63,17 +55,17 @@ export const chatRouter = new Elysia({name: "chat"})
         auth: true
     })
 
-    .delete("/chat/:ownerId/:mountId/:chatId/rooms/:roomId/messages/:messageId", async ({params, user}) => {
+    .delete("/chat/:ownerId/:mountId/:chatId/messages/:messageId", async ({params, user}) => {
         const drive = await getSharedDrive(params.ownerId, user);
-        const chatRoom = await drive.getChatRoom(params.mountId, params.roomId);
-        const result = await chatRoom.deleteMessage(params.messageId, user.id);
+        const chat = await drive.getChat(params.mountId, params.chatId);
+        const result = await chat.deleteMessage(params.messageId, user.id);
         return {success: result};
     }, {auth: true})
 
-    .post("/chat/:ownerId/:mountId/:chatId/rooms/:roomId/read", async ({params, body, user}) => {
+    .post("/chat/:ownerId/:mountId/:chatId/read", async ({params, body, user}) => {
         const drive = await getSharedDrive(params.ownerId, user);
-        const chatRoom = await drive.getChatRoom(params.mountId, params.roomId);
-        await chatRoom.markRead(user.id, body.messageId);
+        const chat = await drive.getChat(params.mountId, params.chatId);
+        await chat.markRead(user.id, body.messageId);
         return {success: true};
     }, {
         body: t.Object({messageId: t.String()}),

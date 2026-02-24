@@ -145,6 +145,9 @@ export default class Drive {
         const safeName = `${docName}.eigendoc`;
         const pathId = await mount.createFolder(parentId, safeName, 'doc');
         await CollabDocument.create(this, mountId, pathId);
+        const chatFolderId = await mount.createFolder(pathId, 'chat');
+        const generalChatId = await mount.createFolder(chatFolderId, 'General.eigenchat', 'chat');
+        await ChatRoom.create(this, mountId, generalChatId);
         const doc = await mount.getPath(pathId);
         if (!doc) throw new ApiError(500, 'Failed to create doc');
         this.emit(SSEventType.DRIVE_FILE_CREATED, doc);
@@ -160,6 +163,9 @@ export default class Drive {
         const safeName = `${stickiesName}.eigenstickies`;
         const pathId = await mount.createFolder(parentId, safeName, 'stickies');
         await CollabDocument.create(this, mountId, pathId);
+        const chatFolderId = await mount.createFolder(pathId, 'chat');
+        const generalChatId = await mount.createFolder(chatFolderId, 'General.eigenchat', 'chat');
+        await ChatRoom.create(this, mountId, generalChatId);
         const stickies = await mount.getPath(pathId);
         if (!stickies) throw new ApiError(500, 'Failed to create stickies');
         this.emit(SSEventType.DRIVE_FILE_CREATED, stickies);
@@ -174,37 +180,18 @@ export default class Drive {
 
         const safeName = `${chatName}.eigenchat`;
         const pathId = await mount.createFolder(parentId, safeName, 'chat');
+        await ChatRoom.create(this, mountId, pathId);
         const chat = await mount.getPath(pathId);
         if (!chat) throw new ApiError(500, 'Failed to create chat');
         this.emit(SSEventType.DRIVE_FILE_CREATED, chat);
         return chat;
     }
 
-    async createChatRoom(mountId: string, chatId: string, roomName: string): Promise<DrivePath> {
+    async getChat(mountId: string, chatId: string): Promise<ChatRoom> {
         const mount = this.getMount(mountId);
-        const chat = await mount.getPath(chatId);
-        if (!chat || chat.type !== 'chat') {
+        const path = await mount.getPath(chatId);
+        if (!path || path.type !== 'chat') {
             throw new ApiError(404, 'Chat not found');
-        }
-
-        if (!(await this.canWrite(mountId, chatId, this.owner))) {
-            throw new ApiError(403, 'No write permission');
-        }
-
-        const safeName = `${roomName}.eigenchatroom`;
-        const pathId = await mount.createFolder(chatId, safeName, 'chatroom');
-        await ChatRoom.create(this, mountId, pathId);
-        const room = await mount.getPath(pathId);
-        if (!room) throw new ApiError(500, 'Failed to create chat room');
-        this.emit(SSEventType.DRIVE_FILE_CREATED, room);
-        return room;
-    }
-
-    async getChatRoom(mountId: string, roomId: string): Promise<ChatRoom> {
-        const mount = this.getMount(mountId);
-        const path = await mount.getPath(roomId);
-        if (!path || path.type !== 'chatroom') {
-            throw new ApiError(404, 'Chat room not found');
         }
         const chatRoom = new ChatRoom(this, this.home, path);
         return chatRoom.init();

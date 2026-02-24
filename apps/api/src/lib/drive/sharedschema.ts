@@ -6,7 +6,7 @@ export const sharedPaths = sqliteTable('shared_paths', {
     id: text('id').primaryKey(),
     mountId: text('mountId').notNull(),
     name: text('name').notNull(),
-    type: text('type').notNull().$type<"folder" | "file" | "doc" | "stickies" | "chat" | "chatroom">(),
+    type: text('type').notNull().$type<"folder" | "file" | "doc" | "stickies" | "chat">(),
     parentId: text('parentId'),  // We'll reference this in the relations
     ownerId: text('ownerId').notNull(),
     mimeType: text('mimeType').notNull(),
