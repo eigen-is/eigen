@@ -1,4 +1,4 @@
-import {useMutation, useQuery, useQueryClient} from "@tanstack/react-query";
+import {useMutation, useQuery, useQueryClient, type QueryClient} from "@tanstack/react-query";
 import {chatApi, driveApi} from "@workspace/lib/api";
 import {driveKeys, invalidateItemCreated} from "../../drive/hooks/use-drive";
 import type {DrivePath} from "@workspace/lib/types/drive";
@@ -70,4 +70,9 @@ export function useCreateChat(ownerId: string, mountId: string) {
         },
         onSuccess: (_data, variables) => invalidateItemCreated(queryClient, mountId, variables.parentId, 'application/eigenchat'),
     });
+}
+
+// SSE invalidation functions
+export function invalidateMessages(queryClient: QueryClient, ownerId: string, mountId: string, chatId: string): void {
+    queryClient.invalidateQueries({queryKey: chatKeys.messages(ownerId, mountId, chatId)});
 }
