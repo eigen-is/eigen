@@ -2,8 +2,9 @@ export type DriveACL = {
     email: string;
     read: boolean;
     write: boolean;
-    public: boolean;
 }
+
+export type DriveVisibility = 'private' | 'public-read' | 'public-write';
 
 export type DriveCollabType = "doc" | "stickies";
 export type DriveChatType = "chat";
@@ -42,6 +43,7 @@ export type DrivePath = {
     size: number;
     thumbnail: string | null;
     acl: DriveACL[] | null;
+    visibility: DriveVisibility;
     details: DrivePathDetails;
     createdAt: Date;
     updatedAt: Date;

@@ -1,9 +1,9 @@
-import {Fragment, useRef, useState} from 'react';
+import {Fragment, useMemo, useRef, useState} from 'react';
 import {Button} from "@workspace/ui/components/button";
 import {EigenLoader} from "@workspace/ui";
 import {FileText, FolderPlus, MessageSquare, Plus, StickyNote, UploadIcon} from "lucide-react";
 import {DriveTable, getFileIcon} from "@workspace/ui/components/layout/drive";
-import {type DrivePath} from "@workspace/lib/types/drive";
+import {type DriveACL, type DrivePath} from "@workspace/lib/types/drive";
 import {cn} from "@workspace/ui/lib/utils";
 import {
     DropdownMenu,
@@ -206,6 +206,23 @@ export function DriveList({
                           }: DriveListProps) {
     const [isDragging, setIsDragging] = useState(false);
     const dragCounter = useRef(0);
+    const {data: breadcrumbData} = useBreadcrumb(ownerId, mountId, pathId);
+
+    const ancestorAcl = useMemo<DriveACL[]>(() => {
+        if (!breadcrumbData || breadcrumbData.length === 0) return [];
+        const seen = new Set<string>();
+        const result: DriveACL[] = [];
+        for (const ancestor of breadcrumbData) {
+            if (!ancestor.acl) continue;
+            for (const acl of ancestor.acl) {
+                const key = acl.email.toLowerCase();
+                if (seen.has(key)) continue;
+                seen.add(key);
+                result.push(acl);
+            }
+        }
+        return result;
+    }, [breadcrumbData]);
 
     // Handle row click with two different behaviors
     const handleRowClick = (path: DrivePath) => {
@@ -321,6 +338,7 @@ export function DriveList({
             <DriveTable
                 items={items}
                 currentPath={currentPath}
+                ancestorAcl={ancestorAcl}
                 activeItemId={activeRowId}
                 onItemClick={handleRowClick}
                 onItemOpen={onRowActivate}

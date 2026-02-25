@@ -41,7 +41,7 @@ function ChatView() {
     const roomMembers: RoomMember[] = useMemo(() => {
         if (!chatPath?.acl) return [];
         return chatPath.acl
-            .filter(a => !a.public && a.email)
+            .filter(a => a.email)
             .map(a => ({email: a.email, displayName: a.email.split('@')[0]}));
     }, [chatPath?.acl]);
 
@@ -131,7 +131,7 @@ function ChatView() {
                         addLocalMessage(`${local.target} already has access to this room.`);
                         return;
                     }
-                    const newAcl: DriveACL[] = [...currentAcl, {email: local.target, read: true, write: true, public: false}];
+                    const newAcl: DriveACL[] = [...currentAcl, {email: local.target, read: true, write: true}];
                     try {
                         await updateACL.mutateAsync({path: chatPath as DrivePath, acl: newAcl});
                         addLocalMessage(`You invited ${local.target} to the room.`);

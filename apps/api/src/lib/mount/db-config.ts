@@ -19,6 +19,7 @@ export const MOUNT_DB_CONFIG: DatabaseConfig<typeof schema> = {
                     size INTEGER DEFAULT 0,
                     thumbnail TEXT,
                     acl TEXT,
+                    visibility TEXT DEFAULT 'private',
                     details TEXT,
                     createdAt INTEGER DEFAULT (unixepoch()),
                     updatedAt INTEGER DEFAULT (unixepoch()),

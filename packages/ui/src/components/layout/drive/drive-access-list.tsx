@@ -22,41 +22,35 @@ export function DriveAccessList({
                                 }: DriveAccessListProps) {
     const owner = usePublicUser(path.ownerId);
 
-    // Combine owner and ACL list, ensuring owner is first and not duplicated
-    // Also calculate publicAccess directly here instead of using setState
-    const [accessList, publicAccess] = useMemo(() => {
-        if (!owner.data) return [[], false];
+    const accessList = useMemo(() => {
+        if (!owner.data) return [];
 
         const ownerAccess = {
             email: owner.data.email || '',
             read: true,
             write: true,
-            public: false,
             owner: true
         }
 
-        const accessList = [ownerAccess];
-        let hasPublicAccess = false;
+        const list = [ownerAccess];
 
         if (path.acl && path.acl.length > 0) {
-            // Add only non-owner users from ACL
-            for(const access of path.acl) {
-                if (access.public) {
-                    hasPublicAccess = true;
-                } else if (access.email !== owner.data?.email) {
-                    accessList.push({
+            for (const access of path.acl) {
+                if (access.email !== owner.data?.email) {
+                    list.push({
                         email: access.email,
                         read: access.read,
                         write: access.write,
-                        public: access.public,
                         owner: false
                     })
                 }
             }
         }
 
-        return [accessList, hasPublicAccess];
+        return list;
     }, [path, owner.data]);
+
+    const isPublic = path.visibility !== 'private';
 
     return (
         <div className={cn("space-y-4", className)}>
@@ -85,7 +79,7 @@ export function DriveAccessList({
             <Separator/>
             <div>
                 <h4 className="text-sm font-medium mb-2">General access</h4>
-                {!publicAccess ? (
+                {!isPublic ? (
                     <div className="flex items-center">
                         <AvatarIcon
                             className="w-10 h-10"
@@ -102,7 +96,11 @@ export function DriveAccessList({
                         ><Unlock/></AvatarIcon>
                         <div>
                             <p className="text-sm font-medium">Unrestricted</p>
-                            <p className="text-xs text-gray-500">Any logged-in eigen user with the link can access</p>
+                            <p className="text-xs text-gray-500">
+                                {path.visibility === 'public-write'
+                                    ? "Anyone with the link can edit"
+                                    : "Anyone with the link can view"}
+                            </p>
                         </div>
                     </div>
                 )}
@@ -111,7 +109,6 @@ export function DriveAccessList({
     )
 }
 
-// Component to display the appropriate access label
 function AccessLabel({access}: { access: DriveACL }) {
     if (access.write) {
         return <span>Editor</span>
