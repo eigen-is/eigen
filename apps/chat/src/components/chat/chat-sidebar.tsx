@@ -90,7 +90,6 @@ export function ChatSidebar({
             ) : (
                 <>
                     <SidebarSection condensed={condensed}>
-                        {!condensed && <p className="px-3 pt-2 pb-1 text-xs font-medium text-muted-foreground uppercase tracking-wider">My chats</p>}
                         {chats.length === 0 ? (
                             <div className="px-3 py-2 text-xs text-muted-foreground">No chats yet</div>
                         ) : (
