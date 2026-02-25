@@ -146,9 +146,6 @@ export default class Drive {
         const safeName = `${docName}.eigendoc`;
         const pathId = await mount.createFolder(parentId, safeName, 'doc');
         await CollabDocument.create(this, mountId, pathId);
-        const chatFolderId = await mount.createFolder(pathId, 'chat');
-        const generalChatId = await mount.createFolder(chatFolderId, 'General.eigenchat', 'chat');
-        await ChatRoom.create(this, mountId, generalChatId);
         const doc = await mount.getPath(pathId);
         if (!doc) throw new ApiError(500, 'Failed to create doc');
         this.emit(SSEventType.DRIVE_FILE_CREATED, doc);
@@ -164,9 +161,6 @@ export default class Drive {
         const safeName = `${stickiesName}.eigenstickies`;
         const pathId = await mount.createFolder(parentId, safeName, 'stickies');
         await CollabDocument.create(this, mountId, pathId);
-        const chatFolderId = await mount.createFolder(pathId, 'chat');
-        const generalChatId = await mount.createFolder(chatFolderId, 'General.eigenchat', 'chat');
-        await ChatRoom.create(this, mountId, generalChatId);
         const stickies = await mount.getPath(pathId);
         if (!stickies) throw new ApiError(500, 'Failed to create stickies');
         this.emit(SSEventType.DRIVE_FILE_CREATED, stickies);
