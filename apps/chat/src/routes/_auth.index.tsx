@@ -1,23 +1,39 @@
-import {createFileRoute} from '@tanstack/react-router'
+import {createFileRoute, redirect} from '@tanstack/react-router'
 import {useAuth} from "@workspace/lib/auth";
 import {useChats, useCreateChat} from "@workspace/lib/chat";
 import {useRootFolder, DEFAULT_MOUNT_ID} from "@workspace/lib/drive";
 import {Button} from "@workspace/ui/components/button";
 import {MessageSquare, Plus} from "lucide-react";
 import {DriveCreateItemDialog} from "@workspace/ui/components/layout/drive/drive-create-folder-item";
-import {useState} from "react";
+import {useState, useEffect} from "react";
 import type {DrivePath} from "@workspace/lib/types/drive";
 import {toast} from "sonner";
-import {getChatRoomUrl} from "@workspace/lib/api";
+import {useNavigate} from "@tanstack/react-router";
 
 function ChatIndex() {
     const {user} = useAuth();
+    const navigate = useNavigate();
     const mountId = DEFAULT_MOUNT_ID;
-    const {myChats, sharedChats} = useChats(user?.id || '');
-    const chats = [...myChats, ...sharedChats];
+    const {data} = useChats(user?.id || '');
     const {data: root} = useRootFolder(user?.id || '', mountId);
     const [createChatOpen, setCreateChatOpen] = useState(false);
     const createChatMutation = useCreateChat(user?.id || '', mountId);
+
+    // Auto-redirect to first chat if available
+    useEffect(() => {
+        if (data && data.length > 0) {
+            const chat = data[0];
+            console.log('redirecting to chat', chat);
+            navigate({
+                to: '/$ownerId/$mountId/$chatId',
+                params: {
+                    ownerId: chat?.ownerId || '',
+                    mountId: chat?.mountId || '',
+                    chatId: chat?.id || ''
+                }
+            });
+        }
+    }, [data, navigate]);
 
     const handleCreateChat = async (fileName: string) => {
         if (!root) return;
@@ -28,14 +44,21 @@ function ChatIndex() {
             });
             setCreateChatOpen(false);
             if (newPath) {
-                window.location.href = getChatRoomUrl(user?.id || '', mountId, newPath.id);
+                navigate({
+                    to: '/$ownerId/$mountId/$chatId',
+                    params: {
+                        ownerId: user?.id || '',
+                        mountId: mountId,
+                        chatId: newPath.id
+                    }
+                });
             }
         } catch (error: unknown) {
             toast.error(error instanceof Error ? error.message : "Failed to create chat");
         }
     };
 
-    if (chats.length === 0) {
+    if (data && data.length === 0) {
         return (
             <div className="flex flex-col items-center justify-center h-full w-full gap-4">
                 <MessageSquare className="h-12 w-12 text-muted-foreground"/>
@@ -66,5 +89,11 @@ function ChatIndex() {
 }
 
 export const Route = createFileRoute('/_auth/')({
+    beforeLoad: ({context}) => {
+        const userId = context.auth?.user?.id;
+        if (!userId) {
+            throw redirect({to: '/login'});
+        }
+    },
     component: ChatIndex,
 })

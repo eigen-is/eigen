@@ -1,4 +1,4 @@
-import {useMutation, useQuery, useQueryClient} from "@tanstack/react-query";
+import {useMutation, useQuery, useQueryClient, type QueryClient} from "@tanstack/react-query";
 import {chatApi, driveApi} from "@workspace/lib/api";
 import {driveKeys, invalidateItemCreated} from "../../drive/hooks/use-drive";
 import type {DrivePath} from "@workspace/lib/types/drive";
@@ -11,7 +11,7 @@ export const chatKeys = {
     file: (pathId: string) => [...chatKeys.all, 'file', pathId] as const,
 };
 
-export function useOwnChats(ownerId: string) {
+export function useChats(ownerId: string) {
     return useQuery({
         queryKey: [...driveKeys.mime('application-eigenchat'), 'own'],
         queryFn: async () => {
@@ -21,31 +21,6 @@ export function useOwnChats(ownerId: string) {
         },
         enabled: !!ownerId,
     });
-}
-
-export function useSharedChats(ownerId: string) {
-    return useQuery({
-        queryKey: [...driveKeys.shared('with-me'), 'chats'],
-        queryFn: async () => {
-            const response = await driveApi({ownerId}).shared['with-me'].get();
-            const all = (response.data || []) as DrivePath[];
-            return all.filter(p => p.mimeType === 'application/eigenchat');
-        },
-        enabled: !!ownerId,
-    });
-}
-
-export function useChats(ownerId: string) {
-    const own = useOwnChats(ownerId);
-    const shared = useSharedChats(ownerId);
-    const sharedIds = new Set((shared.data || []).map(c => c.id));
-    const myChats = (own.data || []).filter(c => !sharedIds.has(c.id));
-
-    return {
-        myChats,
-        sharedChats: shared.data || [],
-        isLoading: own.isLoading || shared.isLoading,
-    };
 }
 
 export function useMessages(ownerId: string, mountId: string, chatId: string | undefined) {
@@ -95,4 +70,9 @@ export function useCreateChat(ownerId: string, mountId: string) {
         },
         onSuccess: (_data, variables) => invalidateItemCreated(queryClient, mountId, variables.parentId, 'application/eigenchat'),
     });
+}
+
+// SSE invalidation functions
+export function invalidateMessages(queryClient: QueryClient, ownerId: string, mountId: string, chatId: string): void {
+    queryClient.invalidateQueries({queryKey: chatKeys.messages(ownerId, mountId, chatId)});
 }

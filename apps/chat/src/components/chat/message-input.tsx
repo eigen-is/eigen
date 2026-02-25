@@ -1,7 +1,7 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
 import {Button} from "@workspace/ui/components/button";
 import {Paperclip, Send, X} from "lucide-react";
-import {getAtSuggestQuery} from "../../lib/commands";
+import {getAtSuggestQuery, getSlashCommandQuery, SLASH_COMMANDS} from "../../lib/commands";
 import {PlayerSuggest, type RoomMember} from "./player-suggest";
 
 type MessageInputProps = {
@@ -41,6 +41,7 @@ export function MessageInput({onSend, disabled = false, readOnly = false, chatNa
     };
 
     const atQuery = getAtSuggestQuery(content);
+    const slashQuery = getSlashCommandQuery(content);
     const suggestOpen = atQuery !== null;
 
     const handlePlayerSelect = useCallback((email: string) => {
@@ -70,6 +71,16 @@ export function MessageInput({onSend, disabled = false, readOnly = false, chatNa
     }, []);
 
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+        // Handle slash command Tab autocomplete
+        if (e.key === 'Tab' && slashQuery) {
+            e.preventDefault();
+            const matches = SLASH_COMMANDS.filter(cmd => cmd.startsWith(slashQuery));
+            if (matches.length === 1) {
+                setContent(matches[0] + ' ');
+            }
+            return;
+        }
+
         if (suggestOpen) {
             if (e.key === 'ArrowDown') {
                 e.preventDefault();
