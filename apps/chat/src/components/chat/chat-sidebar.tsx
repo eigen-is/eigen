@@ -28,7 +28,7 @@ export function ChatSidebar({
                                 mountId,
                                 rootPath,
                             }: ChatSidebarProps) {
-    const {myChats, sharedChats: shared, isLoading} = useChats(ownerId);
+    const {data: chats, isLoading} = useChats(ownerId);
     const [createChatOpen, setCreateChatOpen] = useState(false);
     const createChatMutation = useCreateChat(ownerId, mountId);
 
@@ -83,27 +83,19 @@ export function ChatSidebar({
                 </Button>
             </div>
 
-            {isLoading ? (
+            {isLoading || !chats ? (
                 <div className="flex justify-center py-4">
                     <EigenLoader/>
                 </div>
             ) : (
                 <>
                     <SidebarSection condensed={condensed}>
-                        {!condensed && <p className="px-3 pt-2 pb-1 text-xs font-medium text-muted-foreground uppercase tracking-wider">My chats</p>}
-                        {myChats.length === 0 ? (
+                        {chats.length === 0 ? (
                             <div className="px-3 py-2 text-xs text-muted-foreground">No chats yet</div>
                         ) : (
-                            myChats.map(renderChatItem)
+                            chats.map(renderChatItem)
                         )}
                     </SidebarSection>
-
-                    {shared.length > 0 && (
-                        <SidebarSection condensed={condensed}>
-                            {!condensed && <p className="px-3 pt-2 pb-1 text-xs font-medium text-muted-foreground uppercase tracking-wider">Shared with me</p>}
-                            {shared.map(renderChatItem)}
-                        </SidebarSection>
-                    )}
                 </>
             )}
 
