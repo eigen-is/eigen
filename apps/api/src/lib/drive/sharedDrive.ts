@@ -1,7 +1,7 @@
 import type {User} from "better-auth";
 import Drive from "./drive";
 import type {Home} from "../home";
-import type {DriveACL, DrivePath} from "@workspace/lib/types/drive";
+import type {DriveACL, DrivePath, DriveVisibility} from "@workspace/lib/types/drive";
 import CollabDocument from "../collab/collabDocument.ts";
 import type {ChatRoom} from "../chat";
 import type {DatabaseConfig, ManagedDatabase, SchemaType} from "../core/managed-database";
@@ -132,8 +132,8 @@ export default class SharedDrive extends Drive {
         return this.sharedDrive.getChat(mountId, chatId);
     }
 
-    public async updateACL(mountId: string, pathId: string, acl: DriveACL[]) {
-        return this.withWritePermission(mountId, pathId, () => this.sharedDrive.updateACL(mountId, pathId, acl), undefined);
+    public async updateACL(mountId: string, pathId: string, acl: DriveACL[], visibility?: DriveVisibility) {
+        return this.withWritePermission(mountId, pathId, () => this.sharedDrive.updateACL(mountId, pathId, acl, visibility), undefined);
     }
 
     public async deleteFolder(mountId: string, pathId: string) {

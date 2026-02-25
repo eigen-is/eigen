@@ -5,7 +5,7 @@ import {eq} from 'drizzle-orm';
 import {type DatabaseConfig, type ManagedDatabase, type SchemaType} from '../core/managed-database';
 import {createDefaultMountConfig, Mount} from '../mount';
 import type {MountConfig, MountInfo} from '@workspace/lib/types';
-import {type DriveACL, type DrivePath, isContainerType, isCollabType, isChatType} from '@workspace/lib/types/drive';
+import {type DriveACL, type DrivePath, type DriveVisibility, isContainerType, isCollabType, isChatType} from '@workspace/lib/types/drive';
 import {ChatRoom} from '../chat';
 import {canRead, canWrite, normalizeACL} from './acl';
 import {validateACLEmails} from '@workspace/lib/validation';
@@ -109,13 +109,7 @@ export default class Drive {
             throw new ApiError(403, 'No read permission');
         }
 
-        const contents = await mount.listFolder(pathId);
-        const parentACL = this.getACL(pathId);
-
-        return contents.map((item: DrivePath) => ({
-            ...item,
-            acl: item.acl ?? parentACL
-        }));
+        return await mount.listFolder(pathId);
     }
 
     async createFolder(mountId: string, parentId: string, folderName: string): Promise<DrivePath> {
@@ -392,6 +386,7 @@ export default class Drive {
             size: r.size ?? 0,
             thumbnail: r.thumbnail,
             acl: r.acl as DriveACL[] | null,
+            visibility: (r.visibility ?? 'private') as DriveVisibility,
             details: r.details ?? null,
             createdAt: r.createdAt ?? new Date(),
             updatedAt: r.updatedAt ?? new Date()
@@ -405,7 +400,7 @@ export default class Drive {
         return await mount.getBreadcrumb(pathId);
     }
 
-    async updateACL(mountId: string, pathId: string, acl: DriveACL[] | null): Promise<void> {
+    async updateACL(mountId: string, pathId: string, acl: DriveACL[] | null, visibility?: DriveVisibility): Promise<void> {
         const mount = this.getMount(mountId);
         const item = await mount.getPath(pathId);
         if (!item) {
@@ -422,14 +417,12 @@ export default class Drive {
         }
 
         const normalizedACL = normalizeACL(acl);
-        await mount.updatePath(pathId, {acl: normalizedACL});
+        const updates: Partial<DrivePath> = {acl: normalizedACL};
+        if (visibility !== undefined) updates.visibility = visibility;
+        await mount.updatePath(pathId, updates);
         await propagateACLChange(item, item.acl, normalizedACL);
         const updatedItem = await mount.getPath(pathId);
         if (updatedItem) this.emit(SSEventType.DRIVE_ACL_UPDATED, updatedItem);
-    }
-
-    getACL(_pathId: string): DriveACL[] | null {
-        return null;
     }
 
     async canRead(mountId: string, pathId: string, user: User): Promise<boolean> {
@@ -515,6 +508,7 @@ export default class Drive {
             size: r.size ?? 0,
             thumbnail: r.thumbnail,
             acl: r.acl as DriveACL[] | null,
+            visibility: (r.visibility ?? 'private') as DriveVisibility,
             details: r.details ?? null,
             createdAt: r.createdAt ?? new Date(),
             updatedAt: r.updatedAt ?? new Date()
@@ -541,6 +535,7 @@ export default class Drive {
         } else if (this.sharedDb.select().from(sharedSchema.sharedPaths).where(eq(sharedSchema.sharedPaths.id, path.id)).get()) {
             this.sharedDb.update(sharedSchema.sharedPaths).set({
                 acl: newACL,
+                visibility: path.visibility,
                 name: path.name,
                 size: path.size,
                 thumbnail: path.thumbnail,
@@ -559,6 +554,7 @@ export default class Drive {
                 size: path.size,
                 thumbnail: path.thumbnail,
                 acl: newACL,
+                visibility: path.visibility,
                 createdAt: new Date(),
                 updatedAt: new Date()
             }).run();

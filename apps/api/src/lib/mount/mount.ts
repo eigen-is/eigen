@@ -6,6 +6,7 @@ import * as path from 'path';
 import * as fs from 'node:fs';
 
 import type {DrivePath, MountConfig} from '@workspace/lib/types';
+import type {DriveVisibility} from '@workspace/lib/types/drive';
 import * as schema from './schema';
 import {labels, paths, pathsToLabels} from './schema';
 import {MOUNT_DB_CONFIG} from './db-config';
@@ -411,6 +412,7 @@ export class Mount {
             size: row.size ?? 0,
             thumbnail: row.thumbnail,
             acl: row.acl,
+            visibility: (row.visibility ?? 'private') as DriveVisibility,
             details: row.details ?? null,
             createdAt: row.createdAt ?? new Date(),
             updatedAt: row.updatedAt ?? new Date()

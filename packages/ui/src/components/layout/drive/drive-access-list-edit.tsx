@@ -1,10 +1,11 @@
 "use client"
 
-import {useCallback, useEffect, useRef, useState} from "react"
+import {useCallback, useEffect, useMemo, useRef, useState} from "react"
 import {UserPublicItem} from "../user-item"
-import type {DriveACL, DrivePath} from "@workspace/lib/types/drive"
+import type {DriveACL, DrivePath, DriveVisibility} from "@workspace/lib/types/drive"
 import {cn} from "@workspace/ui/lib/utils"
 import {usePublicUser} from "@workspace/lib/public"
+import {useBreadcrumb} from "@workspace/lib/drive"
 import {Lock, Plus, Unlock} from "lucide-react"
 import {AvatarIcon} from "@workspace/ui/components/avatar"
 import {Separator} from "@workspace/ui/components/separator"
@@ -15,19 +16,23 @@ import {ContactSuggestion} from "../contacts/types"
 
 export type DriveAccessListEditProps = {
     path: DrivePath
-    onSave: (updatedAcl: DriveACL[]) => void
+    onSave: (updatedAcl: DriveACL[], visibility: DriveVisibility) => void
     onCancel?: () => void
     className?: string
 }
 
-type UserAccessItem = {
+type DirectAccessItem = {
     email: string
     read: boolean
     write: boolean
-    public: boolean
     owner: boolean
-    isNew?: boolean
-    displayName?: string
+}
+
+type InheritedAccessItem = {
+    email: string
+    read: boolean
+    write: boolean
+    sourceFolderName: string
 }
 
 export function DriveAccessListEdit({
@@ -37,82 +42,87 @@ export function DriveAccessListEdit({
                                         className,
                                     }: DriveAccessListEditProps) {
     const owner = usePublicUser(path.ownerId)
+    const breadcrumb = useBreadcrumb(path.ownerId, path.mountId, path.id)
     const [pendingChanges, setPendingChanges] = useState(false)
     const [newContactInput, setNewContactInput] = useState("")
     const inputRef = useRef<HTMLInputElement>(null)
 
-    // State for access list including original and added users
-    const [accessList, setAccessList] = useState<UserAccessItem[]>(() => {
-        const initialList: UserAccessItem[] = []
+    const [directList, setDirectList] = useState<DirectAccessItem[]>([])
+    const [visibility, setVisibility] = useState<DriveVisibility>(path.visibility ?? 'private')
 
-        // First initialize with empty list, we'll populate it when owner data is available
-        return initialList
-    })
+    const inheritedList = useMemo<InheritedAccessItem[]>(() => {
+        if (!breadcrumb.data || breadcrumb.data.length < 2) return []
+        const ownerEmail = owner.data?.email?.toLowerCase()
+        const directEmails = new Set(directList.map(u => u.email.toLowerCase()))
+        if (ownerEmail) directEmails.add(ownerEmail)
 
-    // State for public access
-    const [isPublicEnabled, setIsPublicEnabled] = useState(false)
-    const [publicAccessRights, setPublicAccessRights] = useState({
-        read: true,
-        write: true
-    })
+        const inherited: InheritedAccessItem[] = []
+        const seenEmails = new Set<string>()
+
+        const ancestors = breadcrumb.data.slice(0, -1)
+        for (const ancestor of [...ancestors].reverse()) {
+            if (!ancestor.acl) continue
+            for (const acl of ancestor.acl) {
+                const email = acl.email.toLowerCase()
+                if (directEmails.has(email) || seenEmails.has(email)) continue
+                seenEmails.add(email)
+                inherited.push({
+                    email,
+                    read: acl.read,
+                    write: acl.write,
+                    sourceFolderName: ancestor.name,
+                })
+            }
+        }
+        return inherited
+    }, [breadcrumb.data, directList, owner.data])
 
     useEffect(() => {
         if (!owner.data) return
 
-        const ownerAccess = {
+        const ownerAccess: DirectAccessItem = {
             email: owner.data.email || '',
             read: true,
             write: true,
-            public: false,
             owner: true
         }
 
-        const newAccessList = [ownerAccess]
+        const newDirectList: DirectAccessItem[] = [ownerAccess]
 
         if (path.acl && path.acl.length > 0) {
-            for(const access of path.acl) {
-                if (access.public) {
-                    setIsPublicEnabled(true)
-                    setPublicAccessRights({
-                        read: access.read,
-                        write: access.write
-                    })
-                } else if (access.email.toLowerCase() !== owner.data?.email.toLowerCase()) {
-                    newAccessList.push({
+            for (const access of path.acl) {
+                if (access.email.toLowerCase() !== owner.data?.email.toLowerCase()) {
+                    newDirectList.push({
                         email: access.email.toLowerCase(),
                         read: access.read,
                         write: access.write,
-                        public: access.public,
                         owner: false
                     })
                 }
             }
         }
 
-        setAccessList(newAccessList)
+        setDirectList(newDirectList)
+        setVisibility(path.visibility ?? 'private')
     }, [path, owner.data])
 
-    // Handle adding a new user
     const handleAddUser = useCallback((suggestion: ContactSuggestion) => {
-        if (accessList.some(user => user.email.toLowerCase() === suggestion.email.toLowerCase())) {
+        if (directList.some(user => user.email.toLowerCase() === suggestion.email.toLowerCase())) {
             return
         }
 
-        const newUser = {
+        const newUser: DirectAccessItem = {
             email: suggestion.email,
             read: true,
             write: true,
-            public: false,
             owner: false
         }
 
-        setAccessList(prevList => [...prevList, newUser])
-
+        setDirectList(prevList => [...prevList, newUser])
         setPendingChanges(true)
         setNewContactInput("")
-    }, [accessList])
+    }, [directList])
 
-    // Parse contact suggestion from input and add user if valid
     const processContactInput = useCallback((value: string) => {
         const emailMatch = value.match(/<(.+)>/)
         let email: string
@@ -131,11 +141,7 @@ export function DriveAccessListEdit({
             }
         }
 
-        if (!email.toLowerCase().endsWith('@eigen.is')) {
-            return false;
-        }
-
-        if (accessList.some(user => user.email.toLowerCase() === email.toLowerCase())) {
+        if (directList.some(user => user.email.toLowerCase() === email.toLowerCase())) {
             return false;
         }
 
@@ -148,11 +154,9 @@ export function DriveAccessListEdit({
 
         handleAddUser(suggestion)
         return true
-    }, [accessList, handleAddUser])
+    }, [directList, handleAddUser])
 
-    // This is called when a suggestion is selected from the dropdown
     const handleContactSelected = useCallback((value: string) => {
-        // If the value contains angle brackets, it's a selected suggestion
         if (value.includes('<') && value.includes('>')) {
             const added = processContactInput(value)
             if (added) {
@@ -161,7 +165,6 @@ export function DriveAccessListEdit({
                 setNewContactInput(value)
             }
         } else {
-            // Just update the input value
             setNewContactInput(value)
         }
     }, [processContactInput])
@@ -174,12 +177,10 @@ export function DriveAccessListEdit({
         }
     }, [newContactInput, processContactInput])
 
-    // Handle changing user permissions
     const handlePermissionChange = useCallback((email: string, permission: string) => {
-        setAccessList(prev => prev.map(user => {
+        setDirectList(prev => prev.map(user => {
             if (user.email === email) {
                 if (permission === "remove") {
-                    // Mark for removal - will be filtered out when saving
                     return {...user, read: false, write: false}
                 } else if (permission === "editor") {
                     return {...user, read: true, write: true}
@@ -189,60 +190,33 @@ export function DriveAccessListEdit({
             }
             return user
         }))
-
         setPendingChanges(true)
     }, [])
 
-    // Handle public access toggle
-    const handlePublicAccessToggle = useCallback((enabled: boolean) => {
-        setIsPublicEnabled(enabled)
+    const handleVisibilityChange = useCallback((newVisibility: DriveVisibility) => {
+        setVisibility(newVisibility)
         setPendingChanges(true)
     }, [])
 
-    // Handle public permission change
-    const handlePublicPermissionChange = useCallback((permission: string) => {
-        if (permission === "editor") {
-            setPublicAccessRights({read: true, write: true})
-        } else if (permission === "viewer") {
-            setPublicAccessRights({read: true, write: false})
-        }
-
-        setPendingChanges(true)
-    }, [])
-
-    // Generate final ACL for saving
     const handleSave = useCallback(() => {
         const updatedAcl: DriveACL[] = []
 
-        // Add all non-owner users that aren't removed
-        for(const user of accessList) {
+        for (const user of directList) {
             if (!user.owner && (user.read || user.write)) {
                 updatedAcl.push({
                     email: user.email,
                     read: user.read,
                     write: user.write,
-                    public: false
                 })
             }
         }
 
-        // Add public access if enabled
-        if (isPublicEnabled) {
-            updatedAcl.push({
-                email: "",
-                read: publicAccessRights.read,
-                write: publicAccessRights.write,
-                public: true
-            })
-        }
-
-        onSave(updatedAcl)
-    }, [accessList, isPublicEnabled, publicAccessRights, onSave])
+        onSave(updatedAcl, visibility)
+    }, [directList, visibility, onSave])
 
     return (
         <div className={cn("space-y-4", className)}>
 
-            {/* Contact autosuggest to add new people */}
             <div>
                 <div className="flex mt-2">
                     <div className="flex-1 relative">
@@ -250,7 +224,7 @@ export function DriveAccessListEdit({
                             id="new-contact"
                             value={newContactInput}
                             onChange={handleContactSelected}
-                            onlyEigenIsMails={true}
+                            onlyEigenIsMails={false}
                             placeholder="Enter email addresses"
                             inputRef={inputRef}
                             onSubmit={handleAddContactClick}
@@ -270,62 +244,75 @@ export function DriveAccessListEdit({
 
             <Separator/>
 
-            {/* People with access list */}
             <div className="space-y-2">
                 <h4 className="text-base font-medium">People with access</h4>
 
-                {accessList.map((access) => (
+                {directList.map((access) => (
                     <div key={access.email} className="flex items-center justify-between">
-                        <><UserPublicItem
+                        <UserPublicItem
                             email={access.email}
                         />
-                            {!access.owner && (
-                                <Select
-                                    defaultValue={access.write ? "editor" : "viewer"}
-                                    onValueChange={(value) => handlePermissionChange(access.email, value)}
-                                >
-                                    <SelectTrigger className="h-7 w-28">
-                                        <SelectValue/>
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        <SelectItem value="editor">Editor</SelectItem>
-                                        <SelectItem value="viewer">Viewer</SelectItem>
-                                        <SelectItem value="remove">Remove</SelectItem>
-                                    </SelectContent>
-                                </Select>
-                            )}
-                        </>
+                        {access.owner ? (
+                            <span className="text-xs text-muted-foreground w-28 text-right">
+                                Owner
+                            </span>
+                        ) : (
+                            <Select
+                                defaultValue={access.write ? "editor" : "viewer"}
+                                onValueChange={(value) => handlePermissionChange(access.email, value)}
+                            >
+                                <SelectTrigger className="h-7 w-28">
+                                    <SelectValue/>
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="editor">Editor</SelectItem>
+                                    <SelectItem value="viewer">Viewer</SelectItem>
+                                    <SelectItem value="remove">Remove</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        )}
+                    </div>
+                ))}
+
+                {inheritedList.map((access) => (
+                    <div key={access.email} className="flex items-center justify-between">
+                        <UserPublicItem
+                            email={access.email}
+                            label={<span className="text-muted-foreground text-xs">Inherited from "{access.sourceFolderName}"</span>}
+                        />
+                        <span className="text-xs text-muted-foreground w-28 text-right">
+                            {access.write ? "Editor" : "Viewer"}
+                        </span>
                     </div>
                 ))}
             </div>
 
             <Separator/>
 
-            {/* General access section */}
             <div>
                 <h4 className="text-sm font-medium mb-2">General access</h4>
                 <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center">
                         <AvatarIcon className="w-10 h-10 cursor-pointer"
-                                    onClick={() => handlePublicAccessToggle(!isPublicEnabled)}>
-                            {isPublicEnabled ? <Unlock/> : <Lock/>}
+                                    onClick={() => handleVisibilityChange(visibility === 'private' ? 'public-read' : 'private')}>
+                            {visibility !== 'private' ? <Unlock/> : <Lock/>}
                         </AvatarIcon>
                         <div className="ml-3">
                             <p className="text-sm font-medium">
-                                {isPublicEnabled ? "Unrestricted" : "Restricted"}
+                                {visibility !== 'private' ? "Unrestricted" : "Restricted"}
                             </p>
                             <p className="text-xs text-gray-500">
-                                {isPublicEnabled
-                                    ? "Any logged-in eigen user with the link can access"
+                                {visibility !== 'private'
+                                    ? "Anyone with the link can access"
                                     : "Only people with access can open with the link"}
                             </p>
                         </div>
                     </div>
 
-                    {isPublicEnabled && (
+                    {visibility !== 'private' && (
                         <Select
-                            defaultValue={publicAccessRights.write ? "editor" : "viewer"}
-                            onValueChange={handlePublicPermissionChange}
+                            value={visibility === 'public-write' ? "editor" : "viewer"}
+                            onValueChange={(v) => handleVisibilityChange(v === 'editor' ? 'public-write' : 'public-read')}
                         >
                             <SelectTrigger className="h-8 w-28">
                                 <SelectValue/>
@@ -341,7 +328,6 @@ export function DriveAccessListEdit({
 
             <Separator/>
 
-            {/* Action buttons */}
             <div className="flex justify-end space-x-4">
                 {onCancel && (
                     <Button variant="outline" onClick={onCancel}>
