@@ -3,7 +3,7 @@ import {validateCommand} from '@workspace/lib/validation';
 export const COMMANDS_HELP = [
     {cmd: '/?, /h, /help', desc: 'List of available slash commands'},
     {cmd: '/time', desc: 'Provides server as well as local time'},
-    {cmd: '/inspect, /look, /finger [Player]', desc: 'Inspects the player'},
+    {cmd: '/inspect, /look, /finger [User]', desc: 'Inspects the user'},
     {cmd: '/dance', desc: 'Performs the dance emote'},
     {cmd: '/cheer', desc: 'Performs the cheer emote'},
     {cmd: '/taunt', desc: 'Performs the taunt emote'},
@@ -13,9 +13,22 @@ export const COMMANDS_HELP = [
     {cmd: '/shrug', desc: '¯\\_(ツ)_/¯'},
     {cmd: '/flip', desc: '(╯°□°)╯︵ ┻━┻'},
     {cmd: '/me [action]', desc: 'Performs a custom emote'},
-    {cmd: '/i, /inv, /invite [Player]', desc: 'Invites player to the room'},
-    {cmd: '/send, /t, /tell, /w, /whisper [Player] [Message]', desc: 'Send private message'},
+    {cmd: '/i, /inv, /invite [User]', desc: 'Invites user to the room'},
+    {cmd: '/send, /t, /tell, /w, /whisper [User] [Message]', desc: 'Send private message'},
     {cmd: '/reply, /r [Message]', desc: 'Reply to the last whisper'},
+];
+
+// All available slash commands for autocomplete
+export const SLASH_COMMANDS = [
+    '/?', '/h', '/help',
+    '/time',
+    '/inspect', '/look', '/finger',
+    '/dance', '/cheer', '/taunt', '/greet',
+    '/allthethings', '/facepalm', '/shrug', '/flip',
+    '/me',
+    '/i', '/inv', '/invite',
+    '/send', '/t', '/tell', '/w', '/whisper',
+    '/reply', '/r'
 ];
 
 export type LocalCommand =
@@ -64,23 +77,25 @@ export function getLocalCommand(raw: string): LocalCommand {
     return null;
 }
 
-const KNOWN_COMMANDS = [
-    '/help', '/h', '/?', '/time',
-    '/inspect', '/look', '/finger',
-    '/dance', '/cheer', '/taunt', '/greet',
-    '/allthethings', '/facepalm', '/shrug', '/flip',
-    '/me', '/whisper', '/w', '/tell', '/t', '/send',
-    '/reply', '/r', '/invite', '/i', '/inv',
-];
-
 export function isUnknownCommand(raw: string): boolean {
     const trimmed = raw.trim();
     if (!trimmed.startsWith('/')) return false;
     const cmd = trimmed.split(' ')[0].toLowerCase();
-    return !KNOWN_COMMANDS.includes(cmd);
+    return !SLASH_COMMANDS.includes(cmd);
 }
 
 export {isEmailAddress, validateEmailTarget} from '@workspace/lib/validation';
+
+export function getSlashCommandQuery(content: string): string | null {
+    const trimmed = content.trim();
+    if (!trimmed.startsWith('/')) return null;
+    
+    // If there's a space after the slash command, don't autocomplete
+    const spaceIdx = trimmed.indexOf(' ');
+    if (spaceIdx > 0) return null;
+    
+    return trimmed;
+}
 
 export function getAtSuggestQuery(text: string): string | null {
     const atIdx = text.lastIndexOf('@');
