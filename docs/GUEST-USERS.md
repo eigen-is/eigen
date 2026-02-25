@@ -104,3 +104,207 @@ Better-auth's plugin architecture has limitations that make the naive approach (
 - Create users via `auth.api` directly with `role: 'guest'`
 - Validate ACL before any state change
 - Still use better-auth for session management (cookies, tokens)
+
+
+### Analysis of the Architecture
+
+1.  **Security via Decoupling**: The strategy brilliantly bypasses the `emailOTP` plugin's limitations. By setting `disableSignUp: true` on the plugin, you prevent arbitrary users from spamming the OTP endpoint to create accounts. The custom `/guest-auth/create-guest` endpoint acts as the sole gatekeeper for guest registration, allowing you to enforce the ACL check effectively. Once the user record exists, the standard `emailOTP` login flow works seamlessly.
+2.  **Stateless Sandboxing**: Extending `Home` to create `GuestHome` and overriding `init()` is the correct approach. Because Drizzle/LocalStorage only create files upon actual data manipulation or their respective `init()` calls, skipping `contacts.init()` and `mail.init()` ensures zero bytes are written to disk for guests.
+3.  **Role Enforcement**: Manually inserting the user using Drizzle ORM guarantees `role: 'guest'` is immutably set without fighting better-auth's lifecycle hooks.
+
+Here is the backend implementation required to make this work.
+
+### 1. Update Auth Configuration
+First, register the `emailOTP` plugin but strictly disable its ability to sign up new users.
+
+```typescript
+// apps/api/src/lib/auth/auth.ts
+import {admin, organization, twoFactor, emailOTP} from "better-auth/plugins"
+
+// ... existing code ...
+export const auth = betterAuth({
+    database: drizzleAdapter(drizzle(getServerDataPath('users3.db')), { /* ... */ }),
+    emailAndPassword: { enabled: true },
+    plugins:[
+        twoFactor({ /* ... */ }),
+        admin(),
+        organization(),
+        emailOTP({
+            disableSignUp: true, // Crucial: forces users through the custom endpoint
+            async sendVerificationOTP({email, otp, type}, request) {
+                console.log('Sending Guest OTP:', email, otp, type);
+                // TODO: Integrate actual email sending (e.g., mailApi or direct SMTP)
+            },
+        }),
+    ],
+    // ...
+});
+```
+
+### 2. Custom Guest Auth Router
+This custom endpoint acts as the gatekeeper. It checks the ACL and creates the user in the database before generating the OTP. *Note: Don't forget to register this router in `app.ts`.*
+
+```typescript
+// apps/api/src/routes/guest-auth.ts
+import { Elysia, t } from 'elysia';
+import { getHome } from '../lib/home/get-home';
+import { getUserById, getUserByEmail } from '../lib/users/users';
+import { ApiError } from '../lib/core/errors';
+import { drizzle } from 'drizzle-orm/bun-sqlite';
+import { getServerDataPath } from '../lib/config/paths';
+import { user as userScheme } from '../../../auth-schema.ts';
+import { generateId } from 'better-auth';
+import type { User } from 'better-auth/types';
+
+const db = drizzle(getServerDataPath('users3.db'));
+
+export const guestAuthRouter = new Elysia({ prefix: '/guest-auth' })
+    .post('/create-guest', async ({ body }) => {
+        const { email, ownerId, mountId, pathId } = body;
+        
+        const owner = await getUserById(ownerId);
+        if (!owner) throw new ApiError(404, 'Owner not found');
+        
+        const home = await getHome(owner);
+        // Validate ACL using a dummy guest user object
+        const hasAccess = await home.drive.canRead(mountId, pathId, { id: 'guest-check', email } as User);
+        
+        if (!hasAccess) {
+            throw new ApiError(403, 'No access to this shared resource');
+        }
+        
+        let user = await getUserByEmail(email);
+        if (!user) {
+            // Create the guest user
+            await db.insert(userScheme).values({
+                id: generateId(),
+                email: email.toLowerCase(),
+                name: email.split('@')[0],
+                role: 'guest',
+                createdAt: new Date(),
+                updatedAt: new Date(),
+                emailVerified: false
+            }).run();
+        }
+        
+        return { success: true };
+    }, {
+        body: t.Object({
+            email: t.String(),
+            ownerId: t.String(),
+            mountId: t.String(),
+            pathId: t.String()
+        })
+    });
+```
+
+### 3. Guest Drive (Sandbox)
+This dummy drive exists solely to satisfy the `Home.drive` interface without initializing a default mount or shared databases. The real interactions happen through `SharedDrive`.
+
+```typescript
+// apps/api/src/lib/drive/guest-drive.ts
+import type { User } from 'better-auth/types';
+import Drive from './drive';
+import type { Home } from '../home/home';
+import type { DrivePath } from '@workspace/lib/types/drive';
+
+export class GuestDrive extends Drive {
+    constructor(home: Home) {
+        super(home);
+    }
+
+    async init(): Promise<void> {
+        // No default mounts, no shared db
+    }
+
+    async addMount(): Promise<void> {}
+    async removeMount(): Promise<void> {}
+    async listMounts(): Promise<any[]> { return[]; }
+    async size(): Promise<number> { return 0; }
+    async getRootFolder(): Promise<DrivePath | null> { return null; }
+    async getPath(): Promise<DrivePath | null> { return null; }
+    async getFolderContents(): Promise<DrivePath[]> { return []; }
+    async getSharedPathsWithMe(): Promise<DrivePath[]> { return []; }
+    async getSharedPathsByMe(): Promise<DrivePath[]> { return[]; }
+    async receiveACLChange(): Promise<void> {}
+}
+```
+
+### 4. Guest Home
+A sandboxed `Home` instance that overrides the `init()` method so that directories aren't created in the filesystem.
+
+```typescript
+// apps/api/src/lib/home/guest-home.ts
+import type { User } from 'better-auth/types';
+import { Home } from './home';
+import { GuestDrive } from '../drive/guest-drive';
+
+export class GuestHome extends Home {
+    private guestInitialized = false;
+
+    constructor(user: User) {
+        super(user);
+        // Overwrite standard domain objects with safe placeholders just in case
+        this.fs = {} as any; 
+        this.contacts = {} as any;
+        this.mail = {} as any;
+    }
+
+    public async init() {
+        if (this.guestInitialized) return this;
+        
+        this.drive = new GuestDrive(this) as any;
+        await this.drive.init();
+        
+        // Skip calling contacts.init() and mail.init()
+        this.guestInitialized = true;
+        return this;
+    }
+
+    public async size() {
+        return { mail: 0, contacts: 0, drive: 0, used: 0, max: 0 };
+    }
+}
+```
+
+### 5. Update Home Factory
+Finally, update the factory to serve the `GuestHome` when applicable.
+
+```typescript
+// apps/api/src/lib/home/get-home.ts
+import type {User} from 'better-auth/types';
+import {createAsyncSingleton} from '../../utils/singleton';
+import {getUserById} from '../users/users';
+import {Home} from './home';
+import {GuestHome} from './guest-home'; // <-- Add import
+
+const homeFactories: Map<string, () => Promise<Home>> = new Map();
+
+export function getHome(user: User): Promise<Home> {
+    if (!homeFactories.has(user.id)) {
+        homeFactories.set(user.id, createAsyncSingleton(async () => {
+            const userExists = await getUserById(user.id);
+            if (!userExists) {
+                throw new Error('User not found');
+            }
+
+            // <-- Use GuestHome if the role matches
+            const home = user.role === 'guest' ? new GuestHome(user) : new Home(user);
+            await home.init();
+            return home.touch();
+        }));
+    }
+
+    return homeFactories.get(user.id)!();
+}
+
+export function cleanupHomeFactory(userId: string): void {
+    homeFactories.delete(userId);
+}
+```
+
+### Frontend Adjustments
+On the frontend (`packages/ui/src/components/layout/loginpage.tsx`), the flow should be:
+1. When submitting the email, fire `treaty.guestAuth['create-guest'].post({ email, ownerId, mountId, pathId })`.
+2. Once the 200 OK resolves, fire `authClient.signIn.emailOtp({ email })` which will send the email.
+3. Prompt for the OTP, and run `authClient.signIn.emailOtp({ email, otp })` to complete the sign-in.
