@@ -8,28 +8,18 @@ export async function canRead(
     user: User,
     getPath: PathGetter
 ): Promise<boolean> {
-    if (path.ownerId === user.id) {
-        return true;
-    }
+    if (path.ownerId === user.id) return true;
+    if (path.visibility === 'public-read' || path.visibility === 'public-write') return true;
 
-    if (path.acl && path.acl.length > 0) {
-        const userAcl = path.acl.find(a => a.email.toLowerCase() === user.email.toLowerCase());
-        if (userAcl) {
-            return userAcl.read || userAcl.public === true;
-        }
+    const userAcl = path.acl?.find(a => a.email.toLowerCase() === user.email.toLowerCase());
+    if (userAcl?.read) return true;
 
-        const publicAcl = path.acl.find(a => a.public);
-        if (publicAcl) {
-            return true;
-        }
-    } else if (path.parentId) {
+    if (path.parentId) {
         const parent = await getPath(path.parentId);
-        if (parent) {
-            return canRead(parent, user, getPath);
-        }
+        if (parent) return canRead(parent, user, getPath);
     }
 
-    return path.ownerId === user.id;
+    return false;
 }
 
 export async function canWrite(
@@ -37,41 +27,18 @@ export async function canWrite(
     user: User,
     getPath: PathGetter
 ): Promise<boolean> {
-    if (path.ownerId === user.id) {
-        return true;
-    }
+    if (path.ownerId === user.id) return true;
+    if (path.visibility === 'public-write') return true;
 
-    if (path.acl && path.acl.length > 0) {
-        const userAcl = path.acl.find(a => a.email.toLowerCase() === user.email.toLowerCase());
-        if (userAcl) {
-            return userAcl.write;
-        }
-    } else if (path.parentId) {
-        const parent = await getPath(path.parentId);
-        if (parent) {
-            return canWrite(parent, user, getPath);
-        }
-    }
-
-    return path.ownerId === user.id;
-}
-
-export function getEffectiveACL(
-    path: DrivePath,
-    getPath: (pathId: string) => DrivePath | null
-): DriveACL[] | null {
-    if (path.acl && path.acl.length > 0) {
-        return path.acl;
-    }
+    const userAcl = path.acl?.find(a => a.email.toLowerCase() === user.email.toLowerCase());
+    if (userAcl?.write) return true;
 
     if (path.parentId) {
-        const parent = getPath(path.parentId);
-        if (parent) {
-            return getEffectiveACL(parent, getPath);
-        }
+        const parent = await getPath(path.parentId);
+        if (parent) return canWrite(parent, user, getPath);
     }
 
-    return null;
+    return false;
 }
 
 export function normalizeACL(acl: DriveACL[] | null): DriveACL[] | null {

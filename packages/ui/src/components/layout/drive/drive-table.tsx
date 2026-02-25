@@ -2,7 +2,7 @@ import React, {useCallback, useMemo, useRef, useState} from "react";
 import {Table, TableBody, TableCell, TableHead, TableHeader, TableRow} from "@workspace/ui/components/table";
 import {cn} from "@workspace/ui/lib/utils";
 import {formatDistanceToNow} from "date-fns";
-import {DrivePath, DEFAULT_MOUNT_ID} from "@workspace/lib/types";
+import {type DriveACL, DrivePath, DEFAULT_MOUNT_ID} from "@workspace/lib/types";
 import {DriveShareSummary} from "./drive-share-summary";
 import {ArrowRight, ChevronLeft, Download, Pencil, Trash2, UserRoundPlus} from "lucide-react";
 import {DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator} from "@workspace/ui/components/dropdown-menu";
@@ -15,6 +15,7 @@ import {useListDrag} from "../../../hooks/use-list-drag";
 export type DriveTableProps = {
     items: DrivePath[];
     currentPath?: DrivePath | null;
+    ancestorAcl?: DriveACL[];
     activeItemId?: string;
     onItemClick?: (item: DrivePath) => void;
     onItemOpen?: (item: DrivePath) => void;
@@ -31,6 +32,7 @@ export type DriveTableProps = {
 export function DriveTable({
                                items = [],
                                currentPath,
+                               ancestorAcl,
                                activeItemId,
                                onItemClick,
                                onItemOpen,
@@ -72,6 +74,7 @@ export function DriveTable({
                 size: 0,
                 thumbnail: null,
                 acl: null,
+                visibility: 'private',
                 details: null,
                 createdAt: new Date(),
                 updatedAt: new Date()
@@ -229,6 +232,7 @@ export function DriveTable({
                                 <TableCell className="hidden sm:table-cell group">
                                     <DriveShareSummary
                                         path={item}
+                                        ancestorAcl={ancestorAcl}
                                         onClick={() => onShareClick?.(item)}
                                         showIconOnHover={true}
                                     />

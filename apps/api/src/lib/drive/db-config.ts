@@ -20,6 +20,7 @@ export const SHARED_DB_CONFIG: DatabaseConfig<typeof schema> = {
                     ownerId TEXT NOT NULL,
                     mimeType TEXT NOT NULL,
                     acl TEXT,
+                    visibility TEXT DEFAULT 'private',
                     details TEXT,
                     createdAt INTEGER DEFAULT (unixepoch()),
                     updatedAt INTEGER DEFAULT (unixepoch())

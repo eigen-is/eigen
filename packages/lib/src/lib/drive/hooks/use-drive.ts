@@ -1,5 +1,5 @@
 import {useMutation, useQuery, useQueryClient, type QueryClient} from "@tanstack/react-query";
-import type {DriveACL, DrivePath} from "@workspace/lib/types/drive";
+import type {DriveACL, DrivePath, DriveVisibility} from "@workspace/lib/types/drive";
 import {driveApi} from "@workspace/lib/api";
 import {invalidateHomeSize} from '../../home';
 import {DEFAULT_MOUNT_ID} from "@workspace/lib/types/mount";
@@ -185,8 +185,8 @@ export function useRenamePath(ownerId: string, mountId: string = DEFAULT_MOUNT_I
 export function useUpdateACL(ownerId: string, mountId: string = DEFAULT_MOUNT_ID) {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: async ({path, acl}: { path: DrivePath, acl: DriveACL[] }) => {
-            const response = await driveApi({ownerId})({mountId}).path({pathId: path.id}).acl.put({acl});
+        mutationFn: async ({path, acl, visibility}: { path: DrivePath, acl: DriveACL[], visibility?: DriveVisibility }) => {
+            const response = await driveApi({ownerId})({mountId}).path({pathId: path.id}).acl.put({acl, visibility});
             return response.data;
         },
         onSuccess: (_data, variables) => invalidateAclUpdated(queryClient, variables.path.mountId, variables.path.id, variables.path.parentId),

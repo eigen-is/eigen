@@ -1,7 +1,7 @@
 import {useState} from "react"
 import {Dialog, DialogContent, DialogHeader, DialogTitle} from "@workspace/ui/components/dialog"
 import {DriveAccessListEdit} from "@workspace/ui/components/layout/drive/drive-access-list-edit"
-import type {DriveACL, DrivePath} from "@workspace/lib/types/drive"
+import type {DriveACL, DrivePath, DriveVisibility} from "@workspace/lib/types/drive"
 import {useUpdateACL} from "@workspace/lib/drive";
 
 export type DriveAccessDialogProps = {
@@ -17,18 +17,15 @@ export function DriveAccessDialog({
                                   }: DriveAccessDialogProps) {
     const [isSubmitting, setIsSubmitting] = useState(false)
 
-    // Always call hooks, even if path is null
     const updateACL = useUpdateACL(path?.ownerId || '');
 
-    // Don't render if no path is provided
     if (!path) {
         return null
     }
 
-    // Handler for when save is clicked in the access list edit component
-    const handleSave = async (updatedAcl: DriveACL[]) => {
+    const handleSave = async (updatedAcl: DriveACL[], visibility: DriveVisibility) => {
         setIsSubmitting(true)
-        await updateACL.mutateAsync({path, acl: updatedAcl});
+        await updateACL.mutateAsync({path, acl: updatedAcl, visibility});
         onOpenChange(false);
         setIsSubmitting(false);
     }

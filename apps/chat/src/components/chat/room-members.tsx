@@ -8,7 +8,7 @@ type RoomMembersProps = {
 }
 
 export function RoomMembers({ownerId, acl, onClick}: RoomMembersProps) {
-    const members = acl?.filter(a => !a.public) || [];
+    const members = acl || [];
 
     return (
         <button onClick={onClick} className="flex items-center cursor-pointer hover:opacity-80 transition-opacity">

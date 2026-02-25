@@ -302,7 +302,8 @@ All shared types in `packages/lib/src/types/[domain].ts`. Import from `@workspac
 
 Key types:
 - `DrivePath` — file/folder metadata (id, name, type, parentId, mimeType, acl, labels, thumbnail, etc.)
-- `DriveACL` — access control entry (email, read, write, public)
+- `DriveACL` — access control entry (email, read, write)
+- `DriveVisibility` — path visibility (`'private' | 'public-read' | 'public-write'`)
 - `Contact` — contact record
 - `Email` / `EmailDraft` — parsed email messages
 - `SSEvent` — SSE event union type
@@ -528,7 +529,7 @@ For deep-dives, read the relevant file in `docs/`:
 - **Eden Treaty** populates `response.error` on API errors and makes `response.data` null. Frontend hooks use `response.data || []` or check `response.error` — they handle error responses gracefully without needing to know the status code
 - **Maildir path sanitization**: `sanitizeDirName()` lowercases and dot-prefixes mailbox names (e.g., `Sent` → `Maildir/.sent`). INBOX is `Maildir/.` which resolves to `Maildir/`
 - **Collab documents** are folders (not files) in metadata.db containing a `data.db` child. The `data.db` pathId is used as the storage key
-- **ACL inheritance**: If a path has no ACL, it inherits from its parent recursively up the tree
+- **ACL inheritance**: Purely additive (Google Drive model). Permissions always check local ACL first, then walk up to parent. A child can only *add* permissions, never revoke inherited ones. See `docs/ACL.md`
 - **Home singleton timeout**: 5 minutes of inactivity → auto-destruct (closes all DBs, removes from factory cache)
 - **Auth DB schema**: better-auth with drizzle adapter does NOT auto-create tables. The setup flow (`/setup/complete`) creates them via `initializeDatabaseSchema()`. Tests use this same setup endpoint rather than manual SQL
 - **Import hoisting**: `paths.ts` reads `EIGEN_DATA_ROOT` lazily (via function call) because ES module static imports are hoisted before any code runs. This is critical for test isolation

@@ -58,7 +58,7 @@ describe('Integration', () => {
                     method: 'PUT',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
-                        acl: [{email: 'bob@test.eigen.is', read: true, write: false, public: false}],
+                        acl: [{email: 'bob@test.eigen.is', read: true, write: false}],
                     }),
                 });
 
@@ -152,7 +152,7 @@ describe('Integration', () => {
                     method: 'PUT',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
-                        acl: [{email: 'bob@test.eigen.is', read: true, write: true, public: false}],
+                        acl: [{email: 'bob@test.eigen.is', read: true, write: true}],
                     }),
                 });
 
@@ -198,7 +198,7 @@ describe('Integration', () => {
                     method: 'PUT',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
-                        acl: [{email: 'bob@test.eigen.is', read: true, write: false, public: false}],
+                        acl: [{email: 'bob@test.eigen.is', read: true, write: false}],
                     }),
                 });
 
@@ -367,7 +367,7 @@ describe('Integration', () => {
                     method: 'PUT',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
-                        acl: [{email: 'bob@test.eigen.is', read: true, write: false, public: false}],
+                        acl: [{email: 'bob@test.eigen.is', read: true, write: false}],
                     }),
                 });
 
