@@ -110,12 +110,15 @@ Every authenticated user gets a `Home` instance (`apps/api/src/lib/home/home.ts`
 - **Auto-destructs** after 5 minutes of inactivity (closes DB connections, cleans up singleton)
 - **Filesystem root**: `home.fs` is a `LocalStorage` at `{EIGEN_DATA_ROOT}/home/{userId}/`
 
+**TeamHome** (`apps/api/src/lib/home/team-home.ts`) extends Home for team-owned drives. Uses a synthetic user ID `team_{teamId}`, data stored at `{EIGEN_DATA_ROOT}/team/{teamId}/`. Only initializes Drive (no mail/contacts). Created lazily via `getTeamHome(teamId)`.
+
 ### 4.3 Data Path Resolution
 
 `apps/api/src/lib/config/paths.ts`:
 - `getDataRoot()` reads `process.env['EIGEN_DATA_ROOT']` **lazily** (at call time, not import time) to support test isolation
 - `getServerDataPath(filename?)` → `{root}/server/{filename}` — global server DBs
 - `getUserHomePath(userId)` → `{root}/home/{userId}` — per-user data
+- `getTeamDataPath(teamId)` → `{root}/team/{teamId}` — team-owned drives
 
 ### 4.4 API Routes
 
@@ -318,7 +321,7 @@ All shared types in `packages/lib/src/types/[domain].ts`. Import from `@workspac
 
 Key types:
 - `DrivePath` — file/folder metadata (id, name, type, parentId, mimeType, acl, labels, thumbnail, etc.)
-- `DriveACL` — access control entry (email, read, write)
+- `DriveACL` — access control entry (email, read, write, optional type/targetId for team ACL)
 - `DriveVisibility` — path visibility (`'private' | 'public-read' | 'public-write'`)
 - `Contact` — contact record
 - `Email` / `EmailDraft` — parsed email messages
@@ -391,6 +394,7 @@ Tests are API integration tests in `apps/api/src/test/`. Run with: `bun run test
 |------|----------|
 | `auth.test.ts` | Health check, auth required, user access |
 | `drive.test.ts` | Mounts, folders, files, sharing/ACL, docs, stickies, breadcrumb, permissions |
+| `org-drive.test.ts` | Team drives, team ACL on personal drives, redundant ACL filtering |
 | `home.test.ts` | Storage size |
 | `contacts.test.ts` | Contact CRUD, labels, isolation, me endpoint |
 | `chat.test.ts` | Chat creation, messages, whisper visibility, slash commands, read-only ACL, backend validation |
@@ -425,22 +429,30 @@ Tests are API integration tests in `apps/api/src/test/`. Run with: `bun run test
 │   ├── config.db         # System configuration
 │   └── config.json       # Setup state
 │
-└── home/{userId}/
-    ├── mounts/
-    │   ├── default/
-    │   │   ├── metadata.db    # Drive paths, labels, ACL
-    │   │   ├── data/          # Files by UUID
-    │   │   ├── thumbs/        # Thumbnails (WebP)
-    │   │   └── tmp/           # Collab temp files
-    │   └── shared.db          # Paths shared with this user
-    │
-    ├── eigen.mail/
-    │   ├── mail.db            # Email metadata index
-    │   └── Maildir/           # Maildir format (.sent, .drafts, .trash, etc.)
-    │
-    └── eigen.contacts/
-        ├── contacts.db        # Contact data + labels
-        └── avatars/           # Avatar images (WebP thumbnails)
+├── home/{userId}/
+│   ├── mounts/
+│   │   ├── default/
+│   │   │   ├── metadata.db    # Drive paths, labels, ACL
+│   │   │   ├── data/          # Files by UUID
+│   │   │   ├── thumbs/        # Thumbnails (WebP)
+│   │   │   └── tmp/           # Collab temp files
+│   │   └── shared.db          # Paths shared with this user
+│   │
+│   ├── eigen.mail/
+│   │   ├── mail.db            # Email metadata index
+│   │   └── Maildir/           # Maildir format (.sent, .drafts, .trash, etc.)
+│   │
+│   └── eigen.contacts/
+│       ├── contacts.db        # Contact data + labels
+│       └── avatars/           # Avatar images (WebP thumbnails)
+│
+└── team/{teamId}/             # Team-owned drives (same mount structure as user)
+    └── mounts/
+        └── default/
+            ├── metadata.db
+            ├── data/
+            ├── thumbs/
+            └── tmp/
 ```
 
 ---
@@ -496,6 +508,7 @@ For deep-dives, read the relevant file in `docs/`:
 | `LAYOUT-SHARED-COMPONENTS.md` | Shared UI component inventory |
 | `LAYOUT-UI-LIST.md` | List interaction hooks and usage patterns |
 | `LAYOUT-UI-DRIVE.md` | Drive-specific layout behavior |
+| `ORGANISATIONS-AND-TEAMS.md` | Organization setup, teams, team drives, team ACL, prefixed owner IDs |
 | `ACL.md` | ACL inheritance and effective permission model |
 | `CHAT.md` | Chat architecture, room model, slash commands |
 | `STICKIES.md` | Stickies architecture and collaborative behavior |
@@ -549,7 +562,7 @@ Backlog docs prefixed with `TODO-` are design proposals and planning notes; trea
 - **Eden Treaty** populates `response.error` on API errors and makes `response.data` null. Frontend hooks use `response.data || []` or check `response.error` — they handle error responses gracefully without needing to know the status code
 - **Maildir path sanitization**: `sanitizeDirName()` lowercases and dot-prefixes mailbox names (e.g., `Sent` → `Maildir/.sent`). INBOX is `Maildir/.` which resolves to `Maildir/`
 - **Collab documents** are folders (not files) in metadata.db containing a `data.db` child. The `data.db` pathId is used as the storage key
-- **ACL inheritance**: Purely additive (Google Drive model). Permissions always check local ACL first, then walk up to parent. A child can only *add* permissions, never revoke inherited ones. See `docs/ACL.md`
+- **ACL inheritance**: Purely additive (Google Drive model). Permissions always check local ACL first, then walk up to parent. A child can only *add* permissions, never revoke inherited ones. Supports team-based ACL via `type: 'team'` entries. Redundant ACL entries (already covered by parent or ownership) are auto-stripped on save. See `docs/ACL.md` and `docs/ORGANISATIONS-AND-TEAMS.md`
 - **Home singleton timeout**: 5 minutes of inactivity → auto-destruct (closes all DBs, removes from factory cache)
 - **Auth DB schema**: better-auth with drizzle adapter does NOT auto-create tables. The setup flow (`/setup/complete`) creates them via `initializeDatabaseSchema()`. Tests use this same setup endpoint rather than manual SQL
 - **Import hoisting**: `paths.ts` reads `EIGEN_DATA_ROOT` lazily (via function call) because ES module static imports are hoisted before any code runs. This is critical for test isolation
