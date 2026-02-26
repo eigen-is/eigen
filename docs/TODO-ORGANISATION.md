@@ -17,6 +17,53 @@ Eigen is fully **per-user**. Every user gets a `Home` singleton with their own D
 3. **Shared Drives** = organization-owned storage (not tied to any individual, survives departures)
 4. **Guest Access** = external users via Email OTP (see `docs/TODO-GUEST-USERS.md`)
 5. **Unified routing** = all drive types use the same `/drive/:ownerId/:mountId/:pathId` URL pattern
+6. **People management** = admin UI to manage users, teams, and roles
+
+---
+
+## Roles
+
+Three levels of roles, each minimal and sufficient:
+
+### System roles (`user.role` in better-auth)
+
+| Role | Description |
+|------|-------------|
+| `admin` | Full system access. Can manage users, orgs, teams, settings. Created during setup. |
+| `user` | Regular org member. Has personal Home (drive, mail, contacts). Default for new sign-ups. |
+| `guest` | External user via Email OTP. Stateless — no personal storage. See `docs/TODO-GUEST-USERS.md`. |
+
+System roles are stored on the `user` table and control what `Home` type a user gets (`Home`, `GuestHome`) and whether they can access admin features.
+
+### Organization roles (`member.role` in better-auth)
+
+| Role | Description |
+|------|-------------|
+| `owner` | Can delete org, manage all members and teams. Assigned to setup admin. |
+| `admin` | Can manage members and teams, create shared drives. |
+| `member` | Default. Can use shared drives they have access to. |
+
+Org roles come from better-auth's `organization()` plugin. They determine what a user can do within the org — specifically, who can manage people and teams via the People app.
+
+### Team roles (`teamMember.role` in better-auth)
+
+| Role | Description |
+|------|-------------|
+| `owner` | Can edit team, add/remove members. |
+| `member` | Default. Part of the team for ACL purposes. |
+
+Team roles are minimal — they only control who can manage the team itself. For drive access, what matters is whether you're *in* the team (any role), not your team role.
+
+### Role-based access summary
+
+| Action | Required role |
+|--------|--------------|
+| Access personal drive, mail, contacts | `user` or `admin` (system role) |
+| Access shared files (via ACL) | Any authenticated user (including `guest`) |
+| Access `org-read`/`org-write` files | Org `member`/`admin`/`owner` |
+| Manage users, teams (People app) | Org `admin` or `owner` |
+| System settings (Admin app) | System `admin` |
+| Create/manage shared drives | Org `admin` or `owner` |
 
 ---
 
@@ -358,14 +405,26 @@ This adds:
 
 ### Auto-Create Default Organization
 
-During setup wizard (`apps/api/src/lib/setup/setup.ts`), after creating the admin user:
+During setup wizard, ask for **domain** and **organization name** (e.g., "Acme Corp"). Add `orgName` to the setup input:
+
+```typescript
+// apps/api/src/routes/setup.ts — add to body schema:
+orgName: t.String({minLength: 1})
+
+// apps/api/src/lib/setup/setup.ts — add to SetupInput:
+orgName: string
+```
+
+The setup frontend (`apps/setup/`) also needs the org name field.
+
+After creating the admin user in `completeSetup()`:
 
 ```typescript
 // In completeSetup(), after creating admin user:
 const org = await auth.api.createOrganization({
     body: {
-        name: input.domain,
-        slug: input.domain.replace(/\./g, '-'),
+        name: input.orgName,
+        slug: input.orgName.toLowerCase().replace(/[^a-z0-9]+/g, '-'),
     },
     headers: { /* admin session */ }
 });
@@ -400,6 +459,80 @@ databaseHooks: {
     }
 }
 ```
+
+---
+
+## People App (User & Team Management)
+
+A new frontend app (`apps/people/`) accessible to users with org role `admin` or `owner`. This is the UI for managing the organization's members and teams. It lives alongside the existing `apps/admin/` app (which handles system-level settings like storage, domain, etc.).
+
+**Why a separate app?** The admin app (`apps/admin/`) is for system `admin` only (server config, storage, setup). People management is an org-level concern — org admins should access it without needing system admin rights. Keeping them separate follows the existing app-per-domain pattern.
+
+### Pages
+
+#### People > Members
+- List all org members (name, email, org role, system role, joined date)
+- Change a member's org role (`member` ↔ `admin`). Only `owner` can promote to `admin`.
+- Remove a member from the org (does NOT delete the user account — just removes org membership)
+- Invite new members by email (uses better-auth `invitation` flow)
+- Filter/search by name or email
+
+#### People > Teams
+- List all teams in the org
+- Create new team (name)
+- Edit team (rename)
+- Delete team (removes team, does NOT affect members' accounts)
+- View team members
+
+#### People > Team Detail (People > Teams > {teamName})
+- List team members (name, email, team role)
+- Add members to team (autocomplete from org members)
+- Remove members from team
+- Change team role (`member` ↔ `owner`)
+
+### API Routes
+
+Most of this is handled by better-auth's client API (`authClient.organization.*`). Custom routes needed:
+
+```typescript
+// apps/api/src/routes/people.ts (or extend admin.ts)
+// Middleware: require org admin/owner role
+
+GET    /people/members              → list org members (wraps better-auth)
+PATCH  /people/members/:userId/role → change org role
+DELETE /people/members/:userId      → remove from org
+POST   /people/invite               → send invitation
+
+GET    /people/teams                → list teams
+POST   /people/teams                → create team
+PATCH  /people/teams/:teamId        → rename team
+DELETE /people/teams/:teamId        → delete team
+
+GET    /people/teams/:teamId/members    → list team members
+POST   /people/teams/:teamId/members    → add member to team
+DELETE /people/teams/:teamId/members/:userId → remove from team
+PATCH  /people/teams/:teamId/members/:userId/role → change team role
+```
+
+Alternatively, if better-auth's client API covers all of this, the frontend can call `authClient.organization.*` directly and skip custom routes. Evaluate during implementation — better-auth may handle everything except the role guard middleware.
+
+### Access Control
+
+The People app route guard checks:
+1. User is authenticated (session)
+2. User has org role `admin` or `owner` (query `member` table for user's role in active org)
+
+```typescript
+// In apps/people/ route guard or API middleware:
+const membership = await getMemberByUserId(orgId, user.id);
+if (!membership || !['admin', 'owner'].includes(membership.role)) {
+    throw new ApiError(403, 'Org admin access required');
+}
+```
+
+### Navigation
+
+Add a "People" link in the app switcher (the grid icon in the top bar). Only visible to users with org `admin`/`owner` role. The app switcher already conditionally shows "Admin" — same pattern.
 
 ---
 
@@ -526,19 +659,20 @@ const hasAccess = await drive.canRead(mountId, pathId, { id: 'guest-check', emai
 
 ### Phase 2: Organization Infrastructure
 
-**Goal**: Default organization exists. All users are members.
+**Goal**: Default organization exists. All users are members. Roles enforced.
 
 | # | Task | Files |
 |---|------|-------|
 | 1 | Add `team`/`teamMember` tables to `auth-schema.ts` | `apps/api/auth-schema.ts` |
 | 2 | Enable `teams: { enabled: true }` in `organization()` plugin | `apps/api/src/lib/auth/auth.ts` |
 | 3 | Add team/teamMember schema to auth config | `apps/api/src/lib/auth/auth.ts` |
-| 4 | Create default org in `completeSetup()` | `apps/api/src/lib/setup/setup.ts` |
-| 5 | Add admin as org owner in setup | `apps/api/src/lib/setup/setup.ts` |
-| 6 | Auto-add new users to default org (database hook) | `apps/api/src/lib/auth/auth.ts` |
-| 7 | Add `initializeDatabaseSchema()` DDL for team/teamMember | `apps/api/src/lib/setup/setup.ts` |
-| 8 | Add team management API routes | `apps/api/src/routes/admin.ts` or new `teams.ts` |
-| 9 | Update tests: setup creates org, new users auto-join | `apps/api/src/test/` |
+| 4 | Add `orgName` field to setup route + `SetupInput` type | `apps/api/src/routes/setup.ts`, `apps/api/src/lib/setup/setup.ts` |
+| 5 | Add org name input to setup frontend | `apps/setup/` |
+| 6 | Create default org (using `orgName`) in `completeSetup()` | `apps/api/src/lib/setup/setup.ts` |
+| 7 | Add admin as org `owner` in setup | `apps/api/src/lib/setup/setup.ts` |
+| 8 | Auto-add new users to default org as `member` (database hook) | `apps/api/src/lib/auth/auth.ts` |
+| 9 | Add `initializeDatabaseSchema()` DDL for team/teamMember | `apps/api/src/lib/setup/setup.ts` |
+| 10 | Update tests: setup creates org, new users auto-join with correct roles | `apps/api/src/test/` |
 
 ### Phase 3: OrgHome + Shared Drives
 
@@ -570,9 +704,9 @@ const hasAccess = await drive.canRead(mountId, pathId, { id: 'guest-check', emai
 | 7 | Update ACL validation in route to accept `type` field | `apps/api/src/routes/drive.ts` |
 | 8 | Add tests: team ACL, org visibility, team membership changes | `apps/api/src/test/` |
 
-### Phase 5: Frontend
+### Phase 5: Frontend — Drive UI
 
-**Goal**: UI for team sharing, org drives, team management.
+**Goal**: UI for team sharing, org drives, visibility options.
 
 | # | Task | Files |
 |---|------|-------|
@@ -580,9 +714,24 @@ const hasAccess = await drive.canRead(mountId, pathId, { id: 'guest-check', emai
 | 2 | Add team ACL display (group icon, team name) | `packages/ui/` |
 | 3 | Add "Shared Drives" section in Drive app sidebar | `apps/drive/` |
 | 4 | Add org drive browsing (same DriveLayout, different ownerId) | `apps/drive/` |
-| 5 | Add team management UI in Admin panel | `apps/admin/` |
-| 6 | Update breadcrumb to show org/team drive names | `packages/ui/` |
-| 7 | Add visibility dropdown with `org-read`/`org-write` options | `packages/ui/` |
+| 5 | Update breadcrumb to show org/team drive names | `packages/ui/` |
+| 6 | Add visibility dropdown with `org-read`/`org-write` options | `packages/ui/` |
+
+### Phase 5b: Frontend — People App
+
+**Goal**: Org admins/owners can manage members and teams.
+
+| # | Task | Files |
+|---|------|-------|
+| 1 | Scaffold `apps/people/` app (Vite + React + TanStack Router, same pattern as `apps/admin/`) | `apps/people/` |
+| 2 | Add route guard: require org `admin` or `owner` role | `apps/people/src/routes/_auth.tsx` |
+| 3 | Members list page: list, search, filter org members | `apps/people/src/routes/_auth.members.tsx` |
+| 4 | Member role editing: change org role, remove member | `apps/people/src/routes/_auth.members.tsx` |
+| 5 | Invite member page/dialog | `apps/people/src/components/invite-dialog.tsx` |
+| 6 | Teams list page: list, create, rename, delete teams | `apps/people/src/routes/_auth.teams.tsx` |
+| 7 | Team detail page: list members, add/remove, change team role | `apps/people/src/routes/_auth.teams.$teamId.tsx` |
+| 8 | Add People API routes (or use better-auth client API directly) | `apps/api/src/routes/people.ts` |
+| 9 | Add "People" to app switcher (conditionally, for org admin/owner) | `packages/ui/src/components/layout/` |
 
 ### Phase 6: Guest Access Integration
 
@@ -603,12 +752,16 @@ See `docs/TODO-GUEST-USERS.md` for the full plan. Additional changes:
 | Feature | Mechanism | Phase |
 |---------|-----------|-------|
 | Prefixed owner IDs | `user_`, `org_`, `team_` prefix on `ownerId` | 1 |
-| Organizations | better-auth `organization()` plugin, auto-created on setup | 2 |
+| Roles (system) | `admin`, `user`, `guest` on `user.role` | 2 |
+| Roles (org) | `owner`, `admin`, `member` on `member.role` | 2 |
+| Roles (team) | `owner`, `member` on `teamMember.role` | 2 |
+| Organizations | better-auth `organization()` plugin, auto-created on setup with org name | 2 |
 | Teams | better-auth `teams` feature, flat within org | 2 |
 | Share with team | `DriveACL.type = 'team'` | 4 |
 | Org-wide visibility | `DriveVisibility = 'org-read' \| 'org-write'` | 4 |
 | Org-owned drives | `OrgHome` class + `data/org/` directory | 3 |
 | Team-owned drives | `TeamHome` class + `data/team/` directory | 3 |
+| People app | `apps/people/` — manage members, teams, roles (org admin/owner only) | 5b |
 | Guest access to org drives | `parseOwnerId` in `create-guest` endpoint | 6 |
 | Public URLs | `/p/drive/...` routes, no auth (see `TODO-GUEST-USERS.md`) | 6 |
 
