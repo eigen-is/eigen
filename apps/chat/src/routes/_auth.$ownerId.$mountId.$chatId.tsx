@@ -10,9 +10,9 @@ import {TooltipButton} from "@workspace/ui";
 import {Pencil, UserRoundPlus} from "lucide-react";
 import {DriveAccessDialog} from "@workspace/ui/components/layout/drive/drive-access-dialog";
 import {DriveRenameItem} from "@workspace/ui/components/layout/drive/drive-rename-item";
+import {DriveShareSummary} from "@workspace/ui/components/layout/drive/drive-share-summary";
 import type {DrivePath, DriveACL} from "@workspace/lib/types/drive";
 import type {ChatMessage} from "@workspace/lib/types/chat";
-import {RoomMembers} from "../components/chat/room-members";
 import type {RoomMember} from "../components/chat/player-suggest";
 import {getLocalCommand, COMMANDS_HELP, isUnknownCommand, validateEmailTarget} from "../lib/commands";
 import {toast} from "sonner";
@@ -156,7 +156,7 @@ function ChatView() {
         <div className="flex items-center justify-between w-full">
             <span className="font-semibold text-sm truncate">{chatName}</span>
             <div className="flex items-center gap-2">
-                <RoomMembers ownerId={ownerId} acl={chatPath?.acl as DriveACL[] | null ?? null} onClick={() => setAccessDialogOpen(true)}/>
+                {chatPath && <DriveShareSummary path={chatPath as DrivePath} onClick={() => setAccessDialogOpen(true)} showIconOnHover={false}/>}
                 <TooltipButton
                     icon={Pencil}
                     tooltipText="Rename"
