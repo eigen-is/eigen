@@ -14,6 +14,9 @@ A modern workspace platform providing integrated productivity and collaboration 
 - **Calendar**: Calendar and scheduling
 - **Space**: Team collaboration workspace
 - **Stickies**: Kanban board
+- **Chat**: Real-time chat with slash commands and whispers
+- **Admin**: Admin dashboard
+- **Setup**: First-run setup wizard
 
 ## Technology Stack
 
@@ -88,6 +91,8 @@ bun serve:admin
 bun serve:contacts
 bun serve:docs
 bun serve:stickies
+bun serve:chat
+bun serve:calendar
 ```
 
 ### Type Checking
@@ -136,6 +141,7 @@ Access your applications:
 - Docs: http://localhost/docs
 - Stickies: http://localhost/stickies
 - Space: http://localhost/space
+- Chat: http://localhost/chat
 
 ### Production Docker Deployment
 
@@ -172,7 +178,10 @@ docker-compose restart
 - [Database Architecture](docs/DATABASE.md) - SQLite databases, migrations, and access patterns
 - [Storage & Mount System](docs/STORAGE.md) - Storage backends and file management
 - [SSE Architecture](docs/SSE.md) - Real-time updates and cache invalidation
+- [Layout System](docs/LAYOUT.md) - Responsive layout system and components
+- [Shared UI Components](docs/LAYOUT-SHARED-COMPONENTS.md) - UI component lookup reference
 - [Docker Deployment](docs/DOCKER.md) - Building and deploying with Docker
+- [API Reference](docs/API.md) - API endpoints and usage
 
 ## License
 
