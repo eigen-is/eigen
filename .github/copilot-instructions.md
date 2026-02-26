@@ -41,7 +41,7 @@ bun run build:prod
 - Run with `bun run test` (or `bun --filter '@apps/api' test`)
 - Tests run with `--concurrency 1` due to shared SQLite connections via Home singleton
 - Each test run uses isolated temp data directory (`data/test-{timestamp}/`)
-- Test users: Alice (`alice@test.eigen.is`) and Bob (`bob@test.eigen.is`)
+- Test users: Alice (`alice@test.eigen.is`), Bob (`bob@test.eigen.is`), and Charlie (`charlie@test.eigen.is`)
 
 ---
 
@@ -275,7 +275,8 @@ Used by `DriveTable`, `EmailList`, `ContactsList` following the same pattern.
 
 - **Auth DB schema**: better-auth does NOT auto-create tables. Setup flow (`/setup/complete`) creates them via `initializeDatabaseSchema()`. Tests use the same endpoint.
 - **Collab documents** are folders (not files) in metadata.db containing a `data.db` child. The `data.db` pathId is the storage key.
-- **ACL inheritance**: Purely additive (Google Drive model). Child can only *add* permissions, never revoke inherited ones. See `docs/ACL.md`.
+- **ACL inheritance**: Purely additive (Google Drive model). Child can only *add* permissions, never revoke inherited ones. Supports team-based ACL. Redundant entries auto-stripped. See `docs/ACL.md` and `docs/ORGANISATIONS-AND-TEAMS.md`.
+- **Owner IDs**: User IDs are raw UUIDs (no prefix). Team IDs are `team_{uuid}`. Parsed via `parseOwnerId()` from `packages/lib/src/types/owner.ts`.
 - **Home singleton timeout**: 5 minutes of inactivity → auto-destruct.
 - **Test concurrency**: Must be 1 due to shared SQLite connections.
 - **Maildir path sanitization**: `sanitizeDirName()` lowercases and dot-prefixes mailbox names (e.g., `Sent` → `.sent`). INBOX is `Maildir/.` which resolves to `Maildir/`.
@@ -297,5 +298,6 @@ For deep-dives, see `docs/`:
 - **LAYOUT-SHARED-COMPONENTS.md** - UI components inventory
 - **LAYOUT-UI-LIST.md** - List hooks (selection, keyboard nav, drag-and-drop)
 - **ACL.md** - Access control inheritance model
+- **ORGANISATIONS-AND-TEAMS.md** - Organization setup, teams, team drives, team ACL
 
 Also see **LLM.md** (root) - Single source of truth for project context.

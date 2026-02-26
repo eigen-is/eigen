@@ -11,6 +11,8 @@ type DriveACL = {
     email: string
     read: boolean
     write: boolean
+    type?: 'user' | 'team'   // default: 'user'
+    targetId?: string          // team ID when type is 'team'
 }
 
 type DriveVisibility = 'private' | 'public-read' | 'public-write'
@@ -22,25 +24,37 @@ type DrivePath = {
 }
 ```
 
-- **`acl`** — per-user access entries (email-based). Only stored on paths where access is explicitly granted.
+- **`acl`** — access control entries. User entries use `email` for matching. Team entries use `type: 'team'` with `targetId` set to the team ID — all team members get access.
 - **`visibility`** — link-level access, independent of user ACLs. Lives on `DrivePath` itself.
 
 ## Core Logic (`apps/api/src/lib/drive/acl.ts`)
 
 ### `canRead(path, user, getPath)`
 1. Owner → `true`
-2. `visibility` is `public-read` or `public-write` → `true`
-3. User found in local `acl` with `read: true` → `true`
-4. **Always check parent** (even if local ACL exists but user isn't in it) → recurse
-5. Default → `false`
+2. Team membership → `true` if path is owned by a team the user belongs to
+3. `visibility` is `public-read` or `public-write` → `true`
+4. User found in local `acl` with `read: true` (email match or team membership) → `true`
+5. **Always check parent** (even if local ACL exists but user isn't in it) → recurse
+6. Default → `false`
 
 ### `canWrite(path, user, getPath)`
 Same pattern, but checks `write` and only `public-write` visibility.
+
+### `matchesACL(entry, user)`
+Resolves an ACL entry against a user:
+- `type: 'user'` (default) — matches by email
+- `type: 'team'` — matches if user is a member of the team (via `targetId`)
+
+### `filterRedundantACL(acl, path, getPath)`
+On save, auto-strips ACL entries that are redundant:
+- Entry already granted by an ancestor's ACL (same or broader permissions)
+- Team ACL on a path already owned by that team (all members have full access)
 
 ### Key design decisions
 - **Purely additive**: A read-only ACL entry on a child folder does **not** downgrade inherited write from a parent. The system checks local first, then walks up. If write is granted anywhere in the ancestor chain, the user can write.
 - **No explicit denies**: There is no `{read: false}` deny mechanism. If a user is in the local ACL with `read: true, write: false`, this does not block inherited write from a parent. The parent check still runs.
 - **External emails**: Any valid email address can be added to ACLs (no domain restriction).
+- **Team ACL**: Grants access to all members of a team. Combined with user ACL (additive).
 
 ## Inheritance Behavior (tested)
 
@@ -80,8 +94,9 @@ A (Bob: read)  →  B (Bob: write)  →  C (Bob: read-only)
 
 The share dialog (`drive-access-list-edit.tsx`) distinguishes between:
 
-- **Direct access** — users explicitly in this path's ACL. Editable (Editor / Viewer / Remove).
-- **Inherited access** — users from ancestor ACLs, shown greyed out with source folder name (e.g., "Inherited from 'Project'"). Not editable. User must navigate to the parent folder to change.
+- **Direct access** — users/teams explicitly in this path's ACL. Editable (Editor / Viewer / Remove).
+- **Inherited access** — users/teams from ancestor ACLs, shown greyed out with source folder name (e.g., "Inherited from 'Project'"). Not editable. User must navigate to the parent folder to change.
+- **Team entries** — shown with a group icon instead of user avatar. Team name resolved via API.
 
 The **Share column** in file listings shows avatars for both direct and inherited users via `ancestorAcl` prop.
 
@@ -94,7 +109,7 @@ When ACLs change, `acl-propagation.ts` updates each affected user's `shared.db` 
 | File | Purpose |
 |------|---------|
 | `packages/lib/src/types/drive.ts` | `DriveACL`, `DriveVisibility`, `DrivePath` types |
-| `apps/api/src/lib/drive/acl.ts` | `canRead`, `canWrite`, `normalizeACL` |
+| `apps/api/src/lib/drive/acl.ts` | `canRead`, `canWrite`, `matchesACL`, `normalizeACL`, `filterRedundantACL` |
 | `apps/api/src/lib/drive/drive.ts` | `updateACL(mountId, pathId, acl, visibility)` |
 | `apps/api/src/lib/drive/acl-propagation.ts` | Propagate changes to shared DBs |
 | `apps/api/src/routes/drive.ts` | PUT `/drive/:ownerId/:mountId/path/:pathId/acl` |
