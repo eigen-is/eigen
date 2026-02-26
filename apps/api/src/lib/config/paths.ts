@@ -20,3 +20,7 @@ export function getUserHomePath(userId: string): string {
 export function getHomeDataPath(): string {
     return path.join(getDataRoot(), 'home');
 }
+
+export function getTeamDataPath(teamId: string): string {
+    return path.join(getDataRoot(), 'team', teamId);
+}

@@ -18,7 +18,9 @@ export const authClient = createAuthClient({
             }
         }),
         adminClient(),
-        organizationClient(),
+        organizationClient({
+            teams: {enabled: true},
+        }),
     ],
 });
 

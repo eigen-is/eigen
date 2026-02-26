@@ -14,6 +14,7 @@ const setupResponse = await app.handle(new Request('http://localhost/setup/compl
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({
         domain: 'test.eigen.is',
+        orgName: 'Test Organization',
         storageType: 'local-id',
         adminEmail: 'alice@test.eigen.is',
         adminPassword: 'testpassword123',
@@ -26,6 +27,7 @@ if (!setupResult.success) {
 }
 
 const {auth} = await import('../lib/auth/auth');
+const {addUserToDefaultOrg} = await import('../lib/auth/auth');
 const {treaty} = await import('@elysiajs/eden');
 
 type App = typeof app;
@@ -105,6 +107,10 @@ export async function getTestContext(): Promise<TestContext> {
     const alice = await createTestUser('alice@test.eigen.is', 'testpassword123', 'Alice Test');
     const bob = await createTestUser('bob@test.eigen.is', 'testpassword123', 'Bob Test');
     const charlie = await createTestUser('charlie@test.eigen.is', 'testpassword123', 'Charlie Test');
+
+    // Auto-join non-admin users to default org (Alice is already owner from setup)
+    await addUserToDefaultOrg(bob.id);
+    await addUserToDefaultOrg(charlie.id);
 
     context = {
         alice: {

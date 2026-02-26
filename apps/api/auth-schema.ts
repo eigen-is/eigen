@@ -25,7 +25,8 @@ export const session = sqliteTable("session", {
     userAgent: text('user_agent'),
     userId: text('user_id').notNull().references(() => user.id, {onDelete: 'cascade'}),
     impersonatedBy: text('impersonated_by'),
-    activeOrganizationId: text('active_organization_id')
+    activeOrganizationId: text('active_organization_id'),
+    activeTeamId: text('active_team_id')
 });
 
 export const account = sqliteTable("account", {
@@ -85,4 +86,19 @@ export const invitation = sqliteTable("invitation", {
     status: text('status').notNull(),
     expiresAt: integer('expires_at', {mode: 'timestamp'}).notNull(),
     inviterId: text('inviter_id').notNull().references(() => user.id, {onDelete: 'cascade'})
+});
+
+export const team = sqliteTable("team", {
+    id: text("id").primaryKey(),
+    name: text('name').notNull(),
+    organizationId: text('organization_id').notNull().references(() => organization.id, {onDelete: 'cascade'}),
+    createdAt: integer('created_at', {mode: 'timestamp'}).notNull(),
+    updatedAt: integer('updated_at', {mode: 'timestamp'})
+});
+
+export const teamMember = sqliteTable("team_member", {
+    id: text("id").primaryKey(),
+    teamId: text('team_id').notNull().references(() => team.id, {onDelete: 'cascade'}),
+    userId: text('user_id').notNull().references(() => user.id, {onDelete: 'cascade'}),
+    createdAt: integer('created_at', {mode: 'timestamp'})
 });

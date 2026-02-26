@@ -4,6 +4,8 @@ import type {DrivePath} from "@workspace/lib/types/drive";
 import {useUpload} from "../../layout/upload-provider/upload-provider";
 import {uploadWithProgress} from "../upload-provider/upload-with-progress";
 import {getDriveFileUploadUrl, getDriveFilesUploadUrl} from "@workspace/lib/api";
+import {invalidateItemCreated} from "@workspace/lib/drive";
+import {useQueryClient} from "@tanstack/react-query";
 import type {UploadResult} from "./file-upload";
 
 export type {UploadResult};
@@ -27,6 +29,7 @@ export function DriveUploadFiles({
                                  }: DriveUploadFilesProps) {
     const fileInputRef = useRef<HTMLInputElement>(null);
     const upload = useUpload();
+    const queryClient = useQueryClient();
 
     // Process initial files when they're provided and component is opening
     useEffect(() => {
@@ -91,6 +94,9 @@ export function DriveUploadFiles({
                 onSuccess: async () => {
                     // Mark upload as complete
                     uploadHandler.complete();
+
+                    // Invalidate the parent folder cache so new files appear
+                    invalidateItemCreated(queryClient, path.mountId, path.id);
 
                     // Notify parent component
                     if (onAfterAction) {

@@ -10,7 +10,7 @@ export {DEFAULT_MOUNT_ID};
 export const driveKeys = {
     all: ['drive'] as const,
     mounts: () => [...driveKeys.all, 'mounts'] as const,
-    root: (mountId: string) => [...driveKeys.all, 'root', mountId] as const,
+    root: (ownerId: string, mountId: string) => [...driveKeys.all, 'root', ownerId, mountId] as const,
     folders: () => [...driveKeys.all, 'folder'] as const,
     folder: (mountId: string, pathId: string) => [...driveKeys.folders(), mountId, pathId] as const,
     mimeTypes: () => [...driveKeys.all, 'mime'] as const,
@@ -39,7 +39,7 @@ export function useMounts(ownerId: string) {
 // GET ROOT FOLDER
 export function useRootFolder(ownerId: string, mountId: string = DEFAULT_MOUNT_ID) {
     return useQuery({
-        queryKey: driveKeys.root(mountId),
+        queryKey: driveKeys.root(ownerId, mountId),
         queryFn: async () => {
             const response = await driveApi({ownerId})({mountId}).root.get();
             return response.data || null;

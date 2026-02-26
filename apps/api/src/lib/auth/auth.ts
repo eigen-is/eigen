@@ -2,6 +2,7 @@ import {betterAuth} from "better-auth";
 import {drizzle} from 'drizzle-orm/bun-sqlite';
 import {drizzleAdapter} from "better-auth/adapters/drizzle";
 import {getServerDataPath} from "../config/paths";
+import {getServerConfig} from "../config/server-config";
 import {admin, organization, twoFactor} from "better-auth/plugins"
 import {
     account as accountScheme,
@@ -9,6 +10,8 @@ import {
     member as memberScheme,
     organization as organizationScheme,
     session as sessionScheme,
+    team as teamScheme,
+    teamMember as teamMemberScheme,
     twoFactor as twoFactorScheme,
     user as userScheme,
     verification as verificationScheme
@@ -31,7 +34,7 @@ export const trustedOrigins = [
 
 export const auth = betterAuth({
     database: drizzleAdapter(drizzle(getServerDataPath('users3.db')), {
-        provider: "sqlite", // or "pg" or "mysql"
+        provider: "sqlite",
         schema: {
             user: userScheme,
             session: sessionScheme,
@@ -41,8 +44,34 @@ export const auth = betterAuth({
             organization: organizationScheme,
             member: memberScheme,
             invitation: invitationScheme,
+            team: teamScheme,
+            teamMember: teamMemberScheme,
         },
     }),
+    databaseHooks: {
+        user: {
+            create: {
+                after: async (user) => {
+                    const config = getServerConfig();
+                    if (!config?.orgId) return;
+                    // Defer to avoid transaction visibility issues
+                    setTimeout(async () => {
+                        try {
+                            await auth.api.addMember({
+                                body: {
+                                    userId: user.id,
+                                    organizationId: config.orgId,
+                                    role: 'member',
+                                },
+                            });
+                        } catch (error) {
+                            console.error(`Failed to auto-join user ${user.id} to default org:`, error);
+                        }
+                    }, 0);
+                },
+            },
+        },
+    },
     emailAndPassword: {
         enabled: true
     },
@@ -56,11 +85,36 @@ export const auth = betterAuth({
             },
         }),
         admin(),
-        organization(),
+        organization({
+            teams: {
+                enabled: true,
+            },
+        }),
     ],
     trustedOrigins,
     appName: "eigen",
     baseURL: process.env["API_URL"],
-    basePath: "/auth",  // Auth routes at /auth/*
+    basePath: "/auth",
     secret: "+/SmL4b3+bxwJgsJU7yT1Sbfm9YR/0GZhVGRaBm838c=",
 });
+
+/**
+ * Add a user to the default organization as a member.
+ * Can be called explicitly when the databaseHook timing isn't sufficient.
+ */
+export async function addUserToDefaultOrg(userId: string): Promise<void> {
+    const config = getServerConfig();
+    if (!config?.orgId) return;
+
+    try {
+        await auth.api.addMember({
+            body: {
+                userId,
+                organizationId: config.orgId,
+                role: 'member',
+            },
+        });
+    } catch (error) {
+        console.error(`Failed to auto-join user ${userId} to default org:`, error);
+    }
+}
