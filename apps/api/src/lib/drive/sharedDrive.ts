@@ -2,6 +2,7 @@ import type {User} from "better-auth";
 import Drive from "./drive";
 import type {Home} from "../home";
 import type {DriveACL, DrivePath, DriveVisibility} from "@workspace/lib/types/drive";
+import type {MountInfo} from "@workspace/lib/types";
 import CollabDocument from "../collab/collabDocument.ts";
 import type {ChatRoom} from "../chat";
 import type {DatabaseConfig, ManagedDatabase, SchemaType} from "../core/managed-database";
@@ -35,8 +36,14 @@ export default class SharedDrive extends Drive {
     public async init() {
     }
 
-    public async getRootFolder(_mountId: string) {
-        return null;
+    public async listMounts(): Promise<MountInfo[]> {
+        return this.sharedDrive.listMounts();
+    }
+
+    public async getRootFolder(mountId: string) {
+        const root = await this.sharedDrive.getRootFolder(mountId);
+        if (!root) return null;
+        return (await this.canRead(mountId, root.id, this.user)) ? root : null;
     }
 
     public async size(_mountId: string) {
