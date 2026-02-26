@@ -45,8 +45,9 @@ This plan outlines the steps to enable external users (guests) to authenticate v
 
 ## 4. API & Auth Flow
 - **Access Pattern**:
-    - Guest clicks link: `https://eigen.is/drive/s/alice/default/file-uuid?email=bob@gmail.com`
-    - Frontend (`_auth` guard) redirects to `/login?redirect=...&email=bob@gmail.com&ownerId=alice&mountId=default&pathId=file-uuid`.
+    - Guest clicks link: `https://eigen.is/drive/s/user_alice/default/file-uuid?email=bob@gmail.com`
+    - `ownerId` uses prefixed format (`user_<id>`, `org_<id>`, `team_<id>`) — see `docs/TODO-ORGANISATION.md`
+    - Frontend (`_auth` guard) redirects to `/login?redirect=...&email=bob@gmail.com&ownerId=user_alice&mountId=default&pathId=file-uuid`.
     - **Frontend Implementation**:
         - Modify `packages/ui/src/components/layout/login-route.tsx`: Update `loginSearchSchema` to accept `email`, `ownerId`, `mountId`, `pathId` (all optional).
         - Modify `packages/ui/src/components/layout/loginpage.tsx`:
@@ -64,8 +65,10 @@ This plan outlines the steps to enable external users (guests) to authenticate v
         - Guest enters OTP -> Verified via custom endpoint -> Logged in (as Guest).
         - Redirects back to `redirect` URL.
         - FE requests file: `GET /drive/alice/default/file/file-uuid`.
-        - BE `driveRouter`: `getSharedDrive('alice', guestUser)` -> returns `SharedDrive(AliceHome, GuestUser)`.
+        - BE `driveRouter`: `getSharedDrive('user_alice', guestUser)` -> returns `SharedDrive(AliceHome, GuestUser)`.
         - `SharedDrive` checks Alice's ACL. Success.
+        - Same flow works for org drives: `getSharedDrive('org_xyz', guestUser)` -> checks org drive ACL.
+        - See `docs/TODO-ORGANISATION.md` for full org/team/guest interaction details.
 
 ## 5. Factory Update
 - **Action**:
@@ -162,12 +165,25 @@ export const guestAuthRouter = new Elysia({ prefix: '/guest-auth' })
     .post('/create-guest', async ({ body }) => {
         const { email, ownerId, mountId, pathId } = body;
         
-        const owner = await getUserById(ownerId);
-        if (!owner) throw new ApiError(404, 'Owner not found');
+        // ownerId uses prefixed format (user_<id>, org_<id>, team_<id>)
+        // See docs/TODO-ORGANISATION.md for parseOwnerId
+        const parsed = parseOwnerId(ownerId);
+        let drive;
+        if (parsed.type === 'org') {
+            const orgHome = await getOrgHome(parsed.id);
+            drive = orgHome.drive;
+        } else if (parsed.type === 'team') {
+            const teamHome = await getTeamHome(parsed.id);
+            drive = teamHome.drive;
+        } else {
+            const owner = await getUserById(parsed.id);
+            if (!owner) throw new ApiError(404, 'Owner not found');
+            const home = await getHome(owner);
+            drive = home.drive;
+        }
         
-        const home = await getHome(owner);
         // Validate ACL using a dummy guest user object
-        const hasAccess = await home.drive.canRead(mountId, pathId, { id: 'guest-check', email } as User);
+        const hasAccess = await drive.canRead(mountId, pathId, { id: 'guest-check', email } as User);
         
         if (!hasAccess) {
             throw new ApiError(403, 'No access to this shared resource');
