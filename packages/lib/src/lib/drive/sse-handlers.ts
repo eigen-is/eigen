@@ -20,6 +20,8 @@ export function handleDriveSSEvent(event: SSEvent, queryClient: QueryClient): bo
         case SSEventType.DRIVE_ACL_SHARED:
         case SSEventType.DRIVE_ACL_UNSHARED:
             invalidateAclSharedOrUnshared(queryClient);
+            // Also invalidate path/permissions in case user is already viewing this path
+            invalidateAclUpdated(queryClient, path.mountId, path.id, path.parentId);
             return true;
 
         case SSEventType.DRIVE_FOLDER_CREATED:
