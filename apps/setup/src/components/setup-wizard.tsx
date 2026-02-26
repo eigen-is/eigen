@@ -9,6 +9,7 @@ type StorageType = 'local-id' | 'local-fullnames' | 's3'
 
 interface SetupData {
     domain: string
+    orgName: string
     storageType: StorageType
     s3Bucket: string
     s3Region: string
@@ -47,6 +48,7 @@ export function SetupWizard() {
 
     const [formData, setFormData] = useState<SetupData>({
         domain: 'eigen.is',
+        orgName: 'Eigen',
         storageType: 'local-id',
         s3Bucket: '',
         s3Region: '',
@@ -189,6 +191,21 @@ export function SetupWizard() {
                                 />
                                 <p className="text-xs text-muted-foreground mt-1">
                                     The domain where Eigen will be accessible
+                                </p>
+                            </div>
+
+                            <div>
+                                <Label htmlFor="orgName">Organization Name</Label>
+                                <Input
+                                    id="orgName"
+                                    value={formData.orgName}
+                                    onChange={updateField('orgName')}
+                                    placeholder="Eigen"
+                                    required
+                                    className="mt-1.5"
+                                />
+                                <p className="text-xs text-muted-foreground mt-1">
+                                    The name of your organization
                                 </p>
                             </div>
 

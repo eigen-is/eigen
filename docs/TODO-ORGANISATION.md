@@ -69,7 +69,7 @@ Team roles are minimal — they only control who can manage the team itself. For
 
 ## Core Mechanism: Prefixed Owner IDs
 
-The key insight: `ownerId` currently assumes a user ID. To support org-owned and team-owned drives through the same route pattern, prefix the owner ID to encode its type:
+The key insight: `ownerId` currently assumes a user ID. To support org-owned and team-owned drives through the same route pattern, prefix the owner ID to encode its type. **User IDs stay unprefixed** (raw UUIDs); only `org_` and `team_` get prefixes:
 
 ```typescript
 // packages/lib/src/types/owner.ts
@@ -78,11 +78,11 @@ export type OwnerType = 'user' | 'org' | 'team';
 export function parseOwnerId(ownerId: string): { type: OwnerType; id: string } {
     if (ownerId.startsWith('org_')) return { type: 'org', id: ownerId.slice(4) };
     if (ownerId.startsWith('team_')) return { type: 'team', id: ownerId.slice(5) };
-    return { type: 'user', id: ownerId.startsWith('user_') ? ownerId.slice(5) : ownerId };
+    return { type: 'user', id: ownerId };
 }
 
 export function userOwnerId(userId: string): string {
-    return `user_${userId}`;
+    return userId;
 }
 
 export function orgOwnerId(orgId: string): string {
@@ -157,7 +157,7 @@ data/
 ├── home/{userId}/             # Personal data (unchanged)
 │   ├── mounts/
 │   │   ├── default/
-│   │   │   ├── metadata.db    # ownerId = user_{userId}
+│   │   │   ├── metadata.db    # ownerId = {userId} (no prefix)
 │   │   │   └── data/
 │   │   └── shared.db
 │   ├── eigen.mail/
@@ -287,8 +287,6 @@ export async function canRead(
     getMemberships?: MembershipResolver
 ): Promise<boolean> {
     if (path.ownerId === user.id) return true;
-    // Also check prefixed ownerId match
-    if (path.ownerId === userOwnerId(user.id)) return true;
     if (path.visibility === 'public-read' || path.visibility === 'public-write') return true;
 
     // Check org-wide visibility
@@ -651,7 +649,7 @@ const hasAccess = await drive.canRead(mountId, pathId, { id: 'guest-check', emai
 |---|------|-------|
 | 1 | Create `packages/lib/src/types/owner.ts` with `parseOwnerId`, `userOwnerId`, `orgOwnerId`, `teamOwnerId` | `packages/lib/` |
 | 2 | Export from `packages/lib/src/types/index.ts` | `packages/lib/` |
-| 3 | Update `Drive.addMount()` to pass `userOwnerId(user.id)` instead of raw `user.id` | `apps/api/src/lib/drive/drive.ts` |
+| 3 | `userOwnerId()` is identity (returns userId as-is), no `addMount` change needed | `apps/api/src/lib/drive/drive.ts` |
 | 4 | Update `canRead`/`canWrite` `ownerId` comparison to handle prefixed IDs | `apps/api/src/lib/drive/acl.ts` |
 | 5 | Update `getSharedDrive()` to use `parseOwnerId` for routing | `apps/api/src/lib/drive/get-drive.ts` |
 | 6 | Add `getOrgDataPath`, `getTeamDataPath` to paths.ts | `apps/api/src/lib/config/paths.ts` |
@@ -751,7 +749,7 @@ See `docs/TODO-GUEST-USERS.md` for the full plan. Additional changes:
 
 | Feature | Mechanism | Phase |
 |---------|-----------|-------|
-| Prefixed owner IDs | `user_`, `org_`, `team_` prefix on `ownerId` | 1 |
+| Prefixed owner IDs | User IDs unprefixed, `org_`, `team_` prefix on `ownerId` | 1 |
 | Roles (system) | `admin`, `user`, `guest` on `user.role` | 2 |
 | Roles (org) | `owner`, `admin`, `member` on `member.role` | 2 |
 | Roles (team) | `owner`, `member` on `teamMember.role` | 2 |

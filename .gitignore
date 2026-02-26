@@ -46,6 +46,8 @@ next-env.d.ts
 /apps/api/data/config.db
 /data/home
 /data/server
+/data/team
+/data/org
 .env
 
 /data/test*

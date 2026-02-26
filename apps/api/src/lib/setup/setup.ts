@@ -47,7 +47,8 @@ async function initializeDatabaseSchema(): Promise<void> {
         "user_agent" text,
         "user_id" text NOT NULL REFERENCES "user"("id") ON DELETE CASCADE,
         "impersonated_by" text,
-        "active_organization_id" text
+        "active_organization_id" text,
+        "active_team_id" text
     )`);
 
     await db.run(`CREATE TABLE IF NOT EXISTS "account" (
@@ -108,10 +109,26 @@ async function initializeDatabaseSchema(): Promise<void> {
         "expires_at" integer NOT NULL,
         "inviter_id" text NOT NULL REFERENCES "user"("id") ON DELETE CASCADE
     )`);
+
+    await db.run(`CREATE TABLE IF NOT EXISTS "team" (
+        "id" text PRIMARY KEY NOT NULL,
+        "name" text NOT NULL,
+        "organization_id" text NOT NULL REFERENCES "organization"("id") ON DELETE CASCADE,
+        "created_at" integer NOT NULL,
+        "updated_at" integer
+    )`);
+
+    await db.run(`CREATE TABLE IF NOT EXISTS "team_member" (
+        "id" text PRIMARY KEY NOT NULL,
+        "team_id" text NOT NULL REFERENCES "team"("id") ON DELETE CASCADE,
+        "user_id" text NOT NULL REFERENCES "user"("id") ON DELETE CASCADE,
+        "created_at" integer
+    )`);
 }
 
 export type SetupInput = {
     domain: string;
+    orgName: string;
     storageType: 'local-fullnames' | 'local-id' | 's3';
     s3Bucket?: string;
     s3Region?: string;
@@ -150,6 +167,10 @@ export async function completeSetup(input: SetupInput): Promise<SetupResult> {
         return {success: false, error: "Domain is required"};
     }
 
+    if (!input.orgName) {
+        return {success: false, error: "Organization name is required"};
+    }
+
     if (!input.storageType) {
         return {success: false, error: "Storage type is required"};
     }
@@ -184,8 +205,24 @@ export async function completeSetup(input: SetupInput): Promise<SetupResult> {
             throw new Error('Failed to create admin user');
         }
 
+        // Create default organization via better-auth API
+        const orgSlug = input.orgName.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+        const org = await auth.api.createOrganization({
+            body: {
+                name: input.orgName,
+                slug: orgSlug,
+                userId: user.user.id,
+            },
+        });
+
+        if (!org) {
+            throw new Error('Failed to create default organization');
+        }
+
         const serverConfig: ServerConfig = {
             domain: input.domain,
+            orgName: input.orgName,
+            orgId: org.id,
             storage: {
                 type: input.storageType,
                 s3: input.storageType === 's3' ? {

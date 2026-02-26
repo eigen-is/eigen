@@ -11,6 +11,8 @@ export type S3Config = {
 
 export type ServerConfig = {
     domain: string;
+    orgName: string;
+    orgId: string;
     storage: {
         type: 'local-id' | 'local-fullnames' | 's3';
         s3?: S3Config;
