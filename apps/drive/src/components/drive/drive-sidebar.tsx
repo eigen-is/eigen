@@ -19,7 +19,10 @@ import {Separator} from '@workspace/ui/components/separator';
 import {DrivePath} from '@workspace/lib/types/drive';
 import {useState} from 'react';
 import {useMatch, useNavigate} from '@tanstack/react-router';
-import {usePathInfo} from '@workspace/lib/drive';
+import {usePathInfo, useRootFolder} from '@workspace/lib/drive';
+import {useOrganization, useTeams} from '@workspace/lib/auth';
+import {teamOwnerId} from '@workspace/lib/types';
+import {DEFAULT_MOUNT_ID} from '@workspace/lib/types/mount';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -39,6 +42,22 @@ interface DriveSidebarProps {
     onClose?: () => void;
     isMobile?: boolean;
     rootPath: DrivePath | null;
+}
+
+/** Sidebar item that resolves the root pathId for a shared drive */
+function SharedDriveItem({ownerId, label, icon, condensed}: {
+    ownerId: string; label: string; icon: React.ReactNode; condensed: boolean
+}) {
+    const {data: root} = useRootFolder(ownerId, DEFAULT_MOUNT_ID);
+    if (!root) return null;
+    return (
+        <SidebarItem
+            icon={icon}
+            to={`/fs/${root.ownerId}/${root.mountId}/${root.id}`}
+            label={label}
+            condensed={condensed}
+        />
+    );
 }
 
 export function DriveSidebar({
@@ -76,6 +95,10 @@ export function DriveSidebar({
 
     // Determine which path to use for operations (current or root)
     const targetPath = currentPath || rootPath;
+
+    // Fetch org data for shared drives section
+    const {data: org} = useOrganization();
+    const {data: teams} = useTeams(org?.id);
 
     // Handle file input change
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -207,6 +230,23 @@ export function DriveSidebar({
                     condensed={condensed}
                 />
             </SidebarSection>
+
+            {org && teams && teams.length > 0 && (
+                <>
+                    <Separator/>
+                    <SidebarSection condensed={condensed} title={condensed ? undefined : "Shared Drives"}>
+                        {teams.map((team) => (
+                            <SharedDriveItem
+                                key={team.id}
+                                ownerId={teamOwnerId(team.id)}
+                                label={team.name}
+                                icon={<UsersRound className="h-4 w-4"/>}
+                                condensed={condensed}
+                            />
+                        ))}
+                    </SidebarSection>
+                </>
+            )}
 
             {/* Storage usage indicator at the bottom of sidebar */}
             <StorageUsage

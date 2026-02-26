@@ -130,6 +130,11 @@ export const driveRouter = new Elysia({name: "drive"})
                 email: t.String(),
                 read: t.Boolean(),
                 write: t.Boolean(),
+                type: t.Optional(t.Union([
+                    t.Literal('user'),
+                    t.Literal('team'),
+                ])),
+                targetId: t.Optional(t.String()),
             })),
             visibility: t.Optional(t.Union([
                 t.Literal('private'),

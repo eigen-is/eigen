@@ -2,6 +2,9 @@ export type DriveACL = {
     email: string;
     read: boolean;
     write: boolean;
+    type?: 'user' | 'team';
+    /** Team ID when type is 'team' */
+    targetId?: string;
 }
 
 export type DriveVisibility = 'private' | 'public-read' | 'public-write';

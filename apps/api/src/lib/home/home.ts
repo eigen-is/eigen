@@ -20,10 +20,10 @@ export class Home {
     public contacts: Contacts;
     public mail: Maildir;
 
-    private initialized: boolean = false;
-    private initializationStarted: boolean = false;
-    private initWaiters: ((home: Home) => void)[] = [];
-    private timeout: Timer | undefined;
+    protected initialized: boolean = false;
+    protected initializationStarted: boolean = false;
+    protected initWaiters: ((home: Home) => void)[] = [];
+    protected timeout: Timer | undefined;
     private managedDatabases: Map<string, () => Promise<ManagedDatabase<any>>> = new Map();
     private sseListeners: ((event: SSEvent) => void)[] = [];
 
@@ -46,9 +46,7 @@ export class Home {
         }
         this.initializationStarted = true;
 
-        this.drive = new Drive(this);
-        await this.drive.init();
-
+        await this.initDrive();
         await this.contacts.init();
         await this.mail.init();
 
@@ -58,6 +56,11 @@ export class Home {
         }
         this.initWaiters = [];
         return this;
+    }
+
+    protected async initDrive() {
+        this.drive = new Drive(this);
+        await this.drive.init();
     }
 
     public async getManagedDatabase<S extends SchemaType>(
@@ -127,7 +130,7 @@ export class Home {
         }
     }
 
-    private async destruct() {
+    protected async destruct() {
         try {
             await this.drive.destruct();
         } catch (error) {

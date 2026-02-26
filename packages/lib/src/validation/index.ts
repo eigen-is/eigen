@@ -11,8 +11,10 @@ export function validateEmailTarget(value: string, context: string): string | nu
     return null;
 }
 
-export function validateACLEmails(acl: { email: string }[]): string | null {
+export function validateACLEmails(acl: { email: string; type?: string }[]): string | null {
     for (const entry of acl) {
+        // Team ACL entries don't need valid emails
+        if (entry.type === 'team') continue;
         if (!isEmailAddress(entry.email)) {
             return `Invalid email in ACL: '${entry.email}'`;
         }

@@ -7,7 +7,8 @@ import {createDefaultMountConfig, Mount} from '../mount';
 import type {MountConfig, MountInfo} from '@workspace/lib/types';
 import {type DriveACL, type DrivePath, type DriveVisibility, isContainerType, isCollabType, isChatType} from '@workspace/lib/types/drive';
 import {ChatRoom} from '../chat';
-import {canRead, canWrite, normalizeACL} from './acl';
+import {canRead, canWrite, normalizeACL, filterRedundantACL} from './acl';
+import {getMemberships} from './membership';
 import {validateACLEmails} from '@workspace/lib/validation';
 import {extractImageDetails, getThumbnail, saveThumbnail} from '../shared/thumbnails';
 import CollabDocument from '../collab/collabDocument';
@@ -410,7 +411,16 @@ export default class Drive {
             if (aclError) throw new ApiError(400, aclError);
         }
 
-        const normalizedACL = normalizeACL(acl);
+        let normalizedACL = normalizeACL(acl);
+
+        // Strip ACL entries that are already covered by inherited permissions or ownership
+        if (normalizedACL && normalizedACL.length > 0) {
+            const {filtered} = await filterRedundantACL(
+                normalizedACL, item, mount.getPath.bind(mount)
+            );
+            normalizedACL = filtered.length > 0 ? filtered : null;
+        }
+
         const updates: Partial<DrivePath> = {acl: normalizedACL};
         if (visibility !== undefined) updates.visibility = visibility;
         await mount.updatePath(pathId, updates);
@@ -423,14 +433,14 @@ export default class Drive {
         const mount = this.getMount(mountId);
         const path = await mount.getPath(pathId);
         if (!path) return false;
-        return await canRead(path, user, mount.getPath.bind(mount));
+        return await canRead(path, user, mount.getPath.bind(mount), getMemberships);
     }
 
     async canWrite(mountId: string, pathId: string, user: User): Promise<boolean> {
         const mount = this.getMount(mountId);
         const path = await mount.getPath(pathId);
         if (!path) return false;
-        return await canWrite(path, user, mount.getPath.bind(mount));
+        return await canWrite(path, user, mount.getPath.bind(mount), getMemberships);
     }
 
     async getCollabDocument(mountId: string, pathId: string): Promise<CollabDocument> {

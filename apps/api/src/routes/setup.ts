@@ -12,6 +12,7 @@ export const setupRouter = new Elysia({name: "setup"})
     }, {
         body: t.Object({
             domain: t.String({minLength: 1}),
+            orgName: t.String({minLength: 1}),
             storageType: t.Union([t.Literal('local-fullnames'), t.Literal('local-id'), t.Literal('s3')]),
             s3Bucket: t.Optional(t.String()),
             s3Region: t.Optional(t.String()),
