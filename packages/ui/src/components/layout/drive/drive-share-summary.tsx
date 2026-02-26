@@ -1,9 +1,10 @@
 import {useMemo} from "react";
-import {Unlock, UserRoundPlus} from "lucide-react";
+import {Unlock, UserRoundPlus, Users} from "lucide-react";
 import {cn} from "@workspace/ui/lib/utils";
 import {UserPublicAvatar} from "../user-public-avatar";
 import {type DriveACL, type DrivePath} from "@workspace/lib/types/drive";
 import {Tooltip, TooltipContent, TooltipTrigger} from "@workspace/ui/components/tooltip";
+import {useOrganization, useTeams} from "@workspace/lib/auth";
 
 export type DriveShareSummaryProps = {
     path: DrivePath;
@@ -18,18 +19,31 @@ export function DriveShareSummary({
                                       onClick,
                                       showIconOnHover = true,
                                   }: DriveShareSummaryProps) {
-    const allUsers = useMemo(() => {
+    const {data: org} = useOrganization();
+    const {data: teams} = useTeams(org?.id);
+
+    const teamNameMap = useMemo(() => {
+        const map = new Map<string, string>();
+        if (teams) {
+            for (const team of teams) {
+                map.set(team.id, team.name);
+            }
+        }
+        return map;
+    }, [teams]);
+
+    const allEntries = useMemo(() => {
         const seen = new Set<string>();
         const result: DriveACL[] = [];
         for (const acl of (path.acl || [])) {
-            const key = acl.email.toLowerCase();
+            const key = acl.type === 'team' ? `team:${acl.targetId}` : acl.email.toLowerCase();
             if (!seen.has(key)) {
                 seen.add(key);
                 result.push(acl);
             }
         }
         for (const acl of (ancestorAcl || [])) {
-            const key = acl.email.toLowerCase();
+            const key = acl.type === 'team' ? `team:${acl.targetId}` : acl.email.toLowerCase();
             if (!seen.has(key)) {
                 seen.add(key);
                 result.push(acl);
@@ -38,9 +52,9 @@ export function DriveShareSummary({
         return result;
     }, [path.acl, ancestorAcl]);
 
-    const hasUsers = allUsers.length > 0;
+    const hasEntries = allEntries.length > 0;
     const isPublic = path.visibility !== 'private';
-    const isShared = hasUsers || isPublic;
+    const isShared = hasEntries || isPublic;
 
     return (
         <div
@@ -73,18 +87,34 @@ export function DriveShareSummary({
                             <TooltipContent>Anyone with the link can access</TooltipContent>
                         </Tooltip>
                     )}
-                    {allUsers.slice(0, isPublic ? 2 : 3).map((access, index) => (
-                        <UserPublicAvatar
-                            key={access.email}
-                            email={access.email}
-                            size="sm"
-                            className="-ml-4 position-relative"
-                            style={{zIndex: (isPublic ? 2 : 1) + index}}
-                        />
+                    {allEntries.slice(0, isPublic ? 2 : 3).map((access, index) => (
+                        access.type === 'team' ? (
+                            <Tooltip key={`team:${access.targetId}`} delayDuration={300}>
+                                <TooltipTrigger asChild>
+                                    <span
+                                        className={cn(
+                                            "-ml-4 h-6 w-6 rounded-full flex items-center justify-center bg-muted position-relative",
+                                        )}
+                                        style={{zIndex: (isPublic ? 2 : 1) + index}}
+                                    >
+                                        <Users className="h-3 w-3 text-muted-foreground"/>
+                                    </span>
+                                </TooltipTrigger>
+                                <TooltipContent>{teamNameMap.get(access.targetId || '') || 'Team'}</TooltipContent>
+                            </Tooltip>
+                        ) : (
+                            <UserPublicAvatar
+                                key={access.email}
+                                email={access.email}
+                                size="sm"
+                                className="-ml-4 position-relative"
+                                style={{zIndex: (isPublic ? 2 : 1) + index}}
+                            />
+                        )
                     ))}
-                    {allUsers.length > (isPublic ? 2 : 3) && (
+                    {allEntries.length > (isPublic ? 2 : 3) && (
                         <span className="text-xs text-muted-foreground ml-1">
-                            +{allUsers.length - (isPublic ? 2 : 3)}
+                            +{allEntries.length - (isPublic ? 2 : 3)}
                         </span>
                     )}
                 </div>

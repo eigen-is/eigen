@@ -72,6 +72,14 @@ describe('Team Drives', () => {
         teamId = team.id;
         teamOwner = teamOwnerId(teamId);
 
+        // Add alice to the team
+        await authedRequest(ctx.alice.user.sessionToken,
+            '/auth/organization/add-team-member', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({teamId, userId: ctx.alice.user.id}),
+            });
+
         // Add bob to the team
         await authedRequest(ctx.alice.user.sessionToken,
             '/auth/organization/add-team-member', {
@@ -152,13 +160,25 @@ describe('Team Drives', () => {
         expect(folder.ownerId).toBe(teamOwner);
     });
 
-    test('non-team member (charlie) cannot write to team drive', async () => {
-        const res = await authedRequest(ctx.charlie.user.sessionToken,
+    test('non-team member (charlie) cannot read team drive root', async () => {
+        const res = await authedRequest(ctx.alice.user.sessionToken,
             `/drive/${teamOwner}/mounts`);
         const mounts = await res.json() as any[];
         const mountId = mounts[0].id;
 
-        const root = await driveGet(ctx.charlie.user.sessionToken, teamOwner, mountId, 'root');
+        const rootRes = await authedRequest(ctx.charlie.user.sessionToken,
+            `/drive/${teamOwner}/${mountId}/root`);
+        const body = await rootRes.text();
+        expect(body === '' || body === 'null').toBe(true);
+    });
+
+    test('non-team member (charlie) cannot write to team drive', async () => {
+        const res = await authedRequest(ctx.alice.user.sessionToken,
+            `/drive/${teamOwner}/mounts`);
+        const mounts = await res.json() as any[];
+        const mountId = mounts[0].id;
+        const root = await driveGet(ctx.alice.user.sessionToken, teamOwner, mountId, 'root');
+
         const writeRes = await authedRequest(ctx.charlie.user.sessionToken,
             `/drive/${teamOwner}/${mountId}/path/${root.id}/permissions/write`);
         const result = await writeRes.json() as any;
@@ -401,6 +421,14 @@ describe('Redundant ACL filtering', () => {
             });
         const team = await teamRes.json() as any;
         const tOwner = teamOwnerId(team.id);
+
+        // Add alice to the team so she can access the team drive
+        await authedRequest(ctx.alice.user.sessionToken,
+            '/auth/organization/add-team-member', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({teamId: team.id, userId: ctx.alice.user.id}),
+            });
 
         const tmRes = await authedRequest(ctx.alice.user.sessionToken,
             `/drive/${tOwner}/mounts`);
