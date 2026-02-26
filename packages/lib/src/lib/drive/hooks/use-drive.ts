@@ -325,6 +325,8 @@ export function invalidateAclUpdated(queryClient: QueryClient, mountId: string, 
     queryClient.invalidateQueries({queryKey: driveKeys.shared('by-me')});
     queryClient.invalidateQueries({queryKey: driveKeys.shared('with-me')});
     queryClient.invalidateQueries({queryKey: driveKeys.path(mountId, pathId)});
+    queryClient.invalidateQueries({queryKey: driveKeys.read(mountId, pathId)});
+    queryClient.invalidateQueries({queryKey: driveKeys.write(mountId, pathId)});
     if (parentId) {
         queryClient.invalidateQueries({queryKey: driveKeys.folder(mountId, parentId)});
     }

@@ -546,6 +546,7 @@ export default class Drive {
                 parentId: path.parentId,
                 updatedAt: new Date()
             }).where(eq(sharedSchema.sharedPaths.id, path.id)).run();
+            this.emit(SSEventType.DRIVE_ACL_UPDATED, path);
         } else {
             this.sharedDb.insert(sharedSchema.sharedPaths).values({
                 id: path.id,
