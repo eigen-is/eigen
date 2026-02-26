@@ -2,6 +2,8 @@
 
 A self-hosted Google Workspace alternative. Monorepo with multiple integrated apps sharing a single API server, UI library, and business logic layer.
 
+This file is the primary context source for contributors and coding agents. Keep it aligned with `docs/*.md` when architecture or workflows change.
+
 ---
 
 ## 1. Tech Stack
@@ -60,16 +62,30 @@ A self-hosted Google Workspace alternative. Monorepo with multiple integrated ap
 
 ## 3. Running the Project
 
+### 3.1 Development
+
 ```bash
-bun run serve              # All apps + API
-bun run serve:drive        # API + Drive app only
-bun run serve:mail         # API + Mail app only
-bun run typecheck          # TypeScript check across entire monorepo
+bun run serve              # All frontend apps + API
+bun run serve:drive        # API + Drive app
+bun run serve:mail         # API + Mail app
+bun run serve:contacts     # API + Contacts app
+# ...see root package.json for all serve:* scripts
+
+bun run typecheck          # TypeScript check across the monorepo
 bun run test               # API integration tests
 bun run check              # typecheck + test
 ```
 
-The API server runs with `--env-file=../../.env` and reads `EIGEN_DATA_ROOT` env var (defaults to `../../data` relative to `apps/api/`). Frontend apps use Vite with env vars from the root `.env*` files (`VITE_*` prefix).
+### 3.2 Production Build
+
+```bash
+bun run build              # Build all apps
+bun run build:prod         # Build artifacts for Docker deployment
+```
+
+### 3.3 Env and Runtime Notes
+
+The API server runs with `--env-file=../../.env` and reads `EIGEN_DATA_ROOT` (defaults to `../../data` relative to `apps/api/`). Frontend apps use Vite env vars from root `.env*` files (`VITE_*` prefix).
 
 ---
 
@@ -367,6 +383,7 @@ Tests are API integration tests in `apps/api/src/test/`. Run with: `bun run test
 |------|-------|---------|
 | Alice | `alice@test.eigen.is` | Primary user |
 | Bob | `bob@test.eigen.is` | Secondary (sharing, ACL, isolation) |
+| Charlie | `charlie@test.eigen.is` | Third user for inheritance and multi-user ACL scenarios |
 
 ### Test Files
 
@@ -472,17 +489,20 @@ For deep-dives, read the relevant file in `docs/`:
 | File | Topic |
 |------|-------|
 | `CONTRIBUTING.md` | Code style, architecture patterns, conventions |
-| `DATABASE.md` | SQLite architecture, ManagedDatabase, migrations, per-domain DB configs |
-| `STORAGE.md` | Storage backends, mount system, user data layout, DB schemas |
-| `SSE.md` | Real-time events: backend emission, frontend handling, adding new domains |
-| `LAYOUT.md` | Responsive layout system: AppShell, ColumnLayout, Column, mobile navigation |
+| `DATABASE.md` | SQLite architecture, ManagedDatabase, migrations |
+| `STORAGE.md` | Storage backends, mount system, user data layout |
+| `SSE.md` | Real-time events: backend emission and frontend invalidation |
+| `LAYOUT.md` | AppShell and responsive layout architecture |
+| `LAYOUT-SHARED-COMPONENTS.md` | Shared UI component inventory |
+| `LAYOUT-UI-LIST.md` | List interaction hooks and usage patterns |
+| `LAYOUT-UI-DRIVE.md` | Drive-specific layout behavior |
+| `ACL.md` | ACL inheritance and effective permission model |
+| `CHAT.md` | Chat architecture, room model, slash commands |
+| `STICKIES.md` | Stickies architecture and collaborative behavior |
 | `TESTING.md` | Test architecture, data isolation, test users, scripts |
 | `DOCKER.md` | Docker deployment, build process, nginx config |
-| `SHARED-COMPONENTS.md` | All shared UI components inventory |
-| `SHARED-LIST-ABSTRACTION.md` | List hooks: selection, keyboard nav, drag-and-drop, context menu |
-| `HOTKEYS.md` | Keyboard shortcut inventory and TanStack Hotkeys adoption plan |
-| `PUBLIC-API-PLAN.md` | Public avatar endpoint and route namespace strategy |
-| `CHAT.md` | Chat system design (planned, not yet implemented) |
+
+Backlog docs prefixed with `TODO-` are design proposals and planning notes; treat them as non-authoritative until implemented.
 
 ---
 
@@ -534,7 +554,7 @@ For deep-dives, read the relevant file in `docs/`:
 - **Auth DB schema**: better-auth with drizzle adapter does NOT auto-create tables. The setup flow (`/setup/complete`) creates them via `initializeDatabaseSchema()`. Tests use this same setup endpoint rather than manual SQL
 - **Import hoisting**: `paths.ts` reads `EIGEN_DATA_ROOT` lazily (via function call) because ES module static imports are hoisted before any code runs. This is critical for test isolation
 - **Test concurrency**: Must be 1 because Home singletons share SQLite connections across test files
-- **Sidebar Ctrl+B conflict**: The sidebar toggle shortcut conflicts with Bold in the Docs editor. Known issue documented in `docs/HOTKEYS.md`
+- **Sidebar Ctrl+B conflict**: The sidebar toggle shortcut conflicts with Bold in the Docs editor. Known issue documented in `docs/TODO-HOTKEYS.md`
 - **WebSocket collab**: The `collabRouter` uses Elysia's WebSocket support for Yjs document sync, not the SSE system
 - **Thumbnails**: Generated on upload for images only (sharp). Stored as WebP in `thumbs/`. Video/PDF thumbnails not supported
 - **`config.json`**: A simple JSON file in `{server}/` that tracks whether initial setup is complete. Separate from `config.db`
