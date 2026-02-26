@@ -33,7 +33,7 @@ export async function getSharedDrive(ownerId: string, user: User) {
         }
         case 'team': {
             const teamHome = await getTeamHome(parsed.id);
-            return teamHome.drive;
+            return new SharedDrive(teamHome, user);
         }
     }
 }
