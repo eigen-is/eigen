@@ -1,7 +1,20 @@
 import {describe, expect, test, beforeAll} from 'bun:test';
 import {getTestContext, authedRequest} from './setup';
+import type {SSEvent} from '@workspace/lib/types/sse';
+import {getHome} from '../lib/home';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
+
+function collectSSE(userId: string): { events: SSEvent[], stop: () => void } {
+    const events: SSEvent[] = [];
+    let home: Awaited<ReturnType<typeof getHome>> | null = null;
+    const listener = (event: SSEvent) => events.push(event);
+    const setup = getHome({id: userId} as any).then(h => { home = h; h.subscribeSSE(listener); });
+    return {
+        events,
+        stop: () => { setup.then(() => { if (home) home.unsubscribeSSE(listener); }); }
+    };
+}
 
 describe('SSE', () => {
     let ctx: TestCtx;
@@ -130,6 +143,59 @@ describe('SSE', () => {
 
             if (aliceReader) await aliceReader.cancel();
             if (bobReader) await bobReader.cancel();
+        });
+    });
+
+    describe('SSE ACL Events', () => {
+        test('owner receives DRIVE_ACL_UPDATED when ACL is changed', async () => {
+            // Create a folder to share
+            const {data: root} = await ctx.alice.api.drive({ownerId: ctx.alice.user.id})({mountId: 'default'}).root.get();
+            const {data: folder} = await ctx.alice.api.drive({ownerId: ctx.alice.user.id})({mountId: 'default'}).folder({pathId: root!.id}).post({folderName: 'sse-test-folder'});
+
+            // Subscribe to Alice's SSE events
+            const aliceSSE = collectSSE(ctx.alice.user.id);
+            await new Promise(r => setTimeout(r, 50));
+
+            // Set ACL - share with Bob
+            await ctx.alice.api.drive({ownerId: ctx.alice.user.id})({mountId: 'default'}).path({pathId: folder!.id}).acl.put({
+                acl: [{email: ctx.bob.user.email, read: true, write: false}]
+            });
+
+            await new Promise(r => setTimeout(r, 50));
+            aliceSSE.stop();
+
+            const aclUpdated = aliceSSE.events.filter(e => e.type === 'drive:acl-updated');
+            expect(aclUpdated.length).toBeGreaterThanOrEqual(1);
+            expect((aclUpdated[0] as any).path.id).toBe(folder!.id);
+        });
+
+        test('shared user receives DRIVE_ACL_UPDATED when ACL is modified on existing share', async () => {
+            // Create a folder and share with Bob
+            const {data: root} = await ctx.alice.api.drive({ownerId: ctx.alice.user.id})({mountId: 'default'}).root.get();
+            const {data: folder} = await ctx.alice.api.drive({ownerId: ctx.alice.user.id})({mountId: 'default'}).folder({pathId: root!.id}).post({folderName: 'sse-shared-test'});
+
+            await ctx.alice.api.drive({ownerId: ctx.alice.user.id})({mountId: 'default'}).path({pathId: folder!.id}).acl.put({
+                acl: [{email: ctx.bob.user.email, read: true, write: false}]
+            });
+
+            // Now subscribe to Bob's SSE events
+            const bobSSE = collectSSE(ctx.bob.user.id);
+            await new Promise(r => setTimeout(r, 50));
+
+            // Modify ACL — add Charlie (Bob already has share, so receiveACLChange updates existing)
+            await ctx.alice.api.drive({ownerId: ctx.alice.user.id})({mountId: 'default'}).path({pathId: folder!.id}).acl.put({
+                acl: [
+                    {email: ctx.bob.user.email, read: true, write: true},
+                    {email: ctx.charlie.user.email, read: true, write: false}
+                ]
+            });
+
+            await new Promise(r => setTimeout(r, 50));
+            bobSSE.stop();
+
+            // Bob should receive DRIVE_ACL_UPDATED (not just SHARED/UNSHARED) since the path was already shared
+            const aclUpdated = bobSSE.events.filter(e => e.type === 'drive:acl-updated');
+            expect(aclUpdated.length).toBeGreaterThanOrEqual(1);
         });
     });
 });
