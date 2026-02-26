@@ -2,6 +2,14 @@
 
 This guide covers development conventions, architecture patterns, and best practices for contributing to Eigen.
 
+---
+
+## Overview
+
+Eigen is a self-hosted Google Workspace alternative built with modern web technologies. This document helps new contributors understand the codebase structure and development patterns.
+
+---
+
 ## Technology Stack
 
 | Layer | Technology |
@@ -14,6 +22,8 @@ This guide covers development conventions, architecture patterns, and best pract
 | Styling | Tailwind CSS + shadcn/ui |
 | Auth | better-auth |
 
+---
+
 ## Project Structure
 
 ```
@@ -21,6 +31,7 @@ This guide covers development conventions, architecture patterns, and best pract
   /api          # Backend API server
   /admin        # Admin dashboard
   /calendar     # Calendar app
+  /chat         # Chat app
   /contacts     # Contacts app
   /docs         # Document editor
   /drive        # File storage
@@ -35,6 +46,8 @@ This guide covers development conventions, architecture patterns, and best pract
   /ui           # Reusable UI components (shadcn/ui)
 ```
 
+---
+
 ## Code Style
 
 - Use **English** for all code and text
@@ -45,14 +58,16 @@ This guide covers development conventions, architecture patterns, and best pract
   - **Functions**: camelCase
   - **Components**: PascalCase
 
-## Types & Interfaces
+---
+
+## Key Patterns
+
+### Types & Interfaces
 
 - Always use `type` instead of `interface` (except when methods are involved)
 - Define types in `packages/lib/src/types/[domain].ts`
 - Import from `@workspace/lib/types/[domain]` or `@workspace/lib/types`
 - Check existing types before creating new ones
-
-## Architecture Patterns
 
 ### API Routes
 
