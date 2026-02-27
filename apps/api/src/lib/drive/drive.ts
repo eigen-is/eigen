@@ -402,6 +402,10 @@ export default class Drive {
             throw new ApiError(404, 'Path not found');
         }
 
+        if (item.parentId === null) {
+            throw new ApiError(403, 'Cannot update ACL for root folder');
+        }
+
         if (!(await this.canWrite(mountId, pathId, this.owner))) {
             throw new ApiError(403, 'No write permission');
         }
