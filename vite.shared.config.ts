@@ -49,6 +49,9 @@ export function createAppConfig(appName: string, extraConfig?: UserConfig) {
             target: 'es2023',
             outDir: `./../../dist/${appName}`,
             emptyOutDir: true,
+            commonjsOptions: {
+                defaultIsModuleExports: 'auto',
+            },
         },
     }
 
