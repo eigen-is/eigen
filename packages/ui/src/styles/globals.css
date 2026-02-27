@@ -1,5 +1,4 @@
 @import "tailwindcss";
-@import "react-day-picker/dist/style.css";
 
 @source "../../../apps/**/*.{ts,tsx}";
 @source "../../../components/**/*.{ts,tsx}";
