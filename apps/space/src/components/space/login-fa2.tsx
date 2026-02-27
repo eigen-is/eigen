@@ -24,7 +24,7 @@ import {Checkbox} from "@workspace/ui/components/checkbox"
 // Define form schema with validation
 const formSchema = z.object({
     code: z.string().min(6, "Verification code must be 6 digits").max(6, "Verification code must be 6 digits"),
-    trustDevice: z.boolean().default(false),
+    trustDevice: z.boolean(),
 });
 
 export function LoginFa2Form() {

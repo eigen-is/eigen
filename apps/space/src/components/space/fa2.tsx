@@ -27,7 +27,7 @@ const passwordFormSchema = z.object({
 
 const verificationFormSchema = z.object({
     verificationCode: z.string().min(6, "Verification code must be 6 digits").max(6, "Verification code must be 6 digits"),
-    enableTwoFactor: z.boolean().default(true),
+    enableTwoFactor: z.boolean(),
 });
 
 type TwoFactorSetupProps = {
