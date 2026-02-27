@@ -6,6 +6,7 @@ import {type DriveACL, type DrivePath} from "@workspace/lib/types/drive";
 import {Tooltip, TooltipContent, TooltipTrigger} from "@workspace/ui/components/tooltip";
 import {useOrganization, useTeams} from "@workspace/lib/auth";
 import {useBreadcrumb} from "@workspace/lib/drive";
+import {parseOwnerId} from "@workspace/lib/types/owner";
 
 export type DriveShareSummaryProps = {
     path: DrivePath;
@@ -84,12 +85,29 @@ export function DriveShareSummary({
         >
             {isShared ? (
                 <div className="flex items-center gap-1">
-                    <UserPublicAvatar
-                        email={path.ownerId}
-                        size="sm"
-                        className="position-relative"
-                        style={{zIndex: 0}}
-                    />
+                    {(() => {
+                        const ownerInfo = parseOwnerId(path.ownerId);
+                        return ownerInfo.type === 'team' ? (
+                            <Tooltip delayDuration={300}>
+                                <TooltipTrigger asChild>
+                                    <span
+                                        className="h-6 w-6 rounded-full flex items-center justify-center bg-muted position-relative"
+                                        style={{zIndex: 0}}
+                                    >
+                                        <Users className="h-3 w-3 text-muted-foreground"/>
+                                    </span>
+                                </TooltipTrigger>
+                                <TooltipContent>{teamNameMap.get(ownerInfo.id) || 'Team'}</TooltipContent>
+                            </Tooltip>
+                        ) : (
+                            <UserPublicAvatar
+                                email={path.ownerId}
+                                size="sm"
+                                className="position-relative"
+                                style={{zIndex: 0}}
+                            />
+                        );
+                    })()}
                     {isPublic && (
                         <Tooltip delayDuration={300}>
                             <TooltipTrigger asChild>
