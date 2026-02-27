@@ -5,22 +5,38 @@ import {UserPublicAvatar} from "../user-public-avatar";
 import {type DriveACL, type DrivePath} from "@workspace/lib/types/drive";
 import {Tooltip, TooltipContent, TooltipTrigger} from "@workspace/ui/components/tooltip";
 import {useOrganization, useTeams} from "@workspace/lib/auth";
+import {useBreadcrumb} from "@workspace/lib/drive";
 
 export type DriveShareSummaryProps = {
     path: DrivePath;
-    ancestorAcl?: DriveACL[];
     onClick?: () => void;
     showIconOnHover?: boolean;
 }
 
 export function DriveShareSummary({
                                       path,
-                                      ancestorAcl,
                                       onClick,
                                       showIconOnHover = true,
                                   }: DriveShareSummaryProps) {
     const {data: org} = useOrganization();
     const {data: teams} = useTeams(org?.id);
+    const {data: breadcrumbData} = useBreadcrumb(path.ownerId, path.mountId, path.id);
+
+    const ancestorAcl = useMemo<DriveACL[]>(() => {
+        if (!breadcrumbData || breadcrumbData.length === 0) return [];
+        const seen = new Set<string>();
+        const result: DriveACL[] = [];
+        for (const ancestor of breadcrumbData) {
+            if (!ancestor.acl) continue;
+            for (const acl of ancestor.acl) {
+                const key = acl.email.toLowerCase();
+                if (seen.has(key)) continue;
+                seen.add(key);
+                result.push(acl);
+            }
+        }
+        return result;
+    }, [breadcrumbData]);
 
     const teamNameMap = useMemo(() => {
         const map = new Map<string, string>();

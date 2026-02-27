@@ -7,7 +7,7 @@ import {ColumnLayout, Column} from "@workspace/ui/components/layout/column-layou
 import {MessageList} from "../components/chat/message-list";
 import {MessageInput} from "../components/chat/message-input";
 import {TooltipButton} from "@workspace/ui";
-import {Pencil, UserRoundPlus} from "lucide-react";
+import {Edit, UserRoundPlus} from "lucide-react";
 import {DriveAccessDialog} from "@workspace/ui/components/layout/drive/drive-access-dialog";
 import {DriveRenameItem} from "@workspace/ui/components/layout/drive/drive-rename-item";
 import {DriveShareSummary} from "@workspace/ui/components/layout/drive/drive-share-summary";
@@ -154,12 +154,12 @@ function ChatView() {
 
     const toolbar = (
         <div className="flex items-center justify-between w-full">
+            {chatPath && <DriveShareSummary path={chatPath as DrivePath} onClick={() => setAccessDialogOpen(true)} showIconOnHover={false}/>}
             <span className="font-semibold text-sm truncate">{chatName}</span>
             <div className="flex items-center gap-2">
-                {chatPath && <DriveShareSummary path={chatPath as DrivePath} onClick={() => setAccessDialogOpen(true)} showIconOnHover={false}/>}
                 <TooltipButton
-                    icon={Pencil}
-                    tooltipText="Rename"
+                    icon={Edit}
+                    tooltipText="Edit"
                     variant="ghost"
                     onClick={() => setRenameDialogOpen(true)}
                 />

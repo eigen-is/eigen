@@ -208,22 +208,6 @@ export function DriveList({
     const dragCounter = useRef(0);
     const {data: breadcrumbData} = useBreadcrumb(ownerId, mountId, pathId);
 
-    const ancestorAcl = useMemo<DriveACL[]>(() => {
-        if (!breadcrumbData || breadcrumbData.length === 0) return [];
-        const seen = new Set<string>();
-        const result: DriveACL[] = [];
-        for (const ancestor of breadcrumbData) {
-            if (!ancestor.acl) continue;
-            for (const acl of ancestor.acl) {
-                const key = acl.email.toLowerCase();
-                if (seen.has(key)) continue;
-                seen.add(key);
-                result.push(acl);
-            }
-        }
-        return result;
-    }, [breadcrumbData]);
-
     // Handle row click with two different behaviors
     const handleRowClick = (path: DrivePath) => {
         if (path.id === activeRowId && onRowActivate) {
@@ -338,7 +322,6 @@ export function DriveList({
             <DriveTable
                 items={items}
                 currentPath={currentPath}
-                ancestorAcl={ancestorAcl}
                 activeItemId={activeRowId}
                 onItemClick={handleRowClick}
                 onItemOpen={onRowActivate}
