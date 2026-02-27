@@ -262,6 +262,7 @@ Used by `DriveTable`, `EmailList`, `ContactsList` following the same pattern.
 5. Auth routes under `_auth.tsx` layout
 6. Add `serve:{appname}` script to root `package.json`
 7. Add port to `vite.shared.config.ts` `APP_PORTS`
+8. Read docs/LAYOUT*.md documentation
 
 ### New Shared Type
 1. Define in `packages/lib/src/types/[domain].ts`
