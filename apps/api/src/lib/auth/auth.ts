@@ -16,6 +16,8 @@ import {
     user as userScheme,
     verification as verificationScheme
 } from '../../../auth-schema.ts';
+import type {User} from "better-auth/types";
+import {ApiError} from "../core";
 
 export const trustedOrigins = [
     "http://localhost",
@@ -52,22 +54,7 @@ export const auth = betterAuth({
         user: {
             create: {
                 after: async (user) => {
-                    const config = getServerConfig();
-                    if (!config?.orgId) return;
-                    // Defer to avoid transaction visibility issues
-                    setTimeout(async () => {
-                        try {
-                            await auth.api.addMember({
-                                body: {
-                                    userId: user.id,
-                                    organizationId: config.orgId,
-                                    role: 'member',
-                                },
-                            });
-                        } catch (error) {
-                            console.error(`Failed to auto-join user ${user.id} to default org:`, error);
-                        }
-                    }, 0);
+                    await addUserToDefaultOrg(user);
                 },
             },
         },
@@ -98,23 +85,19 @@ export const auth = betterAuth({
     secret: "+/SmL4b3+bxwJgsJU7yT1Sbfm9YR/0GZhVGRaBm838c=",
 });
 
-/**
- * Add a user to the default organization as a member.
- * Can be called explicitly when the databaseHook timing isn't sufficient.
- */
-export async function addUserToDefaultOrg(userId: string): Promise<void> {
+export async function addUserToDefaultOrg(user: User): Promise<void> {
     const config = getServerConfig();
     if (!config?.orgId) return;
 
     try {
         await auth.api.addMember({
             body: {
-                userId,
+                userId: user.id,
                 organizationId: config.orgId,
                 role: 'member',
             },
         });
     } catch (error) {
-        console.error(`Failed to auto-join user ${userId} to default org:`, error);
+        throw new ApiError(500, `Failed to auto-join user ${user.id} to default org: ${error instanceof Error ? error.message : String(error)}`);
     }
 }
