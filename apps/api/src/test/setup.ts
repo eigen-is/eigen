@@ -108,8 +108,8 @@ export async function getTestContext(): Promise<TestContext> {
     const charlie = await createTestUser('charlie@test.eigen.is', 'testpassword123', 'Charlie Test');
 
     // Auto-join non-admin users to default org (Alice is already owner from setup)
-    // await addUserToDefaultOrg(bob.id);
-    // await addUserToDefaultOrg(charlie.id);
+    // await authAddUserToDefaultOrg(bob.id);
+    // await authAddUserToDefaultOrg(charlie.id);
 
     context = {
         alice: {

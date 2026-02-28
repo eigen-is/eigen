@@ -54,7 +54,7 @@ export const auth = betterAuth({
         user: {
             create: {
                 after: async (user) => {
-                    await addUserToDefaultOrg(user);
+                    await authAddUserToDefaultOrg(user);
                 },
             },
         },
@@ -85,7 +85,7 @@ export const auth = betterAuth({
     secret: "+/SmL4b3+bxwJgsJU7yT1Sbfm9YR/0GZhVGRaBm838c=",
 });
 
-export async function addUserToDefaultOrg(user: User): Promise<void> {
+export async function authAddUserToDefaultOrg(user: User): Promise<void> {
     const config = getServerConfig();
     if (!config?.orgId) return;
 
@@ -100,4 +100,26 @@ export async function addUserToDefaultOrg(user: User): Promise<void> {
     } catch (error) {
         throw new ApiError(500, `Failed to auto-join user ${user.id} to default org: ${error instanceof Error ? error.message : String(error)}`);
     }
+}
+
+let authDrizzleDb: ReturnType<typeof drizzle> | undefined;
+
+export function getAuthDrizzleDb() {
+    if (!authDrizzleDb) {
+        authDrizzleDb = drizzle(getServerDataPath('users3.db'), {
+            schema: {
+                user: userScheme,
+                session: sessionScheme,
+                account: accountScheme,
+                verification: verificationScheme,
+                twoFactor: twoFactorScheme,
+                organization: organizationScheme,
+                member: memberScheme,
+                invitation: invitationScheme,
+                team: teamScheme,
+                teamMember: teamMemberScheme,
+            },
+        });
+    }
+    return authDrizzleDb;
 }
