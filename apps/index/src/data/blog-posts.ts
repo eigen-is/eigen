@@ -20,12 +20,11 @@ function parseFrontmatter(markdown: string): { data: Record<string, string>; con
     const content = match[2];
     const data: Record<string, string> = {};
 
-    for(const line of frontmatterText.split('\n')) {
+    for (const line of frontmatterText.split('\n')) {
         const colonIndex = line.indexOf(':');
         if (colonIndex !== -1) {
             const key = line.substring(0, colonIndex).trim();
-            const value = line.substring(colonIndex + 1).trim().replace(/^["']|["']$/g, '');
-            data[key] = value;
+            data[key] = line.substring(colonIndex + 1).trim().replace(/^["']|["']$/g, '');
         }
     }
 

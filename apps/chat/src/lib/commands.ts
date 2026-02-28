@@ -43,9 +43,9 @@ export type LocalCommand =
 export function getLocalCommand(raw: string): LocalCommand {
     const trimmed = raw.trim();
     const validation = validateCommand(trimmed);
-    
+
     if (!validation.valid) {
-        return { kind: 'error', error: validation.error };
+        return {kind: 'error', error: validation.error};
     }
 
     if (validation.kind === 'help') {
@@ -54,26 +54,26 @@ export function getLocalCommand(raw: string): LocalCommand {
     if (validation.kind === 'time') {
         return {kind: 'time'};
     }
-    
+
     for (const cmd of ['/inspect ', '/look ', '/finger ']) {
         if (trimmed.startsWith(cmd)) {
             const target = trimmed.slice(cmd.length).trim();
             if (target) return {kind: 'inspect', target};
         }
     }
-    
+
     for (const cmd of ['/invite ', '/i ', '/inv ']) {
         if (trimmed.startsWith(cmd)) {
             const target = trimmed.slice(cmd.length).trim();
             if (target) return {kind: 'invite', target};
         }
     }
-    
+
     if (trimmed.startsWith('/reply ') || trimmed.startsWith('/r ')) {
         const cmd = trimmed.startsWith('/reply ') ? '/reply ' : '/r ';
         return {kind: 'reply', content: trimmed.slice(cmd.length)};
     }
-    
+
     return null;
 }
 
@@ -89,11 +89,11 @@ export {isEmailAddress, validateEmailTarget} from '@workspace/lib/validation';
 export function getSlashCommandQuery(content: string): string | null {
     const trimmed = content.trim();
     if (!trimmed.startsWith('/')) return null;
-    
+
     // If there's a space after the slash command, don't autocomplete
     const spaceIdx = trimmed.indexOf(' ');
     if (spaceIdx > 0) return null;
-    
+
     return trimmed;
 }
 

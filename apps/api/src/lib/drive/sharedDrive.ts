@@ -5,8 +5,8 @@ import type {DriveACL, DrivePath, DriveVisibility} from "@workspace/lib/types/dr
 import type {MountInfo} from "@workspace/lib/types";
 import CollabDocument from "../collab/collabDocument.ts";
 import type {ChatRoom} from "../chat";
-import type {DatabaseConfig, ManagedDatabase, SchemaType} from "../core/managed-database";
-import { ApiError } from "../core/errors.ts";
+import type {DatabaseConfig, ManagedDatabase, SchemaType} from "../core";
+import {ApiError} from "../core";
 
 export default class SharedDrive extends Drive {
     private sharedDrive: Drive;
@@ -70,20 +70,20 @@ export default class SharedDrive extends Drive {
     }
 
     public async getFolderContents(mountId: string, pathId: string) {
-        return this.withReadPermission(mountId, pathId, () => this.sharedDrive.getFolderContents(mountId, pathId), []);
+        return this.withReadPermission(mountId, pathId, () => this.sharedDrive.getFolderContents(mountId, pathId));
     }
 
     public async getPath(mountId: string, pathId: string) {
-        return this.withReadPermission(mountId, pathId, () => this.sharedDrive.getPath(mountId, pathId), null);
+        return this.withReadPermission(mountId, pathId, () => this.sharedDrive.getPath(mountId, pathId));
     }
 
     public async downloadFile(mountId: string, pathId: string) {
-        return this.withReadPermission(mountId, pathId, () => this.sharedDrive.downloadFile(mountId, pathId), null);
+        return this.withReadPermission(mountId, pathId, () => this.sharedDrive.downloadFile(mountId, pathId));
     }
 
     public async getThumbnail(mountId: string, fileName: string) {
         const pathId = fileName.split('.')[0];
-        return this.withReadPermission(mountId, pathId, () => this.sharedDrive.getThumbnail(mountId, fileName), null);
+        return this.withReadPermission(mountId, pathId, () => this.sharedDrive.getThumbnail(mountId, fileName));
     }
 
     public async getCollabDocument(mountId: string, pathId: string): Promise<CollabDocument> {
@@ -94,7 +94,7 @@ export default class SharedDrive extends Drive {
     }
 
     public async closeCollabDocument(mountId: string, pathId: string) {
-        return this.withReadPermission(mountId, pathId, () => this.sharedDrive.closeCollabDocument(mountId, pathId), undefined);
+        return this.withReadPermission(mountId, pathId, () => this.sharedDrive.closeCollabDocument(mountId, pathId));
     }
 
     public async createFolder(mountId: string, parentId: string, folderName: string): Promise<DrivePath> {

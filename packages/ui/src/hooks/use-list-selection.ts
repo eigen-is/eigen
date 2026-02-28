@@ -83,8 +83,8 @@ export function useListSelection<T>({items, getId}: UseListSelectionOptions<T>):
     const isSelected = useCallback((id: string) => selectedIds.has(id), [selectedIds]);
 
     const selectedItems = useMemo(() =>
-        items.filter(item => selectedIds.has(getId(item))),
-    [items, selectedIds, getId]);
+            items.filter(item => selectedIds.has(getId(item))),
+        [items, selectedIds, getId]);
 
     return {
         selectedIds,

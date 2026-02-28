@@ -616,7 +616,7 @@ export function ContactEdit({
                                         render={({field}) => (
                                             <FormItem className="flex flex-col">
                                                 <FormLabel>Birthday</FormLabel>
-                                                
+
                                                 <FormControl>
                                                     <Input
                                                         type="date"

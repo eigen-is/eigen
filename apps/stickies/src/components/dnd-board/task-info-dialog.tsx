@@ -50,7 +50,7 @@ export function TaskInfoDialog({
 
         const loadComments = () => {
             const result: Record<string, CommentItem> = {};
-            for(const [key, value] of commentsMap) {
+            for (const [key, value] of commentsMap) {
                 if (value instanceof Y.Map) {
                     result[key] = mapToComment(value);
                 }

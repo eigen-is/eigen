@@ -1,4 +1,4 @@
-import {mkdirSync, existsSync, rmSync} from 'fs';
+import {existsSync, mkdirSync, rmSync} from 'fs';
 import {join} from 'path';
 
 const TEST_DATA_DIR = join(import.meta.dir, '../../../../data/test-' + Date.now());
@@ -21,7 +21,7 @@ const setupResponse = await app.handle(new Request('http://localhost/setup/compl
         adminName: 'Alice Test',
     }),
 }));
-const setupResult = await setupResponse.json() as {success: boolean; error?: string};
+const setupResult = await setupResponse.json() as { success: boolean; error?: string };
 if (!setupResult.success) {
     throw new Error(`Setup failed: ${setupResult.error}`);
 }
@@ -39,9 +39,9 @@ type TestUser = {
 };
 
 type TestContext = {
-    alice: {user: TestUser; api: ReturnType<typeof treaty<App>>};
-    bob: {user: TestUser; api: ReturnType<typeof treaty<App>>};
-    charlie: {user: TestUser; api: ReturnType<typeof treaty<App>>};
+    alice: { user: TestUser; api: ReturnType<typeof treaty<App>> };
+    bob: { user: TestUser; api: ReturnType<typeof treaty<App>> };
+    charlie: { user: TestUser; api: ReturnType<typeof treaty<App>> };
     app: App;
 };
 

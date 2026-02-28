@@ -2,7 +2,7 @@ import {useCallback, useState} from 'react';
 
 type UseListDropTargetOptions = {
     acceptTypes: string[];
-    onDrop: (data: {type: string; ids: string[]}) => void;
+    onDrop: (data: { type: string; ids: string[] }) => void;
 }
 
 export function useListDropTarget({acceptTypes, onDrop}: UseListDropTargetOptions) {
@@ -31,7 +31,8 @@ export function useListDropTarget({acceptTypes, onDrop}: UseListDropTargetOption
                 if (acceptTypes.includes(data.type)) {
                     onDrop(data);
                 }
-            } catch { /* ignore invalid drops */ }
+            } catch { /* ignore invalid drops */
+            }
         },
     }), [acceptTypes, onDrop]);
 

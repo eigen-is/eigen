@@ -1,7 +1,7 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
 import {Button} from "@workspace/ui/components/button";
 import {Paperclip, Send, X} from "lucide-react";
-import {getAtSuggestQuery, getSlashCommandQuery, SLASH_COMMANDS} from "../../lib/commands";
+import {getAtSuggestQuery, getSlashCommandQuery, SLASH_COMMANDS} from "@/lib/commands.ts";
 import {PlayerSuggest, type RoomMember} from "./player-suggest";
 
 type MessageInputProps = {
@@ -13,7 +13,14 @@ type MessageInputProps = {
     messageCount?: number;
 }
 
-export function MessageInput({onSend, disabled = false, readOnly = false, chatName, roomMembers = [], messageCount = 0}: MessageInputProps) {
+export function MessageInput({
+                                 onSend,
+                                 disabled = false,
+                                 readOnly = false,
+                                 chatName,
+                                 roomMembers = [],
+                                 messageCount = 0
+                             }: MessageInputProps) {
     const [content, setContent] = useState('');
     const [files, setFiles] = useState<File[]>([]);
     const [selectedSuggestIdx, setSelectedSuggestIdx] = useState(0);
@@ -142,10 +149,12 @@ export function MessageInput({onSend, disabled = false, readOnly = false, chatNa
             {files.length > 0 && (
                 <div className="flex flex-wrap gap-2 mb-2">
                     {files.map((file, i) => (
-                        <div key={i} className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-muted text-xs border">
+                        <div key={i}
+                             className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-muted text-xs border">
                             <Paperclip className="h-3 w-3 text-muted-foreground"/>
                             <span className="truncate max-w-[150px]">{file.name}</span>
-                            <button onClick={() => removeFile(i)} className="text-muted-foreground hover:text-foreground">
+                            <button onClick={() => removeFile(i)}
+                                    className="text-muted-foreground hover:text-foreground">
                                 <X className="h-3 w-3"/>
                             </button>
                         </div>

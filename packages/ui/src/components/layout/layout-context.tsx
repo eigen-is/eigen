@@ -12,9 +12,11 @@ export type LayoutContextType = {
 
 export const LayoutContext = createContext<LayoutContextType>({
     appName: '',
-    setAppName: () => {},
+    setAppName: () => {
+    },
     sidebarOpen: false,
-    setSidebarOpen: () => {},
+    setSidebarOpen: () => {
+    },
     sidebarMode: 'collapsible',
     isMobile: false,
     isTablet: false,

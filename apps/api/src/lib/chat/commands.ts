@@ -55,7 +55,7 @@ export function parseCommand(raw: string): ParsedCommand {
     // Validate command first
     const validation = validateCommand(trimmed);
     if (!validation.valid) {
-        return { kind: 'error', error: validation.error };
+        return {kind: 'error', error: validation.error};
     }
 
     // Built-in emotes

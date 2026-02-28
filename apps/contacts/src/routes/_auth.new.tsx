@@ -2,7 +2,7 @@ import {createFileRoute, useNavigate} from '@tanstack/react-router';
 import {ContactEdit, ContactEditToolbar, type ContactFormValues} from '../components/contacts/contact-edit';
 import {type Contact} from "@workspace/lib/types/contact";
 import {useAddContact} from '@workspace/lib/contacts';
-import {ColumnLayout, Column} from "@workspace/ui/components/layout/column-layout";
+import {Column, ColumnLayout} from "@workspace/ui/components/layout/column-layout";
 
 export const Route = createFileRoute('/_auth/new')({
     component: NewContactRoute,
@@ -27,7 +27,7 @@ function NewContactRoute() {
     const handleSave = async (data: ContactFormValues) => {
         try {
             // Transform the data for API compatibility (avatar is added by ContactEdit component)
-            const formData = data as ContactFormValues & {avatar?: string | null};
+            const formData = data as ContactFormValues & { avatar?: string | null };
             const contactData = {
                 ...formData,
                 firstName: formData.firstName || '',

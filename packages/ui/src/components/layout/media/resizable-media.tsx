@@ -2,8 +2,13 @@ import {useCallback, useEffect, useRef, useState} from "react";
 import {cn} from "@workspace/ui/lib/utils";
 import {Popover, PopoverContent, PopoverTrigger} from "@workspace/ui/components/popover";
 import {Button} from "@workspace/ui/components/button";
-import {Palette, AlignLeft, AlignCenter, AlignRight} from "lucide-react";
-import {type MediaStyleOptions, type MediaAlignment, type ResizableMediaProps, defaultStyleOptions} from "./media.types";
+import {AlignCenter, AlignLeft, AlignRight, Palette} from "lucide-react";
+import {
+    defaultStyleOptions,
+    type MediaAlignment,
+    type MediaStyleOptions,
+    type ResizableMediaProps
+} from "./media.types";
 import {MediaStylePicker} from "./media-style-picker";
 
 type ResizeHandle = 'nw' | 'n' | 'ne' | 'w' | 'e' | 'sw' | 's' | 'se';
@@ -32,20 +37,20 @@ const alignmentStyles: Record<MediaAlignment, React.CSSProperties> = {
 };
 
 export function ResizableMedia({
-    src,
-    alt = "",
-    width,
-    minWidth = 50,
-    isSelected,
-    alignment = 'center',
-    styleOptions = defaultStyleOptions,
-    onWidthChange,
-    onAlignmentChange,
-    onStyleChange,
-    onSelect,
-    onDeselect,
-    onDelete,
-}: ResizableMediaProps) {
+                                   src,
+                                   alt = "",
+                                   width,
+                                   minWidth = 50,
+                                   isSelected,
+                                   alignment = 'center',
+                                   styleOptions = defaultStyleOptions,
+                                   onWidthChange,
+                                   onAlignmentChange,
+                                   onStyleChange,
+                                   onSelect,
+                                   onDeselect,
+                                   onDelete,
+                               }: ResizableMediaProps) {
     const containerRef = useRef<HTMLDivElement>(null);
     const imageRef = useRef<HTMLImageElement>(null);
     const [isResizing, setIsResizing] = useState(false);
@@ -175,9 +180,10 @@ export function ResizableMedia({
                     <div className={cn(
                         "absolute inset-0 border-2 border-dashed border-blue-500 bg-blue-500/10 pointer-events-none",
                         radius
-                    )} />
+                    )}/>
                     {(onStyleChange || onAlignmentChange) && (
-                        <div className="absolute -top-10 left-1/2 -translate-x-1/2 z-10 flex gap-1 bg-background rounded-md shadow-md border p-1">
+                        <div
+                            className="absolute -top-10 left-1/2 -translate-x-1/2 z-10 flex gap-1 bg-background rounded-md shadow-md border p-1">
                             {onAlignmentChange && (
                                 <>
                                     <Button
@@ -186,7 +192,7 @@ export function ResizableMedia({
                                         className="size-7"
                                         onClick={() => onAlignmentChange('left')}
                                     >
-                                        <AlignLeft className="size-4" />
+                                        <AlignLeft className="size-4"/>
                                     </Button>
                                     <Button
                                         size="icon"
@@ -194,7 +200,7 @@ export function ResizableMedia({
                                         className="size-7"
                                         onClick={() => onAlignmentChange('center')}
                                     >
-                                        <AlignCenter className="size-4" />
+                                        <AlignCenter className="size-4"/>
                                     </Button>
                                     <Button
                                         size="icon"
@@ -202,7 +208,7 @@ export function ResizableMedia({
                                         className="size-7"
                                         onClick={() => onAlignmentChange('right')}
                                     >
-                                        <AlignRight className="size-4" />
+                                        <AlignRight className="size-4"/>
                                     </Button>
                                 </>
                             )}
@@ -210,24 +216,24 @@ export function ResizableMedia({
                                 <Popover>
                                     <PopoverTrigger asChild>
                                         <Button size="icon" variant="ghost" className="size-7">
-                                            <Palette className="size-4" />
+                                            <Palette className="size-4"/>
                                         </Button>
                                     </PopoverTrigger>
                                     <PopoverContent align="center" className="w-auto p-0">
-                                        <MediaStylePicker value={styleOptions} onChange={onStyleChange} />
+                                        <MediaStylePicker value={styleOptions} onChange={onStyleChange}/>
                                     </PopoverContent>
                                 </Popover>
                             )}
                         </div>
                     )}
-                    <ResizeHandle position="nw" onMouseDown={(e) => handleResizeStart(e, 'nw')} />
-                    <ResizeHandle position="n" onMouseDown={(e) => handleResizeStart(e, 'n')} />
-                    <ResizeHandle position="ne" onMouseDown={(e) => handleResizeStart(e, 'ne')} />
-                    <ResizeHandle position="w" onMouseDown={(e) => handleResizeStart(e, 'w')} />
-                    <ResizeHandle position="e" onMouseDown={(e) => handleResizeStart(e, 'e')} />
-                    <ResizeHandle position="sw" onMouseDown={(e) => handleResizeStart(e, 'sw')} />
-                    <ResizeHandle position="s" onMouseDown={(e) => handleResizeStart(e, 's')} />
-                    <ResizeHandle position="se" onMouseDown={(e) => handleResizeStart(e, 'se')} />
+                    <ResizeHandle position="nw" onMouseDown={(e) => handleResizeStart(e, 'nw')}/>
+                    <ResizeHandle position="n" onMouseDown={(e) => handleResizeStart(e, 'n')}/>
+                    <ResizeHandle position="ne" onMouseDown={(e) => handleResizeStart(e, 'ne')}/>
+                    <ResizeHandle position="w" onMouseDown={(e) => handleResizeStart(e, 'w')}/>
+                    <ResizeHandle position="e" onMouseDown={(e) => handleResizeStart(e, 'e')}/>
+                    <ResizeHandle position="sw" onMouseDown={(e) => handleResizeStart(e, 'sw')}/>
+                    <ResizeHandle position="s" onMouseDown={(e) => handleResizeStart(e, 's')}/>
+                    <ResizeHandle position="se" onMouseDown={(e) => handleResizeStart(e, 'se')}/>
                 </>
             )}
         </div>

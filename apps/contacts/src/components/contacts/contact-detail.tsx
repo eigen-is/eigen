@@ -108,7 +108,7 @@ interface ContactDetailProps {
     filterId?: string;
 }
 
-export function ContactDetail({contact, onDelete, filterType, filterId}: ContactDetailProps) {
+export function ContactDetail({contact, onDelete}: ContactDetailProps) {
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
 
     const {
@@ -156,7 +156,7 @@ export function ContactDetail({contact, onDelete, filterType, filterId}: Contact
         : [];
 
     return (
-        <div className="h-full flex flex-col overflow-hidden" data-document>
+        <div className="h-full flex flex-col overflow-hidden" data-document="contact-detail">
             <div className="flex-1 overflow-auto p-6">
                 <div className="flex flex-col md:flex-row gap-8">
                     <div className="flex flex-col items-center gap-4 w-50">
@@ -211,7 +211,7 @@ export function ContactDetail({contact, onDelete, filterType, filterId}: Contact
                                     {contact.email.map((email: string, index: number) => (
                                         <div key={index} className="pl-6">
                                             <a className="text-blue-600 hover:underline"
-                                                href={getMailComposeUrl(email)}>
+                                               href={getMailComposeUrl(email)}>
                                                 {email}
                                             </a>
                                         </div>

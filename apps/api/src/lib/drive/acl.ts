@@ -113,10 +113,10 @@ export async function filterRedundantACL(
     acl: DriveACL[],
     path: DrivePath,
     getPath: PathGetter,
-): Promise<{filtered: DriveACL[], removed: DriveACL[]}> {
+): Promise<{ filtered: DriveACL[], removed: DriveACL[] }> {
     // Collect inherited ACL from ancestors
-    const inheritedUserEmails = new Map<string, {read: boolean, write: boolean}>();
-    const inheritedTargets = new Map<string, {read: boolean, write: boolean}>();
+    const inheritedUserEmails = new Map<string, { read: boolean, write: boolean }>();
+    const inheritedTargets = new Map<string, { read: boolean, write: boolean }>();
 
     let current = path.parentId ? await getPath(path.parentId) : null;
     while (current) {

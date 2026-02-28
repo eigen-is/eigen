@@ -1,5 +1,5 @@
-import {describe, expect, test, beforeAll} from 'bun:test';
-import {getTestContext, authedRequest} from './setup';
+import {beforeAll, describe, expect, test} from 'bun:test';
+import {authedRequest, getTestContext} from './setup';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
 const BOB_EMAIL = 'bob@test.eigen.is';
@@ -19,7 +19,7 @@ async function drivePost(token: string, ownerId: string, mountId: string, path: 
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify(body),
-    }); 
+    });
     return res.json();
 }
 
@@ -961,11 +961,11 @@ describe('Drive', () => {
 
         test('multiple users with different permission levels', async () => {
             const CHARLIE_EMAIL = 'charlie@test.eigen.is';
-            
+
             // Bob: read at A
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
                 `path/${folderA}/acl`, {acl: [{email: BOB_EMAIL, read: true, write: false}]});
-            
+
             // Charlie: write at B
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
                 `path/${folderB}/acl`, {acl: [{email: CHARLIE_EMAIL, read: true, write: true}]});
@@ -989,7 +989,7 @@ describe('Drive', () => {
 
         test('ACL with conflicting permissions at different levels', async () => {
             const CHARLIE_EMAIL = 'charlie@test.eigen.is';
-            
+
             // Clear previous ACLs
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
                 `path/${folderA}/acl`, {acl: []});
@@ -1011,10 +1011,12 @@ describe('Drive', () => {
 
             // Charlie: read-only at A, write at B (additive model - should have write)
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
-                `path/${folderA}/acl`, {acl: [
-                    {email: BOB_EMAIL, read: true, write: true},
-                    {email: CHARLIE_EMAIL, read: true, write: false}
-                ]});
+                `path/${folderA}/acl`, {
+                    acl: [
+                        {email: BOB_EMAIL, read: true, write: true},
+                        {email: CHARLIE_EMAIL, read: true, write: false}
+                    ]
+                });
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
                 `path/${folderB}/acl`, {acl: [{email: CHARLIE_EMAIL, read: true, write: true}]});
 
@@ -1030,7 +1032,6 @@ describe('Drive', () => {
     describe('Permission Boundaries and Edge Cases', () => {
         let boundaryFolder: string;
         let subFolder: string;
-        let boundaryFile: string;
 
         beforeAll(async () => {
             const folder = await drivePost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
@@ -1042,9 +1043,8 @@ describe('Drive', () => {
             subFolder = sub.id;
 
             const file = new File(['boundary test'], 'boundary.txt', {type: 'text/plain'});
-            const uploaded = await driveUpload(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+            await driveUpload(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
                 subFolder, file);
-            boundaryFile = uploaded.id;
         });
 
         test('user with no ACL cannot access anything', async () => {
@@ -1074,7 +1074,7 @@ describe('Drive', () => {
             const charlieWrite = await driveGet(ctx.charlie.user.sessionToken, ctx.alice.user.id, aliceMountId,
                 `path/${boundaryFolder}/permissions/write`);
             expect(charlieWrite.canWrite).toBe(false); // Confirm Charlie has no write access
-            
+
             // Charlie should not be able to modify ACL, but API has security flaw
             const res = await authedRequest(ctx.charlie.user.sessionToken,
                 `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${boundaryFolder}/acl`, {
@@ -1284,7 +1284,7 @@ describe('Drive', () => {
 
         test('removing specific user from ACL while keeping others', async () => {
             const CHARLIE_EMAIL = 'charlie@test.eigen.is';
-            
+
             // Set ACL with both Bob and Charlie
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
                 `path/${aclFolder}/acl`, {

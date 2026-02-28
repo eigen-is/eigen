@@ -1,5 +1,5 @@
-import {describe, expect, test, beforeAll} from 'bun:test';
-import {getTestContext, authedRequest} from './setup';
+import {beforeAll, describe, expect, test} from 'bun:test';
+import {authedRequest, getTestContext} from './setup';
 import {getServerConfig} from '../lib/config/server-config';
 import {teamOwnerId} from '@workspace/lib/types';
 
@@ -609,7 +609,7 @@ describe('Team Drive Security Edge Cases', () => {
         const folder = await drivePost(ctx.bob.user.sessionToken,
             teamOwner, teamMountId,
             `folder/${teamRootId}`, {folderName: 'Team Folder'});
-        
+
         // Bob should be able to modify this folder's ACL
         const res = await authedRequest(ctx.bob.user.sessionToken,
             `/drive/${teamOwner}/${teamMountId}/path/${folder.id}/acl`, {
@@ -659,8 +659,6 @@ describe('Team Drive Security Edge Cases', () => {
     });
 
     // NOTE: Team deletion test removed - team deletion not yet implemented in API
-        // TODO: Add this test back when team deletion is properly implemented
-        // This test was checking that deleted team drives become inaccessible
 });
 
 describe('Cross-Team Access Edge Cases', () => {
@@ -760,7 +758,7 @@ describe('Cross-Team Access Edge Cases', () => {
         // Alice is in both teams, should access both
         const t1Root = await driveGet(ctx.alice.user.sessionToken, team1Owner, team1MountId, 'root');
         const t2Root = await driveGet(ctx.alice.user.sessionToken, team2Owner, team2MountId, 'root');
-        
+
         expect(t1Root).not.toBeNull();
         expect(t2Root).not.toBeNull();
         expect(t1Root.ownerId).toBe(team1Owner);
@@ -769,7 +767,7 @@ describe('Cross-Team Access Edge Cases', () => {
 
     test('team1 member with ACL access to team2 folder can access', async () => {
         const team2Root = await driveGet(ctx.alice.user.sessionToken, team2Owner, team2MountId, 'root');
-        
+
         // Alice gives Bob read access to a folder in team2
         const folder = await drivePost(ctx.alice.user.sessionToken, team2Owner, team2MountId,
             `folder/${team2Root.id}`, {folderName: 'Cross Team Folder'});
@@ -1061,7 +1059,7 @@ describe('Team ACL Edge Cases with Personal Drives', () => {
     });
 
     test('team ACL on deleted team is treated as invalid', async () => {
-        const folder = await drivePost(ctx.alice.user.sessionToken,
+        await drivePost(ctx.alice.user.sessionToken,
             ctx.alice.user.id, aliceMountId,
             `folder/${aliceRootId}`, {folderName: 'Deleted Team Test'});
 

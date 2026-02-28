@@ -89,7 +89,7 @@ const SlateEditor = ({
         const e = withReact(
             withHistory(
                 withCursors(withYjs(createEditor(), sharedType!), provider!.awareness, {
-                            data: {
+                    data: {
                         name: auth.user!.name,
                         email: auth.user!.email,
                         color: "#9810fa",
@@ -260,7 +260,7 @@ const SlateEditor = ({
 
     const handleImageUpload = useCallback(async (file: File) => {
         if (!mediaFolderId || !file.type.startsWith('image/')) return;
-        
+
         const result = await uploadFile.mutateAsync({parentId: mediaFolderId, file});
         if (result) {
             const width = result.details?.width as number | undefined;
@@ -294,7 +294,7 @@ const SlateEditor = ({
                     <EditorToolbar path={path} canWrite={access.canWrite} onDeleteDialogOpen={onDeleteDialogOpen}
                                    onAccessDialogOpen={onAccessDialogOpen}/>
                     <div className="h-full w-full overflow-y-scroll bg-gray-200 p-4">
-                        <div data-document
+                        <div data-document="true"
                              className="grid p-[2cm] bg-white rounded-lg shadow-sm shadow-transparent min-h-full w-[210mm] m-auto print:shadow-none">
                             <Cursors className="h-full">
                                 <Editable

@@ -4,7 +4,7 @@ import {cn} from '../../../lib/utils';
 
 type DroppableSidebarItemProps = SidebarItemProps & {
     acceptTypes: string[];
-    onDrop: (data: {type: string; ids: string[]}) => void;
+    onDrop: (data: { type: string; ids: string[] }) => void;
 }
 
 export function DroppableSidebarItem({acceptTypes, onDrop, className, ...props}: DroppableSidebarItemProps) {

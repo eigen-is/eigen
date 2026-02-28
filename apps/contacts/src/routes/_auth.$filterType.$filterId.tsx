@@ -5,7 +5,7 @@ import {useContacts, useDeleteContact, useLabels, useUpdateContact} from '@works
 import {Contact} from '@workspace/lib/types/contact';
 import {EigenLoader} from '@workspace/ui/components/layout/eigen-loader';
 import {LabelFilterHeader} from "@workspace/ui/components/layout/labels/label-filter-header";
-import {ColumnLayout, Column} from "@workspace/ui/components/layout/column-layout";
+import {Column, ColumnLayout} from "@workspace/ui/components/layout/column-layout";
 import {useEffect, useState} from 'react';
 
 export type ContactsSearchParams = {
@@ -133,9 +133,15 @@ function ContactsRoute() {
                             for (const c of selectedContacts) {
                                 const currentLabels = c.labels || [];
                                 if (allHaveLabel) {
-                                    updateContactMutation.mutate({...c, labels: currentLabels.filter(id => id !== labelId)} as Contact);
+                                    updateContactMutation.mutate({
+                                        ...c,
+                                        labels: currentLabels.filter(id => id !== labelId)
+                                    } as Contact);
                                 } else if (!currentLabels.includes(labelId)) {
-                                    updateContactMutation.mutate({...c, labels: [...currentLabels, labelId]} as Contact);
+                                    updateContactMutation.mutate({
+                                        ...c,
+                                        labels: [...currentLabels, labelId]
+                                    } as Contact);
                                 }
                             }
                         }}

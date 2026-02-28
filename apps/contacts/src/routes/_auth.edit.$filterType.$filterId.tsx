@@ -4,7 +4,7 @@ import {ContactEdit, ContactEditToolbar, ContactFormValues} from '../components/
 import {useAddContact, useContacts, useUpdateContact} from '@workspace/lib/contacts';
 import {type Contact} from "@workspace/lib/types/contact";
 import {EigenLoader} from "@workspace/ui";
-import {ColumnLayout, Column} from "@workspace/ui/components/layout/column-layout";
+import {Column, ColumnLayout} from "@workspace/ui/components/layout/column-layout";
 
 // Define search params type with Zod schema
 const searchSchema = z.object({
@@ -45,7 +45,7 @@ function EditContactRoute() {
 
     const handleSave = async (data: ContactFormValues) => {
         try {
-            const formData = data as ContactFormValues & {avatar?: string | null};
+            const formData = data as ContactFormValues & { avatar?: string | null };
             const contactData: Omit<Contact, 'id'> = {
                 ...formData,
                 firstName: formData.firstName || '',

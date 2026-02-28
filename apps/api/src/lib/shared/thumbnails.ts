@@ -120,7 +120,7 @@ export async function extractImageDetails(
     try {
         const metadata = await sharp(source).metadata();
         if (metadata.width && metadata.height) {
-            return { width: metadata.width, height: metadata.height };
+            return {width: metadata.width, height: metadata.height};
         }
     } catch {
     }

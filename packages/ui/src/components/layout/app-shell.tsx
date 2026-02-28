@@ -16,7 +16,13 @@ type AppShellProps = {
     children?: ReactNode;
 }
 
-export function AppShell({appName: initialAppName, rootRoute, sidebar, sidebarMode = 'collapsible', children}: AppShellProps) {
+export function AppShell({
+                             appName: initialAppName,
+                             rootRoute,
+                             sidebar,
+                             sidebarMode = 'collapsible',
+                             children
+                         }: AppShellProps) {
     const [appName, setAppName] = useState(initialAppName);
     const [sidebarOpen, setSidebarOpen] = useState(false);
 

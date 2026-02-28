@@ -54,7 +54,10 @@ export function EmailContextMenu({
         >
             {isSingleSelect && onPrint && (
                 <>
-                    <DropdownMenuItem onClick={() => { onPrint(firstId); onClose(); }}>
+                    <DropdownMenuItem onClick={() => {
+                        onPrint(firstId);
+                        onClose();
+                    }}>
                         <Printer className="mr-2"/>
                         Print
                     </DropdownMenuItem>
@@ -64,15 +67,24 @@ export function EmailContextMenu({
 
             {isSingleSelect && (
                 <>
-                    <DropdownMenuItem onClick={() => { onReply?.(firstId); onClose(); }}>
+                    <DropdownMenuItem onClick={() => {
+                        onReply?.(firstId);
+                        onClose();
+                    }}>
                         <Reply className="mr-2"/>
                         Reply
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => { onReplyAll?.(firstId); onClose(); }}>
+                    <DropdownMenuItem onClick={() => {
+                        onReplyAll?.(firstId);
+                        onClose();
+                    }}>
                         <ReplyAll className="mr-2"/>
                         Reply All
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => { onForward?.(firstId); onClose(); }}>
+                    <DropdownMenuItem onClick={() => {
+                        onForward?.(firstId);
+                        onClose();
+                    }}>
                         <Forward className="mr-2"/>
                         Forward
                     </DropdownMenuItem>
@@ -80,15 +92,24 @@ export function EmailContextMenu({
                 </>
             )}
 
-            <DropdownMenuItem onClick={() => { onArchive?.(messageIds); onClose(); }}>
+            <DropdownMenuItem onClick={() => {
+                onArchive?.(messageIds);
+                onClose();
+            }}>
                 <Archive className="mr-2"/>
                 {isSingleSelect ? 'Archive' : `Archive ${messageIds.length} emails`}
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => { onReportSpam?.(messageIds); onClose(); }}>
+            <DropdownMenuItem onClick={() => {
+                onReportSpam?.(messageIds);
+                onClose();
+            }}>
                 <AlertTriangle className="mr-2"/>
                 Report Spam
             </DropdownMenuItem>
-            <DropdownMenuItem onClick={() => { onDelete?.(messageIds); onClose(); }}>
+            <DropdownMenuItem onClick={() => {
+                onDelete?.(messageIds);
+                onClose();
+            }}>
                 <Trash2 className="mr-2"/>
                 {isSingleSelect ? 'Delete' : `Delete ${messageIds.length} emails`}
             </DropdownMenuItem>
