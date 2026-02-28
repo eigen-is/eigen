@@ -80,7 +80,7 @@ export class ManagedDatabase<S extends SchemaType> {
     private async runMigrations(): Promise<void> {
         if (!this.rawDb) return;
 
-        const row = this.rawDb.query('SELECT version FROM __schema_version WHERE id = 1').get() as {version: number};
+        const row = this.rawDb.query('SELECT version FROM __schema_version WHERE id = 1').get() as { version: number };
         let currentVersion = row?.version ?? 0;
 
         const pending = this.config.migrations

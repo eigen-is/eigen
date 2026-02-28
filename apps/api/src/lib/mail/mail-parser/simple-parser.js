@@ -49,7 +49,7 @@ module.exports = (input, options, callback) => {
         }
 
         if (data.type === 'text') {
-            for(const key of Object.keys(data)) {
+            for (const key of Object.keys(data)) {
                 if (['text', 'html', 'textAsHtml'].includes(key)) {
                     mail[key] = data[key];
                 }
@@ -86,7 +86,7 @@ module.exports = (input, options, callback) => {
     });
 
     parser.on('end', () => {
-        for(const key of ['subject', 'references', 'date', 'to', 'from', 'to', 'cc', 'bcc', 'message-id', 'in-reply-to', 'reply-to']) {
+        for (const key of ['subject', 'references', 'date', 'to', 'from', 'to', 'cc', 'bcc', 'message-id', 'in-reply-to', 'reply-to']) {
             if (mail.headers && mail.headers.has(key)) {
                 mail[key.replace(/-([a-z])/g, (m, c) => c.toUpperCase())] = mail.headers.get(key);
             }

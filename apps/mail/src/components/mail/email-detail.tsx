@@ -1,13 +1,4 @@
-import {
-    AlertTriangle,
-    Archive,
-    Forward,
-    MoreVertical,
-    Paperclip,
-    Reply,
-    ReplyAll,
-    Trash2
-} from "lucide-react";
+import {AlertTriangle, Archive, Forward, MoreVertical, Paperclip, Reply, ReplyAll, Trash2} from "lucide-react";
 import {Button} from "@workspace/ui/components/button";
 import {DropdownMenu, DropdownMenuTrigger} from "@workspace/ui/components/dropdown-menu";
 import {format} from "date-fns";
@@ -104,7 +95,8 @@ export function EmailDetailToolbar({
                         onReportSpam={onReportSpam ? (ids) => ids.forEach(id => onReportSpam(id)) : undefined}
                         onDelete={onDelete ? (ids) => ids.forEach(id => onDelete(id)) : undefined}
                         onMoveToFolder={onMoveToFolder ? (ids, folderId) => ids.forEach(id => onMoveToFolder(id, folderId)) : undefined}
-                        onClose={() => {}}
+                        onClose={() => {
+                        }}
                         onPrint={() => printDocument()}
                     />
                 </DropdownMenu>
@@ -198,7 +190,7 @@ export function EmailDetail({email, toggleMailRead}: EmailDetailProps) {
 
     return (
         <div className="flex flex-col h-full bg-white">
-            <div className="p-4 flex-1 overflow-auto" data-document>
+            <div className="p-4 flex-1 overflow-auto" data-document="email-detail">
                 {/* Email header */}
                 <div className="space-y-4 mb-6">
                     <div>

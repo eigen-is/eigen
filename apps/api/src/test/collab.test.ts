@@ -1,5 +1,5 @@
-import {describe, expect, test, beforeAll} from 'bun:test';
-import {getTestContext, authedRequest} from './setup';
+import {beforeAll, describe, expect, test} from 'bun:test';
+import {authedRequest, getTestContext} from './setup';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
 
@@ -47,7 +47,12 @@ describe('Collab', () => {
                 `/collab/${ctx.alice.user.id}/${aliceMountId}/${docId}/info`);
             expect(res.status).toBe(200);
 
-            const data = await res.json() as {canRead: boolean; canWrite: boolean; path: {id: string}; folderContents: unknown[]};
+            const data = await res.json() as {
+                canRead: boolean;
+                canWrite: boolean;
+                path: { id: string };
+                folderContents: unknown[]
+            };
             expect(data.canRead).toBe(true);
             expect(data.canWrite).toBe(true);
             expect(data.path).toBeDefined();
@@ -74,7 +79,7 @@ describe('Collab', () => {
                 `/collab/${ctx.alice.user.id}/${aliceMountId}/${docId}/info`);
             expect(res.status).toBe(200);
 
-            const data = await res.json() as {canRead: boolean; canWrite: boolean; path: null};
+            const data = await res.json() as { canRead: boolean; canWrite: boolean; path: null };
             expect(data.canRead).toBe(false);
             expect(data.canWrite).toBe(false);
             expect(data.path).toBeNull();
@@ -94,7 +99,7 @@ describe('Collab', () => {
                 `/collab/${ctx.alice.user.id}/${aliceMountId}/${docId}/info`);
             expect(res.status).toBe(200);
 
-            const data = await res.json() as {canRead: boolean; canWrite: boolean; path: string};
+            const data = await res.json() as { canRead: boolean; canWrite: boolean; path: string };
             expect(data.canRead).toBe(true);
             expect(data.canWrite).toBe(false);
             expect(data.path).toBeDefined();
@@ -148,7 +153,7 @@ describe('Collab', () => {
 
             const ws = (wsRes as any).webSocket!;
             const pongPromise = new Promise<string>((resolve) => {
-                ws.onmessage = (event: {data: string}) => {
+                ws.onmessage = (event: { data: string }) => {
                     if (event.data === 'pong') {
                         resolve('pong');
                     }

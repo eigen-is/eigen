@@ -1,9 +1,9 @@
-import {Fragment, useMemo, useRef, useState} from 'react';
+import {Fragment, useRef, useState} from 'react';
 import {Button} from "@workspace/ui/components/button";
 import {EigenLoader} from "@workspace/ui";
 import {FileText, FolderPlus, MessageSquare, Plus, StickyNote, UploadIcon} from "lucide-react";
 import {DriveTable, getFileIcon} from "@workspace/ui/components/layout/drive";
-import {type DriveACL, type DrivePath} from "@workspace/lib/types/drive";
+import {type DrivePath} from "@workspace/lib/types/drive";
 import {cn} from "@workspace/ui/lib/utils";
 import {
     DropdownMenu,
@@ -184,20 +184,14 @@ export function DriveList({
                               onRowSelect,
                               onRowActivate,
                               activeRowId,
-                              onCreateFolder,
-                              onUploadFile,
                               onUploadFiles,
                               onDelete,
                               currentPath,
                               onShareClick,
-                              onCreateDoc,
-                              onCreateStickies,
-                              onCreateChat,
                               onDownload,
                               ownerId,
                               mountId,
                               pathId,
-                              showBreadcrumb = true,
                               allowDelete = false,
                               allowDownload = false,
                               allowUpload = false,
@@ -206,9 +200,7 @@ export function DriveList({
                           }: DriveListProps) {
     const [isDragging, setIsDragging] = useState(false);
     const dragCounter = useRef(0);
-    const {data: breadcrumbData} = useBreadcrumb(ownerId, mountId, pathId);
-
-    // Handle row click with two different behaviors
+// Handle row click with two different behaviors
     const handleRowClick = (path: DrivePath) => {
         if (path.id === activeRowId && onRowActivate) {
             // If the item is already selected, activate it

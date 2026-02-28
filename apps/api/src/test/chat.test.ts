@@ -1,5 +1,5 @@
-import {describe, expect, test, beforeAll} from 'bun:test';
-import {getTestContext, authedRequest} from './setup';
+import {beforeAll, describe, expect, test} from 'bun:test';
+import {authedRequest, getTestContext} from './setup';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
 
@@ -471,7 +471,11 @@ describe('Chat', () => {
                 `/chat/${ctx.alice.user.id}/${aliceMountId}/${chatId}/messages`, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({content: 'direct whisper', type: 'whisper', whisperTo: 'ghost@fake.eigen.is'}),
+                    body: JSON.stringify({
+                        content: 'direct whisper',
+                        type: 'whisper',
+                        whisperTo: 'ghost@fake.eigen.is'
+                    }),
                 });
             expect(res.status).toBe(404);
         });

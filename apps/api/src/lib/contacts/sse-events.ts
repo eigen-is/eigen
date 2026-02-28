@@ -1,8 +1,14 @@
 import type {SSEvent, SSEventContactData, SSEventContactLabelData} from '@workspace/lib/types/sse';
 import {SSEventType} from '@workspace/lib/types/sse';
 
-type ContactEventType = typeof SSEventType.CONTACT_CREATED | typeof SSEventType.CONTACT_UPDATED | typeof SSEventType.CONTACT_DELETED;
-type LabelEventType = typeof SSEventType.LABEL_CREATED | typeof SSEventType.LABEL_UPDATED | typeof SSEventType.LABEL_DELETED;
+type ContactEventType =
+    typeof SSEventType.CONTACT_CREATED
+    | typeof SSEventType.CONTACT_UPDATED
+    | typeof SSEventType.CONTACT_DELETED;
+type LabelEventType =
+    typeof SSEventType.LABEL_CREATED
+    | typeof SSEventType.LABEL_UPDATED
+    | typeof SSEventType.LABEL_DELETED;
 
 type ContactNotificationTemplate = {
     title: string;

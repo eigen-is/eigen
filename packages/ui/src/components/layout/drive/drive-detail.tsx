@@ -105,12 +105,8 @@ type DriveDetailProps = {
 
 export function DriveDetail({
                                 path,
-                                onDelete,
                                 onShareClick,
-                                onDownload,
                                 onItemOpen,
-                                onRename,
-                                allowDelete,
                             }: DriveDetailProps) {
 
     if (!path) {
@@ -199,7 +195,8 @@ export function DriveDetail({
                             {path.details.duration && (
                                 <TableRow>
                                     <TableCell className="font-medium px-0 w-20">Duration</TableCell>
-                                    <TableCell className="px">{Math.floor(path.details.duration / 60)}:{String(Math.floor(path.details.duration % 60)).padStart(2, '0')}</TableCell>
+                                    <TableCell
+                                        className="px">{Math.floor(path.details.duration / 60)}:{String(Math.floor(path.details.duration % 60)).padStart(2, '0')}</TableCell>
                                 </TableRow>
                             )}
                             {path.details.pageCount && (

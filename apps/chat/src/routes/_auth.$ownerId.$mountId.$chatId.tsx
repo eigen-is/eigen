@@ -2,8 +2,8 @@ import {createFileRoute} from '@tanstack/react-router'
 import {useCallback, useMemo, useRef, useState} from 'react';
 import {useAuth} from "@workspace/lib/auth";
 import {useMessages, usePostMessage} from "@workspace/lib/chat";
-import {usePathInfo, useUploadFile, useUpdateACL, useCheckWritePermission} from "@workspace/lib/drive";
-import {ColumnLayout, Column} from "@workspace/ui/components/layout/column-layout";
+import {useCheckWritePermission, usePathInfo, useUpdateACL, useUploadFile} from "@workspace/lib/drive";
+import {Column, ColumnLayout} from "@workspace/ui/components/layout/column-layout";
 import {MessageList} from "../components/chat/message-list";
 import {MessageInput} from "../components/chat/message-input";
 import {TooltipButton} from "@workspace/ui";
@@ -11,10 +11,10 @@ import {Edit, UserRoundPlus} from "lucide-react";
 import {DriveAccessDialog} from "@workspace/ui/components/layout/drive/drive-access-dialog";
 import {DriveRenameItem} from "@workspace/ui/components/layout/drive/drive-rename-item";
 import {DriveShareSummary} from "@workspace/ui/components/layout/drive/drive-share-summary";
-import type {DrivePath, DriveACL} from "@workspace/lib/types/drive";
+import type {DriveACL, DrivePath} from "@workspace/lib/types/drive";
 import type {ChatMessage} from "@workspace/lib/types/chat";
 import type {RoomMember} from "../components/chat/player-suggest";
-import {getLocalCommand, COMMANDS_HELP, isUnknownCommand, validateEmailTarget} from "../lib/commands";
+import {COMMANDS_HELP, getLocalCommand, isUnknownCommand, validateEmailTarget} from "../lib/commands";
 import {toast} from "sonner";
 
 let localIdCounter = 0;
@@ -116,7 +116,12 @@ function ChatView() {
                         return;
                     }
                     lastWhisperFromRef.current = target;
-                    await postMessage.mutateAsync({content: local.content, type: 'whisper', whisperTo: target, attachments});
+                    await postMessage.mutateAsync({
+                        content: local.content,
+                        type: 'whisper',
+                        whisperTo: target,
+                        attachments
+                    });
                     return;
                 }
                 case 'invite': {
@@ -154,7 +159,8 @@ function ChatView() {
 
     const toolbar = (
         <div className="flex items-center justify-between w-full">
-            {chatPath && <DriveShareSummary path={chatPath as DrivePath} onClick={() => setAccessDialogOpen(true)} showIconOnHover={false}/>}
+            {chatPath && <DriveShareSummary path={chatPath as DrivePath} onClick={() => setAccessDialogOpen(true)}
+                                            showIconOnHover={false}/>}
             <span className="font-semibold text-sm truncate">{chatName}</span>
             <div className="flex items-center gap-2">
                 <TooltipButton

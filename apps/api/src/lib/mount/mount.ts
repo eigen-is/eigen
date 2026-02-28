@@ -11,7 +11,7 @@ import * as schema from './schema';
 import {labels, paths, pathsToLabels} from './schema';
 import {MOUNT_DB_CONFIG} from './db-config';
 import {LocalKeyStorage, S3Storage, type StorageBackend} from '../storage';
-import {type DatabaseConfig, ManagedDatabase, type SchemaType} from '../core/managed-database';
+import {type DatabaseConfig, ManagedDatabase, type SchemaType} from '../core';
 import {deleteThumbnail} from '../shared/thumbnails';
 import {createAsyncSingleton} from '../../utils/singleton';
 
@@ -231,7 +231,7 @@ export class Mount {
     async writeFile(pathId: string, data: Buffer | Uint8Array | ArrayBuffer | BunFile): Promise<number> {
         const written = await this.storage.write(pathId, data);
 
-        let size = 0;
+        let size: number;
         if (Buffer.isBuffer(data) || data instanceof Uint8Array) {
             size = data.length;
         } else if (data instanceof ArrayBuffer) {
@@ -418,7 +418,7 @@ export class Mount {
             updatedAt: row.updatedAt ?? new Date()
         };
     }
-    
+
     // @ts-ignore - Debug utility, called manually when needed
     private async logStructure(): Promise<void> {
         const buildTree = async (parentId: string | null, prefix: string): Promise<string[]> => {

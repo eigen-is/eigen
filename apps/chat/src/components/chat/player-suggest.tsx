@@ -17,7 +17,14 @@ type PlayerSuggestProps = {
     onItemsChange: (count: number, emails: string[]) => void;
 }
 
-export function PlayerSuggest({query, roomMembers, onSelect, visible, selectedIndex, onItemsChange}: PlayerSuggestProps) {
+export function PlayerSuggest({
+                                  query,
+                                  roomMembers,
+                                  onSelect,
+                                  visible,
+                                  selectedIndex,
+                                  onItemsChange
+                              }: PlayerSuggestProps) {
     const {suggestions: contactSuggestions} = useContactSuggestions(query, true);
 
     const items = useMemo(() => {

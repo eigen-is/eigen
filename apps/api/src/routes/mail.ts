@@ -35,7 +35,10 @@ export const mailRouter = new Elysia({name: "mail"})
             attributes: t.Optional(t.Array(t.String()))
         })
     })
-    .get("/mail/:ownerId/mailbox-exists/*", async ({params, user}) => await mailboxExists(user, params['*']), {auth: true})
+    .get("/mail/:ownerId/mailbox-exists/*", async ({
+                                                       params,
+                                                       user
+                                                   }) => await mailboxExists(user, params['*']), {auth: true})
     .get("/mail/:ownerId/message/:id", async ({params, user}) => await messageGet(user, params.id), {auth: true})
     .get("/mail/:ownerId/message/:id/download", async ({params, user, set}) => {
         set.headers['Cache-Control'] = 'public, max-age=86400';
@@ -46,18 +49,27 @@ export const mailRouter = new Elysia({name: "mail"})
         return await messageGetFile(user, params.id);
     }, {auth: true})
     .delete("/mail/:ownerId/message/:id", async ({params, user}) => await messageDelete(user, params.id), {auth: true})
-    .put("/mail/:ownerId/message/move", async ({body, user}) => await messageMove(user, body.messageId, body.targetMailbox), {
+    .put("/mail/:ownerId/message/move", async ({
+                                                   body,
+                                                   user
+                                               }) => await messageMove(user, body.messageId, body.targetMailbox), {
         auth: true,
         body: t.Object({
             messageId: t.String(),
             targetMailbox: t.String()
         })
     })
-    .put("/mail/:ownerId/message/move-to-inbox", async ({body, user}) => await messageMoveToInbox(user, body.messageId), {
+    .put("/mail/:ownerId/message/move-to-inbox", async ({
+                                                            body,
+                                                            user
+                                                        }) => await messageMoveToInbox(user, body.messageId), {
         auth: true,
         body: t.Object({messageId: t.String()})
     })
-    .put("/mail/:ownerId/message/move-to-archive", async ({body, user}) => await messageMoveToArchive(user, body.messageId), {
+    .put("/mail/:ownerId/message/move-to-archive", async ({
+                                                              body,
+                                                              user
+                                                          }) => await messageMoveToArchive(user, body.messageId), {
         auth: true,
         body: t.Object({messageId: t.String()})
     })
@@ -65,11 +77,17 @@ export const mailRouter = new Elysia({name: "mail"})
         auth: true,
         body: t.Object({messageId: t.String()})
     })
-    .put("/mail/:ownerId/message/move-to-trash", async ({body, user}) => await messageMoveToTrash(user, body.messageId), {
+    .put("/mail/:ownerId/message/move-to-trash", async ({
+                                                            body,
+                                                            user
+                                                        }) => await messageMoveToTrash(user, body.messageId), {
         auth: true,
         body: t.Object({messageId: t.String()})
     })
-    .post("/mail/:ownerId/message/copy", async ({body, user}) => await messageCopy(user, body.messageId, body.targetMailbox), {
+    .post("/mail/:ownerId/message/copy", async ({
+                                                    body,
+                                                    user
+                                                }) => await messageCopy(user, body.messageId, body.targetMailbox), {
         auth: true,
         body: t.Object({
             messageId: t.String(),
@@ -84,7 +102,11 @@ export const mailRouter = new Elysia({name: "mail"})
         auth: true,
         body: t.Object({mail: t.Any()})
     })
-    .put("/mail/:ownerId/message/:id/read", async ({params, body, user}) => await messageSetRead(user, params.id, body.read), {
+    .put("/mail/:ownerId/message/:id/read", async ({
+                                                       params,
+                                                       body,
+                                                       user
+                                                   }) => await messageSetRead(user, params.id, body.read), {
         auth: true,
         body: t.Object({
             read: t.Boolean()

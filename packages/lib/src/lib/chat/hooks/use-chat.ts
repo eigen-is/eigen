@@ -1,4 +1,4 @@
-import {useMutation, useQuery, useQueryClient, type QueryClient} from "@tanstack/react-query";
+import {type QueryClient, useMutation, useQuery, useQueryClient} from "@tanstack/react-query";
 import {chatApi, driveApi} from "@workspace/lib/api";
 import {driveKeys, invalidateItemCreated} from "../../drive/hooks/use-drive";
 import type {DrivePath} from "@workspace/lib/types/drive";
@@ -39,7 +39,13 @@ export function useMessages(ownerId: string, mountId: string, chatId: string | u
 export function usePostMessage(ownerId: string, mountId: string, chatId: string) {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: async (body: { content: string; type?: 'message' | 'emote' | 'whisper' | 'system'; whisperTo?: string; replyTo?: string; attachments?: string[] }) => {
+        mutationFn: async (body: {
+            content: string;
+            type?: 'message' | 'emote' | 'whisper' | 'system';
+            whisperTo?: string;
+            replyTo?: string;
+            attachments?: string[]
+        }) => {
             const response = await chatApi({ownerId})({mountId})({chatId}).messages.post(body);
             return response.data;
         },

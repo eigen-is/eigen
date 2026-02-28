@@ -11,7 +11,12 @@ import {AvatarIcon} from "@workspace/ui/components/avatar"
 import {Separator} from "@workspace/ui/components/separator"
 import {Button} from "@workspace/ui/components/button"
 import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from "@workspace/ui/components/select"
-import {DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger} from "@workspace/ui/components/dropdown-menu"
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger
+} from "@workspace/ui/components/dropdown-menu"
 import {ContactAutosuggest} from "../contacts/contact-autosuggest"
 import {ContactSuggestion} from "../contacts/types"
 import {useOrganization, useTeams} from "@workspace/lib/auth"
@@ -361,42 +366,42 @@ export function DriveAccessListEdit({
                     const displayName = access.type === 'team'
                         ? (teamNameMap.get(access.targetId || '') || access.email) : null
                     return (
-                    <div key={itemKey} className="flex items-center justify-between">
-                        {access.type === 'team' ? (
-                            <div className="flex items-center gap-3 py-1">
-                                <AvatarIcon className="w-8 h-8">
-                                    <Users className="h-4 w-4"/>
-                                </AvatarIcon>
-                                <div>
-                                    <p className="text-sm font-medium">{displayName}</p>
-                                    <p className="text-xs text-muted-foreground capitalize">{access.type}</p>
+                        <div key={itemKey} className="flex items-center justify-between">
+                            {access.type === 'team' ? (
+                                <div className="flex items-center gap-3 py-1">
+                                    <AvatarIcon className="w-8 h-8">
+                                        <Users className="h-4 w-4"/>
+                                    </AvatarIcon>
+                                    <div>
+                                        <p className="text-sm font-medium">{displayName}</p>
+                                        <p className="text-xs text-muted-foreground capitalize">{access.type}</p>
+                                    </div>
                                 </div>
-                            </div>
-                        ) : (
-                            <UserPublicItem
-                                email={access.email}
-                            />
-                        )}
-                        {access.owner ? (
-                            <span className="text-xs text-muted-foreground w-28 text-right">
+                            ) : (
+                                <UserPublicItem
+                                    email={access.email}
+                                />
+                            )}
+                            {access.owner ? (
+                                <span className="text-xs text-muted-foreground w-28 text-right">
                                 Owner
                             </span>
-                        ) : (
-                            <Select
-                                defaultValue={access.write ? "editor" : "viewer"}
-                                onValueChange={(value) => handlePermissionChange(itemKey, value)}
-                            >
-                                <SelectTrigger className="h-7 w-28">
-                                    <SelectValue/>
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="editor">Editor</SelectItem>
-                                    <SelectItem value="viewer">Viewer</SelectItem>
-                                    <SelectItem value="remove">Remove</SelectItem>
-                                </SelectContent>
-                            </Select>
-                        )}
-                    </div>
+                            ) : (
+                                <Select
+                                    defaultValue={access.write ? "editor" : "viewer"}
+                                    onValueChange={(value) => handlePermissionChange(itemKey, value)}
+                                >
+                                    <SelectTrigger className="h-7 w-28">
+                                        <SelectValue/>
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="editor">Editor</SelectItem>
+                                        <SelectItem value="viewer">Viewer</SelectItem>
+                                        <SelectItem value="remove">Remove</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            )}
+                        </div>
                     )
                 })}
 
@@ -405,29 +410,31 @@ export function DriveAccessListEdit({
                     const inheritedKey = isGroup ? `${access.type}-${access.targetId}` : access.email
                     const inheritedName = isGroup ? (teamNameMap.get(access.targetId || '') || access.email) : null
                     return (
-                    <div key={inheritedKey} className="flex items-center justify-between">
-                        {isGroup ? (
-                            <div className="flex items-center gap-3 py-1">
-                                <AvatarIcon className="w-8 h-8">
-                                    <Users className="h-4 w-4"/>
-                                </AvatarIcon>
-                                <div>
-                                    <p className="text-sm font-medium">{inheritedName}</p>
-                                    <p className="text-xs text-muted-foreground">
-                                        <span className="capitalize">{access.type}</span> · Inherited from "{access.sourceFolderName}"
-                                    </p>
+                        <div key={inheritedKey} className="flex items-center justify-between">
+                            {isGroup ? (
+                                <div className="flex items-center gap-3 py-1">
+                                    <AvatarIcon className="w-8 h-8">
+                                        <Users className="h-4 w-4"/>
+                                    </AvatarIcon>
+                                    <div>
+                                        <p className="text-sm font-medium">{inheritedName}</p>
+                                        <p className="text-xs text-muted-foreground">
+                                            <span className="capitalize">{access.type}</span> · Inherited from
+                                            "{access.sourceFolderName}"
+                                        </p>
+                                    </div>
                                 </div>
-                            </div>
-                        ) : (
-                            <UserPublicItem
-                                email={access.email}
-                                label={<span className="text-muted-foreground text-xs">Inherited from "{access.sourceFolderName}"</span>}
-                            />
-                        )}
-                        <span className="text-xs text-muted-foreground w-28 text-right">
+                            ) : (
+                                <UserPublicItem
+                                    email={access.email}
+                                    label={<span
+                                        className="text-muted-foreground text-xs">Inherited from "{access.sourceFolderName}"</span>}
+                                />
+                            )}
+                            <span className="text-xs text-muted-foreground w-28 text-right">
                             {access.write ? "Editor" : "Viewer"}
                         </span>
-                    </div>
+                        </div>
                     )
                 })}
             </div>

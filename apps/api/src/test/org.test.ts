@@ -1,5 +1,5 @@
-import {describe, test, expect, beforeAll, afterAll} from 'bun:test';
-import {getTestContext, authedRequest} from './setup';
+import {afterAll, beforeAll, describe, expect, test} from 'bun:test';
+import {authedRequest, getTestContext} from './setup';
 import {getServerConfig} from '../lib/config/server-config';
 
 async function getFullOrganization(sessionToken: string, orgId: string) {
@@ -125,7 +125,7 @@ describe('Organization Infrastructure', () => {
 
         test('non-owner cannot create team', async () => {
             const ctx = await getTestContext();
-            
+
             const res = await authedRequest(ctx.bob.user.sessionToken,
                 '/auth/organization/create-team', {
                     method: 'POST',
@@ -140,7 +140,7 @@ describe('Organization Infrastructure', () => {
 
         test('owner can create team', async () => {
             const ctx = await getTestContext();
-            
+
             const res = await authedRequest(ctx.alice.user.sessionToken,
                 '/auth/organization/create-team', {
                     method: 'POST',
@@ -158,7 +158,7 @@ describe('Organization Infrastructure', () => {
 
         test('non-owner cannot add team members', async () => {
             const ctx = await getTestContext();
-            
+
             const res = await authedRequest(ctx.bob.user.sessionToken,
                 '/auth/organization/add-team-member', {
                     method: 'POST',
@@ -170,7 +170,7 @@ describe('Organization Infrastructure', () => {
 
         test('owner can add team members', async () => {
             const ctx = await getTestContext();
-            
+
             const res = await authedRequest(ctx.alice.user.sessionToken,
                 '/auth/organization/add-team-member', {
                     method: 'POST',
@@ -182,7 +182,7 @@ describe('Organization Infrastructure', () => {
 
         test('non-member cannot remove team members', async () => {
             const ctx = await getTestContext();
-            
+
             const res = await authedRequest(ctx.charlie.user.sessionToken,
                 '/auth/organization/remove-team-member', {
                     method: 'POST',
@@ -194,7 +194,7 @@ describe('Organization Infrastructure', () => {
 
         test('team member can leave team', async () => {
             const ctx = await getTestContext();
-            
+
             const res = await authedRequest(ctx.bob.user.sessionToken,
                 '/auth/organization/leave-team', {
                     method: 'POST',
@@ -206,7 +206,7 @@ describe('Organization Infrastructure', () => {
 
         test('owner can remove team members', async () => {
             const ctx = await getTestContext();
-            
+
             // Re-add bob first
             await authedRequest(ctx.alice.user.sessionToken,
                 '/auth/organization/add-team-member', {
@@ -226,7 +226,7 @@ describe('Organization Infrastructure', () => {
 
         test('cannot add non-existent user to team', async () => {
             const ctx = await getTestContext();
-            
+
             const res = await authedRequest(ctx.alice.user.sessionToken,
                 '/auth/organization/add-team-member', {
                     method: 'POST',
@@ -238,7 +238,7 @@ describe('Organization Infrastructure', () => {
 
         test('cannot remove user from non-existent team', async () => {
             const ctx = await getTestContext();
-            
+
             const res = await authedRequest(ctx.alice.user.sessionToken,
                 '/auth/organization/remove-team-member', {
                     method: 'POST',
@@ -270,7 +270,7 @@ describe('Organization Infrastructure', () => {
 
         test('owner can promote member to admin', async () => {
             const ctx = await getTestContext();
-            
+
             const res = await authedRequest(ctx.alice.user.sessionToken,
                 '/auth/organization/update-member-role', {
                     method: 'POST',
@@ -291,7 +291,7 @@ describe('Organization Infrastructure', () => {
 
         test('admin can manage teams but not organization roles', async () => {
             const ctx = await getTestContext();
-            
+
             // Admin (bob) can create team
             const teamRes = await authedRequest(ctx.bob.user.sessionToken,
                 '/auth/organization/create-team', {
@@ -320,7 +320,7 @@ describe('Organization Infrastructure', () => {
 
         test('owner can demote admin back to member', async () => {
             const ctx = await getTestContext();
-            
+
             const res = await authedRequest(ctx.alice.user.sessionToken,
                 '/auth/organization/update-member-role', {
                     method: 'POST',
@@ -340,7 +340,7 @@ describe('Organization Infrastructure', () => {
 
         test('cannot remove owner from organization', async () => {
             const ctx = await getTestContext();
-            
+
             const res = await authedRequest(ctx.alice.user.sessionToken,
                 '/auth/organization/remove-member', {
                     method: 'POST',
@@ -355,7 +355,7 @@ describe('Organization Infrastructure', () => {
 
         test('non-owner cannot remove organization members', async () => {
             const ctx = await getTestContext();
-            
+
             const res = await authedRequest(ctx.bob.user.sessionToken,
                 '/auth/organization/remove-member', {
                     method: 'POST',
@@ -412,7 +412,7 @@ describe('Organization Infrastructure', () => {
 
         test('user can be member of multiple teams', async () => {
             const ctx = await getTestContext();
-            
+
             // Add bob to both teams
             await authedRequest(ctx.alice.user.sessionToken,
                 '/auth/organization/add-team-member', {
@@ -438,7 +438,7 @@ describe('Organization Infrastructure', () => {
 
         test('user cannot join same team twice', async () => {
             const ctx = await getTestContext();
-            
+
             const res = await authedRequest(ctx.alice.user.sessionToken,
                 '/auth/organization/add-team-member', {
                     method: 'POST',
@@ -450,7 +450,7 @@ describe('Organization Infrastructure', () => {
 
         test('user cannot leave team they are not member of', async () => {
             const ctx = await getTestContext();
-            
+
             const res = await authedRequest(ctx.charlie.user.sessionToken,
                 '/auth/organization/leave-team', {
                     method: 'POST',
@@ -462,7 +462,7 @@ describe('Organization Infrastructure', () => {
 
         test('team owner cannot leave team (must transfer or delete)', async () => {
             const ctx = await getTestContext();
-            
+
             const res = await authedRequest(ctx.alice.user.sessionToken,
                 '/auth/organization/leave-team', {
                     method: 'POST',
@@ -473,8 +473,8 @@ describe('Organization Infrastructure', () => {
         });
 
         afterAll(async () => {
-            const ctx = await getTestContext();
-            
+            // const ctx = await getTestContext();
+
             // NOTE: Team cleanup removed - team deletion not yet implemented in API
             // TODO: Add cleanup back when team deletion is properly implemented
             // Teams will remain in test environment for now

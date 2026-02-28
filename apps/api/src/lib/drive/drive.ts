@@ -2,12 +2,19 @@ import type {User} from 'better-auth/types';
 import {BunSQLiteDatabase} from 'drizzle-orm/bun-sqlite';
 import {eq} from 'drizzle-orm';
 
-import {type DatabaseConfig, type ManagedDatabase, type SchemaType} from '../core/managed-database';
+import {ApiError, type DatabaseConfig, type ManagedDatabase, type SchemaType} from '../core';
 import {createDefaultMountConfig, Mount} from '../mount';
 import type {MountConfig, MountInfo} from '@workspace/lib/types';
-import {type DriveACL, type DrivePath, type DriveVisibility, isContainerType, isCollabType, isChatType} from '@workspace/lib/types/drive';
+import {
+    type DriveACL,
+    type DrivePath,
+    type DriveVisibility,
+    isChatType,
+    isCollabType,
+    isContainerType
+} from '@workspace/lib/types/drive';
 import {ChatRoom} from '../chat';
-import {canRead, canWrite, normalizeACL, filterRedundantACL} from './acl';
+import {canRead, canWrite, filterRedundantACL, normalizeACL} from './acl';
 import {getMemberships} from './membership';
 import {validateACLEmails} from '@workspace/lib/validation';
 import {extractImageDetails, getThumbnail, saveThumbnail} from '../shared/thumbnails';
@@ -19,7 +26,6 @@ import {createAsyncSingleton} from '../../utils/singleton';
 import type {Home} from '../home';
 import {SSEventType} from '@workspace/lib/types/sse';
 import {buildDriveEvent} from './sse-events';
-import {ApiError} from '../core/errors';
 
 export type {DrivePath, DriveACL} from '@workspace/lib/types/drive';
 
@@ -229,8 +235,7 @@ export default class Drive {
     }
 
     async uploadFiles(mountId: string, parentId: string, files: File[]): Promise<DrivePath[]> {
-        const results = await Promise.all(files.map(f => this.uploadFile(mountId, parentId, f)));
-        return results;
+        return await Promise.all(files.map(f => this.uploadFile(mountId, parentId, f)));
     }
 
     async deleteFolder(mountId: string, pathId: string): Promise<void> {
@@ -252,7 +257,7 @@ export default class Drive {
 
         await mount.deletePath(pathId);
         await propagateACLChange(folder, folder.acl, null);
-        
+
         if (isCollabType(folder.type) || isChatType(folder.type)) {
             this.emit(SSEventType.DRIVE_FILE_DELETED, folder);
         } else {

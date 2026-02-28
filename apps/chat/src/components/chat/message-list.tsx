@@ -1,8 +1,7 @@
-import {useEffect, useRef, type ReactNode} from 'react';
-import {EigenLoader} from "@workspace/ui";
+import {type ReactNode, useEffect, useRef} from 'react';
+import {EigenLoader, UserAvatar} from "@workspace/ui";
 import type {ChatMessage} from "@workspace/lib/types/chat";
 import {cn} from "@workspace/ui/lib/utils";
-import {UserAvatar} from "@workspace/ui";
 import {UserPublicAvatar} from "@workspace/ui/components/layout/user-public-avatar";
 import {usePublicUser} from "@workspace/lib/public";
 import {useContacts} from "@workspace/lib/contacts";
@@ -124,7 +123,7 @@ function InspectCard({target}: { target: string }) {
     );
 }
 
-export function MessageList({messages, isLoading, currentUserId, ownerId, mountId}: MessageListProps) {
+export function MessageList({messages, isLoading, ownerId, mountId}: MessageListProps) {
     const bottomRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -215,7 +214,8 @@ export function MessageList({messages, isLoading, currentUserId, ownerId, mountI
                                 {!grouped && (
                                     <div className="flex items-baseline gap-2">
                                         <span className="text-sm font-bold text-foreground">{displayName}</span>
-                                        <span className="text-xs text-muted-foreground">{formatTime(message.createdAt)}</span>
+                                        <span
+                                            className="text-xs text-muted-foreground">{formatTime(message.createdAt)}</span>
                                         <span className="text-xs text-orange-500 font-medium italic">whisper</span>
                                     </div>
                                 )}

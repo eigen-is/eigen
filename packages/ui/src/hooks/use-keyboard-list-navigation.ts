@@ -1,4 +1,4 @@
-import {useEffect, useRef, useState, RefObject, KeyboardEvent} from 'react';
+import {KeyboardEvent, RefObject, useEffect, useRef, useState} from 'react';
 import type {UseListSelectionReturn} from './use-list-selection';
 
 type UseKeyboardListNavigationOptions<T> = {
@@ -14,19 +14,21 @@ type UseKeyboardListNavigationOptions<T> = {
 }
 
 export function useKeyboardListNavigation<T>({
-    items,
-    activeId,
-    getId,
-    onSelect,
-    containerRef,
-    itemSelector = '.eigen-list-item',
-    onDelete,
-    shouldNotify,
-    selection,
-}: UseKeyboardListNavigationOptions<T>) {
+                                                 items,
+                                                 activeId,
+                                                 getId,
+                                                 onSelect,
+                                                 containerRef,
+                                                 itemSelector = '.eigen-list-item',
+                                                 onDelete,
+                                                 shouldNotify,
+                                                 selection,
+                                             }: UseKeyboardListNavigationOptions<T>) {
     const [selectedIndex, setSelectedIndex] = useState(-1);
     const getIdRef = useRef(getId);
-    useEffect(() => { getIdRef.current = getId; });
+    useEffect(() => {
+        getIdRef.current = getId;
+    });
 
     useEffect(() => {
         if (activeId && items.length > 0) {
