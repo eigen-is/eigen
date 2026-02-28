@@ -31,28 +31,32 @@ describe('SSE', () => {
     });
 
     describe('SSE Endpoint', () => {
-        test('SSE endpoint requires authentication', async () => {
+        test('requires authentication', async () => {
             const res = await ctx.app.handle(
                 new Request(`http://localhost/sse/${ctx.alice.user.id}/events`)
             );
             expect([401, 500]).toContain(res.status);
         });
 
-        test('SSE endpoint returns stream for authenticated user', async () => {
-            const res = await authedRequest(ctx.alice.user.sessionToken,
+        test('invalid session token returns error', async () => {
+            const res = await authedRequest('invalid-token',
                 `/sse/${ctx.alice.user.id}/events`);
-
-            expect(res.status).toBe(200);
-            expect(res.headers.get('content-type')).toContain('text/event-stream');
+            expect([401, 500]).toContain(res.status);
         });
 
-        test('SSE endpoint has correct headers', async () => {
+        test('returns event-stream with correct headers', async () => {
             const res = await authedRequest(ctx.alice.user.sessionToken,
                 `/sse/${ctx.alice.user.id}/events`);
 
             expect(res.status).toBe(200);
             expect(res.headers.get('content-type')).toContain('text/event-stream');
             expect(res.headers.get('cache-control')).toContain('no-cache');
+            expect(res.body).toBeDefined();
+
+            if (res.body) {
+                const reader = res.body.getReader?.();
+                if (reader) await reader.cancel();
+            }
         });
 
         test('ownerId spoofing resolves to authenticated user', async () => {
@@ -63,43 +67,6 @@ describe('SSE', () => {
 
             if (res.body) {
                 const reader = res.body.getReader?.();
-                if (reader) await reader.cancel();
-            }
-        });
-
-        test('invalid session token returns 401 or 500', async () => {
-            const res = await authedRequest('invalid-token',
-                `/sse/${ctx.alice.user.id}/events`);
-
-            expect([401, 500]).toContain(res.status);
-        });
-    });
-
-    describe('SSE Stream Content', () => {
-        test('stream connection works', async () => {
-            const res = await authedRequest(ctx.alice.user.sessionToken,
-                `/sse/${ctx.alice.user.id}/events`);
-
-            expect(res.status).toBe(200);
-            expect(res.body).toBeDefined();
-
-            if (res.body) {
-                const reader = res.body.getReader?.();
-                if (reader) await reader.cancel();
-            }
-        });
-    });
-
-    describe('SSE Event Types', () => {
-        test('SSE connection is established', async () => {
-            const sseRes = await authedRequest(ctx.alice.user.sessionToken,
-                `/sse/${ctx.alice.user.id}/events`);
-
-            expect(sseRes.status).toBe(200);
-            expect(sseRes.headers.get('content-type')).toContain('text/event-stream');
-
-            if (sseRes.body) {
-                const reader = sseRes.body.getReader?.();
                 if (reader) await reader.cancel();
             }
         });

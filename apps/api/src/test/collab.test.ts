@@ -1,20 +1,7 @@
 import {beforeAll, describe, expect, test} from 'bun:test';
-import {authedRequest, getTestContext} from './setup';
+import {authedRequest, driveGet, drivePost, getTestContext} from './setup';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
-
-function drivePost(token: string, ownerId: string, mountId: string, path: string, body: Record<string, unknown>): Promise<any> {
-    return authedRequest(token, `/drive/${ownerId}/${mountId}/${path}`, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(body),
-    }).then(r => r.json());
-}
-
-async function driveGet(token: string, ownerId: string, mountId: string, ...parts: string[]): Promise<any> {
-    const res = await authedRequest(token, `/drive/${ownerId}/${mountId}/${parts.join('/')}`);
-    return res.json();
-}
 
 describe('Collab', () => {
     let ctx: TestCtx;

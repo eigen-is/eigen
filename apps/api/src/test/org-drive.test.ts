@@ -1,46 +1,9 @@
 import {beforeAll, describe, expect, test} from 'bun:test';
-import {authedRequest, getTestContext} from './setup';
+import {authedRequest, driveGet, drivePost, drivePut, driveUpload, getTestContext} from './setup';
 import {getServerConfig} from '../lib/config/server-config';
 import {teamOwnerId} from '@workspace/lib/types';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
-
-function driveUrl(ownerId: string, mountId: string, ...parts: string[]) {
-    return `/drive/${ownerId}/${mountId}/${parts.join('/')}`;
-}
-
-async function driveGet(token: string, ownerId: string, mountId: string, ...parts: string[]): Promise<any> {
-    const res = await authedRequest(token, driveUrl(ownerId, mountId, ...parts));
-    return res.json();
-}
-
-async function drivePost(token: string, ownerId: string, mountId: string, path: string, body: Record<string, unknown>): Promise<any> {
-    const res = await authedRequest(token, `/drive/${ownerId}/${mountId}/${path}`, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(body),
-    });
-    return res.json();
-}
-
-async function drivePut(token: string, ownerId: string, mountId: string, path: string, body: Record<string, unknown>): Promise<any> {
-    const res = await authedRequest(token, `/drive/${ownerId}/${mountId}/${path}`, {
-        method: 'PUT',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(body),
-    });
-    return res.json();
-}
-
-async function driveUpload(token: string, ownerId: string, mountId: string, parentId: string, file: File): Promise<any> {
-    const formData = new FormData();
-    formData.append('file', file);
-    const res = await authedRequest(token, `/drive/${ownerId}/${mountId}/file/${parentId}`, {
-        method: 'POST',
-        body: formData,
-    });
-    return res.json();
-}
 
 describe('Team Drives', () => {
     let ctx: TestCtx;
