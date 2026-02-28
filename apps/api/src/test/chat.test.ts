@@ -1,27 +1,7 @@
 import {beforeAll, describe, expect, test} from 'bun:test';
-import {authedRequest, getTestContext} from './setup';
+import {authedRequest, chatGet, chatPost, driveGet, drivePost, getTestContext} from './setup';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
-
-function drivePost(token: string, ownerId: string, mountId: string, path: string, body: Record<string, unknown>): Promise<any> {
-    return authedRequest(token, `/drive/${ownerId}/${mountId}/${path}`, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(body),
-    }).then(r => r.json());
-}
-
-function driveGet(token: string, ownerId: string, mountId: string, ...parts: string[]): Promise<any> {
-    return authedRequest(token, `/drive/${ownerId}/${mountId}/${parts.join('/')}`).then(r => r.json());
-}
-
-function chatPost(token: string, ownerId: string, mountId: string, path: string, body: Record<string, unknown>): Promise<any> {
-    return authedRequest(token, `/chat/${ownerId}/${mountId}/${path}`, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(body),
-    }).then(r => r.json());
-}
 
 function chatPostRaw(token: string, ownerId: string, mountId: string, path: string, body: Record<string, unknown>): Promise<Response> {
     return authedRequest(token, `/chat/${ownerId}/${mountId}/${path}`, {
@@ -29,10 +9,6 @@ function chatPostRaw(token: string, ownerId: string, mountId: string, path: stri
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify(body),
     });
-}
-
-function chatGet(token: string, ownerId: string, mountId: string, path: string): Promise<any> {
-    return authedRequest(token, `/chat/${ownerId}/${mountId}/${path}`).then(r => r.json());
 }
 
 describe('Chat', () => {
@@ -356,33 +332,14 @@ describe('Chat', () => {
                 });
         });
 
-        test('/dance creates built-in emote', async () => {
-            const msg = await chatPost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
-                `${chatId}/messages`, {content: '/dance'});
-            expect(msg.type).toBe('emote');
-            expect(msg.content).toBe('$dance');
-        });
-
-        test('/cheer creates built-in emote', async () => {
-            const msg = await chatPost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
-                `${chatId}/messages`, {content: '/cheer'});
-            expect(msg.type).toBe('emote');
-            expect(msg.content).toBe('$cheer');
-        });
-
-        test('/taunt creates built-in emote', async () => {
-            const msg = await chatPost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
-                `${chatId}/messages`, {content: '/taunt'});
-            expect(msg.type).toBe('emote');
-            expect(msg.content).toBe('$taunt');
-        });
-
-        test('/greet creates built-in emote', async () => {
-            const msg = await chatPost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
-                `${chatId}/messages`, {content: '/greet'});
-            expect(msg.type).toBe('emote');
-            expect(msg.content).toBe('$greet');
-        });
+        for (const emote of ['dance', 'cheer', 'taunt', 'greet']) {
+            test(`/${emote} creates built-in emote`, async () => {
+                const msg = await chatPost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                    `${chatId}/messages`, {content: `/${emote}`});
+                expect(msg.type).toBe('emote');
+                expect(msg.content).toBe(`$${emote}`);
+            });
+        }
 
         test('/me creates custom emote', async () => {
             const msg = await chatPost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
@@ -421,33 +378,14 @@ describe('Chat', () => {
             expect(msg.content).toBe('secret hello');
         });
 
-        test('/w alias works for whisper', async () => {
-            const msg = await chatPost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
-                `${chatId}/messages`, {content: `/w ${ctx.bob.user.email} short whisper`});
-            expect(msg.type).toBe('whisper');
-            expect(msg.content).toBe('short whisper');
-        });
-
-        test('/tell alias works for whisper', async () => {
-            const msg = await chatPost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
-                `${chatId}/messages`, {content: `/tell ${ctx.bob.user.email} tell msg`});
-            expect(msg.type).toBe('whisper');
-            expect(msg.content).toBe('tell msg');
-        });
-
-        test('/t alias works for whisper', async () => {
-            const msg = await chatPost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
-                `${chatId}/messages`, {content: `/t ${ctx.bob.user.email} t msg`});
-            expect(msg.type).toBe('whisper');
-            expect(msg.content).toBe('t msg');
-        });
-
-        test('/send alias works for whisper', async () => {
-            const msg = await chatPost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
-                `${chatId}/messages`, {content: `/send ${ctx.bob.user.email} send msg`});
-            expect(msg.type).toBe('whisper');
-            expect(msg.content).toBe('send msg');
-        });
+        for (const [alias, text] of [['w', 'short whisper'], ['tell', 'tell msg'], ['t', 't msg'], ['send', 'send msg']]) {
+            test(`/${alias} alias works for whisper`, async () => {
+                const msg = await chatPost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                    `${chatId}/messages`, {content: `/${alias} ${ctx.bob.user.email} ${text}`});
+                expect(msg.type).toBe('whisper');
+                expect(msg.content).toBe(text);
+            });
+        }
 
         test('whisper to non-existent user returns error', async () => {
             const res = await authedRequest(ctx.alice.user.sessionToken,
@@ -629,33 +567,14 @@ describe('Chat', () => {
             chatId = chat.id;
         });
 
-        test('/allthethings creates emote', async () => {
-            const msg = await chatPost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
-                `${chatId}/messages`, {content: '/allthethings'});
-            expect(msg.type).toBe('emote');
-            expect(msg.content).toBe('$allthethings');
-        });
-
-        test('/facepalm creates emote', async () => {
-            const msg = await chatPost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
-                `${chatId}/messages`, {content: '/facepalm'});
-            expect(msg.type).toBe('emote');
-            expect(msg.content).toBe('$facepalm');
-        });
-
-        test('/shrug creates emote', async () => {
-            const msg = await chatPost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
-                `${chatId}/messages`, {content: '/shrug'});
-            expect(msg.type).toBe('emote');
-            expect(msg.content).toBe('$shrug');
-        });
-
-        test('/flip creates emote', async () => {
-            const msg = await chatPost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
-                `${chatId}/messages`, {content: '/flip'});
-            expect(msg.type).toBe('emote');
-            expect(msg.content).toBe('$flip');
-        });
+        for (const emote of ['allthethings', 'facepalm', 'shrug', 'flip']) {
+            test(`/${emote} creates emote`, async () => {
+                const msg = await chatPost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                    `${chatId}/messages`, {content: `/${emote}`});
+                expect(msg.type).toBe('emote');
+                expect(msg.content).toBe(`$${emote}`);
+            });
+        }
 
         test('allthethings emote shows correct first person text', async () => {
             const msgs = await chatGet(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
