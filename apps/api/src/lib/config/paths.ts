@@ -17,10 +17,10 @@ export function getUserHomePath(userId: string): string {
     return path.join(getDataRoot(), 'home', userId);
 }
 
-export function getHomeDataPath(): string {
-    return path.join(getDataRoot(), 'home');
-}
-
 export function getTeamDataPath(teamId: string): string {
     return path.join(getDataRoot(), 'team', teamId);
+}
+
+export function getOrgDataPath(orgId: string): string {
+    return path.join(getDataRoot(), 'org', orgId);
 }

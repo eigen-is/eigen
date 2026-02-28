@@ -1,14 +1,13 @@
-import {createFileRoute, redirect} from '@tanstack/react-router'
+import {createFileRoute, redirect, useNavigate} from '@tanstack/react-router'
 import {useAuth} from "@workspace/lib/auth";
 import {useChats, useCreateChat} from "@workspace/lib/chat";
-import {useRootFolder, DEFAULT_MOUNT_ID} from "@workspace/lib/drive";
+import {DEFAULT_MOUNT_ID, useRootFolder} from "@workspace/lib/drive";
 import {Button} from "@workspace/ui/components/button";
 import {MessageSquare, Plus} from "lucide-react";
 import {DriveCreateItemDialog} from "@workspace/ui/components/layout/drive/drive-create-folder-item";
-import {useState, useEffect} from "react";
+import {useEffect, useState} from "react";
 import type {DrivePath} from "@workspace/lib/types/drive";
 import {toast} from "sonner";
-import {useNavigate} from "@tanstack/react-router";
 
 function ChatIndex() {
     const {user} = useAuth();

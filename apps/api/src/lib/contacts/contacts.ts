@@ -7,18 +7,18 @@ import {v4 as uuidv4} from "uuid";
 import type {Home} from "../home";
 import {getHome} from "../home";
 import type {User} from "better-auth/types";
-import {getUserByEmail, updateUser} from "../users/users.ts";
+import {getUserByEmail, updateUser} from "../user/";
 import {LocalStorage} from "../storage";
 import {generateThumbnail} from "../shared/thumbnails";
 import {DEFAULT_LABELS, PATHS} from "../core";
 import {buildContactEvent, buildLabelEvent} from "./sse-events";
 import {SSEventType} from "@workspace/lib/types/sse";
 import {CONTACTS_DB_CONFIG} from "./db-config";
-import type {ManagedDatabase} from "../core/managed-database";
-import {ApiError} from '../core/errors';
+import type {ManagedDatabase} from "../core/";
+import {ApiError} from '../core/';
 
 export async function getContacts(user: User) {
-    const home = await getHome(user);
+    const home = await getHome(user.id);
     return home.contacts;
 }
 

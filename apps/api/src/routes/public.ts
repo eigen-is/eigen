@@ -1,5 +1,5 @@
 import Elysia, {t} from "elysia";
-import {getAvatarByEmailOrId, generateFallbackSvg, getPublicInfo} from "../lib/space/public";
+import {generateFallbackSvg, getAvatarByEmailOrId, getPublicInfo} from "../lib/space/public";
 import {waitlist} from "../lib/space/waitlist";
 
 export const publicRouter = new Elysia({name: "public"})

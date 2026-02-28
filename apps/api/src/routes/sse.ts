@@ -10,7 +10,7 @@ export const sseRouter = new Elysia({name: "sse"})
             return new Response('Unauthorized', {status: 401});
         }
 
-        const home = await getHome(user);
+        const home = await getHome(user.id);
 
         let keepalive: Timer | null = null;
         let listener: ((event: SSEvent) => void) | null = null;

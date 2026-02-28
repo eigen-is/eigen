@@ -151,7 +151,7 @@ This custom endpoint acts as the gatekeeper. It checks the ACL and creates the u
 // apps/api/src/routes/guest-auth.ts
 import { Elysia, t } from 'elysia';
 import { getHome } from '../lib/home/get-home';
-import { getUserById, getUserByEmail } from '../lib/users/users';
+import { getUserById, getUserByEmail } from '../lib/user/';
 import { ApiError } from '../lib/core/errors';
 import { drizzle } from 'drizzle-orm/bun-sqlite';
 import { getServerDataPath } from '../lib/config/paths';
@@ -290,7 +290,7 @@ Finally, update the factory to serve the `GuestHome` when applicable.
 // apps/api/src/lib/home/get-home.ts
 import type {User} from 'better-auth/types';
 import {createAsyncSingleton} from '../../utils/singleton';
-import {getUserById} from '../users/users';
+import {getUserById} from '../user/';
 import {Home} from './home';
 import {GuestHome} from './guest-home'; // <-- Add import
 

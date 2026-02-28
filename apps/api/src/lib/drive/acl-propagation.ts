@@ -1,6 +1,5 @@
 import type {DriveACL, DrivePath} from '@workspace/lib/types/drive';
-import type {User} from 'better-auth/types';
-import {getUserByEmail} from '../users/users';
+import {getUserByEmail} from '../user/';
 import {getHome} from '../home';
 
 /**
@@ -27,7 +26,7 @@ export async function propagateACLChange(path: DrivePath, oldACL: DriveACL[] | n
         try {
             const user = await getUserByEmail(email);
             if (user) {
-                const home = await getHome(user as User);
+                const home = await getHome(user.id);
                 await home.drive.receiveACLChange(path, newACL);
             }
         } catch (error) {

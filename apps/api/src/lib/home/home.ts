@@ -6,33 +6,30 @@ import {Contacts} from '../contacts/contacts';
 import Maildir from '../mail/maildir';
 import type {SSEvent} from '@workspace/lib/types/sse';
 import {createAsyncSingleton} from '../../utils/singleton';
-import {cleanupHomeFactory} from './get-home';
-import {getUserHomePath} from '../config/paths';
 import {LocalStorage} from '../storage';
 import {Drive} from '../drive';
 
 export class Home {
     public user: User;
-    public homeDir: string;
-    public fs: LocalStorage;
+    public homeDir!: string;
+    public fs!: LocalStorage;
 
     public drive!: Drive;
-    public contacts: Contacts;
-    public mail: Maildir;
+    public contacts!: Contacts;
+    public mail!: Maildir;
 
     protected initialized: boolean = false;
     protected initializationStarted: boolean = false;
     protected initWaiters: ((home: Home) => void)[] = [];
     protected timeout: Timer | undefined;
+
     private managedDatabases: Map<string, () => Promise<ManagedDatabase<any>>> = new Map();
     private sseListeners: ((event: SSEvent) => void)[] = [];
+    private cleanUp: (() => void) | null = null;
 
-    constructor(user: User) {
+    constructor(user: User, cleanUp?: () => void) {
         this.user = user;
-        this.homeDir = getUserHomePath(user.id);
-        this.fs = new LocalStorage(this.homeDir);
-        this.contacts = new Contacts(this);
-        this.mail = new Maildir(this);
+        this.cleanUp = cleanUp || null;
     }
 
     public async init() {
@@ -47,8 +44,8 @@ export class Home {
         this.initializationStarted = true;
 
         await this.initDrive();
-        await this.contacts.init();
-        await this.mail.init();
+        await this.contacts?.init();
+        await this.mail?.init();
 
         this.initialized = true;
         for (const resolve of this.initWaiters) {
@@ -63,14 +60,15 @@ export class Home {
         await this.drive.init();
     }
 
-    public async getManagedDatabase<S extends SchemaType>(
-        key: string,
-        factory: () => Promise<ManagedDatabase<S>>
-    ): Promise<ManagedDatabase<S>> {
-        if (!this.managedDatabases.has(key)) {
-            this.managedDatabases.set(key, createAsyncSingleton(factory));
+    public touch() {
+        if (this.timeout) {
+            clearTimeout(this.timeout);
         }
-        return this.managedDatabases.get(key)!() as Promise<ManagedDatabase<S>>;
+        this.timeout = setTimeout(() => {
+            this.cleanUp && this.cleanUp();
+            return this.destruct();
+        }, 1000 * 60 * 5);
+        return this;
     }
 
     public async getLocalDatabase<S extends SchemaType>(
@@ -81,15 +79,6 @@ export class Home {
         return this.getManagedDatabase(relativePath, () => openLocalDatabase(config, absolutePath));
     }
 
-    public async closeManagedDatabase(key: string): Promise<void> {
-        const getter = this.managedDatabases.get(key);
-        if (getter) {
-            const db = await getter();
-            await db.close();
-            this.managedDatabases.delete(key);
-        }
-    }
-
     public subscribeSSE(listener: (event: SSEvent) => void) {
         this.sseListeners.push(listener);
     }
@@ -98,36 +87,15 @@ export class Home {
         this.sseListeners = this.sseListeners.filter(l => l !== listener);
     }
 
-    public touch() {
-        if (this.timeout) {
-            clearTimeout(this.timeout);
-        }
-        this.timeout = setTimeout(() => {
-            cleanupHomeFactory(this.user.id);
-            this.destruct();
-        }, 1000 * 60 * 5);
-        return this;
-    }
-
     public async size() {
         const [mail, contacts, drive] = await Promise.all([
-            this.mail.size(),
-            this.contacts.size(),
+            this.mail?.size(),
+            this.contacts?.size(),
             this.drive.size('default')
         ]);
         const maxMB = 50;
         const max = maxMB * 1024 * 1024;
-        return {mail, contacts, drive, used: (mail + contacts + drive), max};
-    }
-
-    public async getZip(): Promise<{ data: ArrayBuffer, contentType: string, fileName: string }> {
-        throw new Error('Not implemented');
-    }
-
-    public notify(event: SSEvent) {
-        for (const listener of this.sseListeners) {
-            listener(event);
-        }
+        return {mail, contacts, drive, used: ((mail || 0) + (contacts || 0) + drive), max};
     }
 
     protected async destruct() {
@@ -138,13 +106,13 @@ export class Home {
         }
 
         try {
-            await this.contacts.destruct();
+            await this.contacts?.destruct();
         } catch (error) {
             console.error('Failed to destruct contacts:', error);
         }
 
         try {
-            await this.mail.destruct();
+            await this.mail?.destruct();
         } catch (error) {
             console.error('Failed to destruct mail:', error);
         }
@@ -158,5 +126,25 @@ export class Home {
             }
         }
         this.managedDatabases.clear();
+    }
+
+    public async getZip(): Promise<{ data: ArrayBuffer, contentType: string, fileName: string }> {
+        throw new Error('Not implemented');
+    }
+
+    public notify(event: SSEvent) {
+        for (const listener of this.sseListeners) {
+            listener(event);
+        }
+    }
+
+    private async getManagedDatabase<S extends SchemaType>(
+        key: string,
+        factory: () => Promise<ManagedDatabase<S>>
+    ): Promise<ManagedDatabase<S>> {
+        if (!this.managedDatabases.has(key)) {
+            this.managedDatabases.set(key, createAsyncSingleton(factory));
+        }
+        return this.managedDatabases.get(key)!() as Promise<ManagedDatabase<S>>;
     }
 }

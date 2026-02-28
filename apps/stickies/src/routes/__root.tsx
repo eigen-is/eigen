@@ -1,9 +1,8 @@
 import {createRootRouteWithContext, Outlet, useMatch} from '@tanstack/react-router'
-import {AuthContextType} from "@workspace/lib/auth";
+import {AuthContextType, useAuth} from "@workspace/lib/auth";
 import {AppShell} from "@workspace/ui/components/layout/app-shell";
 import {StickiesSidebar} from "../components/dnd-board/stickies-sidebar";
-import {useRootFolder, DEFAULT_MOUNT_ID} from '@workspace/lib/drive';
-import {useAuth} from '@workspace/lib/auth';
+import {DEFAULT_MOUNT_ID, useRootFolder} from '@workspace/lib/drive';
 import {createContext} from 'react';
 import {DriveContextType} from '@workspace/lib/types/drive';
 

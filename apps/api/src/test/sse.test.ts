@@ -9,7 +9,7 @@ function collectSSE(userId: string): { events: SSEvent[], stop: () => void } {
     const events: SSEvent[] = [];
     let home: Awaited<ReturnType<typeof getHome>> | null = null;
     const listener = (event: SSEvent) => events.push(event);
-    const setup = getHome({id: userId} as any).then(h => {
+    const setup = getHome(userId).then(h => {
         home = h;
         h.subscribeSSE(listener);
     });

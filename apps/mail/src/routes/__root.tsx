@@ -1,9 +1,8 @@
-import {createRootRouteWithContext} from '@tanstack/react-router'
-import {Outlet} from '@tanstack/react-router'
+import {createRootRouteWithContext, Outlet} from '@tanstack/react-router'
 import {AuthContextType, useAuth} from "@workspace/lib/auth";
 import {AppShell} from "@workspace/ui/components/layout/app-shell";
 import {EmailSidebar} from "../components/mail/email-sidebar";
-import {useMailboxes, useMoveEmail, useEmailById} from '@workspace/lib/mail';
+import {useEmailById, useMailboxes, useMoveEmail} from '@workspace/lib/mail';
 
 interface MyRouterContext {
     auth: AuthContextType
