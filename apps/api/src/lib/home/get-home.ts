@@ -1,27 +1,53 @@
-import type {User} from 'better-auth/types';
 import {createAsyncSingleton} from '../../utils/singleton';
-import {getUserById} from '../users/users';
-import {Home} from './home';
+import type {Home} from './home';
+import {getUserById} from "../user/user.ts";
+import {ApiError} from "../core";
+import {parseOwnerId} from "@workspace/lib/types";
+import {UserHome} from "./user-home.ts";
+import {getSyntheticTeamUser, TeamHome} from "./team-home.ts";
+import {getTeamExists} from "../team/team.ts";
 
 const homeFactories: Map<string, () => Promise<Home>> = new Map();
 
-export function getHome(user: User): Promise<Home> {
-    if (!homeFactories.has(user.id)) {
-        homeFactories.set(user.id, createAsyncSingleton(async () => {
-            const userExists = await getUserById(user.id);
-            if (!userExists) {
-                throw new Error('User not found');
+export async function getHome(ownerId: string): Promise<Home> {
+    if (!homeFactories.has(ownerId)) {
+        homeFactories.set(ownerId, createAsyncSingleton(async () => {
+            const parsed = parseOwnerId(ownerId);
+            if (!parsed) {
+                throw new ApiError(400, 'Invalid ownerId format');
             }
-
-            const home = new Home(user);
+            let home: Home;
+            switch (parsed.type) {
+                case 'user': {
+                    const user = await getUserById(parsed.id);
+                    if (!user) {
+                        throw new ApiError(404, 'User not found');
+                    }
+                    home = new UserHome(user, () => {
+                        cleanupHomeFactory(ownerId);
+                    });
+                    break;
+                }
+                case 'team': {
+                    if (!await getTeamExists(parsed.id)) {
+                        throw new ApiError(404, 'Team not found');
+                    }
+                    home = new TeamHome(getSyntheticTeamUser(ownerId), () => {
+                        cleanupHomeFactory(ownerId);
+                    });
+                    break;
+                }
+                default:
+                    throw new ApiError(400, 'Unsupported ownerId type');
+            }
             await home.init();
             return home.touch();
         }));
     }
 
-    return homeFactories.get(user.id)!();
+    return (await homeFactories.get(ownerId)!()).touch();
 }
 
-export function cleanupHomeFactory(userId: string): void {
-    homeFactories.delete(userId);
+export function cleanupHomeFactory(ownerId: string): void {
+    homeFactories.delete(ownerId);
 }

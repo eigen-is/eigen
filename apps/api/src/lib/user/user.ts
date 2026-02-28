@@ -1,7 +1,7 @@
 import {drizzle} from "drizzle-orm/bun-sqlite";
 import {account, session, user, verification} from '../../../auth-schema.ts';
 import {eq} from "drizzle-orm";
-import {getServerDataPath} from "../config/paths";
+import {getServerDataPath} from "../config/paths.ts";
 import type {User} from "better-auth/types";
 
 function getUserDb() {
@@ -21,7 +21,6 @@ export async function getUserByEmail(email: string) {
 }
 
 export async function getUserById(id: string) {
-    // copyPassword();
     const db = getUserDb();
     return await db.select().from(user).where(eq(user.id, id)).get() as User | null;
 }

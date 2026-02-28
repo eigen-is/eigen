@@ -1,9 +1,8 @@
 import {createRootRouteWithContext, Outlet} from '@tanstack/react-router'
-import {AuthContextType} from "@workspace/lib/auth";
+import {AuthContextType, useAuth} from "@workspace/lib/auth";
 import {AppShell} from "@workspace/ui/components/layout/app-shell";
 import {DriveSidebar} from '../components/drive/drive-sidebar';
-import {useRootFolder, DEFAULT_MOUNT_ID} from '@workspace/lib/drive';
-import {useAuth} from '@workspace/lib/auth';
+import {DEFAULT_MOUNT_ID, useRootFolder} from '@workspace/lib/drive';
 import {EigenLoader} from '@workspace/ui';
 import {createContext} from 'react';
 import {DriveContextType} from '@workspace/lib/types/drive';

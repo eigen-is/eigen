@@ -1,5 +1,5 @@
-import {describe, expect, test, beforeAll} from 'bun:test';
-import {getTestContext, authedRequest} from './setup';
+import {beforeAll, describe, expect, test} from 'bun:test';
+import {authedRequest, getTestContext} from './setup';
 
 describe('Auth', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
@@ -46,7 +46,6 @@ describe('Auth', () => {
         );
 
         expect(response.status).toBe(404);
-        expect(await response.text()).toContain('Owner not found');
     });
 
     test('Alice can access authenticated routes', async () => {

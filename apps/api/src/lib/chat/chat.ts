@@ -1,5 +1,5 @@
 import {randomUUID} from 'crypto';
-import {eq, desc, lt} from 'drizzle-orm';
+import {desc, eq, lt} from 'drizzle-orm';
 import type {BunSQLiteDatabase} from 'drizzle-orm/bun-sqlite';
 
 import type {DrivePath} from '@workspace/lib/types/drive';
@@ -11,9 +11,9 @@ import * as schema from './schema';
 import {buildChatEvent} from './sse-events';
 import {SSEventType} from '@workspace/lib/types/sse';
 import type {Home} from '../home';
-import {parseCommand, formatEmoteForViewer} from './commands';
+import {formatEmoteForViewer, parseCommand} from './commands';
 import {isEmailAddress} from '@workspace/lib/validation';
-import {getUserByEmail} from '../users/users';
+import {getUserByEmail} from '../user/';
 import {ApiError} from '../core/errors';
 
 export class ChatRoom {
