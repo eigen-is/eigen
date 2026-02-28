@@ -1,6 +1,6 @@
 import type {PublicUser} from "@workspace/lib/types/public";
 import {getHome} from "../home";
-import {getUserByEmail, getUserById} from "../users/users";
+import {getUserByEmail, getUserById} from "../user/";
 import type {User} from "better-auth/types";
 
 export async function getUserByEmailOrId(emailOrId: string): Promise<User | null> {
@@ -23,7 +23,7 @@ export async function getAvatarByEmailOrId(emailOrId: string): Promise<ArrayBuff
     const filename = user.image.split('/').pop();
     if (!filename) return null;
 
-    const home = await getHome(user);
+    const home = await getHome(user.id);
     const file = home.fs.file(`eigen.contacts/avatars/${filename}`);
     if (await file.exists()) {
         return file.arrayBuffer();

@@ -7,14 +7,14 @@ export const homeRouter = new Elysia({name: "home"})
 
     // Get root folder
     .get("/home/:ownerId/size", async ({user}) => {
-        const home = await getHome(user);
+        const home = await getHome(user.id);
         return await home.size();
     }, {
         auth: true
     })
     .get("/home/:ownerId/zip", async ({user, set}) => {
         try {
-            const home = await getHome(user);
+            const home = await getHome(user.id);
             const data = await home.getZip();
             set.headers['Cache-Control'] = 'public, max-age=3600';
             set.headers['Expires'] = new Date(Date.now() + 3600000).toUTCString();

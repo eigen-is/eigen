@@ -1,4 +1,4 @@
-import {SSEventType, type SSEvent, type SSEventChatData} from '@workspace/lib/types/sse';
+import {type SSEvent, type SSEventChatData, SSEventType} from '@workspace/lib/types/sse';
 
 type ChatEventType = typeof SSEventType[keyof typeof SSEventType] & `chat:${string}`;
 

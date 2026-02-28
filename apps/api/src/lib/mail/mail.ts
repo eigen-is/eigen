@@ -1,11 +1,11 @@
 import {type User} from "better-auth/types";
 import type {EmailDraft} from "@workspace/lib/types/mail";
-import {getUserByEmail} from "../users/users.ts";
+import {getUserByEmail} from "../user/";
 import {getHome} from "../home";
 import {ApiError} from '../core/errors';
 
 async function getMailClient(user: User) {
-    const home = await getHome(user);
+    const home = await getHome(user.id);
     return home.mail;
 }
 
