@@ -1,8 +1,6 @@
 import {Elysia, t} from "elysia";
 import {betterAuth} from "./auth";
 import {getSharedDrive} from "../lib/drive";
-import { ApiError } from "src/lib/core";
-import drive from "src/lib/drive/drive";
 
 export const driveRouter = new Elysia({name: "drive"})
     .use(betterAuth)

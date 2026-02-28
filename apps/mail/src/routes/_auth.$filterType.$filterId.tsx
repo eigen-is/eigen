@@ -2,6 +2,7 @@ import {createFileRoute, useNavigate} from '@tanstack/react-router';
 import {EmailDetail, EmailDetailToolbar} from "../components/mail/email-detail";
 import {EmailDraft, EmailDraftToolbar} from "../components/mail/email-draft";
 import {
+    createDraftEmail,
     useDeleteEmail,
     useEmail,
     useEmailById,
@@ -14,12 +15,11 @@ import {
 } from '@workspace/lib/mail';
 import {EmailList, EmailListToolbar} from "../components/mail/email-list";
 import {Email, EmailDraft as EmailDraftType} from "@workspace/lib/types/mail";
-import {createDraftEmail} from "@workspace/lib/mail";
 import {toast} from "sonner";
 import {useEffect, useState} from 'react';
 import {format} from "date-fns";
 import {DeleteDialog} from "@workspace/ui/components/layout/delete/delete-dialog";
-import {ColumnLayout, Column} from "@workspace/ui/components/layout/column-layout";
+import {Column, ColumnLayout} from "@workspace/ui/components/layout/column-layout";
 import {useLayout} from "@workspace/ui/components/layout/layout-context";
 
 export type MailSearchParams = {
@@ -156,7 +156,10 @@ function MailRoute() {
 
     const handleReplyEmail = async (emailId: string) => {
         const email = await getEmailById(emailId);
-        if (!email) { toast.error("Could not load email"); return; }
+        if (!email) {
+            toast.error("Could not load email");
+            return;
+        }
         handleNewDraftEmail(createDraftEmail({
             to: email.from,
             subject: `RE: ${email.subject}`,
@@ -166,7 +169,10 @@ function MailRoute() {
 
     const handleReplyAllEmail = async (emailId: string) => {
         const email = await getEmailById(emailId);
-        if (!email) { toast.error("Could not load email"); return; }
+        if (!email) {
+            toast.error("Could not load email");
+            return;
+        }
         const ccValues = Array.isArray(email.cc) ? email.cc.flatMap(c => c.value) : (email.cc?.value || []);
         handleNewDraftEmail(createDraftEmail({
             to: {value: [...(email.from?.value || []), ...ccValues], html: '', text: ''},
@@ -177,7 +183,10 @@ function MailRoute() {
 
     const handleForwardEmail = async (emailId: string) => {
         const email = await getEmailById(emailId);
-        if (!email) { toast.error("Could not load email"); return; }
+        if (!email) {
+            toast.error("Could not load email");
+            return;
+        }
         handleNewDraftEmail(createDraftEmail({
             subject: `FW: ${email.subject}`,
             text: `\n\nOn ${format(new Date(email.date), "d MMM yyyy 'at' h:mm a")} ${email.from?.value[0]?.name} <${email.from?.value[0]?.address}> wrote:\n\n${email.text}`,
@@ -188,7 +197,7 @@ function MailRoute() {
         if (mailId && mode) {
             navigate({
                 to: `/_auth/${filterType}/${filterId}`,
-                search: { mailId },
+                search: {mailId},
                 replace: true,
             });
         }

@@ -1,5 +1,5 @@
-import {describe, expect, test, beforeAll} from 'bun:test';
-import {getTestContext, authedRequest} from './setup';
+import {beforeAll, describe, expect, test} from 'bun:test';
+import {authedRequest, getTestContext} from './setup';
 import type {SSEvent} from '@workspace/lib/types/sse';
 import {getHome} from '../lib/home';
 
@@ -9,10 +9,17 @@ function collectSSE(userId: string): { events: SSEvent[], stop: () => void } {
     const events: SSEvent[] = [];
     let home: Awaited<ReturnType<typeof getHome>> | null = null;
     const listener = (event: SSEvent) => events.push(event);
-    const setup = getHome({id: userId} as any).then(h => { home = h; h.subscribeSSE(listener); });
+    const setup = getHome({id: userId} as any).then(h => {
+        home = h;
+        h.subscribeSSE(listener);
+    });
     return {
         events,
-        stop: () => { setup.then(() => { if (home) home.unsubscribeSSE(listener); }); }
+        stop: () => {
+            setup.then(() => {
+                if (home) home.unsubscribeSSE(listener);
+            });
+        }
     };
 }
 

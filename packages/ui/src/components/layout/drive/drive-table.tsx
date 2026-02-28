@@ -2,7 +2,7 @@ import React, {useCallback, useMemo, useRef, useState} from "react";
 import {Table, TableBody, TableCell, TableHead, TableHeader, TableRow} from "@workspace/ui/components/table";
 import {cn} from "@workspace/ui/lib/utils";
 import {formatDistanceToNow} from "date-fns";
-import {DrivePath, DEFAULT_MOUNT_ID} from "@workspace/lib/types";
+import {DEFAULT_MOUNT_ID, DrivePath} from "@workspace/lib/types";
 import {DriveShareSummary} from "./drive-share-summary";
 import {ArrowRight, ChevronLeft, Download, Pencil, Trash2, UserRoundPlus} from "lucide-react";
 import {DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator} from "@workspace/ui/components/dropdown-menu";
@@ -193,7 +193,8 @@ export function DriveTable({
                                 onDragEnter={() => {
                                     if (drag.isDragging) setDragOverItemId(item.id);
                                 }}
-                                onDragLeave={() => {}}
+                                onDragLeave={() => {
+                                }}
                                 onDrop={(e) => {
                                     e.preventDefault();
                                     setDragOverItemId(null);
@@ -236,7 +237,7 @@ export function DriveTable({
                                 </TableCell>
                                 <TableCell className="hidden sm:table-cell">
                                     {item.updatedAt ?
-                                        formatDistanceToNow(new Date(item.updatedAt instanceof Date ? item.updatedAt : new Date(item.updatedAt)), {addSuffix: true}) :
+                                        formatDistanceToNow(new Date(item.updatedAt), {addSuffix: true}) :
                                         'Unknown'}
                                 </TableCell>
                             </TableRow>

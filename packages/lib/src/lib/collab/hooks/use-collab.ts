@@ -22,7 +22,12 @@ export function useCollabDocumentInfo(ownerId: string, mountId: string, pathId: 
                 return {canRead: false, canWrite: false, path: null, folderContents: null};
             }
 
-            return response.data as CollabDocumentInfo || {canRead: false, canWrite: false, path: null, folderContents: null};
+            return response.data as CollabDocumentInfo || {
+                canRead: false,
+                canWrite: false,
+                path: null,
+                folderContents: null
+            };
         },
         enabled: !!ownerId && !!pathId,
         staleTime: 60 * 1000,

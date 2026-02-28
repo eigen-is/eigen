@@ -3,7 +3,7 @@
 import {HTMLAttributes} from "react"
 import {cn} from "@workspace/ui/lib/utils"
 import {Avatar, AvatarImage} from "@workspace/ui/components/avatar"
-import {getPublicAvatarUrl, API_HOST} from "@workspace/lib/api"
+import {API_HOST, getPublicAvatarUrl} from "@workspace/lib/api"
 
 export type UserAvatarProps = HTMLAttributes<HTMLDivElement> & {
     name?: string

@@ -3,7 +3,13 @@ import {cn} from '@workspace/ui/lib/utils';
 import {SearchBar} from '@workspace/ui/components/layout/search-bar/search-bar';
 import {useContacts} from '@workspace/lib/contacts';
 import {Contact} from '@workspace/lib/types/contact';
-import {DropdownMenu, DropdownMenuTrigger, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator} from '@workspace/ui/components/dropdown-menu';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger
+} from '@workspace/ui/components/dropdown-menu';
 import {ArrowUpDown, Edit, Trash2} from 'lucide-react';
 import {Button} from '@workspace/ui/components/button';
 import {EigenLoader} from '@workspace/ui/components/layout/eigen-loader';
@@ -24,7 +30,7 @@ interface ContactsListToolbarProps {
     onSortChange: (sort: 'firstName' | 'lastName') => void;
 }
 
-export function ContactsListToolbar({searchQuery, onSearchChange, sortBy, onSortChange}: ContactsListToolbarProps) {
+export function ContactsListToolbar({searchQuery, onSearchChange, onSortChange}: ContactsListToolbarProps) {
     return (
         <div className="flex items-center justify-between w-full gap-2">
             <SearchBar
@@ -66,7 +72,18 @@ interface ContactsListProps {
     onRowClick?: (contactId: string) => void;
 }
 
-export function ContactsList({filterType = 'filter', filterId = 'all', searchQuery, sortBy, activeContactId, labels = [], onEdit, onDelete, onToggleLabel, onRowClick}: ContactsListProps) {
+export function ContactsList({
+                                 filterType = 'filter',
+                                 filterId = 'all',
+                                 searchQuery,
+                                 sortBy,
+                                 activeContactId,
+                                 labels = [],
+                                 onEdit,
+                                 onDelete,
+                                 onToggleLabel,
+                                 onRowClick
+                             }: ContactsListProps) {
     const {user} = useAuth();
     const listRef = useRef<HTMLDivElement>(null);
     const contextMenu = useContextMenu<Contact>();
@@ -143,7 +160,7 @@ export function ContactsList({filterType = 'filter', filterId = 'all', searchQue
         return (
             <div className="w-full h-full flex flex-col items-center justify-center text-destructive">
                 <p>An error occurred while loading contacts.</p>
-                <p className="text-sm">{error instanceof Error ? error.message : 'Unknown error'}</p>
+                <p className="text-sm">{error.message}</p>
             </div>
         );
     }
@@ -214,12 +231,18 @@ export function ContactsList({filterType = 'filter', filterId = 'all', searchQue
                         className="min-w-[200px]"
                     >
                         {isSingleSelect && onEdit && contextMenu.item && (
-                            <DropdownMenuItem onClick={() => { onEdit(contextMenu.item!); contextMenu.close(); }}>
+                            <DropdownMenuItem onClick={() => {
+                                onEdit(contextMenu.item!);
+                                contextMenu.close();
+                            }}>
                                 <Edit className="w-4 h-4 mr-2"/> Edit
                             </DropdownMenuItem>
                         )}
                         {onDelete && !hasMe && contextItems.length > 0 && (
-                            <DropdownMenuItem onClick={() => { onDelete(contextItems); contextMenu.close(); }}>
+                            <DropdownMenuItem onClick={() => {
+                                onDelete(contextItems);
+                                contextMenu.close();
+                            }}>
                                 <Trash2 className="w-4 h-4 mr-2"/>
                                 {isSingleSelect ? 'Delete' : `Delete ${contextItems.length} contacts`}
                             </DropdownMenuItem>

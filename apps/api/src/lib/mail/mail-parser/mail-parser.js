@@ -296,7 +296,7 @@ class MailParser extends Transform {
 
     processHeaders(lines) {
         let headers = new Map();
-        for(const line of lines || []) {
+        for (const line of lines || []) {
             let key = line.key;
             let value = ((this.libmime.decodeHeader(line.line) || {}).value || '').toString().trim();
             value = Buffer.from(value, 'binary').toString();
@@ -308,7 +308,7 @@ class MailParser extends Transform {
                     if (value.value) {
                         value.value = this.libmime.decodeWords(value.value);
                     }
-                    for(const key of Object.keys((value && value.params) || {})) {
+                    for (const key of Object.keys((value && value.params) || {})) {
                         try {
                             value.params[key] = this.libmime.decodeWords(value.params[key]);
                         } catch (E) {
@@ -413,7 +413,7 @@ class MailParser extends Transform {
             'disposition-notification.ts-to'
         ];
 
-        for(const [key, value] of headers.entries()) {
+        for (const [key, value] of headers.entries()) {
             if (Array.isArray(value)) {
                 if (singleKeys.includes(key) && value.length) {
                     headers.set(key, value[value.length - 1]);
@@ -425,8 +425,8 @@ class MailParser extends Transform {
             if (key === 'list') {
                 // normalize List-* headers
                 let listValue = {};
-                for(const val of [].concat(value || [])) {
-                    for(const listKey of Object.keys(val || {})) {
+                for (const val of [].concat(value || [])) {
+                    for (const listKey of Object.keys(val || {})) {
                         listValue[listKey] = val[listKey];
                     }
                 }
@@ -518,7 +518,7 @@ class MailParser extends Transform {
             if (!address.address && /^(=\?([^?]+)\?[Bb]\?[^?]*\?=)(\s*=\?([^?]+)\?[Bb]\?[^?]*\?=)*$/.test(address.name) && !processedAddress.has(address)) {
                 let parsed = addressparser(this.libmime.decodeWords(address.name));
                 if (parsed.length) {
-                    for(const entry of parsed) {
+                    for (const entry of parsed) {
                         processedAddress.add(entry);
                         addresses.push(entry);
                     }
@@ -760,7 +760,7 @@ class MailParser extends Transform {
             }
             alternative = alternative || node.contentType === 'multipart/alternative';
             if (node.children) {
-                for(const subNode of node.children) {
+                for (const subNode of node.children) {
                     processNode(alternative, level + 1, subNode);
                 }
             }
@@ -790,7 +790,7 @@ class MailParser extends Transform {
             case 'node': {
                 let node = this.createNode(data);
                 if (node === this.tree) {
-                    for(const key of ['subject', 'references', 'date', 'to', 'from', 'to', 'cc', 'bcc', 'message-id', 'in-reply-to', 'reply-to']) {
+                    for (const key of ['subject', 'references', 'date', 'to', 'from', 'to', 'cc', 'bcc', 'message-id', 'in-reply-to', 'reply-to']) {
                         if (node.headers.has(key)) {
                             this[key.replace(/-([a-z])/g, (m, c) => c.toUpperCase())] = node.headers.get(key);
                         }
@@ -1064,7 +1064,7 @@ class MailParser extends Transform {
         });
 
         let cidList = [];
-        for(const entry of cids.values()) {
+        for (const entry of cids.values()) {
             cidList.push(entry);
         }
 
@@ -1109,7 +1109,7 @@ class MailParser extends Transform {
                     let result = [];
                     let last = 0;
 
-                    for(const link of links) {
+                    for (const link of links) {
                         if (last < link.index) {
                             let textPart = he
                                 // encode special chars

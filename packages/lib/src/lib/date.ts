@@ -9,10 +9,10 @@ export function formatDate(date: Date): string {
 export function formatDateTime(date: Date): string {
     const now = new Date();
     const isToday = date.toDateString() === now.toDateString();
-    
+
     if (isToday) {
         return formatTime(date);
     }
-    
+
     return formatDate(date);
 }

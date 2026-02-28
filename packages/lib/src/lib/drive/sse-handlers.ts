@@ -3,11 +3,11 @@ import type {SSEvent} from '@workspace/lib/types/sse';
 import {SSEventType} from '@workspace/lib/types/sse';
 import {
     invalidateAclSharedOrUnshared,
+    invalidateAclUpdated,
     invalidateItemCreated,
     invalidateItemDeleted,
-    invalidatePathRenamed,
     invalidatePathMoved,
-    invalidateAclUpdated
+    invalidatePathRenamed
 } from './hooks/use-drive';
 
 export function handleDriveSSEvent(event: SSEvent, queryClient: QueryClient): boolean {
@@ -25,7 +25,7 @@ export function handleDriveSSEvent(event: SSEvent, queryClient: QueryClient): bo
             return true;
 
         case SSEventType.DRIVE_FOLDER_CREATED:
-        case SSEventType.DRIVE_FILE_CREATED:    
+        case SSEventType.DRIVE_FILE_CREATED:
         case SSEventType.DRIVE_FILE_UPLOADED:
             invalidateItemCreated(queryClient, path.mountId, path.parentId, path.mimeType);
             return true;

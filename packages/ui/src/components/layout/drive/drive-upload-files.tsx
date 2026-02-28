@@ -3,7 +3,7 @@ import {toast} from "sonner";
 import type {DrivePath} from "@workspace/lib/types/drive";
 import {useUpload} from "../../layout/upload-provider/upload-provider";
 import {uploadWithProgress} from "../upload-provider/upload-with-progress";
-import {getDriveFileUploadUrl, getDriveFilesUploadUrl} from "@workspace/lib/api";
+import {getDriveFilesUploadUrl, getDriveFileUploadUrl} from "@workspace/lib/api";
 import {invalidateItemCreated} from "@workspace/lib/drive";
 import {useQueryClient} from "@tanstack/react-query";
 import type {UploadResult} from "./file-upload";

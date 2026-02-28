@@ -62,7 +62,7 @@ export const useInitializeBoard = () => {
                 tasksMap.set(taskId, taskYMap);
 
                 // Create columns
-                for(const [index, column] of DEFAULT_BOARD_STRUCTURE.columns.entries()) {
+                for (const [index, column] of DEFAULT_BOARD_STRUCTURE.columns.entries()) {
                     const columnId = `column-${nanoid(6)}`;
                     columnIds.push(columnId);
 

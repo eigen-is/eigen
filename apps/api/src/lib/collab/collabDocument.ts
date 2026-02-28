@@ -6,7 +6,7 @@ import * as encoding from "lib0/encoding";
 import * as decoding from "lib0/decoding";
 import type {DrivePath} from "@workspace/lib/types/drive";
 import type {Drive} from "../drive";
-import type {ManagedDatabase} from "../core/managed-database";
+import type {ManagedDatabase} from "../core";
 import {COLLAB_DB_CONFIG} from "./db-config";
 import * as schema from "./schema.ts";
 import type {User} from "better-auth/types";
@@ -62,7 +62,7 @@ class DbProvider {
 
         // apply all changes from database to document
         this.db.select().from(schema.docUpdates).then((updates) => {
-            for(const update of updates) {
+            for (const update of updates) {
                 // Apply each update to the document
                 const data = update.updateData as Uint8Array;
                 console.log(`[DbProvider] Applying update for document ${this.docId}, size: ${data.length} bytes`);
@@ -149,7 +149,7 @@ export default class CollabDocument {
     public destruct() {
         this.closed = true;
         // destroy all connections
-        for(const conn of this.connections) {
+        for (const conn of this.connections) {
             conn.close();
             this.connections.delete(conn);
         }
@@ -173,7 +173,7 @@ export default class CollabDocument {
         }
         this.connections.delete(conn);
         console.log(`User ${user.id} disconnected from document ${this.path.name}`);
-        for(const connection of this.connections) {
+        for (const connection of this.connections) {
             if (connection.readyState > 1) { // CLOSING or CLOSED
                 this.connections.delete(connection);
             }

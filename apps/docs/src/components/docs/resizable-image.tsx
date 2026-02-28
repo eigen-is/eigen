@@ -1,7 +1,12 @@
 import {useCallback} from "react";
 import {ReactEditor, useSlateStatic} from "slate-react";
 import {Transforms} from "slate";
-import {ResizableMedia, defaultStyleOptions, type MediaStyleOptions, type MediaAlignment} from "@workspace/ui/components/layout/media";
+import {
+    defaultStyleOptions,
+    type MediaAlignment,
+    type MediaStyleOptions,
+    ResizableMedia
+} from "@workspace/ui/components/layout/media";
 import {CustomElement, TextAlignment} from "./editor.types";
 
 type ResizableImageProps = {

@@ -53,7 +53,7 @@ export function TaskSettingsDialog({
             let foundColumn: Y.Map<any> | null = null;
             let taskIndex = -1;
 
-            for(const [, columnMapValue] of columnsMap) {
+            for (const [, columnMapValue] of columnsMap) {
                 if (!(columnMapValue instanceof Y.Map)) return;
                 const columnMap = columnMapValue;
                 const taskIdsArray = columnMap.get("taskIds") as Y.Array<any>;
@@ -72,10 +72,9 @@ export function TaskSettingsDialog({
             }
 
             const commentsMap = yjsDoc.getMap("comments");
-            for(const [commentId, commentMapValue] of commentsMap) {
+            for (const [commentId, commentMapValue] of commentsMap) {
                 if (!(commentMapValue instanceof Y.Map)) return;
-                const commentMap = commentMapValue;
-                if (commentMap.get("taskId") === taskId) {
+                if (commentMapValue.get("taskId") === taskId) {
                     commentsMap.delete(commentId);
                 }
             }

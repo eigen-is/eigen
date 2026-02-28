@@ -1,7 +1,7 @@
 import {useRef} from 'react';
 import {useUpload} from "../../layout/upload-provider/upload-provider";
 import {uploadWithProgress} from "../upload-provider/upload-with-progress";
-import {getDriveFileUploadUrl, getDriveFilesUploadUrl} from "@workspace/lib/api";
+import {getDriveFilesUploadUrl, getDriveFileUploadUrl} from "@workspace/lib/api";
 
 export type UploadResult = {
     success: boolean;

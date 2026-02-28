@@ -11,7 +11,7 @@ import {draftToMailOptions, sendMail} from './sender';
 import {type SSEventMailData, SSEventType} from "@workspace/lib/types/sse";
 import {LocalStorage} from "../storage";
 import {buildMailEvent} from './sse-events';
-import {ApiError} from '../core/errors';
+import {ApiError} from '../core';
 
 export default class Maildir {
     private basePath: string;
@@ -212,7 +212,7 @@ export default class Maildir {
                 const parsed = await this.parseMessage(messageId, cached.mailbox);
                 if (parsed !== null) {
                     // strip the attachment data for now
-                    for(const a of parsed.attachments) {
+                    for (const a of parsed.attachments) {
                         a.content = new Buffer(0);
                     }
 
@@ -394,7 +394,7 @@ export default class Maildir {
         try {
             const mailOptions = draftToMailOptions(mail, this.home.user.email);
             const isDev = Bun.env['PRODUCTION'] !== '1';
-            let sent = false;
+            let sent: boolean;
 
             if (isDev) {
                 console.log('[DEV MODE] Would send email:', {
@@ -528,7 +528,7 @@ export default class Maildir {
                 attributes.push('\\Inbox');
             }
             // Create the mailbox object
-            const mailbox: MaildirMailbox = {
+            return {
                 path: mailboxName,
                 name: mailboxName ? mailboxName.split('.').pop() || mailboxName : 'INBOX',
                 delimiter: '.',
@@ -536,8 +536,6 @@ export default class Maildir {
                 total: await this.db.getEmailsCount(mailboxName),
                 unread: await this.db.getEmailsCountUnread(mailboxName),
             };
-
-            return mailbox;
         } catch (error) {
             console.error(`Error getting mailbox info for ${mailboxName}:`, error);
             return null;

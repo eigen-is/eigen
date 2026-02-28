@@ -15,7 +15,7 @@ export function useContactSuggestions(
 
         const results: ContactSuggestion[] = [];
 
-        for(const contact of contacts) {
+        for (const contact of contacts) {
 
             const fullName = `${contact.firstName} ${contact.lastName}`.toLowerCase();
             const nameMatch = fullName.includes(lowerQuery);

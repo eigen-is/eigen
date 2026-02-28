@@ -53,7 +53,7 @@ export function ColumnSettingsDialog({
             if (!taskIdsArray) return;
 
             const taskIds = taskIdsArray.toArray() as string[];
-            for(const taskId of taskIds) {
+            for (const taskId of taskIds) {
                 tasksMap.delete(taskId);
             }
 

@@ -13,7 +13,7 @@ import {DriveRenameItem} from "./drive-rename-item";
 import {useMovePath} from "@workspace/lib/drive";
 import {useDriveDialogs} from "./use-drive-dialogs";
 import {getDriveDownloadUrl} from "@workspace/lib/api";
-import {ColumnLayout, Column} from "../column-layout";
+import {Column, ColumnLayout} from "../column-layout";
 import {useLayout} from "../layout-context";
 
 export type DriveLayoutProps = {
@@ -207,7 +207,8 @@ export function DriveLayout({
                     <DriveList {...listProps} />
                 </Column>
                 {showDetail && (
-                    <Column id="detail" width={isMobile ? 'flex' : '400px'} onBack={onBackToList} toolbar={detailToolbar}>
+                    <Column id="detail" width={isMobile ? 'flex' : '400px'} onBack={onBackToList}
+                            toolbar={detailToolbar}>
                         <DriveDetail {...detailProps} />
                     </Column>
                 )}
