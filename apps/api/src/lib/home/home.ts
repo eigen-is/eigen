@@ -43,7 +43,7 @@ export class Home {
         }
         this.initializationStarted = true;
 
-        await this.initDrive();
+        await this.drive?.init();
         await this.contacts?.init();
         await this.mail?.init();
 
@@ -53,11 +53,6 @@ export class Home {
         }
         this.initWaiters = [];
         return this;
-    }
-
-    protected async initDrive() {
-        this.drive = new Drive(this);
-        await this.drive.init();
     }
 
     public touch() {
