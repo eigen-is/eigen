@@ -1,5 +1,5 @@
 "use client"
-import {UserItem, UserPublicItem} from "../user-item"
+import {UserItem} from "../user-item"
 import type {DriveACL, DrivePath} from "@workspace/lib/types/drive"
 import {cn} from "@workspace/ui/lib/utils"
 import {useMemo} from "react"

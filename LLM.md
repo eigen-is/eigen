@@ -36,6 +36,7 @@ This file is the primary context source for contributors and coding agents. Keep
 │   ├── calendar/     # Calendar (port 3005)
 │   ├── docs/         # Document editor — Slate.js (port 3006)
 │   ├── stickies/     # Kanban board — Yjs (port 3007)
+│   ├── people/       # People management — org members, roles, teams (port 3009)
 │   ├── admin/        # Admin dashboard (port 3010)
 │   ├── setup/        # First-run setup wizard (port 3011)
 │   ├── index/        # Landing page (port 3000)
@@ -352,7 +353,9 @@ User Action → API mutation → home.notify(event) → SSE stream → Client ha
 | SSE Provider (toasts) | `packages/ui/src/components/layout/sse-provider/sse-provider.tsx` |
 | SSE route (backend) | `apps/api/src/routes/sse.ts` |
 
-Events are namespaced: `drive:`, `mail:`, `contacts:`. Each domain handler checks the prefix, invalidates appropriate query keys, and returns `true` if handled.
+Events are namespaced: `drive:`, `mail:`, `contacts:`, `chat:`. Each domain handler checks the prefix, invalidates appropriate query keys, and returns `true` if handled.
+
+**Note**: The People app (org members/teams) uses better-auth's organization API directly. It does not have SSE events — mutations invalidate the local cache via `onSuccess` callbacks only.
 
 ---
 
@@ -548,6 +551,11 @@ Backlog docs prefixed with `TODO-` are design proposals and planning notes; trea
 5. Auth routes under `_auth.tsx` layout
 6. Add `serve:{appname}` script to root `package.json`
 7. Add port to `vite.shared.config.ts` `APP_PORTS`
+8. Add export to `packages/lib/package.json` `exports` field
+9. Add app URL env vars to `.env.dev.local`, `.env.eigen`, `.env.docker.local`
+10. Add port to `apps/api/src/lib/auth/auth.ts` `trustedOrigins`
+11. Add app color to `packages/ui/src/styles/globals.css`
+12. Add app entry to `packages/lib/src/lib/apps.ts`
 
 ### Adding a new shared type
 1. Define in `packages/lib/src/types/[domain].ts`

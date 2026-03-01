@@ -158,6 +158,7 @@
         --app-stickies-color: var(--color-emerald-600);
         --app-stickies-light-color: var(--color-emerald-200);
         --app-chat-color: var(--color-slate-600);
+        --app-people-color: var(--color-indigo-600);
         --app-admin-color: var(--color-orange-600);
 
         scroll-behavior: smooth;
