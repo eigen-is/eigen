@@ -1,7 +1,7 @@
 "use client"
 
 import {useCallback, useEffect, useMemo, useRef, useState} from "react"
-import {UserPublicItem} from "../user-item"
+import {UserItem, UserPublicItem} from "../user-item"
 import type {DriveACL, DrivePath, DriveVisibility} from "@workspace/lib/types/drive"
 import {cn} from "@workspace/ui/lib/utils"
 import {usePublicUser} from "@workspace/lib/public"
@@ -21,6 +21,7 @@ import {ContactAutosuggest} from "../contacts/contact-autosuggest"
 import {ContactSuggestion} from "../contacts/types"
 import {useOrganization, useTeams} from "@workspace/lib/auth"
 import {parseOwnerId, teamOwnerId} from "@workspace/lib/types"
+import { UserAvatar } from "../user-avatar"
 
 export type DriveAccessListEditProps = {
     path: DrivePath
@@ -320,16 +321,16 @@ export function DriveAccessListEdit({
                         <div key={access.id} className="flex items-center justify-between">
                             {isTeam ? (
                                 <div className="flex items-center gap-3 py-1">
-                                    <AvatarIcon className="w-8 h-8">
-                                        <Users className="h-4 w-4"/>
-                                    </AvatarIcon>
+                                    <UserAvatar
+                                        email={access.id}
+                                    />
                                     <div>
                                         <p className="text-sm font-medium">{displayName}</p>
                                         <p className="text-xs text-muted-foreground">Team</p>
                                     </div>
                                 </div>
                             ) : (
-                                <UserPublicItem
+                                <UserItem
                                     email={access.id}
                                 />
                             )}
