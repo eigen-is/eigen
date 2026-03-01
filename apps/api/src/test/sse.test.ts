@@ -132,7 +132,7 @@ describe('SSE', () => {
 
             // Set ACL - share with Bob
             await ctx.alice.api.drive({ownerId: ctx.alice.user.id})({mountId: 'default'}).path({pathId: folder!.id}).acl.put({
-                acl: [{email: ctx.bob.user.email, read: true, write: false}]
+                acl: [{id: ctx.bob.user.email, read: true, write: false}]
             });
 
             await new Promise(r => setTimeout(r, 50));
@@ -149,7 +149,7 @@ describe('SSE', () => {
             const {data: folder} = await ctx.alice.api.drive({ownerId: ctx.alice.user.id})({mountId: 'default'}).folder({pathId: root!.id}).post({folderName: 'sse-shared-test'});
 
             await ctx.alice.api.drive({ownerId: ctx.alice.user.id})({mountId: 'default'}).path({pathId: folder!.id}).acl.put({
-                acl: [{email: ctx.bob.user.email, read: true, write: false}]
+                acl: [{id: ctx.bob.user.email, read: true, write: false}]
             });
 
             // Now subscribe to Bob's SSE events
@@ -159,8 +159,8 @@ describe('SSE', () => {
             // Modify ACL — add Charlie (Bob already has share, so receiveACLChange updates existing)
             await ctx.alice.api.drive({ownerId: ctx.alice.user.id})({mountId: 'default'}).path({pathId: folder!.id}).acl.put({
                 acl: [
-                    {email: ctx.bob.user.email, read: true, write: true},
-                    {email: ctx.charlie.user.email, read: true, write: false}
+                    {id: ctx.bob.user.email, read: true, write: true},
+                    {id: ctx.charlie.user.email, read: true, write: false}
                 ]
             });
 

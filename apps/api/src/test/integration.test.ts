@@ -76,7 +76,7 @@ describe('Cross-Domain Integration', () => {
                     method: 'PUT',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
-                        acl: [{email: 'bob@test.eigen.is', read: true, write: true}],
+                        acl: [{id: 'bob@test.eigen.is', read: true, write: true}],
                     }),
                 });
 
@@ -143,7 +143,7 @@ describe('Cross-Domain Integration', () => {
                     method: 'PUT',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
-                        acl: [{email: 'bob@test.eigen.is', read: true, write: false}],
+                        acl: [{id: 'bob@test.eigen.is', read: true, write: false}],
                     }),
                 });
 

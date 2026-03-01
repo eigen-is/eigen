@@ -9,7 +9,7 @@ import {
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
 import {TooltipButton} from '@workspace/ui';
-import {DocumentModeButton} from '@workspace/ui/components/layout/toolbar/DocumentModeButton';
+import {DocumentModeButton} from '@workspace/ui/components/layout/toolbar/document-mode-button';
 import * as Y from 'yjs';
 import {useNavigate} from '@tanstack/react-router';
 import {useAuth} from '@workspace/lib/auth';

@@ -47,7 +47,7 @@ import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,} from "@
 import {Input} from "@workspace/ui/components/input";
 import {printDocument} from "@workspace/ui/lib/printElement";
 import {CustomElement, CustomElementType, CustomText, TextAlignment} from "./editor.types";
-import {DocumentModeButton} from "@workspace/ui/components/layout/toolbar/DocumentModeButton";
+import {DocumentModeButton} from "@workspace/ui/components/layout/toolbar/document-mode-button";
 import {DriveCreateDoc} from "@workspace/ui/components/layout/drive/drive-create-doc";
 import {useRootFolder} from "@workspace/lib/drive";
 import {useAuth} from "@workspace/lib/auth";

@@ -1,1 +1,1 @@
-export {isEmailAddress, validateEmailTarget, validateACLEmails} from '../../validation';
+export {isEmailAddress, validateEmailTarget, validateACLEntries} from '../../validation';

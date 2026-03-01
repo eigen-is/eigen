@@ -20,7 +20,7 @@ import {
 import {ContactAutosuggest} from "../contacts/contact-autosuggest"
 import {ContactSuggestion} from "../contacts/types"
 import {useOrganization, useTeams} from "@workspace/lib/auth"
-import {parseOwnerId} from "@workspace/lib/types"
+import {parseOwnerId, teamOwnerId} from "@workspace/lib/types"
 
 export type DriveAccessListEditProps = {
     path: DrivePath
@@ -30,21 +30,17 @@ export type DriveAccessListEditProps = {
 }
 
 type DirectAccessItem = {
-    email: string
+    id: string
     read: boolean
     write: boolean
     owner: boolean
-    type?: 'user' | 'team'
-    targetId?: string
 }
 
 type InheritedAccessItem = {
-    email: string
+    id: string
     read: boolean
     write: boolean
     sourceFolderName: string
-    type?: 'user' | 'team'
-    targetId?: string
 }
 
 export function DriveAccessListEdit({
@@ -81,10 +77,8 @@ export function DriveAccessListEdit({
 
     const inheritedList = useMemo<InheritedAccessItem[]>(() => {
         if (!breadcrumb.data || breadcrumb.data.length < 2) return []
-        const ownerEmail = owner.data?.email?.toLowerCase()
-        const directEmails = new Set(directList.filter(u => !u.type).map(u => u.email.toLowerCase()))
-        const directTargetIds = new Set(directList.filter(u => u.type).map(u => `${u.type}-${u.targetId}`))
-        if (ownerEmail) directEmails.add(ownerEmail)
+        const directIds = new Set(directList.map(u => u.id.toLowerCase()))
+        if (owner.data?.email) directIds.add(owner.data.email.toLowerCase())
 
         const inherited: InheritedAccessItem[] = []
         const seenKeys = new Set<string>()
@@ -93,29 +87,15 @@ export function DriveAccessListEdit({
         for (const ancestor of [...ancestors].reverse()) {
             if (!ancestor.acl) continue
             for (const acl of ancestor.acl) {
-                if (acl.type === 'team') {
-                    const key = `${acl.type}-${acl.targetId}`
-                    if (directTargetIds.has(key) || seenKeys.has(key)) continue
-                    seenKeys.add(key)
-                    inherited.push({
-                        email: acl.email,
-                        read: acl.read,
-                        write: acl.write,
-                        sourceFolderName: ancestor.name,
-                        type: acl.type,
-                        targetId: acl.targetId,
-                    })
-                } else {
-                    const email = acl.email.toLowerCase()
-                    if (directEmails.has(email) || seenKeys.has(email)) continue
-                    seenKeys.add(email)
-                    inherited.push({
-                        email,
-                        read: acl.read,
-                        write: acl.write,
-                        sourceFolderName: ancestor.name,
-                    })
-                }
+                const key = acl.id.toLowerCase()
+                if (directIds.has(key) || seenKeys.has(key)) continue
+                seenKeys.add(key)
+                inherited.push({
+                    id: acl.id,
+                    read: acl.read,
+                    write: acl.write,
+                    sourceFolderName: ancestor.name,
+                })
             }
         }
         return inherited
@@ -124,37 +104,23 @@ export function DriveAccessListEdit({
     useEffect(() => {
         // For group-owned paths (team/org), show the group as owner
         if (isGroupOwned) {
-            const groupName = teamNameMap.get(parsedOwner.id) || parsedOwner.id
             const ownerAccess: DirectAccessItem = {
-                email: groupName,
+                id: path.ownerId,
                 read: true,
                 write: true,
                 owner: true,
-                type: parsedOwner.type as 'team',
-                targetId: parsedOwner.id,
             }
 
             const newDirectList: DirectAccessItem[] = [ownerAccess]
 
             if (path.acl && path.acl.length > 0) {
                 for (const access of path.acl) {
-                    if (access.type === 'team') {
-                        newDirectList.push({
-                            email: access.email,
-                            read: access.read,
-                            write: access.write,
-                            owner: false,
-                            type: access.type,
-                            targetId: access.targetId,
-                        })
-                    } else {
-                        newDirectList.push({
-                            email: access.email.toLowerCase(),
-                            read: access.read,
-                            write: access.write,
-                            owner: false,
-                        })
-                    }
+                    newDirectList.push({
+                        id: access.id,
+                        read: access.read,
+                        write: access.write,
+                        owner: false,
+                    })
                 }
             }
 
@@ -167,7 +133,7 @@ export function DriveAccessListEdit({
         if (!owner.data) return
 
         const ownerAccess: DirectAccessItem = {
-            email: owner.data.email || '',
+            id: owner.data.email || '',
             read: true,
             write: true,
             owner: true
@@ -177,18 +143,9 @@ export function DriveAccessListEdit({
 
         if (path.acl && path.acl.length > 0) {
             for (const access of path.acl) {
-                if (access.type === 'team') {
+                if (access.id.toLowerCase() !== owner.data?.email.toLowerCase()) {
                     newDirectList.push({
-                        email: access.email,
-                        read: access.read,
-                        write: access.write,
-                        owner: false,
-                        type: access.type,
-                        targetId: access.targetId,
-                    })
-                } else if (access.email.toLowerCase() !== owner.data?.email.toLowerCase()) {
-                    newDirectList.push({
-                        email: access.email.toLowerCase(),
+                        id: access.id,
                         read: access.read,
                         write: access.write,
                         owner: false
@@ -202,12 +159,12 @@ export function DriveAccessListEdit({
     }, [path, owner.data, isGroupOwned, parsedOwner, teamNameMap])
 
     const handleAddUser = useCallback((suggestion: ContactSuggestion) => {
-        if (directList.some(user => user.email.toLowerCase() === suggestion.email.toLowerCase())) {
+        if (directList.some(item => item.id.toLowerCase() === suggestion.email.toLowerCase())) {
             return
         }
 
         const newUser: DirectAccessItem = {
-            email: suggestion.email,
+            id: suggestion.email.toLowerCase(),
             read: true,
             write: true,
             owner: false
@@ -236,7 +193,7 @@ export function DriveAccessListEdit({
             }
         }
 
-        if (directList.some(user => user.email.toLowerCase() === email.toLowerCase())) {
+        if (directList.some(item => item.id.toLowerCase() === email.toLowerCase())) {
             return false;
         }
 
@@ -272,33 +229,30 @@ export function DriveAccessListEdit({
         }
     }, [newContactInput, processContactInput])
 
-    const handleAddTeam = useCallback((teamId: string, teamName: string) => {
-        if (directList.some(item => item.type === 'team' && item.targetId === teamId)) return
+    const handleAddTeam = useCallback((teamId: string) => {
+        const id = teamOwnerId(teamId)
+        if (directList.some(item => item.id === id)) return
         setDirectList(prev => [...prev, {
-            email: teamName,
+            id,
             read: true,
             write: true,
             owner: false,
-            type: 'team',
-            targetId: teamId,
         }])
         setPendingChanges(true)
     }, [directList])
 
-    const handlePermissionChange = useCallback((key: string, permission: string) => {
-        setDirectList(prev => prev.map(user => {
-            const itemKey = user.type === 'team'
-                ? `${user.type}-${user.targetId}` : user.email
-            if (itemKey === key) {
+    const handlePermissionChange = useCallback((id: string, permission: string) => {
+        setDirectList(prev => prev.map(item => {
+            if (item.id === id) {
                 if (permission === "remove") {
-                    return {...user, read: false, write: false}
+                    return {...item, read: false, write: false}
                 } else if (permission === "editor") {
-                    return {...user, read: true, write: true}
+                    return {...item, read: true, write: true}
                 } else if (permission === "viewer") {
-                    return {...user, read: true, write: false}
+                    return {...item, read: true, write: false}
                 }
             }
-            return user
+            return item
         }))
         setPendingChanges(true)
     }, [])
@@ -311,16 +265,13 @@ export function DriveAccessListEdit({
     const handleSave = useCallback(() => {
         const updatedAcl: DriveACL[] = []
 
-        for (const user of directList) {
-            if (!user.owner && (user.read || user.write)) {
-                const entry: DriveACL = {
-                    email: user.email,
-                    read: user.read,
-                    write: user.write,
-                }
-                if (user.type) entry.type = user.type
-                if (user.targetId) entry.targetId = user.targetId
-                updatedAcl.push(entry)
+        for (const item of directList) {
+            if (!item.owner && (item.read || item.write)) {
+                updatedAcl.push({
+                    id: item.id,
+                    read: item.read,
+                    write: item.write,
+                })
             }
         }
 
@@ -361,25 +312,25 @@ export function DriveAccessListEdit({
                 <h4 className="text-base font-medium">People with access</h4>
 
                 {directList.map((access) => {
-                    const itemKey = access.type === 'team'
-                        ? `team-${access.targetId}` : access.email
-                    const displayName = access.type === 'team'
-                        ? (teamNameMap.get(access.targetId || '') || access.email) : null
+                    const parsed = parseOwnerId(access.id)
+                    const isTeam = parsed.type === 'team'
+                    const displayName = isTeam
+                        ? (teamNameMap.get(parsed.id) || 'Team') : null
                     return (
-                        <div key={itemKey} className="flex items-center justify-between">
-                            {access.type === 'team' ? (
+                        <div key={access.id} className="flex items-center justify-between">
+                            {isTeam ? (
                                 <div className="flex items-center gap-3 py-1">
                                     <AvatarIcon className="w-8 h-8">
                                         <Users className="h-4 w-4"/>
                                     </AvatarIcon>
                                     <div>
                                         <p className="text-sm font-medium">{displayName}</p>
-                                        <p className="text-xs text-muted-foreground capitalize">{access.type}</p>
+                                        <p className="text-xs text-muted-foreground">Team</p>
                                     </div>
                                 </div>
                             ) : (
                                 <UserPublicItem
-                                    email={access.email}
+                                    email={access.id}
                                 />
                             )}
                             {access.owner ? (
@@ -389,7 +340,7 @@ export function DriveAccessListEdit({
                             ) : (
                                 <Select
                                     defaultValue={access.write ? "editor" : "viewer"}
-                                    onValueChange={(value) => handlePermissionChange(itemKey, value)}
+                                    onValueChange={(value) => handlePermissionChange(access.id, value)}
                                 >
                                     <SelectTrigger className="h-7 w-28">
                                         <SelectValue/>
@@ -406,12 +357,12 @@ export function DriveAccessListEdit({
                 })}
 
                 {inheritedList.map((access) => {
-                    const isGroup = access.type === 'team'
-                    const inheritedKey = isGroup ? `${access.type}-${access.targetId}` : access.email
-                    const inheritedName = isGroup ? (teamNameMap.get(access.targetId || '') || access.email) : null
+                    const parsed = parseOwnerId(access.id)
+                    const isTeam = parsed.type === 'team'
+                    const inheritedName = isTeam ? (teamNameMap.get(parsed.id) || 'Team') : null
                     return (
-                        <div key={inheritedKey} className="flex items-center justify-between">
-                            {isGroup ? (
+                        <div key={access.id} className="flex items-center justify-between">
+                            {isTeam ? (
                                 <div className="flex items-center gap-3 py-1">
                                     <AvatarIcon className="w-8 h-8">
                                         <Users className="h-4 w-4"/>
@@ -419,14 +370,14 @@ export function DriveAccessListEdit({
                                     <div>
                                         <p className="text-sm font-medium">{inheritedName}</p>
                                         <p className="text-xs text-muted-foreground">
-                                            <span className="capitalize">{access.type}</span> · Inherited from
+                                            Team · Inherited from
                                             "{access.sourceFolderName}"
                                         </p>
                                     </div>
                                 </div>
                             ) : (
                                 <UserPublicItem
-                                    email={access.email}
+                                    email={access.id}
                                     label={<span
                                         className="text-muted-foreground text-xs">Inherited from "{access.sourceFolderName}"</span>}
                                 />
@@ -494,8 +445,8 @@ export function DriveAccessListEdit({
                                 {teams.map((team) => (
                                     <DropdownMenuItem
                                         key={team.id}
-                                        onClick={() => handleAddTeam(team.id, team.name)}
-                                        disabled={directList.some(i => i.type === 'team' && i.targetId === team.id)}
+                                        onClick={() => handleAddTeam(team.id)}
+                                        disabled={directList.some(i => i.id === teamOwnerId(team.id))}
                                     >
                                         <Users className="h-4 w-4 mr-2"/>
                                         {team.name}

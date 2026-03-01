@@ -78,7 +78,7 @@ describe('Collab', () => {
                     method: 'PUT',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
-                        acl: [{email: 'bob@test.eigen.is', read: true, write: false, public: false}],
+                        acl: [{id: 'bob@test.eigen.is', read: true, write: false}],
                     }),
                 });
 
@@ -179,7 +179,7 @@ describe('Collab', () => {
                     method: 'PUT',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
-                        acl: [{email: 'bob@test.eigen.is', read: true, write: false, public: false}],
+                        acl: [{id: 'bob@test.eigen.is', read: true, write: false}],
                     }),
                 });
 
@@ -280,7 +280,7 @@ describe('Collab', () => {
                     method: 'PUT',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
-                        acl: [{email: 'charlie@test.eigen.is', read: true, write: false, public: false}],
+                        acl: [{id: 'charlie@test.eigen.is', read: true, write: false}],
                     }),
                 });
 
@@ -316,7 +316,7 @@ describe('Collab', () => {
                     method: 'PUT',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
-                        acl: [{email: 'bob@test.eigen.is', read: true, write: true, public: false}],
+                        acl: [{id: 'bob@test.eigen.is', read: true, write: true}],
                     }),
                 });
 
@@ -352,7 +352,7 @@ describe('Collab', () => {
                     method: 'PUT',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
-                        acl: [{email: 'bob@test.eigen.is', read: true, write: true, public: false}],
+                        acl: [{id: 'bob@test.eigen.is', read: true, write: true}],
                     }),
                 });
 
@@ -375,7 +375,7 @@ describe('Collab', () => {
                     method: 'PUT',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
-                        acl: [{email: 'bob@test.eigen.is', read: true, write: false, public: false}],
+                        acl: [{id: 'bob@test.eigen.is', read: true, write: false}],
                     }),
                 });
 
