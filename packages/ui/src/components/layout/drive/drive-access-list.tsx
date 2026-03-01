@@ -25,10 +25,11 @@ export function DriveAccessList({
     const accessList = useMemo(() => {
         if (!owner.data) return [];
 
-        const ownerAccess = {
+        const ownerAccess : DriveACL & { owner: boolean } = {
             email: owner.data.email || '',
             read: true,
             write: true,
+            targetId: undefined,
             owner: true
         }
 
@@ -41,6 +42,7 @@ export function DriveAccessList({
                         email: access.email,
                         read: access.read,
                         write: access.write,
+                        targetId: access.targetId,
                         owner: false
                     })
                 }
@@ -70,6 +72,7 @@ export function DriveAccessList({
                     <UserPublicItem
                         key={access.email}
                         email={access.email}
+                        userId={access.targetId}
                         label={access.owner ? "Owner" : (
                             <AccessLabel access={access}/>
                         )}

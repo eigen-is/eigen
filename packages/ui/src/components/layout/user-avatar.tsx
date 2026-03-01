@@ -27,7 +27,7 @@ export function UserAvatar({
 
     const avatarSrc = imageUrl
         ? `${API_HOST}/${imageUrl}`
-        : getPublicAvatarUrl(email || userId || '');
+        : getPublicAvatarUrl(userId || email || '');
 
     const sizeClasses = {
         sm: "h-6 w-6",
