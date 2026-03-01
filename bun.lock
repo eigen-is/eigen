@@ -149,6 +149,14 @@
         "@workspace/ui": "workspace:*",
       },
     },
+    "apps/people": {
+      "name": "@apps/people",
+      "version": "0.0.1",
+      "dependencies": {
+        "@workspace/lib": "workspace:*",
+        "@workspace/ui": "workspace:*",
+      },
+    },
     "apps/setup": {
       "name": "@apps/setup",
       "version": "0.0.1",
@@ -243,6 +251,8 @@
     "@apps/index": ["@apps/index@workspace:apps/index"],
 
     "@apps/mail": ["@apps/mail@workspace:apps/mail"],
+
+    "@apps/people": ["@apps/people@workspace:apps/people"],
 
     "@apps/setup": ["@apps/setup@workspace:apps/setup"],
 
