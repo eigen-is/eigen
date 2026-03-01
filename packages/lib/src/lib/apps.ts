@@ -59,13 +59,13 @@ const apps = [
         icon: 'message-square',
         description: 'Chat with your team',
     },
-    {
-        name: 'People',
-        className: 'text-indigo-600',
-        href: getPeopleAppUrl(),
-        icon: 'users-round',
-        description: 'Manage your organization',
-    },
+    // {
+    //     name: 'People',
+    //     className: 'text-indigo-600',
+    //     href: getPeopleAppUrl(),
+    //     icon: 'users-round',
+    //     description: 'Manage your organization',
+    // },
     // {
     //     name: 'Calendar',
     //     className: 'text-blue-600',
