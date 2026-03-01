@@ -15,6 +15,7 @@ const APP_PORTS: Record<string, number> = {
     docs: 3006,
     stickies: 3007,
     chat: 3008,
+    people: 3009,
     admin: 3010,
     setup: 3011,
 }

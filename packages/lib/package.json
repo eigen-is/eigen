@@ -30,6 +30,7 @@
     "./validation": "./src/validation/index.ts",
     "./sse": "./src/lib/sse/index.ts",
     "./stickies": "./src/lib/stickies/index.ts",
+    "./people": "./src/lib/people/index.ts",
     "./date": "./src/lib/date.ts",
     "./types": "./src/types/index.ts",
     "./types/drive": "./src/types/drive.ts",
@@ -39,6 +40,7 @@
     "./types/sse": "./src/types/sse.ts",
     "./types/public": "./src/types/public.ts",
     "./types/mount": "./src/types/mount.ts",
-    "./types/owner": "./src/types/owner.ts"
+    "./types/owner": "./src/types/owner.ts",
+    "./types/people": "./src/types/people.ts"
   }
 }

@@ -26,6 +26,7 @@ export const DRIVE_APP_URL = import.meta.env.VITE_APP_DRIVE_URL as string;
 export const DOCS_APP_URL = import.meta.env.VITE_APP_DOCS_URL as string;
 export const STICKIES_APP_URL = import.meta.env.VITE_APP_STICKIES_URL as string;
 export const CHAT_APP_URL = import.meta.env.VITE_APP_CHAT_URL as string;
+export const PEOPLE_APP_URL = import.meta.env.VITE_APP_PEOPLE_URL as string;
 
 const trimTrailingSlash = (url: string) => url.replace(/\/+$/, '');
 
@@ -42,6 +43,7 @@ export const getDriveAppUrl = (path?: string) => joinAppUrl(DRIVE_APP_URL, path)
 export const getDocsAppUrl = (path?: string) => joinAppUrl(DOCS_APP_URL, path);
 export const getStickiesAppUrl = (path?: string) => joinAppUrl(STICKIES_APP_URL, path);
 export const getChatAppUrl = (path?: string) => joinAppUrl(CHAT_APP_URL, path);
+export const getPeopleAppUrl = (path?: string) => joinAppUrl(PEOPLE_APP_URL, path);
 
 export const getChatRoomUrl = (ownerId: string, mountId: string, chatId: string) =>
     getChatAppUrl(`${ownerId}/${mountId}/${chatId}`);

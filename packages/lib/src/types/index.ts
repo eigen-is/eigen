@@ -6,4 +6,5 @@ export * from './mail';
 export * from './mount';
 export * from './owner';
 export * from './sse';
+export * from './people';
 export * from './public';
