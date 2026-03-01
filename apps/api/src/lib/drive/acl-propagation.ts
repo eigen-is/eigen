@@ -1,28 +1,25 @@
 import type {DriveACL, DrivePath} from '@workspace/lib/types/drive';
+import {parseOwnerId} from '@workspace/lib/types';
 import {getUserByEmail} from '../user/';
 import {getHome} from '../home';
-
-/**
- * ACL Propagation Service
- *
- * This module handles propagating ACL changes to all affected users' shared databases.
- * When a file/folder's ACL is modified, all users in both the old and new ACL need to be notified
- * so their local "shared with me" cache can be updated.
- *
- * Current implementation: Direct in-process calls (monolith architecture)
- * Future implementation: HTTP calls to distributed user servers (when scaling horizontally)
- *
- * The abstraction allows switching between implementations by only modifying this file,
- * without touching any of the Drive business logic that calls it.
- */
+import {eq} from 'drizzle-orm';
+import {teamMember as teamMemberSchema, user as userSchema} from '../../../auth-schema';
+import { getAuthDrizzleDb } from '../auth/auth';
 
 export async function propagateACLChange(path: DrivePath, oldACL: DriveACL[] | null, newACL: DriveACL[] | null): Promise<void> {
-    const users = new Set(oldACL?.map(acl => acl.email) || []);
-    for (const acl of newACL || []) {
-        users.add(acl.email);
+    const userEmails = new Set<string>();
+
+    for (const acl of [...(oldACL || []), ...(newACL || [])]) {
+        const parsed = parseOwnerId(acl.id);
+        if (parsed.type === 'user') {
+            userEmails.add(acl.id.toLowerCase());
+        } else if (parsed.type === 'team') {
+            const members = await getTeamMemberEmails(parsed.id);
+            for (const email of members) userEmails.add(email);
+        }
     }
 
-    for (const email of users) {
+    for (const email of userEmails) {
         try {
             const user = await getUserByEmail(email);
             if (user) {
@@ -32,5 +29,19 @@ export async function propagateACLChange(path: DrivePath, oldACL: DriveACL[] | n
         } catch (error) {
             console.error('Failed to propagate ACL change:', error);
         }
+    }
+}
+
+async function getTeamMemberEmails(teamId: string): Promise<string[]> {
+    try {
+        const db = getAuthDrizzleDb();
+        const members = await db.select({email: userSchema.email})
+            .from(teamMemberSchema)
+            .innerJoin(userSchema, eq(teamMemberSchema.userId, userSchema.id))
+            .where(eq(teamMemberSchema.teamId, teamId))
+            .all();
+        return members.map(m => m.email.toLowerCase());
+    } catch {
+        return [];
     }
 }

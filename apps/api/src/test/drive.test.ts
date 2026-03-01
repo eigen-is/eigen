@@ -236,7 +236,7 @@ describe('Drive', () => {
         test('Alice shares folder with Bob (read)', async () => {
             const result = await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
                 `path/${sharedFolderId}/acl`, {
-                    acl: [{email: BOB_EMAIL.toUpperCase(), read: true, write: false}],
+                    acl: [{id: BOB_EMAIL.toUpperCase(), read: true, write: false}],
                 });
             expect(result.success).toBe(true);
         });
@@ -262,7 +262,7 @@ describe('Drive', () => {
             const data = await res.json() as any[];
             const shared = data.find(item => item.id === sharedFolderId);
             expect(shared).toBeDefined();
-            expect(shared.acl).toEqual([{email: BOB_EMAIL, read: true, write: false}]);
+            expect(shared.acl).toEqual([{id: BOB_EMAIL, read: true, write: false}]);
         });
 
         test('Alice sees folder in shared-by-me', async () => {
@@ -295,19 +295,19 @@ describe('Drive', () => {
                     method: 'PUT',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
-                        acl: [{email: BOB_EMAIL, read: true, write: true}],
+                        acl: [{id: BOB_EMAIL, read: true, write: true}],
                     }),
                 });
 
             const folder = await driveGet(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
                 `path/${sharedFolderId}`);
-            expect(folder.acl).toEqual([{email: BOB_EMAIL, read: true, write: false}]);
+            expect(folder.acl).toEqual([{id: BOB_EMAIL, read: true, write: false}]);
         });
 
         test('Alice upgrades Bob to write access', async () => {
             const result = await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
                 `path/${sharedFolderId}/acl`, {
-                    acl: [{email: BOB_EMAIL, read: true, write: true}],
+                    acl: [{id: BOB_EMAIL, read: true, write: true}],
                 });
             expect(result.success).toBe(true);
         });
@@ -335,7 +335,7 @@ describe('Drive', () => {
         test('Bob can change ACL of shared item when he has write access', async () => {
             const result = await drivePut(ctx.bob.user.sessionToken, ctx.alice.user.id, aliceMountId,
                 `path/${sharedFolderId}/acl`, {
-                    acl: [{email: BOB_EMAIL, read: true, write: false}],
+                    acl: [{id: BOB_EMAIL, read: true, write: false}],
                 });
             expect(result.success).toBe(true);
         });
@@ -352,13 +352,13 @@ describe('Drive', () => {
             const data = await res.json() as any[];
             const shared = data.find(item => item.id === sharedFolderId);
             expect(shared).toBeDefined();
-            expect(shared.acl).toEqual([{email: BOB_EMAIL, read: true, write: false}]);
+            expect(shared.acl).toEqual([{id: BOB_EMAIL, read: true, write: false}]);
         });
 
         test('Alice restores Bob write access', async () => {
             const result = await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
                 `path/${sharedFolderId}/acl`, {
-                    acl: [{email: BOB_EMAIL, read: true, write: true}],
+                    acl: [{id: BOB_EMAIL, read: true, write: true}],
                 });
             expect(result.success).toBe(true);
         });
@@ -433,7 +433,7 @@ describe('Drive', () => {
         test('Alice shares parent folder with Bob (read-only)', async () => {
             const result = await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
                 `path/${inheritedParentId}/acl`, {
-                    acl: [{email: BOB_EMAIL, read: true, write: false}],
+                    acl: [{id: BOB_EMAIL, read: true, write: false}],
                 });
             expect(result.success).toBe(true);
         });
@@ -456,7 +456,7 @@ describe('Drive', () => {
         test('Alice upgrades parent ACL to write', async () => {
             const result = await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
                 `path/${inheritedParentId}/acl`, {
-                    acl: [{email: BOB_EMAIL, read: true, write: true}],
+                    acl: [{id: BOB_EMAIL, read: true, write: true}],
                 });
             expect(result.success).toBe(true);
         });
@@ -497,14 +497,14 @@ describe('Drive', () => {
 
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
                 `path/${parentId}/acl`, {
-                    acl: [{email: BOB_EMAIL, read: true, write: false}],
+                    acl: [{id: BOB_EMAIL, read: true, write: false}],
                 });
         });
 
         test('Bob inherits read from parent even when child has ACL for another user', async () => {
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
                 `path/${childFolderId}/acl`, {
-                    acl: [{email: CHARLIE_EMAIL, read: true, write: true}],
+                    acl: [{id: CHARLIE_EMAIL, read: true, write: true}],
                 });
 
             const read = await driveGet(ctx.bob.user.sessionToken, ctx.alice.user.id, aliceMountId,
@@ -516,8 +516,8 @@ describe('Drive', () => {
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
                 `path/${childFolderId}/acl`, {
                     acl: [
-                        {email: CHARLIE_EMAIL, read: true, write: true},
-                        {email: BOB_EMAIL, read: true, write: true},
+                        {id: CHARLIE_EMAIL, read: true, write: true},
+                        {id: BOB_EMAIL, read: true, write: true},
                     ],
                 });
 
@@ -529,7 +529,7 @@ describe('Drive', () => {
         test('Removing Bob from child ACL still inherits parent read', async () => {
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
                 `path/${childFolderId}/acl`, {
-                    acl: [{email: CHARLIE_EMAIL, read: true, write: true}],
+                    acl: [{id: CHARLIE_EMAIL, read: true, write: true}],
                 });
 
             const read = await driveGet(ctx.bob.user.sessionToken, ctx.alice.user.id, aliceMountId,
@@ -614,9 +614,9 @@ describe('Drive', () => {
 
         test('Read in A + write in B: Bob can read A, write B, write C', async () => {
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
-                `path/${folderA}/acl`, {acl: [{email: BOB_EMAIL, read: true, write: false}]});
+                `path/${folderA}/acl`, {acl: [{id: BOB_EMAIL, read: true, write: false}]});
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
-                `path/${folderB}/acl`, {acl: [{email: BOB_EMAIL, read: true, write: true}]});
+                `path/${folderB}/acl`, {acl: [{id: BOB_EMAIL, read: true, write: true}]});
 
             const readA = await driveGet(ctx.bob.user.sessionToken, ctx.alice.user.id, aliceMountId,
                 `path/${folderA}/permissions/read`);
@@ -657,9 +657,9 @@ describe('Drive', () => {
 
         test('Adding read-only ACL on C does not downgrade inherited write from B', async () => {
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
-                `path/${folderA}/acl`, {acl: [{email: BOB_EMAIL, read: true, write: false}]});
+                `path/${folderA}/acl`, {acl: [{id: BOB_EMAIL, read: true, write: false}]});
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
-                `path/${folderC}/acl`, {acl: [{email: BOB_EMAIL, read: true, write: false}]});
+                `path/${folderC}/acl`, {acl: [{id: BOB_EMAIL, read: true, write: false}]});
 
             const writeC = await driveGet(ctx.bob.user.sessionToken, ctx.alice.user.id, aliceMountId,
                 `path/${folderC}/permissions/write`);
@@ -757,7 +757,7 @@ describe('Drive', () => {
         test('breadcrumb respects permissions on shared paths', async () => {
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
                 `path/${nestedFolderId}/acl`, {
-                    acl: [{email: 'bob@test.eigen.is', read: true, write: false}],
+                    acl: [{id: 'bob@test.eigen.is', read: true, write: false}],
                 });
 
             const breadcrumb = await driveGet(ctx.bob.user.sessionToken, ctx.alice.user.id, aliceMountId,
@@ -782,7 +782,7 @@ describe('Drive', () => {
                     method: 'PUT',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
-                        acl: [{email: BOB_EMAIL, read: true, write: false}],
+                        acl: [{id: BOB_EMAIL, read: true, write: false}],
                     }),
                 });
             expect(res.status).toBe(200);
@@ -794,7 +794,7 @@ describe('Drive', () => {
                     method: 'PUT',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
-                        acl: [{email: 'not-an-email', read: true, write: false}],
+                        acl: [{id: 'not-an-email', read: true, write: false}],
                     }),
                 });
             expect(res.status).toBe(400);
@@ -806,7 +806,7 @@ describe('Drive', () => {
                     method: 'PUT',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
-                        acl: [{email: 'justausername', read: true, write: false}],
+                        acl: [{id: 'justausername', read: true, write: false}],
                     }),
                 });
             expect(res.status).toBe(400);
@@ -818,7 +818,7 @@ describe('Drive', () => {
                     method: 'PUT',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
-                        acl: [{email: '', read: true, write: false}],
+                        acl: [{id: '', read: true, write: false}],
                     }),
                 });
             expect(res.status).toBe(400);
@@ -831,8 +831,8 @@ describe('Drive', () => {
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
                         acl: [
-                            {email: BOB_EMAIL, read: true, write: false},
-                            {email: 'bad-entry', read: true, write: false},
+                            {id: BOB_EMAIL, read: true, write: false},
+                            {id: 'bad-entry', read: true, write: false},
                         ],
                     }),
                 });
@@ -845,7 +845,7 @@ describe('Drive', () => {
                     method: 'PUT',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
-                        acl: [{email: BOB_EMAIL, read: true, write: true}],
+                        acl: [{id: BOB_EMAIL, read: true, write: true}],
                     }),
                 });
 
@@ -854,7 +854,7 @@ describe('Drive', () => {
                     method: 'PUT',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
-                        acl: [{email: 'garbage', read: true, write: true}],
+                        acl: [{id: 'garbage', read: true, write: true}],
                     }),
                 });
 
@@ -862,7 +862,7 @@ describe('Drive', () => {
                 `path/${folderId}`);
             expect(path.acl).toBeDefined();
             expect(path.acl.length).toBe(1);
-            expect(path.acl[0].email).toBe(BOB_EMAIL.toLowerCase());
+            expect(path.acl[0].id).toBe(BOB_EMAIL.toLowerCase());
         });
     });
 
@@ -913,9 +913,9 @@ describe('Drive', () => {
 
         test('deep inheritance: read at A, write at C, file in D inherits write', async () => {
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
-                `path/${folderA}/acl`, {acl: [{email: BOB_EMAIL, read: true, write: false}]});
+                `path/${folderA}/acl`, {acl: [{id: BOB_EMAIL, read: true, write: false}]});
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
-                `path/${folderC}/acl`, {acl: [{email: BOB_EMAIL, read: true, write: true}]});
+                `path/${folderC}/acl`, {acl: [{id: BOB_EMAIL, read: true, write: true}]});
 
             const readA = await driveGet(ctx.bob.user.sessionToken, ctx.alice.user.id, aliceMountId,
                 `path/${folderA}/permissions/read`);
@@ -941,9 +941,9 @@ describe('Drive', () => {
 
             // Set: A(read-only) -> B(no ACL) -> C(write) -> D(no ACL)
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
-                `path/${folderA}/acl`, {acl: [{email: BOB_EMAIL, read: true, write: false}]});
+                `path/${folderA}/acl`, {acl: [{id: BOB_EMAIL, read: true, write: false}]});
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
-                `path/${folderC}/acl`, {acl: [{email: BOB_EMAIL, read: true, write: true}]});
+                `path/${folderC}/acl`, {acl: [{id: BOB_EMAIL, read: true, write: true}]});
 
             // Bob should have write at C and below despite read-only at A
             const writeC = await driveGet(ctx.bob.user.sessionToken, ctx.alice.user.id, aliceMountId,
@@ -970,11 +970,11 @@ describe('Drive', () => {
 
             // Bob: read at A
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
-                `path/${folderA}/acl`, {acl: [{email: BOB_EMAIL, read: true, write: false}]});
+                `path/${folderA}/acl`, {acl: [{id: BOB_EMAIL, read: true, write: false}]});
 
             // Charlie: write at B
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
-                `path/${folderB}/acl`, {acl: [{email: CHARLIE_EMAIL, read: true, write: true}]});
+                `path/${folderB}/acl`, {acl: [{id: CHARLIE_EMAIL, read: true, write: true}]});
 
             // Verify Bob has read-only throughout
             const bobReadD = await driveGet(ctx.bob.user.sessionToken, ctx.alice.user.id, aliceMountId,
@@ -1004,9 +1004,9 @@ describe('Drive', () => {
 
             // Bob: write at A, read-only at B (additive model - should have write from A)
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
-                `path/${folderA}/acl`, {acl: [{email: BOB_EMAIL, read: true, write: true}]});
+                `path/${folderA}/acl`, {acl: [{id: BOB_EMAIL, read: true, write: true}]});
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
-                `path/${folderB}/acl`, {acl: [{email: BOB_EMAIL, read: true, write: false}]});
+                `path/${folderB}/acl`, {acl: [{id: BOB_EMAIL, read: true, write: false}]});
 
             const writeB = await driveGet(ctx.bob.user.sessionToken, ctx.alice.user.id, aliceMountId,
                 `path/${folderB}/permissions/write`);
@@ -1019,12 +1019,12 @@ describe('Drive', () => {
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
                 `path/${folderA}/acl`, {
                     acl: [
-                        {email: BOB_EMAIL, read: true, write: true},
-                        {email: CHARLIE_EMAIL, read: true, write: false}
+                        {id: BOB_EMAIL, read: true, write: true},
+                        {id: CHARLIE_EMAIL, read: true, write: false}
                     ]
                 });
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
-                `path/${folderB}/acl`, {acl: [{email: CHARLIE_EMAIL, read: true, write: true}]});
+                `path/${folderB}/acl`, {acl: [{id: CHARLIE_EMAIL, read: true, write: true}]});
 
             const charlieWriteB = await driveGet(ctx.charlie.user.sessionToken, ctx.alice.user.id, aliceMountId,
                 `path/${folderB}/permissions/write`);
@@ -1065,7 +1065,7 @@ describe('Drive', () => {
         test('owner always has full permissions regardless of ACL', async () => {
             // Give Bob write access, then check Alice (owner) still has full access
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
-                `path/${boundaryFolder}/acl`, {acl: [{email: BOB_EMAIL, read: true, write: true}]});
+                `path/${boundaryFolder}/acl`, {acl: [{id: BOB_EMAIL, read: true, write: true}]});
 
             const aliceRead = await driveGet(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
                 `path/${boundaryFolder}/permissions/read`);
@@ -1087,7 +1087,7 @@ describe('Drive', () => {
                     method: 'PUT',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
-                        acl: [{email: CHARLIE_EMAIL, read: true, write: false}],
+                        acl: [{id: CHARLIE_EMAIL, read: true, write: false}],
                     }),
                 });
             // TODO: This should be 403, but API has security vulnerability allowing ACL modification without write access
@@ -1100,7 +1100,7 @@ describe('Drive', () => {
                     method: 'PUT',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
-                        acl: [{email: BOB_EMAIL, read: true, write: false}],
+                        acl: [{id: BOB_EMAIL, read: true, write: false}],
                     }),
                 });
             expect(res.status).toBe(200);
@@ -1121,7 +1121,7 @@ describe('Drive', () => {
                     method: 'PUT',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
-                        acl: [{email: CHARLIE_EMAIL, read: true, write: true}],
+                        acl: [{id: CHARLIE_EMAIL, read: true, write: true}],
                     }),
                 });
             // TODO: This should be 403, but API has security vulnerability allowing ACL modification without write access
@@ -1139,7 +1139,7 @@ describe('Drive', () => {
 
         test('ACL entries are case-insensitive for emails', async () => {
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
-                `path/${boundaryFolder}/acl`, {acl: [{email: BOB_EMAIL.toUpperCase(), read: true, write: false}]});
+                `path/${boundaryFolder}/acl`, {acl: [{id: BOB_EMAIL.toUpperCase(), read: true, write: false}]});
 
             const bobRead = await driveGet(ctx.bob.user.sessionToken, ctx.alice.user.id, aliceMountId,
                 `path/${boundaryFolder}/permissions/read`);
@@ -1165,7 +1165,7 @@ describe('Drive', () => {
             // Set private ACL (Bob denied) but public-read visibility
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
                 `path/${visibilityFolder}/acl`, {
-                    acl: [{email: BOB_EMAIL, read: false, write: false}],
+                    acl: [{id: BOB_EMAIL, read: false, write: false}],
                     visibility: 'public-read'
                 });
 
@@ -1180,7 +1180,7 @@ describe('Drive', () => {
         test('public-write overrides private ACL for both read and write', async () => {
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
                 `path/${visibilityFolder}/acl`, {
-                    acl: [{email: BOB_EMAIL, read: false, write: false}],
+                    acl: [{id: BOB_EMAIL, read: false, write: false}],
                     visibility: 'public-write'
                 });
 
@@ -1229,7 +1229,7 @@ describe('Drive', () => {
             // Bob: write ACL + public-read visibility = should get write
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
                 `path/${visibilityFolder}/acl`, {
-                    acl: [{email: BOB_EMAIL, read: true, write: true}],
+                    acl: [{id: BOB_EMAIL, read: true, write: true}],
                     visibility: 'public-read'
                 });
 
@@ -1244,7 +1244,7 @@ describe('Drive', () => {
         test('non-existent user in ACL is ignored but visibility still works', async () => {
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
                 `path/${visibilityFolder}/acl`, {
-                    acl: [{email: 'nonexistent@test.com', read: true, write: false}],
+                    acl: [{id: 'nonexistent@test.com', read: true, write: false}],
                     visibility: 'public-read'
                 });
 
@@ -1275,8 +1275,8 @@ describe('Drive', () => {
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
                         acl: [
-                            {email: BOB_EMAIL, read: true, write: false},
-                            {email: 'invalid-email', read: true, write: false}
+                            {id: BOB_EMAIL, read: true, write: false},
+                            {id: 'invalid-email', read: true, write: false}
                         ],
                     }),
                 });
@@ -1295,15 +1295,15 @@ describe('Drive', () => {
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
                 `path/${aclFolder}/acl`, {
                     acl: [
-                        {email: BOB_EMAIL, read: true, write: false},
-                        {email: CHARLIE_EMAIL, read: true, write: true}
+                        {id: BOB_EMAIL, read: true, write: false},
+                        {id: CHARLIE_EMAIL, read: true, write: true}
                     ],
                 });
 
             // Remove only Bob
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
                 `path/${aclFolder}/acl`, {
-                    acl: [{email: CHARLIE_EMAIL, read: true, write: true}],
+                    acl: [{id: CHARLIE_EMAIL, read: true, write: true}],
                 });
 
             const bobRead = await driveGet(ctx.bob.user.sessionToken, ctx.alice.user.id, aliceMountId,
@@ -1318,7 +1318,7 @@ describe('Drive', () => {
             // Give Bob write access
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
                 `path/${aclFolder}/acl`, {
-                    acl: [{email: BOB_EMAIL, read: true, write: true}],
+                    acl: [{id: BOB_EMAIL, read: true, write: true}],
                 });
 
             // Bob creates a folder
@@ -1346,7 +1346,7 @@ describe('Drive', () => {
             // Set parent ACL
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
                 `path/${aclFolder}/acl`, {
-                    acl: [{email: BOB_EMAIL, read: true, write: false}],
+                    acl: [{id: BOB_EMAIL, read: true, write: false}],
                 });
 
             // Verify Bob can read subfolder through inheritance
@@ -1480,9 +1480,9 @@ describe('Drive', () => {
         test('additive model: read at parent + write at child = write at child', async () => {
             // Bob: read at A, write at B
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
-                `path/${folderA}/acl`, {acl: [{email: BOB_EMAIL, read: true, write: false}]});
+                `path/${folderA}/acl`, {acl: [{id: BOB_EMAIL, read: true, write: false}]});
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
-                `path/${folderB}/acl`, {acl: [{email: BOB_EMAIL, read: true, write: true}]});
+                `path/${folderB}/acl`, {acl: [{id: BOB_EMAIL, read: true, write: true}]});
 
             const readA = await driveGet(ctx.bob.user.sessionToken, ctx.alice.user.id, aliceMountId,
                 `path/${folderA}/permissions/read`);
@@ -1505,9 +1505,9 @@ describe('Drive', () => {
 
             // Charlie: write at A, read at B
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
-                `path/${folderA}/acl`, {acl: [{email: CHARLIE_EMAIL, read: true, write: true}]});
+                `path/${folderA}/acl`, {acl: [{id: CHARLIE_EMAIL, read: true, write: true}]});
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
-                `path/${folderB}/acl`, {acl: [{email: CHARLIE_EMAIL, read: true, write: false}]});
+                `path/${folderB}/acl`, {acl: [{id: CHARLIE_EMAIL, read: true, write: false}]});
 
             const writeA = await driveGet(ctx.charlie.user.sessionToken, ctx.alice.user.id, aliceMountId,
                 `path/${folderA}/permissions/write`);
@@ -1542,7 +1542,7 @@ describe('Drive', () => {
         test('additive model: owner always has full access regardless of ACL', async () => {
             // Give Bob write access to A
             await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
-                `path/${folderA}/acl`, {acl: [{email: BOB_EMAIL, read: true, write: true}]});
+                `path/${folderA}/acl`, {acl: [{id: BOB_EMAIL, read: true, write: true}]});
 
             // Alice (owner) should still have full access
             const aliceReadA = await driveGet(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,

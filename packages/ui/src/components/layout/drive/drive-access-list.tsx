@@ -26,10 +26,9 @@ export function DriveAccessList({
         if (!owner.data) return [];
 
         const ownerAccess : DriveACL & { owner: boolean } = {
-            email: owner.data.email || '',
+            id: owner.data.email || '',
             read: true,
             write: true,
-            targetId: undefined,
             owner: true
         }
 
@@ -37,12 +36,11 @@ export function DriveAccessList({
 
         if (path.acl && path.acl.length > 0) {
             for (const access of path.acl) {
-                if (access.email !== owner.data?.email) {
+                if (access.id.toLowerCase() !== owner.data?.email.toLowerCase()) {
                     list.push({
-                        email: access.email,
+                        id: access.id,
                         read: access.read,
                         write: access.write,
-                        targetId: access.targetId,
                         owner: false
                     })
                 }
@@ -70,9 +68,8 @@ export function DriveAccessList({
             <div className="space-y-2">
                 {accessList.map((access) => (
                     <UserPublicItem
-                        key={access.email}
-                        email={access.email}
-                        userId={access.targetId}
+                        key={access.id}
+                        email={access.id}
                         label={access.owner ? "Owner" : (
                             <AccessLabel access={access}/>
                         )}
