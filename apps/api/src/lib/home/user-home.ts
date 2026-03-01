@@ -4,6 +4,7 @@ import {getUserHomePath} from "../config/paths.ts";
 import {LocalStorage} from "../storage";
 import {Contacts} from "../contacts/contacts.ts";
 import Maildir from "../mail/maildir.ts";
+import {Drive} from "../drive";
 
 export class UserHome extends Home {
     constructor(user: User, cleanUp?: () => void) {
@@ -11,7 +12,9 @@ export class UserHome extends Home {
         this.user = user;
         this.homeDir = getUserHomePath(user.id);
         this.fs = new LocalStorage(this.homeDir);
+        
         this.contacts = new Contacts(this);
         this.mail = new Maildir(this);
+        this.drive = new Drive(this);
     }
 }

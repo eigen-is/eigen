@@ -5,6 +5,7 @@ import {LocalStorage} from '../storage';
 import {Home} from './home';
 import {parseOwnerId} from "@workspace/lib/types";
 import {ApiError} from "../core";
+import { Drive } from '../drive';
 
 export function getSyntheticTeamUser(ownerId: string): User {
     const parsed = parseOwnerId(ownerId);
@@ -32,5 +33,7 @@ export class TeamHome extends Home {
         this.teamId = parsed.id;
         this.homeDir = getTeamDataPath(parsed.id);
         this.fs = new LocalStorage(this.homeDir);
+
+        this.drive = new Drive(this);
     }
 }
