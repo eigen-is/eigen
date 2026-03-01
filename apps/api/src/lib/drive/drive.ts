@@ -16,7 +16,7 @@ import {
 import {ChatRoom} from '../chat';
 import {canRead, canWrite, filterRedundantACL, normalizeACL} from './acl';
 import {getMemberships} from './membership';
-import {validateACLEmails} from '@workspace/lib/validation';
+import {validateACLEntries} from '@workspace/lib/validation';
 import {extractImageDetails, getThumbnail, saveThumbnail} from '../shared/thumbnails';
 import CollabDocument from '../collab/collabDocument';
 import {getSharedDatabase} from './shared';
@@ -416,7 +416,7 @@ export default class Drive {
         }
 
         if (acl && acl.length > 0) {
-            const aclError = validateACLEmails(acl);
+            const aclError = validateACLEntries(acl);
             if (aclError) throw new ApiError(400, aclError);
         }
 
@@ -540,7 +540,7 @@ export default class Drive {
     }
 
     async receiveACLChange(path: DrivePath, newACL: DriveACL[] | null): Promise<void> {
-        if (newACL === null || !newACL.find(acl => acl.email.toLowerCase() === this.owner.email.toLowerCase())) {
+        if (newACL === null || !newACL.find(acl => acl.id.toLowerCase() === this.owner.email.toLowerCase())) {
             this.sharedDb.delete(sharedSchema.sharedPaths)
                 .where(eq(sharedSchema.sharedPaths.id, path.id))
                 .run();

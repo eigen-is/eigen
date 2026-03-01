@@ -30,7 +30,7 @@ export function DriveShareSummary({
         for (const ancestor of breadcrumbData) {
             if (!ancestor.acl) continue;
             for (const acl of ancestor.acl) {
-                const key = acl.email.toLowerCase();
+                const key = acl.id.toLowerCase();
                 if (seen.has(key)) continue;
                 seen.add(key);
                 result.push(acl);
@@ -52,15 +52,8 @@ export function DriveShareSummary({
     const allEntries = useMemo(() => {
         const seen = new Set<string>();
         const result: DriveACL[] = [];
-        for (const acl of (path.acl || [])) {
-            const key = acl.type === 'team' ? `team:${acl.targetId}` : acl.email.toLowerCase();
-            if (!seen.has(key)) {
-                seen.add(key);
-                result.push(acl);
-            }
-        }
-        for (const acl of (ancestorAcl || [])) {
-            const key = acl.type === 'team' ? `team:${acl.targetId}` : acl.email.toLowerCase();
+        for (const acl of [...(path.acl || []), ...(ancestorAcl || [])]) {
+            const key = acl.id.toLowerCase();
             if (!seen.has(key)) {
                 seen.add(key);
                 result.push(acl);
@@ -121,9 +114,10 @@ export function DriveShareSummary({
                             <TooltipContent>Anyone with the link can access</TooltipContent>
                         </Tooltip>
                     )}
-                    {allEntries.slice(0, isPublic ? 2 : 3).map((access, index) => (
-                        access.type === 'team' ? (
-                            <Tooltip key={`team:${access.targetId}`} delayDuration={300}>
+                    {allEntries.slice(0, isPublic ? 2 : 3).map((access, index) => {
+                        const parsed = parseOwnerId(access.id);
+                        return parsed.type === 'team' ? (
+                            <Tooltip key={access.id} delayDuration={300}>
                                 <TooltipTrigger asChild>
                                     <span
                                         className={cn(
@@ -134,18 +128,18 @@ export function DriveShareSummary({
                                         <Users className="h-3 w-3 text-muted-foreground"/>
                                     </span>
                                 </TooltipTrigger>
-                                <TooltipContent>{teamNameMap.get(access.targetId || '') || 'Team'}</TooltipContent>
+                                <TooltipContent>{teamNameMap.get(parsed.id) || 'Team'}</TooltipContent>
                             </Tooltip>
                         ) : (
                             <UserPublicAvatar
-                                key={access.email}
-                                email={access.email}
+                                key={access.id}
+                                email={access.id}
                                 size="sm"
                                 className="-ml-4 position-relative"
                                 style={{zIndex: (isPublic ? 2 : 1) + index}}
                             />
-                        )
-                    ))}
+                        );
+                    })}
                     {allEntries.length > (isPublic ? 2 : 3) && (
                         <span className="text-xs text-muted-foreground ml-1">
                             +{allEntries.length - (isPublic ? 2 : 3)}

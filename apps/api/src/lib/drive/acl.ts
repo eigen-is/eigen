@@ -80,15 +80,15 @@ async function matchesACL(
         const hasPermission = permission === 'read' ? entry.read : entry.write;
         if (!hasPermission) continue;
 
-        // Direct user match by email
-        if ((!entry.type || entry.type === 'user') && entry.email.toLowerCase() === user.email.toLowerCase()) {
+        const parsed = parseOwnerId(entry.id);
+
+        if (parsed.type === 'user' && entry.id.toLowerCase() === user.email.toLowerCase()) {
             return true;
         }
 
-        // Team ACL: check if user is a member of the team
-        if (entry.type === 'team' && entry.targetId && getMemberships) {
+        if (parsed.type === 'team' && getMemberships) {
             const memberships = await getMemberships(user.id);
-            if (memberships.teamIds.includes(entry.targetId)) return true;
+            if (memberships.teamIds.includes(parsed.id)) return true;
         }
     }
     return false;
@@ -99,10 +99,13 @@ export function normalizeACL(acl: DriveACL[] | null): DriveACL[] | null {
         return null;
     }
 
-    return acl.map(a => ({
-        ...a,
-        email: a.email.toLowerCase()
-    }));
+    return acl.map(a => {
+        const parsed = parseOwnerId(a.id);
+        return {
+            ...a,
+            id: parsed.type === 'user' ? a.id.toLowerCase() : a.id,
+        };
+    });
 }
 
 /**
@@ -114,65 +117,40 @@ export async function filterRedundantACL(
     path: DrivePath,
     getPath: PathGetter,
 ): Promise<{ filtered: DriveACL[], removed: DriveACL[] }> {
-    // Collect inherited ACL from ancestors
-    const inheritedUserEmails = new Map<string, { read: boolean, write: boolean }>();
-    const inheritedTargets = new Map<string, { read: boolean, write: boolean }>();
+    const inherited = new Map<string, { read: boolean, write: boolean }>();
 
     let current = path.parentId ? await getPath(path.parentId) : null;
     while (current) {
         if (current.acl) {
             for (const entry of current.acl) {
-                if (entry.type === 'team') {
-                    const key = `team:${entry.targetId}`;
-                    if (!inheritedTargets.has(key)) {
-                        inheritedTargets.set(key, {read: entry.read, write: entry.write});
-                    }
-                } else {
-                    const email = entry.email.toLowerCase();
-                    if (!inheritedUserEmails.has(email)) {
-                        inheritedUserEmails.set(email, {read: entry.read, write: entry.write});
-                    }
+                const key = entry.id.toLowerCase();
+                if (!inherited.has(key)) {
+                    inherited.set(key, {read: entry.read, write: entry.write});
                 }
             }
         }
         current = current.parentId ? await getPath(current.parentId) : null;
     }
 
-    // Check ownership grants (team members automatically have full access)
-    const parsed = parseOwnerId(path.ownerId);
-    const ownerGrantsAll = parsed.type === 'team';
+    const ownerParsed = parseOwnerId(path.ownerId);
 
     const filtered: DriveACL[] = [];
     const removed: DriveACL[] = [];
 
     for (const entry of acl) {
         let isRedundant = false;
+        const entryParsed = parseOwnerId(entry.id);
 
-        if (entry.type === 'team') {
-            const key = `team:${entry.targetId}`;
+        // Team ACL on a path owned by the same team is always redundant
+        if (ownerParsed.type === 'team' && entryParsed.type === 'team' && entryParsed.id === ownerParsed.id) {
+            isRedundant = true;
+        }
 
-            // Team ACL on a path owned by the same team is always redundant
-            if (ownerGrantsAll && entry.targetId === parsed.id) {
-                isRedundant = true;
-            }
-
-            // Check if a parent already grants the same or broader permissions
-            if (!isRedundant) {
-                const inherited = inheritedTargets.get(key);
-                if (inherited) {
-                    const readCovered = !entry.read || inherited.read;
-                    const writeCovered = !entry.write || inherited.write;
-                    if (readCovered && writeCovered) isRedundant = true;
-                }
-            }
-        } else {
-            const email = entry.email.toLowerCase();
-
-            // Check inherited user ACL
-            const inherited = inheritedUserEmails.get(email);
-            if (inherited) {
-                const readCovered = !entry.read || inherited.read;
-                const writeCovered = !entry.write || inherited.write;
+        if (!isRedundant) {
+            const inheritedPerms = inherited.get(entry.id.toLowerCase());
+            if (inheritedPerms) {
+                const readCovered = !entry.read || inheritedPerms.read;
+                const writeCovered = !entry.write || inheritedPerms.write;
                 if (readCovered && writeCovered) isRedundant = true;
             }
         }

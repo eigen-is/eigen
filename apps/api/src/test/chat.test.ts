@@ -179,8 +179,8 @@ describe('Chat', () => {
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
                         acl: [
-                            {email: BOB_EMAIL, read: true, write: true},
-                            {email: CHARLIE_EMAIL, read: true, write: true},
+                            {id: BOB_EMAIL, read: true, write: true},
+                            {id: CHARLIE_EMAIL, read: true, write: true},
                         ],
                     }),
                 });
@@ -326,7 +326,7 @@ describe('Chat', () => {
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
                         acl: [
-                            {email: 'bob@test.eigen.is', read: true, write: true},
+                            {id: 'bob@test.eigen.is', read: true, write: true},
                         ],
                     }),
                 });
@@ -454,7 +454,7 @@ describe('Chat', () => {
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
                         acl: [
-                            {email: 'bob@test.eigen.is', read: true, write: false},
+                            {id: 'bob@test.eigen.is', read: true, write: false},
                         ],
                     }),
                 });
@@ -546,7 +546,7 @@ describe('Chat', () => {
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
                         acl: [
-                            {email: 'bob@test.eigen.is', read: true, write: true},
+                            {id: 'bob@test.eigen.is', read: true, write: true},
                         ],
                     }),
                 });
@@ -615,7 +615,7 @@ describe('Chat', () => {
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({
                         acl: [
-                            {email: 'bob@test.eigen.is', read: true, write: true},
+                            {id: 'bob@test.eigen.is', read: true, write: true},
                         ],
                     }),
                 });
