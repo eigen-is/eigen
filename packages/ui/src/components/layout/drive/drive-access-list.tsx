@@ -1,5 +1,5 @@
 "use client"
-import {UserPublicItem} from "../user-item"
+import {UserItem, UserPublicItem} from "../user-item"
 import type {DriveACL, DrivePath} from "@workspace/lib/types/drive"
 import {cn} from "@workspace/ui/lib/utils"
 import {useMemo} from "react"
@@ -67,7 +67,7 @@ export function DriveAccessList({
 
             <div className="space-y-2">
                 {accessList.map((access) => (
-                    <UserPublicItem
+                    <UserItem
                         key={access.id}
                         email={access.id}
                         label={access.owner ? "Owner" : (
