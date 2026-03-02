@@ -14,8 +14,6 @@ User Action → API Mutation → home.notify() → SSE Stream → Client Handler
 
 **Currently implemented:** Drive, Mail, Contacts
 
----
-
 ## File Locations
 
 | Purpose | Location |
@@ -28,8 +26,6 @@ User Action → API Mutation → home.notify() → SSE Stream → Client Handler
 | SSE route (backend) | `apps/api/src/routes/sse.ts` |
 | Home class (notify) | `apps/api/src/lib/home/home.ts` |
 
----
-
 ## 1. Type Definitions
 
 See `packages/lib/src/types/sse.ts` for all types.
@@ -40,8 +36,6 @@ See `packages/lib/src/types/sse.ts` for all types.
 2. **Notification events have `body`** - Checked via `isSSEventNotification()` type guard
 3. **Domain-specific data** - Drive uses `path: DrivePath`, Mail uses `mail: SSEventMailData`, Contacts uses `contact` or `label`
 4. **Type prefixes** - Events are namespaced (`drive:`, `mail:`, `contacts:`)
-
----
 
 ## 2. Backend: Emitting Events
 
@@ -70,8 +64,6 @@ Call `emit()` after mutations. See `apps/api/src/lib/drive/drive.ts` for referen
 The `Home` class at `apps/api/src/lib/home/home.ts` manages:
 - `subscribeSSE()` / `unsubscribeSSE()` - listener management
 - `notify(event)` - broadcasts to all connected clients
-
----
 
 ## 3. Frontend: Receiving Events
 
@@ -102,8 +94,6 @@ Location: `packages/ui/src/components/layout/sse-provider/sse-provider.tsx`
 
 Wraps `useSSE` and displays toasts via sonner for notification events.
 
----
-
 ## 4. Adding SSE to a New Domain
 
 ### Checklist
@@ -112,28 +102,21 @@ Wraps `useSSE` and displays toasts via sonner for notification events.
    - Add constants to `SSEventType`
    - Create domain event type (e.g., `SSEventNewDomain`)
    - Add to `SSEvent` union
-
 2. **Create event templates** at `apps/api/src/lib/[domain]/sse-events.ts`
    - Define templates with `title` and `body` functions
    - Export `build[Domain]Event()` function
-
 3. **Emit from business logic** in `apps/api/src/lib/[domain]/[domain].ts`
    - Add `emit()` helper method
    - Call after mutations
-
 4. **Create SSE handler** at `packages/lib/src/lib/[domain]/sse-handlers.ts`
    - Export `handle[Domain]SSEvent()` function
    - Call invalidation functions from hooks
-
 5. **Register handler** in `packages/lib/src/lib/sse/hooks/use-sse.ts`
    - Import handler
    - Add to `handleEvent` callback
-
 6. **Clean up UI code**
    - Remove `toast.success()` calls from mutations (SSE handles toasts)
    - Keep `invalidateQueries()` in `onSuccess` for immediate local updates
-
----
 
 ## 5. Summary
 

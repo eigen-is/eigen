@@ -2,8 +2,6 @@
 
 API integration tests for the Eigen backend using Bun's test runner.
 
----
-
 ## Running Tests
 
 ```bash
@@ -24,7 +22,7 @@ Test File → Eden Treaty / authedRequest() → app.handle() → Real business l
 
 `EIGEN_DATA_ROOT` env var in `apps/api/src/lib/config/paths.ts` points to a temp directory (`data/test-<timestamp>`). Each test run gets a fresh directory, cleaned up in `afterAll`.
 
-### Two Test Users
+### Test Users
 
 | User | Email | Purpose |
 |------|-------|---------|
@@ -35,23 +33,27 @@ Users are created via `auth.api.signUpEmail()` (falls back to `signInEmail()` if
 
 ## Test Files
 
-| File | Tests | Count |
-|------|-------|-------|
-| `auth.test.ts` | Health check, root route, auth required, Alice/Bob access | 6 |
-| `drive.test.ts` | Mounts, folders (CRUD), files (upload/download/rename/move/delete), image upload, sharing & ACL (read/write/revoke), docs, stickies, breadcrumb, permissions | 31 |
-| `home.test.ts` | Size structure, used=sum, Bob isolation | 3 |
-| `contacts.test.ts` | Contact CRUD, labels CRUD, cross-user isolation, me endpoint | 10 |
-| `mail.test.ts` | Mailbox listing, create mailbox, Bob isolation | 3 |
-
-**Total: 51 tests**
+| File                | Tests                                                                                                                                    |
+|---------------------|------------------------------------------------------------------------------------------------------------------------------------------|
+| `auth.test.ts`      | Health check, root route, auth required, Alice/Bob access                                                                                |
+| `drive.test.ts`     | Mounts, folders (CRUD), files (upload/download/rename/move/delete), image upload, sharing & ACL, docs, stickies, breadcrumb, permissions |
+| `home.test.ts`      | Size structure, used=sum, Bob isolation                                                                                                  |
+| `contacts.test.ts`  | Contact CRUD, labels CRUD, cross-user isolation, me endpoint                                                                             |
+| `mail.test.ts`      | Mailbox listing, create mailbox, Bob isolation                                                                                           |
+| `chat.test.ts`      | Chat creation, messages, whisper visibility, slash commands, read-only ACL, backend validation                                           |
+| `org.test.ts`       | Org creation, teams, admin roles, members                                                                                                |
+| `org-drive.test.ts` | Team drives, team ACL on personal drives, redundant ACL filtering                                                                        |
+| `sse.test.ts`       | SSE endpoint, connection management, SSE ACL events                                                                                      |
 
 ## Key Implementation Details
 
-- **Concurrency**: Tests run with `--concurrency 1` because test files share SQLite connections via the `Home` singleton
-- **Drive routes**: Use `authedRequest()` helper with raw `app.handle()` for mount-specific routes (avoids Treaty's strict string literal typing for dynamic `:mountId` params)
-- **Treaty**: Used for routes with static path segments (mounts list, home size, shared-with-me)
-- **Contacts**: `addContact`/`addLabel` return plain UUID strings, not JSON objects
-- **Contacts init**: Auto-seeds the user themselves as a contact + default labels on first access
+- **Concurrency**: Tests run with `--concurrency 1` because test files share SQLite connections via the `Home`
+  singleton.
+- **Drive routes**: Use `authedRequest()` helper with raw `app.handle()` for mount-specific routes (avoids Treaty's
+  strict string literal typing for dynamic `:mountId` params).
+- **Treaty**: Used for routes with static path segments (mounts list, home size, shared-with-me).
+- **Contacts**: `addContact`/`addLabel` return plain UUID strings, not JSON objects.
+- **Contacts init**: Auto-seeds the user themselves as a contact + default labels on first access.
 
 ## Scripts
 
