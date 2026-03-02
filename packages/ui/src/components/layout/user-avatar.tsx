@@ -36,7 +36,6 @@ export function UserAvatar({
 
     const url = imageUrl || (contact?.avatar) || (publicUser?.avatar) || null;
     const displayName = (contact && `${contact.firstName} ${contact.lastName}`.trim()) || (publicUser && publicUser.name?.trim()) || name || email || "";
-
     const avatarSrc = url
         ? `${API_HOST}/${url}`
         : getPublicAvatarUrl(userId || email || '');
