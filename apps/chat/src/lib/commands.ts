@@ -84,7 +84,7 @@ export function isUnknownCommand(raw: string): boolean {
     return !SLASH_COMMANDS.includes(cmd);
 }
 
-export {isEmailAddress, validateEmailTarget} from '@workspace/lib/validation';
+export {validateEmailAddress, validateEmailTarget} from '@workspace/lib/validation';
 
 export function getSlashCommandQuery(content: string): string | null {
     const trimmed = content.trim();

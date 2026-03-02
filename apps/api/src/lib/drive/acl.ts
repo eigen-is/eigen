@@ -1,5 +1,5 @@
 import type {User} from 'better-auth/types';
-import type {DriveACL, DrivePath} from '@workspace/lib/types/drive';
+import {type DriveACL, type DrivePath} from '@workspace/lib/types/drive';
 import {parseOwnerId} from '@workspace/lib/types';
 import type {Memberships} from './membership';
 
@@ -17,7 +17,7 @@ export async function canRead(
     // Team-owned paths: members get automatic read access
     if (getMemberships) {
         const parsed = parseOwnerId(path.ownerId);
-        if (parsed.type === 'team') {
+        if (parsed && parsed.type === 'team') {
             const memberships = await getMemberships(user.id);
             if (memberships.teamIds.includes(parsed.id)) return true;
         }
@@ -49,7 +49,7 @@ export async function canWrite(
     // Team-owned paths: members get automatic write access
     if (getMemberships) {
         const parsed = parseOwnerId(path.ownerId);
-        if (parsed.type === 'team') {
+        if (parsed && parsed.type === 'team') {
             const memberships = await getMemberships(user.id);
             if (memberships.teamIds.includes(parsed.id)) return true;
         }
@@ -82,11 +82,11 @@ async function matchesACL(
 
         const parsed = parseOwnerId(entry.id);
 
-        if (parsed.type === 'user' && entry.id.toLowerCase() === user.email.toLowerCase()) {
+        if (parsed && parsed.type === 'user' && entry.id.toLowerCase() === user.email.toLowerCase()) {
             return true;
         }
 
-        if (parsed.type === 'team' && getMemberships) {
+        if (parsed && parsed.type === 'team' && getMemberships) {
             const memberships = await getMemberships(user.id);
             if (memberships.teamIds.includes(parsed.id)) return true;
         }
@@ -103,7 +103,7 @@ export function normalizeACL(acl: DriveACL[] | null): DriveACL[] | null {
         const parsed = parseOwnerId(a.id);
         return {
             ...a,
-            id: parsed.type === 'user' ? a.id.toLowerCase() : a.id,
+            id: parsed && parsed.type === 'user' ? a.id.toLowerCase() : a.id,
         };
     });
 }
@@ -142,7 +142,7 @@ export async function filterRedundantACL(
         const entryParsed = parseOwnerId(entry.id);
 
         // Team ACL on a path owned by the same team is always redundant
-        if (ownerParsed.type === 'team' && entryParsed.type === 'team' && entryParsed.id === ownerParsed.id) {
+        if (entryParsed && ownerParsed && ownerParsed.type === 'team' && entryParsed.type === 'team' && entryParsed.id === ownerParsed.id) {
             isRedundant = true;
         }
 
