@@ -207,6 +207,7 @@ export function useCheckReadPermission(ownerId: string, mountId: string, pathId:
             return response.data || {canRead: false};
         },
         enabled: !!pathId && !!ownerId && !!mountId,
+        staleTime: 1000 * 60 * 5 // 5 minutes
     });
 }
 
@@ -220,6 +221,7 @@ export function useCheckWritePermission(ownerId: string, mountId: string, pathId
             return response.data || {canWrite: false};
         },
         enabled: !!pathId && !!ownerId && !!mountId,
+        staleTime: 1000 * 60 * 5 // 5 minutes
     });
 }
 
@@ -233,6 +235,7 @@ export function useBreadcrumb(ownerId: string, mountId: string, pathId: string |
             return response.data || [];
         },
         enabled: !!pathId && !!ownerId && !!mountId,
+        staleTime: 1000 * 60 * 5 // 5 minutes
     });
 }
 

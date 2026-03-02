@@ -2,10 +2,11 @@
 
 import {HTMLAttributes, ReactNode} from "react"
 import {cn} from "@workspace/ui/lib/utils"
-import {UserAvatar} from "./user-avatar"
 import {usePublicUser} from "@workspace/lib/public"
-import {getMailComposeUrl} from "@workspace/lib/api"
+import {API_HOST, getMailComposeUrl, getPublicAvatarUrl} from "@workspace/lib/api"
 import {EigenLoader} from "./eigen-loader"
+import {useContacts} from "@workspace/lib/contacts";
+import {Avatar, AvatarImage} from "../avatar.tsx";
 
 export type UserItemProps = HTMLAttributes<HTMLDivElement> & {
     name?: string
@@ -29,27 +30,31 @@ export function UserItem({
                              autoFetch = false,
                              ...props
                          }: UserItemProps) {
-    const {data, isLoading} = usePublicUser(userId || email || '');
+    const {data: dataContacts, isLoading: isLoadingContacts} = useContacts();
+    const {data: dataPublic, isLoading: isLoadingPublic} = usePublicUser(userId || email || '');
 
-    const resolvedName = autoFetch ? (data?.name || name || email) : (name || email || "");
-    const resolvedEmail = autoFetch ? (data?.email || email) : email;
-    const displayName = resolvedName || "";
+    const contact = !isLoadingContacts && email && dataContacts ? dataContacts.find(c => c.email.includes(email)) : null;
+    const publicUser = !isLoadingPublic ? dataPublic : null;
 
-    if (autoFetch && isLoading) return <EigenLoader/>;
+    const url = imageUrl || (contact?.avatar) || (publicUser?.avatar) || null;
+    const displayName = (contact && `${contact.firstName} ${contact.lastName}`.trim()) || (publicUser && publicUser.name?.trim()) || name || email || "";
+    const resolvedEmail = publicUser?.email || email || "";
+    const avatarSrc = url
+        ? `${API_HOST}/${url}`
+        : getPublicAvatarUrl(userId || email || '');
+
+    if (isLoadingPublic || isLoadingContacts) return <EigenLoader/>;
 
     return (
         <div className={cn("flex items-center", className)} {...props}>
-            <UserAvatar
-                name={resolvedName}
-                email={resolvedEmail}
-                imageUrl={imageUrl}
-                userId={userId}
-            />
+            <Avatar className={cn(className, "h-8 w-8 print-exact select-none")} {...props}>
+                <AvatarImage src={avatarSrc} alt={displayName}/>
+            </Avatar>
 
             <div className="ml-3 flex-1">
                 <p className="text-sm font-medium text-gray-900">{displayName}</p>
                 <div className="flex justify-between items-center gap-2">
-                    {resolvedEmail && resolvedName && resolvedName !== resolvedEmail &&
+                    {resolvedEmail && (resolvedEmail !== displayName || mailLink) &&
                         <p className="text-xs text-gray-500">{mailLink ? <a className="hover:underline"
                                                                             href={getMailComposeUrl(resolvedEmail)}>{resolvedEmail}</a> : resolvedEmail}</p>}
                     {label && (
