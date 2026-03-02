@@ -33,6 +33,7 @@ export function UserAvatar({
 
     const contact = !isLoadingContacts && email && dataContacts ? dataContacts.find(c => c.email.includes(email)) : null;
     const publicUser = !isLoadingPublic ? dataPublic : null;
+
     const url = imageUrl || (contact?.avatar) || (publicUser?.avatar) || null;
     const displayName = (contact && `${contact.firstName} ${contact.lastName}`.trim()) || (publicUser && publicUser.name?.trim()) || name || email || "";
 
@@ -50,14 +51,14 @@ export function UserAvatar({
         tooltip ?
             <Tooltip delayDuration={300}>
                 <TooltipTrigger asChild>
-                    <Avatar className={cn(sizeClasses[size], className, "print-exact")} {...props}>
+                    <Avatar className={cn(sizeClasses[size], className, "print-exact select-none")} {...props}>
                         <AvatarImage src={avatarSrc} alt={displayName}/>
                     </Avatar>
                 </TooltipTrigger>
                 <TooltipContent>{displayName}</TooltipContent>
             </Tooltip>
             :
-            <Avatar className={cn(sizeClasses[size], className, "print-exact")} {...props}>
+            <Avatar className={cn(sizeClasses[size], className, "print-exact select-none")} {...props}>
                 <AvatarImage src={avatarSrc} alt={displayName}/>
             </Avatar>
 
