@@ -12,8 +12,9 @@ export async function getUserByEmailOrId(emailOrId: string): Promise<User | null
 export async function getPublicInfo(emailOrId: string): Promise<PublicUser | null> {
     const user = await getUserByEmailOrId(emailOrId);
     return user ? {
-        name: user?.name,
-        email: user?.email,
+        name: user.name,
+        email: user.email,
+        avatar: `p/avatar/${user.id}`
     } : null;
 }
 
