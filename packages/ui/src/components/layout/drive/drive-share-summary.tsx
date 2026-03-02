@@ -1,9 +1,8 @@
-import {useMemo} from "react";
 import {Unlock, UserRoundPlus} from "lucide-react";
 import {cn} from "@workspace/ui/lib/utils";
-import {type DriveACL, type DrivePath} from "@workspace/lib/types/drive";
+import {type DrivePath} from "@workspace/lib/types/drive";
 import {Tooltip, TooltipContent, TooltipTrigger} from "@workspace/ui/components/tooltip";
-import {useBreadcrumb} from "@workspace/lib/drive";
+import {type DriveAccessItem, useDriveAccess} from "@workspace/lib/drive";
 import {UserAvatar} from "@workspace/ui/components/layout/user-avatar";
 
 export type DriveShareSummaryProps = {
@@ -17,38 +16,9 @@ export function DriveShareSummary({
                                       onClick,
                                       showIconOnHover = true,
                                   }: DriveShareSummaryProps) {
-    const {data: breadcrumbData} = useBreadcrumb(path.ownerId, path.mountId, path.id);
+    const {allEntries} = useDriveAccess(path);
 
-    const ancestorAcl = useMemo<DriveACL[]>(() => {
-        if (!breadcrumbData || breadcrumbData.length === 0) return [];
-        const seen = new Set<string>();
-        const result: DriveACL[] = [];
-        for (const ancestor of breadcrumbData) {
-            if (!ancestor.acl) continue;
-            for (const acl of ancestor.acl) {
-                const key = acl.id.toLowerCase();
-                if (seen.has(key)) continue;
-                seen.add(key);
-                result.push(acl);
-            }
-        }
-        return result;
-    }, [breadcrumbData]);
-
-    const allEntries = useMemo(() => {
-        const seen = new Set<string>();
-        const result: DriveACL[] = [];
-        for (const acl of [...(path.acl || []), ...(ancestorAcl || [])]) {
-            const key = acl.id.toLowerCase();
-            if (!seen.has(key)) {
-                seen.add(key);
-                result.push(acl);
-            }
-        }
-        return result;
-    }, [path.acl, ancestorAcl]);
-
-    const hasEntries = allEntries.length > 0;
+    const hasEntries = allEntries.length > 1;
     const isPublic = path.visibility !== 'private';
     const isShared = hasEntries || isPublic;
 
@@ -64,13 +34,6 @@ export function DriveShareSummary({
         >
             {isShared ? (
                 <div className="flex items-center gap-1">
-                    <UserAvatar
-                        email={path.ownerId}
-                        size="sm"
-                        className="position-relative"
-                        style={{zIndex: 0}}
-                        tooltip={true}
-                    />
                     {isPublic && (
                         <Tooltip delayDuration={300}>
                             <TooltipTrigger asChild>
@@ -84,7 +47,7 @@ export function DriveShareSummary({
                             <TooltipContent>Anyone with the link can access</TooltipContent>
                         </Tooltip>
                     )}
-                    {allEntries.slice(0, isPublic ? 2 : 3).map((access, index) =>
+                    {allEntries.slice(0, isPublic ? 3 : 4).map((access: DriveAccessItem, index: number) =>
                         <UserAvatar
                             key={access.id}
                             email={access.id}
@@ -94,9 +57,9 @@ export function DriveShareSummary({
                             tooltip={true}
                         />
                     )}
-                    {allEntries.length > (isPublic ? 2 : 3) && (
+                    {allEntries.length > (isPublic ? 3 : 4) && (
                         <span className="text-xs text-muted-foreground ml-1">
-                            +{allEntries.length - (isPublic ? 2 : 3)}
+                            +{allEntries.length - (isPublic ? 3 : 4)}
                         </span>
                     )}
                 </div>

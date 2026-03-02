@@ -1,11 +1,10 @@
 "use client"
 
-import {useCallback, useEffect, useMemo, useRef, useState} from "react"
+import {useCallback, useEffect, useRef, useState} from "react"
 import {UserPublicItem} from "../user-item"
 import type {DriveACL, DrivePath, DriveVisibility} from "@workspace/lib/types/drive"
 import {cn} from "@workspace/ui/lib/utils"
-import {usePublicUser} from "@workspace/lib/public"
-import {useBreadcrumb} from "@workspace/lib/drive"
+import {type DirectAccessItem, useDriveAccess} from "@workspace/lib/drive"
 import {Lock, Plus, Unlock, Users} from "lucide-react"
 import {AvatarIcon} from "@workspace/ui/components/avatar"
 import {Separator} from "@workspace/ui/components/separator"
@@ -20,8 +19,7 @@ import {
 import {ContactAutosuggest} from "../contacts/contact-autosuggest"
 import {ContactSuggestion} from "../contacts/types"
 import {useOrganization, useTeams} from "@workspace/lib/auth"
-import {parseOwnerId, teamOwnerId} from "@workspace/lib/types"
-import {UserAvatar} from "../user-avatar"
+import {teamOwnerId} from "@workspace/lib/types"
 
 export type DriveAccessListEditProps = {
     path: DrivePath
@@ -30,137 +28,37 @@ export type DriveAccessListEditProps = {
     className?: string
 }
 
-type DirectAccessItem = {
-    id: string
-    read: boolean
-    write: boolean
-    owner: boolean
-}
-
-type InheritedAccessItem = {
-    id: string
-    read: boolean
-    write: boolean
-    sourceFolderName: string
-}
-
 export function DriveAccessListEdit({
                                         path,
                                         onSave,
                                         onCancel,
                                         className,
                                     }: DriveAccessListEditProps) {
-    const parsedOwner = useMemo(() => parseOwnerId(path.ownerId), [path.ownerId])
-    const isGroupOwned = parsedOwner.type === 'team'
-    const owner = usePublicUser(path.ownerId)
-    const breadcrumb = useBreadcrumb(path.ownerId, path.mountId, path.id)
     const [pendingChanges, setPendingChanges] = useState(false)
     const [newContactInput, setNewContactInput] = useState("")
     const inputRef = useRef<HTMLInputElement>(null)
 
-    const [directList, setDirectList] = useState<DirectAccessItem[]>([])
+    const [directListOverride, setDirectListOverride] = useState<DirectAccessItem[] | undefined>()
+
+    const {
+        baseDirectList,
+        directList,
+        inheritedList
+    } = useDriveAccess(path, directListOverride)
+
     const [visibility, setVisibility] = useState<DriveVisibility>(path.visibility ?? 'private')
 
     // Fetch org and teams for the team sharing picker
     const {data: org} = useOrganization()
     const {data: teams} = useTeams(org?.id)
 
-    // Build a map of teamId -> team name for display
-    const teamNameMap = useMemo(() => {
-        const map = new Map<string, string>()
-        if (teams) {
-            for (const team of teams) {
-                map.set(team.id, team.name)
-            }
-        }
-        return map
-    }, [teams])
-
-    const inheritedList = useMemo<InheritedAccessItem[]>(() => {
-        if (!breadcrumb.data || breadcrumb.data.length < 2) return []
-        const directIds = new Set(directList.map(u => u.id.toLowerCase()))
-        if (owner.data?.email) directIds.add(owner.data.email.toLowerCase())
-
-        const inherited: InheritedAccessItem[] = []
-        const seenKeys = new Set<string>()
-
-        const ancestors = breadcrumb.data.slice(0, -1)
-        for (const ancestor of [...ancestors].reverse()) {
-            if (!ancestor.acl) continue
-            for (const acl of ancestor.acl) {
-                const key = acl.id.toLowerCase()
-                if (directIds.has(key) || seenKeys.has(key)) continue
-                seenKeys.add(key)
-                inherited.push({
-                    id: acl.id,
-                    read: acl.read,
-                    write: acl.write,
-                    sourceFolderName: ancestor.name,
-                })
-            }
-        }
-        return inherited
-    }, [breadcrumb.data, directList, owner.data])
-
     useEffect(() => {
-        // For group-owned paths (team/org), show the group as owner
-        if (isGroupOwned) {
-            const ownerAccess: DirectAccessItem = {
-                id: path.ownerId,
-                read: true,
-                write: true,
-                owner: true,
-            }
-
-            const newDirectList: DirectAccessItem[] = [ownerAccess]
-
-            if (path.acl && path.acl.length > 0) {
-                for (const access of path.acl) {
-                    newDirectList.push({
-                        id: access.id,
-                        read: access.read,
-                        write: access.write,
-                        owner: false,
-                    })
-                }
-            }
-
-            setDirectList(newDirectList)
-            setVisibility(path.visibility ?? 'private')
-            return
-        }
-
-        // For user-owned paths, wait for user data
-        if (!owner.data) return
-
-        const ownerAccess: DirectAccessItem = {
-            id: owner.data.email || '',
-            read: true,
-            write: true,
-            owner: true
-        }
-
-        const newDirectList: DirectAccessItem[] = [ownerAccess]
-
-        if (path.acl && path.acl.length > 0) {
-            for (const access of path.acl) {
-                if (access.id.toLowerCase() !== owner.data?.email.toLowerCase()) {
-                    newDirectList.push({
-                        id: access.id,
-                        read: access.read,
-                        write: access.write,
-                        owner: false
-                    })
-                }
-            }
-        }
-
-        setDirectList(newDirectList)
+        setDirectListOverride(undefined)
         setVisibility(path.visibility ?? 'private')
-    }, [path, owner.data, isGroupOwned, parsedOwner, teamNameMap])
+    }, [path])
 
     const handleAddUser = useCallback((suggestion: ContactSuggestion) => {
-        if (directList.some(item => item.id.toLowerCase() === suggestion.email.toLowerCase())) {
+        if (directList.some((item: DirectAccessItem) => item.id.toLowerCase() === suggestion.email.toLowerCase())) {
             return
         }
 
@@ -171,7 +69,7 @@ export function DriveAccessListEdit({
             owner: false
         }
 
-        setDirectList(prevList => [...prevList, newUser])
+        setDirectListOverride(prevList => [...(prevList || baseDirectList), newUser])
         setPendingChanges(true)
         setNewContactInput("")
     }, [directList])
@@ -194,7 +92,7 @@ export function DriveAccessListEdit({
             }
         }
 
-        if (directList.some(item => item.id.toLowerCase() === email.toLowerCase())) {
+        if (directList.some((item: DirectAccessItem) => item.id.toLowerCase() === email.toLowerCase())) {
             return false;
         }
 
@@ -232,8 +130,8 @@ export function DriveAccessListEdit({
 
     const handleAddTeam = useCallback((teamId: string) => {
         const id = teamOwnerId(teamId)
-        if (directList.some(item => item.id === id)) return
-        setDirectList(prev => [...prev, {
+        if (directList.some((item: DirectAccessItem) => item.id === id)) return
+        setDirectListOverride(prev => [...(prev || baseDirectList), {
             id,
             read: true,
             write: true,
@@ -243,7 +141,7 @@ export function DriveAccessListEdit({
     }, [directList])
 
     const handlePermissionChange = useCallback((id: string, permission: string) => {
-        setDirectList(prev => prev.map(item => {
+        setDirectListOverride(prev => (prev || baseDirectList).map((item: DirectAccessItem) => {
             if (item.id === id) {
                 if (permission === "remove") {
                     return {...item, read: false, write: false}
@@ -312,28 +210,10 @@ export function DriveAccessListEdit({
             <div className="space-y-2">
                 <h4 className="text-base font-medium">People with access</h4>
 
-                {directList.map((access) => {
-                    const parsed = parseOwnerId(access.id)
-                    const isTeam = parsed.type === 'team'
-                    const displayName = isTeam
-                        ? (teamNameMap.get(parsed.id) || 'Team') : null
+                {directList.map((access: DirectAccessItem) => {
                     return (
                         <div key={access.id} className="flex items-center justify-between">
-                            {isTeam ? (
-                                <div className="flex items-center gap-3 py-1">
-                                    <UserAvatar
-                                        email={access.id}
-                                    />
-                                    <div>
-                                        <p className="text-sm font-medium">{displayName}</p>
-                                        <p className="text-xs text-muted-foreground">Team</p>
-                                    </div>
-                                </div>
-                            ) : (
-                                <UserPublicItem
-                                    email={access.id}
-                                />
-                            )}
+                            <UserPublicItem email={access.id}/>
                             {access.owner ? (
                                 <span className="text-xs text-muted-foreground w-28 text-right">
                                 Owner
@@ -357,30 +237,14 @@ export function DriveAccessListEdit({
                     )
                 })}
 
-                {inheritedList.map((access) => {
-                    const parsed = parseOwnerId(access.id)
-                    const isTeam = parsed.type === 'team'
-                    const inheritedName = isTeam ? (teamNameMap.get(parsed.id) || 'Team') : null
+                {inheritedList.map((access: any) => {
                     return (
                         <div key={access.id} className="flex items-center justify-between">
-                            {isTeam ? (
-                                <div className="flex items-center gap-3 py-1">
-                                    <UserAvatar className="w-8 h-8" userId={access.id}/>
-                                    <div>
-                                        <p className="text-sm font-medium">{inheritedName}</p>
-                                        <p className="text-xs text-muted-foreground">
-                                            Team · Inherited from
-                                            "{access.sourceFolderName}"
-                                        </p>
-                                    </div>
-                                </div>
-                            ) : (
-                                <UserPublicItem
-                                    userId={access.id}
-                                    label={<span
-                                        className="text-muted-foreground text-xs">Inherited from "{access.sourceFolderName}"</span>}
-                                />
-                            )}
+                            <UserPublicItem
+                                email={access.id}
+                                label={<span
+                                    className="text-muted-foreground text-xs">Inherited from "{access.sourceFolderName}"</span>}
+                            />
                             <span className="text-xs text-muted-foreground w-28 text-right">
                             {access.write ? "Editor" : "Viewer"}
                         </span>
@@ -445,7 +309,7 @@ export function DriveAccessListEdit({
                                     <DropdownMenuItem
                                         key={team.id}
                                         onClick={() => handleAddTeam(team.id)}
-                                        disabled={directList.some(i => i.id === teamOwnerId(team.id))}
+                                        disabled={directList.some((i: DirectAccessItem) => i.id === teamOwnerId(team.id))}
                                     >
                                         <Users className="h-4 w-4 mr-2"/>
                                         {team.name}
