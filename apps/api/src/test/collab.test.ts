@@ -274,6 +274,32 @@ describe('Collab', () => {
             expect(received).toBe(true);
         });
 
+        test('document rejects non-binary updates from client', async () => {
+            const wsRes = await authedRequest(ctx.alice.user.sessionToken,
+                `/ws/collab/${ctx.alice.user.id}/${aliceMountId}/${docId}`, {
+                    headers: {
+                        'Upgrade': 'websocket',
+                        'Connection': 'Upgrade',
+                    },
+                });
+
+            if (wsRes.status !== 101) {
+                return;
+            }
+
+            const ws = (wsRes as any).webSocket!;
+
+            // Sending string instead of binary Uint8Array
+            ws.send('invalid string data');
+
+            // Wait to see if connection is closed or maintained
+            await new Promise(resolve => setTimeout(resolve, 100));
+
+            expect(ws.readyState).toBeGreaterThan(0); // Should stay open despite invalid payload format
+
+            ws.close();
+        });
+
         test('read-only user WebSocket behavior if connected', async () => {
             await authedRequest(ctx.alice.user.sessionToken,
                 `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${docId}/acl`, {

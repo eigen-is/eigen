@@ -95,13 +95,39 @@ describe('Cross-Domain Integration', () => {
         });
     });
 
-    describe('Public Avatar', () => {
+    describe('Public API', () => {
         test('public avatar is accessible', async () => {
             const avatarRes = await ctx.app.handle(
                 new Request(`http://localhost/p/avatar/${ctx.alice.user.email}`)
             );
             expect(avatarRes.status).toBe(200);
             expect(avatarRes.headers.get('content-type')).toMatch(/image\//);
+        });
+
+        test('public avatar fallback for unknown user returns SVG', async () => {
+            const avatarRes = await ctx.app.handle(
+                new Request(`http://localhost/p/avatar/unknown@test.eigen.is`)
+            );
+            expect(avatarRes.status).toBe(200);
+            expect(avatarRes.headers.get('content-type')).toContain('image/svg+xml');
+        });
+
+        test('waitlist endpoint validates missing email', async () => {
+            const res = await ctx.app.handle(
+                new Request(`http://localhost/p/waitlist`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({notes: 'test'}),
+                })
+            );
+            expect(res.status).toBe(422); // Elysia validation error
+        });
+
+        test('public user info returns 404 for unknown user', async () => {
+            const res = await ctx.app.handle(
+                new Request(`http://localhost/p/user/unknown@test.eigen.is`)
+            );
+            expect(res.status).toBe(404);
         });
     });
 
