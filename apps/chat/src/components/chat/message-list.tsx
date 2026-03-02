@@ -2,7 +2,6 @@ import {type ReactNode, useEffect, useRef} from 'react';
 import {EigenLoader, UserAvatar} from "@workspace/ui";
 import type {ChatMessage} from "@workspace/lib/types/chat";
 import {cn} from "@workspace/ui/lib/utils";
-import {UserPublicAvatar} from "@workspace/ui/components/layout/user-public-avatar";
 import {usePublicUser} from "@workspace/lib/public";
 import {useContacts} from "@workspace/lib/contacts";
 import {Mail, Paperclip} from "lucide-react";
@@ -60,7 +59,7 @@ function InlineEmail({email}: { email: string }) {
             href={getMailComposeUrl(email)}
             className="inline-flex items-baseline gap-1 text-blue-600 hover:underline"
         >
-            <UserPublicAvatar email={email} size="sm" className="h-4 w-4 inline-block relative top-0.5"/>
+            <UserAvatar email={email} size="sm" className="h-4 w-4 inline-block relative top-0.5"/>
             <span>{name}</span>
         </a>
     );
@@ -98,7 +97,7 @@ function InspectCard({target}: { target: string }) {
     return (
         <div className="flex gap-4 p-4 rounded-lg border bg-card max-w-sm">
             <div className="shrink-0">
-                <UserPublicAvatar email={target} size="lg" className="h-16 w-16"/>
+                <UserAvatar email={target} size="lg" className="h-16 w-16"/>
             </div>
             <div className="flex-1 min-w-0 space-y-1">
                 <p className="text-sm font-bold text-foreground truncate">{name}</p>
