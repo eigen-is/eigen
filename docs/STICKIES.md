@@ -10,8 +10,6 @@ real-time multi-user editing and drag-and-drop, with state synchronized via a Yj
 - **Drag & Drop**: Uses `@dnd-kit` for smooth drag-and-drop of columns and stickies.
 - **State Management**: Yjs document serves as the single source of truth, with React state derived from it.
 
----
-
 ## Data Structures
 
 All board data is modeled as follows (see `types.ts`):
@@ -25,8 +23,6 @@ All board data is modeled as follows (see `types.ts`):
     - `columns`: Record of all columns by ID
     - `columnOrder`: Ordered array of column IDs
 
----
-
 ## Architecture
 
 The implementation follows a clean separation of concerns:
@@ -37,11 +33,9 @@ The implementation follows a clean separation of concerns:
 
 This architecture ensures that:
 
-- All changes go through the Yjs document first
-- React state always reflects the Yjs document
-- Multiple users can collaborate in real-time
-
----
+- All changes go through the Yjs document first.
+- React state always reflects the Yjs document.
+- Multiple users can collaborate in real-time.
 
 ## Drag & Drop Implementation
 
@@ -55,8 +49,6 @@ The drag and drop implementation uses a minimalist approach:
 
 This approach prevents race conditions and ensures a smooth user experience, even with multiple users.
 
----
-
 ## Board Initialization
 
 A dedicated `useInitializeBoard` hook handles board initialization:
@@ -65,8 +57,6 @@ A dedicated `useInitializeBoard` hook handles board initialization:
 - Adds a welcome sticky in the first column.
 - Uses the current user's information for creator details.
 - Initializes the board only if it's empty.
-
----
 
 ## State Synchronization Flow
 
@@ -78,8 +68,6 @@ A dedicated `useInitializeBoard` hook handles board initialization:
 
 This flow ensures that all clients stay in sync while maintaining a responsive local experience.
 
----
-
 ## Key Files
 
 - `board.tsx` — Main Kanban board component with drag-and-drop setup.
@@ -89,8 +77,6 @@ This flow ensures that all clients stay in sync while maintaining a responsive l
 - `hooks/useYjsDragAndDrop.ts` — Hook for drag-and-drop logic and Yjs synchronization.
 - `hooks/useInitializeBoard.ts` — Hook for initializing a new board with default content.
 - `types.ts` — TypeScript interfaces for board data structures.
-
----
 
 ## Summary
 

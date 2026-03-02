@@ -48,31 +48,17 @@ On first run, Eigen requires initial configuration through a setup wizard:
    bun run serve
    ```
 
-2. Visit `http://localhost:3011/setup` in your browser
+2. Visit `http://localhost:3011/setup` in your browser.
 
 3. Configure your instance:
+    - **Domain Configuration**: Enter your domain (e.g., `eigen.example.com` or `localhost` for development).
+    - **Storage Type**:
+        - `local-fullnames`: Files stored with original names (recommended for development).
+        - `local-id`: Files stored by ID (better for production).
+        - `s3`: Amazon S3 or compatible storage (for cloud deployment).
+    - **Admin Account**: Set up your primary admin credentials.
 
-   **Domain Configuration**
-   - Enter your domain (e.g., `eigen.example.com` or `localhost` for development)
-
-   **Storage Type**
-   - `local-fullnames`: Files stored with original names (recommended for development)
-   - `local-id`: Files stored by ID (better for production)
-   - `s3`: Amazon S3 or compatible storage (for cloud deployment)
-
-   If using S3, you'll need:
-   - Bucket name
-   - Region
-   - Access Key ID
-   - Secret Access Key
-   - Endpoint URL (optional, for S3-compatible services like MinIO)
-
-   **Admin Account**
-   - Name
-   - Email address
-   - Password (minimum 8 characters)
-
-4. After setup completes, you'll be redirected to sign in with your admin account
+4. After setup completes, you will be redirected to sign in with your admin account.
 
 **Note:** Setup can only be completed once. The configuration is stored in the server data directory.
 
@@ -95,25 +81,17 @@ bun serve:chat
 bun serve:calendar
 ```
 
-### Type Checking
+### Type Checking and Building
 
 ```bash
 # Run TypeScript type check across all packages
 bun run typecheck
-```
 
-### Building for Production
-
-```bash
-bun build
+# Build for production
+bun run build
 ```
 
 ## Docker Deployment
-
-### Prerequisites
-
-- Docker
-- Docker Compose
 
 ### Local Docker Deployment
 
@@ -123,25 +101,8 @@ To run Eigen in Docker locally:
 ./deploy.sh --local
 ```
 
-This will:
-
-1. Build all frontend applications
-2. Create Docker images for nginx (frontend) and API server
-3. Start containers with Docker Compose
-4. Make all apps available at `http://localhost/`
-
-Access your applications:
-
-- Home: http://localhost/
-- Admin: http://localhost/admin
-- Mail: http://localhost/mail
-- Contacts: http://localhost/contacts
-- Calendar: http://localhost/calendar
-- Drive: http://localhost/drive
-- Docs: http://localhost/docs
-- Stickies: http://localhost/stickies
-- Space: http://localhost/space
-- Chat: http://localhost/chat
+This will build frontend applications, create Docker images, and start containers with Docker Compose. Apps will be
+available at `http://localhost/`.
 
 ### Production Docker Deployment
 
@@ -174,6 +135,7 @@ docker-compose restart
 
 ## Documentation
 
+- [LLM Context](LLM.md) - Project context and architecture for LLMs
 - [Contributing Guide](docs/CONTRIBUTING.md) - Development conventions and architecture patterns
 - [Database Architecture](docs/DATABASE.md) - SQLite databases, migrations, and access patterns
 - [Storage & Mount System](docs/STORAGE.md) - Storage backends and file management
@@ -181,7 +143,6 @@ docker-compose restart
 - [Layout System](docs/LAYOUT.md) - Responsive layout system and components
 - [Shared UI Components](docs/LAYOUT-SHARED-COMPONENTS.md) - UI component lookup reference
 - [Docker Deployment](docs/DOCKER.md) - Building and deploying with Docker
-- [API Reference](docs/API.md) - API endpoints and usage
 
 ## License
 

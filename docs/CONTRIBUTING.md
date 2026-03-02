@@ -2,13 +2,9 @@
 
 This guide covers development conventions, architecture patterns, and best practices for contributing to Eigen.
 
----
-
 ## Overview
 
 Eigen is a self-hosted Google Workspace alternative built with modern web technologies. This document helps new contributors understand the codebase structure and development patterns.
-
----
 
 ## Technology Stack
 
@@ -21,8 +17,6 @@ Eigen is a self-hosted Google Workspace alternative built with modern web techno
 | Routing | TanStack Router |
 | Styling | Tailwind CSS + shadcn/ui |
 | Auth | better-auth |
-
----
 
 ## Project Structure
 
@@ -46,8 +40,6 @@ Eigen is a self-hosted Google Workspace alternative built with modern web techno
   /ui           # Reusable UI components (shadcn/ui)
 ```
 
----
-
 ## Code Style
 
 - Use **English** for all code and text
@@ -57,8 +49,6 @@ Eigen is a self-hosted Google Workspace alternative built with modern web techno
   - **Routes**: domain-based (`mail`, `drive`, `contacts`)
   - **Functions**: camelCase
   - **Components**: PascalCase
-
----
 
 ## Key Patterns
 

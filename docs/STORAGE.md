@@ -2,25 +2,14 @@
 
 Technical documentation for the storage layer, mount system, and file management architecture.
 
-## Table of Contents
-
-1. [Architecture Overview](#1-architecture-overview)
-2. [Storage Layer](#2-storage-layer)
-3. [Mount System](#3-mount-system)
-4. [Applications](#4-applications)
-5. [User Data Layout](#5-user-data-layout)
-6. [Database Schemas](#6-database-schemas)
-
----
-
 ## 1. Architecture Overview
 
 ```
 ┌─────────────────────────────────────────────────────────────────┐
-│                            Home                                  │
+│                            Home                                 │
 │  Singleton per user. Manages DB connections and SSE events.     │
 ├─────────────────────────────────────────────────────────────────┤
-│                                                                  │
+│                                                                 │
 │  ┌─────────────────┐   ┌─────────────────┐   ┌───────────────┐  │
 │  │      Drive      │   │      Mail       │   │   Contacts    │  │
 │  │                 │   │                 │   │               │  │
@@ -28,7 +17,7 @@ Technical documentation for the storage layer, mount system, and file management
 │  │  └─LocalKey     │   │  maildb (SQL)   │   │  contacts.db  │  │
 │  │    Storage      │   │                 │   │  avatars/     │  │
 │  └─────────────────┘   └─────────────────┘   └───────────────┘  │
-│                                                                  │
+│                                                                 │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
@@ -43,10 +32,7 @@ Technical documentation for the storage layer, mount system, and file management
 | **Contacts** | Uses `LocalStorage` for avatars, SQLite for contact data.                                                                                   |
 
 **Current Limitations:**
-
 - `Home.getZip()` not implemented
-
----
 
 ## 2. Storage Layer
 
@@ -59,10 +45,7 @@ Three pluggable storage backends in `lib/storage/`:
 | **S3Storage**       | Remote storage (ready)  | S3-compatible object storage                      |
 
 All backends implement the `StorageBackend` interface (read, write, delete, exists, size).
-
 `LocalStorage` additionally provides filesystem operations: list, mkdir, rename, stat, etc.
-
----
 
 ## 3. Mount System
 
@@ -76,25 +59,19 @@ A Mount bundles everything needed for Drive file storage:
 | `tmp/`        | Temp files for collaborative editing            |
 
 **Key types** (`lib/mount/types.ts`):
-
 - `PathEntry` – File/folder metadata (id, name, type, parentId, ownerId, mimeType, size, thumbnail, acl, labels)
 - `ACLEntry` – Access control (email, read, write, public)
 - `MountConfig` – Mount configuration (id, name, storageType, isDefault)
 
 **Thumbnails** (`lib/shared/thumbnails.ts`):
-
 - Supports image formats (jpeg, png, gif, webp, svg, bmp, tiff)
 - Generated on upload, stored locally in `thumbs/` as WebP
 - Video/PDF thumbnails not currently supported
 
----
-
 ## 4. Applications
 
 ### 4.1 Drive
-
 Business logic layer (~500 lines) providing:
-
 - **Folder/file operations** with ACL checks
 - **Thumbnail** generation and serving
 - **Sharing** – cross-user ACL propagation via `shared.db`
@@ -103,17 +80,13 @@ Business logic layer (~500 lines) providing:
 **ACL inheritance**: If a path has no ACL, inherits from parent recursively.
 
 ### 4.2 Mail
-
 - Uses `LocalStorage` for Maildir file structure
 - Uses `maildb` (SQLite) for email metadata
 - Indexes on mailbox, date, read status for performance
 
 ### 4.3 Contacts
-
 - Uses `LocalStorage` for avatar images (with thumbnail generation)
 - Uses SQLite for contact data and labels
-
----
 
 ## 5. User Data Layout
 
@@ -140,8 +113,6 @@ Business logic layer (~500 lines) providing:
 
 For S3 mounts: `metadata.db`, `tmp/`, and `thumbs/` stay local; file data goes to S3.
 
----
-
 ## 6. Database Schemas
 
 ### metadata.db (per mount)
@@ -154,8 +125,8 @@ For S3 mounts: `metadata.db`, `tmp/`, and `thumbs/` stay local; file data goes t
 
 ### shared.db
 
-| Table          | Purpose                                      |
-|----------------|----------------------------------------------|
+| Table          | Purpose                                                                                    |
+|----------------|--------------------------------------------------------------------------------------------|
 | `shared_paths` | Paths shared with this user from other users (includes `mountId` to identify source mount) |
 
 ### mail.db
