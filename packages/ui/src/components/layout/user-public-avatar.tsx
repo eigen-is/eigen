@@ -18,7 +18,7 @@ export function UserPublicAvatar({
                                      size = "md",
                                      ...props
                                  }: UserPublicAvatarProps) {
-    const {data} = usePublicUser(email || '');
+    const {data} = usePublicUser(email || userId || '');
 
     return (
         <Tooltip delayDuration={300}>

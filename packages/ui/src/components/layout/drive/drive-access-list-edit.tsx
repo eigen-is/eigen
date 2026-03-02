@@ -1,7 +1,8 @@
 "use client"
 
 import {useCallback, useEffect, useMemo, useRef, useState} from "react"
-import {UserItem, UserPublicItem} from "../user-item"
+import {UserPublicItem} from "../user-item"
+import {UserPublicAvatar} from "../user-public-avatar.tsx"
 import type {DriveACL, DrivePath, DriveVisibility} from "@workspace/lib/types/drive"
 import {cn} from "@workspace/ui/lib/utils"
 import {usePublicUser} from "@workspace/lib/public"
@@ -21,7 +22,7 @@ import {ContactAutosuggest} from "../contacts/contact-autosuggest"
 import {ContactSuggestion} from "../contacts/types"
 import {useOrganization, useTeams} from "@workspace/lib/auth"
 import {parseOwnerId, teamOwnerId} from "@workspace/lib/types"
-import { UserAvatar } from "../user-avatar"
+import {UserAvatar} from "../user-avatar"
 
 export type DriveAccessListEditProps = {
     path: DrivePath
@@ -330,7 +331,7 @@ export function DriveAccessListEdit({
                                     </div>
                                 </div>
                             ) : (
-                                <UserItem
+                                <UserPublicItem
                                     email={access.id}
                                 />
                             )}
@@ -365,9 +366,7 @@ export function DriveAccessListEdit({
                         <div key={access.id} className="flex items-center justify-between">
                             {isTeam ? (
                                 <div className="flex items-center gap-3 py-1">
-                                    <AvatarIcon className="w-8 h-8">
-                                        <Users className="h-4 w-4"/>
-                                    </AvatarIcon>
+                                    <UserPublicAvatar className="w-8 h-8" userId={access.id}/>
                                     <div>
                                         <p className="text-sm font-medium">{inheritedName}</p>
                                         <p className="text-xs text-muted-foreground">
@@ -378,7 +377,7 @@ export function DriveAccessListEdit({
                                 </div>
                             ) : (
                                 <UserPublicItem
-                                    email={access.id}
+                                    userId={access.id}
                                     label={<span
                                         className="text-muted-foreground text-xs">Inherited from "{access.sourceFolderName}"</span>}
                                 />
