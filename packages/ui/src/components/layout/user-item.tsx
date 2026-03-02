@@ -47,7 +47,7 @@ export function UserItem({
 
     return (
         <div className={cn("flex items-center", className)} {...props}>
-            <Avatar className={cn(className, "h-8 w-8 print-exact select-none")} {...props}>
+            <Avatar className={"h-8 w-8 print-exact select-none"}>
                 <AvatarImage src={avatarSrc} alt={displayName}/>
             </Avatar>
 
