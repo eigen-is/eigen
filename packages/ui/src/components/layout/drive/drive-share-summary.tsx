@@ -1,10 +1,10 @@
 import {useMemo} from "react";
 import {Unlock, UserRoundPlus} from "lucide-react";
 import {cn} from "@workspace/ui/lib/utils";
-import {UserPublicAvatar} from "../user-public-avatar";
 import {type DriveACL, type DrivePath} from "@workspace/lib/types/drive";
 import {Tooltip, TooltipContent, TooltipTrigger} from "@workspace/ui/components/tooltip";
 import {useBreadcrumb} from "@workspace/lib/drive";
+import {UserAvatar} from "@workspace/ui/components/layout/user-avatar";
 
 export type DriveShareSummaryProps = {
     path: DrivePath;
@@ -64,11 +64,12 @@ export function DriveShareSummary({
         >
             {isShared ? (
                 <div className="flex items-center gap-1">
-                    <UserPublicAvatar
+                    <UserAvatar
                         email={path.ownerId}
                         size="sm"
                         className="position-relative"
                         style={{zIndex: 0}}
+                        tooltip={true}
                     />
                     {isPublic && (
                         <Tooltip delayDuration={300}>
@@ -84,12 +85,13 @@ export function DriveShareSummary({
                         </Tooltip>
                     )}
                     {allEntries.slice(0, isPublic ? 2 : 3).map((access, index) =>
-                        <UserPublicAvatar
+                        <UserAvatar
                             key={access.id}
                             email={access.id}
                             size="sm"
                             className="-ml-4 position-relative"
                             style={{zIndex: (isPublic ? 2 : 1) + index}}
+                            tooltip={true}
                         />
                     )}
                     {allEntries.length > (isPublic ? 2 : 3) && (

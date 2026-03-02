@@ -2,7 +2,6 @@
 
 import {useCallback, useEffect, useMemo, useRef, useState} from "react"
 import {UserPublicItem} from "../user-item"
-import {UserPublicAvatar} from "../user-public-avatar.tsx"
 import type {DriveACL, DrivePath, DriveVisibility} from "@workspace/lib/types/drive"
 import {cn} from "@workspace/ui/lib/utils"
 import {usePublicUser} from "@workspace/lib/public"
@@ -53,7 +52,7 @@ export function DriveAccessListEdit({
                                     }: DriveAccessListEditProps) {
     const parsedOwner = useMemo(() => parseOwnerId(path.ownerId), [path.ownerId])
     const isGroupOwned = parsedOwner.type === 'team'
-    const owner = usePublicUser(path.ownerId, {enabled: !isGroupOwned})
+    const owner = usePublicUser(path.ownerId)
     const breadcrumb = useBreadcrumb(path.ownerId, path.mountId, path.id)
     const [pendingChanges, setPendingChanges] = useState(false)
     const [newContactInput, setNewContactInput] = useState("")
@@ -366,7 +365,7 @@ export function DriveAccessListEdit({
                         <div key={access.id} className="flex items-center justify-between">
                             {isTeam ? (
                                 <div className="flex items-center gap-3 py-1">
-                                    <UserPublicAvatar className="w-8 h-8" userId={access.id}/>
+                                    <UserAvatar className="w-8 h-8" userId={access.id}/>
                                     <div>
                                         <p className="text-sm font-medium">{inheritedName}</p>
                                         <p className="text-xs text-muted-foreground">

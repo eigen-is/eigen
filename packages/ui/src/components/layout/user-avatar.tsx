@@ -2,9 +2,11 @@
 
 import {HTMLAttributes} from "react"
 import {cn} from "@workspace/ui/lib/utils"
-import {Avatar, AvatarImage} from "@workspace/ui/components/avatar"
+import {Avatar, AvatarImage} from "../avatar"
 import {API_HOST, getPublicAvatarUrl} from "@workspace/lib/api"
 import {useContacts} from "@workspace/lib/contacts";
+import {usePublicUser} from "@workspace/lib/public"
+import {Tooltip, TooltipContent, TooltipTrigger} from "../tooltip.tsx";
 
 export type UserAvatarProps = HTMLAttributes<HTMLDivElement> & {
     name?: string
@@ -13,6 +15,7 @@ export type UserAvatarProps = HTMLAttributes<HTMLDivElement> & {
     userId?: string
     className?: string
     size?: "sm" | "md" | "lg"
+    tooltip?: boolean
 }
 
 export function UserAvatar({
@@ -22,15 +25,19 @@ export function UserAvatar({
                                userId,
                                className,
                                size = "md",
+                               tooltip = false,
                                ...props
                            }: UserAvatarProps) {
-    const displayName = (name || email || "");
-    const {data, isLoading} = useContacts();
+    const {data: dataContacts, isLoading: isLoadingContacts} = useContacts();
+    const {data: dataPublic, isLoading: isLoadingPublic} = usePublicUser(userId || email || '');
 
-    imageUrl = imageUrl || ((!isLoading && email && data && data.find(c => c.email.includes(email))?.avatar) || '');
+    const contact = !isLoadingContacts && email && dataContacts ? dataContacts.find(c => c.email.includes(email)) : null;
+    const publicUser = !isLoadingPublic ? dataPublic : null;
+    const url = imageUrl || (contact?.avatar) || (publicUser?.avatar) || null;
+    const displayName = (contact && `${contact.firstName} ${contact.lastName}`.trim()) || (publicUser && publicUser.name?.trim()) || name || email || "";
 
-    const avatarSrc = imageUrl
-        ? `${API_HOST}/${imageUrl}`
+    const avatarSrc = url
+        ? `${API_HOST}/${url}`
         : getPublicAvatarUrl(userId || email || '');
 
     const sizeClasses = {
@@ -40,8 +47,19 @@ export function UserAvatar({
     };
 
     return (
-        <Avatar className={cn(sizeClasses[size], className, "print-exact")} {...props}>
-            <AvatarImage src={avatarSrc} alt={displayName}/>
-        </Avatar>
+        tooltip ?
+            <Tooltip delayDuration={300}>
+                <TooltipTrigger asChild>
+                    <Avatar className={cn(sizeClasses[size], className, "print-exact")} {...props}>
+                        <AvatarImage src={avatarSrc} alt={displayName}/>
+                    </Avatar>
+                </TooltipTrigger>
+                <TooltipContent>{displayName}</TooltipContent>
+            </Tooltip>
+            :
+            <Avatar className={cn(sizeClasses[size], className, "print-exact")} {...props}>
+                <AvatarImage src={avatarSrc} alt={displayName}/>
+            </Avatar>
+
     );
 }

@@ -29,7 +29,7 @@ export function UserItem({
                              autoFetch = false,
                              ...props
                          }: UserItemProps) {
-    const {data, isLoading} = usePublicUser(email || '', {enabled: autoFetch});
+    const {data, isLoading} = usePublicUser(userId || email || '');
 
     const resolvedName = autoFetch ? (data?.name || name || email) : (name || email || "");
     const resolvedEmail = autoFetch ? (data?.email || email) : email;
