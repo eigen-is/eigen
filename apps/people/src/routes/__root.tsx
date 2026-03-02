@@ -4,6 +4,7 @@ import {usePeopleTeams, useAddTeamMember} from '@workspace/lib/people';
 import {AppShell} from '@workspace/ui/components/layout/app-shell';
 import {PeopleSidebar} from '../components/people/people-sidebar';
 import {toast} from 'sonner';
+import {useLocation} from '@tanstack/react-router';
 
 interface MyRouterContext {
     auth: AuthContextType;
@@ -13,6 +14,10 @@ function PeopleRoot() {
     const {data: org} = useOrganization();
     const {data: teams = []} = usePeopleTeams(org?.id);
     const addMember = useAddTeamMember();
+    const location = useLocation();
+
+    // Check if we're on the teams route with a teamId selected
+    const isTeamDetailSelected = location.pathname === '/teams' && location.search.teamId;
 
     const handleAddMembersToTeam = async (memberIds: string[], teamId: string) => {
         const team = teams.find(t => t.id === teamId);
@@ -31,6 +36,7 @@ function PeopleRoot() {
         <AppShell
             appName="people"
             rootRoute={Route}
+            sidebarMode={isTeamDetailSelected ? 'hidden' : 'collapsible'}
             sidebar={({condensed, isMobile, onClose}) => (
                 <PeopleSidebar
                     condensed={condensed}
