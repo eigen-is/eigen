@@ -64,6 +64,7 @@ export function UserItem({
 }
 
 export type UserPublicItemProps = HTMLAttributes<HTMLDivElement> & {
+    name?: string
     email?: string
     label?: ReactNode
     className?: string
@@ -71,6 +72,15 @@ export type UserPublicItemProps = HTMLAttributes<HTMLDivElement> & {
     mailLink?: boolean
 }
 
-export function UserPublicItem({email, label, className, userId, mailLink = false, ...props}: UserPublicItemProps) {
-    return <UserItem email={email} label={label} className={className} mailLink={mailLink} autoFetch userId={userId} {...props}/>;
+export function UserPublicItem({
+                                   name,
+                                   email,
+                                   label,
+                                   className,
+                                   userId,
+                                   mailLink = false,
+                                   ...props
+                               }: UserPublicItemProps) {
+    return <UserItem name={name} email={email} label={label} className={className} mailLink={mailLink} autoFetch
+                     userId={userId} {...props}/>;
 }   

@@ -47,7 +47,7 @@ export async function generateFallbackSvg(emailOrId: string): Promise<string> {
 
     if (parsed.type === 'team') {
         return `<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
-  <rect width="256" height="256" fill="#e5e5e5"/>
+  <rect width="256" height="256" fill="#f1f5f9"/>
   <g fill="${color}">
     <circle cx="128" cy="128" r="32"/>
     
@@ -63,7 +63,7 @@ export async function generateFallbackSvg(emailOrId: string): Promise<string> {
 </svg>`;
     } else {
         return `<svg xmlns="http://www.w3.org/2000/svg" width="256" height="256" viewBox="0 0 256 256">
-  <rect width="256" height="256" fill="#e5e5e5"/>
+  <rect width="256" height="256" fill="#f1f5f9"/>
   <circle cx="128" cy="128" r="96" fill="${color}"/>
 </svg>`;
     }

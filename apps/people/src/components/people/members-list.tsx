@@ -1,7 +1,7 @@
 import {useMemo, useRef} from 'react';
 import {cn} from '@workspace/ui/lib/utils';
 import {SearchBar} from '@workspace/ui/components/layout/search-bar/search-bar';
-import {UserItem} from '@workspace/ui/components/layout/user-item';
+import {UserPublicItem} from '@workspace/ui/components/layout/user-item';
 import {useKeyboardListNavigation} from '@workspace/ui/hooks/use-keyboard-list-navigation';
 import {useListSelection} from '@workspace/ui/hooks/use-list-selection';
 import {useListDrag} from '@workspace/ui/hooks/use-list-drag';
@@ -19,7 +19,13 @@ interface MembersListToolbarProps {
     organizationId?: string;
 }
 
-export function MembersListToolbar({searchQuery, onSearchChange, showCreateDialog, onShowCreateDialog, organizationId}: MembersListToolbarProps) {
+export function MembersListToolbar({
+                                       searchQuery,
+                                       onSearchChange,
+                                       showCreateDialog,
+                                       onShowCreateDialog,
+                                       organizationId
+                                   }: MembersListToolbarProps) {
     return (
         <div className="flex items-center justify-between w-full gap-2">
             <SearchBar
@@ -110,10 +116,9 @@ export function MembersList({members, searchQuery, activeMemberId, onRowClick}: 
                     }}
                     {...drag.getDragProps(member)}
                 >
-                    <UserItem
+                    <UserPublicItem
                         name={member.name}
                         email={member.email}
-                        imageUrl={member.image ?? undefined}
                         className="flex-1 min-w-0"
                     />
                     <Badge variant={roleBadgeVariant[member.role] ?? 'outline'} className="shrink-0 text-xs">
