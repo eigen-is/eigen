@@ -4,22 +4,18 @@ A chat is a Drive document type (`application/eigenchat`), like `.eigendoc` and 
 
 **Why not Yjs?** Chat is append-only messages, not collaborative editing. SQLite gives pagination, indexing, and efficient queries. Yjs documents grow forever and can't be paginated.
 
----
-
 ## 1. Design Philosophy
 
 MUD-inspired, adapted to Eigen's architecture:
 
-- **Chat = Room**: Each `.eigenchat` is a single chat room with its own `data.db`
-- **Focus-first**: Notifications scoped to active chat (with @mention exceptions)
-- **Commands**: MUD-style slash commands (emotes, whisper, inspect, invite)
-- **Keyboard-first**: Command-driven interaction
-- **Validation**: Both client and server validate commands and targets
-- Chats are Drive folders → ACL works automatically
-- Real-time via SSE (existing) → no new infrastructure
-- History is paginated SQLite → efficient at any scale
-
----
+- **Chat = Room**: Each `.eigenchat` is a single chat room with its own `data.db`.
+- **Focus-first**: Notifications scoped to active chat (with @mention exceptions).
+- **Commands**: MUD-style slash commands (emotes, whisper, inspect, invite).
+- **Keyboard-first**: Command-driven interaction.
+- **Validation**: Both client and server validate commands and targets.
+- Chats are Drive folders → ACL works automatically.
+- Real-time via SSE (existing) → no new infrastructure.
+- History is paginated SQLite → efficient at any scale.
 
 ## 2. Storage Architecture
 
@@ -59,8 +55,6 @@ my-document.eigendoc/
 
 The embedded chats inherit ACL from the parent document. The collab info endpoint returns `folderContents` which includes the `chat/` subfolder. Users can create additional chats in the `chat/` subfolder.
 
----
-
 ## 3. Database Schema
 
 Each `.eigenchat` contains a `data.db` with two tables.
@@ -95,8 +89,6 @@ Each `.eigenchat` contains a `data.db` with two tables.
 - `messages(replyTo)` — thread queries
 - `messages(authorId)` — author filter
 
----
-
 ## 4. API Design
 
 ### Chat Creation (Drive route)
@@ -130,8 +122,6 @@ apps/api/src/lib/chat/
 └── index.ts
 ```
 
----
-
 ## 5. ACL & Permissions
 
 Inherits from Drive's ACL system — no new permission logic.
@@ -143,13 +133,11 @@ Inherits from Drive's ACL system — no new permission logic.
 | `read: true, write: false` | Read-only — can view but not post, edit, or delete |
 | `owner` | Manage ACL |
 
-- **Share chat**: Set ACL on `.eigenchat` folder
-- **Embedded chat**: Inherits from parent `.eigendoc` / `.eigenstickies`
-- **DM**: Chat with ACL restricted to two users
-- **Write enforcement**: POST/PATCH/DELETE routes check `canWrite()` and return 403 if read-only
-- **Frontend**: `MessageInput` shows read-only notice when user lacks write permission
-
----
+- **Share chat**: Set ACL on `.eigenchat` folder.
+- **Embedded chat**: Inherits from parent `.eigendoc` / `.eigenstickies`.
+- **DM**: Chat with ACL restricted to two users.
+- **Write enforcement**: POST/PATCH/DELETE routes check `canWrite()` and return 403 if read-only.
+- **Frontend**: `MessageInput` shows read-only notice when user lacks write permission.
 
 ## 6. Frontend Architecture
 
@@ -178,8 +166,6 @@ apps/chat/src/
 - `useMessages(ownerId, mountId, chatId)` — GET messages with polling
 - `usePostMessage(ownerId, mountId, chatId)` — POST message mutation
 - `useCreateChat(ownerId, mountId)` — create chat via drive
-
----
 
 ## 7. Implementation Status
 
@@ -233,23 +219,24 @@ Parsed on backend (`apps/api/src/lib/chat/commands.ts`) and locally on frontend 
 
 ### Validation
 
-- **Unknown commands**: Client-side check prevents sending messages starting with `/` that don't match known commands
-- **Whisper targets**: Must be valid email addresses (validated both client and server). Server returns 400 for non-email targets, 404 for non-existent users
-- **Invite targets**: Must be valid email addresses (client-side validation)
+- **Unknown commands**: Client-side check prevents sending messages starting with `/` that don't match known commands.
+- **Whisper targets**: Must be valid email addresses (validated both client and server). Server returns 400 for
+  non-email targets, 404 for non-existent users.
+- **Invite targets**: Must be valid email addresses (client-side validation).
 
 ## 9. Message Display
 
-- **Emotes**: Shown with ✦ marker, italic text. Built-in emotes show first/third person text
-- **Whispers**: Orange background, "whisper" badge. Author sees "whispers to X", recipient sees "whispers to you", others see "[a few hushed words]"
-- **Email rendering**: Email addresses in message content are replaced with inline avatar + name (clickable, opens mail compose)
-- **Inspect card**: Shows user avatar, name, email (clickable), company/job, phone from public user data and contacts
-- **Deleted messages**: Content cleared to `''` in database, displayed as "This message was deleted"
+- **Emotes**: Shown with ✦ marker, italic text. Built-in emotes show first/third person text.
+- **Whispers**: Orange background, "whisper" badge. Author sees "whispers to X", recipient sees "whispers to you",
+  others see "[a few hushed words]".
+- **Email rendering**: Email addresses in message content are replaced with inline avatar + name (clickable, opens mail
+  compose).
+- **Inspect card**: Shows user avatar, name, email (clickable), company/job, phone from public user data and contacts.
+- **Deleted messages**: Content cleared to `''` in database, displayed as "This message was deleted".
 
 ## 10. @ Mention Trigger
 
 Typing `@` after whitespace, comma, dot, or at start of line opens a player suggestion dropdown. Selecting a suggestion replaces from the `@` to cursor with the selected email. Mid-word `@` (e.g., in email addresses) does not trigger the dropdown.
-
----
 
 ## 11. Remaining
 

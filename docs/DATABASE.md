@@ -9,8 +9,6 @@ The application uses SQLite databases managed through Drizzle ORM. Databases are
 1. **Server-level databases** - Global databases for auth and config
 2. **User-level databases** - Per-user databases managed through `Home` and `Mount`
 
----
-
 ## Database Inventory
 
 | Database | Path | Manager | Purpose |
@@ -22,8 +20,6 @@ The application uses SQLite databases managed through Drizzle ORM. Databases are
 | **Contacts** | `{home}/eigen.contacts/contacts.db` | `Home.getLocalDatabase()` | User contacts |
 | **Mail** | `{home}/eigen.mail/mail.db` | `Home.getLocalDatabase()` | Email metadata |
 | **Collab Docs** | Mount storage backend (key: `{dataDbPathId}`) | `Mount.openDatabase()` | YJS document updates |
-
----
 
 ## Core Components
 
@@ -61,8 +57,6 @@ Each domain has a `db-config.ts` defining its schema and migrations:
 - `src/lib/mail/db-config.ts` - MAIL_DB_CONFIG
 - `src/lib/drive/db-config.ts` - SHARED_DB_CONFIG
 - `src/lib/mount/db-config.ts` - MOUNT_DB_CONFIG
-
----
 
 ## Database Access Patterns
 
@@ -115,8 +109,6 @@ For remote-capable storage backends (for example `s3`), `Mount.openDatabase()` u
 - `onSync`: Upload temp file to remote storage
 - `onClose`: Cleanup temp file
 
----
-
 ## Singleton Pattern
 
 Both `Home` and `Mount` use the singleton pattern for database management:
@@ -136,8 +128,6 @@ This ensures:
 - Each database is opened only once
 - Concurrent access returns the same instance
 - Proper cleanup on destruction
-
----
 
 ## Migration System
 
@@ -164,8 +154,6 @@ const CONTACTS_DB_CONFIG: DatabaseConfig<typeof schema> = {
 
 The `__schema_version` table tracks the current version. Only pending migrations run.
 
----
-
 ## Considerations
 
 ### Why Local-Only for Contacts/Mail?
@@ -188,8 +176,6 @@ For mount-based databases, the `pathId` (UUID) from metadata.db is used as the s
 - Stable keys that survive file renames
 - Unique keys per document
 - Direct mapping to the drive structure
-
----
 
 ## File Structure
 
