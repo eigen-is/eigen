@@ -4,6 +4,7 @@ import {HTMLAttributes} from "react"
 import {cn} from "@workspace/ui/lib/utils"
 import {Avatar, AvatarImage} from "@workspace/ui/components/avatar"
 import {API_HOST, getPublicAvatarUrl} from "@workspace/lib/api"
+import {useContacts} from "@workspace/lib/contacts";
 
 export type UserAvatarProps = HTMLAttributes<HTMLDivElement> & {
     name?: string
@@ -24,6 +25,9 @@ export function UserAvatar({
                                ...props
                            }: UserAvatarProps) {
     const displayName = (name || email || "");
+    const {data, isLoading} = useContacts();
+
+    imageUrl = imageUrl || ((!isLoading && email && data && data.find(c => c.email.includes(email))?.avatar) || '');
 
     const avatarSrc = imageUrl
         ? `${API_HOST}/${imageUrl}`
