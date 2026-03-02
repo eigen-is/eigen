@@ -12,7 +12,7 @@ import {buildChatEvent} from './sse-events';
 import {SSEventType} from '@workspace/lib/types/sse';
 import type {Home} from '../home';
 import {formatEmoteForViewer, parseCommand} from './commands';
-import {isEmailAddress} from '@workspace/lib/validation';
+import {validateEmailAddress} from '@workspace/lib/validation';
 import {getUserByEmail} from '../user/';
 import {ApiError} from '../core/errors';
 
@@ -74,7 +74,7 @@ export class ChatRoom {
         }
 
         if (type === 'whisper' && whisperTo) {
-            if (!isEmailAddress(whisperTo)) {
+            if (!validateEmailAddress(whisperTo)) {
                 throw new ApiError(400, `Invalid whisper target '${whisperTo}': must be a valid email address`);
             }
             const targetUser = await getUserByEmail(whisperTo);

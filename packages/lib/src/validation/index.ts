@@ -1,20 +1,21 @@
+import {parseOwnerId} from "../types";
+
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 export {EMAIL_REGEX};
 
-export function isEmailAddress(value: string): boolean {
-    return EMAIL_REGEX.test(value);
+export function validateEmailAddress(value: string): boolean {
+    return EMAIL_REGEX.test(value.trim());
 }
 
 export function validateEmailTarget(value: string, context: string): string | null {
     if (!value || !value.trim()) return `${context} target cannot be empty`;
-    if (!isEmailAddress(value.trim())) return `'${value}' is not a valid email address`;
+    if (!validateEmailAddress(value)) return `'${value}' is not a valid email address`;
     return null;
 }
 
 export function validateACLEntries(acl: { id: string }[]): string | null {
     for (const entry of acl) {
-        if (entry.id.startsWith('team_')) continue;
-        if (!isEmailAddress(entry.id)) {
+        if (parseOwnerId(entry.id).id === '') {
             return `Invalid ACL entry: '${entry.id}'`;
         }
     }

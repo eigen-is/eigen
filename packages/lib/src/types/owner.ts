@@ -1,4 +1,4 @@
-import {isEmailAddress} from "@workspace/ui/validation";
+import {validateEmailAddress} from "../validation";
 
 export type OwnerType = 'user' | 'team' | 'org';
 
@@ -6,6 +6,10 @@ export type ParsedOwnerId = { type: OwnerType; id: string };
 
 export function parseOwnerId(ownerId: string): ParsedOwnerId {
     let id = ownerId, type: OwnerType = 'user';
+
+    if (validateEmailAddress(ownerId)) {
+        return {type: 'user', id: ownerId.toLowerCase()};
+    }
 
     if (ownerId.startsWith('team_')) {
         id = ownerId.slice(5);
@@ -18,8 +22,8 @@ export function parseOwnerId(ownerId: string): ParsedOwnerId {
 
     // check if id is valid uuid
     const uuidRegex = /^[0-9a-fA-Z]{32}$/i;
-    if (!uuidRegex.test(id) && !(type === 'user' && isEmailAddress(ownerId))) {
-        throw new Error(`Invalid ownerId: ${ownerId}`);
+    if (!uuidRegex.test(id)) {
+        return {type: 'user', id: ''};
     }
 
     return {id, type};

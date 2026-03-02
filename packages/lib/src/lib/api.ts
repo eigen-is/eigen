@@ -11,7 +11,6 @@ export const api = treaty<app>(API_HOST, {
 
 export const contactsApi = api.contacts;
 export const mailApi = api.mail;
-export const spaceApi = api.space;
 export const publicApi = api.p;
 export const driveApi = api.drive;
 export const homeApi = api.home;
@@ -43,7 +42,6 @@ export const getDriveAppUrl = (path?: string) => joinAppUrl(DRIVE_APP_URL, path)
 export const getDocsAppUrl = (path?: string) => joinAppUrl(DOCS_APP_URL, path);
 export const getStickiesAppUrl = (path?: string) => joinAppUrl(STICKIES_APP_URL, path);
 export const getChatAppUrl = (path?: string) => joinAppUrl(CHAT_APP_URL, path);
-export const getPeopleAppUrl = (path?: string) => joinAppUrl(PEOPLE_APP_URL, path);
 
 export const getChatRoomUrl = (ownerId: string, mountId: string, chatId: string) =>
     getChatAppUrl(`${ownerId}/${mountId}/${chatId}`);

@@ -4,7 +4,6 @@ import {
     getDocsAppUrl,
     getDriveAppUrl,
     getMailAppUrl,
-    getPeopleAppUrl,
     getSpaceAppUrl,
     getStickiesAppUrl,
 } from "@workspace/lib/api";
