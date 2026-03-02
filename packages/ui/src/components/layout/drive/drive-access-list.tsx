@@ -2,12 +2,11 @@
 import {UserPublicItem} from "../user-item"
 import type {DriveACL, DrivePath} from "@workspace/lib/types/drive"
 import {cn} from "@workspace/ui/lib/utils"
-import {useMemo} from "react"
-import {usePublicUser} from "@workspace/lib/public"
 import {Lock, Unlock, UserRoundPlus} from "lucide-react"
 import {AvatarIcon} from "@workspace/ui/components/avatar"
 import {Separator} from "@workspace/ui/components/separator"
 import {TooltipButton} from "../tooltip-button"
+import {useDriveAccess} from "@workspace/lib/drive"
 
 export type DriveAccessListProps = {
     path: DrivePath
@@ -20,35 +19,7 @@ export function DriveAccessList({
                                     className,
                                     onShareClick
                                 }: DriveAccessListProps) {
-    const owner = usePublicUser(path.ownerId);
-
-    const accessList = useMemo(() => {
-        if (!owner.data) return [];
-
-        const ownerAccess : DriveACL & { owner: boolean } = {
-            id: owner.data.email || '',
-            read: true,
-            write: true,
-            owner: true
-        }
-
-        const list = [ownerAccess];
-
-        if (path.acl && path.acl.length > 0) {
-            for (const access of path.acl) {
-                if (access.id.toLowerCase() !== owner.data?.email.toLowerCase()) {
-                    list.push({
-                        id: access.id,
-                        read: access.read,
-                        write: access.write,
-                        owner: false
-                    })
-                }
-            }
-        }
-
-        return list;
-    }, [path, owner.data]);
+    const {allEntries} = useDriveAccess(path);
 
     const isPublic = path.visibility !== 'private';
 
@@ -66,7 +37,7 @@ export function DriveAccessList({
             </div>
 
             <div className="space-y-2">
-                {accessList.map((access) => (
+                {allEntries.map((access) => (
                     <UserPublicItem
                         key={access.id}
                         email={access.id}
