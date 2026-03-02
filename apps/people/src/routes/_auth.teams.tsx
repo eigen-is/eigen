@@ -1,11 +1,8 @@
-import {createFileRoute, useNavigate} from '@tanstack/react-router';
-import {TeamsList, TeamsListToolbar} from '../components/people/teams-list';
+import {createFileRoute} from '@tanstack/react-router';
 import {TeamDetail, TeamDetailToolbar} from '../components/people/team-detail';
 import {usePeopleTeams} from '@workspace/lib/people';
 import {useOrganization} from '@workspace/lib/auth';
-import {Column, ColumnLayout} from '@workspace/ui/components/layout/column-layout';
 import {EigenLoader} from '@workspace/ui/components/layout/eigen-loader';
-import {useState} from 'react';
 
 type TeamsSearch = {
     teamId?: string;
@@ -20,21 +17,11 @@ export const Route = createFileRoute('/_auth/teams')({
 
 function TeamsRoute() {
     const {teamId} = Route.useSearch();
-    const navigate = useNavigate();
-    const [searchQuery, setSearchQuery] = useState('');
 
     const {data: org} = useOrganization();
     const {data: teams = [], isLoading} = usePeopleTeams(org?.id);
 
     const team = teams.find(t => t.id === teamId);
-
-    const handleBackToList = () => {
-        navigate({to: '/teams', search: {}});
-    };
-
-    const handleRowClick = (id: string) => {
-        navigate({to: '/teams', search: {teamId: id}});
-    };
 
     if (isLoading) {
         return (
@@ -44,39 +31,26 @@ function TeamsRoute() {
         );
     }
 
-    const listToolbar = (
-        <TeamsListToolbar
-            searchQuery={searchQuery}
-            onSearchChange={setSearchQuery}
-            organizationId={org?.id}
-        />
-    );
-
     const detailToolbar = team ? (
         <TeamDetailToolbar team={team} organizationId={org?.id}/>
     ) : null;
 
     return (
-        <ColumnLayout mobileColumn={teamId ? 'detail' : 'list'}>
-            <Column id="list" width="350px" toolbar={listToolbar}>
-                <div className="flex h-full flex-col border-r overflow-y-auto">
-                    <TeamsList
-                        teams={teams}
-                        searchQuery={searchQuery}
-                        activeTeamId={teamId}
-                        onRowClick={handleRowClick}
-                    />
+        <div className="h-full flex flex-col">
+            {detailToolbar && (
+                <div className="border-b bg-background">
+                    {detailToolbar}
                 </div>
-            </Column>
-            <Column id="detail" width="flex" onBack={handleBackToList} toolbar={detailToolbar}>
+            )}
+            <div className="flex-1">
                 {team ? (
                     <TeamDetail team={team} organizationId={org?.id}/>
                 ) : (
                     <div className="h-full w-full flex items-center justify-center">
-                        <p className="text-muted-foreground">Select a team to view details</p>
+                        <p className="text-muted-foreground">Select a team from the sidebar to view details</p>
                     </div>
                 )}
-            </Column>
-        </ColumnLayout>
+            </div>
+        </div>
     );
 }
