@@ -6,6 +6,8 @@ import {DroppableSidebarItem} from '@workspace/ui/components/layout/sidebar/drop
 import {SidebarSection} from '@workspace/ui/components/layout/sidebar/sidebar-section';
 import {AppLogo} from '@workspace/ui/components/layout/app-logo';
 import type {OrgTeam} from '@workspace/lib/types/people';
+import {teamOwnerId} from "@workspace/lib/types";
+import {UserAvatar} from "@workspace/ui/components/layout/user-avatar.tsx";
 
 interface PeopleSidebarProps {
     condensed?: boolean;
@@ -15,7 +17,13 @@ interface PeopleSidebarProps {
     onAddMembersToTeam?: (memberIds: string[], teamId: string) => void;
 }
 
-export function PeopleSidebar({condensed = false, onClose, isMobile = false, teams = [], onAddMembersToTeam}: PeopleSidebarProps) {
+export function PeopleSidebar({
+                                  condensed = false,
+                                  onClose,
+                                  isMobile = false,
+                                  teams = [],
+                                  onAddMembersToTeam
+                              }: PeopleSidebarProps) {
     return (
         <div className="h-full flex flex-col bg-background">
             {isMobile && (
@@ -52,7 +60,7 @@ export function PeopleSidebar({condensed = false, onClose, isMobile = false, tea
                             {teams.map(team => (
                                 <DroppableSidebarItem
                                     key={team.id}
-                                    icon={<UsersRound className="h-4 w-4"/>}
+                                    icon={<UserAvatar userId={teamOwnerId(team.id)}/>}
                                     label={team.name}
                                     to={`/teams?teamId=${team.id}`}
                                     condensed={condensed}

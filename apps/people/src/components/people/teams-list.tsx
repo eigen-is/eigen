@@ -5,11 +5,13 @@ import {useKeyboardListNavigation} from '@workspace/ui/hooks/use-keyboard-list-n
 import {useListSelection} from '@workspace/ui/hooks/use-list-selection';
 import {Button} from '@workspace/ui/components/button';
 import {Input} from '@workspace/ui/components/input';
-import {Plus, UsersRound} from 'lucide-react';
+import {Plus} from 'lucide-react';
 import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle} from '@workspace/ui/components/dialog';
 import {useCreateTeam} from '@workspace/lib/people';
 import {toast} from 'sonner';
 import type {OrgTeam} from '@workspace/lib/types/people';
+import {UserAvatar} from "@workspace/ui/components/layout/user-avatar.tsx";
+import {teamOwnerId} from "@workspace/lib/types";
 
 interface TeamsListToolbarProps {
     searchQuery: string;
@@ -131,7 +133,7 @@ export function TeamsList({teams, searchQuery, activeTeamId, onRowClick}: TeamsL
                     }}
                 >
                     <div className="flex h-8 w-8 items-center justify-center rounded-full bg-muted">
-                        <UsersRound className="h-4 w-4 text-muted-foreground"/>
+                        <UserAvatar userId={teamOwnerId(team.id)}/>
                     </div>
                     <div className="flex-1 min-w-0">
                         <p className="text-sm font-medium truncate">{team.name}</p>
