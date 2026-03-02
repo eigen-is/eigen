@@ -1,4 +1,4 @@
-import Elysia, {t} from "elysia";
+import Elysia from "elysia";
 import {betterAuth} from "./auth";
 
 export const spaceRouter = new Elysia({name: "space"})
