@@ -5,7 +5,8 @@ import {UserAvatar, UserAvatarProps} from "./user-avatar"
 import {usePublicUser} from "@workspace/lib/public"
 
 export type UserPublicAvatarProps = Omit<UserAvatarProps, 'name' | 'imageUrl'> & {
-    email: string
+    email?: string
+    userId?: string
     className?: string
     size?: "sm" | "md" | "lg"
 }
@@ -13,6 +14,7 @@ export type UserPublicAvatarProps = Omit<UserAvatarProps, 'name' | 'imageUrl'> &
 export function UserPublicAvatar({
                                      email,
                                      className,
+                                     userId,
                                      size = "md",
                                      ...props
                                  }: UserPublicAvatarProps) {
@@ -24,12 +26,13 @@ export function UserPublicAvatar({
                 <UserAvatar
                     name={data?.name || email}
                     email={email}
+                    userId={userId}
                     size={size}
                     className={className}
                     {...props}
                 />
             </TooltipTrigger>
-            <TooltipContent>{data?.name || email}</TooltipContent>
+            <TooltipContent>{data?.name || email || ''}</TooltipContent>
         </Tooltip>
     );
 }

@@ -14,7 +14,7 @@ import {
 import {Button} from "@workspace/ui/components/button";
 import {SidebarSection} from '@workspace/ui/components/layout/sidebar/sidebar-section';
 import {AppLogo} from '@workspace/ui/components/layout/app-logo';
-import {SidebarItem, StorageUsage} from "@workspace/ui";
+import {SidebarItem, StorageUsage, UserAvatar} from "@workspace/ui";
 import {Separator} from '@workspace/ui/components/separator';
 import {DrivePath} from '@workspace/lib/types/drive';
 import {useState} from 'react';
@@ -240,7 +240,7 @@ export function DriveSidebar({
                                 key={team.id}
                                 ownerId={teamOwnerId(team.id)}
                                 label={team.name}
-                                icon={<UsersRound className="h-4 w-4"/>}
+                                icon={<UserAvatar email={teamOwnerId(team.id)} className="h-4 w-4"/>}
                                 condensed={condensed}
                             />
                         ))}

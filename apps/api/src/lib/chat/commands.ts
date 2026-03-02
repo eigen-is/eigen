@@ -102,8 +102,6 @@ export function parseCommand(raw: string): ParsedCommand {
     return {kind: 'error', error: 'Unknown command'};
 }
 
-export {validateEmailAddress, validateEmailTarget, validateCommand} from '@workspace/lib/validation';
-
 export function formatEmoteForViewer(content: string, authorEmail: string, authorId: string, viewerId: string): string {
     const authorName = authorEmail.split('@')[0] || authorEmail;
 
