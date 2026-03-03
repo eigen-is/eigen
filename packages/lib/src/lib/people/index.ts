@@ -1,2 +1,2 @@
 export * from './hooks';
-export * from './keys';
+export * from './hooks/keys.ts';
