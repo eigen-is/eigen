@@ -1,8 +1,7 @@
 import {useCallback, useMemo, useRef, useState} from 'react';
 import {useAuth} from '../../auth';
 import {useMessages, usePostMessage} from './use-chat';
-import {useCheckWritePermission, usePathInfo, useUpdateACL, useUploadFile} from '../../drive';
-import {driveApi} from '../../../lib/api';
+import {useCheckWritePermission, usePathInfo, useUpdateACL, useUploadFile, useFolderContent} from '../../drive';
 import {COMMANDS_HELP, SLASH_COMMANDS, getLocalCommand, isUnknownCommand, validateEmailTarget} from '../commands';
 import type {ChatMessage} from '../../../types/chat';
 import type {DriveACL, DrivePath} from '../../../types/drive';
@@ -14,13 +13,6 @@ export type RoomMember = {
 
 let localIdCounter = 0;
 
-async function getMediaFolderId(ownerId: string, mountId: string, chatId: string): Promise<string | null> {
-    const response = await driveApi({ownerId})({mountId}).folder({pathId: chatId}).get();
-    const contents = (response.data || []) as DrivePath[];
-    const media = contents.find(item => item.name === 'media');
-    return media?.id || null;
-}
-
 export function useChatRoom(ownerId: string, mountId: string, chatId: string) {
     const {user} = useAuth();
 
@@ -31,6 +23,7 @@ export function useChatRoom(ownerId: string, mountId: string, chatId: string) {
     const updateACL = useUpdateACL(ownerId);
     const {data: writePermission} = useCheckWritePermission(ownerId, mountId, chatId);
     const readOnly = writePermission ? !writePermission.canWrite : false;
+    const {data: chatContents = []} = useFolderContent(ownerId, mountId, chatId);
 
     const [localMessages, setLocalMessages] = useState<ChatMessage[]>([]);
     const lastWhisperFromRef = useRef<string | null>(null);
@@ -77,10 +70,10 @@ export function useChatRoom(ownerId: string, mountId: string, chatId: string) {
 
         let attachments: string[] | undefined;
         if (files && files.length > 0 && chatPath) {
-            const mediaFolder = await getMediaFolderId(ownerId, mountId, chatId);
+            const mediaFolder = chatContents.find(item => item.name === 'media');
             if (mediaFolder) {
                 const uploaded = await Promise.all(
-                    files.map(file => uploadFile.mutateAsync({parentId: mediaFolder, file}))
+                    files.map(file => uploadFile.mutateAsync({parentId: mediaFolder.id, file}))
                 );
                 attachments = uploaded.filter(Boolean).map(u => (u as DrivePath).id);
             }
@@ -144,7 +137,7 @@ export function useChatRoom(ownerId: string, mountId: string, chatId: string) {
         }
 
         await postMessage.mutateAsync({content: rawContent, attachments});
-    }, [ownerId, mountId, chatId, chatPath, uploadFile, postMessage, updateACL, addLocalMessage, findLastWhisperFrom]);
+    }, [ownerId, mountId, chatId, chatPath, chatContents, uploadFile, postMessage, updateACL, addLocalMessage, findLastWhisperFrom]);
 
     const allMessages = useMemo(() => {
         return [...messages, ...localMessages].sort(
