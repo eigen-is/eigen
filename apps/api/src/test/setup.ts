@@ -1,4 +1,4 @@
-import {existsSync, mkdirSync, rmSync} from 'fs';
+import {mkdirSync} from 'fs';
 import {join} from 'path';
 
 const TEST_DATA_DIR = join(import.meta.dir, '../../../../data/test-' + Date.now());
@@ -141,9 +141,9 @@ export function authedRequest(sessionToken: string, path: string, options?: Requ
 }
 
 export function cleanup() {
-    if (existsSync(TEST_DATA_DIR)) {
-        rmSync(TEST_DATA_DIR, {recursive: true, force: true});
-    }
+    // if (existsSync(TEST_DATA_DIR)) {
+    //     rmSync(TEST_DATA_DIR, {recursive: true, force: true});
+    // }
 }
 
 export function driveUrl(ownerId: string, mountId: string, ...parts: string[]) {
