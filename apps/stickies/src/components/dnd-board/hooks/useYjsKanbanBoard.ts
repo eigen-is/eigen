@@ -16,7 +16,6 @@ export const useYjsKanbanBoard = (ownerId: string, mountId: string, pathId: stri
         tasks: {},
         columns: {},
         columnOrder: [],
-        comments: {},
     });
 
     // UI state for dialogs and selection
@@ -52,13 +51,11 @@ export const useYjsKanbanBoard = (ownerId: string, mountId: string, pathId: stri
 
         // Map Yjs doc to React state
         const updateReactState = () => {
-            // Normalize board structure
             normalizeBoard(doc);
             const newState: BoardData = {
                 tasks: {},
                 columns: {},
                 columnOrder: columnOrderArray.toArray() as string[],
-                comments: {},
             };
             for (const [taskId, taskMapValue] of tasksMap) {
                 const taskMap = taskMapValue as Y.Map<any>;
@@ -68,6 +65,7 @@ export const useYjsKanbanBoard = (ownerId: string, mountId: string, pathId: stri
                     description: taskMap.get('description') || '',
                     creator: taskMap.get('creator') || '',
                     createdAt: taskMap.get('createdAt') || Date.now(),
+                    chatId: taskMap.get('chatId') || undefined,
                 };
             }
             for (const [columnId, columnMapValue] of columnsMap) {
@@ -80,18 +78,6 @@ export const useYjsKanbanBoard = (ownerId: string, mountId: string, pathId: stri
                     taskIds,
                     creator: columnMap.get('creator') || '',
                     createdAt: columnMap.get('createdAt') || Date.now()
-                };
-            }
-            // Map Yjs comments if present (future-proofing)
-            const commentsMap = doc.getMap('comments');
-            for (const [commentId, commentMapValue] of commentsMap) {
-                const commentMap = commentMapValue as Y.Map<any>;
-                newState.comments[commentId] = {
-                    id: commentId,
-                    taskId: commentMap.get('taskId') || '',
-                    text: commentMap.get('text') || '',
-                    author: commentMap.get('author') || '',
-                    createdAt: commentMap.get('createdAt') || Date.now(),
                 };
             }
             setBoard(newState);
@@ -128,7 +114,6 @@ export const useYjsKanbanBoard = (ownerId: string, mountId: string, pathId: stri
         setIsAddTaskDialogOpen(true);
     };
 
-    // Add new task (mutates Yjs only)
     const handleAddTask = (taskData: Omit<TaskItem, 'id' | 'createdAt'>) => {
         if (!selectedColumnId || !docRef.current) return;
         const doc = docRef.current;
@@ -143,6 +128,7 @@ export const useYjsKanbanBoard = (ownerId: string, mountId: string, pathId: stri
             newTaskMap.set('description', taskData.description || '');
             newTaskMap.set('creator', taskData.creator);
             newTaskMap.set('createdAt', now);
+            if (taskData.chatId) newTaskMap.set('chatId', taskData.chatId);
             tasksMap.set(taskId, newTaskMap);
             const columnMapValue = columnsMap.get(selectedColumnId);
             if (columnMapValue) {

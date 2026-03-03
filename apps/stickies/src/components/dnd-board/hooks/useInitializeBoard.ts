@@ -14,8 +14,7 @@ const DEFAULT_BOARD_STRUCTURE = {
         {
             id: '',
             title: 'Welcome to stickies!',
-            description: 'Drag this sticky to another column to get started. You can add more stickies with the "Add a sticky" button.',
-            comments: []
+            description: 'Drag this sticky to another column to get started. You can add more stickies with the "Add a sticky" button.'
         }
     ]
 };
@@ -57,7 +56,6 @@ export const useInitializeBoard = () => {
                 taskYMap.set('description', DEFAULT_BOARD_STRUCTURE.tasks[0].description);
                 taskYMap.set('creator', userEmail);
                 taskYMap.set('createdAt', now);
-                taskYMap.set('comments', new Y.Array());
 
                 tasksMap.set(taskId, taskYMap);
 
