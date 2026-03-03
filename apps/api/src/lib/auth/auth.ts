@@ -2,7 +2,6 @@ import {betterAuth} from "better-auth";
 import {drizzle} from 'drizzle-orm/bun-sqlite';
 import {drizzleAdapter} from "better-auth/adapters/drizzle";
 import {getServerDataPath} from "../config/paths";
-import {getServerConfig} from "../config/server-config";
 import {admin, organization, twoFactor} from "better-auth/plugins"
 import {
     account as accountScheme,
@@ -87,14 +86,16 @@ export const auth = betterAuth({
 });
 
 export async function authAddUserToDefaultOrg(user: User): Promise<void> {
-    const config = getServerConfig();
-    if (!config?.orgId) return;
+    const db = getAuthDrizzleDb();
+    const org = await db.select().from(organizationScheme).get();
+    
+    if (!org) return;
 
     try {
         await auth.api.addMember({
             body: {
                 userId: user.id,
-                organizationId: config.orgId,
+                organizationId: org.id,
                 role: 'member',
             },
         });

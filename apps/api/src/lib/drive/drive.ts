@@ -15,7 +15,7 @@ import {
 } from '@workspace/lib/types/drive';
 import {ChatRoom} from '../chat';
 import {canRead, canWrite, filterRedundantACL, normalizeACL} from './acl';
-import {getMemberships} from './membership';
+import {getMemberships} from '../user/user';
 import {validateACLEntries} from '@workspace/lib/validation';
 import {extractImageDetails, getThumbnail, saveThumbnail} from '../shared/thumbnails';
 import CollabDocument from '../collab/collabDocument';

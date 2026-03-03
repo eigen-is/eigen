@@ -1,4 +1,4 @@
-import {user} from '../../../auth-schema.ts';
+import {user, member, teamMember} from '../../../auth-schema.ts';
 import {eq} from "drizzle-orm";
 import type {User} from "better-auth/types";
 import {getAuthDrizzleDb} from "../auth/auth.ts";
@@ -16,4 +16,24 @@ export async function getUserById(id: string) {
 export async function updateUser(me: User, name: string, image: string) {
     const db = getAuthDrizzleDb();
     return await db.update(user).set({name, image}).where(eq(user.id, me.id));
+}
+
+export type Memberships = {
+    orgIds: string[];
+    teamIds: string[];
+};
+
+/**
+ * Resolves a user's org and team memberships from the auth database.
+ */
+export async function getMemberships(userId: string): Promise<Memberships> {
+    const db = getAuthDrizzleDb();
+
+    const orgMembers = await db.select().from(member).where(eq(member.userId, userId)).all();
+    const teamMembers = await db.select().from(teamMember).where(eq(teamMember.userId, userId)).all();
+
+    return {
+        orgIds: orgMembers.map(m => m.organizationId),
+        teamIds: teamMembers.map(m => m.teamId),
+    };
 }
