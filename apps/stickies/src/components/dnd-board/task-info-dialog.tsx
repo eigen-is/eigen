@@ -22,7 +22,7 @@ function TaskChat({ownerId, mountId, chatId}: { ownerId: string; mountId: string
     const chat = useChatRoom(ownerId, mountId, chatId);
 
     return (
-        <div className="flex flex-col min-h-0 overflow-hidden">
+        <div className="flex flex-col h-[50vh] overflow-hidden">
             <ChatMessageList
                 messages={chat.messages}
                 isLoading={chat.isLoading}
