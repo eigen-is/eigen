@@ -1,36 +1,89 @@
-import {useEffect, useRef, useState} from 'react';
+import {useCallback, useEffect, useRef, useState} from 'react';
 import * as Y from 'yjs';
 import {WebsocketProvider} from 'y-websocket';
 import {BoardData, ColumnItem, TaskItem} from '../types';
 import {nanoid} from 'nanoid';
-import {useInitializeBoard} from './useInitializeBoard';
 import {normalizeBoard} from '../normalizeBoard';
 import {getCollabWebSocketUrl} from "@workspace/lib/api";
+import {useAuth} from "@workspace/lib/auth";
+import {useCreateChat} from "@workspace/lib/chat";
+import type {DrivePath} from "@workspace/lib/types/drive";
 
-/**
- * Minimal Yjs-powered Kanban board hook for collaborative editing
- */
-export const useYjsKanbanBoard = (ownerId: string, mountId: string, pathId: string) => {
-    // Board state mirrors Yjs document
-    const [board, setBoard] = useState<BoardData>({
-        tasks: {},
-        columns: {},
-        columnOrder: [],
-    });
+const DEFAULT_COLUMNS = ['To Do', 'In Progress', 'Done'];
+const WELCOME_TASK = {
+    title: 'Welcome to stickies!',
+    description: 'Drag this sticky to another column to get started. You can add more stickies with the "Add a sticky" button.',
+};
 
-    // UI state for dialogs and selection
+export const useYjsKanbanBoard = (ownerId: string, mountId: string, pathId: string, chatFolderId: string | null) => {
+    const [board, setBoard] = useState<BoardData>({tasks: {}, columns: {}, columnOrder: []});
     const [selectedColumnId, setSelectedColumnId] = useState<string | null>(null);
     const [isAddTaskDialogOpen, setIsAddTaskDialogOpen] = useState(false);
     const [isAddColumnDialogOpen, setIsAddColumnDialogOpen] = useState(false);
 
-    // Yjs doc/provider refs
     const docRef = useRef<Y.Doc | null>(null);
     const providerRef = useRef<WebsocketProvider | null>(null);
     const undoManager = useRef<Y.UndoManager | null>(null);
 
-    const {initializeDefaultBoard} = useInitializeBoard();
+    const {user} = useAuth();
+    const createChat = useCreateChat(ownerId, mountId);
+    const createChatRef = useRef(createChat);
+    createChatRef.current = createChat;
+    const chatFolderIdRef = useRef(chatFolderId);
+    chatFolderIdRef.current = chatFolderId;
 
-    // Helper function to initialize board from JSON to Yjs data
+    const createTaskChat = useCallback(async (): Promise<string | undefined> => {
+        const folderId = chatFolderIdRef.current;
+        if (!folderId) return undefined;
+        try {
+            const result = await createChatRef.current.mutateAsync({parentId: folderId, fileName: `task-${Date.now()}`});
+            return (result as DrivePath)?.id;
+        } catch (e) {
+            console.error('Failed to create chat for task:', e);
+            return undefined;
+        }
+    }, []);
+
+    const initializeDefaultBoard = useCallback(async (doc: Y.Doc, userEmail: string) => {
+        const columnsMap = doc.getMap('columns');
+        if (columnsMap.size > 0) return;
+
+        const chatId = await createTaskChat();
+        const now = Date.now();
+
+        doc.transact(() => {
+            const tasksMap = doc.getMap('tasks');
+            const columnOrderArray = doc.getArray('columnOrder');
+
+            const taskId = `task-${nanoid(6)}`;
+            const taskYMap = new Y.Map();
+            taskYMap.set('id', taskId);
+            taskYMap.set('title', WELCOME_TASK.title);
+            taskYMap.set('description', WELCOME_TASK.description);
+            taskYMap.set('creator', userEmail);
+            taskYMap.set('createdAt', now);
+            if (chatId) taskYMap.set('chatId', chatId);
+            tasksMap.set(taskId, taskYMap);
+
+            const columnIds: string[] = [];
+            for (const [index, title] of DEFAULT_COLUMNS.entries()) {
+                const columnId = `column-${nanoid(6)}`;
+                columnIds.push(columnId);
+                const columnYMap = new Y.Map();
+                columnYMap.set('id', columnId);
+                columnYMap.set('title', title);
+                const taskIds = new Y.Array();
+                if (index === 0) taskIds.push([taskId]);
+                columnYMap.set('taskIds', taskIds);
+                columnYMap.set('creator', userEmail);
+                columnYMap.set('createdAt', now);
+                columnsMap.set(columnId, columnYMap);
+            }
+
+            columnOrderArray.insert(0, columnIds);
+        });
+    }, [createTaskChat]);
+
     useEffect(() => {
         const doc = new Y.Doc();
         docRef.current = doc;
@@ -41,7 +94,6 @@ export const useYjsKanbanBoard = (ownerId: string, mountId: string, pathId: stri
 
         undoManager.current = new Y.UndoManager([columnsMap, tasksMap, columnOrderArray]);
 
-        // Connect to WebSocket provider
         const wsUrl = getCollabWebSocketUrl(ownerId, mountId, pathId);
         const wsProvider = new WebsocketProvider(wsUrl, '', doc, {
             resyncInterval: 5000,
@@ -49,7 +101,6 @@ export const useYjsKanbanBoard = (ownerId: string, mountId: string, pathId: stri
         });
         providerRef.current = wsProvider;
 
-        // Map Yjs doc to React state
         const updateReactState = () => {
             normalizeBoard(doc);
             const newState: BoardData = {
@@ -83,39 +134,31 @@ export const useYjsKanbanBoard = (ownerId: string, mountId: string, pathId: stri
             setBoard(newState);
         };
 
-        // Observe Yjs changes
         tasksMap.observeDeep(updateReactState);
         columnsMap.observeDeep(updateReactState);
         columnOrderArray.observe(updateReactState);
         updateReactState();
 
-        // Initialize default columns if doc is empty (as a backup mechanism)
         wsProvider.on('sync', (isSynced: boolean) => {
-            console.log(isSynced)
-
             if (isSynced && columnsMap.size === 0) {
-                console.log('Sync completed, board is still empty, initializing default structure');
-                doc.transact(() => {
-                    initializeDefaultBoard(doc, ownerId);
-                });
+                initializeDefaultBoard(doc, user?.email || 'user@eigen.is');
             }
         });
 
-        // Cleanup
         return () => {
             if (providerRef.current) providerRef.current.disconnect();
             if (docRef.current) docRef.current.destroy();
         };
-    }, [ownerId, pathId, initializeDefaultBoard]);
+    }, [ownerId, mountId, pathId, user?.email, initializeDefaultBoard]);
 
-    // Dialog handlers
     const handleAddTaskClick = (columnId: string) => {
         setSelectedColumnId(columnId);
         setIsAddTaskDialogOpen(true);
     };
 
-    const handleAddTask = (taskData: Omit<TaskItem, 'id' | 'createdAt'>) => {
+    const handleAddTask = async (taskData: Omit<TaskItem, 'id' | 'createdAt' | 'chatId'>) => {
         if (!selectedColumnId || !docRef.current) return;
+        const chatId = await createTaskChat();
         const doc = docRef.current;
         doc.transact(() => {
             const taskId = `task-${nanoid(10)}`;
@@ -128,7 +171,7 @@ export const useYjsKanbanBoard = (ownerId: string, mountId: string, pathId: stri
             newTaskMap.set('description', taskData.description || '');
             newTaskMap.set('creator', taskData.creator);
             newTaskMap.set('createdAt', now);
-            if (taskData.chatId) newTaskMap.set('chatId', taskData.chatId);
+            if (chatId) newTaskMap.set('chatId', chatId);
             tasksMap.set(taskId, newTaskMap);
             const columnMapValue = columnsMap.get(selectedColumnId);
             if (columnMapValue) {
@@ -140,7 +183,6 @@ export const useYjsKanbanBoard = (ownerId: string, mountId: string, pathId: stri
         setIsAddTaskDialogOpen(false);
     };
 
-    // Add new column (mutates Yjs only)
     const handleAddColumn = (columnData: Omit<ColumnItem, 'id' | 'taskIds' | 'createdAt'>) => {
         if (!docRef.current) return;
         const doc = docRef.current;
@@ -172,7 +214,6 @@ export const useYjsKanbanBoard = (ownerId: string, mountId: string, pathId: stri
         handleAddTask,
         handleAddColumn,
         yjsDoc: docRef.current,
-        provider: providerRef.current,
         undoManager: undoManager.current,
     };
 };

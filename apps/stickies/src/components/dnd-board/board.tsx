@@ -11,9 +11,7 @@ import {useIsMobile} from "@workspace/lib/media";
 import {useYjsKanbanBoard} from './hooks/useYjsKanbanBoard';
 import {useYjsDragAndDrop} from './hooks/useYjsDragAndDrop';
 import {StickiesToolbar} from './stickies-toolbar';
-import {DrivePath} from '@workspace/lib/types/drive';
-import {useCreateChat} from '@workspace/lib/chat';
-import type {DrivePath as DrivePathType} from '@workspace/lib/types/drive';
+import type {DrivePath} from '@workspace/lib/types/drive';
 
 interface StickiesBoardProps {
     ownerId: string;
@@ -36,23 +34,7 @@ const StickiesBoard = ({ownerId, path, canWrite, chatFolderId, onAccessDialogOpe
         handleAddColumn,
         yjsDoc,
         undoManager
-    } = useYjsKanbanBoard(ownerId, path.mountId, path.id);
-
-    const createChat = useCreateChat(ownerId, path.mountId);
-
-    const handleAddTaskWithChat = async (taskData: Omit<TaskItem, 'id' | 'createdAt' | 'chatId'>) => {
-        let chatId: string | undefined;
-        if (chatFolderId) {
-            try {
-                const result = await createChat.mutateAsync({parentId: chatFolderId, fileName: `task-${Date.now()}`});
-                const chatPath = result as DrivePathType;
-                chatId = chatPath?.id;
-            } catch (e) {
-                console.error('Failed to create chat for task:', e);
-            }
-        }
-        handleAddTask({...taskData, chatId});
-    };
+    } = useYjsKanbanBoard(ownerId, path.mountId, path.id, chatFolderId);
 
     const {
         dragState,
@@ -193,7 +175,7 @@ const StickiesBoard = ({ownerId, path, canWrite, chatFolderId, onAccessDialogOpe
                     <AddTaskDialog
                         isOpen={isAddTaskDialogOpen}
                         onClose={() => setIsAddTaskDialogOpen(false)}
-                        onAddTask={handleAddTaskWithChat}
+                        onAddTask={handleAddTask}
                         columnId={selectedColumnId}
                     />
 
