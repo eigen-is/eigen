@@ -3,7 +3,6 @@
   "private": true,
   "scripts": {
     "serve": "bun --filter '*' dev",
-    "serve:admin": "bun --filter '@apps/api' --filter './apps/admin' dev",
     "serve:index": "bun --filter '@apps/api' --filter './apps/index' dev",
     "serve:mail": "bun --filter '@apps/api' --filter './apps/mail' dev",
     "serve:space": "bun --filter '@apps/api' --filter './apps/space' dev",

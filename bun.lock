@@ -38,14 +38,6 @@
         "vite-tsconfig-paths": "^6.1.1",
       },
     },
-    "apps/admin": {
-      "name": "@apps/admin",
-      "version": "0.0.1",
-      "dependencies": {
-        "@workspace/lib": "workspace:*",
-        "@workspace/ui": "workspace:*",
-      },
-    },
     "apps/api": {
       "name": "@apps/api",
       "version": "1.0.50",
@@ -233,8 +225,6 @@
     "@acemir/cssom": ["@acemir/cssom@0.9.31", "", {}, "sha512-ZnR3GSaH+/vJ0YlHau21FjfLYjMpYVIzTD8M8vIEQvIGxeOXyXdzCI140rrCY862p/C/BbzWsjc1dgnM9mkoTA=="],
 
     "@alloc/quick-lru": ["@alloc/quick-lru@5.2.0", "", {}, "sha512-UrcABB+4bUrFABwbluTIBErXwvbsU/V7TZWfmbgJfbkwiBuziS9gxdODUyuiecfdGQ85jglMW6juS3+z5TsKLw=="],
-
-    "@apps/admin": ["@apps/admin@workspace:apps/admin"],
 
     "@apps/api": ["@apps/api@workspace:apps/api"],
 
