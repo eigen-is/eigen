@@ -7,20 +7,28 @@ import {useContacts} from "@workspace/lib/contacts";
 import {Mail, Paperclip} from "lucide-react";
 import {useFileInfo} from "@workspace/lib/chat";
 import {getDriveDownloadUrl, getDriveThumbnailUrl, getMailComposeUrl} from "@workspace/lib/api";
+import {formatTime} from "@workspace/lib/date";
+import {EMAIL_FIND_REGEX} from "@workspace/lib/validation";
 import type {ChatMessage} from "@workspace/lib/types/chat";
 import type {Contact} from "@workspace/lib/types/contact";
 
 type ChatMessageListProps = {
-    messages: ChatMessage[]; ?: string;
+    messages: ChatMessage[];
+    isLoading: boolean;
+    currentUserId: string;
+    ownerId?: string;
+    mountId?: string;
+    className?: string;
     emptyMessage?: string;
 }
+
 function isSameAuthorAndClose(prev: ChatMessage, curr: ChatMessage): boolean {
     if (prev.authorId !== curr.authorId) return false;
     const diff = new Date(curr.createdAt).getTime() - new Date(prev.createdAt).getTime();
     return diff < 5 * 60 * 1000;
 }
 
-function AttachmentChip({pathId, ownerId, mountId}: { pathId: string; ow nerId: string; mountId: string }) {
+function AttachmentChip({pathId, ownerId, mountId}: { pathId: string; ownerId: string; mountId: string }) {
     const {data: fileInfo} = useFileInfo(ownerId, mountId, pathId);
 
     const name = fileInfo?.name || pathId;

@@ -19,6 +19,7 @@ import {
     List,
     ListOrdered,
     LucideIcon,
+    MessageSquare,
     Pencil,
     Printer,
     Redo,
@@ -218,7 +219,7 @@ const AlignmentButton = ({alignment, icon, tooltipText}: AlignmentButtonProps) =
     );
 };
 
-export const EditorToolbar = ({path, canWrite, onAccessDialogOpen, onDeleteDialogOpen}: EditorToolbarProps) => {
+export const EditorToolbar = ({path, canWrite, onAccessDialogOpen, onDeleteDialogOpen, onAddComment}: EditorToolbarProps) => {
     const editor = useSlate() as CustomEditor;
     const [linkUrl, setLinkUrl] = useState('');
     const [linkDialogOpen, setLinkDialogOpen] = useState(false);
@@ -550,6 +551,13 @@ export const EditorToolbar = ({path, canWrite, onAccessDialogOpen, onDeleteDialo
             </div>
 
             <div className="flex items-center gap-1">
+                {onAddComment && (
+                    <TooltipButton
+                        icon={MessageSquare}
+                        tooltipText="Add comment"
+                        onClick={onAddComment}
+                    />
+                )}
                 {canWrite ? (
                     <TooltipButton
                         icon={UserRoundPlus}
@@ -613,6 +621,7 @@ interface EditorToolbarProps {
     onAccessDialogOpen: () => void;
     onDeleteDialogOpen: (open: boolean) => void;
     path: DrivePath;
+    onAddComment?: () => void;
 }
 
 export default EditorToolbar;

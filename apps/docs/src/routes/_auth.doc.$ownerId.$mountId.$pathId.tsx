@@ -37,6 +37,10 @@ function CollaborativeTextEditor() {
         return docInfo?.folderContents?.find(item => item.name === 'media')?.id ?? null;
     }, [docInfo?.folderContents]);
 
+    const chatFolderId = useMemo(() => {
+        return docInfo?.folderContents?.find(item => item.name === 'chat')?.id ?? null;
+    }, [docInfo?.folderContents]);
+
     if (isLoading) {
         return <EigenLoader/>
     }
@@ -54,6 +58,7 @@ function CollaborativeTextEditor() {
             <div className="bg-muted flex-1 overflow-hidden">
                 <CollaborativeEditor path={docInfo.path} access={docInfo}
                                      mediaFolderId={mediaFolderId}
+                                     chatFolderId={chatFolderId}
                                      onAccessDialogOpen={handleAccessDialogOpen}
                                      onDeleteDialogOpen={setDeleteDialogOpen}/>
             </div>
