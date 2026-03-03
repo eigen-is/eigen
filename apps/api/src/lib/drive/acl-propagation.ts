@@ -2,9 +2,7 @@ import type {DriveACL, DrivePath} from '@workspace/lib/types/drive';
 import {parseOwnerId} from '@workspace/lib/types';
 import {getUserByEmail} from '../user/';
 import {getHome} from '../home';
-import {eq} from 'drizzle-orm';
-import {teamMember as teamMemberSchema, user as userSchema} from '../../../auth-schema';
-import { getAuthDrizzleDb } from '../auth/auth';
+import {getTeamMemberEmails} from '../team/team';
 
 export async function propagateACLChange(path: DrivePath, oldACL: DriveACL[] | null, newACL: DriveACL[] | null): Promise<void> {
     const userEmails = new Set<string>();
@@ -29,19 +27,5 @@ export async function propagateACLChange(path: DrivePath, oldACL: DriveACL[] | n
         } catch (error) {
             console.error('Failed to propagate ACL change:', error);
         }
-    }
-}
-
-async function getTeamMemberEmails(teamId: string): Promise<string[]> {
-    try {
-        const db = getAuthDrizzleDb();
-        const members = await db.select({email: userSchema.email})
-            .from(teamMemberSchema)
-            .innerJoin(userSchema, eq(teamMemberSchema.userId, userSchema.id))
-            .where(eq(teamMemberSchema.teamId, teamId))
-            .all();
-        return members.map(m => m.email.toLowerCase());
-    } catch {
-        return [];
     }
 }

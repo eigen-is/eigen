@@ -15,7 +15,7 @@ A modern workspace platform providing integrated productivity and collaboration 
 - **Space**: Team collaboration workspace
 - **Stickies**: Kanban board
 - **Chat**: Real-time chat with slash commands and whispers
-- **Admin**: Admin dashboard
+- **People**: Admin dashboard
 - **Setup**: First-run setup wizard
 
 ## Technology Stack
@@ -73,7 +73,7 @@ bun serve:index
 bun serve:mail
 bun serve:drive
 bun serve:space
-bun serve:admin
+bun serve:people
 bun serve:contacts
 bun serve:docs
 bun serve:stickies
