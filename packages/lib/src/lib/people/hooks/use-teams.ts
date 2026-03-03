@@ -1,6 +1,6 @@
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {authClient} from '../../auth/hooks/use-auth-client';
-import {peopleKeys} from '../keys';
+import {peopleKeys} from './keys.ts';
 import type {OrgTeam} from '@workspace/lib/types/people';
 
 export function usePeopleTeams(organizationId?: string) {
