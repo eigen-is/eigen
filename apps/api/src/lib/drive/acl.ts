@@ -1,7 +1,7 @@
 import type {User} from 'better-auth/types';
 import {type DriveACL, type DrivePath} from '@workspace/lib/types/drive';
 import {parseOwnerId} from '@workspace/lib/types';
-import type {Memberships} from './membership';
+import {type Memberships} from '../user/user';
 
 export type PathGetter = (pathId: string) => Promise<DrivePath | null>;
 export type MembershipGetter = (userId: string) => Promise<Memberships>;
