@@ -7,7 +7,7 @@ import {useContacts} from "@workspace/lib/contacts";
 import {Mail, Paperclip} from "lucide-react";
 import {useFileInfo} from "@workspace/lib/chat";
 import {getDriveDownloadUrl, getDriveThumbnailUrl, getMailComposeUrl} from "@workspace/lib/api";
-import {formatTime} from "@workspace/lib/lib/date";
+import {formatTime} from "@workspace/lib/date";
 import {EMAIL_FIND_REGEX} from "@workspace/lib/validation";
 import type {ChatMessage} from "@workspace/lib/types/chat";
 import type {Contact} from "@workspace/lib/types/contact";
