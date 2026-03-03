@@ -4,13 +4,14 @@ import {EigenLoader} from "../eigen-loader";
 import {cn} from "../../../lib/utils";
 import {usePublicUser} from "@workspace/lib/public";
 import {useContacts} from "@workspace/lib/contacts";
-import {Mail, Paperclip} from "lucide-react";
+import {Paperclip} from "lucide-react";
 import {useFileInfo} from "@workspace/lib/chat";
 import {getDriveDownloadUrl, getDriveThumbnailUrl, getMailComposeUrl} from "@workspace/lib/api";
 import {formatTime} from "@workspace/lib/date";
 import {EMAIL_FIND_REGEX} from "@workspace/lib/validation";
 import type {ChatMessage} from "@workspace/lib/types/chat";
 import type {Contact} from "@workspace/lib/types/contact";
+import {UserItem} from "@workspace/ui/components/layout/user-item";
 
 type ChatMessageListProps = {
     messages: ChatMessage[];
@@ -87,38 +88,22 @@ function RichContent({text, className}: { text: string; className?: string }) {
 }
 
 function InspectCard({target}: { target: string }) {
-    const {data: publicUser, isLoading: pubLoading} = usePublicUser(target);
     const {data: contacts = []} = useContacts();
     const contact = (contacts as Contact[]).find(c =>
         c.email?.some(e => e.toLowerCase() === target.toLowerCase())
     );
 
-    const name = publicUser?.name || contact?.firstName
-        ? `${contact?.firstName || ''} ${contact?.lastName || ''}`.trim()
-        : target.split('@')[0];
-
     return (
         <div className="flex gap-4 p-4 rounded-lg border bg-card max-w-sm">
             <div className="shrink-0">
-                <UserAvatar email={target} size="lg" className="h-16 w-16"/>
+                <UserItem email={target} mailLink={true}/>
             </div>
             <div className="flex-1 min-w-0 space-y-1">
-                <p className="text-sm font-bold text-foreground truncate">{name}</p>
-                <a
-                    href={getMailComposeUrl(target)}
-                    className="flex items-center gap-1.5 text-xs text-blue-600 hover:underline"
-                >
-                    <Mail className="h-3 w-3"/>
-                    {target}
-                </a>
                 {contact?.company && (
                     <p className="text-xs text-muted-foreground">{contact.jobTitle ? `${contact.jobTitle} at ` : ''}{contact.company}</p>
                 )}
                 {contact?.phone && contact.phone.length > 0 && contact.phone[0] && (
                     <p className="text-xs text-muted-foreground">{contact.phone[0]}</p>
-                )}
-                {!publicUser && !contact && !pubLoading && (
-                    <p className="text-xs text-muted-foreground italic">No additional info available</p>
                 )}
             </div>
         </div>
