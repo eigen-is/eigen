@@ -14,8 +14,7 @@ import {
     isContainerType
 } from '@workspace/lib/types/drive';
 import {ChatRoom} from '../chat';
-import {canRead, canWrite, filterRedundantACL, normalizeACL} from './acl';
-import {getMemberships} from '../user/user';
+import {canRead, canWrite, filterRedundantACL, matchesACL, normalizeACL} from './acl';
 import {validateACLEntries} from '@workspace/lib/validation';
 import {extractImageDetails, getThumbnail, saveThumbnail} from '../shared/thumbnails';
 import CollabDocument from '../collab/collabDocument';
@@ -442,14 +441,14 @@ export default class Drive {
         const mount = this.getMount(mountId);
         const path = await mount.getPath(pathId);
         if (!path) return false;
-        return await canRead(path, user, mount.getPath.bind(mount), getMemberships);
+        return await canRead(path, user, mount.getPath.bind(mount));
     }
 
     async canWrite(mountId: string, pathId: string, user: User): Promise<boolean> {
         const mount = this.getMount(mountId);
         const path = await mount.getPath(pathId);
         if (!path) return false;
-        return await canWrite(path, user, mount.getPath.bind(mount), getMemberships);
+        return await canWrite(path, user, mount.getPath.bind(mount));
     }
 
     async getCollabDocument(mountId: string, pathId: string): Promise<CollabDocument> {
@@ -540,7 +539,7 @@ export default class Drive {
     }
 
     async receiveACLChange(path: DrivePath, newACL: DriveACL[] | null): Promise<void> {
-        if (newACL === null || !newACL.find(acl => acl.id.toLowerCase() === this.owner.email.toLowerCase())) {
+        if (newACL === null || !matchesACL(newACL, this.owner, 'read')) {
             this.sharedDb.delete(sharedSchema.sharedPaths)
                 .where(eq(sharedSchema.sharedPaths.id, path.id))
                 .run();
