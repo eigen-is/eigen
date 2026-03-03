@@ -1,4 +1,7 @@
-import {validateCommand} from '@workspace/lib/validation';
+import {validateCommand} from '../../validation';
+import {validateEmailTarget} from '../../validation';
+
+export {validateEmailTarget};
 
 export const COMMANDS_HELP = [
     {cmd: '/?, /h, /help', desc: 'List of available slash commands'},
@@ -18,7 +21,6 @@ export const COMMANDS_HELP = [
     {cmd: '/reply, /r [Message]', desc: 'Reply to the last whisper'},
 ];
 
-// All available slash commands for autocomplete
 export const SLASH_COMMANDS = [
     '/?', '/h', '/help',
     '/time',
@@ -82,29 +84,4 @@ export function isUnknownCommand(raw: string): boolean {
     if (!trimmed.startsWith('/')) return false;
     const cmd = trimmed.split(' ')[0].toLowerCase();
     return !SLASH_COMMANDS.includes(cmd);
-}
-
-export {validateEmailAddress, validateEmailTarget} from '@workspace/lib/validation';
-
-export function getSlashCommandQuery(content: string): string | null {
-    const trimmed = content.trim();
-    if (!trimmed.startsWith('/')) return null;
-
-    // If there's a space after the slash command, don't autocomplete
-    const spaceIdx = trimmed.indexOf(' ');
-    if (spaceIdx > 0) return null;
-
-    return trimmed;
-}
-
-export function getAtSuggestQuery(text: string): string | null {
-    const atIdx = text.lastIndexOf('@');
-    if (atIdx === -1) return null;
-    if (atIdx > 0) {
-        const charBefore = text[atIdx - 1];
-        if (!/[\s,.]/.test(charBefore)) return null;
-    }
-    const after = text.slice(atIdx + 1);
-    if (after.includes(' ')) return null;
-    return after;
 }
