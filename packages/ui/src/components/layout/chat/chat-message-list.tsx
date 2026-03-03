@@ -1,7 +1,7 @@
 import {type ReactNode, useEffect, useRef} from 'react';
-import {EigenLoader, UserAvatar} from "@workspace/ui";
-import type {ChatMessage} from "@workspace/lib/types/chat";
-import {cn} from "@workspace/ui/lib/utils";
+import {UserAvatar} from "../user-avatar";
+import {EigenLoader} from "../eigen-loader";
+import {cn} from "../../../lib/utils";
 import {usePublicUser} from "@workspace/lib/public";
 import {useContacts} from "@workspace/lib/contacts";
 import {Mail, Paperclip} from "lucide-react";
@@ -9,14 +9,17 @@ import {useFileInfo} from "@workspace/lib/chat";
 import {getDriveDownloadUrl, getDriveThumbnailUrl, getMailComposeUrl} from "@workspace/lib/api";
 import {formatTime} from "@workspace/lib/lib/date";
 import {EMAIL_FIND_REGEX} from "@workspace/lib/validation";
+import type {ChatMessage} from "@workspace/lib/types/chat";
 import type {Contact} from "@workspace/lib/types/contact";
 
-type MessageListProps = {
+type ChatMessageListProps = {
     messages: ChatMessage[];
     isLoading: boolean;
     currentUserId: string;
     ownerId?: string;
     mountId?: string;
+    className?: string;
+    emptyMessage?: string;
 }
 
 function isSameAuthorAndClose(prev: ChatMessage, curr: ChatMessage): boolean {
@@ -122,7 +125,14 @@ function InspectCard({target}: { target: string }) {
     );
 }
 
-export function MessageList({messages, isLoading, ownerId, mountId}: MessageListProps) {
+export function ChatMessageList({
+                                    messages,
+                                    isLoading,
+                                    ownerId,
+                                    mountId,
+                                    className,
+                                    emptyMessage = 'No messages yet. Start the conversation!',
+                                }: ChatMessageListProps) {
     const bottomRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
@@ -131,7 +141,7 @@ export function MessageList({messages, isLoading, ownerId, mountId}: MessageList
 
     if (isLoading) {
         return (
-            <div className="flex items-center justify-center flex-1">
+            <div className={cn("flex items-center justify-center flex-1", className)}>
                 <EigenLoader/>
             </div>
         );
@@ -139,14 +149,14 @@ export function MessageList({messages, isLoading, ownerId, mountId}: MessageList
 
     if (messages.length === 0) {
         return (
-            <div className="flex items-center justify-center flex-1">
-                <p className="text-sm text-muted-foreground">No messages yet. Start the conversation!</p>
+            <div className={cn("flex items-center justify-center flex-1", className)}>
+                <p className="text-sm text-muted-foreground">{emptyMessage}</p>
             </div>
         );
     }
 
     return (
-        <div className="flex-1 overflow-y-auto">
+        <div className={cn("flex-1 overflow-y-auto", className)}>
             {messages.map((message, i) => {
                 const isWhisper = message.type === 'whisper';
                 const isEmote = message.type === 'emote';

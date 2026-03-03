@@ -1,26 +1,35 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
-import {Button} from "@workspace/ui/components/button";
+import {Button} from "../../button";
 import {Paperclip, Send, X} from "lucide-react";
-import {getAtSuggestQuery, getSlashCommandQuery, SLASH_COMMANDS} from "@/lib/commands.ts";
-import {PlayerSuggest, type RoomMember} from "./player-suggest";
+import {cn} from "../../../lib/utils";
+import {getAtSuggestQuery, type RoomMember} from "./chat-utils";
+import {ChatPlayerSuggest} from "./chat-player-suggest";
 
-type MessageInputProps = {
+type ChatMessageInputProps = {
     onSend: (rawContent: string, files?: File[]) => void;
     disabled?: boolean;
     readOnly?: boolean;
-    chatName?: string;
+    placeholder?: string;
+    readOnlyMessage?: string;
     roomMembers?: RoomMember[];
     messageCount?: number;
+    className?: string;
+    slashCommands?: string[];
+    onKeyDown?: (e: React.KeyboardEvent<HTMLTextAreaElement>, content: string) => boolean | void;
 }
 
-export function MessageInput({
-                                 onSend,
-                                 disabled = false,
-                                 readOnly = false,
-                                 chatName,
-                                 roomMembers = [],
-                                 messageCount = 0
-                             }: MessageInputProps) {
+export function ChatMessageInput({
+                                     onSend,
+                                     disabled = false,
+                                     readOnly = false,
+                                     placeholder = 'Type a message...',
+                                     readOnlyMessage = 'You have read-only access to this chat',
+                                     roomMembers = [],
+                                     messageCount = 0,
+                                     className,
+                                     slashCommands,
+                                     onKeyDown: onKeyDownProp,
+                                 }: ChatMessageInputProps) {
     const [content, setContent] = useState('');
     const [files, setFiles] = useState<File[]>([]);
     const [selectedSuggestIdx, setSelectedSuggestIdx] = useState(0);
@@ -48,7 +57,6 @@ export function MessageInput({
     };
 
     const atQuery = getAtSuggestQuery(content);
-    const slashQuery = getSlashCommandQuery(content);
     const suggestOpen = atQuery !== null;
 
     const handlePlayerSelect = useCallback((email: string) => {
@@ -77,11 +85,19 @@ export function MessageInput({
         setSelectedSuggestIdx(0);
     }, []);
 
+    const getSlashQuery = (): string | null => {
+        if (!slashCommands) return null;
+        const trimmed = content.trim();
+        if (!trimmed.startsWith('/')) return null;
+        if (trimmed.indexOf(' ') > 0) return null;
+        return trimmed;
+    };
+
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-        // Handle slash command Tab autocomplete
-        if (e.key === 'Tab' && slashQuery) {
+        const slashQuery = getSlashQuery();
+        if (e.key === 'Tab' && slashQuery && slashCommands) {
             e.preventDefault();
-            const matches = SLASH_COMMANDS.filter(cmd => cmd.startsWith(slashQuery));
+            const matches = slashCommands.filter(cmd => cmd.startsWith(slashQuery));
             if (matches.length === 1) {
                 setContent(matches[0] + ' ');
             }
@@ -119,6 +135,12 @@ export function MessageInput({
                 return;
             }
         }
+
+        if (onKeyDownProp) {
+            const handled = onKeyDownProp(e, content);
+            if (handled) return;
+        }
+
         if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
             handleSend();
@@ -138,14 +160,14 @@ export function MessageInput({
 
     if (readOnly) {
         return (
-            <div className="border-t px-5 py-3">
-                <p className="text-xs text-muted-foreground text-center py-2">You have read-only access to this chat</p>
+            <div className={cn("border-t px-5 py-3", className)}>
+                <p className="text-xs text-muted-foreground text-center py-2">{readOnlyMessage}</p>
             </div>
         );
     }
 
     return (
-        <div className="border-t px-5 py-3">
+        <div className={cn("border-t px-5 py-3", className)}>
             {files.length > 0 && (
                 <div className="flex flex-wrap gap-2 mb-2">
                     {files.map((file, i) => (
@@ -179,7 +201,7 @@ export function MessageInput({
                     <Paperclip className="h-4 w-4"/>
                 </Button>
                 <div className="flex-1 relative">
-                    <PlayerSuggest
+                    <ChatPlayerSuggest
                         query={atQuery || ''}
                         roomMembers={roomMembers}
                         onSelect={handlePlayerSelect}
@@ -192,7 +214,7 @@ export function MessageInput({
                         value={content}
                         onChange={(e) => setContent(e.target.value)}
                         onKeyDown={handleKeyDown}
-                        placeholder={chatName ? `Message ${chatName}` : 'Type a message...'}
+                        placeholder={placeholder}
                         disabled={disabled}
                         rows={1}
                         className="w-full resize-none rounded-lg border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring min-h-[40px] max-h-[120px] leading-[1.125]"
