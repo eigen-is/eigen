@@ -75,8 +75,8 @@ function MembersRoute() {
                 {member ? (
                     <MemberDetail member={member} organizationId={org?.id}/>
                 ) : (
-                    <div className="h-full w-full flex items-center justify-center">
-                        <p className="text-muted-foreground">Select a member to view details</p>
+                    <div className="flex-1 flex items-center justify-center">
+                        <p className="text-muted-foreground text-center">Select a member to view details</p>
                     </div>
                 )}
             </Column>

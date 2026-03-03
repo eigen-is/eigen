@@ -42,8 +42,8 @@ function TeamsRoute() {
                 {team ? (
                     <TeamDetail team={team} organizationId={org?.id}/>
                 ) : (
-                    <div className="h-full w-full flex items-center justify-center">
-                        <p className="text-muted-foreground">Select a team from the sidebar to view details</p>
+                    <div className="flex-1 flex items-center justify-center">
+                        <p className="text-muted-foreground text-center">Select a team from the sidebar to view details</p>
                     </div>
                 )}
             </Column>
