@@ -1,14 +1,10 @@
 import {useEffect, useMemo} from 'react';
-import {useContactSuggestions} from "@workspace/ui/components/layout/contacts/use-contact-suggestions";
-import {UserItem} from "@workspace/ui/components/layout/user-item";
-import type {ContactSuggestion} from "@workspace/ui/components/layout/contacts/types";
+import {useContactSuggestions} from "../contacts/use-contact-suggestions";
+import {UserItem} from "../user-item";
+import type {ContactSuggestion} from "../contacts/types";
+import type {RoomMember} from "./chat-utils";
 
-export type RoomMember = {
-    email: string;
-    displayName: string;
-}
-
-type PlayerSuggestProps = {
+type ChatPlayerSuggestProps = {
     query: string;
     roomMembers: RoomMember[];
     onSelect: (email: string) => void;
@@ -17,14 +13,14 @@ type PlayerSuggestProps = {
     onItemsChange: (count: number, emails: string[]) => void;
 }
 
-export function PlayerSuggest({
-                                  query,
-                                  roomMembers,
-                                  onSelect,
-                                  visible,
-                                  selectedIndex,
-                                  onItemsChange
-                              }: PlayerSuggestProps) {
+export function ChatPlayerSuggest({
+                                      query,
+                                      roomMembers,
+                                      onSelect,
+                                      visible,
+                                      selectedIndex,
+                                      onItemsChange
+                                  }: ChatPlayerSuggestProps) {
     const {suggestions: contactSuggestions} = useContactSuggestions(query, true);
 
     const items = useMemo(() => {
