@@ -4,6 +4,8 @@ import {Paperclip, Send, X} from "lucide-react";
 import {cn} from "../../../lib/utils";
 import {getAtSuggestQuery, type RoomMember} from "./chat-utils";
 import {ChatPlayerSuggest} from "./chat-player-suggest";
+import {ChatSlashSuggest} from "./chat-slash-suggest";
+import {COMMANDS_HELP, SLASH_COMMANDS} from "@workspace/lib/chat";
 
 type ChatMessageInputProps = {
     onSend: (rawContent: string, files?: File[]) => void;
@@ -14,7 +16,6 @@ type ChatMessageInputProps = {
     roomMembers?: RoomMember[];
     messageCount?: number;
     className?: string;
-    slashCommands?: string[];
     onKeyDown?: (e: React.KeyboardEvent<HTMLTextAreaElement>, content: string) => boolean | void;
 }
 
@@ -27,7 +28,6 @@ export function ChatMessageInput({
                                      roomMembers = [],
                                      messageCount = 0,
                                      className,
-                                     slashCommands,
                                      onKeyDown: onKeyDownProp,
                                  }: ChatMessageInputProps) {
     const [content, setContent] = useState('');
@@ -86,22 +86,59 @@ export function ChatMessageInput({
     }, []);
 
     const getSlashQuery = (): string | null => {
-        if (!slashCommands) return null;
         const trimmed = content.trim();
         if (!trimmed.startsWith('/')) return null;
         if (trimmed.indexOf(' ') > 0) return null;
         return trimmed;
     };
 
+
+    const slashQuery = getSlashQuery();
+    const slashSuggestOpen = slashQuery !== null && slashQuery.length > 0 && !SLASH_COMMANDS.includes(slashQuery);
+
+    const slashSuggestCountRef = useRef(0);
+    const slashSuggestCmdsRef = useRef<string[]>([]);
+    const [selectedSlashIdx, setSelectedSlashIdx] = useState(0);
+
+    const handleSlashSelect = useCallback((command: string) => {
+        const needsSpace = !['/dance', '/cheer', '/taunt', '/greet', '/allthethings', '/facepalm', '/shrug', '/flip', '/help', '/h', '/?', '/time'].includes(command);
+        setContent(command + (needsSpace ? ' ' : ''));
+        setSelectedSlashIdx(0);
+    }, []);
+
+    const handleSlashItemsChange = useCallback((count: number, cmds: string[]) => {
+        slashSuggestCountRef.current = count;
+        slashSuggestCmdsRef.current = cmds;
+        if (count > 0) setSelectedSlashIdx(prev => Math.min(prev, count - 1));
+    }, []);
+
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-        const slashQuery = getSlashQuery();
-        if (e.key === 'Tab' && slashQuery && slashCommands) {
-            e.preventDefault();
-            const matches = slashCommands.filter(cmd => cmd.startsWith(slashQuery));
-            if (matches.length === 1) {
-                setContent(matches[0] + ' ');
+        // Slash suggest keyboard handling
+        if (slashSuggestOpen && slashSuggestCountRef.current > 0) {
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                setSelectedSlashIdx(i => Math.min(i + 1, slashSuggestCountRef.current - 1));
+                return;
             }
-            return;
+            if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                setSelectedSlashIdx(i => Math.max(i - 1, 0));
+                return;
+            }
+            if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey)) {
+                e.preventDefault();
+                const cmd = slashSuggestCmdsRef.current[selectedSlashIdx];
+                if (cmd) {
+                    handleSlashSelect(cmd);
+                }
+                return;
+            }
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                setContent('');
+                setSelectedSlashIdx(0);
+                return;
+            }
         }
 
         if (suggestOpen) {
@@ -208,6 +245,14 @@ export function ChatMessageInput({
                         visible={atQuery !== null}
                         selectedIndex={selectedSuggestIdx}
                         onItemsChange={handleSuggestItemsChange}
+                    />
+                    <ChatSlashSuggest
+                        query={slashQuery || ''}
+                        commandsHelp={COMMANDS_HELP}
+                        onSelect={handleSlashSelect}
+                        visible={slashSuggestOpen}
+                        selectedIndex={selectedSlashIdx}
+                        onItemsChange={handleSlashItemsChange}
                     />
                     <textarea
                         ref={textareaRef}

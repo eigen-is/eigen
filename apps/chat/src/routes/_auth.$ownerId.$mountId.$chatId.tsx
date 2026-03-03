@@ -2,7 +2,7 @@ import {createFileRoute} from '@tanstack/react-router'
 import {useState} from 'react';
 import {useChatRoom} from "@workspace/lib/chat";
 import {Column, ColumnLayout} from "@workspace/ui/components/layout/column-layout";
-import {ChatMessageList, ChatMessageInput, TooltipButton} from "@workspace/ui";
+import {ChatMessageInput, ChatMessageList, TooltipButton} from "@workspace/ui";
 import {Edit, UserRoundPlus} from "lucide-react";
 import {DriveAccessDialog} from "@workspace/ui/components/layout/drive/drive-access-dialog";
 import {DriveRenameItem} from "@workspace/ui/components/layout/drive/drive-rename-item";
@@ -57,7 +57,6 @@ function ChatView() {
                             placeholder={`Message ${chat.chatName}`}
                             roomMembers={chat.roomMembers}
                             messageCount={chat.messages.length}
-                            slashCommands={chat.slashCommands}
                         />
                     </div>
                 </Column>
