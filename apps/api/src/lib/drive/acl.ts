@@ -1,38 +1,34 @@
 import type {User} from 'better-auth/types';
 import {type DriveACL, type DrivePath} from '@workspace/lib/types/drive';
 import {parseOwnerId} from '@workspace/lib/types';
-import {type Memberships} from '../user/user';
+import {getMemberships} from '../user/';
 
 export type PathGetter = (pathId: string) => Promise<DrivePath | null>;
-export type MembershipGetter = (userId: string) => Promise<Memberships>;
 
 export async function canRead(
     path: DrivePath,
     user: User,
     getPath: PathGetter,
-    getMemberships?: MembershipGetter
 ): Promise<boolean> {
     if (path.ownerId === user.id) return true;
 
     // Team-owned paths: members get automatic read access
-    if (getMemberships) {
-        const parsed = parseOwnerId(path.ownerId);
-        if (parsed && parsed.type === 'team') {
-            const memberships = await getMemberships(user.id);
-            if (memberships.teamIds.includes(parsed.id)) return true;
-        }
+    const parsed = parseOwnerId(path.ownerId);
+    if (parsed && parsed.type === 'team') {
+        const memberships = await getMemberships(user.id);
+        if (memberships.teamIds.includes(parsed.id)) return true;
     }
 
     if (path.visibility === 'public-read' || path.visibility === 'public-write') return true;
 
     // Check ACL entries (user, team)
     if (path.acl) {
-        if (await matchesACL(path.acl, user, 'read', getMemberships)) return true;
+        if (await matchesACL(path.acl, user, 'read')) return true;
     }
 
     if (path.parentId) {
         const parent = await getPath(path.parentId);
-        if (parent) return canRead(parent, user, getPath, getMemberships);
+        if (parent) return canRead(parent, user, getPath);
     }
 
     return false;
@@ -41,40 +37,36 @@ export async function canRead(
 export async function canWrite(
     path: DrivePath,
     user: User,
-    getPath: PathGetter,
-    getMemberships?: MembershipGetter
+    getPath: PathGetter
 ): Promise<boolean> {
     if (path.ownerId === user.id) return true;
 
     // Team-owned paths: members get automatic write access
-    if (getMemberships) {
-        const parsed = parseOwnerId(path.ownerId);
-        if (parsed && parsed.type === 'team') {
-            const memberships = await getMemberships(user.id);
-            if (memberships.teamIds.includes(parsed.id)) return true;
-        }
+    const parsed = parseOwnerId(path.ownerId);
+    if (parsed && parsed.type === 'team') {
+        const memberships = await getMemberships(user.id);
+        if (memberships.teamIds.includes(parsed.id)) return true;
     }
 
     if (path.visibility === 'public-write') return true;
 
     // Check ACL entries (user, team)
     if (path.acl) {
-        if (await matchesACL(path.acl, user, 'write', getMemberships)) return true;
+        if (await matchesACL(path.acl, user, 'write')) return true;
     }
 
     if (path.parentId) {
         const parent = await getPath(path.parentId);
-        if (parent) return canWrite(parent, user, getPath, getMemberships);
+        if (parent) return canWrite(parent, user, getPath);
     }
 
     return false;
 }
 
-async function matchesACL(
+export async function matchesACL(
     acl: DriveACL[],
     user: User,
-    permission: 'read' | 'write',
-    getMemberships?: MembershipGetter
+    permission: 'read' | 'write'
 ): Promise<boolean> {
     for (const entry of acl) {
         const hasPermission = permission === 'read' ? entry.read : entry.write;
@@ -86,7 +78,7 @@ async function matchesACL(
             return true;
         }
 
-        if (parsed && parsed.type === 'team' && getMemberships) {
+        if (parsed && parsed.type === 'team') {
             const memberships = await getMemberships(user.id);
             if (memberships.teamIds.includes(parsed.id)) return true;
         }
