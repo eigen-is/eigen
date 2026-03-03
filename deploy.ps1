@@ -53,7 +53,7 @@ Write-Host "✅ Deployment complete!" -ForegroundColor Green
 Write-Host ""
 Write-Host "🌐 Access your applications at:" -ForegroundColor Cyan
 Write-Host "   - Home: http://localhost/"
-Write-Host "   - Admin: http://localhost/admin"
+Write-Host "   - Admin: http://localhost/people"
 Write-Host "   - Mail: http://localhost/mail"
 Write-Host "   - Contacts: http://localhost/contacts"
 Write-Host "   - Calendar: http://localhost/calendar"

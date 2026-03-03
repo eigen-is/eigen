@@ -11,7 +11,6 @@ import {publicRouter} from "./routes/public";
 import {driveRouter} from "./routes/drive.ts";
 import {homeRouter} from "./routes/home.ts";
 import {collabRouter} from "./routes/collab";
-import {adminRouter} from "./routes/admin";
 import {configRouter} from "./routes/config";
 import {sseRouter} from "./routes/sse";
 import {setupRouter} from "./routes/setup";
@@ -29,7 +28,6 @@ export const app = new Elysia()
     .use(setupRouter)
     .use(configRouter)
 
-    .use(adminRouter)
     .use(mailRouter)
     .use(contactsRouter)
     .use(spaceRouter)

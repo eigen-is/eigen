@@ -21,7 +21,6 @@ echo ""
 echo "🏗️  Building frontend applications..."
 echo "📝 Using environment file: .env"
 bun --filter './apps/index' build
-bun --filter './apps/admin' build
 bun --filter './apps/mail' build
 bun --filter './apps/contacts' build
 bun --filter './apps/calendar' build
@@ -29,6 +28,8 @@ bun --filter './apps/drive' build
 bun --filter './apps/docs' build
 bun --filter './apps/stickies' build
 bun --filter './apps/space' build
+bun --filter './apps/chat' build
+bun --filter './apps/people' build
 
 # Build API server
 echo ""

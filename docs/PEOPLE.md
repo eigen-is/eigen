@@ -2,11 +2,7 @@
 
 ## Overview
 
-The People frontend app (`apps/people/`) provides a UI for users with org role `admin` or `owner` to manage organization
-members and teams. It lives alongside the `apps/admin/` app (which handles system-level settings).
-
-**Why a separate app?** System admins (`apps/admin/`) handle server config/storage. People management is an org-level
-concern. Keeping them separate follows the app-per-domain pattern.
+The People frontend app (`apps/people/`) provides a UI for users with org role `admin` or `owner` to manage organization members and teams.
 
 ## Pages
 
