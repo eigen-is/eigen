@@ -2,7 +2,7 @@ import React from 'react';
 import {SortableContext, useSortable, verticalListSortingStrategy} from '@dnd-kit/sortable';
 import {CSS} from '@dnd-kit/utilities';
 import {TaskCard} from './task-card';
-import {ColumnItem, CommentItem, TaskItem} from './types';
+import {ColumnItem, TaskItem} from './types';
 import {Pencil, Plus} from 'lucide-react';
 import * as Y from 'yjs';
 import {TooltipButton} from '@workspace/ui/components/layout/tooltip-button/tooltip-button';
@@ -16,7 +16,7 @@ interface ColumnProps {
     isMobile: boolean;
     yjsDoc: Y.Doc | null;
     ownerId: string;
-    comments: Record<string, CommentItem>;
+    mountId: string;
 }
 
 export const Column: React.FC<ColumnProps> = ({
@@ -28,7 +28,7 @@ export const Column: React.FC<ColumnProps> = ({
                                                   isMobile,
                                                   yjsDoc,
                                                   ownerId,
-                                                  comments
+                                                  mountId,
                                               }) => {
     const {
         attributes,
@@ -104,7 +104,7 @@ export const Column: React.FC<ColumnProps> = ({
                                     isMobile={isMobile}
                                     yjsDoc={yjsDoc}
                                     ownerId={ownerId}
-                                    comments={comments}
+                                    mountId={mountId}
                                 />
                             ))}
                         </SortableContext>

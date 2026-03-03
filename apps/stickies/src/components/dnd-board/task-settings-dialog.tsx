@@ -71,14 +71,6 @@ export function TaskSettingsDialog({
                 taskIdsArray.delete(taskIndex, 1);
             }
 
-            const commentsMap = yjsDoc.getMap("comments");
-            for (const [commentId, commentMapValue] of commentsMap) {
-                if (!(commentMapValue instanceof Y.Map)) return;
-                if (commentMapValue.get("taskId") === taskId) {
-                    commentsMap.delete(commentId);
-                }
-            }
-
             tasksMap.delete(taskId);
         });
 
@@ -142,7 +134,7 @@ export function TaskSettingsDialog({
                     </DialogHeader>
                     <div className="py-4">
                         <p className="text-sm text-gray-500">
-                            This will permanently delete the task and all its comments.
+                            This will permanently delete the task.
                             This action cannot be undone.
                         </p>
                     </div>

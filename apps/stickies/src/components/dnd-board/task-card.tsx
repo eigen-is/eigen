@@ -1,7 +1,7 @@
 import React, {useState} from 'react';
 import {useSortable} from '@dnd-kit/sortable';
 import {CSS} from '@dnd-kit/utilities';
-import {CommentItem, TaskItem} from './types';
+import {TaskItem} from './types';
 import {TaskInfoDialog} from './task-info-dialog';
 import * as Y from 'yjs';
 
@@ -10,10 +10,10 @@ interface TaskCardProps {
     isMobile: boolean;
     yjsDoc: Y.Doc | null;
     ownerId: string;
-    comments: Record<string, CommentItem>;
+    mountId: string;
 }
 
-export const TaskCard: React.FC<TaskCardProps> = ({task, isMobile, yjsDoc, ownerId, comments}) => {
+export const TaskCard: React.FC<TaskCardProps> = ({task, isMobile, yjsDoc, ownerId, mountId}) => {
     const [isInfoDialogOpen, setIsInfoDialogOpen] = useState(false);
 
     const {
@@ -67,6 +67,7 @@ export const TaskCard: React.FC<TaskCardProps> = ({task, isMobile, yjsDoc, owner
                 task={task}
                 yjsDoc={yjsDoc}
                 ownerId={ownerId}
+                mountId={mountId}
             />
         </>
     );

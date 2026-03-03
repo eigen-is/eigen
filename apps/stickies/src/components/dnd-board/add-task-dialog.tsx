@@ -9,7 +9,7 @@ import {useAuth} from "@workspace/lib/auth";
 interface AddTaskDialogProps {
     isOpen: boolean;
     onClose: () => void;
-    onAddTask: (task: Omit<TaskItem, 'id' | 'comments'>) => void;
+    onAddTask: (task: Omit<TaskItem, 'id' | 'createdAt' | 'chatId'>) => void | Promise<void>;
     columnId: string | null;
 }
 
@@ -23,17 +23,23 @@ export const AddTaskDialog: React.FC<AddTaskDialogProps> = ({
     const [description, setDescription] = useState('');
     const {user} = useAuth();
 
-    const handleSubmit = (e: React.FormEvent) => {
+    const [isSubmitting, setIsSubmitting] = useState(false);
+
+    const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
 
         if (!title.trim() || !columnId) return;
+        setIsSubmitting(true);
 
-        onAddTask({
-            title: title.trim(),
-            description: description.trim(),
-            creator: user?.email || '',
-            createdAt: Date.now()
-        });
+        try {
+            await onAddTask({
+                title: title.trim(),
+                description: description.trim(),
+                creator: user?.email || '',
+            });
+        } finally {
+            setIsSubmitting(false);
+        }
 
         setTitle('');
         setDescription('');
@@ -80,8 +86,8 @@ export const AddTaskDialog: React.FC<AddTaskDialogProps> = ({
                         <Button type="button" variant="outline" onClick={onClose}>
                             Cancel
                         </Button>
-                        <Button type="submit" disabled={!title.trim()}>
-                            Add Task
+                        <Button type="submit" disabled={!title.trim() || isSubmitting}>
+                            {isSubmitting ? 'Adding...' : 'Add Task'}
                         </Button>
                     </DialogFooter>
                 </form>

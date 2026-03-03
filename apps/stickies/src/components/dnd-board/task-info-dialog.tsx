@@ -1,20 +1,13 @@
-import React, {useEffect, useMemo, useRef, useState} from "react";
+import {useState} from "react";
 import {Dialog, DialogContent, DialogHeader, DialogTitle} from "@workspace/ui/components/dialog";
-import {CommentItem, TaskItem} from "./types";
-import {Button} from "@workspace/ui/components/button";
-import {Textarea} from "@workspace/ui/components/textarea";
-import {ScrollArea} from "@workspace/ui/components/scroll-area";
-import {nanoid} from "nanoid";
-import * as Y from "yjs";
-import {formatDistanceToNow} from "date-fns";
-import {useAuth} from "@workspace/lib/auth";
-import {usePublicUser} from "@workspace/lib/public";
-import {UserAvatar} from "@workspace/ui/components/layout/user-avatar";
-import {cn} from "@workspace/ui/lib/utils";
+import {TaskItem} from "./types";
 import {Separator} from "@workspace/ui/components/separator";
 import {Pencil} from "lucide-react";
 import {TooltipButton} from "@workspace/ui/components/layout/tooltip-button/tooltip-button";
 import {TaskSettingsDialog} from "./task-settings-dialog";
+import {ChatMessageList, ChatMessageInput} from "@workspace/ui";
+import {useChatRoom} from "@workspace/lib/chat";
+import * as Y from "yjs";
 
 interface TaskInfoDialogProps {
     isOpen: boolean;
@@ -22,6 +15,32 @@ interface TaskInfoDialogProps {
     task: TaskItem | null;
     yjsDoc: Y.Doc | null;
     ownerId: string;
+    mountId: string;
+}
+
+function TaskChat({ownerId, mountId, chatId}: { ownerId: string; mountId: string; chatId: string }) {
+    const chat = useChatRoom(ownerId, mountId, chatId);
+
+    return (
+        <div className="flex flex-col min-h-0 overflow-hidden">
+            <ChatMessageList
+                messages={chat.messages}
+                isLoading={chat.isLoading}
+                currentUserId={chat.currentUserId}
+                ownerId={ownerId}
+                mountId={mountId}
+                emptyMessage=""
+            />
+            <ChatMessageInput
+                onSend={chat.handleSendMessage}
+                disabled={chat.disabled}
+                readOnly={chat.readOnly}
+                placeholder="Write a comment..."
+                roomMembers={chat.roomMembers}
+                messageCount={chat.messages.length}
+            />
+        </div>
+    );
 }
 
 export function TaskInfoDialog({
@@ -30,188 +49,43 @@ export function TaskInfoDialog({
                                    task,
                                    yjsDoc,
                                    ownerId,
+                                   mountId,
                                }: TaskInfoDialogProps) {
-    const textareaRef = useRef<HTMLTextAreaElement>(null);
-    const {user} = useAuth();
-
-    const [yjsComments, setYjsComments] = useState<Record<string, CommentItem>>({});
-
-    useEffect(() => {
-        if (!yjsDoc) return;
-        const commentsMap = yjsDoc.getMap("comments");
-
-        const mapToComment = (map: Y.Map<any>): CommentItem => ({
-            id: map.get("id"),
-            taskId: map.get("taskId"),
-            text: map.get("text"),
-            author: map.get("author"),
-            createdAt: map.get("createdAt"),
-        });
-
-        const loadComments = () => {
-            const result: Record<string, CommentItem> = {};
-            for (const [key, value] of commentsMap) {
-                if (value instanceof Y.Map) {
-                    result[key] = mapToComment(value);
-                }
-            }
-            setYjsComments(result);
-        };
-        loadComments();
-
-        const observer = () => {
-            loadComments();
-        };
-        commentsMap.observe(observer);
-        return () => {
-            commentsMap.unobserve(observer);
-        };
-    }, [yjsDoc]);
-
-    if (!task) return null;
-
-    const taskComments = useMemo(() => {
-        return Object.values(yjsComments)
-            .filter((c) => c.taskId === task?.id)
-            .sort((a, b) => b.createdAt - a.createdAt);
-    }, [yjsComments, task?.id]);
-
-    const handleAddComment = () => {
-        const value = textareaRef.current?.value.trim() ?? "";
-        if (!value || !yjsDoc || !task) return;
-        yjsDoc.transact(() => {
-            const commentId = `comment-${nanoid(10)}`;
-            const now = Date.now();
-            const commentsMap = yjsDoc.getMap("comments");
-            const newCommentMap = new Y.Map();
-            newCommentMap.set("id", commentId);
-            newCommentMap.set("taskId", task.id);
-            newCommentMap.set("text", value);
-            newCommentMap.set("author", user?.email || '');
-            newCommentMap.set("createdAt", now);
-            commentsMap.set(commentId, newCommentMap);
-        });
-        if (textareaRef.current) textareaRef.current.value = "";
-    };
-
     const [isTaskSettingsOpen, setIsTaskSettingsOpen] = useState(false);
 
-    const UserRow = ({email, timeLabel, leftLabel, className, children}: {
-        email: string,
-        timeLabel: string,
-        leftLabel?: string,
-        className?: string,
-        children?: React.ReactNode,
-    }) => {
-        const {data} = usePublicUser(email);
-        return (
-            <div className={cn("flex items-top", className)}>
-                <UserAvatar name={data?.name || email} email={data?.email || email} size="md"/>
-                <div className="ml-3 flex-1">
-                    <div className="flex justify-between items-baseline">
-                        <p className="text-sm font-medium text-gray-900">
-                            {leftLabel ? `${leftLabel} ` : ''}
-                            {data?.name || email}
-                        </p>
-                        <span className="text-xs text-gray-500 whitespace-nowrap ml-4 mr-2">{timeLabel}</span>
-                    </div>
-                    {children && (
-                        <div className="text-sm text-gray-700 whitespace-pre-line mt-0.5 mr-2">{children}</div>
-                    )}
-                </div>
-            </div>
-        );
-    };
-
-    const CommentRow = ({comment}: { comment: CommentItem }) => (
-        <UserRow
-            email={comment.author}
-            timeLabel={formatDistanceToNow(comment.createdAt, {addSuffix: true})}
-        >
-            {comment.text}
-        </UserRow>
-    );
-
-    const TaskCommentList = ({taskComments, creator, createdAt}: {
-        taskComments: CommentItem[],
-        creator: string,
-        createdAt: Date
-    }) => (
-        <ScrollArea className="h-100 rounded-md p-2">
-            <div className="space-y-4">
-                {taskComments.map((comment) => (
-                    <React.Fragment key={comment.id}>
-                        <CommentRow comment={comment}/>
-                        <Separator/>
-                    </React.Fragment>
-                ))}
-                <UserRow
-                    email={creator}
-                    timeLabel={formatDistanceToNow(createdAt, {addSuffix: true})}
-                    leftLabel="Created by"
-                />
-            </div>
-        </ScrollArea>
-    );
+    if (!task) return null;
 
     return (
         <>
             <Dialog open={isOpen} onOpenChange={(open: boolean) => !open && onClose()}>
-                <DialogContent>
-                    <DialogHeader className="flex flex-row items-center gap-2">
+                <DialogContent className="sm:max-w-[500px] max-h-[70vh] flex flex-col p-0 gap-0">
+                    <DialogHeader className="flex flex-row items-center gap-2 px-4 pt-4 pb-2">
                         <DialogTitle className="flex-1">{task.title} <TooltipButton
                             icon={Pencil}
                             tooltipText="Edit Task"
                             onClick={() => setIsTaskSettingsOpen(true)}
                             className="h-7 w-7 -mt-1"
                         /></DialogTitle>
-
                     </DialogHeader>
 
-                    {/* Task description */}
-                    <div className="mt-2 text-sm text-gray-700">
-                        <p className="whitespace-pre-line">{task.description ?? ''}</p>
-                    </div>
-
-                    <Separator/>
-
-                    {/* Comments section */}
-                    <div>
-                        {/* New comment input (avatar left, textarea, button) */}
-                        <div className="mb-4 flex items-start gap-3">
-                            <UserAvatar
-                                name={user?.name || user?.email || ''}
-                                email={user?.email || ''}
-                                size="md"
-                                className="mt-1"
-                            />
-                            <div className="flex-1">
-                                <Textarea
-                                    placeholder="Write a comment..."
-                                    ref={textareaRef}
-                                    className="min-h-20 mb-2"
-                                    autoFocus={false}
-                                />
-                                <div className="flex justify-end">
-                                    <Button
-                                        onClick={handleAddComment}
-                                        size="sm"
-                                        className={`transform transition-all duration-200 ease-in-out`}
-                                    >
-                                        Add Comment
-                                    </Button>
-                                </div>
-                            </div>
+                    {task.description && (
+                        <div className="px-4 text-sm text-gray-700">
+                            <p className="whitespace-pre-line">{task.description}</p>
                         </div>
+                    )}
 
-                        {/* Comments list (no border, compact) */}
-                        <TaskCommentList taskComments={taskComments} creator={task.creator}
-                                         createdAt={new Date(task.createdAt)}/>
-                    </div>
+                    <Separator className="my-2"/>
+
+                    {task.chatId ? (
+                        <TaskChat ownerId={ownerId} mountId={mountId} chatId={task.chatId}/>
+                    ) : (
+                        <div className="px-4 pb-4 text-sm text-muted-foreground">
+                            No chat available for this task.
+                        </div>
+                    )}
                 </DialogContent>
             </Dialog>
 
-            {/* Task settings dialog */}
             {task && (
                 <TaskSettingsDialog
                     isOpen={isTaskSettingsOpen}
