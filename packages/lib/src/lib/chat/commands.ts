@@ -1,7 +1,4 @@
 import {validateCommand} from '../../validation';
-import {validateEmailTarget} from '../../validation';
-
-export {validateEmailTarget};
 
 export const COMMANDS_HELP = [
     {cmd: '/?, /h, /help', desc: 'List of available slash commands'},

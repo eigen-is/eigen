@@ -18,6 +18,7 @@ import {
 } from "@workspace/ui/components/dropdown-menu"
 import {ContactAutosuggest} from "../contacts/contact-autosuggest"
 import {ContactSuggestion} from "../contacts/types"
+import {validateEmailAddress} from "@workspace/lib/validation"
 import {useOrganization, useTeams} from "@workspace/lib/auth"
 import {teamOwnerId} from "@workspace/lib/types"
 
@@ -83,7 +84,7 @@ export function DriveAccessListEdit({
             email = emailMatch[1]
             displayName = value.split('<')[0].trim()
         } else {
-            const isEmail = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())
+            const isEmail = validateEmailAddress(value)
             if (isEmail) {
                 email = value.trim().toLowerCase();
                 displayName = email.split('@')[0];
