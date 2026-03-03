@@ -2,7 +2,7 @@ import {useCallback, useMemo, useRef, useState} from 'react';
 import {useAuth} from '../../auth';
 import {useMessages, usePostMessage} from './use-chat';
 import {useCheckWritePermission, useFolderContent, usePathInfo, useUpdateACL, useUploadFile} from '../../drive';
-import {COMMANDS_HELP, getLocalCommand, isUnknownCommand, SLASH_COMMANDS} from '../commands';
+import {COMMANDS_HELP, getLocalCommand, isUnknownCommand} from '../commands';
 import {validateEmailTarget} from '../../../validation';
 import type {ChatMessage} from '../../../types/chat';
 import type {DriveACL, DrivePath} from '../../../types/drive';
@@ -154,7 +154,6 @@ export function useChatRoom(ownerId: string, mountId: string, chatId: string) {
         roomMembers,
         readOnly,
         disabled: postMessage.isPending || uploadFile.isPending,
-        slashCommands: SLASH_COMMANDS,
         currentUserId: user?.id || '',
         handleSendMessage,
     };
