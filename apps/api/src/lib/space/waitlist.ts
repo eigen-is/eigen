@@ -1,4 +1,5 @@
 import nodemailer from 'nodemailer';
+import {validateEmailAddress} from '@workspace/lib/validation';
 
 export async function waitlist(email: string, notes: string) {
     // use nodemailer, to send email to reinder@eigen.is
@@ -11,7 +12,7 @@ export async function waitlist(email: string, notes: string) {
     // sanitize email
     email = email.trim().toLowerCase();
     // validate email
-    if (!email.match(/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/)) {
+    if (!validateEmailAddress(email)) {
         return false;
     }
     // make sure no xss
