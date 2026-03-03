@@ -1,5 +1,5 @@
 "use client"
-import {UserPublicItem} from "../user-item"
+import {UserItem} from "../user-item"
 import type {DriveACL, DrivePath} from "@workspace/lib/types/drive"
 import {cn} from "@workspace/ui/lib/utils"
 import {Lock, Unlock, UserRoundPlus} from "lucide-react"
@@ -38,7 +38,7 @@ export function DriveAccessList({
 
             <div className="space-y-2">
                 {allEntries.map((access) => (
-                    <UserPublicItem
+                    <UserItem
                         key={access.id}
                         email={access.id}
                         label={access.owner ? "Owner" : (

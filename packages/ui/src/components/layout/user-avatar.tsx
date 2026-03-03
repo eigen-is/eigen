@@ -7,6 +7,7 @@ import {API_HOST, getPublicAvatarUrl} from "@workspace/lib/api"
 import {useContacts} from "@workspace/lib/contacts";
 import {usePublicUser} from "@workspace/lib/public"
 import {Tooltip, TooltipContent, TooltipTrigger} from "../tooltip.tsx";
+import {parseOwnerId} from "@workspace/lib/types";
 
 export type UserAvatarProps = HTMLAttributes<HTMLDivElement> & {
     name?: string
@@ -30,12 +31,13 @@ export function UserAvatar({
                            }: UserAvatarProps) {
     const {data: dataContacts, isLoading: isLoadingContacts} = useContacts();
     const {data: dataPublic, isLoading: isLoadingPublic} = usePublicUser(userId || email || '');
+    const parsed = parseOwnerId(userId || email || '');
 
     const contact = !isLoadingContacts && email && dataContacts ? dataContacts.find(c => c.email.includes(email)) : null;
     const publicUser = !isLoadingPublic ? dataPublic : null;
 
     const url = imageUrl || (contact?.avatar) || (publicUser?.avatar) || null;
-    const displayName = (contact && `${contact.firstName} ${contact.lastName}`.trim()) || (publicUser && publicUser.name?.trim()) || name || email || "";
+    const displayName = (parsed.type === 'team' ? 'Team' : '') || (contact && `${contact.firstName} ${contact.lastName}`.trim()) || (publicUser && publicUser.name?.trim()) || name || email || "";
     const avatarSrc = url
         ? `${API_HOST}/${url}`
         : getPublicAvatarUrl(userId || email || '');
