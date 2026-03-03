@@ -242,7 +242,7 @@ export function DriveAccessListEdit({
                         <div key={access.id} className="flex items-center justify-between">
                             <UserItem
                                 email={access.id}
-                                label={<>Inherited from "{access.sourceFolderName}"</>}
+                                label={<>(inherited from /{access.sourceFolderName})</>}
                             />
                             <span className="text-xs text-muted-foreground w-28 text-right">
                             {access.write ? "Editor" : "Viewer"}
