@@ -48,4 +48,5 @@ export type CustomText = {
     strikethrough?: boolean;
     code?: boolean;
     link?: string;
+    comment?: string;
 }

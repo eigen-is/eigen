@@ -14,6 +14,7 @@ import {DrivePath} from "@workspace/lib/types/drive";
 import {getCollabWebSocketUrl, getDriveEmbedUrl} from "@workspace/lib/api";
 import {useUploadFile} from "@workspace/lib/drive";
 import {ResizableImage} from "./resizable-image";
+import {CreateCommentDialog, ViewCommentDialog} from "./comment-dialog";
 
 const initialValue: CustomElement[] = [
     {
@@ -22,10 +23,11 @@ const initialValue: CustomElement[] = [
     },
 ];
 
-export const CollaborativeEditor = ({path, access, mediaFolderId, onAccessDialogOpen, onDeleteDialogOpen}: {
+export const CollaborativeEditor = ({path, access, mediaFolderId, chatFolderId, onAccessDialogOpen, onDeleteDialogOpen}: {
     path: DrivePath,
     access: { canRead: boolean; canWrite: boolean; },
     mediaFolderId: string | null,
+    chatFolderId: string | null,
     onAccessDialogOpen: () => void,
     onDeleteDialogOpen: (open: boolean) => void
 }) => {
@@ -58,6 +60,7 @@ export const CollaborativeEditor = ({path, access, mediaFolderId, onAccessDialog
     return <>
         <SlateEditor path={path} sharedType={sharedType} provider={provider} access={access}
                      mediaFolderId={mediaFolderId}
+                     chatFolderId={chatFolderId}
                      onAccessDialogOpen={onAccessDialogOpen}
                      onDeleteDialogOpen={onDeleteDialogOpen}/>
     </>;
@@ -70,6 +73,7 @@ const SlateEditor = ({
                          path,
                          access,
                          mediaFolderId,
+                         chatFolderId,
                          onAccessDialogOpen,
                          onDeleteDialogOpen,
                      }: {
@@ -78,12 +82,16 @@ const SlateEditor = ({
     path: DrivePath;
     access: { canRead: boolean, canWrite: boolean };
     mediaFolderId: string | null;
+    chatFolderId: string | null;
     onAccessDialogOpen: () => void;
     onDeleteDialogOpen: (open: boolean) => void;
 }) => {
     const auth = useAuth();
     const uploadFile = useUploadFile(path.ownerId, path.mountId);
     const [selectedImageId, setSelectedImageId] = useState<string | null>(null);
+    const [commentDialogOpen, setCommentDialogOpen] = useState(false);
+    const [commentSelectedText, setCommentSelectedText] = useState('');
+    const [viewCommentChatId, setViewCommentChatId] = useState<string | null>(null);
 
     const editor = useMemo(() => {
         const e = withReact(
@@ -218,8 +226,33 @@ const SlateEditor = ({
             );
         }
 
+        if (leaf.comment) {
+            const chatId = leaf.comment as string;
+            children = (
+                <span
+                    className="bg-yellow-100 border-b-2 border-yellow-300 cursor-pointer hover:bg-yellow-200 transition-colors"
+                    onClick={() => setViewCommentChatId(chatId)}
+                >
+                    {children}
+                </span>
+            );
+        }
+
         return <span {...attributes}>{children}</span>;
     }, []);
+
+    const handleAddComment = useCallback(() => {
+        const {selection} = editor;
+        if (!selection || !chatFolderId) return;
+        const text = Editor.string(editor, selection);
+        if (!text.trim()) return;
+        setCommentSelectedText(text);
+        setCommentDialogOpen(true);
+    }, [editor, chatFolderId]);
+
+    const handleCommentCreated = useCallback((chatId: string) => {
+        Editor.addMark(editor, 'comment', chatId);
+    }, [editor]);
 
     const handleKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
         const {key, ctrlKey, metaKey} = event;
@@ -292,7 +325,8 @@ const SlateEditor = ({
             <Slate editor={editor} initialValue={initialValue}>
                 <div className="flex h-full w-full flex-col">
                     <EditorToolbar path={path} canWrite={access.canWrite} onDeleteDialogOpen={onDeleteDialogOpen}
-                                   onAccessDialogOpen={onAccessDialogOpen}/>
+                                   onAccessDialogOpen={onAccessDialogOpen}
+                                   onAddComment={chatFolderId ? handleAddComment : undefined}/>
                     <div className="h-full w-full overflow-y-scroll bg-gray-200 p-4">
                         <div data-document="true"
                              className="grid p-[2cm] bg-white rounded-lg shadow-sm shadow-transparent min-h-full w-[210mm] m-auto print:shadow-none">
@@ -313,6 +347,28 @@ const SlateEditor = ({
                     </div>
                 </div>
             </Slate>
+
+            {chatFolderId && (
+                <CreateCommentDialog
+                    open={commentDialogOpen}
+                    onOpenChange={setCommentDialogOpen}
+                    ownerId={path.ownerId}
+                    mountId={path.mountId}
+                    chatFolderId={chatFolderId}
+                    selectedText={commentSelectedText}
+                    onCommentCreated={handleCommentCreated}
+                />
+            )}
+
+            {viewCommentChatId && (
+                <ViewCommentDialog
+                    open={!!viewCommentChatId}
+                    onOpenChange={(open) => { if (!open) setViewCommentChatId(null); }}
+                    ownerId={path.ownerId}
+                    mountId={path.mountId}
+                    chatId={viewCommentChatId}
+                />
+            )}
         </>
     );
 };
