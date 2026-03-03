@@ -58,7 +58,7 @@ export function UserItem({
                 <div className="flex justify-between items-center gap-1 text-xs text-gray-500 whitespace-nowrap">
                     {resolvedEmail && (resolvedEmail !== displayName || mailLink) &&
                         <span>{mailLink ? <a className="hover:underline"
-                                             href={getMailComposeUrl(resolvedEmail)}>{resolvedEmail}</a> : resolvedEmail} {label ? ' · ' : ''}</span>}
+                                             href={getMailComposeUrl(resolvedEmail)}>{resolvedEmail}</a> : resolvedEmail}</span>}
                     {label && (
                         <span>
                             {label}
