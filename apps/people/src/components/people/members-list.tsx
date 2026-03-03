@@ -1,7 +1,7 @@
 import {useMemo, useRef} from 'react';
 import {cn} from '@workspace/ui/lib/utils';
 import {SearchBar} from '@workspace/ui/components/layout/search-bar/search-bar';
-import {UserPublicItem} from '@workspace/ui/components/layout/user-item';
+import {UserItem} from '@workspace/ui/components/layout/user-item';
 import {useKeyboardListNavigation} from '@workspace/ui/hooks/use-keyboard-list-navigation';
 import {useListSelection} from '@workspace/ui/hooks/use-list-selection';
 import {useListDrag} from '@workspace/ui/hooks/use-list-drag';
@@ -116,7 +116,7 @@ export function MembersList({members, searchQuery, activeMemberId, onRowClick}: 
                     }}
                     {...drag.getDragProps(member)}
                 >
-                    <UserPublicItem
+                    <UserItem
                         name={member.name}
                         email={member.email}
                         className="flex-1 min-w-0"

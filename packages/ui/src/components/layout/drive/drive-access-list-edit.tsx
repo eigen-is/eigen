@@ -1,7 +1,7 @@
 "use client"
 
 import {useCallback, useEffect, useRef, useState} from "react"
-import {UserPublicItem} from "../user-item"
+import {UserItem} from "../user-item"
 import type {DriveACL, DrivePath, DriveVisibility} from "@workspace/lib/types/drive"
 import {cn} from "@workspace/ui/lib/utils"
 import {type DirectAccessItem, useDriveAccess} from "@workspace/lib/drive"
@@ -213,7 +213,7 @@ export function DriveAccessListEdit({
                 {directList.map((access: DirectAccessItem) => {
                     return (
                         <div key={access.id} className="flex items-center justify-between">
-                            <UserPublicItem email={access.id}/>
+                            <UserItem email={access.id}/>
                             {access.owner ? (
                                 <span className="text-xs text-muted-foreground w-28 text-right">
                                 Owner
@@ -240,10 +240,9 @@ export function DriveAccessListEdit({
                 {inheritedList.map((access: any) => {
                     return (
                         <div key={access.id} className="flex items-center justify-between">
-                            <UserPublicItem
+                            <UserItem
                                 email={access.id}
-                                label={<span
-                                    className="text-muted-foreground text-xs">Inherited from "{access.sourceFolderName}"</span>}
+                                label={<>Inherited from "{access.sourceFolderName}"</>}
                             />
                             <span className="text-xs text-muted-foreground w-28 text-right">
                             {access.write ? "Editor" : "Viewer"}

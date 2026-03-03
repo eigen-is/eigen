@@ -7,6 +7,7 @@ import {API_HOST, getMailComposeUrl, getPublicAvatarUrl} from "@workspace/lib/ap
 import {EigenLoader} from "./eigen-loader"
 import {useContacts} from "@workspace/lib/contacts";
 import {Avatar, AvatarImage} from "../avatar.tsx";
+import {parseOwnerId} from "@workspace/lib/types";
 
 export type UserItemProps = HTMLAttributes<HTMLDivElement> & {
     name?: string
@@ -32,13 +33,14 @@ export function UserItem({
                          }: UserItemProps) {
     const {data: dataContacts, isLoading: isLoadingContacts} = useContacts();
     const {data: dataPublic, isLoading: isLoadingPublic} = usePublicUser(userId || email || '');
+    const parsed = parseOwnerId(userId || email || '');
 
     const contact = !isLoadingContacts && email && dataContacts ? dataContacts.find(c => c.email.includes(email)) : null;
     const publicUser = !isLoadingPublic ? dataPublic : null;
 
     const url = imageUrl || (contact?.avatar) || (publicUser?.avatar) || null;
-    const displayName = (contact && `${contact.firstName} ${contact.lastName}`.trim()) || (publicUser && publicUser.name?.trim()) || name || email || "";
-    const resolvedEmail = publicUser?.email || email || "";
+    const displayName = (parsed.type === 'team' ? 'TeamName' : '') || (contact && `${contact.firstName} ${contact.lastName}`.trim()) || (publicUser && publicUser.name?.trim()) || name || email || "";
+    const resolvedEmail = (parsed.type === 'team' ? 'Team' : '') || publicUser?.email || email || "";
     const avatarSrc = url
         ? `${API_HOST}/${url}`
         : getPublicAvatarUrl(userId || email || '');
@@ -53,39 +55,17 @@ export function UserItem({
 
             <div className="ml-3 flex-1">
                 <p className="text-sm font-medium text-gray-900">{displayName}</p>
-                <div className="flex justify-between items-center gap-2">
+                <div className="flex justify-between items-center gap-1 text-xs text-gray-500 whitespace-nowrap">
                     {resolvedEmail && (resolvedEmail !== displayName || mailLink) &&
-                        <p className="text-xs text-gray-500">{mailLink ? <a className="hover:underline"
-                                                                            href={getMailComposeUrl(resolvedEmail)}>{resolvedEmail}</a> : resolvedEmail}</p>}
+                        <span>{mailLink ? <a className="hover:underline"
+                                             href={getMailComposeUrl(resolvedEmail)}>{resolvedEmail}</a> : resolvedEmail} {label ? ' · ' : ''}</span>}
                     {label && (
-                        <p className="text-xs text-gray-500 whitespace-nowrap ml-auto">
+                        <span>
                             {label}
-                        </p>
+                        </span>
                     )}
                 </div>
             </div>
         </div>
     );
 }
-
-export type UserPublicItemProps = HTMLAttributes<HTMLDivElement> & {
-    name?: string
-    email?: string
-    label?: ReactNode
-    className?: string
-    userId?: string
-    mailLink?: boolean
-}
-
-export function UserPublicItem({
-                                   name,
-                                   email,
-                                   label,
-                                   className,
-                                   userId,
-                                   mailLink = false,
-                                   ...props
-                               }: UserPublicItemProps) {
-    return <UserItem name={name} email={email} label={label} className={className} mailLink={mailLink} autoFetch
-                     userId={userId} {...props}/>;
-}   
