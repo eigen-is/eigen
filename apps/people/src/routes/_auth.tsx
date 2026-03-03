@@ -51,7 +51,7 @@ function AuthGuard() {
 
     if (!currentMember || currentMember.role === 'member') {
         return (
-            <div className="h-full flex items-center justify-center">
+            <div className="flex-1 flex items-center justify-center w-full h-full">
                 <div className="text-center space-y-2">
                     <p className="text-lg font-medium">Access Denied</p>
                     <p className="text-muted-foreground">You need admin or owner privileges to access People management.</p>
