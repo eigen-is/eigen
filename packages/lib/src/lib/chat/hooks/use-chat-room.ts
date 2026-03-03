@@ -1,8 +1,9 @@
 import {useCallback, useMemo, useRef, useState} from 'react';
 import {useAuth} from '../../auth';
 import {useMessages, usePostMessage} from './use-chat';
-import {useCheckWritePermission, usePathInfo, useUpdateACL, useUploadFile, useFolderContent} from '../../drive';
-import {COMMANDS_HELP, SLASH_COMMANDS, getLocalCommand, isUnknownCommand, validateEmailTarget} from '../commands';
+import {useCheckWritePermission, useFolderContent, usePathInfo, useUpdateACL, useUploadFile} from '../../drive';
+import {COMMANDS_HELP, getLocalCommand, isUnknownCommand, SLASH_COMMANDS} from '../commands';
+import {validateEmailTarget} from '../../../validation';
 import type {ChatMessage} from '../../../types/chat';
 import type {DriveACL, DrivePath} from '../../../types/drive';
 
