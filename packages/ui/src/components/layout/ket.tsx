@@ -15,15 +15,15 @@ export function Ket({
             className={cn("inline align-baseline overflow-visible", className)}
             style={style}
             {...props}
-            height="1rem"
-            viewBox="0 0 14 16"
+            height="1em"
+            viewBox="0 -8 14 22"
             fill="none"
             stroke="currentColor"
             strokeWidth="1.25"
             strokeLinecap="round"
             strokeLinejoin="round"
         >
-            <path d="m3 2 4 7.5 -4 7.5"/>
+            <path d="m3 0 4 7.5 -4 7.5"/>
         </svg>
     )
 }

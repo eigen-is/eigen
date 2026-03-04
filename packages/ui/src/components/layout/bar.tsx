@@ -15,15 +15,15 @@ export function Bar({
             className={cn("inline align-baseline overflow-visible", className)}
             style={style}
             {...props}
-            height="1rem"
-            viewBox="0 0 8 16"
+            height="1em"
+            viewBox="0 -8 7 22"
             fill="none"
             stroke="currentColor"
             strokeWidth="1.25"
             strokeLinecap="round"
             strokeLinejoin="round"
         >
-            <path d="m4 2 0 16"/>
+            <path d="m4 0 0 16"/>
         </svg>
     )
 }
