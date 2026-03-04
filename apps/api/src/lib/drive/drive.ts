@@ -205,11 +205,10 @@ export default class Drive {
         }
 
         let safeName = file.name.replace(/[/\\]/g, '_');
-        let originalName: string | undefined;
+        const originalName = safeName;
 
         const existing = await mount.getChildByName(parentId, safeName);
         if (existing) {
-            originalName = safeName;
             const dotIdx = safeName.lastIndexOf('.');
             const ext = dotIdx !== -1 ? safeName.slice(dotIdx) : '';
             safeName = `${randomUUID()}${ext}`;
