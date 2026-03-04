@@ -67,3 +67,12 @@ export function getDomain(): string {
     const config = getServerConfig();
     return config?.domain ?? 'localhost';
 }
+
+export async function getPublicConfig() {
+    const config = getServerConfig();
+    return {
+        domain: config?.domain,
+        orgName: config?.orgName,
+        orgId: config?.orgId,
+    };
+}
