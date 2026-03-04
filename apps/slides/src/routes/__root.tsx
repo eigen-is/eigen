@@ -1,10 +1,10 @@
-import { createRootRouteWithContext, Outlet, useMatch, createFileRoute } from '@tanstack/react-router'
+import {createRootRouteWithContext, Outlet, useMatch} from '@tanstack/react-router'
 import {AuthContextType, useAuth} from "@workspace/lib/auth";
 import {AppShell} from "@workspace/ui/components/layout/app-shell";
 import {DEFAULT_MOUNT_ID, useRootFolder} from '@workspace/lib/drive';
 import {createContext} from 'react';
 import {DriveContextType} from '@workspace/lib/types/drive';
-import { SlidesSidebar } from '@/components/slides-sidebar';
+import {SlidesSidebar} from "@/components/slides-sidebar.tsx";
 
 export const DriveContext = createContext<DriveContextType>({
     rootPath: null,
@@ -30,7 +30,7 @@ function DocsRoot() {
 
     if (!user) {
         return (
-            <AppShell appName="slides" rootRoute={Route}>
+            <AppShell appName="docs" rootRoute={Route}>
                 <Outlet/>
             </AppShell>
         );
@@ -38,7 +38,7 @@ function DocsRoot() {
 
     return (
         <AppShell
-            appName="slides"
+            appName="docs"
             rootRoute={Route}
             sidebarMode={isFullScreen ? 'none' : 'collapsible'}
             sidebar={!isFullScreen ? ({condensed, isMobile, onClose}) => (
@@ -57,6 +57,6 @@ function DocsRoot() {
     );
 }
 
-export const Route = createRootRouteWithContext<MyRouterContext>('/_auth/_sidebar')({
+export const Route = createRootRouteWithContext<MyRouterContext>()({
     component: DocsRoot,
 });

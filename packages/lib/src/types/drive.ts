@@ -23,6 +23,11 @@ export function isChatType(type: DrivePathType): type is DriveChatType {
     return type === 'chat';
 }
 
+export function isDocumentType(type: DrivePathType) {
+    return isCollabType(type) || isChatType(type);
+}
+
+
 export type DrivePathDetails = {
     originalName?: string;
     width?: number;
