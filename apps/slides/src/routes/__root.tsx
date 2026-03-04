@@ -30,7 +30,7 @@ function DocsRoot() {
 
     if (!user) {
         return (
-            <AppShell appName="docs" rootRoute={Route}>
+            <AppShell appName="slides" rootRoute={Route}>
                 <Outlet/>
             </AppShell>
         );
@@ -38,7 +38,7 @@ function DocsRoot() {
 
     return (
         <AppShell
-            appName="docs"
+            appName="slides"
             rootRoute={Route}
             sidebarMode={isFullScreen ? 'none' : 'collapsible'}
             sidebar={!isFullScreen ? ({condensed, isMobile, onClose}) => (

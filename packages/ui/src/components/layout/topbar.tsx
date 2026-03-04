@@ -7,6 +7,8 @@ import {
     Mail,
     Menu,
     MessageSquare,
+    Presentation,
+    Sheet,
     StickyNote,
     Users
 } from "lucide-react";
@@ -114,6 +116,8 @@ function UserDropdown({rootRoute}: { rootRoute: TopbarProps['rootRoute'] }) {
                                     {app.icon === 'file-text' && <FileText className="h-4 w-4"/>}
                                     {app.icon === 'sticky-note' && <StickyNote className="h-4 w-4"/>}
                                     {app.icon === 'message-square' && <MessageSquare className="h-4 w-4"/>}
+                                    {app.icon === 'presentation' && <Presentation className="h-4 w-4"/>}
+                                    {app.icon === 'sheet' && <Sheet className="h-4 w-4"/>}
                                     <span
                                         className={isActive ? "text-foreground font-medium" : "text-muted-foreground"}>{app.name}</span>
                                 </a>
