@@ -12,6 +12,8 @@ import {
     getDocUrl,
     getDriveDownloadUrl,
     getDriveEmbedUrl,
+    getSheetUrl,
+    getSlideUrl,
     getStickiesBoardUrl
 } from "@workspace/lib/api";
 
@@ -70,7 +72,7 @@ function DriveRoute() {
             }
         }
 
-        if (isMobile && (path.type === 'folder' || path.type === 'doc' || path.type === 'stickies' || path.type === 'chat')) {
+        if (isMobile && (path.type === 'folder' || path.type === 'doc' || path.type === 'stickies' || path.type === 'slides' || path.type === 'sheets' || path.type === 'chat')) {
             onRowActivate(path);
         } else if (currentPath?.parentId === path.id) {
             navigate({
@@ -100,6 +102,10 @@ function DriveRoute() {
             document.location.href = getDocUrl(path.ownerId, path.mountId, path.id);
         } else if (path.type === 'stickies') {
             document.location.href = getStickiesBoardUrl(path.ownerId, path.mountId, path.id);
+        } else if (path.type === 'slides') {
+            document.location.href = getSlideUrl(path.ownerId, path.mountId, path.id);
+        } else if (path.type === 'sheets') {
+            document.location.href = getSheetUrl(path.ownerId, path.mountId, path.id);
         } else if (path.type === 'chat') {
             document.location.href = getChatRoomUrl(path.ownerId, path.mountId, path.id);
         } else if (mimeType.startsWith("image/") || mimeType.startsWith("video/")) {

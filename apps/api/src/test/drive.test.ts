@@ -724,6 +724,20 @@ describe('Drive', () => {
             expect(data.name).toBe('Test Board.eigenstickies');
             expect(data.type).toBe('stickies');
         });
+
+        test('create slides', async () => {
+            const data = await drivePost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `folder/${aliceRootId}/slides`, {fileName: 'Test Slides'});
+            expect(data.name).toBe('Test Slides.eigenslides');
+            expect(data.type).toBe('slides');
+        });
+
+        test('create sheets', async () => {
+            const data = await drivePost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `folder/${aliceRootId}/sheets`, {fileName: 'Test Sheet'});
+            expect(data.name).toBe('Test Sheet.eigensheets');
+            expect(data.type).toBe('sheets');
+        });
     });
 
     describe('Breadcrumb', () => {

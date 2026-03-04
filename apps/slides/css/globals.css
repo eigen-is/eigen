@@ -1,0 +1,7 @@
+.bg-app {
+    background-color: var(--app-slides-color);
+}
+
+.text-app {
+    color: var(--app-slides-color);
+}

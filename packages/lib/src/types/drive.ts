@@ -6,17 +6,17 @@ export type DriveACL = {
 
 export type DriveVisibility = 'private' | 'public-read' | 'public-write';
 
-export type DriveCollabType = "doc" | "stickies";
+export type DriveCollabType = "doc" | "stickies" | "slides" | "sheets";
 export type DriveChatType = "chat";
 export type DriveContainerType = "folder" | DriveCollabType | DriveChatType;
 export type DrivePathType = "file" | DriveContainerType;
 
 export function isContainerType(type: DrivePathType): type is DriveContainerType {
-    return type === 'folder' || type === 'doc' || type === 'stickies' || type === 'chat';
+    return type === 'folder' || type === 'doc' || type === 'stickies' || type === 'slides' || type === 'sheets' || type === 'chat';
 }
 
 export function isCollabType(type: DrivePathType): type is DriveCollabType {
-    return type === 'doc' || type === 'stickies';
+    return type === 'doc' || type === 'stickies' || type === 'slides' || type === 'sheets';
 }
 
 export function isChatType(type: DrivePathType): type is DriveChatType {

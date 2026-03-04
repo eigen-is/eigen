@@ -6,6 +6,8 @@ import {
     Image,
     MessageSquare,
     Plus,
+    Presentation,
+    Sheet,
     StickyNote,
     Upload as UploadIcon,
     UsersRound,
@@ -30,13 +32,13 @@ import {
     DropdownMenuItem,
     DropdownMenuTrigger
 } from '@workspace/ui/components/dropdown-menu';
-
-// Import these directly from their files instead of from the index
 import {DriveCreateFolder} from '@workspace/ui/components/layout/drive/drive-create-folder';
 import {DriveCreateDoc} from '@workspace/ui/components/layout/drive/drive-create-doc';
 import {DriveCreateStickies} from '@workspace/ui/components/layout/drive/drive-create-stickies';
 import {DriveUploadFiles} from '@workspace/ui/components/layout/drive/drive-upload-files';
 import {DriveCreateChat} from '@workspace/ui/components/layout/drive/drive-create-chat';
+import {DriveCreateSlides} from '@workspace/ui/components/layout/drive/drive-create-slides';
+import {DriveCreateSheets} from '@workspace/ui/components/layout/drive/drive-create-sheets';
 
 interface DriveSidebarProps {
     condensed?: boolean;
@@ -72,6 +74,8 @@ export function DriveSidebar({
     const [createDocOpen, setCreateDocOpen] = useState(false);
     const [createStickiesOpen, setCreateStickiesOpen] = useState(false);
     const [createChatOpen, setCreateChatOpen] = useState(false);
+    const [createSlidesOpen, setCreateSlidesOpen] = useState(false);
+    const [createSheetsOpen, setCreateSheetsOpen] = useState(false);
     const [uploadOpen, setUploadOpen] = useState(false);
     const [uploadFiles, setUploadFiles] = useState<File[]>([]);
     const navigate = useNavigate();
@@ -165,6 +169,14 @@ export function DriveSidebar({
                             <MessageSquare className="h-4 w-4 mr-2"/>
                             Create chat
                         </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setCreateSlidesOpen(true)}>
+                            <Presentation className="h-4 w-4 mr-2"/>
+                            Create slides
+                        </DropdownMenuItem>
+                        <DropdownMenuItem onClick={() => setCreateSheetsOpen(true)}>
+                            <Sheet className="h-4 w-4 mr-2"/>
+                            Create sheets
+                        </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => setUploadOpen(true)}>
                             <UploadIcon className="h-4 w-4 mr-2"/>
                             Upload file
@@ -210,6 +222,18 @@ export function DriveSidebar({
                     icon={<MessageSquare className="h-4 w-4"/>}
                     to="/mime/application-eigenchat"
                     label="All chats"
+                    condensed={condensed}
+                />
+                <SidebarItem
+                    icon={<Presentation className="h-4 w-4"/>}
+                    to="/mime/application-eigenslides"
+                    label="All slides"
+                    condensed={condensed}
+                />
+                <SidebarItem
+                    icon={<Sheet className="h-4 w-4"/>}
+                    to="/mime/application-eigensheets"
+                    label="All sheets"
                     condensed={condensed}
                 />
 
@@ -302,6 +326,30 @@ export function DriveSidebar({
                     onSave={() => {
                     }}
                     onCancel={() => setCreateChatOpen(false)}
+                    onAfterAction={handleAfterAction}
+                />
+            )}
+
+            {/* Create Slides Dialog */}
+            {targetPath && (
+                <DriveCreateSlides
+                    path={targetPath}
+                    open={createSlidesOpen}
+                    onOpenChange={setCreateSlidesOpen}
+                    onSave={() => {
+                    }}
+                    onAfterAction={handleAfterAction}
+                />
+            )}
+
+            {/* Create Sheets Dialog */}
+            {targetPath && (
+                <DriveCreateSheets
+                    path={targetPath}
+                    open={createSheetsOpen}
+                    onOpenChange={setCreateSheetsOpen}
+                    onSave={() => {
+                    }}
                     onAfterAction={handleAfterAction}
                 />
             )}

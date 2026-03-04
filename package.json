@@ -12,6 +12,8 @@
     "serve:docs": "bun --filter '@apps/api' --filter './apps/docs' dev",
     "serve:stickies": "bun --filter '@apps/api' --filter './apps/stickies' dev",
     "serve:people": "bun --filter '@apps/api' --filter './apps/people' dev",
+    "serve:slides": "bun --filter '@apps/api' --filter './apps/slides' dev",
+    "serve:sheets": "bun --filter '@apps/api' --filter './apps/sheets' dev",
     "serve:setup": "bun --filter '@apps/api' --filter './apps/setup' dev",
     "build": "bun --filter '*' build",
     "build:prod": "bun --filter './apps/*' build && bun --filter '@apps/api' buildfordocker",

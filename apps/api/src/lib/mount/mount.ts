@@ -146,13 +146,15 @@ export class Mount {
         }
     }
 
-    async createFolder(parentId: string, name: string, type: 'folder' | 'doc' | 'stickies' | 'chat' = 'folder'): Promise<string> {
+    async createFolder(parentId: string, name: string, type: 'folder' | 'doc' | 'stickies' | 'slides' | 'sheets' | 'chat' = 'folder'): Promise<string> {
         await this.assertUniqueName(parentId, name);
         const folderId = randomUUID();
         const mimeTypeMap: Record<string, string> = {
             folder: 'folder',
             doc: 'application/eigendoc',
             stickies: 'application/eigenstickies',
+            slides: 'application/eigenslides',
+            sheets: 'application/eigensheets',
             chat: 'application/eigenchat',
         };
         const mimeType = mimeTypeMap[type] ?? 'folder';
