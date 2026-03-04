@@ -1,6 +1,7 @@
 import Elysia, {t} from "elysia";
 import {generateFallbackSvg, getAvatarByEmailOrId, getPublicInfo} from "../lib/space/public";
 import {waitlist} from "../lib/space/waitlist";
+import {getPublicConfig} from "../lib/config/server-config.ts";
 
 export const publicRouter = new Elysia({name: "public"})
     .get("/p/avatar/:emailOrId", async ({params, set}) => {
@@ -25,3 +26,5 @@ export const publicRouter = new Elysia({name: "public"})
             notes: t.String()
         })
     })
+    .get("/p/config", async () => getPublicConfig()
+    )
