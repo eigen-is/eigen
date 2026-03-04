@@ -1,4 +1,5 @@
 import {useState} from 'react';
+import {useHotkey} from '@tanstack/react-hotkeys';
 import {DndContext, DragOverlay, PointerSensor, useSensor, useSensors} from '@dnd-kit/core';
 import {horizontalListSortingStrategy, SortableContext} from '@dnd-kit/sortable';
 import {Column} from './column';
@@ -41,6 +42,21 @@ const StickiesBoard = ({ownerId, path, canWrite, chatFolderId, onAccessDialogOpe
         handleDragStart,
         handleDragEnd,
     } = useYjsDragAndDrop({board, yjsDoc});
+
+    useHotkey('Mod+Z', (e) => {
+        e.preventDefault();
+        undoManager?.undo();
+    }, {enabled: canWrite && !!undoManager});
+
+    useHotkey('Mod+Y', (e) => {
+        e.preventDefault();
+        undoManager?.redo();
+    }, {enabled: canWrite && !!undoManager});
+
+    useHotkey('Mod+Shift+Z', (e) => {
+        e.preventDefault();
+        undoManager?.redo();
+    }, {enabled: canWrite && !!undoManager});
 
     const isMobile = useIsMobile();
 

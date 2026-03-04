@@ -8,7 +8,8 @@ import {QueryClient, QueryClientProvider} from '@tanstack/react-query';
 import {ReactQueryDevtools} from '@tanstack/react-query-devtools';
 import {SSEProvider} from "./sse-provider";
 import {TooltipProvider} from "@radix-ui/react-tooltip"
-import {usePrintDocument} from "@workspace/ui/hooks/use-print-document"
+import {HotkeysProvider, useHotkey} from "@tanstack/react-hotkeys"
+import {printDocument} from "@workspace/ui/lib/printElement"
 
 interface EigenAppProps {
     children: React.ReactNode;
@@ -17,22 +18,31 @@ interface EigenAppProps {
 // Create a QueryClient instance
 const queryClient = new QueryClient();
 
-export function EigenApp({children}: EigenAppProps) {
-    usePrintDocument();
+function GlobalHotkeys() {
+    useHotkey('Mod+P', (e) => {
+        e.preventDefault();
+        printDocument();
+    });
+    return null;
+}
 
+export function EigenApp({children}: EigenAppProps) {
     return (
-        <TooltipProvider>
-            <QueryClientProvider client={queryClient}>
-                <AuthProvider>
-                    <SSEProvider>
-                        <UploadProvider>
-                            {children}
-                            <Toaster/>
-                        </UploadProvider>
-                    </SSEProvider>
-                    <ReactQueryDevtools initialIsOpen={false}/>
-                </AuthProvider>
-            </QueryClientProvider>
-        </TooltipProvider>
+        <HotkeysProvider>
+            <TooltipProvider>
+                <QueryClientProvider client={queryClient}>
+                    <AuthProvider>
+                        <SSEProvider>
+                            <UploadProvider>
+                                <GlobalHotkeys/>
+                                {children}
+                                <Toaster/>
+                            </UploadProvider>
+                        </SSEProvider>
+                        <ReactQueryDevtools initialIsOpen={false}/>
+                    </AuthProvider>
+                </QueryClientProvider>
+            </TooltipProvider>
+        </HotkeysProvider>
     )
 }

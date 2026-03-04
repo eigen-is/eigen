@@ -1,4 +1,5 @@
 import {useEffect, useState} from 'react';
+import {formatForDisplay} from '@tanstack/react-hotkeys';
 import {FileText, Folder, Pencil, Redo, Trash2, Undo, UserPlus, UserRoundPlus} from 'lucide-react';
 import {Button} from '@workspace/ui/components/button';
 import {
@@ -27,7 +28,6 @@ interface StickiesToolbarProps {
 }
 
 export const StickiesToolbar = ({canWrite, undoManager, onAccessDialogOpen, path}: StickiesToolbarProps) => {
-    const commandKey = window.navigator.platform.includes('Mac') ? '⌘' : 'Ctrl';
     const [canUndo, setCanUndo] = useState(false);
     const [canRedo, setCanRedo] = useState(false);
     const [createStickiesOpen, setCreateStickiesOpen] = useState(false);
@@ -98,14 +98,14 @@ export const StickiesToolbar = ({canWrite, undoManager, onAccessDialogOpen, path
 
                         <TooltipButton
                             icon={Undo}
-                            tooltipText={`Undo (${commandKey}+Z)`}
+                            tooltipText={`Undo (${formatForDisplay('Mod+Z')})`}
                             onClick={() => undoManager?.undo?.()}
                             disabled={!canUndo}
                         />
 
                         <TooltipButton
                             icon={Redo}
-                            tooltipText={`Redo (${commandKey}+Y)`}
+                            tooltipText={`Redo (${formatForDisplay('Mod+Y')})`}
                             onClick={() => undoManager?.redo?.()}
                             disabled={!canRedo}
                         />
