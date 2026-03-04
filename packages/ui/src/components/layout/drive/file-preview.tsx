@@ -1,29 +1,17 @@
-import {useEffect} from "react";
+import {useHotkey} from "@tanstack/react-hotkeys";
 
-export type FilePreviewProps = {
+interface FilePreviewProps {
     url: string;
     mimeType: string;
     onClose: () => void;
     open: boolean;
-    aspectRatio?: number;
+    aspectRatio?: string;
 }
 
 export function FilePreview({url, mimeType, onClose, open, aspectRatio}: FilePreviewProps) {
+    useHotkey('Escape', () => onClose(), {enabled: open});
+
     if (!open) return null;
-
-    useEffect(() => {
-        const handleEscapeKey = (e: KeyboardEvent) => {
-            if (e.key === "Escape") {
-                onClose();
-            }
-        };
-
-        document.addEventListener("keydown", handleEscapeKey);
-
-        return () => {
-            document.removeEventListener("keydown", handleEscapeKey);
-        };
-    }, [onClose]);
 
     return (
         <div

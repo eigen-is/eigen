@@ -1,4 +1,4 @@
-import {useEffect} from 'react';
+import {useHotkey} from '@tanstack/react-hotkeys';
 
 interface MediaPreviewProps {
     src: string;
@@ -8,18 +8,7 @@ interface MediaPreviewProps {
 }
 
 export function MediaPreview({src, type, caption, onClose}: MediaPreviewProps) {
-    useEffect(() => {
-        const handleEscapeKey = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') {
-                onClose();
-            }
-        };
-
-        document.addEventListener('keydown', handleEscapeKey);
-        return () => {
-            document.removeEventListener('keydown', handleEscapeKey);
-        };
-    }, [onClose]);
+    useHotkey('Escape', () => onClose());
 
     return (
         <div

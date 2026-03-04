@@ -157,7 +157,7 @@ function DriveRoute() {
                 mimeType={preview?.mimeType || ''}
                 onClose={() => setPreview(null)}
                 open={preview !== null}
-                aspectRatio={preview?.aspectRatio}
+                aspectRatio={preview?.aspectRatio ? `${preview.aspectRatio}` : undefined}
             />
             <DriveLayout
                 ownerId={ownerId}
