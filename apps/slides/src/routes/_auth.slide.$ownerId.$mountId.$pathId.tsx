@@ -14,12 +14,12 @@ function SlideView() {
     const {data: docInfo} = useCollabDocumentInfo(ownerId, mountId, pathId);
 
     useEffect(() => {
-        if (docInfo?.name) {
-            const name = docInfo.name.replace(/\.eigenslides$/, '');
+        if (docInfo?.path?.name) {
+            const name = docInfo.path.name.replace(/\.eigenslides$/, '');
             setAppName(name);
         }
         return () => setAppName('Slides');
-    }, [docInfo?.name, setAppName]);
+    }, [docInfo?.path?.name, setAppName]);
 
     return (
         <div className="flex flex-col h-full w-full">
