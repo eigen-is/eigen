@@ -1,5 +1,6 @@
 import {treaty} from '@elysiajs/eden';
 import type {app} from "@apps/api";
+import type {DrivePath} from "../types/drive";
 
 export const API_HOST = import.meta.env.VITE_API_HOST as string;
 
@@ -81,3 +82,35 @@ export const getCollabWebSocketUrl = (ownerId: string, mountId: string, pathId: 
 export const getMailMessageDownloadUrl = (messageId: string) => `${API_HOST}/mail/message/download/${messageId}`;
 export const getMailAttachmentUrl = (messageId: string, attachmentIndex: number, fileName: string) => `${API_HOST}/mail/message/${messageId}/attachment/${attachmentIndex}/${encodeURIComponent(fileName)}`;
 export const getSpaceZipUrl = () => `${API_HOST}/space/zip`;
+
+export function getDocumentUrl(path: DrivePath): string | false {
+    let url: string;
+    if (path.type === 'doc') {
+        url = getDocUrl(path.ownerId, path.mountId, path.id);
+    } else if (path.type === 'stickies') {
+        url = getStickiesBoardUrl(path.ownerId, path.mountId, path.id);
+    } else if (path.type === 'sheets') {
+        url = getSheetUrl(path.ownerId, path.mountId, path.id);
+    } else if (path.type === 'slides') {
+        url = getSlideUrl(path.ownerId, path.mountId, path.id);
+    } else if (path.type === 'chat') {
+        url = getChatRoomUrl(path.ownerId, path.mountId, path.id);
+    } else {
+        return false;
+    }
+    return url;
+}
+
+export function openDocument(path: DrivePath, newTab: boolean = false) {
+   const url = getDocumentUrl(path);
+    if (!url) {
+        console.warn('Cannot open document. Unsupported type:', path.type);
+        return false;
+    }
+    if (newTab) {
+        window.open(url, '_blank');
+    } else {
+        window.location.href = url;
+    }
+    return true;
+}

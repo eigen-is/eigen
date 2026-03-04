@@ -1,12 +1,13 @@
 import {createFileRoute, useNavigate} from '@tanstack/react-router';
 import {usePathInfo, useSharedPaths} from '@workspace/lib/drive';
 import {DriveLayout} from "@workspace/ui/components/layout/drive/drive-layout";
-import {DrivePath, DriveSearchParams} from "@workspace/lib/types/drive";
+import {DrivePath, DriveSearchParams, isDocumentType} from "@workspace/lib/types/drive";
 import {useAuth} from '@workspace/lib/auth';
 import {useLayout} from "@workspace/ui/components/layout/layout-context";
 import {EigenLoader} from '@workspace/ui';
 import {useContext} from 'react';
 import {DriveContext} from './__root';
+import {openDocument} from "@workspace/lib/lib/api.ts";
 
 export const Route = createFileRoute('/_auth/_sidebar/shared/$to')({
     component: DriveRoute,
@@ -32,10 +33,10 @@ function DriveRoute() {
         error: isFolderContentLoadingError
     } = useSharedPaths(ownerId, to as 'by-me' | 'with-me');
 
-    const folderContents = unfilteredFolderContents?.filter((path) => path.type === 'stickies') || [];
+    const folderContents = unfilteredFolderContents?.filter(path => path.type === 'doc') || [];
 
     const onRowSelect = (path: DrivePath) => {
-        if (isMobile && (path.type === 'folder' || path.type === 'stickies')) {
+        if (isMobile && isDocumentType(path.type)) {
             onRowActivate(path);
         } else {
             navigate({
@@ -47,13 +48,7 @@ function DriveRoute() {
     };
 
     const onRowActivate = (path: DrivePath) => {
-        if (path.type === 'doc') {
-            const url = `${import.meta.env.VITE_APP_DOCS_URL}/doc/${path.ownerId}/${path.mountId}/${path.id}`;
-            document.location.href = url;
-        } else if (path.type === 'stickies') {
-            const url = `${import.meta.env.VITE_APP_STICKIES_URL}/board/${path.ownerId}/${path.mountId}/${path.id}`;
-            document.location.href = url;
-        }
+        openDocument(path);
     };
 
     const handleBackToList = () => {
@@ -97,8 +92,8 @@ function DriveRoute() {
             allowShare={true}
             allowCreateFolder={false}
             allowUpload={false}
-            allowCreateDoc={false}
-            allowCreateStickies={true}
+            allowCreateDoc={true}
+            allowCreateStickies={false}
             showBreadcrumb={false}
             currentPath={rootPath}
             allowRename={to === 'by-me'}

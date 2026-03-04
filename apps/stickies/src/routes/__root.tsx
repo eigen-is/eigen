@@ -1,10 +1,10 @@
 import {createRootRouteWithContext, Outlet, useMatch} from '@tanstack/react-router'
 import {AuthContextType, useAuth} from "@workspace/lib/auth";
 import {AppShell} from "@workspace/ui/components/layout/app-shell";
-import {StickiesSidebar} from "../components/dnd-board/stickies-sidebar";
 import {DEFAULT_MOUNT_ID, useRootFolder} from '@workspace/lib/drive';
 import {createContext} from 'react';
 import {DriveContextType} from '@workspace/lib/types/drive';
+import {StickiesSidebar} from "../components/dnd-board/stickies-sidebar.tsx";
 
 export const DriveContext = createContext<DriveContextType>({
     rootPath: null,
@@ -15,22 +15,22 @@ interface MyRouterContext {
     auth: AuthContextType
 }
 
-function StickiesRoot() {
+function DocsRoot() {
     const {user} = useAuth();
     const mountId = DEFAULT_MOUNT_ID;
     const {data: root} = useRootFolder(user?.id || '', mountId);
     const rootPath = root || null;
 
-    const isBoardRoute = useMatch({
+    const isEditorRoute = useMatch({
         from: '/_auth/board/$ownerId/$mountId/$pathId',
         shouldThrow: false,
     });
 
-    const isFullScreen = !!isBoardRoute;
+    const isFullScreen = !!isEditorRoute;
 
     if (!user) {
         return (
-            <AppShell appName="stickies" rootRoute={Route}>
+            <AppShell appName="docs" rootRoute={Route}>
                 <Outlet/>
             </AppShell>
         );
@@ -38,7 +38,7 @@ function StickiesRoot() {
 
     return (
         <AppShell
-            appName="stickies"
+            appName="docs"
             rootRoute={Route}
             sidebarMode={isFullScreen ? 'none' : 'collapsible'}
             sidebar={!isFullScreen ? ({condensed, isMobile, onClose}) => (
@@ -58,5 +58,5 @@ function StickiesRoot() {
 }
 
 export const Route = createRootRouteWithContext<MyRouterContext>()({
-    component: StickiesRoot,
+    component: DocsRoot,
 });

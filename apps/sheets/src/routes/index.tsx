@@ -1,7 +1,15 @@
-import {createFileRoute, redirect} from '@tanstack/react-router';
+import {createFileRoute, redirect} from '@tanstack/react-router'
 
 export const Route = createFileRoute('/')({
-    beforeLoad: () => {
-        throw redirect({to: '/mime/$mimeType', params: {mimeType: 'application-eigensheets'}});
+    beforeLoad: ({context}) => {
+        if (!context.auth?.user?.id) {
+            throw redirect({to: '/login'});
+        }
+        throw redirect({
+            to: '/mime/$mimeType',
+            params: {
+                mimeType: 'application-eigensheet'
+            }
+        });
     },
-});
+})
