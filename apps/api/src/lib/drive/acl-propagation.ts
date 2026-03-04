@@ -17,8 +17,8 @@ export async function propagateACLChange(path: DrivePath, oldACL: DriveACL[] | n
         } else if (parsed.type === 'team') {
             // get all members of team
             const team = await getTeamMembers(parsed.id);
-            for (const user of team) {
-                ids.add(user.id);
+            for (const member of team) {
+                ids.add(member.user.id);
             }
         }
     }
