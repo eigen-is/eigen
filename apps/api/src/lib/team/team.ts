@@ -1,5 +1,5 @@
 import {eq} from "drizzle-orm";
-import {team, teamMember, user as userSchema} from "../../../auth-schema.ts";
+import {team, teamMember, user} from "../../../auth-schema.ts";
 import {getAuthDrizzleDb} from "../auth/auth.ts";
 
 export async function getTeamExists(teamId: string) {
@@ -7,18 +7,14 @@ export async function getTeamExists(teamId: string) {
     return await db.select({id: team.id}).from(team).where(eq(team.id, teamId)).get() !== undefined;
 }
 
-export async function getTeamMembers(teamId: string): Promise<{ id: string, email: string }[]> {
+export async function getTeamMembers(teamId: string) {
     try {
         const db = getAuthDrizzleDb();
-        const members = db.select({id: userSchema.id, email: userSchema.email})
+        return db.select({user})
             .from(teamMember)
-            .innerJoin(userSchema, eq(teamMember.userId, userSchema.id))
+            .innerJoin(user, eq(teamMember.userId, user.id))
             .where(eq(teamMember.teamId, teamId))
             .all();
-        return members.map(m => ({
-            id: m.id,
-            email: m.email.toLowerCase()
-        }));
     } catch {
         return [];
     }
