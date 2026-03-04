@@ -1,4 +1,5 @@
-import {useEffect, useState} from "react";
+import {useState} from "react";
+import {formatForDisplay} from '@tanstack/react-hotkeys';
 import {BaseEditor, Editor, Element as SlateElement, Transforms} from "slate";
 import {ReactEditor, useSlate} from "slate-react";
 import {HistoryEditor} from "slate-history";
@@ -223,17 +224,12 @@ export const EditorToolbar = ({path, canWrite, onAccessDialogOpen, onDeleteDialo
     const editor = useSlate() as CustomEditor;
     const [linkUrl, setLinkUrl] = useState('');
     const [linkDialogOpen, setLinkDialogOpen] = useState(false);
-    const [commandKey, setCommandKey] = useState('⌘');
     const [createDocOpen, setCreateDocOpen] = useState(false);
     const [renameDialogOpen, setRenameDialogOpen] = useState(false);
     const {user} = useAuth();
     const {data: rootFolder} = useRootFolder(user?.id || '');
     const navigate = useNavigate();
     const isMobile = useIsMobile();
-
-    useEffect(() => {
-        setCommandKey(window.navigator.platform.includes('Mac') ? '⌘' : 'Ctrl');
-    }, []);
 
     const ToolbarSeparator = () => (<div className="h-6 w-[1px] bg-border mx-1"></div>);
 
@@ -467,14 +463,14 @@ export const EditorToolbar = ({path, canWrite, onAccessDialogOpen, onDeleteDialo
 
                         <TooltipButton
                             icon={Undo}
-                            tooltipText={`Undo (${commandKey}+Z)`}
+                            tooltipText={`Undo (${formatForDisplay('Mod+Z')})`}
                             disabled={editor.history.undos.length === 0}
                             onClick={() => HistoryEditor.undo(editor)}
                         />
 
                         <TooltipButton
                             icon={Redo}
-                            tooltipText={`Redo (${commandKey}+Y)`}
+                            tooltipText={`Redo (${formatForDisplay('Mod+Y')})`}
                             disabled={editor.history.redos.length === 0}
                             onClick={() => HistoryEditor.redo(editor)}
                         />
@@ -484,9 +480,9 @@ export const EditorToolbar = ({path, canWrite, onAccessDialogOpen, onDeleteDialo
             <div className="flex items-center gap-1">
                 {canWrite && !isMobile && (
                     <>
-                        <MarkButton format="bold" icon={Bold} tooltipText={`Bold (${commandKey}+B)`}/>
-                        <MarkButton format="italic" icon={Italic} tooltipText={`Italic (${commandKey}+I)`}/>
-                        <MarkButton format="underline" icon={Underline} tooltipText={`Underline (${commandKey}+U)`}/>
+                        <MarkButton format="bold" icon={Bold} tooltipText={`Bold (${formatForDisplay('Mod+B')})`}/>
+                        <MarkButton format="italic" icon={Italic} tooltipText={`Italic (${formatForDisplay('Mod+I')})`}/>
+                        <MarkButton format="underline" icon={Underline} tooltipText={`Underline (${formatForDisplay('Mod+U')})`}/>
                         <MarkButton format="strikethrough" icon={Strikethrough} tooltipText="Strikethrough"/>
 
                         <DropdownMenu>

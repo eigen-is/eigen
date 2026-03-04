@@ -1,4 +1,5 @@
 import {useCallback, useEffect, useRef, useState} from "react";
+import {useHotkey} from "@tanstack/react-hotkeys";
 import {cn} from "@workspace/ui/lib/utils";
 import {Popover, PopoverContent, PopoverTrigger} from "@workspace/ui/components/popover";
 import {Button} from "@workspace/ui/components/button";
@@ -118,6 +119,10 @@ export function ResizableMedia({
         }
     }, [isSelected, onSelect]);
 
+    useHotkey('Escape', () => onDeselect(), {enabled: isSelected});
+    useHotkey('Delete', (e) => { e.preventDefault(); onDelete?.(); }, {enabled: isSelected && !!onDelete});
+    useHotkey('Backspace', (e) => { e.preventDefault(); onDelete?.(); }, {enabled: isSelected && !!onDelete});
+
     useEffect(() => {
         if (!isSelected) return;
 
@@ -130,23 +135,12 @@ export function ResizableMedia({
             }
         };
 
-        const handleKeyDown = (e: KeyboardEvent) => {
-            if (e.key === 'Escape') {
-                onDeselect();
-            } else if ((e.key === 'Delete' || e.key === 'Backspace') && onDelete) {
-                e.preventDefault();
-                onDelete();
-            }
-        };
-
         document.addEventListener('mousedown', handleClickOutside);
-        document.addEventListener('keydown', handleKeyDown);
 
         return () => {
             document.removeEventListener('mousedown', handleClickOutside);
-            document.removeEventListener('keydown', handleKeyDown);
         };
-    }, [isSelected, onDeselect, onDelete]);
+    }, [isSelected, onDeselect]);
 
     const radius = borderRadiusMap[styleOptions.borderRadius];
     const shadow = shadowMap[styleOptions.shadow];

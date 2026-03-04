@@ -1,4 +1,4 @@
-import {useEffect} from "react";
+import {useHotkey} from "@tanstack/react-hotkeys";
 
 export type FilePreviewProps = {
     url: string;
@@ -9,23 +9,9 @@ export type FilePreviewProps = {
 }
 
 export function FilePreview({url, mimeType, onClose, open, aspectRatio}: FilePreviewProps) {
+    useHotkey('Escape', () => onClose(), {enabled: open});
+
     if (!open) return null;
-
-    // Only handle Escape key, which is the standard for closing modals
-    useEffect(() => {
-        const handleEscapeKey = (e: KeyboardEvent) => {
-            if (e.key === "Escape") {
-                onClose();
-            }
-        };
-
-        // Add event listener for Escape key only
-        document.addEventListener("keydown", handleEscapeKey);
-
-        return () => {
-            document.removeEventListener("keydown", handleEscapeKey);
-        };
-    }, [onClose]);
 
     return (
         <div

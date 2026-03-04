@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@tanstack/react-hotkeys": "^0.1.1",
     "@workspace/lib": "workspace:*",
     "@workspace/ui": "workspace:*",
     "@slate-yjs/core": "^1.0.2",
