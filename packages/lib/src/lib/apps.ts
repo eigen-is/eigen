@@ -4,6 +4,8 @@ import {
     getDocsAppUrl,
     getDriveAppUrl,
     getMailAppUrl,
+    getSheetsAppUrl,
+    getSlidesAppUrl,
     getSpaceAppUrl,
     getStickiesAppUrl,
 } from "@workspace/lib/api";
@@ -57,6 +59,20 @@ const apps = [
         href: getChatAppUrl(),
         icon: 'message-square',
         description: 'Chat with your team',
+    },
+    {
+        name: 'Slides',
+        className: 'text-pink-600',
+        href: getSlidesAppUrl(),
+        icon: 'presentation',
+        description: 'Create presentations',
+    },
+    {
+        name: 'Sheets',
+        className: 'text-lime-600',
+        href: getSheetsAppUrl(),
+        icon: 'sheet',
+        description: 'Work with spreadsheets',
     },
     // {
     //     name: 'People',

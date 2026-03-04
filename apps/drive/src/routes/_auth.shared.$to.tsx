@@ -51,7 +51,7 @@ function DriveRoute() {
             }
         }
 
-        if (isMobile && (path.type === 'folder' || path.type === 'doc' || path.type === 'stickies' || path.type === 'chat')) {
+        if (isMobile && (path.type === 'folder' || path.type === 'doc' || path.type === 'stickies' || path.type === 'slides' || path.type === 'sheets' || path.type === 'chat')) {
             onRowActivate(path);
         } else {
             navigate({
@@ -75,6 +75,12 @@ function DriveRoute() {
             document.location.href = url;
         } else if (path.type === 'stickies') {
             const url = `${import.meta.env.VITE_APP_STICKIES_URL}/board/${path.ownerId}/${path.mountId}/${path.id}`;
+            document.location.href = url;
+        } else if (path.type === 'slides') {
+            const url = `${import.meta.env.VITE_APP_SLIDES_URL}/slide/${path.ownerId}/${path.mountId}/${path.id}`;
+            document.location.href = url;
+        } else if (path.type === 'sheets') {
+            const url = `${import.meta.env.VITE_APP_SHEETS_URL}/sheet/${path.ownerId}/${path.mountId}/${path.id}`;
             document.location.href = url;
         } else if (path.type === 'chat') {
             const url = `${import.meta.env.VITE_APP_CHAT_URL}/${path.ownerId}/${path.mountId}/${path.id}`;

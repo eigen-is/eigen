@@ -16,6 +16,8 @@ export function useDriveDialogs() {
     const [createDocOpen, setCreateDocOpen] = useState(false);
     const [createStickiesOpen, setCreateStickiesOpen] = useState(false);
     const [createChatOpen, setCreateChatOpen] = useState(false);
+    const [createSlidesOpen, setCreateSlidesOpen] = useState(false);
+    const [createSheetsOpen, setCreateSheetsOpen] = useState(false);
 
     const [deleteOpen, setDeleteOpen] = useState(false);
     const [deleteItem, setDeleteItem] = useState<DrivePath | null>(null);
@@ -40,6 +42,12 @@ export function useDriveDialogs() {
 
     const openCreateChat = useCallback(() => setCreateChatOpen(true), []);
     const closeCreateChat = useCallback(() => setCreateChatOpen(false), []);
+
+    const openCreateSlides = useCallback(() => setCreateSlidesOpen(true), []);
+    const closeCreateSlides = useCallback(() => setCreateSlidesOpen(false), []);
+
+    const openCreateSheets = useCallback(() => setCreateSheetsOpen(true), []);
+    const closeCreateSheets = useCallback(() => setCreateSheetsOpen(false), []);
 
     const openDelete = useCallback((item: DrivePath) => {
         setDeleteItem(item);
@@ -101,6 +109,18 @@ export function useDriveDialogs() {
             setOpen: setCreateChatOpen,
             openDialog: openCreateChat,
             closeDialog: closeCreateChat,
+        },
+        createSlides: {
+            open: createSlidesOpen,
+            setOpen: setCreateSlidesOpen,
+            openDialog: openCreateSlides,
+            closeDialog: closeCreateSlides,
+        },
+        createSheets: {
+            open: createSheetsOpen,
+            setOpen: setCreateSheetsOpen,
+            openDialog: openCreateSheets,
+            closeDialog: closeCreateSheets,
         },
         delete: {
             open: deleteOpen,

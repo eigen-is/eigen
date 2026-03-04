@@ -168,6 +168,36 @@ export default class Drive {
         return stickies;
     }
 
+    async createSlides(mountId: string, parentId: string, slidesName: string): Promise<DrivePath> {
+        const mount = this.getMount(mountId);
+        if (!(await this.canWrite(mountId, parentId, this.owner))) {
+            throw new ApiError(403, 'No write permission');
+        }
+
+        const safeName = `${slidesName}.eigenslides`;
+        const pathId = await mount.createFolder(parentId, safeName, 'slides');
+        await CollabDocument.create(this, mountId, pathId);
+        const slides = await mount.getPath(pathId);
+        if (!slides) throw new ApiError(500, 'Failed to create slides');
+        this.emit(SSEventType.DRIVE_FILE_CREATED, slides);
+        return slides;
+    }
+
+    async createSheets(mountId: string, parentId: string, sheetsName: string): Promise<DrivePath> {
+        const mount = this.getMount(mountId);
+        if (!(await this.canWrite(mountId, parentId, this.owner))) {
+            throw new ApiError(403, 'No write permission');
+        }
+
+        const safeName = `${sheetsName}.eigensheets`;
+        const pathId = await mount.createFolder(parentId, safeName, 'sheets');
+        await CollabDocument.create(this, mountId, pathId);
+        const sheets = await mount.getPath(pathId);
+        if (!sheets) throw new ApiError(500, 'Failed to create sheets');
+        this.emit(SSEventType.DRIVE_FILE_CREATED, sheets);
+        return sheets;
+    }
+
     async createChat(mountId: string, parentId: string, chatName: string): Promise<DrivePath> {
         const mount = this.getMount(mountId);
         if (!(await this.canWrite(mountId, parentId, this.owner))) {

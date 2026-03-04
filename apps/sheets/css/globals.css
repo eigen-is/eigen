@@ -1,0 +1,7 @@
+.bg-app {
+    background-color: var(--app-sheets-color);
+}
+
+.text-app {
+    color: var(--app-sheets-color);
+}

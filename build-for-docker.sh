@@ -29,6 +29,8 @@ bun --filter './apps/docs' build
 bun --filter './apps/stickies' build
 bun --filter './apps/space' build
 bun --filter './apps/chat' build
+bun --filter './apps/slides' build
+bun --filter './apps/sheets' build
 bun --filter './apps/people' build
 
 # Build API server

@@ -263,6 +263,30 @@ export function useCreateStickies(ownerId: string, mountId: string = DEFAULT_MOU
     });
 }
 
+// CREATE SLIDES
+export function useCreateSlides(ownerId: string, mountId: string = DEFAULT_MOUNT_ID) {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async ({parentId, fileName}: { parentId: string, fileName: string }) => {
+            const response = await driveApi({ownerId})({mountId}).folder({pathId: parentId}).slides.post({fileName});
+            return response.data;
+        },
+        onSuccess: (_data, variables) => invalidateItemCreated(queryClient, mountId, variables.parentId, 'application/eigenslides'),
+    });
+}
+
+// CREATE SHEETS
+export function useCreateSheets(ownerId: string, mountId: string = DEFAULT_MOUNT_ID) {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async ({parentId, fileName}: { parentId: string, fileName: string }) => {
+            const response = await driveApi({ownerId})({mountId}).folder({pathId: parentId}).sheets.post({fileName});
+            return response.data;
+        },
+        onSuccess: (_data, variables) => invalidateItemCreated(queryClient, mountId, variables.parentId, 'application/eigensheets'),
+    });
+}
+
 export function useSharedPaths(ownerId: string, to: 'by-me' | 'with-me') {
     return useQuery({
         queryKey: driveKeys.shared(to),
