@@ -1,40 +1,41 @@
 import {createFileRoute, useNavigate} from '@tanstack/react-router';
-import {DEFAULT_MOUNT_ID, usePathInfo, useSharedPaths} from '@workspace/lib/drive';
+import {usePathInfo, useSharedPaths} from '@workspace/lib/drive';
 import {DriveLayout} from "@workspace/ui/components/layout/drive/drive-layout";
 import {DrivePath, DriveSearchParams} from "@workspace/lib/types/drive";
 import {useAuth} from '@workspace/lib/auth';
 import {useLayout} from "@workspace/ui/components/layout/layout-context";
 import {EigenLoader} from '@workspace/ui';
-import {getSheetUrl} from "@workspace/lib/api";
+import {useContext} from 'react';
+import {DriveContext} from './__root';
 
 export const Route = createFileRoute('/_auth/_sidebar/shared/$to')({
-    component: SharedRoute,
+    component: DriveRoute,
     validateSearch: (search: Record<string, unknown>) => {
         const pid = typeof search.pid === 'string' ? search.pid : undefined;
         return {pid} as DriveSearchParams;
     },
 });
 
-function SharedRoute() {
+function DriveRoute() {
     const {to} = Route.useParams();
     const navigate = useNavigate();
     const {uid, pid} = Route.useSearch();
     const auth = useAuth();
     const ownerId = auth.user!.id;
-    const mountId = DEFAULT_MOUNT_ID;
+    const {rootPath, mountId} = useContext(DriveContext);
     const {data: selectedPath = null} = usePathInfo(uid || '', mountId, pid || '');
     const {isMobile} = useLayout();
 
     const {
-        data: allContents = [],
-        isLoading,
-        error
+        data: unfilteredFolderContents = [],
+        isLoading: isFolderContentLoading,
+        error: isFolderContentLoadingError
     } = useSharedPaths(ownerId, to as 'by-me' | 'with-me');
 
-    const folderContents = allContents.filter((p: DrivePath) => p.type === 'sheets');
+    const folderContents = unfilteredFolderContents?.filter(path => path.type === 'doc') || [];
 
     const onRowSelect = (path: DrivePath) => {
-        if (isMobile && path.type === 'sheets') {
+        if (isMobile && (path.type === 'folder' || path.type === 'doc')) {
             onRowActivate(path);
         } else {
             navigate({
@@ -46,8 +47,12 @@ function SharedRoute() {
     };
 
     const onRowActivate = (path: DrivePath) => {
-        if (path.type === 'sheets') {
-            document.location.href = getSheetUrl(path.ownerId, path.mountId, path.id);
+        if (path.type === 'doc') {
+            const url = `${import.meta.env.VITE_APP_DOCS_URL}/doc/${path.ownerId}/${path.mountId}/${path.id}`;
+            document.location.href = url;
+        } else if (path.type === 'stickies') {
+            const url = `${import.meta.env.VITE_APP_STICKIES_URL}/board/${path.ownerId}/${path.mountId}/${path.id}`;
+            document.location.href = url;
         }
     };
 
@@ -58,7 +63,7 @@ function SharedRoute() {
         });
     };
 
-    if (error) {
+    if (isFolderContentLoadingError) {
         return (
             <div className="flex items-center justify-center h-full w-full">
                 <p className="text-muted-foreground">Encountering the null vector: a rendezvous with nothing at all.</p>
@@ -66,7 +71,7 @@ function SharedRoute() {
         );
     }
 
-    if (isLoading) {
+    if (isFolderContentLoading) {
         return <EigenLoader/>;
     }
 
@@ -77,23 +82,25 @@ function SharedRoute() {
             ownerId={uid || ownerId}
             mountId={mountId}
             folderContents={folderContents ?? []}
-            isLoading={isLoading}
-            error={error}
+            isLoading={isFolderContentLoading}
+            error={isFolderContentLoadingError}
             onRowSelect={onRowSelect}
             onRowActivate={onRowActivate}
             onBackToList={handleBackToList}
             onAfterAction={() => {
+                navigate({
+                    to: '/mime/$mimeType',
+                    params: {mimeType: 'application-eigendoc'}
+                });
             }}
             allowDelete={to === 'by-me'}
             allowShare={true}
             allowCreateFolder={false}
             allowUpload={false}
-            allowCreateDoc={false}
+            allowCreateDoc={true}
             allowCreateStickies={false}
-            allowCreateChat={false}
-            allowCreateSlides={false}
-            allowCreateSheets={false}
             showBreadcrumb={false}
+            currentPath={rootPath}
             allowRename={to === 'by-me'}
         />
     );

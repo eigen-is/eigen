@@ -1,47 +1,62 @@
-import {createRootRouteWithContext, Outlet} from '@tanstack/react-router';
+import { createRootRouteWithContext, Outlet, useMatch } from '@tanstack/react-router'
+import {AuthContextType, useAuth} from "@workspace/lib/auth";
+import {AppShell} from "@workspace/ui/components/layout/app-shell";
+import {DEFAULT_MOUNT_ID, useRootFolder} from '@workspace/lib/drive';
 import {createContext} from 'react';
-import {AppShell} from '@workspace/ui/components/layout/app-shell';
-import {SheetsSidebar} from '../components/sheets-sidebar';
-import {useAuth} from '@workspace/lib/auth';
-import {useRootFolder} from '@workspace/lib/drive';
-import {DEFAULT_MOUNT_ID} from '@workspace/lib/types/mount';
-import type {DrivePath} from '@workspace/lib/types/drive';
+import {DriveContextType} from '@workspace/lib/types/drive';
+import { SheetsSidebar } from '@/components/sheets-sidebar';
 
-type MyRouterContext = {
-    auth: ReturnType<typeof useAuth>;
-};
-
-export const DriveContext = createContext<{
-    rootPath: DrivePath | null;
-}>({
+export const DriveContext = createContext<DriveContextType>({
     rootPath: null,
+    mountId: DEFAULT_MOUNT_ID
 });
 
-export const Route = createRootRouteWithContext<MyRouterContext>()({
-    component: RootLayout,
-});
+interface MyRouterContext {
+    auth: AuthContextType
+}
 
-function RootLayout() {
-    const auth = useAuth();
-    const ownerId = auth.user?.id || '';
-    const {data: rootPath = null} = useRootFolder(ownerId, DEFAULT_MOUNT_ID);
+function DocsRoot() {
+    const {user} = useAuth();
+    const mountId = DEFAULT_MOUNT_ID;
+    const {data: root} = useRootFolder(user?.id || '', mountId);
+    const rootPath = root || null;
 
-    return (
-        <DriveContext.Provider value={{rootPath}}>
-            <AppShell
-                appName="Sheets"
-                rootRoute="/"
-                sidebar={(props) => (
-                    <SheetsSidebar
-                        condensed={props.condensed}
-                        onClose={props.onClose}
-                        isMobile={props.isMobile}
-                        rootPath={rootPath}
-                    />
-                )}
-            >
+    const isEditorRoute = useMatch({
+        from: '/_auth/sheet/$ownerId/$mountId/$pathId',
+        shouldThrow: false,
+    });
+
+    const isFullScreen = !!isEditorRoute;
+
+    if (!user) {
+        return (
+            <AppShell appName="sheets" rootRoute={Route}>
                 <Outlet/>
             </AppShell>
-        </DriveContext.Provider>
+        );
+    }
+
+    return (
+        <AppShell
+            appName="sheets"
+            rootRoute={Route}
+            sidebarMode={isFullScreen ? 'none' : 'collapsible'}
+            sidebar={!isFullScreen ? ({condensed, isMobile, onClose}) => (
+                <SheetsSidebar
+                    condensed={condensed}
+                    isMobile={isMobile}
+                    onClose={onClose}
+                    rootPath={rootPath}
+                />
+            ) : undefined}
+        >
+            <DriveContext.Provider value={{rootPath, mountId}}>
+                <Outlet/>
+            </DriveContext.Provider>
+        </AppShell>
     );
 }
+
+export const Route = createRootRouteWithContext<MyRouterContext>('/_auth/_sidebar')({
+    component: DocsRoot,
+});
