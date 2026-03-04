@@ -2,12 +2,13 @@
 
 import {HTMLAttributes, ReactNode} from "react"
 import {cn} from "@workspace/ui/lib/utils"
-import {usePublicUser} from "@workspace/lib/public"
+import {usePublicConfig, usePublicUser} from "@workspace/lib/public"
 import {API_HOST, getMailComposeUrl, getPublicAvatarUrl} from "@workspace/lib/api"
 import {EigenLoader} from "./eigen-loader"
 import {useContacts} from "@workspace/lib/contacts";
 import {Avatar, AvatarImage} from "../avatar.tsx";
 import {parseOwnerId} from "@workspace/lib/types";
+import {usePeopleTeams} from "@workspace/lib/people";
 
 export type UserItemProps = HTMLAttributes<HTMLDivElement> & {
     name?: string
@@ -33,13 +34,16 @@ export function UserItem({
                          }: UserItemProps) {
     const {data: dataContacts, isLoading: isLoadingContacts} = useContacts();
     const {data: dataPublic, isLoading: isLoadingPublic} = usePublicUser(userId || email || '');
+    const {data: org} = usePublicConfig();
+    const {data: teams} = usePeopleTeams(org?.orgId);
+
     const parsed = parseOwnerId(userId || email || '');
 
     const contact = !isLoadingContacts && email && dataContacts ? dataContacts.find(c => c.email.includes(email)) : null;
     const publicUser = !isLoadingPublic ? dataPublic : null;
 
     const url = imageUrl || (contact?.avatar) || (publicUser?.avatar) || null;
-    const displayName = (parsed.type === 'team' ? 'TeamName' : '') || (contact && `${contact.firstName} ${contact.lastName}`.trim()) || (publicUser && publicUser.name?.trim()) || name || email || "";
+    const displayName = (parsed.type === 'team' ? teams?.find((t) => t.id === parsed.id)?.name : '') || (contact && `${contact.firstName} ${contact.lastName}`.trim()) || (publicUser && publicUser.name?.trim()) || name || email || "";
     const resolvedEmail = (parsed.type === 'team' ? 'Team' : '') || publicUser?.email || email || "";
     const avatarSrc = url
         ? `${API_HOST}/${url}`
