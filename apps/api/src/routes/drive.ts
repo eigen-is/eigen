@@ -88,7 +88,8 @@ export const driveRouter = new Elysia({name: "drive"})
         const drive = await getSharedDrive(params.ownerId, user);
         const path = await drive.getPath(params.mountId, params.pathId);
         if (path && path.name) {
-            set.headers['Content-Disposition'] = `attachment; filename="${path.name}"`;
+            const displayName = path.details?.originalName || path.name;
+            set.headers['Content-Disposition'] = `attachment; filename="${displayName}"`;
             set.headers['Cache-Control'] = 'public, max-age=86400';
             set.headers['Expires'] = new Date(Date.now() + 86400000).toUTCString();
         }

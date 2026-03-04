@@ -1,6 +1,7 @@
 import type {User} from 'better-auth/types';
 import {BunSQLiteDatabase} from 'drizzle-orm/bun-sqlite';
 import {eq} from 'drizzle-orm';
+import {randomUUID} from 'crypto';
 
 import {ApiError, type DatabaseConfig, type ManagedDatabase, type SchemaType} from '../core';
 import {createDefaultMountConfig, Mount} from '../mount';
@@ -203,7 +204,17 @@ export default class Drive {
             throw new ApiError(403, 'No write permission');
         }
 
-        const safeName = file.name.replace(/[/\\]/g, '_');
+        let safeName = file.name.replace(/[/\\]/g, '_');
+        let originalName: string | undefined;
+
+        const existing = await mount.getChildByName(parentId, safeName);
+        if (existing) {
+            originalName = safeName;
+            const dotIdx = safeName.lastIndexOf('.');
+            const ext = dotIdx !== -1 ? safeName.slice(dotIdx) : '';
+            safeName = `${randomUUID()}${ext}`;
+        }
+
         const buffer = await file.arrayBuffer();
         const bufferData = Buffer.from(buffer);
         const pathId = await mount.createFile(
@@ -219,9 +230,13 @@ export default class Drive {
             extractImageDetails(bufferData, file.type)
         ]);
 
+        const details: Record<string, unknown> = {};
+        if (imageDetails) Object.assign(details, imageDetails);
+        if (originalName) details['originalName'] = originalName;
+
         const updates: Partial<DrivePath> = {};
         if (thumbnail) updates.thumbnail = thumbnail;
-        if (imageDetails) updates.details = imageDetails;
+        if (Object.keys(details).length > 0) updates.details = details;
 
         if (Object.keys(updates).length > 0) {
             await mount.updatePath(pathId, updates);

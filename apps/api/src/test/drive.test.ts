@@ -1613,31 +1613,25 @@ describe('Drive', () => {
             expect(res.status).toBe(200);
         });
 
-        test('cannot upload file with same name as existing folder (case-insensitive)', async () => {
+        test('upload auto-deduplicates when name conflicts with folder', async () => {
             const file = new File(['hello'], 'documents', {type: 'text/plain'});
-            const formData = new FormData();
-            formData.append('file', file);
-            const res = await authedRequest(ctx.alice.user.sessionToken,
-                `/drive/${ctx.alice.user.id}/${aliceMountId}/file/${uniqueRoot}`, {
-                    method: 'POST',
-                    body: formData,
-                });
-            expect(res.status).toBe(409);
+            const uploaded = await driveUpload(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, uniqueRoot, file);
+            expect(uploaded).toBeDefined();
+            expect(uploaded.name).not.toBe('documents');
+            expect(uploaded.details?.originalName).toBe('documents');
         });
 
-        test('cannot upload file with same name as existing file', async () => {
+        test('upload auto-deduplicates when name conflicts with file (case-insensitive)', async () => {
             const file1 = new File(['hello'], 'readme.txt', {type: 'text/plain'});
-            await driveUpload(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, uniqueRoot, file1);
+            const first = await driveUpload(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, uniqueRoot, file1);
+            expect(first.name).toBe('readme.txt');
+            expect(first.details?.originalName).toBeUndefined();
 
             const file2 = new File(['world'], 'README.TXT', {type: 'text/plain'});
-            const formData = new FormData();
-            formData.append('file', file2);
-            const res = await authedRequest(ctx.alice.user.sessionToken,
-                `/drive/${ctx.alice.user.id}/${aliceMountId}/file/${uniqueRoot}`, {
-                    method: 'POST',
-                    body: formData,
-                });
-            expect(res.status).toBe(409);
+            const second = await driveUpload(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, uniqueRoot, file2);
+            expect(second.name).not.toBe('README.TXT');
+            expect(second.name).toEndWith('.TXT');
+            expect(second.details?.originalName).toBe('README.TXT');
         });
 
         test('cannot rename to conflicting name (case-insensitive)', async () => {
