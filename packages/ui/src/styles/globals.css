@@ -198,6 +198,22 @@
         @apply text-purple-600;
     }
 
+    .text-slate-600 {
+        @apply text-slate-600;
+    }
+
+    .text-pink-600 {
+        @apply text-pink-600;
+    }
+
+    .text-lime-600 {
+        @apply text-lime-600;
+    }
+
+    .text-indigo-600 {
+        @apply text-indigo-600;
+    }
+
     .eigen-list-item {
         @apply bg-white cursor-pointer select-none;
     }
