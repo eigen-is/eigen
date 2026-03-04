@@ -11,7 +11,7 @@ import * as schema from './schema';
 import {labels, paths, pathsToLabels} from './schema';
 import {MOUNT_DB_CONFIG} from './db-config';
 import {LocalKeyStorage, S3Storage, type StorageBackend} from '../storage';
-import {type DatabaseConfig, ManagedDatabase, type SchemaType} from '../core';
+import {ApiError, type DatabaseConfig, ManagedDatabase, type SchemaType} from '../core';
 import {deleteThumbnail} from '../shared/thumbnails';
 import {createAsyncSingleton} from '../../utils/singleton';
 
@@ -130,13 +130,24 @@ export class Mount {
 
     async getChildByName(parentId: string, name: string): Promise<DrivePath | null> {
         const result = await this.db.select().from(paths)
-            .where(and(eq(paths.parentId, parentId), eq(paths.name, name)))
+            .where(and(eq(paths.parentId, parentId), sql`LOWER(${paths.name}) = LOWER(${name})`))
             .get();
 
         return result ? this.toDrivePath(result) : null;
     }
 
+    private async assertUniqueName(parentId: string, name: string, excludeId?: string): Promise<void> {
+        const existing = await this.db.select({id: paths.id}).from(paths)
+            .where(and(eq(paths.parentId, parentId), sql`LOWER(${paths.name}) = LOWER(${name})`))
+            .get();
+
+        if (existing && existing.id !== excludeId) {
+            throw new ApiError(409, `A file or folder named "${name}" already exists in this directory`);
+        }
+    }
+
     async createFolder(parentId: string, name: string, type: 'folder' | 'doc' | 'stickies' | 'chat' = 'folder'): Promise<string> {
+        await this.assertUniqueName(parentId, name);
         const folderId = randomUUID();
         const mimeTypeMap: Record<string, string> = {
             folder: 'folder',
@@ -168,6 +179,7 @@ export class Mount {
         size: number,
         data: Buffer | Uint8Array | ArrayBuffer | BunFile | undefined
     ): Promise<string> {
+        await this.assertUniqueName(parentId, name);
         const fileId = randomUUID();
 
         if (data !== undefined) {
@@ -195,6 +207,17 @@ export class Mount {
     }
 
     async updatePath(pathId: string, updates: Partial<Omit<DrivePath, 'id' | 'ownerId' | 'createdAt'>>): Promise<void> {
+        if (updates.name !== undefined || updates.parentId !== undefined) {
+            const current = await this.getPath(pathId);
+            if (current) {
+                const targetParent = updates.parentId ?? current.parentId;
+                const targetName = updates.name ?? current.name;
+                if (targetParent) {
+                    await this.assertUniqueName(targetParent, targetName, pathId);
+                }
+            }
+        }
+
         await this.db.update(paths)
             .set({
                 ...updates,
