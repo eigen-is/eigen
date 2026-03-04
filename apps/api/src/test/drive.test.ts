@@ -1639,7 +1639,7 @@ describe('Drive', () => {
             const file1 = new File(['hello'], 'readme.txt', {type: 'text/plain'});
             const first = await driveUpload(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, uniqueRoot, file1);
             expect(first.name).toBe('readme.txt');
-            expect(first.details?.originalName).toBeUndefined();
+            expect(first.details?.originalName).toBe('readme.txt');
 
             const file2 = new File(['world'], 'README.TXT', {type: 'text/plain'});
             const second = await driveUpload(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, uniqueRoot, file2);
