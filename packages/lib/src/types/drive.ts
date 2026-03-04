@@ -24,6 +24,7 @@ export function isChatType(type: DrivePathType): type is DriveChatType {
 }
 
 export type DrivePathDetails = {
+    originalName?: string;
     width?: number;
     height?: number;
     duration?: number;

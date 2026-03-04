@@ -32,7 +32,7 @@ function isSameAuthorAndClose(prev: ChatMessage, curr: ChatMessage): boolean {
 function AttachmentChip({pathId, ownerId, mountId}: { pathId: string; ownerId: string; mountId: string }) {
     const {data: fileInfo} = useFileInfo(ownerId, mountId, pathId);
 
-    const name = fileInfo?.name || pathId;
+    const name = fileInfo?.details?.originalName || fileInfo?.name || pathId;
     const downloadUrl = getDriveDownloadUrl(ownerId, mountId, pathId);
     const thumbnailUrl = fileInfo?.thumbnail ? getDriveThumbnailUrl(ownerId, mountId, fileInfo.thumbnail) : null;
     const isImage = fileInfo?.mimeType?.startsWith('image/');
