@@ -16,6 +16,7 @@ import {SSEventType} from "@workspace/lib/types/sse";
 import {CONTACTS_DB_CONFIG} from "./db-config";
 import type {ManagedDatabase} from "../core/";
 import {ApiError} from '../core/';
+import {getDomain} from '../config/server-config';
 
 export async function getContacts(user: User) {
     const home = await getHome(user.id);
@@ -84,7 +85,7 @@ export class Contacts {
             // add the user to the contacts table
             await this.addYourself();
             // add reinder, zodat het een beetje gezellig is
-            const reinder = await getUserByEmail('reinder@eigen.is');
+            const reinder = await getUserByEmail(`reinder@${getDomain()}`);
             if (reinder && reinder.id !== user.id) {
                 this.addContact({
                     eigenId: reinder.id,

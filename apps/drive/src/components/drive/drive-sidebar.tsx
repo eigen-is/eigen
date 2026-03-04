@@ -20,7 +20,8 @@ import {DrivePath} from '@workspace/lib/types/drive';
 import {useState} from 'react';
 import {useMatch, useNavigate} from '@tanstack/react-router';
 import {usePathInfo, useRootFolder} from '@workspace/lib/drive';
-import {useOrganization, useTeams} from '@workspace/lib/auth';
+import {usePublicConfig} from '@workspace/lib/public';
+import {usePeopleTeams} from '@workspace/lib/people';
 import {teamOwnerId} from '@workspace/lib/types';
 import {DEFAULT_MOUNT_ID} from '@workspace/lib/types/mount';
 import {
@@ -97,8 +98,8 @@ export function DriveSidebar({
     const targetPath = currentPath || rootPath;
 
     // Fetch org data for shared drives section
-    const {data: org} = useOrganization();
-    const {data: teams} = useTeams(org?.id);
+    const {data: config} = usePublicConfig();
+    const {data: teams} = usePeopleTeams(config?.orgId);
 
     // Handle file input change
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -231,7 +232,7 @@ export function DriveSidebar({
                 />
             </SidebarSection>
 
-            {org && teams && teams.length > 0 && (
+            {config && teams && teams.length > 0 && (
                 <>
                     <Separator/>
                     <SidebarSection condensed={condensed} title={condensed ? undefined : "Shared Drives"}>

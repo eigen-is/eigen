@@ -2,7 +2,7 @@ import {createFileRoute, useNavigate} from '@tanstack/react-router';
 import {MembersList, MembersListToolbar} from '../components/people/members-list';
 import {MemberDetail, MemberDetailToolbar} from '../components/people/member-detail';
 import {usePeopleMembers} from '@workspace/lib/people';
-import {useOrganization} from '@workspace/lib/auth';
+import {usePublicConfig} from '@workspace/lib/public';
 import {Column, ColumnLayout} from '@workspace/ui/components/layout/column-layout';
 import {EigenLoader} from '@workspace/ui/components/layout/eigen-loader';
 import {useState} from 'react';
@@ -24,8 +24,8 @@ function MembersRoute() {
     const [searchQuery, setSearchQuery] = useState('');
     const [showCreateDialog, setShowCreateDialog] = useState(false);
 
-    const {data: org} = useOrganization();
-    const {data: members = [], isLoading} = usePeopleMembers(org?.id);
+    const {data: config} = usePublicConfig();
+    const {data: members = [], isLoading} = usePeopleMembers(config?.orgId);
 
     const member = members.find(m => m.id === memberId);
 
@@ -51,12 +51,12 @@ function MembersRoute() {
             onSearchChange={setSearchQuery}
             showCreateDialog={showCreateDialog}
             onShowCreateDialog={setShowCreateDialog}
-            organizationId={org?.id}
+            organizationId={config?.orgId}
         />
     );
 
     const detailToolbar = member ? (
-        <MemberDetailToolbar member={member} organizationId={org?.id}/>
+        <MemberDetailToolbar member={member} organizationId={config?.orgId}/>
     ) : null;
 
     return (
@@ -73,7 +73,7 @@ function MembersRoute() {
             </Column>
             <Column id="detail" width="flex" onBack={handleBackToList} toolbar={detailToolbar}>
                 {member ? (
-                    <MemberDetail member={member} organizationId={org?.id}/>
+                    <MemberDetail member={member} organizationId={config?.orgId}/>
                 ) : (
                     <div className="flex-1 flex items-center justify-center">
                         <p className="text-muted-foreground text-center">Select a member to view details</p>

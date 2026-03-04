@@ -1,5 +1,6 @@
 import {createRootRouteWithContext, Outlet} from '@tanstack/react-router';
-import {AuthContextType, useOrganization} from '@workspace/lib/auth';
+import {AuthContextType} from '@workspace/lib/auth';
+import {usePublicConfig} from '@workspace/lib/public';
 import {usePeopleTeams, useAddTeamMember} from '@workspace/lib/people';
 import {AppShell} from '@workspace/ui/components/layout/app-shell';
 import {PeopleSidebar} from '../components/people/people-sidebar';
@@ -11,8 +12,8 @@ interface MyRouterContext {
 }
 
 function PeopleRoot() {
-    const {data: org} = useOrganization();
-    const {data: teams = []} = usePeopleTeams(org?.id);
+    const {data: config} = usePublicConfig();
+    const {data: teams = []} = usePeopleTeams(config?.orgId);
     const addMember = useAddTeamMember();
     const location = useLocation();
 
