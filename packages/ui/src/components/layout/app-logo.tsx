@@ -3,6 +3,8 @@ import {Link} from "@tanstack/react-router";
 import {cn} from "@workspace/ui/lib/utils";
 import {apps} from "@workspace/lib/apps.ts";
 import {useIsMobile} from "@workspace/ui/hooks/use-mobile";
+import {Ket} from "./ket.tsx";
+import {Bar} from "./bar.tsx";
 
 interface AppLogoProps {
     appName?: string;
@@ -36,15 +38,16 @@ export function AppLogo({appName = "Mail", className, linkable = true}: AppLogoP
     };
 
     const LogoContent = () => (
-        <>
+        <div className="flex">
+                <span className="text-white font-bold ">
+                    eigen
+                </span>
             {expanded ? (<>
-                    <span className="text-white font-bold pr-0.25">
-                        eigen
-                    </span>
-                <div className="flex items-center animate-in slide-in-from-left-5 duration-300">
+                <div className="flex animate-in slide-in-from-left-5 duration-300 text-white">
                     {apps.map((app) => (
-                        <div key={app.name} className="flex items-center">
-                            <span className="text-white p-0.5">
+                        <div key={app.name}>
+                            <span><Bar/></span>
+                            <span>
                                 <a
                                     href={app.href}
                                     onClick={(e) => e.stopPropagation()}
@@ -52,22 +55,18 @@ export function AppLogo({appName = "Mail", className, linkable = true}: AppLogoP
                                 >{app.name.toLowerCase()}
                             </a>
                             </span>
-                            {app !== apps[apps.length - 1] && <span className="text-white p-0.5">|</span>}
                         </div>
                     ))}
-                    <span className="text-white">&gt;</span>
+                    <span><Ket/></span>
                 </div>
             </>) : (<>
-                <span className="text-white font-bold">
-                    eigen
-                </span>
                 <span className="text-white">
-                    <span className="p-0.5">|</span>
+                    <Bar/>
                     {appName.toLowerCase()}
-                    &gt;
+                    <Ket/>
                 </span>
             </>)}
-        </>
+        </div>
     );
 
     return (

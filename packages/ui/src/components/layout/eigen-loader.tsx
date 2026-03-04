@@ -1,5 +1,7 @@
 import {cn} from '../../lib/utils';
 import {useEffect, useState} from 'react';
+import {Bra} from "./bra.tsx";
+import {Ket} from "./ket.tsx";
 
 type EigenLoadingScreenProps = {
     className?: string;
@@ -42,42 +44,22 @@ export function EigenLoader({className}: EigenLoadingScreenProps) {
                 className
             )}>
                 {/* Left Chevron */}
-                <svg
-                    className="h-8 w-8 absolute"
+                <Bra
+                    className="h-4 w-4 absolute"
                     style={{
                         left: '-10px',
                         animation: animationStarted ? 'moveLeftChevron 1.5s infinite ease-in-out' : 'none'
                     }}
-                    width="24"
-                    height="24"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                >
-                    <path d="m9 7-5 5 5 5"/>
-                </svg>
+                />
 
                 {/* Right Chevron */}
-                <svg
-                    className="h-8 w-8 absolute"
+                <Ket
+                    className="h-4 w-4 absolute"
                     style={{
-                        right: '-10px',
+                        left: '10px',
                         animation: animationStarted ? 'moveRightChevron 1.5s infinite ease-in-out' : 'none'
                     }}
-                    width="24"
-                    height="24"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="1"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                >
-                    <path d="m15 7 5 5-5 5"/>
-                </svg>
+                />
             </div>
         </>
     );

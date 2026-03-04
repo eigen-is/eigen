@@ -11,6 +11,8 @@ import {InputGroup, InputGroupAddon, InputGroupInput, InputGroupText} from "../i
 import {Input} from "../input.tsx";
 import {usePublicConfig} from "@workspace/lib/public";
 import {useApp} from "./layout-context";
+import {Bar} from "./bar.tsx";
+import {Ket} from "./ket.tsx";
 
 // Define the login form schema with Zod
 const loginFormSchema = z.object({
@@ -69,9 +71,9 @@ export function LoginPage() {
         <div className="flex w-full h-[calc(100vh-64px)] items-center justify-center">
             <Card className="w-full max-w-md">
                 <CardHeader className="text-center">
-                    <CardTitle className="text-2xl">
-                        <span className="font-bold text-app">eigen</span>
-                        <span className="font-normal text-app">|{appName}&gt;</span>
+                    <CardTitle className="text-2xl text-app">
+                        <span className="font-bold">eigen</span>
+                        <span className="font-normal"><Bar/>{appName}<Ket/></span>
                     </CardTitle>
                     <CardDescription>
                         Enter your credentials to access your account
