@@ -14,12 +14,12 @@ function SheetView() {
     const {data: docInfo} = useCollabDocumentInfo(ownerId, mountId, pathId);
 
     useEffect(() => {
-        if (docInfo?.name) {
-            const name = docInfo.name.replace(/\.eigensheets$/, '');
+        if (docInfo?.path?.name) {
+            const name = docInfo.path.name.replace(/\.eigensheets$/, '');
             setAppName(name);
         }
         return () => setAppName('Sheets');
-    }, [docInfo?.name, setAppName]);
+    }, [docInfo?.path?.name, setAppName]);
 
     return (
         <div className="flex flex-col h-full w-full">
