@@ -108,6 +108,7 @@ export default class CollabDocument {
     private provider!: LoggingProvider | DbProvider;
     private awareness!: awarenessProtocol.Awareness;
     private connections: Set<ServerWebSocket<any>> = new Set();
+    private connectionClientIds: Map<ServerWebSocket<any>, Set<number>> = new Map();
     private closed: boolean = false;
 
     constructor(drive: Drive, path: DrivePath) {
@@ -171,10 +172,22 @@ export default class CollabDocument {
             return;
         }
         this.connections.delete(conn);
+
+        const clientIds = this.connectionClientIds.get(conn);
+        if (clientIds && clientIds.size > 0) {
+            awarenessProtocol.removeAwarenessStates(this.awareness, Array.from(clientIds), null);
+        }
+        this.connectionClientIds.delete(conn);
+
         console.log(`User ${user.id} disconnected from document ${this.path.name}`);
         for (const connection of this.connections) {
             if (connection.readyState > 1) { // CLOSING or CLOSED
                 this.connections.delete(connection);
+                const staleIds = this.connectionClientIds.get(connection);
+                if (staleIds && staleIds.size > 0) {
+                    awarenessProtocol.removeAwarenessStates(this.awareness, Array.from(staleIds), null);
+                }
+                this.connectionClientIds.delete(connection);
             }
         }
         console.log(`Remaining connections: ${this.connections.size}`);
@@ -226,6 +239,21 @@ export default class CollabDocument {
                 awarenessUpdate,
                 conn
             );
+
+            // Track which clientIds belong to this connection
+            try {
+                const trackDecoder = decoding.createDecoder(awarenessUpdate);
+                const len = decoding.readVarUint(trackDecoder);
+                if (!this.connectionClientIds.has(conn)) {
+                    this.connectionClientIds.set(conn, new Set());
+                }
+                const ids = this.connectionClientIds.get(conn)!;
+                for (let i = 0; i < len; i++) {
+                    ids.add(decoding.readVarUint(trackDecoder));
+                }
+            } catch {
+                // ignore parsing errors
+            }
 
             // Broadcast the awareness update to all other clients
             const encoder = encoding.createEncoder();

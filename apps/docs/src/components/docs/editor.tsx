@@ -1,27 +1,40 @@
-import {useCallback, useEffect, useMemo, useState} from "react";
-import {createEditor, Editor, Node, NodeEntry, Transforms} from "slate";
-import {Editable, ReactEditor, RenderElementProps, RenderLeafProps, Slate, withReact} from "slate-react";
-import {withCursors, withYjs, YjsEditor} from "@slate-yjs/core";
+import {useEffect, useMemo, useState, useCallback} from "react";
+import {useEditor, EditorContent} from "@tiptap/react";
+import StarterKit from "@tiptap/starter-kit";
+import Collaboration from "@tiptap/extension-collaboration";
+import CollaborationCursor from "@tiptap/extension-collaboration-cursor";
+import Underline from "@tiptap/extension-underline";
+import TextAlign from "@tiptap/extension-text-align";
+import TaskList from "@tiptap/extension-task-list";
+import TaskItem from "@tiptap/extension-task-item";
+import Link from "@tiptap/extension-link";
+import Highlight from "@tiptap/extension-highlight";
+import Subscript from "@tiptap/extension-subscript";
+import Superscript from "@tiptap/extension-superscript";
+import Typography from "@tiptap/extension-typography";
+import Table from "@tiptap/extension-table";
+import TableRow from "@tiptap/extension-table-row";
+import TableCell from "@tiptap/extension-table-cell";
+import TableHeader from "@tiptap/extension-table-header";
+import TextStyle from "@tiptap/extension-text-style";
+import Color from "@tiptap/extension-color";
+import FontFamily from "@tiptap/extension-font-family";
+import CharacterCount from "@tiptap/extension-character-count";
+import CodeBlockLowlight from "@tiptap/extension-code-block-lowlight";
+import {common, createLowlight} from "lowlight";
 import * as Y from "yjs";
 import {WebsocketProvider} from "y-websocket";
-import {Cursors} from "./cursors";
 import {useAuth} from "@workspace/lib/auth";
-import {withHistory} from "slate-history";
 import {EditorToolbar} from "./editor-toolbar";
-import {CustomElement} from "./editor.types";
 import {EigenLoader} from "@workspace/ui";
 import {DrivePath} from "@workspace/lib/types/drive";
 import {getCollabWebSocketUrl, getDriveEmbedUrl} from "@workspace/lib/api";
 import {useUploadFile} from "@workspace/lib/drive";
-import {ResizableImage} from "./resizable-image";
 import {CreateCommentDialog, ViewCommentDialog} from "./comment-dialog";
+import {CommentMark} from "./extensions/comment-mark";
+import {ResizableImage} from "./extensions/resizable-image";
 
-const initialValue: CustomElement[] = [
-    {
-        type: "paragraph",
-        children: [{text: ""}],
-    },
-];
+const lowlight = createLowlight(common);
 
 export const CollaborativeEditor = ({path, access, mediaFolderId, chatFolderId, onAccessDialogOpen, onDeleteDialogOpen}: {
     path: DrivePath,
@@ -35,7 +48,6 @@ export const CollaborativeEditor = ({path, access, mediaFolderId, chatFolderId, 
     const [provider, setProvider] = useState<WebsocketProvider>();
 
     const yDoc = useMemo(() => new Y.Doc(), []);
-    const sharedType = useMemo(() => yDoc.get('slate', Y.XmlText), [yDoc]);
 
     useEffect(() => {
         const wsUrl = getCollabWebSocketUrl(path.ownerId, path.mountId, path.id);
@@ -53,32 +65,36 @@ export const CollaborativeEditor = ({path, access, mediaFolderId, chatFolderId, 
         };
     }, [yDoc, path.ownerId, path.mountId, path.id]);
 
-    if (!connected || !sharedType || !provider) {
+    if (!connected || !provider) {
         return <div className="flex h-full items-center justify-center"><EigenLoader/></div>;
     }
 
-    return <>
-        <SlateEditor path={path} sharedType={sharedType} provider={provider} access={access}
-                     mediaFolderId={mediaFolderId}
-                     chatFolderId={chatFolderId}
-                     onAccessDialogOpen={onAccessDialogOpen}
-                     onDeleteDialogOpen={onDeleteDialogOpen}/>
-    </>;
+    return (
+        <TiptapEditor
+            path={path}
+            yDoc={yDoc}
+            provider={provider}
+            access={access}
+            mediaFolderId={mediaFolderId}
+            chatFolderId={chatFolderId}
+            onAccessDialogOpen={onAccessDialogOpen}
+            onDeleteDialogOpen={onDeleteDialogOpen}
+        />
+    );
 };
 
-
-const SlateEditor = ({
-                         sharedType,
-                         provider,
-                         path,
-                         access,
-                         mediaFolderId,
-                         chatFolderId,
-                         onAccessDialogOpen,
-                         onDeleteDialogOpen,
-                     }: {
-    sharedType: Y.XmlText | null;
-    provider: WebsocketProvider | null;
+const TiptapEditor = ({
+                          yDoc,
+                          provider,
+                          path,
+                          access,
+                          mediaFolderId,
+                          chatFolderId,
+                          onAccessDialogOpen,
+                          onDeleteDialogOpen,
+                      }: {
+    yDoc: Y.Doc;
+    provider: WebsocketProvider;
     path: DrivePath;
     access: { canRead: boolean, canWrite: boolean };
     mediaFolderId: string | null;
@@ -88,265 +104,170 @@ const SlateEditor = ({
 }) => {
     const auth = useAuth();
     const uploadFile = useUploadFile(path.ownerId, path.mountId);
-    const [selectedImageId, setSelectedImageId] = useState<string | null>(null);
     const [commentDialogOpen, setCommentDialogOpen] = useState(false);
     const [commentSelectedText, setCommentSelectedText] = useState('');
     const [viewCommentChatId, setViewCommentChatId] = useState<string | null>(null);
 
-    const editor = useMemo(() => {
-        const e = withReact(
-            withHistory(
-                withCursors(withYjs(createEditor(), sharedType!), provider!.awareness, {
-                    data: {
-                        name: auth.user!.name,
-                        email: auth.user!.email,
-                        color: "#9810fa",
-                    },
-                })
-            )
-        );
-
-        const {normalizeNode} = e;
-        e.normalizeNode = (entry: NodeEntry<Node>) => {
-            const [node] = entry;
-
-            if (!Editor.isEditor(node) || node.children.length > 0) {
-                return normalizeNode(entry);
-            }
-
-            Transforms.insertNodes(e, initialValue, {at: [0]});
-        };
-
-        return e;
+    const handleCommentClick = useCallback((chatId: string) => {
+        setViewCommentChatId(chatId);
     }, []);
 
-    useEffect(() => {
-        YjsEditor.connect(editor);
-        return () => YjsEditor.disconnect(editor);
-    }, [editor]);
+    const editor = useEditor({
+        editable: access.canWrite,
+        extensions: [
+            StarterKit.configure({
+                history: false,
+                codeBlock: false,
+                dropcursor: {
+                    color: '#3b82f6',
+                    width: 2,
+                },
+            }),
+            Underline,
+            Subscript,
+            Superscript,
+            Typography,
+            TextStyle,
+            Color,
+            FontFamily,
+            CharacterCount,
+            TextAlign.configure({
+                types: ['heading', 'paragraph'],
+            }),
+            TaskList,
+            TaskItem.configure({
+                nested: true,
+            }),
+            Link.configure({
+                openOnClick: true,
+                HTMLAttributes: {
+                    class: 'text-blue-600 underline cursor-pointer',
+                    target: '_blank',
+                    rel: 'noopener noreferrer',
+                },
+            }),
+            ResizableImage,
+            Highlight.configure({
+                multicolor: true,
+            }),
+            CodeBlockLowlight.configure({
+                lowlight,
+            }),
+            Table.configure({
+                resizable: true,
+            }),
+            TableRow,
+            TableCell,
+            TableHeader,
+            CommentMark.configure({
+                onCommentClick: handleCommentClick,
+            }),
+            Collaboration.configure({
+                document: yDoc,
+            }),
+            CollaborationCursor.configure({
+                provider,
+                user: {
+                    name: auth.user!.name,
+                    color: '#9810fa',
+                },
+                render: (user: Record<string, string>) => {
+                    const cursor = document.createElement('span');
+                    cursor.classList.add('collaboration-cursor__caret');
+                    cursor.setAttribute('style', `border-color: ${user.color}`);
 
-    const renderElement = useCallback((props: RenderElementProps) => {
-        const {attributes, children, element} = props;
-        const style: React.CSSProperties = {
-            textAlign: element.align || 'left',
-        };
+                    const label = document.createElement('div');
+                    label.classList.add('collaboration-cursor__label');
+                    label.setAttribute('style', `background-color: ${user.color}`);
+                    label.insertBefore(document.createTextNode(user.name), null);
 
-        const typedElement = element as CustomElement;
+                    cursor.insertBefore(document.createTextNode('\u2060'), null);
+                    cursor.insertBefore(label, null);
+                    cursor.insertBefore(document.createTextNode('\u2060'), null);
 
-        switch (typedElement.type) {
-            case 'heading-one':
-                return <h1 className="text-4xl font-normal mb-3" style={style} {...attributes}>{children}</h1>;
-            case 'heading-two':
-                return <h2 className="text-3xl font-normal mb-3" style={style} {...attributes}>{children}</h2>;
-            case 'heading-three':
-                return <h3 className="text-2xl font-normal mb-3" style={style} {...attributes}>{children}</h3>;
-            case 'block-quote':
-                return <blockquote className="border-l-2 border-muted-foreground pl-2"
-                                   style={style} {...attributes}>{children}</blockquote>;
-            case 'bulleted-list':
-                return <ul className="list-disc pl-4 pt-2" style={style} {...attributes}>{children}</ul>;
-            case 'numbered-list':
-                return <ol className="list-decimal pl-4 pt-2" style={style} {...attributes}>{children}</ol>;
-            case 'list-item':
-                return <li className="my-1" style={style} {...attributes}>{children}</li>;
-            case 'check-list':
-                return (
-                    <div
-                        {...attributes}
-                        className="flex items-start gap-2"
-                    >
-                        <input
-                            type="checkbox"
-                            checked={typedElement.checked}
-                            onChange={(event: React.ChangeEvent<HTMLInputElement>) => {
-                                const nodePath = ReactEditor.findPath(editor, typedElement);
-                                Transforms.setNodes(
-                                    editor,
-                                    {checked: event.target.checked},
-                                    {at: nodePath}
-                                );
-                            }}
-                            className="mt-1.5"
-                        />
-                        <span className="flex-1">{children}</span>
-                    </div>
-                );
-            case 'image':
-                return (
-                    <div {...attributes} contentEditable={false} className="my-2">
-                        <ResizableImage
-                            element={typedElement}
-                            src={getDriveEmbedUrl(path.ownerId, path.mountId, typedElement.pathId!, 'image')}
-                            isSelected={selectedImageId === typedElement.pathId}
-                            onSelect={() => setSelectedImageId(typedElement.pathId!)}
-                            onDeselect={() => setSelectedImageId(null)}
-                        />
-                        {children}
-                    </div>
-                );
-            default:
-                return <p style={style} {...attributes}>{children}</p>;
-        }
-    }, [editor, selectedImageId]);
-
-    const renderLeaf = useCallback((props: RenderLeafProps) => {
-        const {attributes, leaf} = props;
-        let {children} = props;
-
-        if (leaf.bold) {
-            children = <strong>{children}</strong>;
-        }
-
-        if (leaf.italic) {
-            children = <em>{children}</em>;
-        }
-
-        if (leaf.underline) {
-            children = <u>{children}</u>;
-        }
-
-        if (leaf.strikethrough) {
-            children = <s>{children}</s>;
-        }
-
-        if (leaf.code) {
-            children = <code>{children}</code>;
-        }
-
-        if (leaf.link) {
-            children = (
-                <a
-                    href={leaf.link as string}
-                    className="text-blue-600 underline"
-                    target="_blank"
-                    rel="noopener noreferrer"
-                >
-                    {children}
-                </a>
-            );
-        }
-
-        if (leaf.comment) {
-            const chatId = leaf.comment as string;
-            children = (
-                <span
-                    className="bg-yellow-100 border-b-2 border-yellow-300 cursor-pointer hover:bg-yellow-200 transition-colors"
-                    onClick={() => setViewCommentChatId(chatId)}
-                >
-                    {children}
-                </span>
-            );
-        }
-
-        return <span {...attributes}>{children}</span>;
-    }, []);
-
-    const handleAddComment = useCallback(() => {
-        const {selection} = editor;
-        if (!selection || !chatFolderId) return;
-        const text = Editor.string(editor, selection);
-        if (!text.trim()) return;
-        setCommentSelectedText(text);
-        setCommentDialogOpen(true);
-    }, [editor, chatFolderId]);
-
-    const handleCommentCreated = useCallback((chatId: string) => {
-        Editor.addMark(editor, 'comment', chatId);
-    }, [editor]);
-
-    const handleKeyDown = useCallback((event: React.KeyboardEvent<HTMLDivElement>) => {
-        const {key, ctrlKey, metaKey} = event;
-        const isModKey = metaKey || ctrlKey;
-
-        if (isModKey) {
-            switch (key) {
-                case 'b': {
+                    return cursor;
+                },
+            }),
+        ],
+        editorProps: {
+            handleDrop: (view, event) => {
+                if (!event.dataTransfer) return false;
+                const files = Array.from(event.dataTransfer.files);
+                const imageFile = files.find(f => f.type.startsWith('image/'));
+                if (imageFile && mediaFolderId) {
                     event.preventDefault();
-                    Editor.addMark(editor, 'bold', true);
-                    break;
+                    handleImageUpload(imageFile);
+                    return true;
                 }
-                case 'i': {
+                return false;
+            },
+            handlePaste: (_view, event) => {
+                if (!event.clipboardData) return false;
+                const files = Array.from(event.clipboardData.files);
+                const imageFile = files.find(f => f.type.startsWith('image/'));
+                if (imageFile && mediaFolderId) {
                     event.preventDefault();
-                    Editor.addMark(editor, 'italic', true);
-                    break;
+                    handleImageUpload(imageFile);
+                    return true;
                 }
-                case 'u': {
-                    event.preventDefault();
-                    Editor.addMark(editor, 'underline', true);
-                    break;
-                }
-            }
-        }
-    }, [editor]);
+                return false;
+            },
+        },
+    }, [handleCommentClick]);
 
-    const insertImage = useCallback((pathId: string, width?: number, height?: number) => {
-        const image: CustomElement = {
-            type: 'image',
-            pathId,
-            width,
-            height,
-            children: [{text: ''}],
-        };
-        Transforms.insertNodes(editor, image);
-        Transforms.insertNodes(editor, {type: 'paragraph', children: [{text: ''}]});
-    }, [editor]);
-
-    const handleImageUpload = useCallback(async (file: File) => {
-        if (!mediaFolderId || !file.type.startsWith('image/')) return;
+    const handleImageUpload = async (file: File) => {
+        if (!mediaFolderId || !file.type.startsWith('image/') || !editor) return;
 
         const result = await uploadFile.mutateAsync({parentId: mediaFolderId, file});
         if (result) {
-            const width = result.details?.width as number | undefined;
-            const height = result.details?.height as number | undefined;
-            insertImage(result.id, width, height);
+            const src = getDriveEmbedUrl(path.ownerId, path.mountId, result.id, 'image');
+            editor.chain().focus().setResizableImage({src}).run();
         }
-    }, [mediaFolderId, uploadFile, insertImage]);
+    };
 
-    const handleDrop = useCallback((event: React.DragEvent<HTMLDivElement>) => {
-        const files = Array.from(event.dataTransfer.files);
-        const imageFile = files.find(f => f.type.startsWith('image/'));
-        if (imageFile && mediaFolderId) {
-            event.preventDefault();
-            handleImageUpload(imageFile);
-        }
-    }, [mediaFolderId, handleImageUpload]);
+    const handleAddComment = () => {
+        if (!editor || !chatFolderId) return;
+        const {from, to} = editor.state.selection;
+        const text = editor.state.doc.textBetween(from, to, ' ');
+        if (!text.trim()) return;
+        setCommentSelectedText(text);
+        setCommentDialogOpen(true);
+    };
 
-    const handlePaste = useCallback((event: React.ClipboardEvent<HTMLDivElement>) => {
-        const files = Array.from(event.clipboardData.files);
-        const imageFile = files.find(f => f.type.startsWith('image/'));
-        if (imageFile && mediaFolderId) {
-            event.preventDefault();
-            handleImageUpload(imageFile);
-        }
-    }, [mediaFolderId, handleImageUpload]);
+    const handleCommentCreated = (chatId: string) => {
+        if (!editor) return;
+        editor.chain().focus().setComment(chatId).run();
+    };
+
+    if (!editor) return null;
 
     return (
         <>
-            <Slate editor={editor} initialValue={initialValue}>
-                <div className="flex h-full w-full flex-col">
-                    <EditorToolbar path={path} canWrite={access.canWrite} onDeleteDialogOpen={onDeleteDialogOpen}
-                                   onAccessDialogOpen={onAccessDialogOpen}
-                                   onAddComment={chatFolderId ? handleAddComment : undefined}/>
-                    <div className="h-full w-full overflow-y-scroll bg-gray-200 p-4">
-                        <div data-document="true"
-                             className="grid p-[2cm] bg-white rounded-lg shadow-sm shadow-transparent min-h-full w-[210mm] m-auto print:shadow-none">
-                            <Cursors className="h-full">
-                                <Editable
-                                    readOnly={!access.canWrite}
-                                    spellCheck={false}
-                                    autoFocus
-                                    className="h-full outline-none"
-                                    renderElement={renderElement}
-                                    renderLeaf={renderLeaf}
-                                    onKeyDown={handleKeyDown}
-                                    onDrop={handleDrop}
-                                    onPaste={handlePaste}
-                                />
-                            </Cursors>
-                        </div>
+            <div className="flex h-full w-full flex-col">
+                <EditorToolbar
+                    editor={editor}
+                    path={path}
+                    canWrite={access.canWrite}
+                    onDeleteDialogOpen={onDeleteDialogOpen}
+                    onAccessDialogOpen={onAccessDialogOpen}
+                    onAddComment={chatFolderId ? handleAddComment : undefined}
+                    onImageUpload={mediaFolderId ? handleImageUpload : undefined}
+                />
+                <div className="h-full w-full overflow-y-scroll bg-gray-200 p-4">
+                    <div
+                        data-document="true"
+                        className="grid p-[2cm] bg-white rounded-lg shadow-sm shadow-transparent min-h-full w-[210mm] m-auto print:shadow-none"
+                    >
+                        <EditorContent editor={editor} className="h-full tiptap-wrapper"/>
                     </div>
                 </div>
-            </Slate>
+                {editor && (
+                    <div className="bg-white border-t px-4 py-1 text-xs text-muted-foreground flex items-center gap-4 no-print">
+                        <span>{editor.storage.characterCount.characters()} characters</span>
+                        <span>{editor.storage.characterCount.words()} words</span>
+                    </div>
+                )}
+            </div>
 
             {chatFolderId && (
                 <CreateCommentDialog
