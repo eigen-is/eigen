@@ -7,15 +7,18 @@ export async function getTeamExists(teamId: string) {
     return await db.select({id: team.id}).from(team).where(eq(team.id, teamId)).get() !== undefined;
 }
 
-export async function getTeamMemberEmails(teamId: string): Promise<string[]> {
+export async function getTeamMembers(teamId: string): Promise<{ id: string, email: string }[]> {
     try {
         const db = getAuthDrizzleDb();
-        const members = await db.select({email: userSchema.email})
+        const members = db.select({id: userSchema.id, email: userSchema.email})
             .from(teamMember)
             .innerJoin(userSchema, eq(teamMember.userId, userSchema.id))
             .where(eq(teamMember.teamId, teamId))
             .all();
-        return members.map(m => m.email.toLowerCase());
+        return members.map(m => ({
+            id: m.id,
+            email: m.email.toLowerCase()
+        }));
     } catch {
         return [];
     }
