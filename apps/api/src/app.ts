@@ -11,7 +11,6 @@ import {publicRouter} from "./routes/public";
 import {driveRouter} from "./routes/drive.ts";
 import {homeRouter} from "./routes/home.ts";
 import {collabRouter} from "./routes/collab";
-import {configRouter} from "./routes/config";
 import {sseRouter} from "./routes/sse";
 import {setupRouter} from "./routes/setup";
 import {chatRouter} from "./routes/chat";
@@ -26,7 +25,6 @@ export const app = new Elysia()
     }))
     .use(betterAuth)
     .use(setupRouter)
-    .use(configRouter)
 
     .use(mailRouter)
     .use(contactsRouter)
