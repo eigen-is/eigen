@@ -4,10 +4,12 @@ import {useEffect, useState} from "react";
 import {zodResolver} from "@hookform/resolvers/zod";
 import {useForm} from "react-hook-form";
 import {z} from "zod";
-import {Input} from "../input.tsx";
 import {Button} from "../button.tsx";
 import {Card, CardContent, CardDescription, CardHeader, CardTitle,} from "../card.tsx";
 import {Form, FormControl, FormField, FormItem, FormLabel, FormMessage,} from "../form.tsx";
+import {InputGroup, InputGroupAddon, InputGroupInput, InputGroupText} from "../input-group.tsx";
+import {Input} from "../input.tsx";
+import {usePublicConfig} from "@workspace/lib/public";
 import {useApp} from "./layout-context";
 
 // Define the login form schema with Zod
@@ -23,6 +25,7 @@ export function LoginPage() {
     const {login, isAuthenticated} = useAuth();
     const router = useRouter();
     const {appName} = useApp();
+    const {data: config} = usePublicConfig();
     const [error, setError] = useState('');
     const [isLoading, setIsLoading] = useState(false);
 
@@ -40,8 +43,7 @@ export function LoginPage() {
         setIsLoading(true);
         setError('');
 
-        // check if email is emailadress ending with eigen.is, if not, change it
-        values.email = values.email.toLowerCase().split('@')[0] + '@eigen.is';
+        values.email = values.email.toLowerCase().split('@')[0] + '@' + (config?.domain ?? 'eigen.is');
 
         try {
             const {success, error} = await login(values.email, values.password);
@@ -90,9 +92,14 @@ export function LoginPage() {
                                 name="email"
                                 render={({field}) => (
                                     <FormItem>
-                                        <FormLabel>Email</FormLabel>
+                                        <FormLabel>Username</FormLabel>
                                         <FormControl>
-                                            <Input placeholder="your@eigen.is" autoFocus {...field} />
+                                            <InputGroup>
+                                                <InputGroupInput placeholder="username" autoFocus {...field} />
+                                                <InputGroupAddon align="inline-end">
+                                                    <InputGroupText>@{config?.domain ?? 'eigen.is'}</InputGroupText>
+                                                </InputGroupAddon>
+                                            </InputGroup>
                                         </FormControl>
                                         <FormMessage/>
                                     </FormItem>

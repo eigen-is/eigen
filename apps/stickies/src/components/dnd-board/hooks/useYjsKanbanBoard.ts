@@ -141,7 +141,7 @@ export const useYjsKanbanBoard = (ownerId: string, mountId: string, pathId: stri
 
         wsProvider.on('sync', (isSynced: boolean) => {
             if (isSynced && columnsMap.size === 0) {
-                initializeDefaultBoard(doc, user?.email || 'user@eigen.is');
+                initializeDefaultBoard(doc, user?.email || 'user@localhost');
             }
         });
 

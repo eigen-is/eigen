@@ -13,7 +13,7 @@ import {useState} from 'react';
 import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle} from '@workspace/ui/components/dialog';
 import {Input} from '@workspace/ui/components/input';
 import {useCreateTeam} from '@workspace/lib/people';
-import {useOrganization} from '@workspace/lib/auth';
+import {usePublicConfig} from '@workspace/lib/public';
 import {toast} from 'sonner';
 
 interface PeopleSidebarProps {
@@ -31,10 +31,10 @@ export function PeopleSidebar({
                                   teams = [],
                                   onAddMembersToTeam
                               }: PeopleSidebarProps) {
-    const {data: org} = useOrganization();
+    const {data: config} = usePublicConfig();
     const [showCreate, setShowCreate] = useState(false);
     const [newTeamName, setNewTeamName] = useState('');
-    const createTeam = useCreateTeam(org?.id);
+    const createTeam = useCreateTeam(config?.orgId);
 
     const handleCreate = async (e: React.FormEvent) => {
         e.preventDefault();

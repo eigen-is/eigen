@@ -1,7 +1,8 @@
 import {useEffect, useRef} from 'react';
 import {createFileRoute, Outlet, redirect} from '@tanstack/react-router';
 import {usePeopleMembers} from '@workspace/lib/people';
-import {authClient, useAuth, useOrganization} from '@workspace/lib/auth';
+import {authClient, useAuth} from '@workspace/lib/auth';
+import {usePublicConfig} from '@workspace/lib/public';
 import {EigenLoader} from '@workspace/ui/components/layout/eigen-loader';
 
 export const Route = createFileRoute('/_auth')({
@@ -20,18 +21,18 @@ export const Route = createFileRoute('/_auth')({
 
 function AuthGuard() {
     const {user} = useAuth();
-    const {data: org, isLoading: orgLoading} = useOrganization();
-    const {data: members = [], isLoading: membersLoading} = usePeopleMembers(org?.id);
+    const {data: config, isLoading: configLoading} = usePublicConfig();
+    const {data: members = [], isLoading: membersLoading} = usePeopleMembers(config?.orgId);
     const activatedRef = useRef(false);
 
     useEffect(() => {
-        if (org && !activatedRef.current) {
+        if (config?.orgId && !activatedRef.current) {
             activatedRef.current = true;
-            authClient.organization.setActive({organizationId: org.id});
+            authClient.organization.setActive({organizationId: config.orgId});
         }
-    }, [org]);
+    }, [config]);
 
-    if (orgLoading || membersLoading) {
+    if (configLoading || membersLoading) {
         return (
             <div className="h-full flex items-center justify-center">
                 <EigenLoader/>
@@ -39,7 +40,7 @@ function AuthGuard() {
         );
     }
 
-    if (!org) {
+    if (!config?.orgId) {
         return (
             <div className="h-full flex items-center justify-center">
                 <p className="text-muted-foreground">No organization found.</p>
