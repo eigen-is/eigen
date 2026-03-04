@@ -1,0 +1,22 @@
+{
+  "name": "slides",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "bunx --bun vite",
+    "build": "bunx --bun vite build",
+    "typecheck": "tsc -b"
+  },
+  "dependencies": {
+    "@workspace/lib": "workspace:*",
+    "@workspace/ui": "workspace:*",
+    "react": "^19",
+    "react-dom": "^19"
+  },
+  "devDependencies": {
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "typescript": "^5"
+  }
+}

@@ -60,6 +60,8 @@ Write-Host "   - Calendar: http://localhost/calendar"
 Write-Host "   - Drive: http://localhost/drive"
 Write-Host "   - Docs: http://localhost/docs"
 Write-Host "   - Stickies: http://localhost/stickies"
+Write-Host "   - Slides: http://localhost/slides"
+Write-Host "   - Sheets: http://localhost/sheets"
 Write-Host "   - Space: http://localhost/space"
 Write-Host ""
 Write-Host "📝 View logs: docker compose logs -f" -ForegroundColor Yellow

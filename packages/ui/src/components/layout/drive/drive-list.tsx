@@ -1,7 +1,7 @@
 import {Fragment, useRef, useState} from 'react';
 import {Button} from "@workspace/ui/components/button";
 import {EigenLoader} from "@workspace/ui";
-import {FileText, FolderPlus, MessageSquare, Plus, StickyNote, UploadIcon} from "lucide-react";
+import {FileText, FolderPlus, MessageSquare, Plus, Presentation, Sheet, StickyNote, UploadIcon} from "lucide-react";
 import {DriveTable, getFileIcon} from "@workspace/ui/components/layout/drive";
 import {type DrivePath} from "@workspace/lib/types/drive";
 import {cn} from "@workspace/ui/lib/utils";
@@ -35,6 +35,8 @@ type DriveListToolbarProps = {
     onCreateDoc?: () => void;
     onCreateStickies?: () => void;
     onCreateChat?: () => void;
+    onCreateSlides?: () => void;
+    onCreateSheets?: () => void;
 }
 
 export function DriveListToolbar({
@@ -50,6 +52,8 @@ export function DriveListToolbar({
                                      onCreateDoc,
                                      onCreateStickies,
                                      onCreateChat,
+                                     onCreateSlides,
+                                     onCreateSheets,
                                  }: DriveListToolbarProps) {
     const {data: breadcrumbPaths = []} = showBreadcrumb ? useBreadcrumb(ownerId, mountId, pathId) : {data: []};
     const {isMobile} = useLayout();
@@ -62,9 +66,9 @@ export function DriveListToolbar({
         }
     };
 
-    const numberOfDropDownItems = (onCreateFolder ? 1 : 0) + (onUploadFile ? 1 : 0) + (onCreateDoc ? 1 : 0) + (onCreateStickies ? 1 : 0) + (onCreateChat ? 1 : 0);
+    const numberOfDropDownItems = (onCreateFolder ? 1 : 0) + (onUploadFile ? 1 : 0) + (onCreateDoc ? 1 : 0) + (onCreateStickies ? 1 : 0) + (onCreateChat ? 1 : 0) + (onCreateSlides ? 1 : 0) + (onCreateSheets ? 1 : 0);
 
-    const newItemButton = (onCreateFolder || onUploadFile || onCreateDoc || onCreateStickies || onCreateChat) ? (
+    const newItemButton = (onCreateFolder || onUploadFile || onCreateDoc || onCreateStickies || onCreateChat || onCreateSlides || onCreateSheets) ? (
         (numberOfDropDownItems === 1 ? (
                     onCreateDoc ? <Button size="default" onClick={onCreateDoc}>
                         <Plus/>
@@ -111,6 +115,18 @@ export function DriveListToolbar({
                             <DropdownMenuItem onClick={onCreateChat}>
                                 <MessageSquare className="h-4 w-4 mr-2"/>
                                 Create chat
+                            </DropdownMenuItem>
+                        )}
+                        {onCreateSlides && (
+                            <DropdownMenuItem onClick={onCreateSlides}>
+                                <Presentation className="h-4 w-4 mr-2"/>
+                                Create slides
+                            </DropdownMenuItem>
+                        )}
+                        {onCreateSheets && (
+                            <DropdownMenuItem onClick={onCreateSheets}>
+                                <Sheet className="h-4 w-4 mr-2"/>
+                                Create sheets
                             </DropdownMenuItem>
                         )}
                     </DropdownMenuContent>
@@ -165,6 +181,8 @@ interface DriveListProps {
     onCreateDoc?: () => void;
     onCreateStickies?: () => void;
     onCreateChat?: () => void;
+    onCreateSlides?: () => void;
+    onCreateSheets?: () => void;
     onDownload?: (path: DrivePath) => void;
     ownerId: string;
     mountId: string;

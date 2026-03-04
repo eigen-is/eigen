@@ -18,7 +18,7 @@ to `docs/*.md`.
 ## Project Structure
 
 - `/apps/api`: Backend server (`port 8000`)
-- `/apps/*`: Frontend applications (e.g., `mail`, `drive`, `contacts`, `chat`, `docs`)
+- `/apps/*`: Frontend applications (e.g., `mail`, `drive`, `contacts`, `chat`, `docs`, `slides`, `sheets`)
 - `/packages/lib`: `@workspace/lib` — Shared types, hooks, API client, SSE handlers
 - `/packages/ui`: `@workspace/ui` — Shared UI components (shadcn defaults)
 - `/data`: Runtime storage (databases, user files)
@@ -66,8 +66,8 @@ See:
     - Mutations invalidate local TanStack Query cache.
     - Backend emits SSE via `home.notify()`.
     - FE listens via handlers in `packages/lib/src/lib/[domain]/sse-handlers.ts` to invalidate cache across tabs.
-- **File Types**: `.eigendoc` (Docs), `.eigenstickies` (Stickies), `.eigenchat` (Chat). They are directories with
-  internal `data.db` SQLite files.
+- **File Types**: `.eigendoc` (Docs), `.eigenstickies` (Stickies), `.eigenchat` (Chat), `.eigenslides` (Slides),
+  `.eigensheets` (Sheets). They are directories with internal `data.db` SQLite files.
 
 See:
 

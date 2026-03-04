@@ -6,6 +6,8 @@ import {DriveAccessDialog} from "./drive-access-dialog";
 import {DriveCreateDoc} from "./drive-create-doc";
 import {DriveCreateStickies} from "./drive-create-stickies";
 import {DriveCreateChat} from "./drive-create-chat";
+import {DriveCreateSlides} from "./drive-create-slides";
+import {DriveCreateSheets} from "./drive-create-sheets";
 import {DriveDeleteItem} from "./drive-delete-item";
 import {DriveUploadFiles} from "./drive-upload-files";
 import {DriveCreateFolder} from "./drive-create-folder";
@@ -37,6 +39,8 @@ export type DriveLayoutProps = {
     allowCreateDoc?: boolean;
     allowCreateStickies?: boolean;
     allowCreateChat?: boolean;
+    allowCreateSlides?: boolean;
+    allowCreateSheets?: boolean;
     allowRename?: boolean;
     allowMove?: boolean;
     pid?: string;
@@ -61,6 +65,8 @@ export function DriveLayout({
                                 allowCreateDoc = true,
                                 allowCreateStickies = true,
                                 allowCreateChat = true,
+                                allowCreateSlides = true,
+                                allowCreateSheets = true,
                                 allowUpload = true,
                                 allowRename = true,
                                 allowMove = true,
@@ -141,6 +147,8 @@ export function DriveLayout({
         onCreateDoc: allowCreateDoc ? dialogs.createDoc.openDialog : undefined,
         onCreateStickies: allowCreateStickies ? dialogs.createStickies.openDialog : undefined,
         onCreateChat: allowCreateChat ? dialogs.createChat.openDialog : undefined,
+        onCreateSlides: allowCreateSlides ? dialogs.createSlides.openDialog : undefined,
+        onCreateSheets: allowCreateSheets ? dialogs.createSheets.openDialog : undefined,
         currentPath,
         ownerId,
         mountId,
@@ -167,6 +175,8 @@ export function DriveLayout({
             onCreateDoc={allowCreateDoc ? dialogs.createDoc.openDialog : undefined}
             onCreateStickies={allowCreateStickies ? dialogs.createStickies.openDialog : undefined}
             onCreateChat={allowCreateChat ? dialogs.createChat.openDialog : undefined}
+            onCreateSlides={allowCreateSlides ? dialogs.createSlides.openDialog : undefined}
+            onCreateSheets={allowCreateSheets ? dialogs.createSheets.openDialog : undefined}
         />
     );
 
@@ -254,6 +264,28 @@ export function DriveLayout({
                     onOpenChange={dialogs.createChat.setOpen}
                     onSave={dialogs.createChat.closeDialog}
                     onCancel={dialogs.createChat.closeDialog}
+                    onAfterAction={onAfterAction}
+                />
+            )}
+
+            {allowCreateSlides && currentPath && (
+                <DriveCreateSlides
+                    path={currentPath}
+                    open={dialogs.createSlides.open}
+                    onOpenChange={dialogs.createSlides.setOpen}
+                    onSave={dialogs.createSlides.closeDialog}
+                    onCancel={dialogs.createSlides.closeDialog}
+                    onAfterAction={onAfterAction}
+                />
+            )}
+
+            {allowCreateSheets && currentPath && (
+                <DriveCreateSheets
+                    path={currentPath}
+                    open={dialogs.createSheets.open}
+                    onOpenChange={dialogs.createSheets.setOpen}
+                    onSave={dialogs.createSheets.closeDialog}
+                    onCancel={dialogs.createSheets.closeDialog}
                     onAfterAction={onAfterAction}
                 />
             )}

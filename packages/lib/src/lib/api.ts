@@ -24,6 +24,8 @@ export const DRIVE_APP_URL = import.meta.env.VITE_APP_DRIVE_URL as string;
 export const DOCS_APP_URL = import.meta.env.VITE_APP_DOCS_URL as string;
 export const STICKIES_APP_URL = import.meta.env.VITE_APP_STICKIES_URL as string;
 export const CHAT_APP_URL = import.meta.env.VITE_APP_CHAT_URL as string;
+export const SLIDES_APP_URL = import.meta.env.VITE_APP_SLIDES_URL as string;
+export const SHEETS_APP_URL = import.meta.env.VITE_APP_SHEETS_URL as string;
 export const PEOPLE_APP_URL = import.meta.env.VITE_APP_PEOPLE_URL as string;
 
 const trimTrailingSlash = (url: string) => url.replace(/\/+$/, '');
@@ -41,6 +43,8 @@ export const getDriveAppUrl = (path?: string) => joinAppUrl(DRIVE_APP_URL, path)
 export const getDocsAppUrl = (path?: string) => joinAppUrl(DOCS_APP_URL, path);
 export const getStickiesAppUrl = (path?: string) => joinAppUrl(STICKIES_APP_URL, path);
 export const getChatAppUrl = (path?: string) => joinAppUrl(CHAT_APP_URL, path);
+export const getSlidesAppUrl = (path?: string) => joinAppUrl(SLIDES_APP_URL, path);
+export const getSheetsAppUrl = (path?: string) => joinAppUrl(SHEETS_APP_URL, path);
 
 export const getChatRoomUrl = (ownerId: string, mountId: string, chatId: string) =>
     getChatAppUrl(`${ownerId}/${mountId}/${chatId}`);
@@ -50,6 +54,12 @@ export const getDocUrl = (ownerId: string, mountId: string, pathId: string) =>
 
 export const getStickiesBoardUrl = (ownerId: string, mountId: string, pathId: string) =>
     getStickiesAppUrl(`board/${ownerId}/${mountId}/${pathId}`);
+
+export const getSlideUrl = (ownerId: string, mountId: string, pathId: string) =>
+    getSlidesAppUrl(`slide/${ownerId}/${mountId}/${pathId}`);
+
+export const getSheetUrl = (ownerId: string, mountId: string, pathId: string) =>
+    getSheetsAppUrl(`sheet/${ownerId}/${mountId}/${pathId}`);
 
 export const getMailComposeUrl = (address: string) =>
     getMailAppUrl(`box/inbox?mode=compose&to=${encodeURIComponent(address)}`);
