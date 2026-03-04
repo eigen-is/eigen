@@ -20,6 +20,7 @@ import {Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle} f
 import {authClient} from "@workspace/lib/auth"
 import {toast} from "sonner"
 import {Checkbox} from "@workspace/ui/components/checkbox"
+import {usePublicConfig} from "@workspace/lib/public"
 
 // Define form schema with validation
 const formSchema = z.object({
@@ -29,6 +30,7 @@ const formSchema = z.object({
 
 export function LoginFa2Form() {
     const [isLoading, setIsLoading] = React.useState<boolean>(false)
+    const {data: config} = usePublicConfig()
 
     // Initialize form
     const form = useForm<z.infer<typeof formSchema>>({
@@ -144,7 +146,7 @@ export function LoginFa2Form() {
             <CardFooter className="flex justify-center">
                 <div className="text-sm text-muted-foreground">
                     <span>Need help? </span>
-                    <a href="reinder@eigen.is" className="text-primary hover:underline">
+                    <a href={`mailto:support@${config?.domain ?? 'eigen.is'}`} className="text-primary hover:underline">
                         Contact support
                     </a>
                 </div>

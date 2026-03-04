@@ -1,7 +1,7 @@
 import {createFileRoute} from '@tanstack/react-router';
 import {TeamDetail, TeamDetailToolbar} from '../components/people/team-detail';
 import {usePeopleTeams} from '@workspace/lib/people';
-import {useOrganization} from '@workspace/lib/auth';
+import {usePublicConfig} from '@workspace/lib/public';
 import {Column, ColumnLayout} from '@workspace/ui/components/layout/column-layout';
 import {EigenLoader} from '@workspace/ui/components/layout/eigen-loader';
 
@@ -19,8 +19,8 @@ export const Route = createFileRoute('/_auth/teams')({
 function TeamsRoute() {
     const {teamId} = Route.useSearch();
 
-    const {data: org} = useOrganization();
-    const {data: teams = [], isLoading} = usePeopleTeams(org?.id);
+    const {data: config} = usePublicConfig();
+    const {data: teams = [], isLoading} = usePeopleTeams(config?.orgId);
 
     const team = teams.find(t => t.id === teamId);
 
@@ -33,14 +33,14 @@ function TeamsRoute() {
     }
 
     const detailToolbar = team ? (
-        <TeamDetailToolbar team={team} organizationId={org?.id}/>
+        <TeamDetailToolbar team={team} organizationId={config?.orgId}/>
     ) : null;
 
     return (
         <ColumnLayout>
             <Column id="detail" width="flex" toolbar={detailToolbar}>
                 {team ? (
-                    <TeamDetail team={team} organizationId={org?.id}/>
+                    <TeamDetail team={team} organizationId={config?.orgId}/>
                 ) : (
                     <div className="flex-1 flex items-center justify-center">
                         <p className="text-muted-foreground text-center">Select a team from the sidebar to view details</p>

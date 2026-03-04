@@ -1,8 +1,9 @@
 import nodemailer from 'nodemailer';
 import {validateEmailAddress} from '@workspace/lib/validation';
+import {getDomain} from '../config/server-config';
 
 export async function waitlist(email: string, notes: string) {
-    // use nodemailer, to send email to reinder@eigen.is
+    // use nodemailer to send a notification email
     const transporter = nodemailer.createTransport({
         sendmail: true,
         newline: 'unix',
@@ -21,7 +22,7 @@ export async function waitlist(email: string, notes: string) {
     try {
         // Send mail with defined transport object
         const info = await transporter.sendMail({
-            from: 'noreply-signup@eigen.is',
+            from: `noreply-signup@${getDomain()}`,
             to: 'reinder@infi.nl',
             subject: 'New Eigen Waitlist Signup',
             text: `New waitlist signup:

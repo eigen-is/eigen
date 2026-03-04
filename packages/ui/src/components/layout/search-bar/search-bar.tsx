@@ -1,6 +1,6 @@
 import {Search} from 'lucide-react';
-import {Input} from "@workspace/ui/components/input";
 import {cn} from "@workspace/ui/lib/utils";
+import {InputGroup, InputGroupAddon, InputGroupInput, InputGroupText} from "@workspace/ui/components/input-group";
 import {ChangeEvent} from 'react';
 
 export type SearchBarProps = {
@@ -35,15 +35,19 @@ export function SearchBar({
     };
 
     return (
-        <div className={cn("relative w-full", maxWidthClasses[maxWidth], className)}>
-            <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground"/>
-            <Input
-                type="text"
-                placeholder={placeholder}
-                className={cn("pl-8 w-full", inputClassName)}
-                value={value}
-                onChange={handleChange}
-            />
+        <div className={cn("w-full", maxWidthClasses[maxWidth], className)}>
+            <InputGroup>
+                <InputGroupAddon align="inline-start">
+                    <InputGroupText><Search className="h-4 w-4"/></InputGroupText>
+                </InputGroupAddon>
+                <InputGroupInput
+                    type="text"
+                    placeholder={placeholder}
+                    className={cn("w-full", inputClassName)}
+                    value={value}
+                    onChange={handleChange}
+                />
+            </InputGroup>
         </div>
     );
 }

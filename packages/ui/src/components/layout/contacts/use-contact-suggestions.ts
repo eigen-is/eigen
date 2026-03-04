@@ -1,12 +1,15 @@
 import {useMemo} from 'react';
 import {ContactSuggestion} from './types';
 import {useContacts} from '@workspace/lib/contacts';
+import {usePublicConfig} from '@workspace/lib/public';
 
 export function useContactSuggestions(
     query: string,
     onlyEigenIsMails: boolean = false
 ) {
     const {data: contacts, isLoading, error} = useContacts();
+    const {data: config} = usePublicConfig();
+    const domain = config?.domain ?? 'eigen.is';
 
     const lowerQuery = query.toLowerCase().split(',').pop()?.trim() || '';
 
@@ -24,13 +27,13 @@ export function useContactSuggestions(
             if (nameMatch || emailMatch) {
                 let bestEmail = emailMatch || contact.email[0] || '';
 
-                const eigenIsMail = contact.email.find(email => email.endsWith('@eigen.is'));
+                const eigenIsMail = contact.email.find(email => email.endsWith(`@${domain}`));
 
                 if (eigenIsMail && !emailMatch) {
                     bestEmail = eigenIsMail;
                 }
 
-                if (onlyEigenIsMails && !bestEmail.endsWith('@eigen.is')) {
+                if (onlyEigenIsMails && !bestEmail.endsWith(`@${domain}`)) {
                     continue;
                 }
 
@@ -48,7 +51,7 @@ export function useContactSuggestions(
         }
 
         return results;
-    }, [contacts, lowerQuery, onlyEigenIsMails, query]);
+    }, [contacts, lowerQuery, onlyEigenIsMails, query, domain]);
 
     return {
         suggestions,

@@ -19,7 +19,8 @@ import {
 import {ContactAutosuggest} from "../contacts/contact-autosuggest"
 import {ContactSuggestion} from "../contacts/types"
 import {validateEmailAddress} from "@workspace/lib/validation"
-import {useOrganization, useTeams} from "@workspace/lib/auth"
+import {usePublicConfig} from "@workspace/lib/public"
+import {usePeopleTeams} from "@workspace/lib/people"
 import {teamOwnerId} from "@workspace/lib/types"
 
 export type DriveAccessListEditProps = {
@@ -50,8 +51,8 @@ export function DriveAccessListEdit({
     const [visibility, setVisibility] = useState<DriveVisibility>(path.visibility ?? 'private')
 
     // Fetch org and teams for the team sharing picker
-    const {data: org} = useOrganization()
-    const {data: teams} = useTeams(org?.id)
+    const {data: config} = usePublicConfig()
+    const {data: teams} = usePeopleTeams(config?.orgId)
 
     useEffect(() => {
         setDirectListOverride(undefined)
