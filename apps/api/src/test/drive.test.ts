@@ -1557,4 +1557,180 @@ describe('Drive', () => {
             expect(aliceReadC.canRead).toBe(true);
         });
     });
+
+    describe('Unique Name Enforcement', () => {
+        let uniqueRoot: string;
+
+        beforeAll(async () => {
+            const folder = await drivePost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `folder/${aliceRootId}`, {folderName: 'UniqueNameTests'});
+            uniqueRoot = folder.id;
+        });
+
+        test('cannot create folder with same name (exact case)', async () => {
+            await drivePost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `folder/${uniqueRoot}`, {folderName: 'Documents'});
+
+            const res = await authedRequest(ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/folder/${uniqueRoot}`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({folderName: 'Documents'}),
+                });
+            expect(res.status).toBe(409);
+        });
+
+        test('cannot create folder with same name (different case)', async () => {
+            const res = await authedRequest(ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/folder/${uniqueRoot}`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({folderName: 'DOCUMENTS'}),
+                });
+            expect(res.status).toBe(409);
+        });
+
+        test('can create folder with different name in same directory', async () => {
+            const res = await authedRequest(ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/folder/${uniqueRoot}`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({folderName: 'Photos'}),
+                });
+            expect(res.status).toBe(200);
+        });
+
+        test('can create folder with same name in different directory', async () => {
+            const sub = await drivePost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `folder/${uniqueRoot}`, {folderName: 'SubFolder'});
+
+            const res = await authedRequest(ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/folder/${sub.id}`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({folderName: 'Documents'}),
+                });
+            expect(res.status).toBe(200);
+        });
+
+        test('cannot upload file with same name as existing folder (case-insensitive)', async () => {
+            const file = new File(['hello'], 'documents', {type: 'text/plain'});
+            const formData = new FormData();
+            formData.append('file', file);
+            const res = await authedRequest(ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/file/${uniqueRoot}`, {
+                    method: 'POST',
+                    body: formData,
+                });
+            expect(res.status).toBe(409);
+        });
+
+        test('cannot upload file with same name as existing file', async () => {
+            const file1 = new File(['hello'], 'readme.txt', {type: 'text/plain'});
+            await driveUpload(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, uniqueRoot, file1);
+
+            const file2 = new File(['world'], 'README.TXT', {type: 'text/plain'});
+            const formData = new FormData();
+            formData.append('file', file2);
+            const res = await authedRequest(ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/file/${uniqueRoot}`, {
+                    method: 'POST',
+                    body: formData,
+                });
+            expect(res.status).toBe(409);
+        });
+
+        test('cannot rename to conflicting name (case-insensitive)', async () => {
+            const folder = await drivePost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `folder/${uniqueRoot}`, {folderName: 'RenameTarget'});
+
+            const res = await authedRequest(ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${folder.id}/rename`, {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({newName: 'documents'}),
+                });
+            expect(res.status).toBe(409);
+        });
+
+        test('can rename to same name with different case (self-rename)', async () => {
+            const folder = await drivePost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `folder/${uniqueRoot}`, {folderName: 'CaseChange'});
+
+            const res = await authedRequest(ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${folder.id}/rename`, {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({newName: 'CASECHANGE'}),
+                });
+            expect(res.status).toBe(200);
+        });
+
+        test('cannot move to directory with conflicting name', async () => {
+            const dirA = await drivePost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `folder/${uniqueRoot}`, {folderName: 'MoveTestDirA'});
+            const dirB = await drivePost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `folder/${uniqueRoot}`, {folderName: 'MoveTestDirB'});
+
+            await drivePost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `folder/${dirA.id}`, {folderName: 'Conflict'});
+            const toMove = await drivePost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `folder/${dirB.id}`, {folderName: 'CONFLICT'});
+
+            const res = await authedRequest(ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${toMove.id}/move`, {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({targetParentId: dirA.id}),
+                });
+            expect(res.status).toBe(409);
+        });
+
+        test('can move to directory without conflicting name', async () => {
+            const dirA = await drivePost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `folder/${uniqueRoot}`, {folderName: 'MoveOkDirA'});
+            const dirB = await drivePost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `folder/${uniqueRoot}`, {folderName: 'MoveOkDirB'});
+
+            const toMove = await drivePost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `folder/${dirB.id}`, {folderName: 'NoConflict'});
+
+            const res = await authedRequest(ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${toMove.id}/move`, {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({targetParentId: dirA.id}),
+                });
+            expect(res.status).toBe(200);
+        });
+
+        test('name becomes available after deletion', async () => {
+            const folder = await drivePost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `folder/${uniqueRoot}`, {folderName: 'Temporary'});
+
+            await authedRequest(ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/folder/${folder.id}`, {method: 'DELETE'});
+
+            const res = await authedRequest(ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/folder/${uniqueRoot}`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({folderName: 'Temporary'}),
+                });
+            expect(res.status).toBe(200);
+        });
+
+        test('doc creation with conflicting name is rejected', async () => {
+            await drivePost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `folder/${uniqueRoot}`, {folderName: 'notes.eigendoc'});
+
+            const res = await authedRequest(ctx.alice.user.sessionToken,
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/folder/${uniqueRoot}/doc`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({fileName: 'notes'}),
+                });
+            expect(res.status).toBe(409);
+        });
+    });
 });
