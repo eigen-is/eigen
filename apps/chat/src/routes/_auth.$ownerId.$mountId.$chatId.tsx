@@ -2,7 +2,7 @@ import {createFileRoute} from '@tanstack/react-router'
 import {useState} from 'react';
 import {useChatRoom} from "@workspace/lib/chat";
 import {Column, ColumnLayout} from "@workspace/ui/components/layout/app/column-layout.tsx";
-import {ChatMessageInput, ChatMessageList, TooltipButton} from "@workspace/ui";
+import {ChatMessageInput, ChatMessageList, Toolbar, TooltipButton} from "@workspace/ui";
 import {Edit, UserRoundPlus} from "lucide-react";
 import {DriveAccessDialog} from "@workspace/ui/components/layout/drive/drive-access-dialog";
 import {DriveRenameItem} from "@workspace/ui/components/layout/drive/drive-rename-item";
@@ -17,11 +17,11 @@ function ChatView() {
     const [renameDialogOpen, setRenameDialogOpen] = useState(false);
 
     const toolbar = (
-        <div className="flex items-center justify-between w-full">
+        <Toolbar>
             {chat.chatPath && <DriveShareSummary path={chat.chatPath as DrivePath} onClick={() => setAccessDialogOpen(true)}
                                             showIconOnHover={false}/>}
             <span className="font-semibold text-sm truncate">{chat.chatName}</span>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1">
                 <TooltipButton
                     icon={Edit}
                     tooltipText="Edit"
@@ -35,7 +35,7 @@ function ChatView() {
                     onClick={() => setAccessDialogOpen(true)}
                 />
             </div>
-        </div>
+        </Toolbar>
     );
 
     return (

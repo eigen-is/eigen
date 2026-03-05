@@ -1,5 +1,5 @@
-import {Button} from "@workspace/ui/components/button.tsx";
-import {Tooltip, TooltipContent, TooltipTrigger,} from "@workspace/ui/components/tooltip.tsx";
+import {Button} from "../../button.tsx";
+import {Tooltip, TooltipContent, TooltipTrigger,} from "../../tooltip.tsx";
 import {LucideIcon} from "lucide-react";
 
 export type TooltipButtonProps = {

@@ -32,7 +32,7 @@ function Column({id, width, toolbar, onBack, children}: ColumnProps) {
     return (
         <div className="h-full flex flex-col overflow-hidden" style={style}>
             {toolbar && (
-                <div className="h-12 flex items-center px-4 border-b shrink-0 border-r">
+                <div className="h-12 flex items-center px-4 border-b shrink-0 border-r  bg-white ">
                     {isMobile && onBack && (
                         <>
                             <Button variant="ghost" size="icon" className="h-8 w-8 mr-1" onClick={onBack}>
