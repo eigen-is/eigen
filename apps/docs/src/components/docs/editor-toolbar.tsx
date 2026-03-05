@@ -57,8 +57,7 @@ import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,} from "@
 import {Input} from "@workspace/ui/components/input";
 import {Tooltip, TooltipContent, TooltipTrigger} from "@workspace/ui/components/tooltip";
 import {Popover, PopoverContent, PopoverTrigger} from "@workspace/ui/components/popover";
-import {ToggleGroup} from "@workspace/ui/components/toggle-group";
-import {TooltipButton, TooltipToggle} from "@workspace/ui";
+import {TooltipButton} from "@workspace/ui";
 import {printDocument} from "@workspace/ui/lib/printElement";
 import {DocumentModeButton} from "@workspace/ui/components/layout/toolbar/document-mode-button";
 import {DriveCreateDoc} from "@workspace/ui/components/layout/drive/drive-create-doc";
@@ -394,50 +393,57 @@ export const EditorToolbar = ({editor, path, canWrite, onAccessDialogOpen, onDel
                     <ToolbarSeparator />
 
                     {/* Text formatting toggle group */}
-                    <ToggleGroup type="multiple" className="gap-0.5">
-                        <TooltipToggle
+                    <div className="flex items-center gap-0.5">
+                        <TooltipButton
                             icon={Bold}
                             tooltipText={`Bold (${formatForDisplay('Mod+B')})`}
-                            value="bold"
+                            active={editor.isActive('bold')}
+                            preventFocusLoss
                             onClick={() => editor.chain().focus().toggleBold().run()}
                         />
-                        <TooltipToggle
+                        <TooltipButton
                             icon={Italic}
                             tooltipText={`Italic (${formatForDisplay('Mod+I')})`}
-                            value="italic"
+                            active={editor.isActive('italic')}
+                            preventFocusLoss
                             onClick={() => editor.chain().focus().toggleItalic().run()}
                         />
-                        <TooltipToggle
+                        <TooltipButton
                             icon={Underline}
                             tooltipText={`Underline (${formatForDisplay('Mod+U')})`}
-                            value="underline"
+                            active={editor.isActive('underline')}
+                            preventFocusLoss
                             onClick={() => editor.chain().focus().toggleUnderline().run()}
                         />
-                        <TooltipToggle
+                        <TooltipButton
                             icon={Strikethrough}
                             tooltipText="Strikethrough"
-                            value="strike"
+                            active={editor.isActive('strike')}
+                            preventFocusLoss
                             onClick={() => editor.chain().focus().toggleStrike().run()}
                         />
-                        <TooltipToggle
+                        <TooltipButton
                             icon={Code}
                             tooltipText="Inline code"
-                            value="code"
+                            active={editor.isActive('code')}
+                            preventFocusLoss
                             onClick={() => editor.chain().focus().toggleCode().run()}
                         />
-                        <TooltipToggle
+                        <TooltipButton
                             icon={Superscript}
                             tooltipText="Superscript"
-                            value="superscript"
+                            active={editor.isActive('superscript')}
+                            preventFocusLoss
                             onClick={() => editor.chain().focus().toggleSuperscript().run()}
                         />
-                        <TooltipToggle
+                        <TooltipButton
                             icon={Subscript}
                             tooltipText="Subscript"
-                            value="subscript"
+                            active={editor.isActive('subscript')}
+                            preventFocusLoss
                             onClick={() => editor.chain().focus().toggleSubscript().run()}
                         />
-                    </ToggleGroup>
+                    </div>
 
                     <ToolbarSeparator />
 
@@ -523,71 +529,80 @@ export const EditorToolbar = ({editor, path, canWrite, onAccessDialogOpen, onDel
                     <ToolbarSeparator />
 
                     {/* Alignment toggle group */}
-                    <ToggleGroup type="single" className="gap-0.5">
-                        <TooltipToggle
+                    <div className="flex items-center gap-0.5">
+                        <TooltipButton
                             icon={AlignLeft}
                             tooltipText="Align left"
-                            value="left"
+                            active={editor.isActive({textAlign: 'left'})}
+                            preventFocusLoss
                             onClick={() => editor.chain().focus().setTextAlign('left').run()}
                         />
-                        <TooltipToggle
+                        <TooltipButton
                             icon={AlignCenter}
                             tooltipText="Align center"
-                            value="center"
+                            active={editor.isActive({textAlign: 'center'})}
+                            preventFocusLoss
                             onClick={() => editor.chain().focus().setTextAlign('center').run()}
                         />
-                        <TooltipToggle
+                        <TooltipButton
                             icon={AlignRight}
                             tooltipText="Align right"
-                            value="right"
+                            active={editor.isActive({textAlign: 'right'})}
+                            preventFocusLoss
                             onClick={() => editor.chain().focus().setTextAlign('right').run()}
                         />
-                    </ToggleGroup>
+                    </div>
 
                     <ToolbarSeparator />
 
                     {/* Lists toggle group */}
-                    <ToggleGroup type="multiple" className="gap-0.5">
-                        <TooltipToggle
+                    <div className="flex items-center gap-0.5">
+                        <TooltipButton
                             icon={List}
                             tooltipText="Bulleted list"
-                            value="bulletList"
+                            active={editor.isActive('bulletList')}
+                            preventFocusLoss
                             onClick={() => editor.chain().focus().toggleBulletList().run()}
                         />
-                        <TooltipToggle
+                        <TooltipButton
                             icon={ListOrdered}
                             tooltipText="Numbered list"
-                            value="orderedList"
+                            active={editor.isActive('orderedList')}
+                            preventFocusLoss
                             onClick={() => editor.chain().focus().toggleOrderedList().run()}
                         />
-                        <TooltipToggle
+                        <TooltipButton
                             icon={CheckSquare}
                             tooltipText="Checklist"
-                            value="taskList"
+                            active={editor.isActive('taskList')}
+                            preventFocusLoss
                             onClick={() => editor.chain().focus().toggleTaskList().run()}
                         />
-                    </ToggleGroup>
+                    </div>
 
                     <ToolbarSeparator />
 
                     {/* Block elements */}
-                    <ToggleGroup type="multiple" className="gap-0.5">
-                        <TooltipToggle
+                    <div className="flex items-center gap-0.5">
+                        <TooltipButton
                             icon={Quote}
                             tooltipText="Blockquote"
-                            value="blockquote"
+                            active={editor.isActive('blockquote')}
+                            preventFocusLoss
                             onClick={() => editor.chain().focus().toggleBlockquote().run()}
                         />
-                        <TooltipToggle
+                        <TooltipButton
                             icon={CodeXml}
                             tooltipText="Code block"
-                            value="codeBlock"
+                            active={editor.isActive('codeBlock')}
+                            preventFocusLoss
                             onClick={() => editor.chain().focus().toggleCodeBlock().run()}
                         />
-                    </ToggleGroup>
+                    </div>
                     <TooltipButton
                         icon={Minus}
                         tooltipText="Horizontal rule"
+                        preventFocusLoss
                         onClick={() => editor.chain().focus().setHorizontalRule().run()}
                     />
 
@@ -595,18 +610,18 @@ export const EditorToolbar = ({editor, path, canWrite, onAccessDialogOpen, onDel
 
                     {/* Insert actions */}
                     <div className="flex items-center gap-0.5">
-                        <ToggleGroup type="single" className="gap-0.5">
-                            <TooltipToggle
-                                icon={Link}
-                                tooltipText="Add link"
-                                value="link"
-                                onClick={handleLinkOperation}
-                            />
-                        </ToggleGroup>
+                        <TooltipButton
+                            icon={Link}
+                            tooltipText="Add link"
+                            active={editor.isActive('link')}
+                            preventFocusLoss
+                            onClick={handleLinkOperation}
+                        />
                         {editor.isActive('link') && (
                             <TooltipButton
                                 icon={Link2Off}
                                 tooltipText="Remove link"
+                                preventFocusLoss
                                 onClick={() => editor.chain().focus().unsetLink().run()}
                             />
                         )}
