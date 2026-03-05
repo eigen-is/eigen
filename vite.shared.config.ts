@@ -55,6 +55,11 @@ export function createAppConfig(appName: string, extraConfig?: UserConfig) {
             commonjsOptions: {
                 defaultIsModuleExports: 'auto',
             },
+            rollupOptions: {
+                treeshake: {
+                    preset: 'smallest',
+                },
+            },
         },
     }
 

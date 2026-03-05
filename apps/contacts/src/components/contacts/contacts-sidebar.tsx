@@ -7,7 +7,7 @@ import {SidebarSection} from '@workspace/ui/components/layout/sidebar/sidebar-se
 import {Separator} from '@workspace/ui/components/separator';
 import {type Label} from "@workspace/lib/types/label";
 import {useLabels} from '@workspace/lib/contacts';
-import {AppLogo} from '@workspace/ui/components/layout/app-logo';
+import {AppLogo} from '@workspace/ui/components/layout/app/app-logo.tsx';
 import {EigenLoader, StorageUsage} from "@workspace/ui";
 
 interface ContactsSidebarProps {

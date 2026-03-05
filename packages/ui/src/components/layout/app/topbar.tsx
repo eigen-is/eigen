@@ -13,7 +13,7 @@ import {
     Users
 } from "lucide-react";
 import {useRouter} from "@tanstack/react-router";
-import {Button} from "@workspace/ui/components/button";
+import {Button} from "../../button.tsx";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -21,17 +21,16 @@ import {
     DropdownMenuLabel,
     DropdownMenuSeparator,
     DropdownMenuTrigger
-} from "@workspace/ui/components/dropdown-menu";
-import {useAuth} from "@workspace/lib/auth/auth-context.tsx";
-import {Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,} from "../dialog";
-import {apps} from "@workspace/lib/apps.ts";
-import {getSpacePasswordUrl, getSpaceProfileUrl} from "@workspace/lib/api";
-import {UserItem} from "@workspace/ui/components/layout/user-item";
-import {AppLogo} from "./app-logo";
-import {UserAvatar} from "@workspace/ui";
-import {useLayout} from "./layout-context";
+} from "../../dropdown-menu.tsx";
+import {useAuth} from "@workspace/lib/lib/auth/auth-context.tsx";
+import {Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,} from "../../dialog.tsx";
+import {apps} from "@workspace/lib/lib/apps.ts";
+import {getSpacePasswordUrl, getSpaceProfileUrl} from "@workspace/lib/lib/api.ts";
+import {UserItem} from "../user-item.tsx";
+import {AppLogo} from "./app-logo.tsx";
+import {UserAvatar} from "../user-avatar.tsx";
+import {useLayout} from "./layout-context.tsx";
 
-// Meer generieke definitie voor de Route parameter
 type NavigateFunction = (...args: any[]) => any;
 
 interface TopbarProps {
@@ -50,9 +49,7 @@ function UserDropdown({rootRoute}: { rootRoute: TopbarProps['rootRoute'] }) {
     const handleLogout = () => {
         auth.logout().then(() => {
             router.invalidate().finally(() => {
-                // Gebruik navigate op de manier waarop TanStack Router het verwacht
                 navigate({to: '/'});
-                // Sluit de dialog
                 setLogoutDialogOpen(false);
             })
         })

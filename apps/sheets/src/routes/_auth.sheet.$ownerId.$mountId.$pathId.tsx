@@ -1,6 +1,6 @@
 import {createFileRoute} from '@tanstack/react-router';
 import {useCollabDocumentInfo} from '@workspace/lib/collab';
-import {useApp} from '@workspace/ui/components/layout/layout-context';
+import {useApp} from '@workspace/ui/components/layout/app/layout-context.tsx';
 import {useEffect} from 'react';
 import {Sheet} from 'lucide-react';
 

@@ -12,7 +12,7 @@ import {
 } from '@workspace/ui/components/dropdown-menu';
 import {ArrowUpDown, Edit, Trash2} from 'lucide-react';
 import {Button} from '@workspace/ui/components/button';
-import {EigenLoader} from '@workspace/ui/components/layout/eigen-loader';
+import {EigenLoader} from '@workspace/ui/components/layout/braket/eigen-loader.tsx';
 import {UserItem} from '@workspace/ui/components/layout/user-item';
 import {useContextMenu} from '@workspace/ui/components/layout/context-menu/use-context-menu';
 import {ContextMenuAnchor} from '@workspace/ui/components/layout/context-menu/context-menu-anchor';

@@ -20,7 +20,7 @@ import {
     BreadcrumbSeparator
 } from "@workspace/ui/components/breadcrumb";
 import {useBreadcrumb} from "@workspace/lib/drive";
-import {useLayout} from "../layout-context";
+import {useLayout} from "../app/layout-context.tsx";
 
 type DriveListToolbarProps = {
     ownerId: string;

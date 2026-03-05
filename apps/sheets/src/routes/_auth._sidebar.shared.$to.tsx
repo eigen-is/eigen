@@ -3,7 +3,7 @@ import {usePathInfo, useSharedPaths} from '@workspace/lib/drive';
 import {DriveLayout} from "@workspace/ui/components/layout/drive/drive-layout";
 import {DrivePath, DriveSearchParams, isDocumentType} from "@workspace/lib/types/drive";
 import {useAuth} from '@workspace/lib/auth';
-import {useLayout} from "@workspace/ui/components/layout/layout-context";
+import {useLayout} from "@workspace/ui/components/layout/app/layout-context.tsx";
 import {EigenLoader} from '@workspace/ui';
 import {useContext} from 'react';
 import {DriveContext} from './__root';

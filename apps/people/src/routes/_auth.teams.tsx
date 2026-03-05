@@ -2,8 +2,8 @@ import {createFileRoute} from '@tanstack/react-router';
 import {TeamDetail, TeamDetailToolbar} from '../components/people/team-detail';
 import {usePeopleTeams} from '@workspace/lib/people';
 import {usePublicConfig} from '@workspace/lib/public';
-import {Column, ColumnLayout} from '@workspace/ui/components/layout/column-layout';
-import {EigenLoader} from '@workspace/ui/components/layout/eigen-loader';
+import {Column, ColumnLayout} from '@workspace/ui/components/layout/app/column-layout.tsx';
+import {EigenLoader} from '@workspace/ui/components/layout/braket/eigen-loader.tsx';
 
 type TeamsSearch = {
     teamId?: string;

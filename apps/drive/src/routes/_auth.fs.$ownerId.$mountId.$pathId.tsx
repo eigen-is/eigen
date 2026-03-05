@@ -4,7 +4,7 @@ import {useFolderContent, usePathInfo} from '@workspace/lib/drive';
 import {useContext, useEffect, useState} from "react";
 import {DriveLayout} from "@workspace/ui/components/layout/drive/drive-layout";
 import {DrivePath, DriveSearchParams, isDocumentType, isFolderType} from "@workspace/lib/types/drive";
-import {useLayout} from "@workspace/ui/components/layout/layout-context";
+import {useLayout} from "@workspace/ui/components/layout/app/layout-context.tsx";
 import {DriveContext} from "./__root";
 import {FilePreview} from '@workspace/ui/components/layout/drive/file-preview';
 import {getDriveDownloadUrl, getDriveEmbedUrl, openDocument} from "@workspace/lib/api";

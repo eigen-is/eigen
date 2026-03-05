@@ -1,11 +1,10 @@
-import {createRootRouteWithContext, Outlet} from '@tanstack/react-router';
+import {createRootRouteWithContext, Outlet, useLocation} from '@tanstack/react-router';
 import {AuthContextType} from '@workspace/lib/auth';
 import {usePublicConfig} from '@workspace/lib/public';
-import {usePeopleTeams, useAddTeamMember} from '@workspace/lib/people';
-import {AppShell} from '@workspace/ui/components/layout/app-shell';
+import {useAddTeamMember, usePeopleTeams} from '@workspace/lib/people';
+import {AppShell} from '@workspace/ui/components/layout/app/app-shell.tsx';
 import {PeopleSidebar} from '../components/people/people-sidebar';
 import {toast} from 'sonner';
-import {useLocation} from '@tanstack/react-router';
 
 interface MyRouterContext {
     auth: AuthContextType;

@@ -4,7 +4,7 @@ import {Button} from "@workspace/ui/components/button";
 import {SidebarItem} from '@workspace/ui/components/layout/sidebar/sidebar-item';
 import {DroppableSidebarItem} from '@workspace/ui/components/layout/sidebar/droppable-sidebar-item';
 import {SidebarSection} from '@workspace/ui/components/layout/sidebar/sidebar-section';
-import {AppLogo} from '@workspace/ui/components/layout/app-logo';
+import {AppLogo} from '@workspace/ui/components/layout/app/app-logo.tsx';
 import React, {useMemo} from 'react';
 import {EigenLoader, StorageUsage} from "@workspace/ui";
 import {EmailComposeButton} from "./email-compose-button";

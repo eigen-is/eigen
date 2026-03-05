@@ -2,7 +2,7 @@ import {Paperclip} from "lucide-react";
 import {useMemo, useRef} from "react";
 import {cn} from "@workspace/ui/lib/utils";
 import {SearchBar} from "@workspace/ui/components/layout/search-bar/search-bar";
-import {EigenLoader} from "@workspace/ui/components/layout/eigen-loader";
+import {EigenLoader} from "@workspace/ui/components/layout/braket/eigen-loader.tsx";
 import {EmailSummary, MaildirMailbox} from "@workspace/lib/types/mail";
 import {EmailContextMenu} from "./email-context-menu";
 import {ContextMenuAnchor, useContextMenu} from "@workspace/ui/components/layout/context-menu";

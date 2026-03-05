@@ -1,4 +1,4 @@
 import {createFileRoute} from '@tanstack/react-router';
-import {createLoginRouteOptions} from "@workspace/ui/components/layout/login-route";
+import {createLoginRouteOptions} from "@workspace/ui/components/layout/pages/login-route.tsx";
 
 export const Route = createFileRoute('/login')(createLoginRouteOptions('/'));

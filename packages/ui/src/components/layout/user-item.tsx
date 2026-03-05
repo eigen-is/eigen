@@ -4,7 +4,7 @@ import {HTMLAttributes, ReactNode} from "react"
 import {cn} from "@workspace/ui/lib/utils"
 import {usePublicConfig, usePublicUser} from "@workspace/lib/public"
 import {API_HOST, getMailComposeUrl, getPublicAvatarUrl} from "@workspace/lib/api"
-import {EigenLoader} from "./eigen-loader"
+import {EigenLoader} from "./braket/eigen-loader.tsx"
 import {useContacts} from "@workspace/lib/contacts";
 import {Avatar, AvatarImage} from "../avatar.tsx";
 import {parseOwnerId} from "@workspace/lib/types";

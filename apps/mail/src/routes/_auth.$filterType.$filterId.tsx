@@ -19,8 +19,8 @@ import {toast} from "sonner";
 import {useEffect, useState} from 'react';
 import {format} from "date-fns";
 import {DeleteDialog} from "@workspace/ui/components/layout/delete/delete-dialog";
-import {Column, ColumnLayout} from "@workspace/ui/components/layout/column-layout";
-import {useLayout} from "@workspace/ui/components/layout/layout-context";
+import {Column, ColumnLayout} from "@workspace/ui/components/layout/app/column-layout.tsx";
+import {useLayout} from "@workspace/ui/components/layout/app/layout-context.tsx";
 
 export type MailSearchParams = {
     mailId?: string;
