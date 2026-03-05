@@ -22,10 +22,10 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger
 } from "../../dropdown-menu.tsx";
-import {useAuth} from "@workspace/lib/lib/auth/auth-context.tsx";
+import {useAuth} from "@workspace/lib/auth/auth-context.tsx";
 import {Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,} from "../../dialog.tsx";
-import {apps} from "@workspace/lib/lib/apps.ts";
-import {getSpacePasswordUrl, getSpaceProfileUrl} from "@workspace/lib/lib/api.ts";
+import {apps} from "@workspace/lib/apps.ts";
+import {getSpacePasswordUrl, getSpaceProfileUrl} from "@workspace/lib/api.ts";
 import {UserItem} from "../user-item.tsx";
 import {AppLogo} from "./app-logo.tsx";
 import {UserAvatar} from "../user-avatar.tsx";
