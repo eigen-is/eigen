@@ -22,6 +22,7 @@ import {useListSelection} from '@workspace/ui/hooks/use-list-selection';
 import {useListDrag} from '@workspace/ui/hooks/use-list-drag';
 import type {Label} from '@workspace/lib/types/label';
 import {useAuth} from '@workspace/lib/auth';
+import {Toolbar} from '@workspace/ui/index';
 
 interface ContactsListToolbarProps {
     searchQuery: string;
@@ -32,7 +33,7 @@ interface ContactsListToolbarProps {
 
 export function ContactsListToolbar({searchQuery, onSearchChange, onSortChange}: ContactsListToolbarProps) {
     return (
-        <div className="flex items-center justify-between w-full gap-2">
+        <Toolbar>
             <SearchBar
                 placeholder="Search contacts..."
                 value={searchQuery}
@@ -55,7 +56,7 @@ export function ContactsListToolbar({searchQuery, onSearchChange, onSortChange}:
                     </DropdownMenuItem>
                 </DropdownMenuContent>
             </DropdownMenu>
-        </div>
+        </Toolbar>
     );
 }
 

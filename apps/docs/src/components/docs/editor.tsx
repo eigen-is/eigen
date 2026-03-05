@@ -1,5 +1,5 @@
-import {useEffect, useMemo, useState, useCallback, useRef} from "react";
-import {useEditor, EditorContent} from "@tiptap/react";
+import {useCallback, useEffect, useMemo, useRef, useState} from "react";
+import {EditorContent, useEditor} from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Collaboration from "@tiptap/extension-collaboration";
 import CollaborationCursor from "@tiptap/extension-collaboration-cursor";
@@ -26,7 +26,7 @@ import * as Y from "yjs";
 import {WebsocketProvider} from "y-websocket";
 import {useAuth} from "@workspace/lib/auth";
 import {EditorToolbar} from "./editor-toolbar";
-import {EigenLoader} from "@workspace/ui";
+import {Column, EigenLoader} from "@workspace/ui";
 import {DrivePath} from "@workspace/lib/types/drive";
 import {getCollabWebSocketUrl, getDriveEmbedUrl} from "@workspace/lib/api";
 import {useUploadFile} from "@workspace/lib/drive";
@@ -275,7 +275,7 @@ const TiptapEditor = ({
 
     return (
         <>
-            <div className="flex h-full w-full flex-col">
+            <Column id={"1"} width={"w-full"} toolbar={
                 <EditorToolbar
                     editor={editor}
                     path={path}
@@ -284,7 +284,7 @@ const TiptapEditor = ({
                     onAccessDialogOpen={onAccessDialogOpen}
                     onAddComment={chatFolderId ? handleAddComment : undefined}
                     onImageUpload={mediaFolderId ? handleImageUpload : undefined}
-                />
+                />}>
                 <div className="h-full w-full overflow-y-scroll bg-gray-200 p-4">
                     <div
                         data-document="true"
@@ -294,13 +294,7 @@ const TiptapEditor = ({
                         <EditorContent editor={editor} className="h-full tiptap-wrapper"/>
                     </div>
                 </div>
-                {editor && (
-                    <div className="bg-white border-t px-4 py-1 text-xs text-muted-foreground flex items-center gap-4 no-print">
-                        <span>{editor.storage.characterCount.characters()} characters</span>
-                        <span>{editor.storage.characterCount.words()} words</span>
-                    </div>
-                )}
-            </div>
+            </Column>
 
             {chatFolderId && (
                 <CreateCommentDialog
