@@ -5,7 +5,7 @@ import {TaskCard} from './task-card';
 import {ColumnItem, TaskItem} from './types';
 import {Pencil, Plus} from 'lucide-react';
 import * as Y from 'yjs';
-import {TooltipButton} from '@workspace/ui/components/layout/tooltip-button/tooltip-button';
+import {TooltipButton} from '@workspace/ui/components/layout/toolbar/tooltip-button.tsx';
 
 interface ColumnProps {
     column: ColumnItem;

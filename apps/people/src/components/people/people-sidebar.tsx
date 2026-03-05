@@ -8,7 +8,7 @@ import {AppLogo} from '@workspace/ui/components/layout/app/app-logo.tsx';
 import type {OrgTeam} from '@workspace/lib/types/people';
 import {teamOwnerId} from "@workspace/lib/types";
 import {UserAvatar} from "@workspace/ui/components/layout/user-avatar";
-import {TooltipButton} from "@workspace/ui/components/layout/tooltip-button/tooltip-button";
+import {TooltipButton} from "@workspace/ui/components/layout/toolbar/tooltip-button.tsx";
 import {useState} from 'react';
 import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle} from '@workspace/ui/components/dialog';
 import {Input} from '@workspace/ui/components/input';

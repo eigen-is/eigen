@@ -3,7 +3,7 @@ import {Dialog, DialogContent, DialogHeader, DialogTitle} from "@workspace/ui/co
 import {TaskItem} from "./types";
 import {Separator} from "@workspace/ui/components/separator";
 import {Pencil} from "lucide-react";
-import {TooltipButton} from "@workspace/ui/components/layout/tooltip-button/tooltip-button";
+import {TooltipButton} from "@workspace/ui/components/layout/toolbar/tooltip-button.tsx";
 import {TaskSettingsDialog} from "./task-settings-dialog";
 import {ChatMessageList, ChatMessageInput} from "@workspace/ui";
 import {useChatRoom} from "@workspace/lib/chat";

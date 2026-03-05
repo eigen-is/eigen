@@ -1,5 +1,5 @@
-import {ToggleGroupItem} from "@workspace/ui/components/toggle-group";
-import {Tooltip, TooltipContent, TooltipTrigger,} from "@workspace/ui/components/tooltip";
+import {ToggleGroupItem} from "@workspace/ui/components/toggle-group.tsx";
+import {Tooltip, TooltipContent, TooltipTrigger,} from "@workspace/ui/components/tooltip.tsx";
 import {LucideIcon} from "lucide-react";
 
 export type TooltipToggleProps = {

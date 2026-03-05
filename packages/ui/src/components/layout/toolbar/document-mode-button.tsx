@@ -1,5 +1,5 @@
 import {Eye, Pencil} from 'lucide-react';
-import {TooltipButton} from '../tooltip-button/tooltip-button';
+import {TooltipButton} from './tooltip-button.tsx';
 
 export type DocumentModeButtonProps = {
     canWrite: boolean;
