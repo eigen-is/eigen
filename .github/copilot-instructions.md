@@ -181,7 +181,7 @@ All SQLite, managed by `ManagedDatabase` with:
 
 ### Storage Backends
 Three pluggable implementations in `apps/api/src/lib/storage/`:
-- **LocalStorage** - Full filesystem operations (Mail, Contacts)
+- **LocalFilesystem** - Full filesystem operations (Mail, Contacts)
 - **LocalKeyStorage** - Flat UUID-based files (Drive mounts)
 - **S3Storage** - S3-compatible object storage
 

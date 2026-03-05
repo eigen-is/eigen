@@ -49,7 +49,7 @@ to `docs/*.md`.
 - **Routing**: `apps/api/src/routes/[domain].ts`. Routes are thin and call domain class methods.
 - **Databases**: SQLite managed by `ManagedDatabase`. Uses versioned migrations. Stored in user's `/data/home/{userId}/`
   or `/data/team/{teamId}/`.
-- **Storage Backends**: `LocalKeyStorage` (Drive), `LocalStorage` (Mail, Contacts), `S3Storage`.
+- **Storage Backends**: `LocalKeyStorage` (Drive), `LocalFilesystem` (Mail, Contacts), `S3Storage`.
 - **Error Handling**: Throw `ApiError(status, message)` (`apps/api/src/lib/core/errors.ts`), caught by global `onError`.
 
 See:

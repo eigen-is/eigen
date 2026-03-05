@@ -1,10 +1,9 @@
 import type {User} from 'better-auth/types';
 
 import {getTeamDataPath} from '../config/paths';
-import {LocalStorage} from '../storage';
 import {Home} from './home';
 import {parseOwnerId} from "@workspace/lib/types";
-import {ApiError} from "../core";
+import {ApiError, LocalFilesystem} from "../core";
 import { Drive } from '../drive';
 
 export function getSyntheticTeamUser(ownerId: string): User {
@@ -32,7 +31,7 @@ export class TeamHome extends Home {
         const parsed = parseOwnerId(syntheticUser.id);
         this.teamId = parsed.id;
         this.homeDir = getTeamDataPath(parsed.id);
-        this.fs = new LocalStorage(this.homeDir);
+        this.fs = new LocalFilesystem(this.homeDir);
 
         this.drive = new Drive(this);
     }

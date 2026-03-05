@@ -2,9 +2,8 @@ import type {BunFile} from 'bun';
 import * as path from 'path';
 import * as fs from 'node:fs';
 import * as fsPromises from 'node:fs/promises';
-import type {StorageBackend} from './types';
 
-export class LocalStorage implements StorageBackend {
+export class LocalFilesystem {
     private baseDir: string;
 
     constructor(baseDir: string) {
