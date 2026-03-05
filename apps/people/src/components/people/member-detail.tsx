@@ -4,7 +4,7 @@ import {Badge} from '@workspace/ui/components/badge';
 import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '@workspace/ui/components/select';
 import {Trash2} from 'lucide-react';
 import {DeleteDialog} from '@workspace/ui/components/layout/delete/delete-dialog';
-import {TooltipButton} from '@workspace/ui/components/layout/tooltip-button/tooltip-button';
+import {TooltipButton} from '@workspace/ui/components/layout/toolbar/tooltip-button.tsx';
 import {useUpdateMemberRole, useRemoveMember} from '@workspace/lib/people';
 import {useNavigate} from '@tanstack/react-router';
 import {toast} from 'sonner';

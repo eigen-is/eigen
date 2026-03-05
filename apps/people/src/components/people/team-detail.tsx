@@ -4,7 +4,7 @@ import {Button} from '@workspace/ui/components/button';
 import {Trash2, Check, Pencil, Plus, UserPlus, X} from 'lucide-react';
 import {Dialog, DialogContent, DialogHeader, DialogTitle} from '@workspace/ui/components/dialog';
 import {DeleteDialog} from '@workspace/ui/components/layout/delete/delete-dialog';
-import {TooltipButton} from '@workspace/ui/components/layout/tooltip-button/tooltip-button';
+import {TooltipButton} from '@workspace/ui/components/layout/toolbar/tooltip-button.tsx';
 import {UserItem} from '@workspace/ui/components/layout/user-item';
 import {useRemoveTeam, useUpdateTeam, useTeamMembers, useAddTeamMember, useRemoveTeamMember, usePeopleMembers} from '@workspace/lib/people';
 import {useNavigate} from '@tanstack/react-router';
