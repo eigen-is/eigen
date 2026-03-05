@@ -15,6 +15,7 @@ declare module '@tiptap/core' {
 
 function ResizableImageView({node, updateAttributes, selected, editor}: NodeViewProps) {
     const imageRef = useRef<HTMLImageElement>(null);
+    const wrapperRef = useRef<HTMLDivElement>(null);
     const [, setIsResizing] = useState(false);
     const [localWidth, setLocalWidth] = useState<number | null>(null);
     const [aspectRatio, setAspectRatio] = useState<number | null>(null);
@@ -24,12 +25,25 @@ function ResizableImageView({node, updateAttributes, selected, editor}: NodeView
     const src = node.attrs.src;
     const alt = node.attrs.alt || '';
 
+    const getMaxWidth = useCallback(() => {
+        const container = wrapperRef.current?.closest('[data-document]');
+        if (!container) return Infinity;
+        const style = getComputedStyle(container);
+        return container.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+    }, []);
+
     const handleImageLoad = useCallback(() => {
         if (imageRef.current && aspectRatio === null) {
             const ratio = imageRef.current.naturalWidth / imageRef.current.naturalHeight;
             setAspectRatio(ratio);
+
+            const naturalWidth = imageRef.current.naturalWidth;
+            const maxWidth = getMaxWidth();
+            if (!node.attrs.width && naturalWidth > maxWidth) {
+                updateAttributes({width: Math.round(maxWidth)});
+            }
         }
-    }, [aspectRatio]);
+    }, [aspectRatio, getMaxWidth, node.attrs.width, updateAttributes]);
 
     const handleResizeStart = useCallback((e: React.MouseEvent, direction: string) => {
         e.preventDefault();
@@ -39,13 +53,14 @@ function ResizableImageView({node, updateAttributes, selected, editor}: NodeView
         setIsResizing(true);
         const startX = e.clientX;
         const startWidth = imageRef.current?.offsetWidth || width || 300;
+        const maxWidth = getMaxWidth();
         let currentWidth = startWidth;
 
         const handleMouseMove = (moveEvent: MouseEvent) => {
             const deltaX = moveEvent.clientX - startX;
             const isLeft = direction === 'w' || direction === 'nw' || direction === 'sw';
             const effectiveDelta = isLeft ? -deltaX : deltaX;
-            currentWidth = Math.max(100, startWidth + effectiveDelta);
+            currentWidth = Math.min(maxWidth, Math.max(100, startWidth + effectiveDelta));
             setLocalWidth(Math.round(currentWidth));
         };
 
@@ -59,13 +74,14 @@ function ResizableImageView({node, updateAttributes, selected, editor}: NodeView
 
         document.addEventListener('mousemove', handleMouseMove);
         document.addEventListener('mouseup', handleMouseUp);
-    }, [width, aspectRatio, updateAttributes]);
+    }, [width, aspectRatio, updateAttributes, getMaxWidth]);
 
     const displayWidth = localWidth ?? width;
     const isEditable = editor.isEditable;
 
     return (
         <NodeViewWrapper
+            ref={wrapperRef}
             className={`flex ${alignment === 'center' ? 'justify-center' : alignment === 'right' ? 'justify-end' : 'justify-start'}`}
             data-drag-handle=""
             draggable={isEditable}
