@@ -1,7 +1,7 @@
 import {ReactNode, useState} from 'react';
 import {Outlet} from '@tanstack/react-router';
 import {TanStackRouterDevtools} from '@tanstack/react-router-devtools';
-import {useIsMobile, useIsTablet} from '@workspace/lib/lib/media';
+import {useIsMobile, useIsTablet} from '@workspace/lib/media';
 import {LayoutContext} from './layout-context.tsx';
 import {Topbar} from './topbar.tsx';
 import {SidebarContainer, SidebarProps} from '../sidebar/sidebar-container.tsx';

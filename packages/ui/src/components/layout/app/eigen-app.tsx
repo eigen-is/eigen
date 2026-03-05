@@ -3,7 +3,7 @@
 import React from "react"
 import {Toaster} from "../../sonner.tsx"
 import {UploadProvider} from "../upload-provider/upload-provider.tsx"
-import {AuthProvider} from "@workspace/lib/lib/auth/auth-context.tsx"
+import {AuthProvider} from "@workspace/lib/auth/auth-context.tsx"
 import {QueryClient, QueryClientProvider} from '@tanstack/react-query';
 import {ReactQueryDevtools} from '@tanstack/react-query-devtools';
 import {SSEProvider} from "../sse-provider";

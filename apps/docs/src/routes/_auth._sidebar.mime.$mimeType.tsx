@@ -6,7 +6,7 @@ import {useAuth} from '@workspace/lib/auth';
 import {useLayout} from "@workspace/ui/components/layout/app/layout-context.tsx";
 import {useContext} from 'react';
 import {DriveContext} from './__root';
-import {openDocument} from "@workspace/lib/lib/api.ts";
+import {openDocument} from "@workspace/lib/api.ts";
 
 export const Route = createFileRoute('/_auth/_sidebar/mime/$mimeType')({
     component: DriveRoute,

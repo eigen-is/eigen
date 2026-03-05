@@ -1,4 +1,4 @@
-import {useAuth} from "@workspace/lib/lib/auth/auth-context.tsx";
+import {useAuth} from "@workspace/lib/auth/auth-context.tsx";
 import {useRouter} from "@tanstack/react-router";
 import {useEffect, useState} from "react";
 import {zodResolver} from "@hookform/resolvers/zod";
@@ -9,7 +9,7 @@ import {Card, CardContent, CardDescription, CardHeader, CardTitle,} from "../../
 import {Form, FormControl, FormField, FormItem, FormLabel, FormMessage,} from "../../form.tsx";
 import {InputGroup, InputGroupAddon, InputGroupInput, InputGroupText} from "../../input-group.tsx";
 import {Input} from "../../input.tsx";
-import {usePublicConfig} from "@workspace/lib/lib/public";
+import {usePublicConfig} from "@workspace/lib/public";
 import {useApp} from "../app/layout-context.tsx";
 import {Bar} from "../braket/bar.tsx";
 import {Ket} from "../braket/ket.tsx";
