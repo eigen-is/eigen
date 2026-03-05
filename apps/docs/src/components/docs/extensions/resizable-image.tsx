@@ -169,7 +169,16 @@ export const ResizableImage = Node.create({
             src: {default: null},
             alt: {default: null},
             title: {default: null},
-            width: {default: null},
+            width: {
+                default: null,
+                parseHTML: (element: HTMLElement) => {
+                    const attr = element.getAttribute('width');
+                    if (attr) return parseInt(attr, 10) || null;
+                    const styleWidth = element.style.width;
+                    if (styleWidth && styleWidth.endsWith('px')) return parseInt(styleWidth, 10) || null;
+                    return null;
+                },
+            },
             alignment: {default: 'center'},
         };
     },

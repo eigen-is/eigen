@@ -1,4 +1,4 @@
-import {useEffect, useMemo, useState, useCallback} from "react";
+import {useEffect, useMemo, useState, useCallback, useRef} from "react";
 import {useEditor, EditorContent} from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import Collaboration from "@tiptap/extension-collaboration";
@@ -107,6 +107,14 @@ const TiptapEditor = ({
     const [commentDialogOpen, setCommentDialogOpen] = useState(false);
     const [commentSelectedText, setCommentSelectedText] = useState('');
     const [viewCommentChatId, setViewCommentChatId] = useState<string | null>(null);
+    const documentRef = useRef<HTMLDivElement>(null);
+
+    const getEditorMaxWidth = useCallback(() => {
+        const el = documentRef.current;
+        if (!el) return 642;
+        const style = getComputedStyle(el);
+        return el.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+    }, []);
 
     const handleCommentClick = useCallback((chatId: string) => {
         setViewCommentChatId(chatId);
@@ -190,6 +198,27 @@ const TiptapEditor = ({
             }),
         ],
         editorProps: {
+            transformPastedHTML: (html: string) => {
+                const maxWidth = getEditorMaxWidth();
+                const doc = new DOMParser().parseFromString(html, 'text/html');
+
+                doc.querySelectorAll('img, table').forEach((el) => {
+                    const htmlEl = el as HTMLElement;
+
+                    const attrWidth = el.getAttribute('width');
+                    const styleWidth = htmlEl.style.width;
+                    let w = 0;
+                    if (attrWidth) w = parseInt(attrWidth, 10) || 0;
+                    if (!w && styleWidth?.endsWith('px')) w = parseInt(styleWidth, 10) || 0;
+
+                    if (w > maxWidth) {
+                        el.setAttribute('width', String(Math.round(maxWidth)));
+                        htmlEl.style.width = `${Math.round(maxWidth)}px`;
+                    }
+                });
+
+                return doc.body.innerHTML;
+            },
             handleDrop: (view, event) => {
                 if (!event.dataTransfer) return false;
                 const files = Array.from(event.dataTransfer.files);
@@ -257,6 +286,7 @@ const TiptapEditor = ({
                     <div
                         data-document="true"
                         className="grid p-[2cm] bg-white rounded-lg shadow-sm shadow-transparent min-h-full w-[210mm] m-auto print:shadow-none"
+                        ref={documentRef}
                     >
                         <EditorContent editor={editor} className="h-full tiptap-wrapper"/>
                     </div>
