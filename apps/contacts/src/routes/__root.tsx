@@ -1,6 +1,6 @@
 import {createRootRouteWithContext, Outlet} from '@tanstack/react-router'
 import {AuthContextType, useAuth} from "@workspace/lib/auth";
-import {AppShell} from "@workspace/ui/components/layout/app-shell";
+import {AppShell} from "@workspace/ui/components/layout/app/app-shell.tsx";
 import {ContactsSidebar} from "../components/contacts/contacts-sidebar";
 import {useContacts, useUpdateContact} from "@workspace/lib/contacts";
 import {Contact} from "@workspace/lib/types/contact";

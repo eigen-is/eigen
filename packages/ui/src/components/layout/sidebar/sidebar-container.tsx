@@ -1,5 +1,5 @@
 import {ReactNode} from 'react';
-import {useLayout} from '../layout-context';
+import {useLayout} from '../app/layout-context.tsx';
 
 export type SidebarProps = {
     condensed: boolean;

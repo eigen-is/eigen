@@ -1,6 +1,6 @@
 import {redirect} from '@tanstack/react-router'
 import {z} from 'zod'
-import {LoginPage} from './loginpage'
+import {LoginPage} from './loginpage.tsx'
 
 export const loginSearchSchema = z.object({
     redirect: z.string().optional().catch(''),

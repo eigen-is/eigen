@@ -1,7 +1,7 @@
 import {createFileRoute} from '@tanstack/react-router'
 import {useState} from 'react';
 import {useChatRoom} from "@workspace/lib/chat";
-import {Column, ColumnLayout} from "@workspace/ui/components/layout/column-layout";
+import {Column, ColumnLayout} from "@workspace/ui/components/layout/app/column-layout.tsx";
 import {ChatMessageInput, ChatMessageList, TooltipButton} from "@workspace/ui";
 import {Edit, UserRoundPlus} from "lucide-react";
 import {DriveAccessDialog} from "@workspace/ui/components/layout/drive/drive-access-dialog";

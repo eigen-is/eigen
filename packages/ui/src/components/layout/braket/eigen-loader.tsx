@@ -1,4 +1,4 @@
-import {cn} from '../../lib/utils';
+import {cn} from '../../../lib/utils.ts';
 import {useEffect, useState} from 'react';
 import {Bra} from "./bra.tsx";
 import {Ket} from "./ket.tsx";
