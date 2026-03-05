@@ -8,6 +8,8 @@ import {AddTaskDialog} from './add-task-dialog';
 import {AddColumnDialog} from './add-column-dialog';
 import {ColumnSettingsDialog} from './column-settings-dialog';
 import {Plus} from 'lucide-react';
+import {Button} from '@workspace/ui/components/button';
+import {Card, CardContent} from '@workspace/ui/components/card';
 import {useIsMobile} from "@workspace/lib/media";
 import {useYjsKanbanBoard} from './hooks/useYjsKanbanBoard';
 import {useYjsDragAndDrop} from './hooks/useYjsDragAndDrop';
@@ -82,14 +84,14 @@ const StickiesBoard = ({ownerId, path, canWrite, chatFolderId, onAccessDialogOpe
         if (dragState.activeType === 'task') {
             const task = dragState.activeItem as TaskItem;
             return (
-                <div className={`${isMobile ? 'w-full' : 'w-[260px]'} border border-gray-200 shadow-sm bg-white`}>
-                    <div className="py-1.5 px-2 text-sm bg-blue-50">
+                <Card className={`${isMobile ? 'w-full p-0' : 'w-[260px] p-0'}`}>
+                    <CardContent className="p-3 text-sm bg-blue-50">
                         {task.title}
                         {task.description && (
-                            <p className="text-xs text-gray-500 mt-1 truncate">{task.description}</p>
+                            <p className="text-xs text-muted-foreground mt-1 truncate">{task.description}</p>
                         )}
-                    </div>
-                </div>
+                    </CardContent>
+                </Card>
             );
         } else if (dragState.activeType === 'column') {
             const column = dragState.activeItem as import('./types').ColumnItem;
@@ -173,13 +175,15 @@ const StickiesBoard = ({ownerId, path, canWrite, chatFolderId, onAccessDialogOpe
                                     scrollSnapStop: 'normal'
                                 }}
                             >
-                                <button
+                                <Button
+                                    variant="secondary"
+                                    size="sm"
                                     onClick={() => setIsAddColumnDialogOpen(true)}
-                                    className="bg-gray-100 hover:bg-gray-200 border border-gray-200 rounded text-sm flex items-center gap-1 py-2 px-4 text-gray-700 w-full"
+                                    className="w-full justify-start h-auto py-2"
                                 >
                                     <Plus size={16}/>
-                                    <span>Add another list</span>
-                                </button>
+                                    <span>Add Column</span>
+                                </Button>
                             </div>
                         </div>
 

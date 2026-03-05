@@ -3,6 +3,7 @@ import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle} from "@w
 import {Button} from "@workspace/ui/components/button";
 import {Input} from "@workspace/ui/components/input";
 import {Textarea} from "@workspace/ui/components/textarea";
+import {Label} from "@workspace/ui/components/label";
 import {TaskItem} from './types';
 import {useAuth} from "@workspace/lib/auth";
 
@@ -55,9 +56,7 @@ export const AddTaskDialog: React.FC<AddTaskDialogProps> = ({
                     </DialogHeader>
                     <div className="grid gap-4 py-4">
                         <div className="grid gap-2">
-                            <label htmlFor="title" className="text-sm font-medium">
-                                Title
-                            </label>
+                            <Label htmlFor="title">Title</Label>
                             <Input
                                 id="title"
                                 value={title}
@@ -69,9 +68,7 @@ export const AddTaskDialog: React.FC<AddTaskDialogProps> = ({
                             />
                         </div>
                         <div className="grid gap-2">
-                            <label htmlFor="description" className="text-sm font-medium">
-                                Description
-                            </label>
+                            <Label htmlFor="description">Description</Label>
                             <Textarea
                                 id="description"
                                 value={description}
