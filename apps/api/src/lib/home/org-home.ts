@@ -1,9 +1,9 @@
 import type {User} from 'better-auth/types';
 
 import {getOrgDataPath} from '../config/paths';
-import {LocalStorage} from '../storage';
 import {Home} from './home';
 import {orgOwnerId} from "@workspace/lib/types";
+import {LocalFilesystem} from "../core";
 
 export class OrgHome extends Home {
     public teamId: string;
@@ -20,6 +20,6 @@ export class OrgHome extends Home {
         super(syntheticUser);
         this.teamId = teamId;
         this.homeDir = getOrgDataPath(teamId);
-        this.fs = new LocalStorage(this.homeDir);
+        this.fs = new LocalFilesystem(this.homeDir);
     }
 }

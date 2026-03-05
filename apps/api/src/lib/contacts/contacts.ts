@@ -8,9 +8,8 @@ import type {Home} from "../home";
 import {getHome} from "../home";
 import type {User} from "better-auth/types";
 import {getUserByEmail, updateUser} from "../user/";
-import {LocalStorage} from "../storage";
 import {generateThumbnail} from "../shared/thumbnails";
-import {DEFAULT_LABELS, PATHS} from "../core";
+import {DEFAULT_LABELS, LocalFilesystem, PATHS} from "../core";
 import {buildContactEvent, buildLabelEvent} from "./sse-events";
 import {SSEventType} from "@workspace/lib/types/sse";
 import {CONTACTS_DB_CONFIG} from "./db-config";
@@ -49,11 +48,11 @@ export class Contacts {
     private managedDb!: ManagedDatabase<typeof schema>;
     private db!: BunSQLiteDatabase<typeof schema>;
     private home: Home;
-    private storage: LocalStorage;
+    private storage: LocalFilesystem;
 
     constructor(home: Home) {
         this.home = home;
-        this.storage = new LocalStorage(`${home.homeDir}/eigen.contacts`);
+        this.storage = new LocalFilesystem(`${home.homeDir}/eigen.contacts`);
     }
 
     private emitContact(type: Parameters<typeof buildContactEvent>[0], contactId: string, name?: string): void {

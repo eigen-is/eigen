@@ -13,7 +13,7 @@ Technical documentation for the storage layer, mount system, and file management
 │  ┌─────────────────┐   ┌─────────────────┐   ┌───────────────┐  │
 │  │      Drive      │   │      Mail       │   │   Contacts    │  │
 │  │                 │   │                 │   │               │  │
-│  │  Mount          │   │  LocalStorage   │   │  LocalStorage │  │
+│  │  Mount          │   │  LocalFilesystem   │   │  LocalFilesystem │  │
 │  │  └─LocalKey     │   │  maildb (SQL)   │   │  contacts.db  │  │
 │  │    Storage      │   │                 │   │  avatars/     │  │
 │  └─────────────────┘   └─────────────────┘   └───────────────┘  │
@@ -25,11 +25,11 @@ Technical documentation for the storage layer, mount system, and file management
 
 | Component    | Description                                                                                                                                 |
 |--------------|---------------------------------------------------------------------------------------------------------------------------------------------|
-| **Home**     | Per-user singleton. Manages database connections (one per file), SSE notifications, and app instances. Exposes `LocalStorage` as `home.fs`. |
+| **Home**     | Per-user singleton. Manages database connections (one per file), SSE notifications, and app instances. Exposes `LocalFilesystem` as `home.fs`. |
 | **Mount**    | Drive storage unit containing metadata DB, file storage backend, temp directory, and thumbnails. Currently single default mount per user.   |
 | **Drive**    | Business logic layer on top of Mount. Handles ACL, thumbnails, sharing, and collaborative documents.                                        |
-| **Mail**     | Uses `LocalStorage` directly for Maildir file storage, plus SQLite for metadata.                                                            |
-| **Contacts** | Uses `LocalStorage` for avatars, SQLite for contact data.                                                                                   |
+| **Mail**     | Uses `LocalFilesystem` directly for Maildir file storage, plus SQLite for metadata.                                                            |
+| **Contacts** | Uses `LocalFilesystem` for avatars, SQLite for contact data.                                                                                   |
 
 **Current Limitations:**
 - `Home.getZip()` not implemented
@@ -41,11 +41,11 @@ Three pluggable storage backends in `lib/storage/`:
 | Backend             | Use Case                | Storage Pattern                                   |
 |---------------------|-------------------------|---------------------------------------------------|
 | **LocalKeyStorage** | Drive mounts            | Flat `data/{uuid}` files                          |
-| **LocalStorage**    | Mail, Contacts, Home.fs | Full directory hierarchy with extended fs methods |
+| **LocalFilesystem**    | Mail, Contacts, Home.fs | Full directory hierarchy with extended fs methods |
 | **S3Storage**       | Remote storage (ready)  | S3-compatible object storage                      |
 
 All backends implement the `StorageBackend` interface (read, write, delete, exists, size).
-`LocalStorage` additionally provides filesystem operations: list, mkdir, rename, stat, etc.
+`LocalFilesystem` additionally provides filesystem operations: list, mkdir, rename, stat, etc.
 
 ## 3. Mount System
 
@@ -80,12 +80,12 @@ Business logic layer (~500 lines) providing:
 **ACL inheritance**: If a path has no ACL, inherits from parent recursively.
 
 ### 4.2 Mail
-- Uses `LocalStorage` for Maildir file structure
+- Uses `LocalFilesystem` for Maildir file structure
 - Uses `maildb` (SQLite) for email metadata
 - Indexes on mailbox, date, read status for performance
 
 ### 4.3 Contacts
-- Uses `LocalStorage` for avatar images (with thumbnail generation)
+- Uses `LocalFilesystem` for avatar images (with thumbnail generation)
 - Uses SQLite for contact data and labels
 
 ## 5. User Data Layout

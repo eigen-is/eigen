@@ -9,20 +9,19 @@ import maildb from "./maildb.ts";
 import type {Home} from "../home";
 import {draftToMailOptions, sendMail} from './sender';
 import {type SSEventMailData, SSEventType} from "@workspace/lib/types/sse";
-import {LocalStorage} from "../storage";
 import {buildMailEvent} from './sse-events';
-import {ApiError} from '../core';
+import {ApiError, LocalFilesystem} from '../core';
 
 export default class Maildir {
     private basePath: string;
     private user: User;
-    private storage: LocalStorage;
+    private storage: LocalFilesystem;
     private db!: maildb;
 
     constructor(private home: Home) {
         this.user = home.user;
         this.basePath = 'Maildir';
-        this.storage = new LocalStorage(`${home.homeDir}/eigen.mail`);
+        this.storage = new LocalFilesystem(`${home.homeDir}/eigen.mail`);
     }
 
     private emit(type: Parameters<typeof buildMailEvent>[0], mail: SSEventMailData, options?: Parameters<typeof buildMailEvent>[2]): void {

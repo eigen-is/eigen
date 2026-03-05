@@ -1,18 +1,18 @@
 import type {User} from 'better-auth/types';
 import * as path from 'path';
 
-import {type DatabaseConfig, ManagedDatabase, openLocalDatabase, type SchemaType} from '../core/managed-database';
+import {type DatabaseConfig, ManagedDatabase, openLocalDatabase, type SchemaType} from '../core';
 import {Contacts} from '../contacts/contacts';
 import Maildir from '../mail/maildir';
 import type {SSEvent} from '@workspace/lib/types/sse';
 import {createAsyncSingleton} from '../../utils/singleton';
-import {LocalStorage} from '../storage';
 import {Drive} from '../drive';
+import {LocalFilesystem} from "../core";
 
 export class Home {
     public user: User;
     public homeDir!: string;
-    public fs!: LocalStorage;
+    public fs!: LocalFilesystem;
 
     public drive!: Drive;
     public contacts!: Contacts;
