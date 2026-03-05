@@ -11,6 +11,8 @@ export type TooltipButtonProps = {
     className?: string;
     disabled?: boolean;
     label?: string;
+    active?: boolean;
+    preventFocusLoss?: boolean;
 }
 
 export const TooltipButton = ({
@@ -21,17 +23,29 @@ export const TooltipButton = ({
                                   variant = "ghost",
                                   className = "h-8 w-8",
                                   disabled = false,
-                                  label = undefined
+                                  label = undefined,
+                                  active = false,
+                                  preventFocusLoss = false,
                               }: TooltipButtonProps) => {
+    const resolvedVariant = active ? "secondary" : variant;
+
     return (
         <Tooltip>
             <TooltipTrigger asChild>
                 <Button
-                    variant={variant}
+                    variant={resolvedVariant}
                     size={size}
                     className={className}
-                    onClick={onClick}
                     disabled={disabled}
+                    {...(preventFocusLoss
+                        ? {
+                            onMouseDown: (e: React.MouseEvent) => {
+                                e.preventDefault();
+                                onClick?.();
+                            },
+                        }
+                        : {onClick}
+                    )}
                 >
                     <Icon className="h-4 w-4"/>
                     {label}
