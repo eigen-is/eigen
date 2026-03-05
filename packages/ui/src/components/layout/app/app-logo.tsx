@@ -1,7 +1,7 @@
 import {useEffect, useRef, useState} from "react";
 import {Link} from "@tanstack/react-router";
 import {cn} from "../../../lib/utils.ts";
-import {apps} from "@workspace/lib/lib/apps.ts";
+import {apps} from "@workspace/lib/apps.ts";
 import {useIsMobile} from "../../../hooks/";
 import {Ket} from "../braket/ket.tsx";
 import {Bar} from "../braket/bar.tsx";

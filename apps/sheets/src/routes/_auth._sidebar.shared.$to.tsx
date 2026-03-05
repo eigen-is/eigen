@@ -7,7 +7,7 @@ import {useLayout} from "@workspace/ui/components/layout/app/layout-context.tsx"
 import {EigenLoader} from '@workspace/ui';
 import {useContext} from 'react';
 import {DriveContext} from './__root';
-import {openDocument} from "@workspace/lib/lib/api.ts";
+import {openDocument} from "@workspace/lib/api.ts";
 
 export const Route = createFileRoute('/_auth/_sidebar/shared/$to')({
     component: DriveRoute,

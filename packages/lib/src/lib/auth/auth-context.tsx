@@ -1,6 +1,6 @@
 import React, {createContext, ReactNode, useEffect, useState} from 'react';
 import {authClient} from "./hooks/use-auth-client.ts";
-import {LoadingScreen} from '@workspace/ui/components/layout/';
+import {LoadingScreen} from '@workspace/ui/components/layout/pages';
 import {useQueryClient} from '@tanstack/react-query';
 
 export type AuthUser = {
