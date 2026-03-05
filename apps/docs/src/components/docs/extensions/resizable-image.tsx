@@ -2,6 +2,8 @@ import {Node, mergeAttributes, type CommandProps} from '@tiptap/core';
 import {ReactNodeViewRenderer, NodeViewWrapper} from '@tiptap/react';
 import {useCallback, useRef, useState} from 'react';
 import type {NodeViewProps} from '@tiptap/react';
+import {AlignCenter, AlignLeft, AlignRight} from 'lucide-react';
+import {TooltipButton} from '@workspace/ui';
 
 declare module '@tiptap/core' {
     interface Commands<ReturnType> {
@@ -87,22 +89,31 @@ function ResizableImageView({node, updateAttributes, selected, editor}: NodeView
                 />
                 {selected && isEditable && (
                     <>
-                        <div className="absolute -top-9 left-1/2 -translate-x-1/2 z-10 flex gap-1 bg-white rounded-md shadow-md border p-1">
-                            <button
-                                type="button"
-                                className={`px-2 py-0.5 rounded text-xs ${alignment === 'left' ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-100'}`}
-                                onMouseDown={(e) => { e.preventDefault(); updateAttributes({alignment: 'left'}); }}
-                            >L</button>
-                            <button
-                                type="button"
-                                className={`px-2 py-0.5 rounded text-xs ${alignment === 'center' ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-100'}`}
-                                onMouseDown={(e) => { e.preventDefault(); updateAttributes({alignment: 'center'}); }}
-                            >C</button>
-                            <button
-                                type="button"
-                                className={`px-2 py-0.5 rounded text-xs ${alignment === 'right' ? 'bg-blue-100 text-blue-700' : 'hover:bg-gray-100'}`}
-                                onMouseDown={(e) => { e.preventDefault(); updateAttributes({alignment: 'right'}); }}
-                            >R</button>
+                        <div className="absolute -top-9 left-1/2 -translate-x-1/2 z-10 flex gap-0.5 bg-white rounded-md shadow-md border p-0.5">
+                            <TooltipButton
+                                icon={AlignLeft}
+                                tooltipText="Align left"
+                                active={alignment === 'left'}
+                                preventFocusLoss
+                                className="h-7 w-7"
+                                onClick={() => updateAttributes({alignment: 'left'})}
+                            />
+                            <TooltipButton
+                                icon={AlignCenter}
+                                tooltipText="Align center"
+                                active={alignment === 'center'}
+                                preventFocusLoss
+                                className="h-7 w-7"
+                                onClick={() => updateAttributes({alignment: 'center'})}
+                            />
+                            <TooltipButton
+                                icon={AlignRight}
+                                tooltipText="Align right"
+                                active={alignment === 'right'}
+                                preventFocusLoss
+                                className="h-7 w-7"
+                                onClick={() => updateAttributes({alignment: 'right'})}
+                            />
                         </div>
                         {/* Resize handles */}
                         <div
