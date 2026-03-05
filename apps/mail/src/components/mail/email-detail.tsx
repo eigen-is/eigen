@@ -5,7 +5,7 @@ import {format} from "date-fns";
 import {AddressObject, Attachment, Email, MaildirMailbox} from "@workspace/lib/types/mail";
 import {ShadowContent} from "@workspace/ui/components/layout/shadow-content";
 import {UserItem} from "@workspace/ui/components/layout/user-item";
-import {TooltipButton} from "@workspace/ui";
+import {Toolbar, TooltipButton} from "@workspace/ui";
 import {Separator} from "@workspace/ui/components/separator";
 import {getMailAttachmentUrl} from "@workspace/lib/api";
 import {EmailContextMenu} from "./email-context-menu";
@@ -37,7 +37,7 @@ export function EmailDetailToolbar({
                                        mailboxes = [],
                                    }: EmailDetailToolbarProps) {
     return (
-        <div className="flex items-center justify-between w-full">
+        <Toolbar>
             <div className="flex items-center gap-1">
                 {email.mailbox !== 'archive' && (
                     <TooltipButton
@@ -101,7 +101,7 @@ export function EmailDetailToolbar({
                     />
                 </DropdownMenu>
             </div>
-        </div>
+        </Toolbar>
     );
 }
 
