@@ -2,6 +2,7 @@ import React, {useState} from 'react';
 import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle} from "@workspace/ui/components/dialog";
 import {Button} from "@workspace/ui/components/button";
 import {Input} from "@workspace/ui/components/input";
+import {Label} from "@workspace/ui/components/label";
 import {ColumnItem} from './types';
 import {useAuth} from "@workspace/lib/auth";
 
@@ -43,9 +44,7 @@ export const AddColumnDialog: React.FC<AddColumnDialogProps> = ({
                     </DialogHeader>
                     <div className="grid gap-4 py-4">
                         <div className="grid gap-2">
-                            <label htmlFor="column-title" className="text-sm font-medium">
-                                Title
-                            </label>
+                            <Label htmlFor="column-title">Title</Label>
                             <Input
                                 id="column-title"
                                 value={title}

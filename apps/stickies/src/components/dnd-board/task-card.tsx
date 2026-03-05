@@ -3,6 +3,7 @@ import {useSortable} from '@dnd-kit/sortable';
 import {CSS} from '@dnd-kit/utilities';
 import {TaskItem} from './types';
 import {TaskInfoDialog} from './task-info-dialog';
+import {Card, CardContent} from '@workspace/ui/components/card';
 import * as Y from 'yjs';
 
 interface TaskCardProps {
@@ -41,9 +42,9 @@ export const TaskCard: React.FC<TaskCardProps> = ({task, isMobile, yjsDoc, owner
 
     return (
         <>
-            <div
+            <Card
                 ref={setNodeRef}
-                className={`mb-2 w-full border border-gray-200 shadow-sm bg-white select-none ${isDragging ? 'opacity-50' : ''}`}
+                className={`mb-2 p-0 w-full select-none cursor-grab touch-none ${isDragging ? 'opacity-50' : ''}`}
                 style={{
                     transform: CSS.Transform.toString(transform),
                     transition,
@@ -53,13 +54,13 @@ export const TaskCard: React.FC<TaskCardProps> = ({task, isMobile, yjsDoc, owner
                 {...listeners}
                 onClick={handleCardClick}
             >
-                <div className={`p-2 cursor-grab touch-none text-sm ${isDragging ? 'bg-blue-50' : 'bg-white'}`}>
+                <CardContent className={`p-3 text-sm ${isDragging ? 'bg-blue-50' : ''}`}>
                     {task.title}
                     {task.description && (
-                        <p className="text-xs text-gray-500 mt-1 truncate">{task.description}</p>
+                        <p className="text-xs text-muted-foreground mt-1 truncate">{task.description}</p>
                     )}
-                </div>
-            </div>
+                </CardContent>
+            </Card>
 
             <TaskInfoDialog
                 isOpen={isInfoDialogOpen}
