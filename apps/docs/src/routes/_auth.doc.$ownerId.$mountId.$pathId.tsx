@@ -55,7 +55,7 @@ function CollaborativeTextEditor() {
 
     return (
         <>
-            <div className="bg-muted flex-1 overflow-hidden">
+            <div className="flex-1 overflow-hidden">
                 <CollaborativeEditor path={docInfo.path} access={docInfo}
                                      mediaFolderId={mediaFolderId}
                                      chatFolderId={chatFolderId}
