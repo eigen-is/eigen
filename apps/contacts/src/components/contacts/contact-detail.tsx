@@ -14,7 +14,7 @@ import {Badge} from "@workspace/ui/components/badge";
 import {Link} from '@tanstack/react-router';
 import {DeleteDialog} from "@workspace/ui/components/layout/delete/delete-dialog";
 import {useLabels} from '@workspace/lib/contacts';
-import {TooltipButton, UserAvatar} from "@workspace/ui";
+import {Toolbar, TooltipButton, UserAvatar} from "@workspace/ui";
 import {EigenLoader} from '@workspace/ui/components/layout/braket/eigen-loader.tsx';
 import {useOpenWriteEmailTo} from "@workspace/lib/mail";
 import {printDocument} from '@workspace/ui/lib/printElement';
@@ -31,6 +31,7 @@ export function ContactDetailToolbar({contact, filterType, filterId, onDeleteCli
     const openWriteEmailTo = useOpenWriteEmailTo();
 
     return (
+        <Toolbar>
         <div className="flex items-center gap-1 ml-auto">
             <Link
                 to="/edit/$filterType/$filterId"
@@ -98,6 +99,7 @@ export function ContactDetailToolbar({contact, filterType, filterId, onDeleteCli
                 </DropdownMenuContent>
             </DropdownMenu>
         </div>
+        </Toolbar>
     );
 }
 

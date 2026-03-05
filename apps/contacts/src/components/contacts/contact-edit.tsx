@@ -15,7 +15,7 @@ import {Input} from "@workspace/ui/components/input";
 import {Badge} from "@workspace/ui/components/badge";
 import {Textarea} from "@workspace/ui/components/textarea";
 import {Form, FormControl, FormField, FormItem, FormLabel, FormMessage} from "@workspace/ui/components/form";
-import {UserAvatar} from "@workspace/ui";
+import {Toolbar, UserAvatar} from "@workspace/ui";
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -59,7 +59,9 @@ interface ContactEditToolbarProps {
 
 export function ContactEditToolbar({isNew}: ContactEditToolbarProps) {
     return (
+        <Toolbar>
         <h1 className="font-medium">{isNew ? 'Create Contact' : 'Edit Contact'}</h1>
+        </Toolbar>
     );
 }
 

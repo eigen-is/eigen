@@ -1,5 +1,5 @@
 import {EmailDraft as EmailDraftType} from "@workspace/lib/types/mail";
-import {ContactAutosuggest, TooltipButton} from "@workspace/ui";
+import {ContactAutosuggest, Toolbar, TooltipButton} from "@workspace/ui";
 import {Input} from "@workspace/ui/components/input";
 import {Textarea} from "@workspace/ui/components/textarea";
 import {useEffect, useMemo, useRef, useState} from "react";
@@ -38,7 +38,7 @@ export function EmailDraftToolbar({onSend, onDelete, isSending, hasId}: {
     hasId: boolean;
 }) {
     return (
-        <div className="flex items-center gap-1">
+        <Toolbar>
             <TooltipButton
                 icon={Send}
                 tooltipText="Send"
@@ -53,7 +53,7 @@ export function EmailDraftToolbar({onSend, onDelete, isSending, hasId}: {
                     disabled={isSending}
                 />
             )}
-        </div>
+        </Toolbar>
     );
 }
 
