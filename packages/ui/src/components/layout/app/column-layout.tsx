@@ -1,7 +1,7 @@
 import {createContext, ReactNode, useContext} from 'react';
 import {ArrowLeft} from 'lucide-react';
-import {Button} from '@workspace/ui/components/button';
-import {useLayout} from './layout-context';
+import {Button} from '../../button.tsx';
+import {useLayout} from './layout-context.tsx';
 
 type ColumnContextType = {
     mobileColumn: string | null;

@@ -13,7 +13,7 @@ import {DriveAccessList} from "@workspace/ui/components/layout/drive";
 import {type DrivePath} from "@workspace/lib/types/drive";
 import {formatFileSize} from "@workspace/ui/lib/formatFileSize";
 import {Table, TableBody, TableCell, TableRow} from "@workspace/ui/components/table";
-import {useLayout} from "../layout-context";
+import {useLayout} from "../app/layout-context.tsx";
 
 type DriveDetailToolbarProps = {
     path: DrivePath;

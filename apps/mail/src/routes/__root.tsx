@@ -1,6 +1,6 @@
 import {createRootRouteWithContext, Outlet} from '@tanstack/react-router'
 import {AuthContextType, useAuth} from "@workspace/lib/auth";
-import {AppShell} from "@workspace/ui/components/layout/app-shell";
+import {AppShell} from "@workspace/ui/components/layout/app/app-shell.tsx";
 import {EmailSidebar} from "../components/mail/email-sidebar";
 import {useEmailById, useMailboxes, useMoveEmail} from '@workspace/lib/mail';
 

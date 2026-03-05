@@ -1,7 +1,7 @@
-import {Download, Presentation, Plus, UsersRound, X} from 'lucide-react';
+import {Download, Plus, Presentation, UsersRound, X} from 'lucide-react';
 import {Button} from "@workspace/ui/components/button";
 import {SidebarSection} from '@workspace/ui/components/layout/sidebar/sidebar-section';
-import {AppLogo} from '@workspace/ui/components/layout/app-logo';
+import {AppLogo} from '@workspace/ui/components/layout/app/app-logo.tsx';
 import {SidebarItem, StorageUsage} from "@workspace/ui";
 import {DrivePath} from '@workspace/lib/types/drive';
 import {useState} from 'react';

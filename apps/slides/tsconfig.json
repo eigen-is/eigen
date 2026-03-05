@@ -1,22 +1,21 @@
 {
   "extends": "../../tsconfig.json",
   "compilerOptions": {
-    "tsBuildInfoFile": "./node_modules/.tmp/tsconfig.app.tsbuildinfo",
     "baseUrl": ".",
     "paths": {
-      "@workspace/lib": ["../../packages/lib/src"],
-      "@workspace/lib/*": ["../../packages/lib/src/*"],
-      "@workspace/ui": ["../../packages/ui/src"],
-      "@workspace/ui/*": ["../../packages/ui/src/*"],
-      "@/*": ["./src/*"]
+      "@workspace/lib/*": [
+        "../../packages/lib/src/*"
+      ],
+      "@workspace/ui/*": [
+        "../../packages/ui/src/*"
+      ]
     }
   },
   "include": [
     "src",
-    "css.d.ts",
-    "../../packages/ui/src/**/*.ts",
-    "../../packages/ui/src/**/*.tsx",
-    "../../packages/lib/src/**/*.ts",
-    "../../packages/lib/src/**/*.tsx"
+    "css.d.ts"
+  ],
+  "exclude": [
+    "node_modules"
   ]
 }

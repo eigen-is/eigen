@@ -4,7 +4,7 @@ import {ContactEdit, ContactEditToolbar, ContactFormValues} from '../components/
 import {useAddContact, useContacts, useUpdateContact} from '@workspace/lib/contacts';
 import {type Contact} from "@workspace/lib/types/contact";
 import {EigenLoader} from "@workspace/ui";
-import {Column, ColumnLayout} from "@workspace/ui/components/layout/column-layout";
+import {Column, ColumnLayout} from "@workspace/ui/components/layout/app/column-layout.tsx";
 
 // Define search params type with Zod schema
 const searchSchema = z.object({

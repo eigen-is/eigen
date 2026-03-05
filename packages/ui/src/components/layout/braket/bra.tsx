@@ -1,11 +1,11 @@
-import {cn} from "@workspace/ui/lib/utils";
+import {cn} from "../../../lib/utils.ts";
 
 interface BraProps {
     className?: string
     style?: React.CSSProperties
 }
 
-export function Ket({
+export function Bra({
                         className,
                         style,
                         ...props
@@ -23,7 +23,7 @@ export function Ket({
             strokeLinecap="round"
             strokeLinejoin="round"
         >
-            <path d="m3 0 4 7.5 -4 7.5"/>
+            <path d="m9 0 -4 7.5 4 7.5"/>
         </svg>
     )
 }

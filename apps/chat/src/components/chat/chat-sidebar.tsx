@@ -2,7 +2,7 @@ import {MessageSquare, Plus, X} from 'lucide-react';
 import {Button} from "@workspace/ui/components/button";
 import {SidebarSection} from '@workspace/ui/components/layout/sidebar/sidebar-section';
 import {SidebarItem} from '@workspace/ui/components/layout/sidebar/sidebar-item';
-import {AppLogo} from '@workspace/ui/components/layout/app-logo';
+import {AppLogo} from '@workspace/ui/components/layout/app/app-logo.tsx';
 import {useChats, useCreateChat} from '@workspace/lib/chat';
 import {getChatRoomUrl} from "@workspace/lib/api";
 import {EigenLoader} from "@workspace/ui";

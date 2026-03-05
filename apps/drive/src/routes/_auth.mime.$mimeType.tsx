@@ -3,7 +3,7 @@ import {DEFAULT_MOUNT_ID, useMimeContent, usePathInfo} from '@workspace/lib/driv
 import {DriveLayout} from "@workspace/ui/components/layout/drive/drive-layout";
 import {DrivePath, DriveSearchParams, isDocumentType, isFolderType} from "@workspace/lib/types/drive";
 import {useAuth} from '@workspace/lib/auth';
-import {useLayout} from "@workspace/ui/components/layout/layout-context";
+import {useLayout} from "@workspace/ui/components/layout/app/layout-context.tsx";
 import {useState} from "react";
 import {FilePreview} from '@workspace/ui/components/layout/drive/file-preview';
 import {getDriveDownloadUrl, getDriveEmbedUrl, openDocument} from "@workspace/lib/api";

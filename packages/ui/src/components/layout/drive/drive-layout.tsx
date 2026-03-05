@@ -15,8 +15,8 @@ import {DriveRenameItem} from "./drive-rename-item";
 import {useMovePath} from "@workspace/lib/drive";
 import {useDriveDialogs} from "./use-drive-dialogs";
 import {getDriveDownloadUrl} from "@workspace/lib/api";
-import {Column, ColumnLayout} from "../column-layout";
-import {useLayout} from "../layout-context";
+import {Column, ColumnLayout} from "../app/column-layout.tsx";
+import {useLayout} from "../app/layout-context.tsx";
 
 export type DriveLayoutProps = {
     ownerId: string;

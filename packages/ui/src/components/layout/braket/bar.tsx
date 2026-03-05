@@ -1,29 +1,29 @@
-import {cn} from "@workspace/ui/lib/utils";
+import {cn} from "../../../lib/utils.ts";
 
-interface BraProps {
+interface BarProps {
     className?: string
     style?: React.CSSProperties
 }
 
-export function Bra({
+export function Bar({
                         className,
                         style,
                         ...props
-                    }: BraProps) {
+                    }: BarProps) {
     return (
         <svg
             className={cn("inline align-baseline overflow-visible", className)}
             style={style}
             {...props}
             height="1em"
-            viewBox="0 -8 14 22"
+            viewBox="0 -8 7 22"
             fill="none"
             stroke="currentColor"
             strokeWidth="1.25"
             strokeLinecap="round"
             strokeLinejoin="round"
         >
-            <path d="m9 0 -4 7.5 4 7.5"/>
+            <path d="m4 0 0 16"/>
         </svg>
     )
 }

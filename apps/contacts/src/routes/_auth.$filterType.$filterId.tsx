@@ -3,9 +3,9 @@ import {ContactsList, ContactsListToolbar} from '../components/contacts/contacts
 import {ContactDetail, ContactDetailToolbar} from '../components/contacts/contact-detail';
 import {useContacts, useDeleteContact, useLabels, useUpdateContact} from '@workspace/lib/contacts';
 import {Contact} from '@workspace/lib/types/contact';
-import {EigenLoader} from '@workspace/ui/components/layout/eigen-loader';
+import {EigenLoader} from '@workspace/ui/components/layout/braket/eigen-loader.tsx';
 import {LabelFilterHeader} from "@workspace/ui/components/layout/labels/label-filter-header";
-import {Column, ColumnLayout} from "@workspace/ui/components/layout/column-layout";
+import {Column, ColumnLayout} from "@workspace/ui/components/layout/app/column-layout.tsx";
 import {useEffect, useState} from 'react';
 
 export type ContactsSearchParams = {

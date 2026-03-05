@@ -1,6 +1,6 @@
 import {type ReactNode, useEffect, useRef} from 'react';
 import {UserAvatar} from "../user-avatar";
-import {EigenLoader} from "../eigen-loader";
+import {EigenLoader} from "../braket/eigen-loader.tsx";
 import {cn} from "../../../lib/utils";
 import {usePublicUser} from "@workspace/lib/public";
 import {useContacts} from "@workspace/lib/contacts";
