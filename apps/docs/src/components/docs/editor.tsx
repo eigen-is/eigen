@@ -108,6 +108,7 @@ const TiptapEditor = ({
     const [commentSelectedText, setCommentSelectedText] = useState('');
     const [viewCommentChatId, setViewCommentChatId] = useState<string | null>(null);
     const documentRef = useRef<HTMLDivElement>(null);
+    const editorRef = useRef<ReturnType<typeof useEditor>>(null);
 
     const getEditorMaxWidth = useCallback(() => {
         const el = documentRef.current;
@@ -244,13 +245,15 @@ const TiptapEditor = ({
         },
     }, [handleCommentClick]);
 
+    editorRef.current = editor;
+
     const handleImageUpload = async (file: File) => {
-        if (!mediaFolderId || !file.type.startsWith('image/') || !editor) return;
+        if (!mediaFolderId || !file.type.startsWith('image/')) return;
 
         const result = await uploadFile.mutateAsync({parentId: mediaFolderId, file});
-        if (result) {
+        if (result && editorRef.current) {
             const src = getDriveEmbedUrl(path.ownerId, path.mountId, result.id, 'image');
-            editor.chain().focus().setResizableImage({src}).run();
+            editorRef.current.chain().focus().setResizableImage({src}).run();
         }
     };
 
