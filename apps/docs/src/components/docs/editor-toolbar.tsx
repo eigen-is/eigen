@@ -23,7 +23,6 @@ import {
     Link2Off,
     List,
     ListOrdered,
-    LucideIcon,
     MessageSquare,
     Minus,
     Pencil,
@@ -58,6 +57,8 @@ import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,} from "@
 import {Input} from "@workspace/ui/components/input";
 import {Tooltip, TooltipContent, TooltipTrigger} from "@workspace/ui/components/tooltip";
 import {Popover, PopoverContent, PopoverTrigger} from "@workspace/ui/components/popover";
+import {ToggleGroup} from "@workspace/ui/components/toggle-group";
+import {TooltipButton, TooltipToggle} from "@workspace/ui";
 import {printDocument} from "@workspace/ui/lib/printElement";
 import {DocumentModeButton} from "@workspace/ui/components/layout/toolbar/document-mode-button";
 import {DriveCreateDoc} from "@workspace/ui/components/layout/drive/drive-create-doc";
@@ -67,6 +68,7 @@ import {DrivePath} from "@workspace/lib/types/drive";
 import {useNavigate} from '@tanstack/react-router';
 import {useIsMobile} from "@workspace/lib/media";
 import {DriveRenameItem} from "@workspace/ui/components/layout/drive/drive-rename-item";
+import {Label} from "@workspace/ui/components/label";
 
 type EditorToolbarProps = {
     editor: Editor;
@@ -109,34 +111,7 @@ const FONT_FAMILIES = [
     {label: 'Sans', value: 'Inter, system-ui, sans-serif'},
 ];
 
-const ToolbarSeparator = () => (<div className="h-6 w-[1px] bg-border mx-0.5 flex-shrink-0" />);
-
-const ToolbarBtn = ({icon: Icon, tooltip, isActive, disabled, onAction, className = "h-8 w-8"}: {
-    icon: LucideIcon;
-    tooltip: string;
-    isActive?: boolean;
-    disabled?: boolean;
-    onAction: () => void;
-    className?: string;
-}) => (
-    <Tooltip>
-        <TooltipTrigger asChild>
-            <Button
-                variant={isActive ? "secondary" : "ghost"}
-                size="icon"
-                className={className}
-                disabled={disabled}
-                onMouseDown={(e) => {
-                    e.preventDefault();
-                    onAction();
-                }}
-            >
-                <Icon className="h-4 w-4" />
-            </Button>
-        </TooltipTrigger>
-        <TooltipContent>{tooltip}</TooltipContent>
-    </Tooltip>
-);
+const ToolbarSeparator = () => <Separator orientation="vertical" className="h-6 mx-1" />;
 
 export const EditorToolbar = ({editor, path, canWrite, onAccessDialogOpen, onDeleteDialogOpen, onAddComment, onImageUpload}: EditorToolbarProps) => {
     const [linkUrl, setLinkUrl] = useState('');
@@ -331,10 +306,10 @@ export const EditorToolbar = ({editor, path, canWrite, onAccessDialogOpen, onDel
 
                 <div className="flex items-center gap-0.5">
                     {onAddComment && (
-                        <ToolbarBtn icon={MessageSquare} tooltip="Add comment" onAction={onAddComment} />
+                        <TooltipButton icon={MessageSquare} tooltipText="Add comment" onClick={onAddComment} />
                     )}
                     {canWrite ? (
-                        <ToolbarBtn icon={UserRoundPlus} tooltip="Share" onAction={onAccessDialogOpen} />
+                        <TooltipButton icon={UserRoundPlus} tooltipText="Share" onClick={onAccessDialogOpen} />
                     ) : (
                         <DocumentModeButton canWrite={canWrite} />
                     )}
@@ -343,20 +318,22 @@ export const EditorToolbar = ({editor, path, canWrite, onAccessDialogOpen, onDel
 
             {/* Bottom row: Formatting toolbar (desktop only) */}
             {canWrite && !isMobile && (
-                <div className="h-10 flex items-center gap-0.5 px-2 overflow-x-auto">
+                <div className="flex items-center gap-1 px-2 overflow-x-auto">
                     {/* Undo / Redo */}
-                    <ToolbarBtn
-                        icon={Undo}
-                        tooltip={`Undo (${formatForDisplay('Mod+Z')})`}
-                        disabled={!editor.can().undo()}
-                        onAction={() => editor.chain().focus().undo().run()}
-                    />
-                    <ToolbarBtn
-                        icon={Redo}
-                        tooltip={`Redo (${formatForDisplay('Mod+Y')})`}
-                        disabled={!editor.can().redo()}
-                        onAction={() => editor.chain().focus().redo().run()}
-                    />
+                    <div className="flex items-center gap-0.5">
+                        <TooltipButton
+                            icon={Undo}
+                            tooltipText={`Undo (${formatForDisplay('Mod+Z')})`}
+                            disabled={!editor.can().undo()}
+                            onClick={() => editor.chain().focus().undo().run()}
+                        />
+                        <TooltipButton
+                            icon={Redo}
+                            tooltipText={`Redo (${formatForDisplay('Mod+Y')})`}
+                            disabled={!editor.can().redo()}
+                            onClick={() => editor.chain().focus().redo().run()}
+                        />
+                    </div>
 
                     <ToolbarSeparator />
 
@@ -416,49 +393,51 @@ export const EditorToolbar = ({editor, path, canWrite, onAccessDialogOpen, onDel
 
                     <ToolbarSeparator />
 
-                    {/* Text formatting */}
-                    <ToolbarBtn
-                        icon={Bold}
-                        tooltip={`Bold (${formatForDisplay('Mod+B')})`}
-                        isActive={editor.isActive('bold')}
-                        onAction={() => editor.chain().focus().toggleBold().run()}
-                    />
-                    <ToolbarBtn
-                        icon={Italic}
-                        tooltip={`Italic (${formatForDisplay('Mod+I')})`}
-                        isActive={editor.isActive('italic')}
-                        onAction={() => editor.chain().focus().toggleItalic().run()}
-                    />
-                    <ToolbarBtn
-                        icon={Underline}
-                        tooltip={`Underline (${formatForDisplay('Mod+U')})`}
-                        isActive={editor.isActive('underline')}
-                        onAction={() => editor.chain().focus().toggleUnderline().run()}
-                    />
-                    <ToolbarBtn
-                        icon={Strikethrough}
-                        tooltip="Strikethrough"
-                        isActive={editor.isActive('strike')}
-                        onAction={() => editor.chain().focus().toggleStrike().run()}
-                    />
-                    <ToolbarBtn
-                        icon={Code}
-                        tooltip="Inline code"
-                        isActive={editor.isActive('code')}
-                        onAction={() => editor.chain().focus().toggleCode().run()}
-                    />
-                    <ToolbarBtn
-                        icon={Superscript}
-                        tooltip="Superscript"
-                        isActive={editor.isActive('superscript')}
-                        onAction={() => editor.chain().focus().toggleSuperscript().run()}
-                    />
-                    <ToolbarBtn
-                        icon={Subscript}
-                        tooltip="Subscript"
-                        isActive={editor.isActive('subscript')}
-                        onAction={() => editor.chain().focus().toggleSubscript().run()}
-                    />
+                    {/* Text formatting toggle group */}
+                    <ToggleGroup type="multiple" className="gap-0.5">
+                        <TooltipToggle
+                            icon={Bold}
+                            tooltipText={`Bold (${formatForDisplay('Mod+B')})`}
+                            value="bold"
+                            onClick={() => editor.chain().focus().toggleBold().run()}
+                        />
+                        <TooltipToggle
+                            icon={Italic}
+                            tooltipText={`Italic (${formatForDisplay('Mod+I')})`}
+                            value="italic"
+                            onClick={() => editor.chain().focus().toggleItalic().run()}
+                        />
+                        <TooltipToggle
+                            icon={Underline}
+                            tooltipText={`Underline (${formatForDisplay('Mod+U')})`}
+                            value="underline"
+                            onClick={() => editor.chain().focus().toggleUnderline().run()}
+                        />
+                        <TooltipToggle
+                            icon={Strikethrough}
+                            tooltipText="Strikethrough"
+                            value="strike"
+                            onClick={() => editor.chain().focus().toggleStrike().run()}
+                        />
+                        <TooltipToggle
+                            icon={Code}
+                            tooltipText="Inline code"
+                            value="code"
+                            onClick={() => editor.chain().focus().toggleCode().run()}
+                        />
+                        <TooltipToggle
+                            icon={Superscript}
+                            tooltipText="Superscript"
+                            value="superscript"
+                            onClick={() => editor.chain().focus().toggleSuperscript().run()}
+                        />
+                        <TooltipToggle
+                            icon={Subscript}
+                            tooltipText="Subscript"
+                            value="subscript"
+                            onClick={() => editor.chain().focus().toggleSubscript().run()}
+                        />
+                    </ToggleGroup>
 
                     <ToolbarSeparator />
 
@@ -479,15 +458,17 @@ export const EditorToolbar = ({editor, path, canWrite, onAccessDialogOpen, onDel
                                 </Tooltip>
                             </Button>
                         </PopoverTrigger>
-                        <PopoverContent className="w-auto p-2" align="start">
-                            <div className="color-picker-grid">
+                        <PopoverContent className="w-auto p-3" align="start">
+                            <div className="grid grid-cols-5 gap-1">
                                 {TEXT_COLORS.map((color) => (
                                     <button
                                         key={color.label}
                                         title={color.label}
-                                        className={editor.getAttributes('textStyle').color === color.value ? 'active' : ''}
+                                        className={`h-6 w-6 rounded-md border-2 border-border hover:border-ring transition-colors ${
+                                            editor.getAttributes('textStyle').color === color.value ? 'ring-2 ring-ring ring-offset-2' : ''
+                                        }`}
                                         style={{backgroundColor: color.value || '#000'}}
-                                        onMouseDown={(e) => {
+                                        onMouseDown={(e: React.MouseEvent) => {
                                             e.preventDefault();
                                             if (color.value) {
                                                 editor.chain().focus().setColor(color.value).run();
@@ -515,15 +496,17 @@ export const EditorToolbar = ({editor, path, canWrite, onAccessDialogOpen, onDel
                                 </Tooltip>
                             </Button>
                         </PopoverTrigger>
-                        <PopoverContent className="w-auto p-2" align="start">
-                            <div className="color-picker-grid">
+                        <PopoverContent className="w-auto p-3" align="start">
+                            <div className="grid grid-cols-5 gap-1">
                                 {HIGHLIGHT_COLORS.map((color) => (
                                     <button
                                         key={color.label}
                                         title={color.label}
-                                        className={color.value && editor.isActive('highlight', {color: color.value}) ? 'active' : ''}
-                                        style={{backgroundColor: color.value || '#fff', border: !color.value ? '1px solid #d1d5db' : undefined}}
-                                        onMouseDown={(e) => {
+                                        className={`h-6 w-6 rounded-md border-2 hover:border-ring transition-colors ${
+                                            color.value && editor.isActive('highlight', {color: color.value}) ? 'ring-2 ring-ring ring-offset-2' : ''
+                                        }`}
+                                        style={{backgroundColor: color.value || '#fff', border: !color.value ? '2px dashed hsl(var(--border))' : undefined}}
+                                        onMouseDown={(e: React.MouseEvent) => {
                                             e.preventDefault();
                                             if (color.value) {
                                                 editor.chain().focus().toggleHighlight({color: color.value}).run();
@@ -539,163 +522,170 @@ export const EditorToolbar = ({editor, path, canWrite, onAccessDialogOpen, onDel
 
                     <ToolbarSeparator />
 
-                    {/* Alignment */}
-                    <ToolbarBtn
-                        icon={AlignLeft}
-                        tooltip="Align left"
-                        isActive={editor.isActive({textAlign: 'left'})}
-                        onAction={() => editor.chain().focus().setTextAlign('left').run()}
-                    />
-                    <ToolbarBtn
-                        icon={AlignCenter}
-                        tooltip="Align center"
-                        isActive={editor.isActive({textAlign: 'center'})}
-                        onAction={() => editor.chain().focus().setTextAlign('center').run()}
-                    />
-                    <ToolbarBtn
-                        icon={AlignRight}
-                        tooltip="Align right"
-                        isActive={editor.isActive({textAlign: 'right'})}
-                        onAction={() => editor.chain().focus().setTextAlign('right').run()}
-                    />
+                    {/* Alignment toggle group */}
+                    <ToggleGroup type="single" className="gap-0.5">
+                        <TooltipToggle
+                            icon={AlignLeft}
+                            tooltipText="Align left"
+                            value="left"
+                            onClick={() => editor.chain().focus().setTextAlign('left').run()}
+                        />
+                        <TooltipToggle
+                            icon={AlignCenter}
+                            tooltipText="Align center"
+                            value="center"
+                            onClick={() => editor.chain().focus().setTextAlign('center').run()}
+                        />
+                        <TooltipToggle
+                            icon={AlignRight}
+                            tooltipText="Align right"
+                            value="right"
+                            onClick={() => editor.chain().focus().setTextAlign('right').run()}
+                        />
+                    </ToggleGroup>
 
                     <ToolbarSeparator />
 
-                    {/* Lists */}
-                    <ToolbarBtn
-                        icon={List}
-                        tooltip="Bulleted list"
-                        isActive={editor.isActive('bulletList')}
-                        onAction={() => editor.chain().focus().toggleBulletList().run()}
-                    />
-                    <ToolbarBtn
-                        icon={ListOrdered}
-                        tooltip="Numbered list"
-                        isActive={editor.isActive('orderedList')}
-                        onAction={() => editor.chain().focus().toggleOrderedList().run()}
-                    />
-                    <ToolbarBtn
-                        icon={CheckSquare}
-                        tooltip="Checklist"
-                        isActive={editor.isActive('taskList')}
-                        onAction={() => editor.chain().focus().toggleTaskList().run()}
-                    />
+                    {/* Lists toggle group */}
+                    <ToggleGroup type="multiple" className="gap-0.5">
+                        <TooltipToggle
+                            icon={List}
+                            tooltipText="Bulleted list"
+                            value="bulletList"
+                            onClick={() => editor.chain().focus().toggleBulletList().run()}
+                        />
+                        <TooltipToggle
+                            icon={ListOrdered}
+                            tooltipText="Numbered list"
+                            value="orderedList"
+                            onClick={() => editor.chain().focus().toggleOrderedList().run()}
+                        />
+                        <TooltipToggle
+                            icon={CheckSquare}
+                            tooltipText="Checklist"
+                            value="taskList"
+                            onClick={() => editor.chain().focus().toggleTaskList().run()}
+                        />
+                    </ToggleGroup>
 
                     <ToolbarSeparator />
 
                     {/* Block elements */}
-                    <ToolbarBtn
-                        icon={Quote}
-                        tooltip="Blockquote"
-                        isActive={editor.isActive('blockquote')}
-                        onAction={() => editor.chain().focus().toggleBlockquote().run()}
-                    />
-                    <ToolbarBtn
-                        icon={CodeXml}
-                        tooltip="Code block"
-                        isActive={editor.isActive('codeBlock')}
-                        onAction={() => editor.chain().focus().toggleCodeBlock().run()}
-                    />
-                    <ToolbarBtn
+                    <ToggleGroup type="multiple" className="gap-0.5">
+                        <TooltipToggle
+                            icon={Quote}
+                            tooltipText="Blockquote"
+                            value="blockquote"
+                            onClick={() => editor.chain().focus().toggleBlockquote().run()}
+                        />
+                        <TooltipToggle
+                            icon={CodeXml}
+                            tooltipText="Code block"
+                            value="codeBlock"
+                            onClick={() => editor.chain().focus().toggleCodeBlock().run()}
+                        />
+                    </ToggleGroup>
+                    <TooltipButton
                         icon={Minus}
-                        tooltip="Horizontal rule"
-                        onAction={() => editor.chain().focus().setHorizontalRule().run()}
+                        tooltipText="Horizontal rule"
+                        onClick={() => editor.chain().focus().setHorizontalRule().run()}
                     />
 
                     <ToolbarSeparator />
 
                     {/* Insert actions */}
-                    <ToolbarBtn
-                        icon={Link}
-                        tooltip="Add link"
-                        isActive={editor.isActive('link')}
-                        onAction={handleLinkOperation}
-                    />
-                    {editor.isActive('link') && (
-                        <ToolbarBtn
-                            icon={Link2Off}
-                            tooltip="Remove link"
-                            onAction={() => editor.chain().focus().unsetLink().run()}
+                    <div className="flex items-center gap-0.5">
+                        <ToggleGroup type="single" className="gap-0.5">
+                            <TooltipToggle
+                                icon={Link}
+                                tooltipText="Add link"
+                                value="link"
+                                onClick={handleLinkOperation}
+                            />
+                        </ToggleGroup>
+                        {editor.isActive('link') && (
+                            <TooltipButton
+                                icon={Link2Off}
+                                tooltipText="Remove link"
+                                onClick={() => editor.chain().focus().unsetLink().run()}
+                            />
+                        )}
+
+                        {/* Table */}
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button variant={editor.isActive('table') ? "secondary" : "ghost"}
+                                        size="icon" className="h-8 w-8"
+                                        onMouseDown={(e) => e.preventDefault()}>
+                                    <Tooltip>
+                                        <TooltipTrigger asChild>
+                                            <Table className="h-4 w-4" />
+                                        </TooltipTrigger>
+                                        <TooltipContent>Table</TooltipContent>
+                                    </Tooltip>
+                                </Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent>
+                                {!editor.isActive('table') ? (
+                                    <DropdownMenuItem onClick={() => editor.chain().focus().insertTable({rows: 3, cols: 3, withHeaderRow: true}).run()}>
+                                        Insert 3×3 table
+                                    </DropdownMenuItem>
+                                ) : (
+                                    <>
+                                        <DropdownMenuItem onClick={() => editor.chain().focus().addColumnAfter().run()}>
+                                            Add column after
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => editor.chain().focus().addColumnBefore().run()}>
+                                            Add column before
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => editor.chain().focus().deleteColumn().run()}>
+                                            Delete column
+                                        </DropdownMenuItem>
+                                        <DropdownMenuSeparator />
+                                        <DropdownMenuItem onClick={() => editor.chain().focus().addRowAfter().run()}>
+                                            Add row after
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => editor.chain().focus().addRowBefore().run()}>
+                                            Add row before
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => editor.chain().focus().deleteRow().run()}>
+                                            Delete row
+                                        </DropdownMenuItem>
+                                        <DropdownMenuSeparator />
+                                        <DropdownMenuItem onClick={() => editor.chain().focus().toggleHeaderRow().run()}>
+                                            Toggle header row
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => editor.chain().focus().mergeCells().run()}>
+                                            Merge cells
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem onClick={() => editor.chain().focus().splitCell().run()}>
+                                            Split cell
+                                        </DropdownMenuItem>
+                                        <DropdownMenuSeparator />
+                                        <DropdownMenuItem onClick={() => editor.chain().focus().deleteTable().run()}
+                                                          className="text-destructive">
+                                            Delete table
+                                        </DropdownMenuItem>
+                                    </>
+                                )}
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+
+                        {/* Image upload */}
+                        {onImageUpload && (
+                            <TooltipButton
+                                icon={ImagePlus}
+                                tooltipText="Insert image"
+                                onClick={() => imageInputRef.current?.click()}
+                            />
+                        )}
+
+                        <TooltipButton
+                            icon={RemoveFormatting}
+                            tooltipText="Clear formatting"
+                            onClick={clearFormatting}
                         />
-                    )}
-
-                    {/* Table */}
-                    <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                            <Button variant={editor.isActive('table') ? "secondary" : "ghost"}
-                                    size="icon" className="h-8 w-8"
-                                    onMouseDown={(e) => e.preventDefault()}>
-                                <Tooltip>
-                                    <TooltipTrigger asChild>
-                                        <Table className="h-4 w-4" />
-                                    </TooltipTrigger>
-                                    <TooltipContent>Table</TooltipContent>
-                                </Tooltip>
-                            </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent>
-                            {!editor.isActive('table') ? (
-                                <DropdownMenuItem onClick={() => editor.chain().focus().insertTable({rows: 3, cols: 3, withHeaderRow: true}).run()}>
-                                    Insert 3×3 table
-                                </DropdownMenuItem>
-                            ) : (
-                                <>
-                                    <DropdownMenuItem onClick={() => editor.chain().focus().addColumnAfter().run()}>
-                                        Add column after
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => editor.chain().focus().addColumnBefore().run()}>
-                                        Add column before
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => editor.chain().focus().deleteColumn().run()}>
-                                        Delete column
-                                    </DropdownMenuItem>
-                                    <DropdownMenuSeparator />
-                                    <DropdownMenuItem onClick={() => editor.chain().focus().addRowAfter().run()}>
-                                        Add row after
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => editor.chain().focus().addRowBefore().run()}>
-                                        Add row before
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => editor.chain().focus().deleteRow().run()}>
-                                        Delete row
-                                    </DropdownMenuItem>
-                                    <DropdownMenuSeparator />
-                                    <DropdownMenuItem onClick={() => editor.chain().focus().toggleHeaderRow().run()}>
-                                        Toggle header row
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => editor.chain().focus().mergeCells().run()}>
-                                        Merge cells
-                                    </DropdownMenuItem>
-                                    <DropdownMenuItem onClick={() => editor.chain().focus().splitCell().run()}>
-                                        Split cell
-                                    </DropdownMenuItem>
-                                    <DropdownMenuSeparator />
-                                    <DropdownMenuItem onClick={() => editor.chain().focus().deleteTable().run()}
-                                                      className="text-destructive">
-                                        Delete table
-                                    </DropdownMenuItem>
-                                </>
-                            )}
-                        </DropdownMenuContent>
-                    </DropdownMenu>
-
-                    {/* Image upload */}
-                    {onImageUpload && (
-                        <ToolbarBtn
-                            icon={ImagePlus}
-                            tooltip="Insert image"
-                            onAction={() => imageInputRef.current?.click()}
-                        />
-                    )}
-
-                    <ToolbarSeparator />
-
-                    {/* Clear formatting */}
-                    <ToolbarBtn
-                        icon={RemoveFormatting}
-                        tooltip="Clear formatting"
-                        onAction={clearFormatting}
-                    />
+                    </div>
                 </div>
             )}
 
@@ -724,12 +714,13 @@ export const EditorToolbar = ({editor, path, canWrite, onAccessDialogOpen, onDel
                 />
             )}
             <Dialog open={linkDialogOpen} onOpenChange={setLinkDialogOpen}>
-                <DialogContent className="sm:max-w-[425px]">
+                <DialogContent className="sm:max-w-md">
                     <DialogHeader>
                         <DialogTitle>Add link</DialogTitle>
                     </DialogHeader>
-                    <div className="grid gap-4 py-4">
-                        <div className="grid gap-2">
+                    <div className="space-y-4 py-4">
+                        <div className="space-y-2">
+                            <Label htmlFor="link">URL</Label>
                             <Input
                                 id="link"
                                 autoFocus
@@ -746,8 +737,8 @@ export const EditorToolbar = ({editor, path, canWrite, onAccessDialogOpen, onDel
                         </div>
                     </div>
                     <DialogFooter>
-                        <Button type="button" variant="secondary" onClick={() => setLinkDialogOpen(false)}>Cancel</Button>
-                        <Button type="button" onClick={applyLink}>Save</Button>
+                        <Button type="button" variant="outline" onClick={() => setLinkDialogOpen(false)}>Cancel</Button>
+                        <Button type="button" onClick={applyLink}>Add Link</Button>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>
