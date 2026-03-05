@@ -285,7 +285,7 @@ const TiptapEditor = ({
                     onAddComment={chatFolderId ? handleAddComment : undefined}
                     onImageUpload={mediaFolderId ? handleImageUpload : undefined}
                 />}>
-                <div className="h-full w-full overflow-y-scroll bg-gray-200 p-4">
+                <div className="h-full w-full overflow-y-scroll bg-muted p-4">
                     <div
                         data-document="true"
                         className="grid p-[2cm] bg-white rounded-lg shadow-sm shadow-transparent min-h-full w-[210mm] m-auto print:shadow-none"
