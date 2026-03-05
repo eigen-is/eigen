@@ -223,7 +223,7 @@ Business logic lives in `apps/api/src/lib/[domain]/[domain].ts`:
 
 Three pluggable backends in `apps/api/src/lib/storage/`:
 
-- **LocalStorage** - Full filesystem operations (used by Mail, Contacts)
+- **LocalFilesystem** - Full filesystem operations (used by Mail, Contacts)
 - **LocalKeyStorage** - Flat UUID-based file storage (used by Drive mounts)
 - **S3Storage** - S3-compatible object storage (ready for use)
 
