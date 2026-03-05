@@ -1,10 +1,9 @@
 import {useState} from "react";
-import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle} from "@workspace/ui/components/dialog";
+import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle,} from "@workspace/ui/components/dialog";
 import {Button} from "@workspace/ui/components/button";
 import {Textarea} from "@workspace/ui/components/textarea";
-import {useCreateChat} from "@workspace/lib/chat";
-import {ChatMessageList, ChatMessageInput} from "@workspace/ui";
-import {useChatRoom} from "@workspace/lib/chat";
+import {useChatRoom, useCreateChat} from "@workspace/lib/chat";
+import {ChatMessageInput, ChatMessageList} from "@workspace/ui";
 import type {DrivePath} from "@workspace/lib/types/drive";
 
 type CreateCommentDialogProps = {
@@ -55,32 +54,45 @@ export function CreateCommentDialog({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-[425px]">
+            <DialogContent className="sm:max-w-md">
                 <DialogHeader>
-                    <DialogTitle>Add comment</DialogTitle>
+                    <DialogTitle>Add Comment</DialogTitle>
                 </DialogHeader>
-                {selectedText && (
-                    <div className="rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground italic border-l-2 border-primary">
-                        "{selectedText.length > 100 ? selectedText.slice(0, 100) + '…' : selectedText}"
-                    </div>
-                )}
-                <Textarea
-                    autoFocus
-                    placeholder="Write a comment..."
-                    value={comment}
-                    onChange={e => setComment(e.target.value)}
-                    onKeyDown={e => {
-                        if (e.key === 'Enter' && !e.shiftKey) {
-                            e.preventDefault();
-                            handleSubmit();
-                        }
-                    }}
-                    rows={3}
-                />
-                <DialogFooter>
-                    <Button variant="ghost" onClick={() => onOpenChange(false)}>Cancel</Button>
-                    <Button onClick={handleSubmit} disabled={!comment.trim() || isSubmitting}>
-                        Comment
+                <div className="space-y-4">
+                    {selectedText && (
+                        <div className="rounded-lg bg-muted border-l-4 border-primary p-3">
+                            <p className="text-sm text-muted-foreground italic">
+                                "{selectedText.length > 100 ? selectedText.slice(0, 100) + '…' : selectedText}"
+                            </p>
+                        </div>
+                    )}
+                    <Textarea
+                        autoFocus
+                        placeholder="Write a comment..."
+                        value={comment}
+                        onChange={e => setComment(e.target.value)}
+                        onKeyDown={e => {
+                            if (e.key === 'Enter' && !e.shiftKey) {
+                                e.preventDefault();
+                                handleSubmit();
+                            }
+                        }}
+                        className="min-h-[80px] resize-none"
+                    />
+                </div>
+                <DialogFooter className="flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2">
+                    <Button
+                        variant="outline"
+                        onClick={() => onOpenChange(false)}
+                        disabled={isSubmitting}
+                    >
+                        Cancel
+                    </Button>
+                    <Button
+                        onClick={handleSubmit}
+                        disabled={!comment.trim() || isSubmitting}
+                    >
+                        {isSubmitting ? "Commenting..." : "Comment"}
                     </Button>
                 </DialogFooter>
             </DialogContent>
@@ -107,11 +119,11 @@ export function ViewCommentDialog({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-[500px] max-h-[70vh] flex flex-col p-0 gap-0">
-                <DialogHeader className="px-4 pt-4 pb-2">
+            <DialogContent className="sm:max-w-lg max-h-[80vh] flex flex-col p-0">
+                <DialogHeader className="px-6 pt-6 pb-4">
                     <DialogTitle>Comment</DialogTitle>
                 </DialogHeader>
-                <div className="flex flex-col flex-1 min-h-0 overflow-hidden">
+                <div className="flex flex-col flex-1 min-h-0 overflow-hidden px-6">
                     <ChatMessageList
                         messages={chat.messages}
                         isLoading={chat.isLoading}
@@ -119,15 +131,18 @@ export function ViewCommentDialog({
                         ownerId={ownerId}
                         mountId={mountId}
                         emptyMessage=""
+                        className="flex-1"
                     />
-                    <ChatMessageInput
-                        onSend={chat.handleSendMessage}
-                        disabled={chat.disabled}
-                        readOnly={chat.readOnly}
-                        placeholder="Reply..."
-                        roomMembers={chat.roomMembers}
-                        messageCount={chat.messages.length}
-                    />
+                    <div className="mt-4 pb-6">
+                        <ChatMessageInput
+                            onSend={chat.handleSendMessage}
+                            disabled={chat.disabled}
+                            readOnly={chat.readOnly}
+                            placeholder="Reply..."
+                            roomMembers={chat.roomMembers}
+                            messageCount={chat.messages.length}
+                        />
+                    </div>
                 </div>
             </DialogContent>
         </Dialog>

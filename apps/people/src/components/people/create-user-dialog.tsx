@@ -2,9 +2,9 @@ import {useState} from 'react';
 import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle} from '@workspace/ui/components/dialog';
 import {Button} from '@workspace/ui/components/button';
 import {Input} from '@workspace/ui/components/input';
-import {Label} from '@workspace/ui/components/label';
-import {InputGroup, InputGroupAddon, InputGroupInput, InputGroupText} from '@workspace/ui/components/input-group';
 import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '@workspace/ui/components/select';
+import {InputGroup, InputGroupAddon, InputGroupInput, InputGroupText} from '@workspace/ui/components/input-group';
+import {Field, FieldContent, FieldGroup, FieldLabel} from '@workspace/ui/components/field';
 import {useCreateUser} from '@workspace/lib/people';
 import {usePublicConfig} from '@workspace/lib/public';
 import {toast} from 'sonner';
@@ -47,37 +47,53 @@ export function CreateUserDialog({open, onOpenChange}: CreateUserDialogProps) {
                 <DialogHeader>
                     <DialogTitle>Create User</DialogTitle>
                 </DialogHeader>
-                <form onSubmit={handleSubmit} className="space-y-4">
-                    <div className="space-y-2">
-                        <Label htmlFor="name">Name</Label>
-                        <Input id="name" value={name} onChange={e => setName(e.target.value)} required/>
-                    </div>
-                    <div className="space-y-2">
-                        <Label htmlFor="username">Username</Label>
-                        <InputGroup>
-                            <InputGroupInput id="username" value={username} onChange={e => setUsername(e.target.value)} required/>
-                            <InputGroupAddon align="inline-end">
-                                <InputGroupText>@{config?.domain ?? 'eigen.is'}</InputGroupText>
-                            </InputGroupAddon>
-                        </InputGroup>
-                    </div>
-                    <div className="space-y-2">
-                        <Label htmlFor="password">Password</Label>
-                        <Input id="password" type="password" value={password} onChange={e => setPassword(e.target.value)}
-                               minLength={8} required/>
-                    </div>
-                    <div className="space-y-2">
-                        <Label htmlFor="role">Role</Label>
-                        <Select value={role} onValueChange={setRole}>
-                            <SelectTrigger>
-                                <SelectValue/>
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="member">Member</SelectItem>
-                                <SelectItem value="admin">Admin</SelectItem>
-                            </SelectContent>
-                        </Select>
-                    </div>
+                <form onSubmit={handleSubmit}>
+                    <FieldGroup>
+                        <Field>
+                            <FieldLabel htmlFor="name">Name</FieldLabel>
+                            <FieldContent>
+                                <Input id="name" value={name} onChange={e => setName(e.target.value)} required/>
+                            </FieldContent>
+                        </Field>
+
+                        <Field>
+                            <FieldLabel htmlFor="username">Username</FieldLabel>
+                            <FieldContent>
+                                <InputGroup>
+                                    <InputGroupInput id="username" value={username}
+                                                     onChange={e => setUsername(e.target.value)} required/>
+                                    <InputGroupAddon align="inline-end">
+                                        <InputGroupText>@{config?.domain ?? 'eigen.is'}</InputGroupText>
+                                    </InputGroupAddon>
+                                </InputGroup>
+                            </FieldContent>
+                        </Field>
+
+                        <Field>
+                            <FieldLabel htmlFor="password">Password</FieldLabel>
+                            <FieldContent>
+                                <Input id="password" type="password" value={password}
+                                       onChange={e => setPassword(e.target.value)}
+                                       minLength={8} required/>
+                            </FieldContent>
+                        </Field>
+
+                        <Field>
+                            <FieldLabel htmlFor="role">Role</FieldLabel>
+                            <FieldContent>
+                                <Select value={role} onValueChange={setRole}>
+                                    <SelectTrigger>
+                                        <SelectValue/>
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="member">Member</SelectItem>
+                                        <SelectItem value="admin">Admin</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </FieldContent>
+                        </Field>
+                    </FieldGroup>
+                    
                     <DialogFooter>
                         <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
                         <Button type="submit" disabled={createUser.isPending}>

@@ -9,6 +9,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
+import {Separator} from '@workspace/ui/components/separator';
 import {TooltipButton} from '@workspace/ui';
 import {DocumentModeButton} from '@workspace/ui/components/layout/toolbar/document-mode-button';
 import * as Y from 'yjs';
@@ -58,7 +59,6 @@ export const StickiesToolbar = ({canWrite, undoManager, onAccessDialogOpen, path
         };
     }, [undoManager, canWrite]);
 
-    const ToolbarSeparator = () => <div className="h-4 w-px bg-gray-200 mx-1"/>;
 
     return (
         <div className="bg-white h-12 flex items-center justify-between px-4 border-b no-print">
@@ -94,7 +94,7 @@ export const StickiesToolbar = ({canWrite, undoManager, onAccessDialogOpen, path
                 </DropdownMenu>
                 {canWrite && (
                     <>
-                        <ToolbarSeparator/>
+                        <Separator orientation="vertical" className="h-4"/>
 
                         <TooltipButton
                             icon={Undo}
