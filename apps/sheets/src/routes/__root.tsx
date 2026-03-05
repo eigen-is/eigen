@@ -4,7 +4,7 @@ import {AppShell} from "@workspace/ui/components/layout/app/app-shell.tsx";
 import {DEFAULT_MOUNT_ID, useRootFolder} from '@workspace/lib/drive';
 import {createContext} from 'react';
 import {DriveContextType} from '@workspace/lib/types/drive';
-import {SheetsSidebar} from "@/components/sheets-sidebar.tsx";
+import {SheetsSidebar} from "../components/sheets-sidebar.tsx";
 
 export const DriveContext = createContext<DriveContextType>({
     rootPath: null,
