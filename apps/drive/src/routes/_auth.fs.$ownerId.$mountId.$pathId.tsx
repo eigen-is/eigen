@@ -3,19 +3,11 @@ import {EigenLoader} from "@workspace/ui";
 import {useFolderContent, usePathInfo} from '@workspace/lib/drive';
 import {useContext, useEffect, useState} from "react";
 import {DriveLayout} from "@workspace/ui/components/layout/drive/drive-layout";
-import {DrivePath, DriveSearchParams} from "@workspace/lib/types/drive";
+import {DrivePath, DriveSearchParams, isDocumentType, isFolderType} from "@workspace/lib/types/drive";
 import {useLayout} from "@workspace/ui/components/layout/layout-context";
 import {DriveContext} from "./__root";
 import {FilePreview} from '@workspace/ui/components/layout/drive/file-preview';
-import {
-    getChatRoomUrl,
-    getDocUrl,
-    getDriveDownloadUrl,
-    getDriveEmbedUrl,
-    getSheetUrl,
-    getSlideUrl,
-    getStickiesBoardUrl
-} from "@workspace/lib/api";
+import {getDriveDownloadUrl, getDriveEmbedUrl, openDocument} from "@workspace/lib/api";
 
 export const Route = createFileRoute('/_auth/fs/$ownerId/$mountId/$pathId')({
     component: DriveRoute,
@@ -72,7 +64,7 @@ function DriveRoute() {
             }
         }
 
-        if (isMobile && (path.type === 'folder' || path.type === 'doc' || path.type === 'stickies' || path.type === 'slides' || path.type === 'sheets' || path.type === 'chat')) {
+        if (isMobile && (isFolderType(path.type) || isDocumentType(path.type))) {
             onRowActivate(path);
         } else if (currentPath?.parentId === path.id) {
             navigate({
@@ -98,16 +90,8 @@ function DriveRoute() {
                 params: {ownerId, mountId, pathId: path.id},
                 search: {pid: undefined}
             });
-        } else if (path.type === 'doc') {
-            document.location.href = getDocUrl(path.ownerId, path.mountId, path.id);
-        } else if (path.type === 'stickies') {
-            document.location.href = getStickiesBoardUrl(path.ownerId, path.mountId, path.id);
-        } else if (path.type === 'slides') {
-            document.location.href = getSlideUrl(path.ownerId, path.mountId, path.id);
-        } else if (path.type === 'sheets') {
-            document.location.href = getSheetUrl(path.ownerId, path.mountId, path.id);
-        } else if (path.type === 'chat') {
-            document.location.href = getChatRoomUrl(path.ownerId, path.mountId, path.id);
+        } else if (isDocumentType(path.type)) {
+            openDocument(path);
         } else if (mimeType.startsWith("image/") || mimeType.startsWith("video/")) {
             const url = getDriveEmbedUrl(path.ownerId, path.mountId, path.id, path.name);
             const aspectRatio = path.details?.width && path.details?.height ? path.details.width / path.details.height : undefined;

@@ -11,6 +11,10 @@ export type DriveChatType = "chat";
 export type DriveContainerType = "folder" | DriveCollabType | DriveChatType;
 export type DrivePathType = "file" | DriveContainerType;
 
+export function isFolderType(type: DrivePathType) {
+    return type === 'folder';
+}
+
 export function isContainerType(type: DrivePathType): type is DriveContainerType {
     return type === 'folder' || type === 'doc' || type === 'stickies' || type === 'slides' || type === 'sheets' || type === 'chat';
 }
