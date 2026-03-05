@@ -3,6 +3,8 @@ import {useCollabDocumentInfo} from '@workspace/lib/collab';
 import {useApp} from '@workspace/ui/components/layout/app/layout-context.tsx';
 import {useEffect} from 'react';
 import {Sheet} from 'lucide-react';
+import {Column, ColumnLayout} from "@workspace/ui/components/layout";
+import {Toolbar} from "@workspace/ui/components/layout/toolbar";
 
 export const Route = createFileRoute('/_auth/sheet/$ownerId/$mountId/$pathId')({
     component: SheetView,
@@ -22,18 +24,18 @@ function SheetView() {
     }, [docInfo?.path?.name, setAppName]);
 
     return (
-        <div className="flex flex-col h-full w-full">
-            <div className="border-b px-4 py-2 flex items-center gap-2 shrink-0">
-                <Sheet className="h-4 w-4 text-muted-foreground"/>
-                <span className="text-sm text-muted-foreground">Toolbar</span>
-            </div>
-            <div className="flex-1 flex items-center justify-center">
-                <div className="text-center space-y-4">
+        <ColumnLayout>
+            <Column id={"1"} width={"flex"} toolbar={
+                <Toolbar><></>
+                </Toolbar>}>
+                <div className="flex-1 flex items-center justify-center h-full bg-muted">
+                    <div className="text-center space-y-4">
                     <Sheet className="h-16 w-16 text-muted-foreground mx-auto"/>
                     <h2 className="text-2xl font-semibold text-muted-foreground">Sheets</h2>
                     <p className="text-muted-foreground">Under construction</p>
                 </div>
             </div>
-        </div>
+            </Column>
+        </ColumnLayout>
     );
 }
