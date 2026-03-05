@@ -1,13 +1,13 @@
 import {createFileRoute, useNavigate} from '@tanstack/react-router';
 import {DEFAULT_MOUNT_ID, usePathInfo, useSharedPaths} from '@workspace/lib/drive';
 import {DriveLayout} from "@workspace/ui/components/layout/drive/drive-layout";
-import {DrivePath, DriveSearchParams} from "@workspace/lib/types/drive";
+import {DrivePath, DriveSearchParams, isDocumentType, isFolderType} from "@workspace/lib/types/drive";
 import {useAuth} from '@workspace/lib/auth';
 import {useLayout} from "@workspace/ui/components/layout/layout-context";
 import {EigenLoader} from '@workspace/ui';
 import {useState} from "react";
 import {FilePreview} from '@workspace/ui/components/layout/drive/file-preview';
-import {getDriveDownloadUrl, getDriveEmbedUrl} from "@workspace/lib/api";
+import {getDriveDownloadUrl, getDriveEmbedUrl, openDocument} from "@workspace/lib/api";
 
 export const Route = createFileRoute('/_auth/shared/$to')({
     component: DriveRoute,
@@ -51,7 +51,7 @@ function DriveRoute() {
             }
         }
 
-        if (isMobile && (path.type === 'folder' || path.type === 'doc' || path.type === 'stickies' || path.type === 'slides' || path.type === 'sheets' || path.type === 'chat')) {
+        if (isMobile && (isFolderType(path.type) || isDocumentType(path.type))) {
             onRowActivate(path);
         } else {
             navigate({
@@ -70,21 +70,8 @@ function DriveRoute() {
                 to: '/fs/$ownerId/$mountId/$pathId',
                 params: {ownerId: path.ownerId, mountId: path.mountId, pathId: path.id}
             });
-        } else if (path.type === 'doc') {
-            const url = `${import.meta.env.VITE_APP_DOCS_URL}/doc/${path.ownerId}/${path.mountId}/${path.id}`;
-            document.location.href = url;
-        } else if (path.type === 'stickies') {
-            const url = `${import.meta.env.VITE_APP_STICKIES_URL}/board/${path.ownerId}/${path.mountId}/${path.id}`;
-            document.location.href = url;
-        } else if (path.type === 'slides') {
-            const url = `${import.meta.env.VITE_APP_SLIDES_URL}/slide/${path.ownerId}/${path.mountId}/${path.id}`;
-            document.location.href = url;
-        } else if (path.type === 'sheets') {
-            const url = `${import.meta.env.VITE_APP_SHEETS_URL}/sheet/${path.ownerId}/${path.mountId}/${path.id}`;
-            document.location.href = url;
-        } else if (path.type === 'chat') {
-            const url = `${import.meta.env.VITE_APP_CHAT_URL}/${path.ownerId}/${path.mountId}/${path.id}`;
-            document.location.href = url;
+        } else if (isDocumentType(path.type)) {
+            openDocument(path);
         } else if (mimeType.startsWith("image/") || mimeType.startsWith("video/")) {
             const url = getDriveEmbedUrl(path.ownerId, path.mountId, path.id, path.name);
             setPreview({url, mimeType: mimeType});
