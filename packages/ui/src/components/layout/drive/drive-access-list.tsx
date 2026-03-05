@@ -5,7 +5,7 @@ import {cn} from "@workspace/ui/lib/utils"
 import {Lock, Unlock, UserRoundPlus} from "lucide-react"
 import {AvatarIcon} from "@workspace/ui/components/avatar"
 import {Separator} from "@workspace/ui/components/separator"
-import {TooltipButton} from "../tooltip-button"
+import {TooltipButton} from "../toolbar"
 import {useDriveAccess} from "@workspace/lib/drive"
 
 export type DriveAccessListProps = {
