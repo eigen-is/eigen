@@ -29,12 +29,12 @@ function SlideView() {
                 <Toolbar><></>
                 </Toolbar>}>
                 <div className="flex-1 flex items-center justify-center h-full bg-muted">
-                <div className="text-center space-y-4">
-                    <Presentation className="h-16 w-16 text-muted-foreground mx-auto"/>
-                    <h2 className="text-2xl font-semibold text-muted-foreground">Slides</h2>
-                    <p className="text-muted-foreground">Under construction</p>
+                    <div className="text-center space-y-4">
+                        <Presentation className="h-16 w-16 text-muted-foreground mx-auto"/>
+                        <h2 className="text-2xl font-semibold text-muted-foreground">Slides</h2>
+                        <p className="text-muted-foreground">Under construction</p>
+                    </div>
                 </div>
-            </div>
             </Column>
         </ColumnLayout>
     );
