@@ -16,9 +16,5 @@ export type {SidebarProps} from "./sidebar/sidebar-container"
 
 export {createLoginRouteOptions} from "./login-route"
 
-// Media components
-export {ResizableMedia, MediaStylePicker, defaultStyleOptions} from "./media"
-export type {MediaStyleOptions, ResizableMediaProps} from "./media"
-
 export {Bra} from "./bra"
 export {Ket} from "./ket"
