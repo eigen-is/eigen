@@ -4,7 +4,7 @@ import * as syncProtocol from "y-protocols/sync";
 import {type ServerWebSocket} from "bun";
 import * as encoding from "lib0/encoding";
 import * as decoding from "lib0/decoding";
-import {desc, gt, lt} from "drizzle-orm";
+import {desc, eq, gt, lt} from "drizzle-orm";
 import type {DrivePath} from "@workspace/lib/types/drive";
 import type {Drive} from "../drive";
 import type {ManagedDatabase} from "../core";
@@ -17,6 +17,7 @@ const MESSAGE_SYNC = 0;
 const MESSAGE_AWARENESS = 1;
 
 const SNAPSHOT_INTERVAL = 100;
+const MAX_REVISIONS = 50;
 
 class DbProvider {
     private db: BunSQLiteDatabase<typeof schema>;
@@ -96,14 +97,14 @@ class DbProvider {
 
             this.db.delete(schema.docUpdates).run();
 
-            const latestSnapshot = this.db.select({id: schema.docSnapshots.id}).from(schema.docSnapshots)
+            const allSnapshots = this.db.select({id: schema.docSnapshots.id}).from(schema.docSnapshots)
                 .orderBy(desc(schema.docSnapshots.id))
-                .limit(1)
-                .get();
+                .all();
 
-            if (latestSnapshot) {
+            if (allSnapshots.length > MAX_REVISIONS) {
+                const cutoffId = allSnapshots[MAX_REVISIONS - 1].id;
                 this.db.delete(schema.docSnapshots)
-                    .where(lt(schema.docSnapshots.id, latestSnapshot.id))
+                    .where(lt(schema.docSnapshots.id, cutoffId))
                     .run();
             }
 
@@ -111,6 +112,22 @@ class DbProvider {
         } catch (error) {
             console.error(`[DbProvider] Error creating snapshot for ${this.docId}:`, error);
         }
+    }
+
+    getRevisions(): { id: number; createdAt: Date | null }[] {
+        return this.db.select({
+            id: schema.docSnapshots.id,
+            createdAt: schema.docSnapshots.createdAt,
+        }).from(schema.docSnapshots)
+            .orderBy(desc(schema.docSnapshots.id))
+            .all();
+    }
+
+    getRevisionState(revisionId: number): Uint8Array | null {
+        const snapshot = this.db.select({stateData: schema.docSnapshots.stateData}).from(schema.docSnapshots)
+            .where(eq(schema.docSnapshots.id, revisionId))
+            .get();
+        return snapshot ? (snapshot.stateData as Uint8Array) : null;
     }
 
     destroy(): void {
@@ -162,6 +179,14 @@ export default class CollabDocument {
         this.awareness = new awarenessProtocol.Awareness(this.doc);
 
         return this;
+    }
+
+    public getRevisions(): { id: number; createdAt: Date | null }[] {
+        return this.provider.getRevisions();
+    }
+
+    public getRevisionState(revisionId: number): Uint8Array | null {
+        return this.provider.getRevisionState(revisionId);
     }
 
     public destruct() {

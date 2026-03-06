@@ -27,6 +27,32 @@ export const collabRouter = new Elysia({
         return {canRead, canWrite, path, folderContents};
     }, {auth: true})
 
+    .get("/collab/:ownerId/:mountId/:pathId/revisions", async ({params, user}) => {
+        const drive = await getSharedDrive(params.ownerId, user);
+        if (!await drive.canRead(params.mountId, params.pathId, user)) {
+            return {revisions: []};
+        }
+        const document = await drive.getCollabDocument(params.mountId, params.pathId);
+        return {revisions: document.getRevisions()};
+    }, {auth: true})
+
+    .get("/collab/:ownerId/:mountId/:pathId/revisions/:revisionId", async ({params, user, set}) => {
+        const drive = await getSharedDrive(params.ownerId, user);
+        if (!await drive.canRead(params.mountId, params.pathId, user)) {
+            set.status = 403;
+            return {error: "No read permission"};
+        }
+        const document = await drive.getCollabDocument(params.mountId, params.pathId);
+        const state = document.getRevisionState(parseInt(params.revisionId, 10));
+        if (!state) {
+            set.status = 404;
+            return {error: "Revision not found"};
+        }
+        return new Response(Buffer.from(state), {
+            headers: {"Content-Type": "application/octet-stream"}
+        });
+    }, {auth: true})
+
     // WebSocket endpoint for collaborative editing
     .ws("/ws/collab/:ownerId/:mountId/:pathId", {
         auth: true,
