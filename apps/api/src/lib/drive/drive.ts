@@ -1,8 +1,6 @@
 import type {User} from 'better-auth/types';
 import {BunSQLiteDatabase} from 'drizzle-orm/bun-sqlite';
 import {eq} from 'drizzle-orm';
-import {randomUUID} from 'crypto';
-
 import {ApiError, type DatabaseConfig, type ManagedDatabase, type SchemaType} from '../core';
 import {createDefaultMountConfig, Mount} from '../mount';
 import type {MountConfig, MountInfo} from '@workspace/lib/types';
@@ -26,6 +24,7 @@ import {createAsyncSingleton} from '../../utils/singleton';
 import type {Home} from '../home';
 import {SSEventType} from '@workspace/lib/types/sse';
 import {buildDriveEvent} from './sse-events';
+import {getUniqueFileName} from './naming';
 
 export type {DrivePath, DriveACL} from '@workspace/lib/types/drive';
 
@@ -239,9 +238,9 @@ export default class Drive {
 
         const existing = await mount.getChildByName(parentId, safeName);
         if (existing) {
-            const dotIdx = safeName.lastIndexOf('.');
-            const ext = dotIdx !== -1 ? safeName.slice(dotIdx) : '';
-            safeName = `${randomUUID()}${ext}`;
+            const siblings = await mount.listFolder(parentId);
+            const usedNames = new Set(siblings.map(s => s.name.toLowerCase()));
+            safeName = getUniqueFileName(safeName, usedNames);
         }
 
         const buffer = await file.arrayBuffer();
