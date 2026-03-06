@@ -18,7 +18,6 @@ import TableCell from "@tiptap/extension-table-cell";
 import TableHeader from "@tiptap/extension-table-header";
 import TextStyle from "@tiptap/extension-text-style";
 import Color from "@tiptap/extension-color";
-import FontFamily from "@tiptap/extension-font-family";
 import CharacterCount from "@tiptap/extension-character-count";
 import CodeBlockLowlight from "@tiptap/extension-code-block-lowlight";
 import {common, createLowlight} from "lowlight";
@@ -138,7 +137,6 @@ const TiptapEditor = ({
             Typography,
             TextStyle,
             Color,
-            FontFamily,
             CharacterCount,
             TextAlign.configure({
                 types: ['heading', 'paragraph'],
@@ -202,6 +200,10 @@ const TiptapEditor = ({
             transformPastedHTML: (html: string) => {
                 const maxWidth = getEditorMaxWidth();
                 const doc = new DOMParser().parseFromString(html, 'text/html');
+
+                doc.querySelectorAll('[style]').forEach((el) => {
+                    (el as HTMLElement).style.fontFamily = '';
+                });
 
                 doc.querySelectorAll('img, table').forEach((el) => {
                     const htmlEl = el as HTMLElement;
