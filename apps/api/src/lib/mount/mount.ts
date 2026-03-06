@@ -457,6 +457,11 @@ export class Mount {
                     localPath,
                     this.needsTempCopy ? {
                         onOpen: async () => {
+                            const tempPath = this.getTempPath(pathId);
+                            if (fs.existsSync(tempPath)) {
+                                console.log(`[Mount] Recovering from crash: using existing tmp file for ${pathId}`);
+                                return;
+                            }
                             const key = await this.getStorageKey(pathId);
                             if (await this.storage.exists(key)) {
                                 await this.downloadToTemp(key, pathId);

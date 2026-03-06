@@ -4,6 +4,7 @@ import * as syncProtocol from "y-protocols/sync";
 import {type ServerWebSocket} from "bun";
 import * as encoding from "lib0/encoding";
 import * as decoding from "lib0/decoding";
+import {desc, gt, lt} from "drizzle-orm";
 import type {DrivePath} from "@workspace/lib/types/drive";
 import type {Drive} from "../drive";
 import type {ManagedDatabase} from "../core";
@@ -12,92 +13,109 @@ import * as schema from "./schema.ts";
 import type {User} from "better-auth/types";
 import type {BunSQLiteDatabase} from "drizzle-orm/bun-sqlite";
 
-// Define message types (matching y-websocket protocol)
 const MESSAGE_SYNC = 0;
 const MESSAGE_AWARENESS = 1;
 
-// A simple provider that logs operations instead of persisting to database
-class LoggingProvider {
-    private docId: string;
-
-    constructor(doc: Y.Doc, docId: string) {
-        this.docId = docId;
-        console.log(`[LoggingProvider] Created for document: ${docId}`);
-
-        // Listen for document updates
-
-        // updateV2 ?
-        doc.on('update', (_update: Uint8Array) => {
-            // console.log(`[LoggingProvider] Document ${docId} updated, update size: ${update.length} bytes`);
-            // console.log(doc.toJSON());
-        });
-    }
-
-    // Method to store an update (would save to database in real implementation)
-    storeUpdate(update: Uint8Array): void {
-        console.log(`[LoggingProvider] Storing update for document ${this.docId}, size: ${update.length} bytes`);
-        // In a real implementation, save update to database
-    }
-
-    // Cleanup resources
-    destroy(): void {
-        console.log(`[LoggingProvider] Destroying provider for document ${this.docId}`);
-        // In a real implementation, close database connection
-    }
-}
+const SNAPSHOT_INTERVAL = 100;
 
 class DbProvider {
     private db: BunSQLiteDatabase<typeof schema>;
-    private managedDb: ManagedDatabase<typeof schema>;
     private doc: Y.Doc;
     private docId: string;
+    private updatesSinceSnapshot = 0;
+    private updateHandler: (update: Uint8Array) => void;
 
     constructor(doc: Y.Doc, docId: string, managedDb: ManagedDatabase<typeof schema>) {
-        this.managedDb = managedDb;
         this.db = managedDb.db;
         this.doc = doc;
         this.docId = docId;
 
-        console.log(`[DbProvider] Created for document: ${docId}`);
+        this.loadState();
 
-        // apply all changes from database to document
-        this.db.select().from(schema.docUpdates).then((updates) => {
-            for (const update of updates) {
-                // Apply each update to the document
-                const data = update.updateData as Uint8Array;
-                console.log(`[DbProvider] Applying update for document ${this.docId}, size: ${data.length} bytes`);
-                Y.applyUpdate(doc, data);
-            }
-        }).catch((error) => {
-            console.error(`[DbProvider] Error fetching updates for document ${this.docId}:`, error);
-        });
-
-        // updateV2 ?
-        doc.on('updateV2', (_update: Uint8Array) => {
-            // this.storeUpdate(update);
-        });
+        this.updateHandler = (update: Uint8Array) => {
+            this.storeUpdate(update);
+        };
+        doc.on('update', this.updateHandler);
     }
 
-    // Method to store an update (would save to database in real implementation)
-    storeUpdate(update: Uint8Array): void {
-        console.log(`[DbProvider] Storing update for document ${this.docId}, size: ${update.length} bytes`);
+    private loadState(): void {
+        const snapshot = this.db.select().from(schema.docSnapshots)
+            .orderBy(desc(schema.docSnapshots.id))
+            .limit(1)
+            .get();
+
+        if (snapshot) {
+            Y.applyUpdate(this.doc, snapshot.stateData as Uint8Array);
+
+            const updates = this.db.select().from(schema.docUpdates)
+                .where(gt(schema.docUpdates.id, snapshot.lastUpdateId))
+                .all();
+            for (const update of updates) {
+                Y.applyUpdate(this.doc, update.updateData as Uint8Array);
+            }
+            this.updatesSinceSnapshot = updates.length;
+        } else {
+            const updates = this.db.select().from(schema.docUpdates).all();
+            for (const update of updates) {
+                Y.applyUpdate(this.doc, update.updateData as Uint8Array);
+            }
+            this.updatesSinceSnapshot = updates.length;
+        }
+    }
+
+    private storeUpdate(update: Uint8Array): void {
         try {
             this.db.insert(schema.docUpdates).values({
                 updateData: Buffer.from(update)
             }).run();
-            this.managedDb.markDirty();
-            console.log(`[DbProvider] Successfully stored update for document ${this.docId}`);
+            this.updatesSinceSnapshot++;
+
+            if (this.updatesSinceSnapshot >= SNAPSHOT_INTERVAL) {
+                this.createSnapshot();
+            }
         } catch (error) {
-            console.error(`[DbProvider] Error storing update for document ${this.docId}:`, error);
+            console.error(`[DbProvider] Error storing update for ${this.docId}:`, error);
         }
     }
 
-    // Cleanup resources
+    private createSnapshot(): void {
+        try {
+            const stateData = Buffer.from(Y.encodeStateAsUpdate(this.doc));
+
+            const lastUpdate = this.db.select({id: schema.docUpdates.id}).from(schema.docUpdates)
+                .orderBy(desc(schema.docUpdates.id))
+                .limit(1)
+                .get();
+
+            if (!lastUpdate) return;
+
+            this.db.insert(schema.docSnapshots).values({
+                stateData,
+                lastUpdateId: lastUpdate.id,
+            }).run();
+
+            this.db.delete(schema.docUpdates).run();
+
+            const latestSnapshot = this.db.select({id: schema.docSnapshots.id}).from(schema.docSnapshots)
+                .orderBy(desc(schema.docSnapshots.id))
+                .limit(1)
+                .get();
+
+            if (latestSnapshot) {
+                this.db.delete(schema.docSnapshots)
+                    .where(lt(schema.docSnapshots.id, latestSnapshot.id))
+                    .run();
+            }
+
+            this.updatesSinceSnapshot = 0;
+        } catch (error) {
+            console.error(`[DbProvider] Error creating snapshot for ${this.docId}:`, error);
+        }
+    }
+
     destroy(): void {
-        console.log(`[DbProvider] Destroying provider for document ${this.docId}`);
-        const update = Y.encodeStateAsUpdate(this.doc);
-        this.db.delete(schema.docUpdates).run();
-        this.storeUpdate(update);
+        this.doc.off('update', this.updateHandler);
+        this.createSnapshot();
     }
 }
 
@@ -105,7 +123,7 @@ export default class CollabDocument {
     private drive: Drive;
     private path: DrivePath;
     private doc!: Y.Doc;
-    private provider!: LoggingProvider | DbProvider;
+    private provider!: DbProvider;
     private awareness!: awarenessProtocol.Awareness;
     private connections: Set<ServerWebSocket<any>> = new Set();
     private connectionClientIds: Map<ServerWebSocket<any>, Set<number>> = new Map();
