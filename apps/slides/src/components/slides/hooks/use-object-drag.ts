@@ -1,4 +1,5 @@
 import {useCallback, useRef, useState} from 'react';
+import {snapRect, SnapLine} from './use-snap-lines';
 
 type DragMode = 'move' | 'resize-se' | 'resize-sw' | 'resize-ne' | 'resize-nw' | 'resize-e' | 'resize-w' | 'resize-n' | 'resize-s' | null;
 
@@ -16,10 +17,15 @@ type ObjectDragState = {
 type UseObjectDragProps = {
     onUpdate: (objId: string, updates: {x?: number; y?: number; w?: number; h?: number}) => void;
     canvasRef: React.RefObject<HTMLDivElement | null>;
+    vSnaps?: number[];
+    hSnaps?: number[];
 }
 
-export const useObjectDrag = ({onUpdate, canvasRef}: UseObjectDragProps) => {
+export const useObjectDrag = ({onUpdate, canvasRef, vSnaps = [], hSnaps = []}: UseObjectDragProps) => {
     const [isDragging, setIsDragging] = useState(false);
+    const [activeSnapLines, setActiveSnapLines] = useState<SnapLine[]>([]);
+    const snapsRef = useRef({vSnaps, hSnaps});
+    snapsRef.current = {vSnaps, hSnaps};
     const stateRef = useRef<ObjectDragState>({
         objId: null, mode: null,
         startX: 0, startY: 0,
@@ -69,11 +75,14 @@ export const useObjectDrag = ({onUpdate, canvasRef}: UseObjectDragProps) => {
                 x = resized.x; y = resized.y; w = resized.w; h = resized.h;
             }
 
-            onUpdate(s.objId, {x, y, w, h});
+            const snapped = snapRect({x, y, w, h}, snapsRef.current.vSnaps, snapsRef.current.hSnaps, s.mode);
+            setActiveSnapLines(snapped.lines);
+            onUpdate(s.objId, {x: snapped.x, y: snapped.y, w: snapped.w, h: snapped.h});
         };
 
         const handleMouseUp = () => {
             setIsDragging(false);
+            setActiveSnapLines([]);
             stateRef.current = {objId: null, mode: null, startX: 0, startY: 0, startObjX: 0, startObjY: 0, startObjW: 0, startObjH: 0};
             document.removeEventListener('mousemove', handleMouseMove);
             document.removeEventListener('mouseup', handleMouseUp);
@@ -83,7 +92,7 @@ export const useObjectDrag = ({onUpdate, canvasRef}: UseObjectDragProps) => {
         document.addEventListener('mouseup', handleMouseUp);
     }, [getCanvasSize, onUpdate]);
 
-    return {isDragging, startDrag};
+    return {isDragging, startDrag, activeSnapLines};
 };
 
 function clamp(v: number, min: number, max: number) {

@@ -1,9 +1,17 @@
 import {DndContext, DragOverlay, PointerSensor, useSensor, useSensors, closestCenter} from '@dnd-kit/core';
 import {SortableContext, useSortable, verticalListSortingStrategy} from '@dnd-kit/sortable';
 import {CSS} from '@dnd-kit/utilities';
+import {Copy, Trash2} from 'lucide-react';
 import {SlideThumbnail} from './slide-thumbnail';
 import {DeckData, SLIDE_ASPECT_RATIO} from './types';
 import type {DragStartEvent, DragEndEvent} from '@dnd-kit/core';
+import {
+    ContextMenu,
+    ContextMenuContent,
+    ContextMenuItem,
+    ContextMenuSeparator,
+    ContextMenuTrigger,
+} from '@workspace/ui/components/context-menu';
 
 type SlidePanelProps = {
     deck: DeckData;
@@ -12,9 +20,11 @@ type SlidePanelProps = {
     onDragStart: (event: DragStartEvent) => void;
     onDragEnd: (event: DragEndEvent) => void;
     dragActiveId: string | null;
+    onDeleteSlide?: (slideId: string) => void;
+    onDuplicateSlide?: (slideId: string) => void;
 }
 
-export function SlidePanel({deck, activeSlideId, onSelectSlide, onDragStart, onDragEnd, dragActiveId}: SlidePanelProps) {
+export function SlidePanel({deck, activeSlideId, onSelectSlide, onDragStart, onDragEnd, dragActiveId, onDeleteSlide, onDuplicateSlide}: SlidePanelProps) {
     const sensors = useSensors(
         useSensor(PointerSensor, {activationConstraint: {distance: 5}})
     );
@@ -41,13 +51,32 @@ export function SlidePanel({deck, activeSlideId, onSelectSlide, onDragStart, onD
                                     slideId={slideId}
                                     isDragOverlay={false}
                                 >
-                                    <SlideThumbnail
-                                        slide={slide}
-                                        objects={objects}
-                                        index={index}
-                                        isActive={slideId === activeSlideId}
-                                        onClick={() => onSelectSlide(slideId)}
-                                    />
+                                    <ContextMenu>
+                                        <ContextMenuTrigger asChild>
+                                            <div>
+                                                <SlideThumbnail
+                                                    slide={slide}
+                                                    objects={objects}
+                                                    index={index}
+                                                    isActive={slideId === activeSlideId}
+                                                    onClick={() => onSelectSlide(slideId)}
+                                                />
+                                            </div>
+                                        </ContextMenuTrigger>
+                                        <ContextMenuContent>
+                                            <ContextMenuItem onClick={() => onDuplicateSlide?.(slideId)}>
+                                                <Copy className="h-4 w-4 mr-2"/> Duplicate
+                                            </ContextMenuItem>
+                                            <ContextMenuSeparator/>
+                                            <ContextMenuItem
+                                                variant="destructive"
+                                                disabled={deck.slideOrder.length <= 1}
+                                                onClick={() => onDeleteSlide?.(slideId)}
+                                            >
+                                                <Trash2 className="h-4 w-4 mr-2"/> Delete
+                                            </ContextMenuItem>
+                                        </ContextMenuContent>
+                                    </ContextMenu>
                                 </SortableSlide>
                             );
                         })}
