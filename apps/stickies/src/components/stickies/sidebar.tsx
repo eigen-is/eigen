@@ -1,37 +1,28 @@
 import {Download, FileText, Plus, UsersRound, X} from 'lucide-react';
-import {Button} from "@workspace/ui/components/button";
+import {Button} from '@workspace/ui/components/button';
 import {SidebarSection} from '@workspace/ui/components/layout/sidebar/sidebar-section';
 import {AppLogo} from '@workspace/ui/components/layout/app/app-logo.tsx';
-import {SidebarItem, StorageUsage} from "@workspace/ui";
-import {DrivePath} from '@workspace/lib/types/drive';
+import {SidebarItem, StorageUsage} from '@workspace/ui';
 import {useState} from 'react';
 import {useNavigate} from '@tanstack/react-router';
-
 import {DriveCreateStickies} from '@workspace/ui/components/layout/drive/drive-create-stickies';
+import type {DrivePath} from '@workspace/lib/types/drive';
 
-interface StickiesSidebarProps {
+type SidebarProps = {
     condensed?: boolean;
     onClose?: () => void;
     isMobile?: boolean;
     rootPath?: DrivePath | null;
 }
 
-export function StickiesSidebar({
-                                    condensed = false,
-                                    onClose,
-                                    isMobile = false,
-                                    rootPath = null,
-                                }: StickiesSidebarProps) {
+export function StickiesSidebar({condensed = false, onClose, isMobile = false, rootPath = null}: SidebarProps) {
     const navigate = useNavigate();
     const [createStickiesOpen, setCreateStickiesOpen] = useState(false);
-    const targetPath = rootPath;
 
     const handleAfterAction = () => {
         navigate({
             to: '/mime/$mimeType',
-            params: {
-                mimeType: 'application-eigenstickies'
-            }
+            params: {mimeType: 'application-eigenstickies'},
         });
     };
 
@@ -50,7 +41,7 @@ export function StickiesSidebar({
             <div className="px-3 py-2">
                 <Button
                     variant="default"
-                    size={condensed ? "icon" : "default"}
+                    size={condensed ? 'icon' : 'default'}
                     className={`${condensed ? 'w-10 p-0' : 'w-full justify-start gap-3'}`}
                     onClick={() => setCreateStickiesOpen(true)}
                 >
@@ -59,10 +50,7 @@ export function StickiesSidebar({
                 </Button>
             </div>
 
-            <SidebarSection
-                condensed={condensed}
-            >
-
+            <SidebarSection condensed={condensed}>
                 <SidebarItem
                     icon={<FileText className="h-4 w-4"/>}
                     to="/mime/application-eigenstickies"
@@ -83,18 +71,14 @@ export function StickiesSidebar({
                 />
             </SidebarSection>
 
-            <StorageUsage
-                className="mt-auto"
-                condensed={condensed}
-            />
+            <StorageUsage className="mt-auto" condensed={condensed}/>
 
-            {targetPath && (
+            {rootPath && (
                 <DriveCreateStickies
-                    path={targetPath}
+                    path={rootPath}
                     open={createStickiesOpen}
                     onOpenChange={setCreateStickiesOpen}
-                    onSave={() => {
-                    }}
+                    onSave={() => {}}
                     onCancel={() => setCreateStickiesOpen(false)}
                     onAfterAction={handleAfterAction}
                 />

@@ -1,24 +1,24 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
 import * as Y from 'yjs';
 import {WebsocketProvider} from 'y-websocket';
-import {BoardData, ColumnItem, TaskItem} from '../types';
+import {BoardData, CardItem, ColumnItem} from '../types';
 import {nanoid} from 'nanoid';
-import {normalizeBoard} from '../normalizeBoard';
-import {getCollabWebSocketUrl} from "@workspace/lib/api";
-import {useAuth} from "@workspace/lib/auth";
-import {useCreateChat} from "@workspace/lib/chat";
-import type {DrivePath} from "@workspace/lib/types/drive";
+import {normalizeBoard} from '../normalize-board';
+import {getCollabWebSocketUrl} from '@workspace/lib/api';
+import {useAuth} from '@workspace/lib/auth';
+import {useCreateChat} from '@workspace/lib/chat';
+import type {DrivePath} from '@workspace/lib/types/drive';
 
 const DEFAULT_COLUMNS = ['To Do', 'In Progress', 'Done'];
-const WELCOME_TASK = {
+const WELCOME_CARD = {
     title: 'Welcome to stickies!',
     description: 'Drag this sticky to another column to get started. You can add more stickies with the "Add a sticky" button.',
 };
 
-export const useYjsKanbanBoard = (ownerId: string, mountId: string, pathId: string, chatFolderId: string | null) => {
+export const useBoard = (ownerId: string, mountId: string, pathId: string, chatFolderId: string | null) => {
     const [board, setBoard] = useState<BoardData>({tasks: {}, columns: {}, columnOrder: []});
     const [selectedColumnId, setSelectedColumnId] = useState<string | null>(null);
-    const [isAddTaskDialogOpen, setIsAddTaskDialogOpen] = useState(false);
+    const [isAddCardDialogOpen, setIsAddCardDialogOpen] = useState(false);
     const [isAddColumnDialogOpen, setIsAddColumnDialogOpen] = useState(false);
 
     const docRef = useRef<Y.Doc | null>(null);
@@ -32,14 +32,14 @@ export const useYjsKanbanBoard = (ownerId: string, mountId: string, pathId: stri
     const chatFolderIdRef = useRef(chatFolderId);
     chatFolderIdRef.current = chatFolderId;
 
-    const createTaskChat = useCallback(async (): Promise<string | undefined> => {
+    const createCardChat = useCallback(async (): Promise<string | undefined> => {
         const folderId = chatFolderIdRef.current;
         if (!folderId) return undefined;
         try {
             const result = await createChatRef.current.mutateAsync({parentId: folderId, fileName: `task-${Date.now()}`});
             return (result as DrivePath)?.id;
         } catch (e) {
-            console.error('Failed to create chat for task:', e);
+            console.error('Failed to create chat for card:', e);
             return undefined;
         }
     }, []);
@@ -48,7 +48,7 @@ export const useYjsKanbanBoard = (ownerId: string, mountId: string, pathId: stri
         const columnsMap = doc.getMap('columns');
         if (columnsMap.size > 0) return;
 
-        const chatId = await createTaskChat();
+        const chatId = await createCardChat();
         const now = Date.now();
 
         doc.transact(() => {
@@ -58,8 +58,8 @@ export const useYjsKanbanBoard = (ownerId: string, mountId: string, pathId: stri
             const taskId = `task-${nanoid(6)}`;
             const taskYMap = new Y.Map();
             taskYMap.set('id', taskId);
-            taskYMap.set('title', WELCOME_TASK.title);
-            taskYMap.set('description', WELCOME_TASK.description);
+            taskYMap.set('title', WELCOME_CARD.title);
+            taskYMap.set('description', WELCOME_CARD.description);
             taskYMap.set('creator', userEmail);
             taskYMap.set('createdAt', now);
             if (chatId) taskYMap.set('chatId', chatId);
@@ -82,15 +82,15 @@ export const useYjsKanbanBoard = (ownerId: string, mountId: string, pathId: stri
 
             columnOrderArray.insert(0, columnIds);
         });
-    }, [createTaskChat]);
+    }, [createCardChat]);
 
     useEffect(() => {
         const doc = new Y.Doc();
         docRef.current = doc;
 
-        const columnsMap = doc.getMap("columns");
-        const tasksMap = doc.getMap("tasks");
-        const columnOrderArray = doc.getArray("columnOrder");
+        const columnsMap = doc.getMap('columns');
+        const tasksMap = doc.getMap('tasks');
+        const columnOrderArray = doc.getArray('columnOrder');
 
         undoManager.current = new Y.UndoManager([columnsMap, tasksMap, columnOrderArray]);
 
@@ -114,6 +114,7 @@ export const useYjsKanbanBoard = (ownerId: string, mountId: string, pathId: stri
                     id: taskId,
                     title: taskMap.get('title') || '',
                     description: taskMap.get('description') || '',
+                    color: taskMap.get('color') || '',
                     creator: taskMap.get('creator') || '',
                     createdAt: taskMap.get('createdAt') || Date.now(),
                     chatId: taskMap.get('chatId') || undefined,
@@ -128,7 +129,7 @@ export const useYjsKanbanBoard = (ownerId: string, mountId: string, pathId: stri
                     title: columnMap.get('title') || '',
                     taskIds,
                     creator: columnMap.get('creator') || '',
-                    createdAt: columnMap.get('createdAt') || Date.now()
+                    createdAt: columnMap.get('createdAt') || Date.now(),
                 };
             }
             setBoard(newState);
@@ -151,14 +152,14 @@ export const useYjsKanbanBoard = (ownerId: string, mountId: string, pathId: stri
         };
     }, [ownerId, mountId, pathId, user?.email, initializeDefaultBoard]);
 
-    const handleAddTaskClick = (columnId: string) => {
+    const handleAddCardClick = (columnId: string) => {
         setSelectedColumnId(columnId);
-        setIsAddTaskDialogOpen(true);
+        setIsAddCardDialogOpen(true);
     };
 
-    const handleAddTask = async (taskData: Omit<TaskItem, 'id' | 'createdAt' | 'chatId'>) => {
+    const handleAddCard = async (cardData: Omit<CardItem, 'id' | 'createdAt' | 'chatId'>) => {
         if (!selectedColumnId || !docRef.current) return;
-        const chatId = await createTaskChat();
+        const chatId = await createCardChat();
         const doc = docRef.current;
         doc.transact(() => {
             const taskId = `task-${nanoid(10)}`;
@@ -167,9 +168,10 @@ export const useYjsKanbanBoard = (ownerId: string, mountId: string, pathId: stri
             const columnsMap = doc.getMap('columns');
             const newTaskMap = new Y.Map();
             newTaskMap.set('id', taskId);
-            newTaskMap.set('title', taskData.title);
-            newTaskMap.set('description', taskData.description || '');
-            newTaskMap.set('creator', taskData.creator);
+            newTaskMap.set('title', cardData.title);
+            newTaskMap.set('description', cardData.description || '');
+            if (cardData.color) newTaskMap.set('color', cardData.color);
+            newTaskMap.set('creator', cardData.creator);
             newTaskMap.set('createdAt', now);
             if (chatId) newTaskMap.set('chatId', chatId);
             tasksMap.set(taskId, newTaskMap);
@@ -180,7 +182,7 @@ export const useYjsKanbanBoard = (ownerId: string, mountId: string, pathId: stri
                 if (taskIdsArray) taskIdsArray.push([taskId]);
             }
         });
-        setIsAddTaskDialogOpen(false);
+        setIsAddCardDialogOpen(false);
     };
 
     const handleAddColumn = (columnData: Omit<ColumnItem, 'id' | 'taskIds' | 'createdAt'>) => {
@@ -206,12 +208,12 @@ export const useYjsKanbanBoard = (ownerId: string, mountId: string, pathId: stri
     return {
         board,
         selectedColumnId,
-        isAddTaskDialogOpen,
-        setIsAddTaskDialogOpen,
+        isAddCardDialogOpen,
+        setIsAddCardDialogOpen,
         isAddColumnDialogOpen,
         setIsAddColumnDialogOpen,
-        handleAddTaskClick,
-        handleAddTask,
+        handleAddCardClick,
+        handleAddCard,
         handleAddColumn,
         yjsDoc: docRef.current,
         undoManager: undoManager.current,

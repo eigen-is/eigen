@@ -1,34 +1,29 @@
-import React, {useState} from 'react';
-import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle} from "@workspace/ui/components/dialog";
-import {Button} from "@workspace/ui/components/button";
-import {Input} from "@workspace/ui/components/input";
-import {Label} from "@workspace/ui/components/label";
+import {useState} from 'react';
+import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle} from '@workspace/ui/components/dialog';
+import {Button} from '@workspace/ui/components/button';
+import {Input} from '@workspace/ui/components/input';
+import {Label} from '@workspace/ui/components/label';
 import {ColumnItem} from './types';
-import {useAuth} from "@workspace/lib/auth";
+import {useAuth} from '@workspace/lib/auth';
 
-interface AddColumnDialogProps {
+type AddColumnDialogProps = {
     isOpen: boolean;
     onClose: () => void;
     onAddColumn: (column: Omit<ColumnItem, 'id' | 'taskIds'>) => void;
 }
 
-export const AddColumnDialog: React.FC<AddColumnDialogProps> = ({
-                                                                    isOpen,
-                                                                    onClose,
-                                                                    onAddColumn
-                                                                }) => {
+export function AddColumnDialog({isOpen, onClose, onAddColumn}: AddColumnDialogProps) {
     const [title, setTitle] = useState('');
     const {user} = useAuth();
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-
         if (!title.trim()) return;
 
         onAddColumn({
             title: title.trim(),
             creator: user?.email || '',
-            createdAt: Date.now()
+            createdAt: Date.now(),
         });
 
         setTitle('');
@@ -50,7 +45,6 @@ export const AddColumnDialog: React.FC<AddColumnDialogProps> = ({
                                 value={title}
                                 onChange={(e) => setTitle(e.target.value)}
                                 placeholder="Enter column title"
-                                className="col-span-3"
                                 autoFocus
                                 required
                             />
@@ -68,4 +62,4 @@ export const AddColumnDialog: React.FC<AddColumnDialogProps> = ({
             </DialogContent>
         </Dialog>
     );
-};
+}

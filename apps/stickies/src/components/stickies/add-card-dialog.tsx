@@ -1,41 +1,37 @@
-import React, {useState} from 'react';
-import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle} from "@workspace/ui/components/dialog";
-import {Button} from "@workspace/ui/components/button";
-import {Input} from "@workspace/ui/components/input";
-import {Textarea} from "@workspace/ui/components/textarea";
-import {Label} from "@workspace/ui/components/label";
-import {TaskItem} from './types';
-import {useAuth} from "@workspace/lib/auth";
+import {useState} from 'react';
+import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle} from '@workspace/ui/components/dialog';
+import {Button} from '@workspace/ui/components/button';
+import {Input} from '@workspace/ui/components/input';
+import {Textarea} from '@workspace/ui/components/textarea';
+import {Label} from '@workspace/ui/components/label';
+import {ColorPicker} from './color-picker';
+import {CardItem} from './types';
+import {useAuth} from '@workspace/lib/auth';
 
-interface AddTaskDialogProps {
+type AddCardDialogProps = {
     isOpen: boolean;
     onClose: () => void;
-    onAddTask: (task: Omit<TaskItem, 'id' | 'createdAt' | 'chatId'>) => void | Promise<void>;
+    onAddCard: (card: Omit<CardItem, 'id' | 'createdAt' | 'chatId'>) => void | Promise<void>;
     columnId: string | null;
 }
 
-export const AddTaskDialog: React.FC<AddTaskDialogProps> = ({
-                                                                isOpen,
-                                                                onClose,
-                                                                onAddTask,
-                                                                columnId
-                                                            }) => {
+export function AddCardDialog({isOpen, onClose, onAddCard, columnId}: AddCardDialogProps) {
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
-    const {user} = useAuth();
-
+    const [color, setColor] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
+    const {user} = useAuth();
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-
         if (!title.trim() || !columnId) return;
         setIsSubmitting(true);
 
         try {
-            await onAddTask({
+            await onAddCard({
                 title: title.trim(),
                 description: description.trim(),
+                color: color || undefined,
                 creator: user?.email || '',
             });
         } finally {
@@ -44,6 +40,7 @@ export const AddTaskDialog: React.FC<AddTaskDialogProps> = ({
 
         setTitle('');
         setDescription('');
+        setColor('');
         onClose();
     };
 
@@ -52,7 +49,7 @@ export const AddTaskDialog: React.FC<AddTaskDialogProps> = ({
             <DialogContent className="sm:max-w-[425px]">
                 <form onSubmit={handleSubmit}>
                     <DialogHeader>
-                        <DialogTitle>Add Task</DialogTitle>
+                        <DialogTitle>Add Sticky</DialogTitle>
                     </DialogHeader>
                     <div className="grid gap-4 py-4">
                         <div className="grid gap-2">
@@ -61,8 +58,7 @@ export const AddTaskDialog: React.FC<AddTaskDialogProps> = ({
                                 id="title"
                                 value={title}
                                 onChange={(e) => setTitle(e.target.value)}
-                                placeholder="Enter task title"
-                                className="col-span-3"
+                                placeholder="Enter title"
                                 autoFocus
                                 required
                             />
@@ -73,10 +69,13 @@ export const AddTaskDialog: React.FC<AddTaskDialogProps> = ({
                                 id="description"
                                 value={description}
                                 onChange={(e) => setDescription(e.target.value)}
-                                placeholder="Enter task description"
-                                className="col-span-3"
+                                placeholder="Enter description"
                                 rows={3}
                             />
+                        </div>
+                        <div className="grid gap-2">
+                            <Label>Color</Label>
+                            <ColorPicker value={color} onChange={setColor}/>
                         </div>
                     </div>
                     <DialogFooter>
@@ -84,11 +83,11 @@ export const AddTaskDialog: React.FC<AddTaskDialogProps> = ({
                             Cancel
                         </Button>
                         <Button type="submit" disabled={!title.trim() || isSubmitting}>
-                            {isSubmitting ? 'Adding...' : 'Add Task'}
+                            {isSubmitting ? 'Adding...' : 'Add Sticky'}
                         </Button>
                     </DialogFooter>
                 </form>
             </DialogContent>
         </Dialog>
     );
-};
+}
