@@ -10,7 +10,7 @@ import type {DriveVisibility} from '@workspace/lib/types/drive';
 import * as schema from './schema';
 import {labels, paths, pathsToLabels} from './schema';
 import {MOUNT_DB_CONFIG} from './db-config';
-import {LocalKeyStorage, S3Storage, type StorageBackend} from '../storage';
+import {LocalKeyStorage, LocalStorage, S3Storage, type StorageBackend} from '../storage';
 import {ApiError, type DatabaseConfig, ManagedDatabase, type SchemaType} from '../core';
 import {deleteThumbnail} from '../shared/thumbnails';
 import {createAsyncSingleton} from '../../utils/singleton';
@@ -19,6 +19,17 @@ type LocalDatabaseGetter = <S extends SchemaType>(
     config: DatabaseConfig<S>,
     relativePath: string
 ) => Promise<ManagedDatabase<S>>;
+
+export function buildStorageKey(id: string, name: string): string {
+    const dotIdx = name.lastIndexOf('.');
+    if (dotIdx > 0) {
+        const ext = name.slice(dotIdx + 1).toLowerCase();
+        if (ext.length > 0 && ext.length <= 12) {
+            return `${id}.${ext}`;
+        }
+    }
+    return id;
+}
 
 export class Mount {
     readonly id: string;
@@ -31,6 +42,7 @@ export class Mount {
     private getLocalDatabase: LocalDatabaseGetter;
     private ownerId: string;
     private documentDbs: Map<string, () => Promise<ManagedDatabase<any>>> = new Map();
+    private pathLocks: Map<string, Promise<void>> = new Map();
 
     constructor(
         ownerId: string,
@@ -47,6 +59,8 @@ export class Mount {
 
         if (config.storageType === 'local-key') {
             this.storage = new LocalKeyStorage(this.baseDir);
+        } else if (config.storageType === 'local') {
+            this.storage = new LocalStorage(this.baseDir);
         } else if (config.storageType === 's3') {
             this.storage = new S3Storage(config.s3Config!);
         } else {
@@ -92,6 +106,7 @@ export class Mount {
         if (!root) {
             await this.db.insert(paths).values({
                 id: randomUUID(),
+                file: '',
                 name: 'Drive',
                 type: 'folder',
                 parentId: null,
@@ -159,8 +174,14 @@ export class Mount {
         };
         const mimeType = mimeTypeMap[type] ?? 'folder';
 
+        let fileValue = '';
+        if (this.isPathBased) {
+            fileValue = name;
+        }
+
         await this.db.insert(paths).values({
             id: folderId,
+            file: fileValue,
             name,
             type,
             parentId,
@@ -170,6 +191,11 @@ export class Mount {
             createdAt: new Date(),
             updatedAt: new Date()
         });
+
+        if (this.isPathBased && this.storage.mkdir) {
+            const fullPath = await this.resolveStoragePath(folderId);
+            await this.storage.mkdir(fullPath);
+        }
 
         return folderId;
     }
@@ -183,13 +209,11 @@ export class Mount {
     ): Promise<string> {
         await this.assertUniqueName(parentId, name);
         const fileId = randomUUID();
-
-        if (data !== undefined) {
-            await this.storage.write(fileId, data);
-        }
+        const fileValue = this.isPathBased ? name : buildStorageKey(fileId, name);
 
         await this.db.insert(paths).values({
             id: fileId,
+            file: fileValue,
             name,
             type: 'file',
             parentId,
@@ -201,11 +225,33 @@ export class Mount {
             updatedAt: new Date()
         });
 
+        if (data !== undefined) {
+            const storageKey = this.isPathBased
+                ? await this.resolveStoragePath(fileId)
+                : fileValue;
+            await this.storage.write(storageKey, data);
+        }
+
         return fileId;
     }
 
     async touchFile(parentId: string, name: string, mimeType: string) {
         return this.createFile(parentId, name, mimeType, 0, undefined);
+    }
+
+    private async withPathLock<T>(pathId: string, fn: () => Promise<T>): Promise<T> {
+        while (this.pathLocks.has(pathId)) {
+            await this.pathLocks.get(pathId);
+        }
+        let resolve!: () => void;
+        const promise = new Promise<void>(r => { resolve = r; });
+        this.pathLocks.set(pathId, promise);
+        try {
+            return await fn();
+        } finally {
+            this.pathLocks.delete(pathId);
+            resolve();
+        }
     }
 
     async updatePath(pathId: string, updates: Partial<Omit<DrivePath, 'id' | 'ownerId' | 'createdAt'>>): Promise<void> {
@@ -216,6 +262,26 @@ export class Mount {
                 const targetName = updates.name ?? current.name;
                 if (targetParent) {
                     await this.assertUniqueName(targetParent, targetName, pathId);
+                }
+
+                const renameFn = this.storage.rename;
+                if (this.isPathBased && renameFn) {
+                    await this.withPathLock(pathId, async () => {
+                        const oldPath = await this.resolveStoragePath(pathId);
+                        if (oldPath) {
+                            if (updates.name !== undefined) {
+                                updates = {...updates, file: targetName} as any;
+                            }
+                            await this.db.update(paths)
+                                .set({...updates, updatedAt: new Date()})
+                                .where(eq(paths.id, pathId));
+                            const newPath = await this.resolveStoragePath(pathId);
+                            if (oldPath !== newPath) {
+                                await renameFn.call(this.storage, oldPath, newPath);
+                            }
+                        }
+                    });
+                    return;
                 }
             }
         }
@@ -228,13 +294,46 @@ export class Mount {
             .where(eq(paths.id, pathId));
     }
 
+    private async getStorageKey(pathId: string): Promise<string> {
+        if (!this.isPathBased) {
+            const row = await this.db.select({file: paths.file}).from(paths)
+                .where(eq(paths.id, pathId))
+                .get();
+            return row?.file || pathId;
+        }
+        return this.resolveStoragePath(pathId);
+    }
+
+    private async resolveStoragePath(pathId: string): Promise<string> {
+        const segments: string[] = [];
+        let currentId: string | null = pathId;
+        while (currentId) {
+            const row = await this.db.select({file: paths.file, parentId: paths.parentId}).from(paths)
+                .where(eq(paths.id, currentId))
+                .get();
+            if (!row || row.parentId === null) break;
+            if (row.file) {
+                segments.unshift(row.file);
+            }
+            currentId = row.parentId;
+        }
+        return segments.join('/');
+    }
+
     async deletePath(pathId: string): Promise<void> {
         const pathEntry = await this.getPath(pathId);
         if (!pathEntry) return;
 
         if (pathEntry.type === 'file') {
             await deleteThumbnail(this.thumbsDir, pathId);
-            await this.storage.delete(pathId);
+            const storageKey = await this.getStorageKey(pathId);
+            await this.storage.delete(storageKey);
+        } else if (this.isPathBased && this.storage.deleteDir) {
+            const storageKey = await this.getStorageKey(pathId);
+            if (storageKey) {
+                await this.storage.deleteDir(storageKey);
+            }
+            await this.deleteDescendants(pathId);
         } else {
             const children = await this.listFolder(pathId);
             for (const child of children) {
@@ -245,8 +344,23 @@ export class Mount {
         await this.db.delete(paths).where(eq(paths.id, pathId));
     }
 
+    private async deleteDescendants(parentId: string): Promise<void> {
+        const children = await this.db.select({id: paths.id, type: paths.type}).from(paths)
+            .where(eq(paths.parentId, parentId))
+            .all();
+        for (const child of children) {
+            if (child.type === 'file') {
+                await deleteThumbnail(this.thumbsDir, child.id);
+            } else {
+                await this.deleteDescendants(child.id);
+            }
+            await this.db.delete(paths).where(eq(paths.id, child.id));
+        }
+    }
+
     async readFile(pathId: string): Promise<ArrayBuffer | null> {
-        const file = this.storage.read(pathId);
+        const storageKey = await this.getStorageKey(pathId);
+        const file = this.storage.read(storageKey);
         if (await file.exists()) {
             return await file.arrayBuffer();
         }
@@ -254,7 +368,8 @@ export class Mount {
     }
 
     async writeFile(pathId: string, data: Buffer | Uint8Array | ArrayBuffer | BunFile): Promise<number> {
-        const written = await this.storage.write(pathId, data);
+        const storageKey = await this.getStorageKey(pathId);
+        const written = await this.storage.write(storageKey, data);
 
         let size: number;
         if (Buffer.isBuffer(data) || data instanceof Uint8Array) {
@@ -269,31 +384,32 @@ export class Mount {
         return written;
     }
 
-    getStorageFile(pathId: string): BunFile {
-        return this.storage.read(pathId) as BunFile;
+    async getStorageFile(pathId: string): Promise<BunFile> {
+        const storageKey = await this.getStorageKey(pathId);
+        return this.storage.read(storageKey) as BunFile;
     }
 
     getTempPath(pathId: string): string {
         return path.join(this.tmpDir, pathId.replace(/\//g, '_'));
     }
 
-    async downloadToTemp(pathId: string): Promise<string> {
-        const tempPath = this.getTempPath(pathId);
-        const file = this.storage.read(pathId);
+    async downloadToTemp(storageKey: string, tempId: string): Promise<string> {
+        const tempPath = this.getTempPath(tempId);
+        const file = this.storage.read(storageKey);
         await Bun.write(tempPath, file);
         return tempPath;
     }
 
-    async uploadFromTemp(pathId: string): Promise<void> {
-        const tempPath = this.getTempPath(pathId);
+    async uploadFromTemp(storageKey: string, tempId: string): Promise<void> {
+        const tempPath = this.getTempPath(tempId);
         const tempFile = Bun.file(tempPath);
         if (await tempFile.exists()) {
-            await this.storage.write(pathId, tempFile);
+            await this.storage.write(storageKey, tempFile);
         }
     }
 
-    async cleanupTemp(pathId: string): Promise<void> {
-        const tempPath = this.getTempPath(pathId);
+    async cleanupTemp(tempId: string): Promise<void> {
+        const tempPath = this.getTempPath(tempId);
         try {
             const file = Bun.file(tempPath);
             if (await file.exists()) {
@@ -304,7 +420,15 @@ export class Mount {
     }
 
     get isRemote(): boolean {
-        return this.config.storageType !== 'local-key';
+        return this.config.storageType !== 'local-key' && this.config.storageType !== 'local';
+    }
+
+    private get isPathBased(): boolean {
+        return this.config.storageType === 'local';
+    }
+
+    private get needsTempCopy(): boolean {
+        return this.isRemote || this.isPathBased;
     }
 
     async openDatabase<S extends SchemaType>(
@@ -313,20 +437,24 @@ export class Mount {
     ): Promise<ManagedDatabase<S>> {
         if (!this.documentDbs.has(pathId)) {
             this.documentDbs.set(pathId, createAsyncSingleton(async () => {
-                const localPath = this.isRemote
+                const localPath = this.needsTempCopy
                     ? this.getTempPath(pathId)
-                    : this.storage.getPath!(pathId);
+                    : this.storage.getPath!(await this.getStorageKey(pathId));
 
                 const db = new ManagedDatabase(
                     config,
                     localPath,
-                    this.isRemote ? {
+                    this.needsTempCopy ? {
                         onOpen: async () => {
-                            if (await this.storage.exists(pathId)) {
-                                await this.downloadToTemp(pathId);
+                            const key = await this.getStorageKey(pathId);
+                            if (await this.storage.exists(key)) {
+                                await this.downloadToTemp(key, pathId);
                             }
                         },
-                        onSync: () => this.uploadFromTemp(pathId),
+                        onSync: async () => {
+                            const key = await this.getStorageKey(pathId);
+                            await this.uploadFromTemp(key, pathId);
+                        },
                         onClose: () => this.cleanupTemp(pathId),
                     } : {}
                 );
@@ -475,11 +603,11 @@ export class Mount {
     }
 }
 
-export function createDefaultMountConfig(id: string = 'default'): MountConfig {
+export function createDefaultMountConfig(id: string = 'default', storageType: MountConfig['storageType'] = 'local'): MountConfig {
     return {
         id,
         name: 'My Drive',
-        storageType: 'local-key',
+        storageType,
         isDefault: true
     };
 }

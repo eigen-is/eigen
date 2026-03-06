@@ -13,46 +13,46 @@ export class LocalKeyStorage implements StorageBackend {
         }
     }
 
-    private getFilePath(fileId: string): string {
-        return path.join(this.dataDir, fileId);
+    private getFilePath(key: string): string {
+        return path.join(this.dataDir, key);
     }
 
-    read(fileId: string): BunFile {
-        return Bun.file(this.getFilePath(fileId));
+    read(key: string): BunFile {
+        return Bun.file(this.getFilePath(key));
     }
 
-    async write(fileId: string, data: Buffer | Uint8Array | ArrayBuffer | BunFile): Promise<number> {
-        const filePath = this.getFilePath(fileId);
+    async write(key: string, data: Buffer | Uint8Array | ArrayBuffer | BunFile): Promise<number> {
+        const filePath = this.getFilePath(key);
         return await Bun.write(filePath, data, {createPath: true});
     }
 
-    async delete(fileId: string): Promise<boolean> {
+    async delete(key: string): Promise<boolean> {
         try {
-            const file = this.read(fileId);
+            const file = this.read(key);
             if (await file.exists()) {
                 await file.delete();
                 return true;
             }
             return false;
         } catch (error) {
-            console.error(`Failed to delete file ${fileId}:`, error);
+            console.error(`Failed to delete file ${key}:`, error);
             return false;
         }
     }
 
-    async exists(fileId: string): Promise<boolean> {
-        return await this.read(fileId).exists();
+    async exists(key: string): Promise<boolean> {
+        return await this.read(key).exists();
     }
 
-    async size(fileId: string): Promise<number | null> {
-        const file = this.read(fileId);
+    async size(key: string): Promise<number | null> {
+        const file = this.read(key);
         if (await file.exists()) {
             return file.size;
         }
         return null;
     }
 
-    getPath(fileId: string): string {
-        return this.getFilePath(fileId);
+    getPath(key: string): string {
+        return this.getFilePath(key);
     }
 }
