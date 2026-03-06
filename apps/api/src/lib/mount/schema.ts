@@ -4,6 +4,7 @@ import type {DriveACL, DrivePathDetails, DriveVisibility} from '@workspace/lib/t
 
 export const paths = sqliteTable('paths', {
     id: text('id').primaryKey(),
+    file: text('file').notNull().default(''),
     name: text('name').notNull(),
     type: text('type').notNull().$type<'folder' | 'file' | 'doc' | 'stickies' | 'slides' | 'sheets' | 'chat'>(),
     parentId: text('parentId'),

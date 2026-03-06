@@ -11,6 +11,7 @@ export const MOUNT_DB_CONFIG: DatabaseConfig<typeof schema> = {
             up: (db) => db.exec(`
                 CREATE TABLE IF NOT EXISTS paths (
                     id TEXT PRIMARY KEY,
+                    file TEXT NOT NULL DEFAULT '',
                     name TEXT NOT NULL,
                     type TEXT NOT NULL,
                     parentId TEXT,
