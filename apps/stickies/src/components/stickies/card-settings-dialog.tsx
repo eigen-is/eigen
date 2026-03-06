@@ -1,42 +1,39 @@
-import {useState} from "react";
-import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle} from "@workspace/ui/components/dialog";
-import {Button} from "@workspace/ui/components/button";
-import {Input} from "@workspace/ui/components/input";
-import {Label} from "@workspace/ui/components/label";
-import {Textarea} from "@workspace/ui/components/textarea";
-import * as Y from "yjs";
+import {useState} from 'react';
+import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle} from '@workspace/ui/components/dialog';
+import {Button} from '@workspace/ui/components/button';
+import {Input} from '@workspace/ui/components/input';
+import {Label} from '@workspace/ui/components/label';
+import {Textarea} from '@workspace/ui/components/textarea';
+import {ColorPicker} from './color-picker';
+import * as Y from 'yjs';
 
-interface TaskSettingsDialogProps {
+type CardSettingsDialogProps = {
     isOpen: boolean;
     onClose: () => void;
-    taskId: string | null;
-    taskTitle: string;
-    taskDescription: string;
+    cardId: string | null;
+    cardTitle: string;
+    cardDescription: string;
+    cardColor: string;
     yjsDoc: Y.Doc | null;
 }
 
-export function TaskSettingsDialog({
-                                       isOpen,
-                                       onClose,
-                                       taskId,
-                                       taskTitle,
-                                       taskDescription,
-                                       yjsDoc,
-                                   }: TaskSettingsDialogProps) {
-    const [title, setTitle] = useState(taskTitle);
-    const [description, setDescription] = useState(taskDescription);
+export function CardSettingsDialog({isOpen, onClose, cardId, cardTitle, cardDescription, cardColor, yjsDoc}: CardSettingsDialogProps) {
+    const [title, setTitle] = useState(cardTitle);
+    const [description, setDescription] = useState(cardDescription);
+    const [color, setColor] = useState(cardColor);
     const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault();
-        if (!title.trim() || !yjsDoc || !taskId) return;
+        if (!title.trim() || !yjsDoc || !cardId) return;
 
         yjsDoc.transact(() => {
-            const tasksMap = yjsDoc.getMap("tasks");
-            const taskMap = tasksMap.get(taskId) as Y.Map<any>;
+            const tasksMap = yjsDoc.getMap('tasks');
+            const taskMap = tasksMap.get(cardId) as Y.Map<any>;
             if (taskMap) {
-                taskMap.set("title", title.trim());
-                taskMap.set("description", description.trim());
+                taskMap.set('title', title.trim());
+                taskMap.set('description', description.trim());
+                taskMap.set('color', color);
             }
         });
 
@@ -44,34 +41,24 @@ export function TaskSettingsDialog({
     };
 
     const handleDelete = () => {
-        if (!yjsDoc || !taskId) return;
+        if (!yjsDoc || !cardId) return;
 
         yjsDoc.transact(() => {
-            const columnsMap = yjsDoc.getMap("columns");
-            const tasksMap = yjsDoc.getMap("tasks");
-
-            let foundColumn: Y.Map<any> | null = null;
-            let taskIndex = -1;
+            const columnsMap = yjsDoc.getMap('columns');
+            const tasksMap = yjsDoc.getMap('tasks');
 
             for (const [, columnMapValue] of columnsMap) {
                 if (!(columnMapValue instanceof Y.Map)) return;
-                const columnMap = columnMapValue;
-                const taskIdsArray = columnMap.get("taskIds") as Y.Array<any>;
+                const taskIdsArray = columnMapValue.get('taskIds') as Y.Array<any>;
                 const taskIds = taskIdsArray.toArray() as string[];
-
-                const index = taskIds.indexOf(taskId);
+                const index = taskIds.indexOf(cardId);
                 if (index !== -1) {
-                    foundColumn = columnMap;
-                    taskIndex = index;
+                    taskIdsArray.delete(index, 1);
+                    break;
                 }
             }
 
-            if (foundColumn && taskIndex !== -1) {
-                const taskIdsArray = (foundColumn as Y.Map<any>).get("taskIds") as Y.Array<any>;
-                taskIdsArray.delete(taskIndex, 1);
-            }
-
-            tasksMap.delete(taskId);
+            tasksMap.delete(cardId);
         });
 
         setIsDeleteDialogOpen(false);
@@ -83,7 +70,7 @@ export function TaskSettingsDialog({
             <Dialog open={isOpen} onOpenChange={(open: boolean) => !open && onClose()}>
                 <DialogContent className="sm:max-w-md">
                     <DialogHeader>
-                        <DialogTitle>Task Settings</DialogTitle>
+                        <DialogTitle>Card Settings</DialogTitle>
                     </DialogHeader>
                     <form onSubmit={handleSubmit}>
                         <div className="grid gap-4 py-4">
@@ -93,7 +80,6 @@ export function TaskSettingsDialog({
                                     id="title"
                                     value={title}
                                     onChange={(e) => setTitle(e.target.value)}
-                                    className="col-span-3"
                                 />
                             </div>
                             <div className="grid gap-2">
@@ -105,6 +91,10 @@ export function TaskSettingsDialog({
                                     className="min-h-[100px]"
                                 />
                             </div>
+                            <div className="grid gap-2">
+                                <Label>Color</Label>
+                                <ColorPicker value={color} onChange={setColor}/>
+                            </div>
                         </div>
                         <DialogFooter className="sm:justify-between">
                             <Button
@@ -112,7 +102,7 @@ export function TaskSettingsDialog({
                                 variant="destructive"
                                 onClick={() => setIsDeleteDialogOpen(true)}
                             >
-                                Delete Task
+                                Delete Card
                             </Button>
                             <div className="flex gap-2">
                                 <Button type="button" variant="outline" onClick={onClose}>
@@ -130,11 +120,11 @@ export function TaskSettingsDialog({
             <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
                 <DialogContent>
                     <DialogHeader>
-                        <DialogTitle>Delete Task</DialogTitle>
+                        <DialogTitle>Delete Card</DialogTitle>
                     </DialogHeader>
                     <div className="py-4">
                         <p className="text-sm text-gray-500">
-                            This will permanently delete the task.
+                            This will permanently delete the card.
                             This action cannot be undone.
                         </p>
                     </div>

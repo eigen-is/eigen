@@ -3,7 +3,7 @@ import {useCollabDocumentInfo} from '@workspace/lib/collab'
 import {EigenLoader} from '@workspace/ui'
 import {useApp} from '@workspace/ui/components/layout/app/layout-context.tsx'
 import {useCallback, useEffect, useMemo, useState} from 'react'
-import {StickiesBoard} from "../components/dnd-board/board";
+import {StickiesBoard} from "../components/stickies/board";
 import {DriveAccessDialog} from '@workspace/ui/components/layout/drive/drive-access-dialog'
 
 export const Route = createFileRoute('/_auth/board/$ownerId/$mountId/$pathId')({

@@ -1,21 +1,21 @@
-import React, {useState} from 'react';
+import {useState} from 'react';
 import {useSortable} from '@dnd-kit/sortable';
 import {CSS} from '@dnd-kit/utilities';
-import {TaskItem} from './types';
-import {TaskInfoDialog} from './task-info-dialog';
+import {CardItem} from './types';
+import {CardDialog} from './card-dialog';
 import {Card, CardContent} from '@workspace/ui/components/card';
 import * as Y from 'yjs';
 
-interface TaskCardProps {
-    task: TaskItem;
+type CardProps = {
+    card: CardItem;
     isMobile: boolean;
     yjsDoc: Y.Doc | null;
     ownerId: string;
     mountId: string;
 }
 
-export const TaskCard: React.FC<TaskCardProps> = ({task, isMobile, yjsDoc, ownerId, mountId}) => {
-    const [isInfoDialogOpen, setIsInfoDialogOpen] = useState(false);
+export function StickyCard({card, isMobile, yjsDoc, ownerId, mountId}: CardProps) {
+    const [isDialogOpen, setIsDialogOpen] = useState(false);
 
     const {
         attributes,
@@ -25,18 +25,14 @@ export const TaskCard: React.FC<TaskCardProps> = ({task, isMobile, yjsDoc, owner
         transition,
         isDragging,
     } = useSortable({
-        id: task.id,
-        data: {
-            type: 'task',
-            task,
-        },
+        id: card.id,
+        data: {type: 'task', task: card},
     });
 
-    const handleCardClick = (e: React.MouseEvent) => {
-        // Only open dialog if not dragging
+    const handleClick = (e: React.MouseEvent) => {
         if (!isDragging) {
             e.stopPropagation();
-            setIsInfoDialogOpen(true);
+            setIsDialogOpen(true);
         }
     };
 
@@ -49,27 +45,28 @@ export const TaskCard: React.FC<TaskCardProps> = ({task, isMobile, yjsDoc, owner
                     transform: CSS.Transform.toString(transform),
                     transition,
                     zIndex: isDragging ? 10 : 0,
+                    backgroundColor: card.color || undefined,
                 }}
                 {...attributes}
                 {...listeners}
-                onClick={handleCardClick}
+                onClick={handleClick}
             >
                 <CardContent className={`p-3 text-sm ${isDragging ? 'bg-blue-50' : ''}`}>
-                    {task.title}
-                    {task.description && (
-                        <p className="text-xs text-muted-foreground mt-1 truncate">{task.description}</p>
+                    {card.title}
+                    {card.description && (
+                        <p className="text-xs text-muted-foreground mt-1 truncate">{card.description}</p>
                     )}
                 </CardContent>
             </Card>
 
-            <TaskInfoDialog
-                isOpen={isInfoDialogOpen}
-                onClose={() => setIsInfoDialogOpen(false)}
-                task={task}
+            <CardDialog
+                isOpen={isDialogOpen}
+                onClose={() => setIsDialogOpen(false)}
+                card={card}
                 yjsDoc={yjsDoc}
                 ownerId={ownerId}
                 mountId={mountId}
             />
         </>
     );
-};
+}

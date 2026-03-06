@@ -18,17 +18,17 @@ import {useAuth} from '@workspace/lib/auth';
 import {useRootFolder} from '@workspace/lib/drive';
 import {DriveCreateStickies} from '@workspace/ui/components/layout/drive/drive-create-stickies';
 import {DriveDeleteItem} from '@workspace/ui/components/layout/drive/drive-delete-item';
-import {DrivePath} from '@workspace/lib/types/drive';
 import {DriveRenameItem} from '@workspace/ui/components/layout/drive/drive-rename-item';
+import type {DrivePath} from '@workspace/lib/types/drive';
 
-interface StickiesToolbarProps {
+type ToolbarProps = {
     canWrite: boolean;
     undoManager: Y.UndoManager | null;
     onAccessDialogOpen: () => void;
     path: DrivePath;
 }
 
-export const StickiesToolbar = ({canWrite, undoManager, onAccessDialogOpen, path}: StickiesToolbarProps) => {
+export function Toolbar({canWrite, undoManager, onAccessDialogOpen, path}: ToolbarProps) {
     const [canUndo, setCanUndo] = useState(false);
     const [canRedo, setCanRedo] = useState(false);
     const [createStickiesOpen, setCreateStickiesOpen] = useState(false);
@@ -48,7 +48,7 @@ export const StickiesToolbar = ({canWrite, undoManager, onAccessDialogOpen, path
             setCanUndo(undoManager.undoStack.length > 0);
             setCanRedo(undoManager.redoStack.length > 0);
         };
-        update(); // Initial state
+        update();
         undoManager.on('stack-item-added', update);
         undoManager.on('stack-item-popped', update);
         undoManager.on('stack-item-updated', update);
@@ -58,7 +58,6 @@ export const StickiesToolbar = ({canWrite, undoManager, onAccessDialogOpen, path
             undoManager.off('stack-item-updated', update);
         };
     }, [undoManager, canWrite]);
-
 
     return (
         <div className="bg-white h-12 flex items-center justify-between px-4 border-b no-print">
@@ -80,8 +79,9 @@ export const StickiesToolbar = ({canWrite, undoManager, onAccessDialogOpen, path
                             <Pencil className="w-4 h-4 mr-2"/> Rename
                         </DropdownMenuItem>
                         <DropdownMenuSeparator/>
-                        <DropdownMenuItem onClick={onAccessDialogOpen}><UserRoundPlus className="w-4 h-4 mr-2"/> Edit
-                            access</DropdownMenuItem>
+                        <DropdownMenuItem onClick={onAccessDialogOpen}>
+                            <UserRoundPlus className="w-4 h-4 mr-2"/> Edit access
+                        </DropdownMenuItem>
                         {canWrite && (
                             <>
                                 <DropdownMenuSeparator/>
@@ -95,14 +95,12 @@ export const StickiesToolbar = ({canWrite, undoManager, onAccessDialogOpen, path
                 {canWrite && (
                     <>
                         <Separator orientation="vertical" className="h-4"/>
-
                         <TooltipButton
                             icon={Undo}
                             tooltipText={`Undo (${formatForDisplay('Mod+Z')})`}
                             onClick={() => undoManager?.undo?.()}
                             disabled={!canUndo}
                         />
-
                         <TooltipButton
                             icon={Redo}
                             tooltipText={`Redo (${formatForDisplay('Mod+Y')})`}
@@ -139,9 +137,7 @@ export const StickiesToolbar = ({canWrite, undoManager, onAccessDialogOpen, path
                     open={deleteDialogOpen}
                     onOpenChange={setDeleteDialogOpen}
                     onAfterAction={(actionType) => {
-                        if (actionType === 'delete') {
-                            navigate({to: `/`});
-                        }
+                        if (actionType === 'delete') navigate({to: `/`});
                     }}
                 />
             )}
@@ -155,4 +151,4 @@ export const StickiesToolbar = ({canWrite, undoManager, onAccessDialogOpen, path
             )}
         </div>
     );
-};
+}

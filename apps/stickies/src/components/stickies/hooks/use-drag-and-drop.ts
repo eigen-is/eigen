@@ -1,62 +1,45 @@
 import {useState} from 'react';
 import * as Y from 'yjs';
 import {DragEndEvent, DragStartEvent} from '@dnd-kit/core';
-import {BoardData, ColumnItem, TaskItem} from '../types';
-import {normalizeBoard} from '../normalizeBoard';
+import {BoardData, CardItem, ColumnItem} from '../types';
+import {normalizeBoard} from '../normalize-board';
 
 type DragState = {
     activeId: string | null;
     activeType: 'task' | 'column' | null;
-    activeItem: TaskItem | ColumnItem | null;
-};
+    activeItem: CardItem | ColumnItem | null;
+}
 
-type UseYjsDragAndDropProps = {
+type UseDragAndDropProps = {
     board: BoardData;
     yjsDoc: Y.Doc | null;
-};
+}
 
-export const useYjsDragAndDrop = ({board, yjsDoc}: UseYjsDragAndDropProps) => {
+export const useDragAndDrop = ({board, yjsDoc}: UseDragAndDropProps) => {
     const [dragState, setDragState] = useState<DragState>({
         activeId: null,
         activeType: null,
         activeItem: null,
     });
 
-    // Find which column contains a task
     const findColumnOfTask = (taskId: string): string | null => {
         for (const columnId in board.columns) {
-            const column = board.columns[columnId];
-            if (column.taskIds.includes(taskId)) {
-                return columnId;
-            }
+            if (board.columns[columnId].taskIds.includes(taskId)) return columnId;
         }
         return null;
     };
 
-    // Reset drag state utility
     const resetDragState = () => setDragState({activeId: null, activeType: null, activeItem: null});
 
-    // Handle drag start event
     const handleDragStart = (event: DragStartEvent) => {
-        const {active} = event;
-        const {id} = active;
-        const activeId = id as string;
+        const activeId = event.active.id as string;
         if (activeId in board.tasks) {
-            setDragState({
-                activeId,
-                activeType: 'task',
-                activeItem: board.tasks[activeId],
-            });
+            setDragState({activeId, activeType: 'task', activeItem: board.tasks[activeId]});
         } else if (activeId in board.columns) {
-            setDragState({
-                activeId,
-                activeType: 'column',
-                activeItem: board.columns[activeId],
-            });
+            setDragState({activeId, activeType: 'column', activeItem: board.columns[activeId]});
         }
     };
 
-    // Only update Yjs state on drag end (no more React state updates for preview)
     const handleDragEnd = (event: DragEndEvent) => {
         const {active, over} = event;
         if (!over || !yjsDoc) {
@@ -67,6 +50,7 @@ export const useYjsDragAndDrop = ({board, yjsDoc}: UseYjsDragAndDropProps) => {
         const overId = over.id as string;
         const columnsMap = yjsDoc.getMap('columns');
         const columnOrderArray = yjsDoc.getArray('columnOrder');
+
         yjsDoc.transact(() => {
             if (dragState.activeType === 'column') {
                 if (activeId !== overId) {
@@ -87,10 +71,8 @@ export const useYjsDragAndDrop = ({board, yjsDoc}: UseYjsDragAndDropProps) => {
                     const sourceColumnValue = columnsMap.get(sourceColumnId);
                     const destColumnValue = columnsMap.get(overId);
                     if (sourceColumnValue && destColumnValue) {
-                        const sourceColumn = sourceColumnValue as Y.Map<any>;
-                        const destColumn = destColumnValue as Y.Map<any>;
-                        const sourceTaskIds = sourceColumn.get('taskIds') as Y.Array<any>;
-                        const destTaskIds = destColumn.get('taskIds') as Y.Array<any>;
+                        const sourceTaskIds = (sourceColumnValue as Y.Map<any>).get('taskIds') as Y.Array<any>;
+                        const destTaskIds = (destColumnValue as Y.Map<any>).get('taskIds') as Y.Array<any>;
                         const sourceArray = sourceTaskIds.toArray() as string[];
                         const taskIndex = sourceArray.indexOf(activeId);
                         if (taskIndex !== -1) {
@@ -104,10 +86,8 @@ export const useYjsDragAndDrop = ({board, yjsDoc}: UseYjsDragAndDropProps) => {
                         const sourceColumnValue = columnsMap.get(sourceColumnId);
                         const overColumnValue = columnsMap.get(overColumnId);
                         if (sourceColumnValue && overColumnValue) {
-                            const sourceColumn = sourceColumnValue as Y.Map<any>;
-                            const overColumn = overColumnValue as Y.Map<any>;
-                            const sourceTaskIds = sourceColumn.get('taskIds') as Y.Array<any>;
-                            const overTaskIds = overColumn.get('taskIds') as Y.Array<any>;
+                            const sourceTaskIds = (sourceColumnValue as Y.Map<any>).get('taskIds') as Y.Array<any>;
+                            const overTaskIds = (overColumnValue as Y.Map<any>).get('taskIds') as Y.Array<any>;
                             const sourceArray = sourceTaskIds.toArray() as string[];
                             const overArray = overTaskIds.toArray() as string[];
                             const sourceIndex = sourceArray.indexOf(activeId);
@@ -125,7 +105,6 @@ export const useYjsDragAndDrop = ({board, yjsDoc}: UseYjsDragAndDropProps) => {
                     }
                 }
             }
-            // Always normalize after any DnD mutation
             normalizeBoard(yjsDoc);
         });
         resetDragState();
