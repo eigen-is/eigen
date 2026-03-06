@@ -1,5 +1,13 @@
 import {memo} from 'react';
+import {ArrowDownToLine, ArrowUpToLine, Copy, Trash2} from 'lucide-react';
 import {SlideObject} from './types';
+import {
+    ContextMenu,
+    ContextMenuContent,
+    ContextMenuItem,
+    ContextMenuSeparator,
+    ContextMenuTrigger,
+} from '@workspace/ui/components/context-menu';
 
 type SlideObjectViewProps = {
     obj: SlideObject;
@@ -9,6 +17,10 @@ type SlideObjectViewProps = {
     onDragStart: (e: React.MouseEvent, objId: string, mode: 'move', x: number, y: number, w: number, h: number) => void;
     onResizeStart: (e: React.MouseEvent, objId: string, mode: string, x: number, y: number, w: number, h: number) => void;
     onDoubleClick: (objId: string) => void;
+    onCopy?: (objId: string) => void;
+    onDelete?: (objId: string) => void;
+    onMoveToFront?: (objId: string) => void;
+    onMoveToBack?: (objId: string) => void;
 }
 
 const HANDLE_POSITIONS = [
@@ -24,6 +36,7 @@ const HANDLE_POSITIONS = [
 
 export const SlideObjectView = memo(function SlideObjectView({
     obj, selected, editable, onSelect, onDragStart, onResizeStart, onDoubleClick,
+    onCopy, onDelete, onMoveToFront, onMoveToBack,
 }: SlideObjectViewProps) {
     const handleMouseDown = (e: React.MouseEvent) => {
         e.stopPropagation();
@@ -33,7 +46,7 @@ export const SlideObjectView = memo(function SlideObjectView({
         }
     };
 
-    return (
+    const objectDiv = (
         <div
             className={`absolute ${selected ? 'ring-2 ring-blue-500' : obj.type === 'text' ? 'border border-dashed border-gray-300' : ''} ${editable ? 'cursor-move' : 'cursor-default'}`}
             style={{
@@ -90,5 +103,31 @@ export const SlideObjectView = memo(function SlideObjectView({
                 />
             ))}
         </div>
+    );
+
+    if (!editable) return objectDiv;
+
+    return (
+        <ContextMenu>
+            <ContextMenuTrigger asChild>
+                {objectDiv}
+            </ContextMenuTrigger>
+            <ContextMenuContent>
+                <ContextMenuItem onClick={() => onCopy?.(obj.id)}>
+                    <Copy className="h-4 w-4 mr-2"/> Copy
+                </ContextMenuItem>
+                <ContextMenuSeparator/>
+                <ContextMenuItem onClick={() => onMoveToFront?.(obj.id)}>
+                    <ArrowUpToLine className="h-4 w-4 mr-2"/> Bring to front
+                </ContextMenuItem>
+                <ContextMenuItem onClick={() => onMoveToBack?.(obj.id)}>
+                    <ArrowDownToLine className="h-4 w-4 mr-2"/> Send to back
+                </ContextMenuItem>
+                <ContextMenuSeparator/>
+                <ContextMenuItem variant="destructive" onClick={() => onDelete?.(obj.id)}>
+                    <Trash2 className="h-4 w-4 mr-2"/> Delete
+                </ContextMenuItem>
+            </ContextMenuContent>
+        </ContextMenu>
     );
 });

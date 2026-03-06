@@ -1,4 +1,4 @@
-import {useCallback, useState} from 'react';
+import {useCallback, useRef, useState} from 'react';
 import {useHotkey} from '@tanstack/react-hotkeys';
 import {useDeck} from './hooks/use-deck';
 import {useSlideDnd} from './hooks/use-slide-dnd';
@@ -36,11 +36,14 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
         deleteObject,
         yjsDoc,
         undoManager,
+        moveObjectToFront,
+        moveObjectToBack,
     } = useDeck(ownerId, path.mountId, path.id);
 
     const {dragState, handleDragStart, handleDragEnd} = useSlideDnd({deck, yjsDoc});
 
     const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null);
+    const clipboardRef = useRef<SlideObject | null>(null);
     const [isAddTextOpen, setIsAddTextOpen] = useState(false);
     const [isAddImageOpen, setIsAddImageOpen] = useState(false);
     const [isObjectSettingsOpen, setIsObjectSettingsOpen] = useState(false);
@@ -68,6 +71,20 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
         if (isPresenting) setIsPresenting(false);
         else setSelectedObjectId(null);
     });
+    useHotkey('Mod+C', (e) => {
+        e.preventDefault();
+        if (selectedObjectId) {
+            const obj = deck.objects[selectedObjectId];
+            if (obj) clipboardRef.current = {...obj};
+        }
+    }, {enabled: !!selectedObjectId});
+    useHotkey('Mod+V', (e) => {
+        e.preventDefault();
+        if (!clipboardRef.current || !activeSlideId || !canWrite) return;
+        const src = clipboardRef.current;
+        const {id: _id, slideId: _sid, ...rest} = src;
+        addObject(activeSlideId, {...rest, x: rest.x + 2, y: rest.y + 2} as Omit<SlideObject, 'id' | 'slideId'>);
+    }, {enabled: canWrite && !!activeSlideId});
 
     const handleAddText = useCallback((obj: typeof DEFAULT_TEXT_OBJECT & {text: string}) => {
         if (!activeSlideId) return;
@@ -96,6 +113,16 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
         setSelectedObjectId(objId);
         setIsObjectSettingsOpen(true);
     }, []);
+
+    const handleCopyObject = useCallback((objId: string) => {
+        const obj = deck.objects[objId];
+        if (obj) clipboardRef.current = {...obj};
+    }, [deck.objects]);
+
+    const handleDeleteObject = useCallback((objId: string) => {
+        deleteObject(objId);
+        if (selectedObjectId === objId) setSelectedObjectId(null);
+    }, [deleteObject, selectedObjectId]);
 
     const handleDropImage = useCallback(async (file: File) => {
         if (!activeSlideId || !mediaFolderId || !file.type.startsWith('image/')) return;
@@ -211,6 +238,8 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
                     onDragStart={handleDragStart}
                     onDragEnd={handleDragEnd}
                     dragActiveId={dragState.activeId}
+                    onDeleteSlide={canWrite ? deleteSlide : undefined}
+                    onDuplicateSlide={canWrite ? duplicateSlide : undefined}
                 />
                 {activeSlide ? (
                     <div className="flex-1 flex flex-col overflow-hidden">
@@ -222,6 +251,10 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
                             onUpdateObject={updateObject}
                             onDoubleClickObject={handleDoubleClickObject}
                             onDropImage={canWrite ? handleDropImage : undefined}
+                            onCopyObject={handleCopyObject}
+                            onDeleteObject={canWrite ? handleDeleteObject : undefined}
+                            onMoveToFront={canWrite ? moveObjectToFront : undefined}
+                            onMoveToBack={canWrite ? moveObjectToBack : undefined}
                             canWrite={canWrite}
                         />
                         <div className="h-8 bg-muted border-t flex items-center justify-between px-4 text-xs text-muted-foreground">

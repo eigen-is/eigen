@@ -2,6 +2,7 @@ import {useCallback, useRef} from 'react';
 import {SlideItem, SlideObject, SLIDE_ASPECT_RATIO} from './types';
 import {SlideObjectView} from './slide-object';
 import {useObjectDrag} from './hooks/use-object-drag';
+import {useSnapTargets} from './hooks/use-snap-lines';
 
 type SlideCanvasProps = {
     slide: SlideItem;
@@ -11,15 +12,22 @@ type SlideCanvasProps = {
     onUpdateObject: (objId: string, updates: Partial<SlideObject>) => void;
     onDoubleClickObject: (objId: string) => void;
     onDropImage?: (file: File) => void;
+    onCopyObject?: (objId: string) => void;
+    onDeleteObject?: (objId: string) => void;
+    onMoveToFront?: (objId: string) => void;
+    onMoveToBack?: (objId: string) => void;
     canWrite: boolean;
 }
 
-export function SlideCanvas({slide, objects, selectedObjectId, onSelectObject, onUpdateObject, onDoubleClickObject, onDropImage, canWrite}: SlideCanvasProps) {
+export function SlideCanvas({slide, objects, selectedObjectId, onSelectObject, onUpdateObject, onDoubleClickObject, onDropImage, onCopyObject, onDeleteObject, onMoveToFront, onMoveToBack, canWrite}: SlideCanvasProps) {
     const canvasRef = useRef<HTMLDivElement>(null);
+    const {vSnaps, hSnaps} = useSnapTargets(objects, selectedObjectId);
 
-    const {startDrag} = useObjectDrag({
+    const {startDrag, activeSnapLines} = useObjectDrag({
         onUpdate: onUpdateObject,
         canvasRef,
+        vSnaps,
+        hSnaps,
     });
 
     const handleDragStart = useCallback((e: React.MouseEvent, objId: string, mode: 'move', x: number, y: number, w: number, h: number) => {
@@ -75,6 +83,20 @@ export function SlideCanvas({slide, objects, selectedObjectId, onSelectObject, o
                         onDragStart={handleDragStart}
                         onResizeStart={handleResizeStart}
                         onDoubleClick={onDoubleClickObject}
+                        onCopy={onCopyObject}
+                        onDelete={onDeleteObject}
+                        onMoveToFront={onMoveToFront}
+                        onMoveToBack={onMoveToBack}
+                    />
+                ))}
+                {activeSnapLines.map((line, i) => (
+                    <div
+                        key={i}
+                        className="absolute pointer-events-none z-50"
+                        style={line.orientation === 'vertical'
+                            ? {left: `${line.position}%`, top: 0, bottom: 0, width: '1px', backgroundColor: '#3b82f6'}
+                            : {top: `${line.position}%`, left: 0, right: 0, height: '1px', backgroundColor: '#3b82f6'}
+                        }
                     />
                 ))}
             </div>
