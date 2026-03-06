@@ -14,6 +14,12 @@ export const COLLAB_DB_CONFIG: DatabaseConfig<typeof schema> = {
                     updateData BLOB NOT NULL,
                     createdAt INTEGER DEFAULT (unixepoch())
                 );
+                CREATE TABLE IF NOT EXISTS doc_snapshots (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    stateData BLOB NOT NULL,
+                    lastUpdateId INTEGER NOT NULL,
+                    createdAt INTEGER DEFAULT (unixepoch())
+                );
             `)
         }
     ]
