@@ -1,11 +1,11 @@
-import {useState} from "react";
-import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle} from "@workspace/ui/components/dialog";
-import {Button} from "@workspace/ui/components/button";
-import {Input} from "@workspace/ui/components/input";
-import {Label} from "@workspace/ui/components/label";
-import * as Y from "yjs";
+import {useState} from 'react';
+import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle} from '@workspace/ui/components/dialog';
+import {Button} from '@workspace/ui/components/button';
+import {Input} from '@workspace/ui/components/input';
+import {Label} from '@workspace/ui/components/label';
+import * as Y from 'yjs';
 
-interface ColumnSettingsDialogProps {
+type ColumnSettingsDialogProps = {
     isOpen: boolean;
     onClose: () => void;
     columnId: string | null;
@@ -13,13 +13,7 @@ interface ColumnSettingsDialogProps {
     yjsDoc: Y.Doc | null;
 }
 
-export function ColumnSettingsDialog({
-                                         isOpen,
-                                         onClose,
-                                         columnId,
-                                         columnTitle,
-                                         yjsDoc,
-                                     }: ColumnSettingsDialogProps) {
+export function ColumnSettingsDialog({isOpen, onClose, columnId, columnTitle, yjsDoc}: ColumnSettingsDialogProps) {
     const [title, setTitle] = useState(columnTitle);
     const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 
@@ -28,11 +22,9 @@ export function ColumnSettingsDialog({
         if (!title.trim() || !yjsDoc || !columnId) return;
 
         yjsDoc.transact(() => {
-            const columnsMap = yjsDoc.getMap("columns");
+            const columnsMap = yjsDoc.getMap('columns');
             const columnMap = columnsMap.get(columnId) as Y.Map<any>;
-            if (columnMap) {
-                columnMap.set("title", title.trim());
-            }
+            if (columnMap) columnMap.set('title', title.trim());
         });
 
         onClose();
@@ -42,26 +34,23 @@ export function ColumnSettingsDialog({
         if (!yjsDoc || !columnId) return;
 
         yjsDoc.transact(() => {
-            const columnsMap = yjsDoc.getMap("columns");
-            const tasksMap = yjsDoc.getMap("tasks");
-            const columnOrderArray = yjsDoc.getArray("columnOrder");
+            const columnsMap = yjsDoc.getMap('columns');
+            const tasksMap = yjsDoc.getMap('tasks');
+            const columnOrderArray = yjsDoc.getArray('columnOrder');
 
             const columnMap = columnsMap.get(columnId) as Y.Map<any>;
             if (!columnMap) return;
 
-            const taskIdsArray = columnMap.get("taskIds") as Y.Array<any>;
-            if (!taskIdsArray) return;
-
-            const taskIds = taskIdsArray.toArray() as string[];
-            for (const taskId of taskIds) {
-                tasksMap.delete(taskId);
+            const taskIdsArray = columnMap.get('taskIds') as Y.Array<any>;
+            if (taskIdsArray) {
+                for (const taskId of taskIdsArray.toArray() as string[]) {
+                    tasksMap.delete(taskId);
+                }
             }
 
             const columnOrder = columnOrderArray.toArray() as string[];
             const columnIndex = columnOrder.indexOf(columnId);
-            if (columnIndex !== -1) {
-                columnOrderArray.delete(columnIndex, 1);
-            }
+            if (columnIndex !== -1) columnOrderArray.delete(columnIndex, 1);
 
             columnsMap.delete(columnId);
         });
@@ -84,7 +73,6 @@ export function ColumnSettingsDialog({
                                 id="title"
                                 value={title}
                                 onChange={(e) => setTitle(e.target.value)}
-                                className="col-span-3"
                             />
                         </div>
                     </div>
@@ -115,7 +103,7 @@ export function ColumnSettingsDialog({
                     </DialogHeader>
                     <div className="py-4">
                         <p className="text-sm text-gray-500">
-                            This will permanently delete the column and all tasks within it.
+                            This will permanently delete the column and all cards within it.
                             This action cannot be undone.
                         </p>
                     </div>

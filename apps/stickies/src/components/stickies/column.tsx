@@ -1,17 +1,16 @@
-import React from 'react';
 import {SortableContext, useSortable, verticalListSortingStrategy} from '@dnd-kit/sortable';
 import {CSS} from '@dnd-kit/utilities';
-import {TaskCard} from './task-card';
-import {ColumnItem, TaskItem} from './types';
+import {StickyCard} from './card';
+import {CardItem, ColumnItem} from './types';
 import {Pencil, Plus} from 'lucide-react';
-import * as Y from 'yjs';
 import {TooltipButton} from '@workspace/ui/components/layout/toolbar/tooltip-button.tsx';
+import * as Y from 'yjs';
 
-interface ColumnProps {
+type ColumnProps = {
     column: ColumnItem;
-    tasks: TaskItem[];
+    cards: CardItem[];
     isDropAnimating?: boolean;
-    onAddTask: (columnId: string) => void;
+    onAddCard: (columnId: string) => void;
     onEditColumn: (columnId: string) => void;
     isMobile: boolean;
     yjsDoc: Y.Doc | null;
@@ -19,17 +18,7 @@ interface ColumnProps {
     mountId: string;
 }
 
-export const Column: React.FC<ColumnProps> = ({
-                                                  column,
-                                                  tasks,
-                                                  isDropAnimating,
-                                                  onAddTask,
-                                                  onEditColumn,
-                                                  isMobile,
-                                                  yjsDoc,
-                                                  ownerId,
-                                                  mountId,
-                                              }) => {
+export function Column({column, cards, isDropAnimating, onAddCard, onEditColumn, isMobile, yjsDoc, ownerId, mountId}: ColumnProps) {
     const {
         attributes,
         listeners,
@@ -39,14 +28,10 @@ export const Column: React.FC<ColumnProps> = ({
         isDragging,
     } = useSortable({
         id: column.id,
-        data: {
-            type: 'column',
-            column,
-        },
+        data: {type: 'column', column},
     });
 
-    const taskIds = tasks.map(task => task.id);
-
+    const cardIds = cards.map(c => c.id);
     const columnWidth = isMobile ? 'w-[92vw] min-w-[92vw]' : 'w-[280px] min-w-[280px]';
     const columnMargin = isMobile ? 'mx-[4vw]' : 'mx-1.5';
 
@@ -58,7 +43,7 @@ export const Column: React.FC<ColumnProps> = ({
                 transform: CSS.Transform.toString(transform),
                 transition,
                 scrollSnapAlign: 'center',
-                scrollSnapStop: 'normal'
+                scrollSnapStop: 'normal',
             }}
         >
             <div
@@ -71,7 +56,7 @@ export const Column: React.FC<ColumnProps> = ({
                     <TooltipButton
                         icon={Plus}
                         tooltipText="Add a sticky"
-                        onClick={() => onAddTask(column.id)}
+                        onClick={() => onAddCard(column.id)}
                         className="h-6 w-6 opacity-50 hover:opacity-100 mr-1"
                     />
                     <TooltipButton
@@ -88,19 +73,18 @@ export const Column: React.FC<ColumnProps> = ({
                     isDropAnimating ? 'bg-blue-50/10' : 'bg-white'
                 }`}
             >
-                {tasks.length === 0 ? (
+                {cards.length === 0 ? (
                     <div
                         className="flex-grow min-h-[150px] flex items-center justify-center"
                         data-column-id={column.id}
-                    >
-                    </div>
+                    />
                 ) : (
                     <div className="flex-grow">
-                        <SortableContext items={taskIds} strategy={verticalListSortingStrategy}>
-                            {tasks.map((task) => (
-                                <TaskCard
-                                    key={task.id}
-                                    task={task}
+                        <SortableContext items={cardIds} strategy={verticalListSortingStrategy}>
+                            {cards.map((card) => (
+                                <StickyCard
+                                    key={card.id}
+                                    card={card}
                                     isMobile={isMobile}
                                     yjsDoc={yjsDoc}
                                     ownerId={ownerId}
@@ -112,7 +96,7 @@ export const Column: React.FC<ColumnProps> = ({
                 )}
 
                 <button
-                    onClick={() => onAddTask(column.id)}
+                    onClick={() => onAddCard(column.id)}
                     className="mt-2 flex items-center gap-1 text-sm text-gray-600 hover:bg-gray-100 px-2 py-1.5 rounded-sm w-full"
                 >
                     <Plus size={16}/>
@@ -121,4 +105,4 @@ export const Column: React.FC<ColumnProps> = ({
             </div>
         </div>
     );
-};
+}
