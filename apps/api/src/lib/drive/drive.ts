@@ -500,7 +500,7 @@ export default class Drive {
         if (!this.documents.has(key)) {
             this.documents.set(key, createAsyncSingleton(async () => {
                 const path = await mount.getPath(pathId);
-                if (!path || (path.type !== 'doc' && path.type !== 'stickies')) {
+                if (!path || !isCollabType(path.type)) {
                     throw new Error('Document not found');
                 }
                 const document = new CollabDocument(this, path);
