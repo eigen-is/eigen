@@ -17,6 +17,7 @@ import {
     Heading2,
     Heading3,
     Highlighter,
+    History,
     ImagePlus,
     Italic,
     Link,
@@ -68,6 +69,10 @@ import {useNavigate} from '@tanstack/react-router';
 import {useIsMobile} from "@workspace/lib/media";
 import {DriveRenameItem} from "@workspace/ui/components/layout/drive/drive-rename-item";
 import {Label} from "@workspace/ui/components/label";
+import {useCollabRevisions, fetchRevisionState} from "@workspace/lib/collab";
+import {formatDateTime} from "@workspace/lib/date";
+import {yDocToProsemirrorJSON} from "y-prosemirror";
+import * as Y from "yjs";
 
 type EditorToolbarProps = {
     editor: Editor;
@@ -103,13 +108,6 @@ const HIGHLIGHT_COLORS = [
     {label: 'Orange', value: '#fed7aa'},
 ];
 
-const FONT_FAMILIES = [
-    {label: 'Default', value: ''},
-    {label: 'Serif', value: 'Georgia, serif'},
-    {label: 'Mono', value: '"SF Mono", "Fira Code", monospace'},
-    {label: 'Sans', value: 'Inter, system-ui, sans-serif'},
-];
-
 const ToolbarSeparator = () => <Separator orientation="vertical" className="h-6 mx-1" />;
 
 export const EditorToolbar = ({editor, path, canWrite, onAccessDialogOpen, onDeleteDialogOpen, onAddComment, onImageUpload}: EditorToolbarProps) => {
@@ -117,11 +115,24 @@ export const EditorToolbar = ({editor, path, canWrite, onAccessDialogOpen, onDel
     const [linkDialogOpen, setLinkDialogOpen] = useState(false);
     const [createDocOpen, setCreateDocOpen] = useState(false);
     const [renameDialogOpen, setRenameDialogOpen] = useState(false);
+    const [revisionsOpen, setRevisionsOpen] = useState(false);
     const imageInputRef = useRef<HTMLInputElement>(null);
     const {user} = useAuth();
     const {data: rootFolder} = useRootFolder(user?.id || '');
     const navigate = useNavigate();
     const isMobile = useIsMobile();
+    const {data: revisions} = useCollabRevisions(path.ownerId, path.mountId, path.id, revisionsOpen);
+
+    const handleRestore = async (revisionId: number) => {
+        const state = await fetchRevisionState(path.ownerId, path.mountId, path.id, revisionId);
+        if (!state) return;
+        const tempDoc = new Y.Doc();
+        Y.applyUpdate(tempDoc, state);
+        const json = yDocToProsemirrorJSON(tempDoc, 'default');
+        editor.commands.setContent(json);
+        tempDoc.destroy();
+        setRevisionsOpen(false);
+    };
 
     const handleLinkOperation = () => {
         if (editor.isActive('link')) {
@@ -335,34 +346,6 @@ export const EditorToolbar = ({editor, path, canWrite, onAccessDialogOpen, onDel
             {canWrite && !isMobile && (<div className="flex">
 
                     <ToolbarSeparator />
-
-                    {/* Font family */}
-                    <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="sm" className="h-8 px-2 text-xs gap-1 min-w-[70px]"
-                                    onMouseDown={(e) => e.preventDefault()}>
-                                <Type className="h-3.5 w-3.5" />
-                                <span className="max-w-[60px] truncate">
-                                    {FONT_FAMILIES.find(f => f.value && editor.isActive('textStyle', {fontFamily: f.value}))?.label || 'Default'}
-                                </span>
-                                <ChevronDown className="h-3 w-3" />
-                            </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent>
-                            {FONT_FAMILIES.map((font) => (
-                                <DropdownMenuItem
-                                    key={font.label}
-                                    onClick={() => font.value
-                                        ? editor.chain().focus().setFontFamily(font.value).run()
-                                        : editor.chain().focus().unsetFontFamily().run()
-                                    }
-                                    style={{fontFamily: font.value || undefined}}
-                                >
-                                    {font.label}
-                                </DropdownMenuItem>
-                            ))}
-                        </DropdownMenuContent>
-                    </DropdownMenu>
 
                     {/* Heading / paragraph selector */}
                     <DropdownMenu>
@@ -708,6 +691,28 @@ export const EditorToolbar = ({editor, path, canWrite, onAccessDialogOpen, onDel
                 {onAddComment && (
                     <TooltipButton icon={MessageSquare} tooltipText="Add comment" onClick={onAddComment}/>
                 )}
+                <DropdownMenu open={revisionsOpen} onOpenChange={setRevisionsOpen}>
+                    <DropdownMenuTrigger asChild>
+                        <Button variant="ghost" size="icon" className="h-8 w-8">
+                            <Tooltip>
+                                <TooltipTrigger asChild>
+                                    <History className="h-4 w-4"/>
+                                </TooltipTrigger>
+                                <TooltipContent>Version history</TooltipContent>
+                            </Tooltip>
+                        </Button>
+                    </DropdownMenuTrigger>
+                    <DropdownMenuContent align="end" className="max-h-64 overflow-y-auto min-w-[240px]">
+                        {revisions && revisions.length > 0 ? revisions.map((rev) => (
+                            <DropdownMenuItem key={rev.id} className="flex items-center justify-between gap-4" onClick={() => handleRestore(rev.id)}>
+                                <span>{rev.createdAt ? formatDateTime(new Date(rev.createdAt)) : `Revision #${rev.id}`}</span>
+                                <span className="text-xs text-muted-foreground">Restore</span>
+                            </DropdownMenuItem>
+                        )) : (
+                            <DropdownMenuItem disabled>No revisions yet</DropdownMenuItem>
+                        )}
+                    </DropdownMenuContent>
+                </DropdownMenu>
                 {canWrite ? (
                     <TooltipButton icon={UserRoundPlus} tooltipText="Share" onClick={onAccessDialogOpen}/>
                 ) : (

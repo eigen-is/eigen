@@ -1,6 +1,7 @@
 import {Button} from "../../button.tsx";
 import {Tooltip, TooltipContent, TooltipTrigger,} from "../../tooltip.tsx";
 import {LucideIcon} from "lucide-react";
+import {cn} from "../../../lib/utils";
 
 export type TooltipButtonProps = {
     icon: LucideIcon;
@@ -35,7 +36,7 @@ export const TooltipButton = ({
                 <Button
                     variant={resolvedVariant}
                     size={size}
-                    className={className}
+                    className={cn('cursor-pointer', className)}
                     disabled={disabled}
                     {...(preventFocusLoss
                         ? {
