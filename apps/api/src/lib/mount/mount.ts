@@ -20,6 +20,12 @@ type LocalDatabaseGetter = <S extends SchemaType>(
     relativePath: string
 ) => Promise<ManagedDatabase<S>>;
 
+function validateName(name: string): void {
+    if (!name || name === '.' || name === '..' || name.includes('/') || name.includes('\\') || name.includes('\0')) {
+        throw new ApiError(400, `Invalid file or folder name: "${name}"`);
+    }
+}
+
 export function buildStorageKey(id: string, name: string): string {
     const dotIdx = name.lastIndexOf('.');
     if (dotIdx > 0) {
@@ -162,6 +168,7 @@ export class Mount {
     }
 
     async createFolder(parentId: string, name: string, type: 'folder' | 'doc' | 'stickies' | 'slides' | 'sheets' | 'chat' = 'folder'): Promise<string> {
+        validateName(name);
         await this.assertUniqueName(parentId, name);
         const folderId = randomUUID();
         const mimeTypeMap: Record<string, string> = {
@@ -207,6 +214,7 @@ export class Mount {
         size: number,
         data: Buffer | Uint8Array | ArrayBuffer | BunFile | undefined
     ): Promise<string> {
+        validateName(name);
         await this.assertUniqueName(parentId, name);
         const fileId = randomUUID();
         const fileValue = this.isPathBased ? name : buildStorageKey(fileId, name);
@@ -255,6 +263,9 @@ export class Mount {
     }
 
     async updatePath(pathId: string, updates: Partial<Omit<DrivePath, 'id' | 'ownerId' | 'createdAt'>>): Promise<void> {
+        if (updates.name !== undefined) {
+            validateName(updates.name);
+        }
         if (updates.name !== undefined || updates.parentId !== undefined) {
             const current = await this.getPath(pathId);
             if (current) {
