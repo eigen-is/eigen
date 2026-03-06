@@ -79,39 +79,52 @@ See `docs/LAYOUT.md` for detailed architecture documentation.
 | `useListSelection`          | `hooks/use-list-selection.ts`           | Multi-select state (Shift/Ctrl+click).                       |
 | `useListDrag`               | `hooks/use-list-drag.ts`                | Selection-aware drag source.                                 |
 | `useListDropTarget`         | `hooks/use-list-drop-target.ts`         | Generic drop target.                                         |
+| `useMobile`                 | `hooks/use-mobile.ts`                   | Mobile detection hook.                                       |
 
 ## Common UI
 
 | Component            | File                                | Description                                                                              |
 |----------------------|-------------------------------------|------------------------------------------------------------------------------------------|
 | `SearchBar`          | `search-bar/search-bar.tsx`         | Search input with icon, configurable max-width and placeholder                           |
-| `TooltipButton`      | `tooltip-button/tooltip-button.tsx` | Icon button wrapped in tooltip                                                           |
+| `TooltipButton`      | `toolbar/tooltip-button.tsx`        | Icon button wrapped in tooltip                                                           |
+| `TooltipToggle`      | `toolbar/tooltip-toggle.tsx`        | Toggle button wrapped in tooltip                                                           |
 | `DeleteDialog`       | `delete/delete-dialog.tsx`          | Confirmation dialog for destructive actions with cancel/delete buttons                   |
 | `ShadowContent`      | `shadow-content.tsx`                | Renders HTML/text inside a closed Shadow DOM for style isolation (used for email bodies) |
-| `DocumentModeButton` | `toolbar/DocumentModeButton.tsx`    | Read-only/editing mode indicator using `TooltipButton` with Eye/Pencil icon              |
-
-## Media
-
-| Component | File | Description |
-|-----------|------|-------------|
-| `ResizableMedia` | `media/resizable-media.tsx` | Image with drag-to-resize handles, alignment controls, and style picker |
-| `MediaStylePicker` | `media/media-style-picker.tsx` | Popover picker for border-radius, shadow, and border options |
+| `DocumentModeButton` | `toolbar/document-mode-button.tsx`  | Read-only/editing mode indicator using `TooltipButton` with Eye/Pencil icon              |
 
 ## Branding & Auth
 
 | Component                 | File                 | Description                                                  |
 |---------------------------|----------------------|--------------------------------------------------------------|
-| `AppLogo`                 | `app-logo.tsx`       | `eigen\|appname>` logo with expandable app switcher on click |
-| `EigenLoader`             | `eigen-loader.tsx`   | Animated chevron loading indicator with delayed start        |
-| `LoadingScreen`           | `loading-screen.tsx` | Full-screen centered `EigenLoader`                           |
-| `LoginPage`               | `loginpage.tsx`      | Login form with email/password, uses `useAuth`               |
-| `createLoginRouteOptions` | `login-route.tsx`    | Factory for TanStack Router login route config with redirect |
+| `AppLogo`                 | `app/app-logo.tsx`       | `eigen\|appname>` logo with expandable app switcher on click |
+| `EigenLoader`             | `braket/eigen-loader.tsx`   | Animated chevron loading indicator with delayed start        |
+| `LoadingScreen`           | `pages/loading-screen.tsx` | Full-screen centered `EigenLoader`                           |
+| `LoginPage`               | `pages/loginpage.tsx`      | Login form with email/password, uses `useAuth`               |
+| `createLoginRouteOptions` | `pages/login-route.tsx`    | Factory for TanStack Router login route config with redirect |
 
 ## Storage
 
 | Component | File | Description |
 |-----------|------|-------------|
 | `StorageUsage` | `home/usage.tsx` | Storage progress bar with expandable per-domain breakdown |
+
+## Chat
+
+| Component               | File                                 | Description                                                                              |
+|-------------------------|--------------------------------------|------------------------------------------------------------------------------------------|
+| `ChatMessageInput`      | `chat/chat-message-input.tsx`        | Chat message input component with slash commands and player suggestions                   |
+| `ChatMessageList`       | `chat/chat-message-list.tsx`         | List of chat messages with auto-scroll and keyboard navigation                            |
+| `ChatPlayerSuggest`     | `chat/chat-player-suggest.tsx`       | Autosuggest for player mentions in chat                                                  |
+| `ChatSlashSuggest`      | `chat/chat-slash-suggest.tsx`        | Autosuggest for slash commands in chat                                                   |
+
+## Toolbar
+
+| Component               | File                                 | Description                                                                              |
+|-------------------------|--------------------------------------|------------------------------------------------------------------------------------------|
+| `Toolbar`               | `toolbar/toolbar.tsx`                | Base toolbar component                                                                   |
+| `TooltipButton`         | `toolbar/tooltip-button.tsx`         | Icon button wrapped in tooltip                                                           |
+| `TooltipToggle`         | `toolbar/tooltip-toggle.tsx`         | Toggle button wrapped in tooltip                                                           |
+| `DocumentModeButton`    | `toolbar/document-mode-button.tsx`   | Read-only/editing mode indicator using `TooltipButton` with Eye/Pencil icon              |
 
 ## Drive (domain-specific shared)
 
@@ -126,10 +139,13 @@ The `drive/` subdirectory contains shared Drive components used by the Drive, Do
 | `DriveAccessDialog`     | `drive/drive-access-dialog.tsx`      | Share dialog for managing file/folder access                                             |
 | `DriveAccessList`       | `drive/drive-access-list.tsx`        | Read-only list of users with access to a file                                            |
 | `DriveAccessListEdit`   | `drive/drive-access-list-edit.tsx`   | Editable access list with role dropdowns, contact autosuggest, and public access toggle  |
+| `DriveCreateChat`      | `drive/drive-create-chat.tsx`        | Create new chat dialog                                                               |
 | `DriveCreateDoc`        | `drive/drive-create-doc.tsx`         | Create new document dialog                                                               |
 | `DriveCreateFolder`     | `drive/drive-create-folder.tsx`      | Create folder dialog                                                                     |
 | `DriveCreateFolderItem` | `drive/drive-create-folder-item.tsx` | Inline folder creation input                                                             |
-| `DriveCreateStickies`   | `drive/drive-create-stickies.tsx`    | Create new stickies board dialog                                                         |
+| `DriveCreateSheets`   | `drive/drive-create-sheets.tsx`    | Create new sheets dialog                                                         |
+| `DriveCreateSlides`   | `drive/drive-create-slides.tsx`    | Create new slides dialog                                                         |
+| `DriveCreateStickies` | `drive/drive-create-stickies.tsx`    | Create new stickies board dialog                                                         |
 | `DriveDeleteItem`       | `drive/drive-delete-item.tsx`        | Delete confirmation for drive items with post-action callback                            |
 | `DriveRenameItem`       | `drive/drive-rename-item.tsx`        | Rename dialog for drive items                                                            |
 | `DriveShareSummary`     | `drive/drive-share-summary.tsx`      | Sharing status badge/summary                                                             |
