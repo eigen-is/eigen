@@ -30,8 +30,8 @@ export class ManagedDatabase<S extends SchemaType> {
     private callbacks: SyncCallbacks;
     private rawDb: Database | null = null;
     private drizzleDb: BunSQLiteDatabase<S> | null = null;
-    private isDirty = false;
     private syncTimer: Timer | null = null;
+    private lastSyncedChanges = 0;
 
     constructor(
         config: DatabaseConfig<S>,
@@ -69,6 +69,7 @@ export class ManagedDatabase<S extends SchemaType> {
         await this.runMigrations();
 
         this.drizzleDb = drizzle(this.rawDb, {schema: this.config.schema}) as BunSQLiteDatabase<S>;
+        this.lastSyncedChanges = 0;
 
         if (this.callbacks.onSync && autoSyncMs > 0) {
             this.syncTimer = setInterval(() => this.sync(), autoSyncMs);
@@ -92,12 +93,17 @@ export class ManagedDatabase<S extends SchemaType> {
             migration.up(this.rawDb);
             this.rawDb.run('UPDATE __schema_version SET version = ? WHERE id = 1', [migration.version]);
             currentVersion = migration.version;
-            this.isDirty = true;
         }
     }
 
-    markDirty(): void {
-        this.isDirty = true;
+    private getTotalChanges(): number {
+        if (!this.rawDb) return 0;
+        const row = this.rawDb.query('SELECT total_changes() as tc').get() as { tc: number } | null;
+        return row?.tc ?? 0;
+    }
+
+    private get isDirty(): boolean {
+        return this.getTotalChanges() !== this.lastSyncedChanges;
     }
 
     async sync(): Promise<void> {
@@ -105,7 +111,7 @@ export class ManagedDatabase<S extends SchemaType> {
 
         this.rawDb?.run('PRAGMA wal_checkpoint(TRUNCATE);');
         await this.callbacks.onSync();
-        this.isDirty = false;
+        this.lastSyncedChanges = this.getTotalChanges();
         console.log(`[${this.config.name}] Synced`);
     }
 
