@@ -23,7 +23,7 @@ export function SlideCanvas({slide, objects, selectedObjectId, onSelectObject, o
     const canvasRef = useRef<HTMLDivElement>(null);
     const {vSnaps, hSnaps} = useSnapTargets(objects, selectedObjectId);
 
-    const {startDrag, activeSnapLines} = useObjectDrag({
+    const {startDrag, activeSnapLines, dragPreview} = useObjectDrag({
         onUpdate: onUpdateObject,
         canvasRef,
         vSnaps,
@@ -73,10 +73,14 @@ export function SlideCanvas({slide, objects, selectedObjectId, onSelectObject, o
                 onDrop={handleDrop}
                 onDragOver={handleDragOver}
             >
-                {objects.map((obj) => (
+                {objects.map((obj) => {
+                    const displayObj = (dragPreview && dragPreview.objId === obj.id)
+                        ? {...obj, x: dragPreview.x, y: dragPreview.y, w: dragPreview.w, h: dragPreview.h}
+                        : obj;
+                    return (
                     <SlideObjectView
                         key={obj.id}
-                        obj={obj}
+                        obj={displayObj}
                         selected={selectedObjectId === obj.id}
                         editable={canWrite}
                         onSelect={onSelectObject}
@@ -88,7 +92,8 @@ export function SlideCanvas({slide, objects, selectedObjectId, onSelectObject, o
                         onMoveToFront={onMoveToFront}
                         onMoveToBack={onMoveToBack}
                     />
-                ))}
+                    );
+                })}
                 {activeSnapLines.map((line, i) => (
                     <div
                         key={i}

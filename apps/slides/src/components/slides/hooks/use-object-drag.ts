@@ -14,6 +14,14 @@ type ObjectDragState = {
     startObjH: number;
 }
 
+export type DragPreview = {
+    objId: string;
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+} | null;
+
 type UseObjectDragProps = {
     onUpdate: (objId: string, updates: {x?: number; y?: number; w?: number; h?: number}) => void;
     canvasRef: React.RefObject<HTMLDivElement | null>;
@@ -24,6 +32,8 @@ type UseObjectDragProps = {
 export const useObjectDrag = ({onUpdate, canvasRef, vSnaps = [], hSnaps = []}: UseObjectDragProps) => {
     const [isDragging, setIsDragging] = useState(false);
     const [activeSnapLines, setActiveSnapLines] = useState<SnapLine[]>([]);
+    const [dragPreview, setDragPreview] = useState<DragPreview>(null);
+    const lastSnappedRef = useRef<{x: number; y: number; w: number; h: number} | null>(null);
     const snapsRef = useRef({vSnaps, hSnaps});
     snapsRef.current = {vSnaps, hSnaps};
     const stateRef = useRef<ObjectDragState>({
@@ -77,12 +87,19 @@ export const useObjectDrag = ({onUpdate, canvasRef, vSnaps = [], hSnaps = []}: U
 
             const snapped = snapRect({x, y, w, h}, snapsRef.current.vSnaps, snapsRef.current.hSnaps, s.mode);
             setActiveSnapLines(snapped.lines);
-            onUpdate(s.objId, {x: snapped.x, y: snapped.y, w: snapped.w, h: snapped.h});
+            lastSnappedRef.current = {x: snapped.x, y: snapped.y, w: snapped.w, h: snapped.h};
+            setDragPreview({objId: s.objId, x: snapped.x, y: snapped.y, w: snapped.w, h: snapped.h});
         };
 
         const handleMouseUp = () => {
+            const s = stateRef.current;
+            if (s.objId && lastSnappedRef.current) {
+                onUpdate(s.objId, lastSnappedRef.current);
+            }
             setIsDragging(false);
             setActiveSnapLines([]);
+            setDragPreview(null);
+            lastSnappedRef.current = null;
             stateRef.current = {objId: null, mode: null, startX: 0, startY: 0, startObjX: 0, startObjY: 0, startObjW: 0, startObjH: 0};
             document.removeEventListener('mousemove', handleMouseMove);
             document.removeEventListener('mouseup', handleMouseUp);
@@ -92,7 +109,7 @@ export const useObjectDrag = ({onUpdate, canvasRef, vSnaps = [], hSnaps = []}: U
         document.addEventListener('mouseup', handleMouseUp);
     }, [getCanvasSize, onUpdate]);
 
-    return {isDragging, startDrag, activeSnapLines};
+    return {isDragging, startDrag, activeSnapLines, dragPreview};
 };
 
 function clamp(v: number, min: number, max: number) {
