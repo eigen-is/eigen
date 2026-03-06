@@ -70,6 +70,9 @@ export class LocalStorage implements StorageBackend {
 
     async rename(oldKey: string, newKey: string): Promise<void> {
         const oldPath = this.resolve(oldKey);
+        if (!fs.existsSync(oldPath)) {
+            throw new ApiError(404, `Cannot rename: source path not found`);
+        }
         const newPath = this.resolve(newKey);
         const newParent = path.dirname(newPath);
         if (!fs.existsSync(newParent)) {

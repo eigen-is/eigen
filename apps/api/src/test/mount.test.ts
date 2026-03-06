@@ -2,7 +2,9 @@ import {afterAll, beforeAll, describe, expect, test} from 'bun:test';
 import {existsSync, mkdirSync, rmSync} from 'node:fs';
 import {join} from 'path';
 import {buildStorageKey, createDefaultMountConfig, Mount} from '../lib/mount/mount';
+import {getUniqueFileName} from '../lib/drive/naming';
 import {ManagedDatabase, type DatabaseConfig, type SchemaType} from '../lib/core';
+import {LocalStorage} from '../lib/storage/local-storage';
 
 const TEST_DIR = join(import.meta.dir, '../../../../data/test-mount-' + Date.now());
 const OWNER_ID = 'test-owner-id';
@@ -279,5 +281,108 @@ describe('Mount (local path-based storage)', () => {
         expect(fileA).not.toBeNull();
         expect(fileB).not.toBeNull();
         expect(fileA!.id).not.toBe(fileB!.id);
+    });
+});
+
+describe('Name validation', () => {
+    let mount: Mount;
+    let rootId: string;
+
+    beforeAll(async () => {
+        const config = createDefaultMountConfig('test-validate', 'local');
+        mount = new Mount(OWNER_ID, TEST_DIR, config, createGetLocalDatabase(TEST_DIR));
+        await mount.init();
+        const root = await mount.getRootFolder();
+        rootId = root!.id;
+    });
+
+    test('rejects .. as folder name', async () => {
+        expect(mount.createFolder(rootId, '..')).rejects.toThrow('Invalid file or folder name');
+    });
+
+    test('rejects . as folder name', async () => {
+        expect(mount.createFolder(rootId, '.')).rejects.toThrow('Invalid file or folder name');
+    });
+
+    test('rejects empty name', async () => {
+        expect(mount.createFolder(rootId, '')).rejects.toThrow('Invalid file or folder name');
+    });
+
+    test('rejects name with slash', async () => {
+        expect(mount.createFolder(rootId, 'a/b')).rejects.toThrow('Invalid file or folder name');
+    });
+
+    test('rejects name with backslash', async () => {
+        expect(mount.createFolder(rootId, 'a\\b')).rejects.toThrow('Invalid file or folder name');
+    });
+
+    test('rejects name with null byte', async () => {
+        expect(mount.createFolder(rootId, 'a\0b')).rejects.toThrow('Invalid file or folder name');
+    });
+
+    test('rejects .. as file name', async () => {
+        expect(mount.createFile(rootId, '..', 'text/plain', 0, undefined)).rejects.toThrow('Invalid file or folder name');
+    });
+
+    test('rejects .. on rename', async () => {
+        const id = await mount.createFolder(rootId, 'ValidName');
+        expect(mount.updatePath(id, {name: '..'})).rejects.toThrow('Invalid file or folder name');
+    });
+
+    test('allows dotfiles', async () => {
+        const id = await mount.createFile(rootId, '.gitignore', 'text/plain', 0, undefined);
+        const file = await mount.getPath(id);
+        expect(file!.name).toBe('.gitignore');
+    });
+
+    test('allows names with dots', async () => {
+        const id = await mount.createFile(rootId, 'archive.tar.gz', 'application/gzip', 0, undefined);
+        const file = await mount.getPath(id);
+        expect(file!.name).toBe('archive.tar.gz');
+    });
+});
+
+describe('getUniqueFileName', () => {
+    test('returns original if not in set', () => {
+        const used = new Set(['other.txt']);
+        expect(getUniqueFileName('photo.jpg', used)).toBe('photo#1.jpg');
+    });
+
+    test('increments number for simple collision', () => {
+        const used = new Set(['photo.jpg', 'photo#1.jpg']);
+        expect(getUniqueFileName('photo.jpg', used)).toBe('photo#2.jpg');
+    });
+
+    test('increments existing numbered file', () => {
+        const used = new Set(['photo#3.jpg', 'photo#4.jpg']);
+        expect(getUniqueFileName('photo#3.jpg', used)).toBe('photo#5.jpg');
+    });
+
+    test('handles file without extension', () => {
+        const used = new Set(['readme', 'readme#1']);
+        expect(getUniqueFileName('readme', used)).toBe('readme#2');
+    });
+
+    test('case-insensitive collision detection', () => {
+        const used = new Set(['photo#1.jpg']);
+        expect(getUniqueFileName('Photo.JPG', used)).toBe('Photo#2.JPG');
+    });
+
+    test('handles many collisions', () => {
+        const used = new Set<string>();
+        for (let i = 1; i <= 50; i++) used.add(`file#${i}.txt`);
+        expect(getUniqueFileName('file.txt', used)).toBe('file#51.txt');
+    });
+});
+
+describe('LocalStorage safety', () => {
+    let storage: LocalStorage;
+
+    beforeAll(() => {
+        storage = new LocalStorage(join(TEST_DIR, 'safety-storage'));
+    });
+
+    test('rename throws when source does not exist', async () => {
+        expect(storage.rename('nonexistent', 'target')).rejects.toThrow('source path not found');
     });
 });
