@@ -41,11 +41,23 @@ Three pluggable storage backends in `lib/storage/`:
 | Backend             | Use Case                | Storage Pattern                                   |
 |---------------------|-------------------------|---------------------------------------------------|
 | **LocalKeyStorage** | Drive mounts            | Flat `data/{uuid}` files                          |
-| **LocalFilesystem**    | Mail, Contacts, Home.fs | Full directory hierarchy with extended fs methods |
+| **LocalStorage**    | Path-based storage      | Full directory hierarchy with extended fs methods |
 | **S3Storage**       | Remote storage (ready)  | S3-compatible object storage                      |
 
 All backends implement the `StorageBackend` interface (read, write, delete, exists, size).
-`LocalFilesystem` additionally provides filesystem operations: list, mkdir, rename, stat, etc.
+`LocalStorage` additionally provides filesystem operations: mkdir, rename, deleteDir.
+`LocalFilesystem` is a separate class used by Home.fs for Mail/Contacts with extended filesystem methods (list, listDirs, dirExists, fileExists, dirSize, readdir, stat, etc.).
+
+**StorageBackend Interface**:
+- `read(key)` - Get file handle (BunFile or S3File)
+- `write(key, data)` - Write data, returns bytes written
+- `delete(key)` - Delete file, returns success
+- `exists(key)` - Check if file exists
+- `size(key)` - Get file size or null
+- `getPath?(key)` - Get absolute file path (local storage only)
+- `mkdir?(key)` - Create directory (LocalStorage only)
+- `rename?(oldKey, newKey)` - Rename file/directory (LocalStorage only)
+- `deleteDir?(key)` - Delete directory recursively (LocalStorage only)
 
 ## 3. Mount System
 
@@ -59,14 +71,22 @@ A Mount bundles everything needed for Drive file storage:
 | `tmp/`        | Temp files for collaborative editing            |
 
 **Key types** (`lib/mount/types.ts`):
-- `PathEntry` – File/folder metadata (id, name, type, parentId, ownerId, mimeType, size, thumbnail, acl, labels)
+- `PathEntry` – File/folder metadata (id, name, type, parentId, ownerId, mimeType, size, thumbnail, acl, labels, visibility, details)
 - `ACLEntry` – Access control (email, read, write, public)
-- `MountConfig` – Mount configuration (id, name, storageType, isDefault)
+- `MountConfig` – Mount configuration (id, name, storageType, isDefault, s3Config)
 
 **Thumbnails** (`lib/shared/thumbnails.ts`):
 - Supports image formats (jpeg, png, gif, webp, svg, bmp, tiff)
 - Generated on upload, stored locally in `thumbs/` as WebP
 - Video/PDF thumbnails not currently supported
+
+**Document types**: Supports `folder`, `file`, `doc` (`.eigendoc`), `stickies` (`.eigenstickies`), `slides` (`.eigenslides`), `sheets` (`.eigensheets`), `chat` (`.eigenchat`)
+
+**Path-based storage**: When using `LocalStorage`, documents are stored as directory hierarchies matching their metadata paths.
+
+**Key-based storage**: When using `LocalKeyStorage`/`S3Storage`, files are stored by UUID keys with extension preservation.
+
+**Collaborative documents**: For remote/path-based storage, document databases are synced to temp files during editing and uploaded on change.
 
 ## 4. Applications
 
@@ -81,12 +101,17 @@ Business logic layer (~500 lines) providing:
 
 ### 4.2 Mail
 - Uses `LocalFilesystem` for Maildir file structure
-- Uses `maildb` (SQLite) for email metadata
+- Uses `mail.db` (SQLite) for email metadata
 - Indexes on mailbox, date, read status for performance
 
-### 4.3 Contacts
+### 4.3 Contacts  
 - Uses `LocalFilesystem` for avatar images (with thumbnail generation)
 - Uses SQLite for contact data and labels
+
+### 4.4 Home
+- Provides `LocalFilesystem` as `home.fs` for general file operations
+- Manages per-user database connections and SSE events
+- Coordinates cleanup and resource management
 
 ## 5. User Data Layout
 
@@ -119,7 +144,7 @@ For S3 mounts: `metadata.db`, `tmp/`, and `thumbs/` stay local; file data goes t
 
 | Table             | Purpose                                                                           |
 |-------------------|-----------------------------------------------------------------------------------|
-| `paths`           | File/folder metadata with parentId FK, acl JSON, indexes on parentId/ownerId/type |
+| `paths`           | File/folder metadata with parentId FK, acl JSON, visibility, details, indexes on parentId/ownerId/type |
 | `labels`          | User-defined labels (name, color)                                                 |
 | `paths_to_labels` | Many-to-many relationship                                                         |
 
