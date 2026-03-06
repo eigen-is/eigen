@@ -72,6 +72,8 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
         else setSelectedObjectId(null);
     });
     useHotkey('Mod+C', (e) => {
+        const tag = (document.activeElement?.tagName ?? '').toLowerCase();
+        if (tag === 'input' || tag === 'textarea' || (document.activeElement as HTMLElement)?.isContentEditable) return;
         e.preventDefault();
         if (selectedObjectId) {
             const obj = deck.objects[selectedObjectId];
@@ -79,6 +81,8 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
         }
     }, {enabled: !!selectedObjectId});
     useHotkey('Mod+V', (e) => {
+        const tag = (document.activeElement?.tagName ?? '').toLowerCase();
+        if (tag === 'input' || tag === 'textarea' || (document.activeElement as HTMLElement)?.isContentEditable) return;
         e.preventDefault();
         if (!clipboardRef.current || !activeSlideId || !canWrite) return;
         const src = clipboardRef.current;
