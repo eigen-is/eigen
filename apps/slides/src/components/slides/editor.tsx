@@ -5,20 +5,17 @@ import {useSlideDnd} from './hooks/use-slide-dnd';
 import {SlidePanel} from './slide-panel';
 import {SlideCanvas} from './slide-canvas';
 import {Toolbar} from './toolbar';
-import {AddTextDialog} from './add-text-dialog';
-import {ObjectSettingsDialog} from './object-settings-dialog';
 import {SlideSettingsDialog} from './slide-settings-dialog';
 import {DEFAULT_IMAGE_OBJECT, DEFAULT_TEXT_OBJECT, type ImageObject, SlideObject} from './types';
 import type {DrivePath} from '@workspace/lib/types/drive';
 import {getDriveEmbedUrl} from '@workspace/lib/api';
 import {useUploadFile} from '@workspace/lib/drive';
 import {
-    EIGEN_CLIPBOARD_MIME,
+    needsReUpload,
     readEigenClipboard,
+    reUploadImage,
     writeEigenClipboard,
     writeEigenClipboardAsync,
-    needsReUpload,
-    reUploadImage,
 } from '@workspace/lib/clipboard';
 import type {EigenClipboardData, EigenClipboardItem} from '@workspace/lib/types/clipboard';
 import * as Y from 'yjs';
@@ -28,7 +25,19 @@ function buildClipboardItem(obj: SlideObject): EigenClipboardItem {
     if (obj.type === 'image') {
         return {type: 'image', src: obj.src, sourcePath: obj.sourcePath, meta: {...rect, objectFit: obj.objectFit}};
     }
-    return {type: 'text', text: obj.text, meta: {...rect, fontSize: obj.fontSize, fontWeight: obj.fontWeight, fontStyle: obj.fontStyle, textAlign: obj.textAlign, color: obj.color}};
+    return {
+        type: 'text',
+        text: obj.text,
+        meta: {
+            ...rect,
+            fontSize: obj.fontSize,
+            fontWeight: obj.fontWeight,
+            fontStyle: obj.fontStyle,
+            textDecoration: obj.textDecoration,
+            textAlign: obj.textAlign,
+            color: obj.color
+        }
+    };
 }
 
 
@@ -77,15 +86,15 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
     const {dragState, handleDragStart, handleDragEnd} = useSlideDnd({deck, yjsDoc});
 
     const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null);
-    const [isAddTextOpen, setIsAddTextOpen] = useState(false);
-    const [isObjectSettingsOpen, setIsObjectSettingsOpen] = useState(false);
+    const [editingObjectId, setEditingObjectId] = useState<string | null>(null);
     const [isSlideSettingsOpen, setIsSlideSettingsOpen] = useState(false);
     const [isPresenting, setIsPresenting] = useState(false);
     const imageInputRef = useRef<HTMLInputElement>(null);
 
     const uploadFile = useUploadFile(ownerId, path.mountId);
 
-    const isDialogOpen = isAddTextOpen || isObjectSettingsOpen || isSlideSettingsOpen;
+    const isEditing = editingObjectId !== null;
+    const isDialogOpen = isSlideSettingsOpen;
 
     useHotkey('Mod+Z', (e) => { e.preventDefault(); undoManager?.undo(); }, {enabled: canWrite && !!undoManager});
     useHotkey('Mod+Y', (e) => { e.preventDefault(); undoManager?.redo(); }, {enabled: canWrite && !!undoManager});
@@ -95,15 +104,16 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
             deleteObject(selectedObjectId);
             setSelectedObjectId(null);
         }
-    }, {enabled: canWrite && !!selectedObjectId && !isDialogOpen});
+    }, {enabled: canWrite && !!selectedObjectId && !isDialogOpen && !isEditing});
     useHotkey('Backspace', () => {
         if (selectedObjectId && canWrite) {
             deleteObject(selectedObjectId);
             setSelectedObjectId(null);
         }
-    }, {enabled: canWrite && !!selectedObjectId && !isDialogOpen});
+    }, {enabled: canWrite && !!selectedObjectId && !isDialogOpen && !isEditing});
     useHotkey('Escape', () => {
         if (isPresenting) setIsPresenting(false);
+        else if (isEditing) setEditingObjectId(null);
         else setSelectedObjectId(null);
     }, {enabled: !isDialogOpen});
     const handleImageFile = useCallback(async (file: File) => {
@@ -174,6 +184,7 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
                             ...m.fontSize != null && {fontSize: m.fontSize},
                             ...m.fontWeight != null && {fontWeight: m.fontWeight},
                             ...m.fontStyle != null && {fontStyle: m.fontStyle},
+                            ...m.textDecoration != null && {textDecoration: m.textDecoration},
                             ...m.textAlign != null && {textAlign: m.textAlign},
                             ...m.color != null && {color: m.color},
                         } as Omit<SlideObject, 'id' | 'slideId'>);
@@ -224,15 +235,18 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
         };
     }, [selectedObjectId, deck.objects, activeSlideId, canWrite, addObject, handleImageFile, handleReUploadImage, mediaFolderId]);
 
-    const handleAddText = useCallback((obj: typeof DEFAULT_TEXT_OBJECT & {text: string}) => {
+    const handleAddText = useCallback(() => {
         if (!activeSlideId) return;
-        addObject(activeSlideId, obj);
+        addObject(activeSlideId, DEFAULT_TEXT_OBJECT);
     }, [activeSlideId, addObject]);
 
-
-    const handleDoubleClickObject = useCallback((objId: string) => {
+    const handleStartEditing = useCallback((objId: string) => {
         setSelectedObjectId(objId);
-        setIsObjectSettingsOpen(true);
+        setEditingObjectId(objId);
+    }, []);
+
+    const handleStopEditing = useCallback(() => {
+        setEditingObjectId(null);
     }, []);
 
     const handleCopyObject = useCallback((objId: string) => {
@@ -288,7 +302,6 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
     const activeObjects = activeSlide
         ? activeSlide.objectIds.map(id => deck.objects[id]).filter(Boolean)
         : [];
-    const selectedObject = selectedObjectId ? deck.objects[selectedObjectId] || null : null;
 
     if (isPresenting && activeSlide) {
         return (
@@ -339,6 +352,7 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
                                         fontSize: `${obj.fontSize / 1080 * 100}vh`,
                                         fontWeight: obj.fontWeight,
                                         fontStyle: obj.fontStyle,
+                                        textDecoration: obj.textDecoration !== 'none' ? obj.textDecoration : undefined,
                                         textAlign: obj.textAlign,
                                         color: obj.color,
                                         justifyContent: obj.textAlign === 'center' ? 'center' : obj.textAlign === 'right' ? 'flex-end' : 'flex-start',
@@ -366,7 +380,7 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
                 undoManager={undoManager}
                 onAccessDialogOpen={onAccessDialogOpen}
                 onRestore={handleRestore}
-                onAddText={() => setIsAddTextOpen(true)}
+                onAddText={handleAddText}
                 onAddImage={() => imageInputRef.current?.click()}
                 onAddSlide={() => addSlide()}
                 onPresent={handlePresent}
@@ -388,9 +402,14 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
                             slide={activeSlide}
                             objects={activeObjects}
                             selectedObjectId={selectedObjectId}
-                            onSelectObject={setSelectedObjectId}
+                            editingObjectId={editingObjectId}
+                            onSelectObject={(id) => {
+                                setSelectedObjectId(id);
+                                if (id !== editingObjectId) setEditingObjectId(null);
+                            }}
+                            onStartEditing={handleStartEditing}
+                            onStopEditing={handleStopEditing}
                             onUpdateObject={updateObject}
-                            onDoubleClickObject={handleDoubleClickObject}
                             onDropImage={canWrite ? handleDropImage : undefined}
                             onCopyObject={handleCopyObject}
                             onDeleteObject={canWrite ? handleDeleteObject : undefined}
@@ -417,24 +436,12 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
                 )}
             </div>
 
-            <AddTextDialog
-                isOpen={isAddTextOpen}
-                onClose={() => setIsAddTextOpen(false)}
-                onAdd={handleAddText}
-            />
             <input
                 ref={imageInputRef}
                 type="file"
                 accept="image/*"
                 className="hidden"
                 onChange={handleImageSelect}
-            />
-            <ObjectSettingsDialog
-                isOpen={isObjectSettingsOpen}
-                onClose={() => setIsObjectSettingsOpen(false)}
-                object={selectedObject}
-                onUpdate={updateObject}
-                onDelete={(objId) => { deleteObject(objId); setSelectedObjectId(null); }}
             />
             {activeSlideId && activeSlide && (
                 <SlideSettingsDialog
