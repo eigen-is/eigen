@@ -173,31 +173,24 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
                 for (const item of eigenData.items) {
                     const m = item.meta ?? {};
                     if (item.type === 'text') {
+                        const overrides: Record<string, unknown> = {};
+                        if (m.x != null) overrides.x = (m.x as number) + 2;
+                        if (m.y != null) overrides.y = (m.y as number) + 2;
+                        for (const k of ['w', 'h', 'rotation', 'fontSize', 'fontWeight', 'fontStyle', 'textDecoration', 'textAlign', 'color'] as const) {
+                            if (m[k] != null) overrides[k] = m[k];
+                        }
                         addObject(activeSlideId, {
                             ...DEFAULT_TEXT_OBJECT,
-                            text: item.text,
-                            ...m.x != null && {x: m.x as number + 2},
-                            ...m.y != null && {y: m.y as number + 2},
-                            ...m.w != null && {w: m.w},
-                            ...m.h != null && {h: m.h},
-                            ...m.rotation != null && {rotation: m.rotation},
-                            ...m.fontSize != null && {fontSize: m.fontSize},
-                            ...m.fontWeight != null && {fontWeight: m.fontWeight},
-                            ...m.fontStyle != null && {fontStyle: m.fontStyle},
-                            ...m.textDecoration != null && {textDecoration: m.textDecoration},
-                            ...m.textAlign != null && {textAlign: m.textAlign},
-                            ...m.color != null && {color: m.color},
+                            text: item.text, ...overrides
                         } as Omit<SlideObject, 'id' | 'slideId'>);
                     } else if (item.type === 'image') {
-                        const imageProps = {
-                            ...DEFAULT_IMAGE_OBJECT,
-                            ...m.x != null && {x: m.x as number + 2},
-                            ...m.y != null && {y: m.y as number + 2},
-                            ...m.w != null && {w: m.w},
-                            ...m.h != null && {h: m.h},
-                            ...m.rotation != null && {rotation: m.rotation},
-                            ...m.objectFit != null && {objectFit: m.objectFit},
-                        };
+                        const overrides: Record<string, unknown> = {};
+                        if (m.x != null) overrides.x = (m.x as number) + 2;
+                        if (m.y != null) overrides.y = (m.y as number) + 2;
+                        for (const k of ['w', 'h', 'rotation', 'objectFit'] as const) {
+                            if (m[k] != null) overrides[k] = m[k];
+                        }
+                        const imageProps = {...DEFAULT_IMAGE_OBJECT, ...overrides};
                         if (needsReUpload(item.sourcePath, mediaFolderId)) {
                             handleReUploadImage(item.src).then((result) => {
                                 addObject(activeSlideId, {
