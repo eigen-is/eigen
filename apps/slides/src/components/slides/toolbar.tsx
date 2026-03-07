@@ -1,6 +1,19 @@
 import {useEffect, useState} from 'react';
 import {formatForDisplay} from '@tanstack/react-hotkeys';
-import {FileText, Folder, ImagePlus, Pencil, Play, Plus, Redo, Trash2, Type, Undo, UserPlus, UserRoundPlus} from 'lucide-react';
+import {
+    FileText,
+    Folder,
+    ImagePlus,
+    Pencil,
+    Play,
+    Plus,
+    Redo,
+    Trash2,
+    Type,
+    Undo,
+    UserPlus,
+    UserRoundPlus
+} from 'lucide-react';
 import {Button} from '@workspace/ui/components/button';
 import {
     DropdownMenu,
@@ -12,6 +25,7 @@ import {
 import {Separator} from '@workspace/ui/components/separator';
 import {TooltipButton} from '@workspace/ui';
 import {DocumentModeButton} from '@workspace/ui/components/layout/toolbar/document-mode-button';
+import {RevisionHistory} from '@workspace/ui/components/layout/collab/revision-history';
 import * as Y from 'yjs';
 import {useNavigate} from '@tanstack/react-router';
 import {useAuth} from '@workspace/lib/auth';
@@ -25,6 +39,7 @@ type ToolbarProps = {
     canWrite: boolean;
     undoManager: Y.UndoManager | null;
     onAccessDialogOpen: () => void;
+    onRestore: (state: Uint8Array) => void;
     path: DrivePath;
     onAddText: () => void;
     onAddImage: () => void;
@@ -32,7 +47,17 @@ type ToolbarProps = {
     onPresent: () => void;
 }
 
-export function Toolbar({canWrite, undoManager, onAccessDialogOpen, path, onAddText, onAddImage, onAddSlide, onPresent}: ToolbarProps) {
+export function Toolbar({
+                            canWrite,
+                            undoManager,
+                            onAccessDialogOpen,
+                            onRestore,
+                            path,
+                            onAddText,
+                            onAddImage,
+                            onAddSlide,
+                            onPresent
+                        }: ToolbarProps) {
     const [canUndo, setCanUndo] = useState(false);
     const [canRedo, setCanRedo] = useState(false);
     const [createSlidesOpen, setCreateSlidesOpen] = useState(false);
@@ -137,6 +162,7 @@ export function Toolbar({canWrite, undoManager, onAccessDialogOpen, path, onAddT
                     tooltipText="Present"
                     onClick={onPresent}
                 />
+                <RevisionHistory path={path} onRestore={onRestore}/>
                 {canWrite ? (
                     <TooltipButton
                         icon={UserPlus}
