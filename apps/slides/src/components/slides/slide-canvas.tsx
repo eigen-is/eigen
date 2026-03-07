@@ -1,5 +1,5 @@
 import {useCallback, useRef} from 'react';
-import {SlideItem, SlideObject, SLIDE_ASPECT_RATIO} from './types';
+import {SLIDE_ASPECT_RATIO, SlideItem, SlideObject} from './types';
 import {SlideObjectView} from './slide-object';
 import {useObjectDrag} from './hooks/use-object-drag';
 import {useSnapTargets} from './hooks/use-snap-lines';
@@ -8,9 +8,11 @@ type SlideCanvasProps = {
     slide: SlideItem;
     objects: SlideObject[];
     selectedObjectId: string | null;
+    editingObjectId: string | null;
     onSelectObject: (objId: string | null) => void;
+    onStartEditing: (objId: string) => void;
+    onStopEditing: () => void;
     onUpdateObject: (objId: string, updates: Partial<SlideObject>) => void;
-    onDoubleClickObject: (objId: string) => void;
     onDropImage?: (file: File) => void;
     onCopyObject?: (objId: string) => void;
     onDeleteObject?: (objId: string) => void;
@@ -19,7 +21,22 @@ type SlideCanvasProps = {
     canWrite: boolean;
 }
 
-export function SlideCanvas({slide, objects, selectedObjectId, onSelectObject, onUpdateObject, onDoubleClickObject, onDropImage, onCopyObject, onDeleteObject, onMoveToFront, onMoveToBack, canWrite}: SlideCanvasProps) {
+export function SlideCanvas({
+                                slide,
+                                objects,
+                                selectedObjectId,
+                                editingObjectId,
+                                onSelectObject,
+                                onStartEditing,
+                                onStopEditing,
+                                onUpdateObject,
+                                onDropImage,
+                                onCopyObject,
+                                onDeleteObject,
+                                onMoveToFront,
+                                onMoveToBack,
+                                canWrite
+                            }: SlideCanvasProps) {
     const canvasRef = useRef<HTMLDivElement>(null);
     const {vSnaps, hSnaps} = useSnapTargets(objects, selectedObjectId);
 
@@ -82,11 +99,14 @@ export function SlideCanvas({slide, objects, selectedObjectId, onSelectObject, o
                         key={obj.id}
                         obj={displayObj}
                         selected={selectedObjectId === obj.id}
+                        editing={editingObjectId === obj.id}
                         editable={canWrite}
                         onSelect={onSelectObject}
+                        onStartEditing={onStartEditing}
+                        onStopEditing={onStopEditing}
+                        onUpdate={onUpdateObject}
                         onDragStart={handleDragStart}
                         onResizeStart={handleResizeStart}
-                        onDoubleClick={onDoubleClickObject}
                         onCopy={onCopyObject}
                         onDelete={onDeleteObject}
                         onMoveToFront={onMoveToFront}

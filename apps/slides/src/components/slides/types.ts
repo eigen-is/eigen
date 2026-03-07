@@ -13,6 +13,7 @@ export type TextObject = {
     fontSize: number;
     fontWeight: 'normal' | 'bold';
     fontStyle: 'normal' | 'italic';
+    textDecoration: 'none' | 'underline' | 'line-through';
     textAlign: 'left' | 'center' | 'right';
     color: string;
 }
@@ -60,6 +61,7 @@ export const DEFAULT_TEXT_OBJECT: Omit<TextObject, 'id' | 'slideId'> = {
     fontSize: 48,
     fontWeight: 'normal',
     fontStyle: 'normal',
+    textDecoration: 'none',
     textAlign: 'center',
     color: '#000000',
 };
