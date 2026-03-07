@@ -16,6 +16,8 @@ import {Form, FormControl, FormField, FormItem, FormLabel, FormMessage,} from "@
 
 import {Input} from "@workspace/ui/components/input";
 import {Button} from "@workspace/ui/components/button";
+import {Popover, PopoverContent, PopoverTrigger} from "@workspace/ui/components/popover";
+import {ColorPicker} from "@workspace/ui/components/layout/media/color-picker";
 import {DeleteDialog} from "@workspace/ui/components/layout/delete/delete-dialog";
 import type {Label} from "@workspace/lib/types/label";
 
@@ -114,12 +116,23 @@ export function LabelDialog({
                                         <FormItem>
                                             <FormLabel className="invisible">Color</FormLabel>
                                             <FormControl>
-                                                <Input
-                                                    type="color"
-                                                    {...field}
-                                                    className="w-12"
-                                                    disabled={isLoading}
-                                                />
+                                                <Popover>
+                                                    <PopoverTrigger asChild>
+                                                        <button
+                                                            type="button"
+                                                            className="h-9 w-9 rounded-md border border-input shrink-0"
+                                                            style={{backgroundColor: field.value}}
+                                                            disabled={isLoading}
+                                                        />
+                                                    </PopoverTrigger>
+                                                    <PopoverContent className="w-auto p-3" align="start">
+                                                        <ColorPicker
+                                                            value={field.value}
+                                                            onChange={field.onChange}
+                                                            showReset={false}
+                                                        />
+                                                    </PopoverContent>
+                                                </Popover>
                                             </FormControl>
                                             <FormMessage>
                                                 {fieldState.error?.message}
