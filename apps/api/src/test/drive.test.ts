@@ -1,5 +1,6 @@
 import {beforeAll, describe, expect, test} from 'bun:test';
 import {authedRequest, driveDelete, driveGet, drivePost, drivePut, driveUpload, getTestContext} from './setup';
+import {DRIVE_TYPE_DOC, DRIVE_TYPE_SHEETS, DRIVE_TYPE_SLIDES, DRIVE_TYPE_STICKIES} from "@workspace/lib/types";
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
 const BOB_EMAIL = 'bob@test.eigen.is';
@@ -715,28 +716,28 @@ describe('Drive', () => {
             const data = await drivePost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
                 `folder/${aliceRootId}/doc`, {fileName: 'Test Document'});
             expect(data.name).toBe('Test Document.eigendoc');
-            expect(data.type).toBe('doc');
+            expect(data.type).toBe(DRIVE_TYPE_DOC);
         });
 
         test('create stickies', async () => {
             const data = await drivePost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
                 `folder/${aliceRootId}/stickies`, {fileName: 'Test Board'});
             expect(data.name).toBe('Test Board.eigenstickies');
-            expect(data.type).toBe('stickies');
+            expect(data.type).toBe(DRIVE_TYPE_STICKIES);
         });
 
         test('create slides', async () => {
             const data = await drivePost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
                 `folder/${aliceRootId}/slides`, {fileName: 'Test Slides'});
             expect(data.name).toBe('Test Slides.eigenslides');
-            expect(data.type).toBe('slides');
+            expect(data.type).toBe(DRIVE_TYPE_SLIDES);
         });
 
         test('create sheets', async () => {
             const data = await drivePost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
                 `folder/${aliceRootId}/sheets`, {fileName: 'Test Sheet'});
             expect(data.name).toBe('Test Sheet.eigensheets');
-            expect(data.type).toBe('sheets');
+            expect(data.type).toBe(DRIVE_TYPE_SHEETS);
         });
     });
 

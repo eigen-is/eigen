@@ -1,6 +1,13 @@
 import {treaty} from '@elysiajs/eden';
 import type {app} from "@apps/api";
-import type {DrivePath} from "../types/drive";
+import {
+    DRIVE_TYPE_CHAT,
+    DRIVE_TYPE_DOC,
+    DRIVE_TYPE_SHEETS,
+    DRIVE_TYPE_SLIDES,
+    DRIVE_TYPE_STICKIES,
+    DrivePath
+} from "../types/drive";
 
 export const API_HOST = import.meta.env.VITE_API_HOST as string;
 
@@ -77,8 +84,6 @@ export const getDriveFilesUploadUrl = (ownerId: string, mountId: string, pathId:
 export const getDriveDownloadUrl = (ownerId: string, mountId: string, pathId: string) => `${API_HOST}/drive/${ownerId}/${mountId}/file/${pathId}/download`;
 export const getDriveEmbedUrl = (ownerId: string, mountId: string, pathId: string, fileName: string) => `${API_HOST}/drive/${ownerId}/${mountId}/file/${pathId}/embed/${fileName}`;
 export const getDriveThumbnailUrl = (ownerId: string, mountId: string, fileName: string) => `${API_HOST}/drive/${ownerId}/${mountId}/thumb/${fileName}`;
-export const getCollabAccessUrl = (ownerId: string, mountId: string, pathId: string) => `${API_HOST}/collab/${ownerId}/${mountId}/${pathId}/access`;
-export const getCollabRevisionUrl = (ownerId: string, mountId: string, pathId: string, revisionId: number) => `${API_HOST}/collab/${ownerId}/${mountId}/${pathId}/revisions/${revisionId}`;
 export const getCollabWebSocketUrl = (ownerId: string, mountId: string, pathId: string) => `${API_HOST.replace('http', 'ws')}/ws/collab/${ownerId}/${mountId}/${pathId}`;
 export const getMailMessageDownloadUrl = (messageId: string) => `${API_HOST}/mail/message/download/${messageId}`;
 export const getMailAttachmentUrl = (messageId: string, attachmentIndex: number, fileName: string) => `${API_HOST}/mail/message/${messageId}/attachment/${attachmentIndex}/${encodeURIComponent(fileName)}`;
@@ -86,15 +91,15 @@ export const getSpaceZipUrl = () => `${API_HOST}/space/zip`;
 
 export function getDocumentUrl(path: DrivePath): string | false {
     let url: string;
-    if (path.type === 'doc') {
+    if (path.type === DRIVE_TYPE_DOC) {
         url = getDocUrl(path.ownerId, path.mountId, path.id);
-    } else if (path.type === 'stickies') {
+    } else if (path.type === DRIVE_TYPE_STICKIES) {
         url = getStickiesBoardUrl(path.ownerId, path.mountId, path.id);
-    } else if (path.type === 'sheets') {
+    } else if (path.type === DRIVE_TYPE_SHEETS) {
         url = getSheetUrl(path.ownerId, path.mountId, path.id);
-    } else if (path.type === 'slides') {
+    } else if (path.type === DRIVE_TYPE_SLIDES) {
         url = getSlideUrl(path.ownerId, path.mountId, path.id);
-    } else if (path.type === 'chat') {
+    } else if (path.type === DRIVE_TYPE_CHAT) {
         url = getChatRoomUrl(path.ownerId, path.mountId, path.id);
     } else {
         return false;

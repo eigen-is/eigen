@@ -1,7 +1,7 @@
 import {createFileRoute, useNavigate} from '@tanstack/react-router';
 import {usePathInfo, useSharedPaths} from '@workspace/lib/drive';
 import {DriveLayout} from "@workspace/ui/components/layout/drive/drive-layout";
-import {DrivePath, DriveSearchParams, isDocumentType} from "@workspace/lib/types/drive";
+import {DRIVE_TYPE_SLIDES, DrivePath, DriveSearchParams, isDocumentType} from "@workspace/lib/types/drive";
 import {useAuth} from '@workspace/lib/auth';
 import {useLayout} from "@workspace/ui/components/layout/app/layout-context.tsx";
 import {EigenLoader} from '@workspace/ui';
@@ -33,7 +33,7 @@ function DriveRoute() {
         error: isFolderContentLoadingError
     } = useSharedPaths(ownerId, to as 'by-me' | 'with-me');
 
-    const folderContents = unfilteredFolderContents?.filter(path => path.type === 'doc') || [];
+    const folderContents = unfilteredFolderContents?.filter(path => path.type === DRIVE_TYPE_SLIDES) || [];
 
     const onRowSelect = (path: DrivePath) => {
         if (isMobile && isDocumentType(path.type)) {
