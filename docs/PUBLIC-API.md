@@ -9,10 +9,8 @@ relies on a public gravatar-like service.
 
 | Component            | File                                               | How it resolves avatars                            |
 |----------------------|----------------------------------------------------|----------------------------------------------------|
-| `UserAvatar`         | `packages/ui/.../user-avatar.tsx`                  | `useAvatar(email)` unless `forceUseImageUrl`       |
-| `UserPublicAvatar`   | `packages/ui/.../user-public-avatar.tsx`           | `useAvatar(email)` → passes result to `UserAvatar` |
-| `UserItem`           | `packages/ui/.../user-item.tsx`                    | `useAvatar(email)` when `autoFetch=true`           |
-| `UserPublicItem`     | `packages/ui/.../user-item.tsx`                    | Wrapper around `UserItem` with `autoFetch`         |
+| `UserAvatar`         | `packages/ui/.../user-avatar.tsx`                  | Resolves `userId`, `email`, and teams via hooks |
+| `UserItem`           | `packages/ui/.../user-item.tsx`                    | Uses `UserAvatar` and resolves display names via hooks |
 | `ContactAutosuggest` | `packages/ui/.../contacts/contact-autosuggest.tsx` | Uses `useContactSuggestions`                       |
 
 ## Public Endpoints (`/p/`)
