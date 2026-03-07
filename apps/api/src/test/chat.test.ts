@@ -34,7 +34,7 @@ describe('Chat', () => {
                 `folder/${aliceRootId}/chat`, {fileName: 'Team Chat'});
             expect(data.name).toBe('Team Chat.eigenchat');
             expect(data.type).toBe('chat');
-            expect(data.mimeType).toBe('application/eigenchat');
+            expect(data.mimeType).toBe('DRIVE_MIME_CHAT');
             chatId = data.id;
         });
 

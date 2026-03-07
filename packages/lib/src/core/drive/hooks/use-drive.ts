@@ -247,7 +247,7 @@ export function useCreateDoc(ownerId: string, mountId: string = DEFAULT_MOUNT_ID
             const response = await driveApi({ownerId})({mountId}).folder({pathId: parentId}).doc.post({fileName});
             return response.data;
         },
-        onSuccess: (_data, variables) => invalidateItemCreated(queryClient, mountId, variables.parentId, 'application/eigendoc'),
+        onSuccess: (_data, variables) => invalidateItemCreated(queryClient, mountId, variables.parentId, 'DRIVE_MIME_DOC'),
     });
 }
 
@@ -259,7 +259,7 @@ export function useCreateStickies(ownerId: string, mountId: string = DEFAULT_MOU
             const response = await driveApi({ownerId})({mountId}).folder({pathId: parentId}).stickies.post({fileName});
             return response.data;
         },
-        onSuccess: (_data, variables) => invalidateItemCreated(queryClient, mountId, variables.parentId, 'application/eigenstickies'),
+        onSuccess: (_data, variables) => invalidateItemCreated(queryClient, mountId, variables.parentId, 'DRIVE_MIME_STICKIES'),
     });
 }
 
@@ -271,7 +271,7 @@ export function useCreateSlides(ownerId: string, mountId: string = DEFAULT_MOUNT
             const response = await driveApi({ownerId})({mountId}).folder({pathId: parentId}).slides.post({fileName});
             return response.data;
         },
-        onSuccess: (_data, variables) => invalidateItemCreated(queryClient, mountId, variables.parentId, 'application/eigenslides'),
+        onSuccess: (_data, variables) => invalidateItemCreated(queryClient, mountId, variables.parentId, 'DRIVE_MIME_SLIDES'),
     });
 }
 
@@ -283,7 +283,7 @@ export function useCreateSheets(ownerId: string, mountId: string = DEFAULT_MOUNT
             const response = await driveApi({ownerId})({mountId}).folder({pathId: parentId}).sheets.post({fileName});
             return response.data;
         },
-        onSuccess: (_data, variables) => invalidateItemCreated(queryClient, mountId, variables.parentId, 'application/eigensheets'),
+        onSuccess: (_data, variables) => invalidateItemCreated(queryClient, mountId, variables.parentId, 'DRIVE_MIME_SHEETS'),
     });
 }
 
