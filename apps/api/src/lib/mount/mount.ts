@@ -5,7 +5,16 @@ import {randomUUID} from 'crypto';
 import * as path from 'path';
 import * as fs from 'node:fs';
 
-import type {DrivePath, MountConfig} from '@workspace/lib/types';
+import {
+    DRIVE_MIME_CHAT,
+    DRIVE_MIME_DOC,
+    DRIVE_MIME_FOLDER,
+    DRIVE_MIME_SHEETS,
+    DRIVE_MIME_SLIDES,
+    DRIVE_MIME_STICKIES,
+    type DrivePath,
+    type MountConfig
+} from '@workspace/lib/types';
 import type {DriveVisibility} from '@workspace/lib/types/drive';
 import * as schema from './schema';
 import {labels, paths, pathsToLabels} from './schema';
@@ -172,12 +181,12 @@ export class Mount {
         await this.assertUniqueName(parentId, name);
         const folderId = randomUUID();
         const mimeTypeMap: Record<string, string> = {
-            folder: 'folder',
-            doc: 'DRIVE_MIME_DOC',
-            stickies: 'DRIVE_MIME_STICKIES',
-            slides: 'DRIVE_MIME_SLIDES',
-            sheets: 'DRIVE_MIME_SHEETS',
-            chat: 'DRIVE_MIME_CHAT',
+            folder: DRIVE_MIME_FOLDER,
+            doc: DRIVE_MIME_DOC,
+            stickies: DRIVE_MIME_STICKIES,
+            slides: DRIVE_MIME_SLIDES,
+            sheets: DRIVE_MIME_SHEETS,
+            chat: DRIVE_MIME_CHAT,
         };
         const mimeType = mimeTypeMap[type] ?? 'folder';
 
