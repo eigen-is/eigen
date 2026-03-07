@@ -38,7 +38,7 @@ export function Column({column, cards, isDropAnimating, onAddCard, onEditColumn,
     return (
         <div
             ref={setNodeRef}
-            className={`${columnMargin} ${columnWidth} rounded-md flex flex-col border border-gray-200 shadow-sm ${isDragging ? 'opacity-10' : ''} h-full`}
+            className={`${columnMargin} ${columnWidth} flex flex-col ${isDragging ? 'opacity-10' : ''} h-full`}
             style={{
                 transform: CSS.Transform.toString(transform),
                 transition,
@@ -47,7 +47,7 @@ export function Column({column, cards, isDropAnimating, onAddCard, onEditColumn,
             }}
         >
             <div
-                className="h-10 px-2 cursor-grab touch-none font-medium text-sm border-b bg-gray-50 flex-shrink-0 flex items-center justify-between"
+                className="h-10 pl-3 cursor-grab touch-none font-medium text-sm bg-muted flex-shrink-0 flex items-center justify-between"
                 {...attributes}
                 {...listeners}
             >
@@ -69,8 +69,8 @@ export function Column({column, cards, isDropAnimating, onAddCard, onEditColumn,
             </div>
 
             <div
-                className={`flex-grow overflow-y-auto overflow-x-hidden flex flex-col p-1.5 ${
-                    isDropAnimating ? 'bg-blue-50/10' : 'bg-white'
+                className={`flex-grow overflow-y-auto overflow-x-hidden flex flex-col p-3 border ${
+                    isDropAnimating ? 'bg-blue-50/10' : 'bg-background'
                 }`}
             >
                 {cards.length === 0 ? (
