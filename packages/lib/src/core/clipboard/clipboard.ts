@@ -3,14 +3,29 @@ import type {EigenClipboardData} from '../../types/clipboard';
 import {getDriveEmbedUrl} from '../api';
 
 export const EIGEN_CLIPBOARD_MIME = 'application/eigen-clipboard';
+const HTML_MARKER = 'data-eigen-clipboard';
 
-export function readEigenClipboard(clipboardData: DataTransfer): EigenClipboardData | null {
-    const raw = clipboardData.getData(EIGEN_CLIPBOARD_MIME);
-    if (!raw) return null;
+function parseEigenJson(raw: string): EigenClipboardData | null {
     try {
         const data = JSON.parse(raw) as EigenClipboardData;
         if (data.version === 1 && Array.isArray(data.items)) return data;
     } catch { /* invalid data */ }
+    return null;
+}
+
+export function readEigenClipboard(clipboardData: DataTransfer): EigenClipboardData | null {
+    const raw = clipboardData.getData(EIGEN_CLIPBOARD_MIME);
+    if (raw) return parseEigenJson(raw);
+
+    const html = clipboardData.getData('text/html');
+    if (html) {
+        const match = html.match(new RegExp(`${HTML_MARKER}="([^"]*?)"`));
+        if (match?.[1]) {
+            try {
+                return parseEigenJson(decodeURIComponent(match[1]));
+            } catch { /* invalid encoding */ }
+        }
+    }
     return null;
 }
 
@@ -23,16 +38,15 @@ export function writeEigenClipboard(e: ClipboardEvent, data: EigenClipboardData,
 
 export async function writeEigenClipboardAsync(data: EigenClipboardData, plainText?: string) {
     const json = JSON.stringify(data);
-    const blob = new Blob([json], {type: EIGEN_CLIPBOARD_MIME});
-    const items: Record<string, Blob> = {[EIGEN_CLIPBOARD_MIME]: blob};
+    const encoded = encodeURIComponent(json);
+    const html = `<span ${HTML_MARKER}="${encoded}"></span>`;
+    const items: Record<string, Blob> = {
+        'text/html': new Blob([html], {type: 'text/html'}),
+    };
     if (plainText) {
         items['text/plain'] = new Blob([plainText], {type: 'text/plain'});
     }
-    try {
-        await navigator.clipboard.write([new ClipboardItem(items)]);
-    } catch {
-        if (plainText) await navigator.clipboard.writeText(plainText);
-    }
+    await navigator.clipboard.write([new ClipboardItem(items)]);
 }
 
 export function needsReUpload(sourcePath: DrivePath | undefined, targetMediaFolderId: string | null): boolean {
