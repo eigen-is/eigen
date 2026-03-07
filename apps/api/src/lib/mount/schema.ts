@@ -1,12 +1,12 @@
 import {sql} from 'drizzle-orm';
 import {integer, primaryKey, sqliteTable, text} from 'drizzle-orm/sqlite-core';
-import type {DriveACL, DrivePathDetails, DriveVisibility} from '@workspace/lib/types/drive';
+import type {DriveACL, DrivePathDetails, DrivePathType, DriveVisibility} from '@workspace/lib/types/drive';
 
 export const paths = sqliteTable('paths', {
     id: text('id').primaryKey(),
     file: text('file').notNull().default(''),
     name: text('name').notNull(),
-    type: text('type').notNull().$type<'folder' | 'file' | 'doc' | 'stickies' | 'slides' | 'sheets' | 'chat'>(),
+    type: text('type').notNull().$type<DrivePathType>(),
     parentId: text('parentId'),
     ownerId: text('ownerId').notNull(),
     mimeType: text('mimeType').notNull(),
