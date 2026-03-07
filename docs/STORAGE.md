@@ -40,9 +40,9 @@ Three pluggable storage backends in `lib/storage/`:
 
 | Backend             | Use Case                | Storage Pattern                                   |
 |---------------------|-------------------------|---------------------------------------------------|
-| **LocalKeyStorage** | Drive mounts            | Flat `data/{uuid}` files                          |
-| **LocalStorage**    | Path-based storage      | Full directory hierarchy with extended fs methods |
-| **S3Storage**       | Remote storage (ready)  | S3-compatible object storage                      |
+| **LocalKeyStorage** | Drive mounts (`local-key` / `local-id`) | Flat `data/{uuid}` files                          |
+| **LocalStorage**    | Path-based storage (`local` / `local-fullnames`) | Full directory hierarchy with extended fs methods |
+| **S3Storage**       | Remote storage (`s3`)  | S3-compatible object storage                      |
 
 All backends implement the `StorageBackend` interface (read, write, delete, exists, size).
 `LocalStorage` additionally provides filesystem operations: mkdir, rename, deleteDir.
