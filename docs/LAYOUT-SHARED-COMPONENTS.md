@@ -126,6 +126,19 @@ See `docs/LAYOUT.md` for detailed architecture documentation.
 | `TooltipToggle`         | `toolbar/tooltip-toggle.tsx`         | Toggle button wrapped in tooltip                                                           |
 | `DocumentModeButton`    | `toolbar/document-mode-button.tsx`   | Read-only/editing mode indicator using `TooltipButton` with Eye/Pencil icon              |
 
+## Media
+
+| Component               | File                                 | Description                                                                              |
+|-------------------------|--------------------------------------|------------------------------------------------------------------------------------------|
+| `ColorPicker`           | `media/color-picker.tsx`             | Color picker popover with preset colors and hex input                                    |
+| `ImageResizeHandles`    | `media/image-resize-handles.tsx`     | Shared resize handle overlay for draggable/resizable images (used in docs and slides)    |
+
+## Collab
+
+| Component               | File                                 | Description                                                                              |
+|-------------------------|--------------------------------------|------------------------------------------------------------------------------------------|
+| `RevisionHistory`       | `collab/revision-history.tsx`        | History panel showing Yjs document revisions                                             |
+
 ## Drive (domain-specific shared)
 
 The `drive/` subdirectory contains shared Drive components used by the Drive, Docs, and Stickies apps:
