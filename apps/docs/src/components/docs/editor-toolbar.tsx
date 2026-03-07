@@ -59,6 +59,7 @@ import {Input} from "@workspace/ui/components/input";
 import {Tooltip, TooltipContent, TooltipTrigger} from "@workspace/ui/components/tooltip";
 import {Popover, PopoverContent, PopoverTrigger} from "@workspace/ui/components/popover";
 import {Toolbar, TooltipButton} from "@workspace/ui";
+import {ColorPicker} from "@workspace/ui/components/layout/media/color-picker";
 import {printDocument} from "@workspace/ui/lib/printElement";
 import {DocumentModeButton} from "@workspace/ui/components/layout/toolbar/document-mode-button";
 import {DriveCreateDoc} from "@workspace/ui/components/layout/drive/drive-create-doc";
@@ -69,7 +70,7 @@ import {useNavigate} from '@tanstack/react-router';
 import {useIsMobile} from "@workspace/lib/media";
 import {DriveRenameItem} from "@workspace/ui/components/layout/drive/drive-rename-item";
 import {Label} from "@workspace/ui/components/label";
-import {useCollabRevisions, fetchRevisionState} from "@workspace/lib/collab";
+import {fetchRevisionState, useCollabRevisions} from "@workspace/lib/collab";
 import {formatDateTime} from "@workspace/lib/date";
 import {yDocToProsemirrorJSON} from "y-prosemirror";
 import * as Y from "yjs";
@@ -84,29 +85,6 @@ type EditorToolbarProps = {
     onImageUpload?: (file: File) => void;
 }
 
-const TEXT_COLORS = [
-    {label: 'Default', value: ''},
-    {label: 'Gray', value: '#6b7280'},
-    {label: 'Brown', value: '#92400e'},
-    {label: 'Red', value: '#dc2626'},
-    {label: 'Orange', value: '#ea580c'},
-    {label: 'Yellow', value: '#ca8a04'},
-    {label: 'Green', value: '#16a34a'},
-    {label: 'Blue', value: '#2563eb'},
-    {label: 'Purple', value: '#9333ea'},
-    {label: 'Pink', value: '#db2777'},
-];
-
-const HIGHLIGHT_COLORS = [
-    {label: 'None', value: ''},
-    {label: 'Yellow', value: '#fef08a'},
-    {label: 'Green', value: '#bbf7d0'},
-    {label: 'Blue', value: '#bfdbfe'},
-    {label: 'Purple', value: '#e9d5ff'},
-    {label: 'Pink', value: '#fbcfe8'},
-    {label: 'Red', value: '#fecaca'},
-    {label: 'Orange', value: '#fed7aa'},
-];
 
 const ToolbarSeparator = () => <Separator orientation="vertical" className="h-6 mx-1" />;
 
@@ -448,26 +426,18 @@ export const EditorToolbar = ({editor, path, canWrite, onAccessDialogOpen, onDel
                             </Button>
                         </PopoverTrigger>
                         <PopoverContent className="w-auto p-3" align="start">
-                            <div className="grid grid-cols-5 gap-1">
-                                {TEXT_COLORS.map((color) => (
-                                    <button
-                                        key={color.label}
-                                        title={color.label}
-                                        className={`h-6 w-6 rounded-md border-2 border-border hover:border-ring transition-colors ${
-                                            editor.getAttributes('textStyle').color === color.value ? 'ring-2 ring-ring ring-offset-2' : ''
-                                        }`}
-                                        style={{backgroundColor: color.value || '#000'}}
-                                        onMouseDown={(e: React.MouseEvent) => {
-                                            e.preventDefault();
-                                            if (color.value) {
-                                                editor.chain().focus().setColor(color.value).run();
-                                            } else {
-                                                editor.chain().focus().unsetColor().run();
-                                            }
-                                        }}
-                                    />
-                                ))}
-                            </div>
+                            <ColorPicker
+                                value={editor.getAttributes('textStyle').color || ''}
+                                resetLabel="Default"
+                                preventFocusLoss
+                                onChange={(color) => {
+                                    if (color) {
+                                        editor.chain().focus().setColor(color).run();
+                                    } else {
+                                        editor.chain().focus().unsetColor().run();
+                                    }
+                                }}
+                            />
                         </PopoverContent>
                     </Popover>
 
@@ -486,26 +456,18 @@ export const EditorToolbar = ({editor, path, canWrite, onAccessDialogOpen, onDel
                             </Button>
                         </PopoverTrigger>
                         <PopoverContent className="w-auto p-3" align="start">
-                            <div className="grid grid-cols-5 gap-1">
-                                {HIGHLIGHT_COLORS.map((color) => (
-                                    <button
-                                        key={color.label}
-                                        title={color.label}
-                                        className={`h-6 w-6 rounded-md border-2 hover:border-ring transition-colors ${
-                                            color.value && editor.isActive('highlight', {color: color.value}) ? 'ring-2 ring-ring ring-offset-2' : ''
-                                        }`}
-                                        style={{backgroundColor: color.value || '#fff', border: !color.value ? '2px dashed hsl(var(--border))' : undefined}}
-                                        onMouseDown={(e: React.MouseEvent) => {
-                                            e.preventDefault();
-                                            if (color.value) {
-                                                editor.chain().focus().toggleHighlight({color: color.value}).run();
-                                            } else {
-                                                editor.chain().focus().unsetHighlight().run();
-                                            }
-                                        }}
-                                    />
-                                ))}
-                            </div>
+                            <ColorPicker
+                                value={editor.isActive('highlight') ? (editor.getAttributes('highlight').color || '') : ''}
+                                resetLabel="None"
+                                preventFocusLoss
+                                onChange={(color) => {
+                                    if (color) {
+                                        editor.chain().focus().toggleHighlight({color}).run();
+                                    } else {
+                                        editor.chain().focus().unsetHighlight().run();
+                                    }
+                                }}
+                            />
                         </PopoverContent>
                     </Popover>
 
