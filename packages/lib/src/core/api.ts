@@ -88,6 +88,8 @@ export const getCollabWebSocketUrl = (ownerId: string, mountId: string, pathId: 
 export const getMailMessageDownloadUrl = (messageId: string) => `${API_HOST}/mail/message/download/${messageId}`;
 export const getMailAttachmentUrl = (messageId: string, attachmentIndex: number, fileName: string) => `${API_HOST}/mail/message/${messageId}/attachment/${attachmentIndex}/${encodeURIComponent(fileName)}`;
 export const getSpaceZipUrl = () => `${API_HOST}/space/zip`;
+export const getCollabAccessUrl = (ownerId: string, mountId: string, pathId: string) => `${API_HOST}/collab/${ownerId}/${mountId}/${pathId}/access`;
+export const getCollabRevisionUrl = (ownerId: string, mountId: string, pathId: string, revisionId: number) => `${API_HOST}/collab/${ownerId}/${mountId}/${pathId}/revisions/${revisionId}`;
 
 export function getDocumentUrl(path: DrivePath): string | false {
     let url: string;
