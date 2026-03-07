@@ -11,6 +11,7 @@
     "serve:drive": "bun --filter '@apps/api' --filter './apps/drive' dev",
     "serve:docs": "bun --filter '@apps/api' --filter './apps/docs' dev",
     "serve:stickies": "bun --filter '@apps/api' --filter './apps/stickies' dev",
+    "serve:chat": "bun --filter '@apps/api' --filter './apps/chat' dev",
     "serve:people": "bun --filter '@apps/api' --filter './apps/people' dev",
     "serve:slides": "bun --filter '@apps/api' --filter './apps/slides' dev",
     "serve:sheets": "bun --filter '@apps/api' --filter './apps/sheets' dev",
