@@ -74,7 +74,7 @@ export function useCreateChat(ownerId: string, mountId: string) {
             const response = await driveApi({ownerId})({mountId}).folder({pathId: parentId}).chat.post({fileName});
             return response.data;
         },
-        onSuccess: (_data, variables) => invalidateItemCreated(queryClient, mountId, variables.parentId, 'application/eigenchat'),
+        onSuccess: (_data, variables) => invalidateItemCreated(queryClient, mountId, variables.parentId, 'DRIVE_MIME_CHAT'),
     });
 }
 

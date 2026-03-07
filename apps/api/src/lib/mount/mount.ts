@@ -173,11 +173,11 @@ export class Mount {
         const folderId = randomUUID();
         const mimeTypeMap: Record<string, string> = {
             folder: 'folder',
-            doc: 'application/eigendoc',
-            stickies: 'application/eigenstickies',
-            slides: 'application/eigenslides',
-            sheets: 'application/eigensheets',
-            chat: 'application/eigenchat',
+            doc: 'DRIVE_MIME_DOC',
+            stickies: 'DRIVE_MIME_STICKIES',
+            slides: 'DRIVE_MIME_SLIDES',
+            sheets: 'DRIVE_MIME_SHEETS',
+            chat: 'DRIVE_MIME_CHAT',
         };
         const mimeType = mimeTypeMap[type] ?? 'folder';
 
