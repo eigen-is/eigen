@@ -12,6 +12,7 @@ export const DRIVE_TYPE_CHAT = "chat" as const;
 export const DRIVE_TYPE_FOLDER = "folder" as const;
 export const DRIVE_TYPE_FILE = "file" as const;
 
+export const DRIVE_MIME_FOLDER = "folder" as const;
 export const DRIVE_MIME_DOC = "application/eigendoc" as const;
 export const DRIVE_MIME_STICKIES = "application/eigenstickies" as const;
 export const DRIVE_MIME_SLIDES = "application/eigenslides" as const;

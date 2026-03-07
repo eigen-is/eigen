@@ -225,7 +225,7 @@ export function DriveTable({
                                             }
                                         )}
                                         <span
-                                            className="truncate max-w-[calc(100%-1.5rem)]">{item.name.replace(/\.eigen(doc|stickies|chat)$/, "")}</span>
+                                            className="truncate max-w-[calc(100%-1.5rem)]">{item.name.replace(/\.eigen(doc|stickies|chat|sheets|slides)$/, "")}</span>
                                     </div>
                                 </TableCell>
                                 <TableCell className="hidden sm:table-cell group">
