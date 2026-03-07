@@ -1,4 +1,4 @@
-import {useCallback, useEffect, useState} from 'react';
+import {useCallback, useEffect, useRef, useState} from 'react';
 import {useHotkey} from '@tanstack/react-hotkeys';
 import {useDeck} from './hooks/use-deck';
 import {useSlideDnd} from './hooks/use-slide-dnd';
@@ -6,7 +6,6 @@ import {SlidePanel} from './slide-panel';
 import {SlideCanvas} from './slide-canvas';
 import {Toolbar} from './toolbar';
 import {AddTextDialog} from './add-text-dialog';
-import {AddImageDialog} from './add-image-dialog';
 import {ObjectSettingsDialog} from './object-settings-dialog';
 import {SlideSettingsDialog} from './slide-settings-dialog';
 import {DEFAULT_IMAGE_OBJECT, DEFAULT_TEXT_OBJECT, SlideObject} from './types';
@@ -63,14 +62,14 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
 
     const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null);
     const [isAddTextOpen, setIsAddTextOpen] = useState(false);
-    const [isAddImageOpen, setIsAddImageOpen] = useState(false);
     const [isObjectSettingsOpen, setIsObjectSettingsOpen] = useState(false);
     const [isSlideSettingsOpen, setIsSlideSettingsOpen] = useState(false);
     const [isPresenting, setIsPresenting] = useState(false);
+    const imageInputRef = useRef<HTMLInputElement>(null);
 
     const uploadFile = useUploadFile(ownerId, path.mountId);
 
-    const isDialogOpen = isAddTextOpen || isAddImageOpen || isObjectSettingsOpen || isSlideSettingsOpen;
+    const isDialogOpen = isAddTextOpen || isObjectSettingsOpen || isSlideSettingsOpen;
 
     useHotkey('Mod+Z', (e) => { e.preventDefault(); undoManager?.undo(); }, {enabled: canWrite && !!undoManager});
     useHotkey('Mod+Y', (e) => { e.preventDefault(); undoManager?.redo(); }, {enabled: canWrite && !!undoManager});
@@ -91,6 +90,25 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
         if (isPresenting) setIsPresenting(false);
         else setSelectedObjectId(null);
     }, {enabled: !isDialogOpen});
+    const handleImageFile = useCallback(async (file: File) => {
+        if (!activeSlideId || !mediaFolderId || !file.type.startsWith('image/')) return;
+        try {
+            const result = await uploadFile.mutateAsync({parentId: mediaFolderId, file});
+            if (result) {
+                const src = getDriveEmbedUrl(path.ownerId, path.mountId, (result as any).id, 'image');
+                addObject(activeSlideId, {...DEFAULT_IMAGE_OBJECT, src} as Omit<SlideObject, 'id' | 'slideId'>);
+            }
+        } catch (e) {
+            console.error('Image upload failed:', e);
+        }
+    }, [activeSlideId, mediaFolderId, uploadFile, path.ownerId, path.mountId, addObject]);
+
+    const handleImageSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) handleImageFile(file);
+        e.target.value = '';
+    }, [handleImageFile]);
+
     useEffect(() => {
         const handleCopy = (e: ClipboardEvent) => {
             const tag = (document.activeElement?.tagName ?? '').toLowerCase();
@@ -105,18 +123,36 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
             const tag = (document.activeElement?.tagName ?? '').toLowerCase();
             if (tag === 'input' || tag === 'textarea' || (document.activeElement as HTMLElement)?.isContentEditable) return;
             if (!activeSlideId || !canWrite) return;
+
+            const imageFile = Array.from(e.clipboardData?.files ?? []).find(f => f.type.startsWith('image/'));
+            if (imageFile) {
+                e.preventDefault();
+                handleImageFile(imageFile);
+                return;
+            }
+
             const text = e.clipboardData?.getData('text/plain') ?? '';
-            if (!text.startsWith(CLIPBOARD_MARKER)) return;
-            e.preventDefault();
-            try {
-                const obj = JSON.parse(text.slice(CLIPBOARD_MARKER.length)) as SlideObject;
-                const {id: _id, slideId: _sid, ...rest} = obj;
+            if (text.startsWith(CLIPBOARD_MARKER)) {
+                e.preventDefault();
+                try {
+                    const obj = JSON.parse(text.slice(CLIPBOARD_MARKER.length)) as SlideObject;
+                    const {id: _id, slideId: _sid, ...rest} = obj;
+                    addObject(activeSlideId, {
+                        ...rest,
+                        x: rest.x + 2,
+                        y: rest.y + 2
+                    } as Omit<SlideObject, 'id' | 'slideId'>);
+                } catch { /* not a valid slide object, ignore */
+                }
+                return;
+            }
+
+            if (text.trim()) {
+                e.preventDefault();
                 addObject(activeSlideId, {
-                    ...rest,
-                    x: rest.x + 2,
-                    y: rest.y + 2
+                    ...DEFAULT_TEXT_OBJECT,
+                    text: text.trim(),
                 } as Omit<SlideObject, 'id' | 'slideId'>);
-            } catch { /* not a valid slide object, ignore */
             }
         };
         document.addEventListener('copy', handleCopy);
@@ -125,30 +161,13 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
             document.removeEventListener('copy', handleCopy);
             document.removeEventListener('paste', handlePaste);
         };
-    }, [selectedObjectId, deck.objects, activeSlideId, canWrite, addObject]);
+    }, [selectedObjectId, deck.objects, activeSlideId, canWrite, addObject, handleImageFile]);
 
     const handleAddText = useCallback((obj: typeof DEFAULT_TEXT_OBJECT & {text: string}) => {
         if (!activeSlideId) return;
         addObject(activeSlideId, obj);
     }, [activeSlideId, addObject]);
 
-    const handleAddImage = useCallback((obj: typeof DEFAULT_IMAGE_OBJECT & {src: string}) => {
-        if (!activeSlideId) return;
-        addObject(activeSlideId, obj);
-    }, [activeSlideId, addObject]);
-
-    const handleUploadImage = useCallback(async (file: File): Promise<string | null> => {
-        if (!mediaFolderId || !file.type.startsWith('image/')) return null;
-        try {
-            const result = await uploadFile.mutateAsync({parentId: mediaFolderId, file});
-            if (result) {
-                return getDriveEmbedUrl(path.ownerId, path.mountId, (result as any).id, 'image');
-            }
-        } catch (e) {
-            console.error('Upload failed:', e);
-        }
-        return null;
-    }, [mediaFolderId, uploadFile, path.ownerId, path.mountId]);
 
     const handleDoubleClickObject = useCallback((objId: string) => {
         setSelectedObjectId(objId);
@@ -166,17 +185,8 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
     }, [deleteObject, selectedObjectId]);
 
     const handleDropImage = useCallback(async (file: File) => {
-        if (!activeSlideId || !mediaFolderId || !file.type.startsWith('image/')) return;
-        try {
-            const result = await uploadFile.mutateAsync({parentId: mediaFolderId, file});
-            if (result) {
-                const src = getDriveEmbedUrl(path.ownerId, path.mountId, (result as any).id, 'image');
-                addObject(activeSlideId, {...DEFAULT_IMAGE_OBJECT, src} as Omit<SlideObject, 'id' | 'slideId'>);
-            }
-        } catch (e) {
-            console.error('Drop upload failed:', e);
-        }
-    }, [activeSlideId, mediaFolderId, uploadFile, path.ownerId, path.mountId, addObject]);
+        handleImageFile(file);
+    }, [handleImageFile]);
 
     const handlePresent = useCallback(() => {
         const el = document.documentElement;
@@ -294,7 +304,7 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
                 onAccessDialogOpen={onAccessDialogOpen}
                 onRestore={handleRestore}
                 onAddText={() => setIsAddTextOpen(true)}
-                onAddImage={() => setIsAddImageOpen(true)}
+                onAddImage={() => imageInputRef.current?.click()}
                 onAddSlide={() => addSlide()}
                 onPresent={handlePresent}
             />
@@ -349,11 +359,12 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
                 onClose={() => setIsAddTextOpen(false)}
                 onAdd={handleAddText}
             />
-            <AddImageDialog
-                isOpen={isAddImageOpen}
-                onClose={() => setIsAddImageOpen(false)}
-                onAdd={handleAddImage}
-                onUpload={handleUploadImage}
+            <input
+                ref={imageInputRef}
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={handleImageSelect}
             />
             <ObjectSettingsDialog
                 isOpen={isObjectSettingsOpen}
