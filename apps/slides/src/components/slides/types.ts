@@ -1,3 +1,5 @@
+import type {DrivePath} from '@workspace/lib/types/drive';
+
 export type TextObject = {
     id: string;
     slideId: string;
@@ -26,6 +28,7 @@ export type ImageObject = {
     rotation: number;
     src: string;
     objectFit: 'contain' | 'cover' | 'fill';
+    sourcePath?: DrivePath;
 }
 
 export type SlideObject = TextObject | ImageObject;

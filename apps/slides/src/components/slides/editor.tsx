@@ -95,8 +95,12 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
         try {
             const result = await uploadFile.mutateAsync({parentId: mediaFolderId, file});
             if (result) {
-                const src = getDriveEmbedUrl(path.ownerId, path.mountId, (result as any).id, 'image');
-                addObject(activeSlideId, {...DEFAULT_IMAGE_OBJECT, src} as Omit<SlideObject, 'id' | 'slideId'>);
+                const src = getDriveEmbedUrl(path.ownerId, path.mountId, result.id, 'image');
+                addObject(activeSlideId, {
+                    ...DEFAULT_IMAGE_OBJECT,
+                    src,
+                    sourcePath: result,
+                } as Omit<SlideObject, 'id' | 'slideId'>);
             }
         } catch (e) {
             console.error('Image upload failed:', e);
@@ -108,6 +112,29 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
         if (file) handleImageFile(file);
         e.target.value = '';
     }, [handleImageFile]);
+
+    const reUploadImage = useCallback(async (srcUrl: string): Promise<{
+        src: string;
+        sourcePath: DrivePath
+    } | null> => {
+        if (!mediaFolderId) return null;
+        try {
+            const response = await fetch(srcUrl, {credentials: 'include'});
+            if (!response.ok) return null;
+            const blob = await response.blob();
+            const file = new File([blob], 'image', {type: blob.type || 'image/png'});
+            const result = await uploadFile.mutateAsync({parentId: mediaFolderId, file});
+            if (result) {
+                return {
+                    src: getDriveEmbedUrl(path.ownerId, path.mountId, result.id, 'image'),
+                    sourcePath: result,
+                };
+            }
+        } catch (e) {
+            console.error('Re-upload failed:', e);
+        }
+        return null;
+    }, [mediaFolderId, uploadFile, path.ownerId, path.mountId]);
 
     useEffect(() => {
         const handleCopy = (e: ClipboardEvent) => {
@@ -137,11 +164,26 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
                 try {
                     const obj = JSON.parse(text.slice(CLIPBOARD_MARKER.length)) as SlideObject;
                     const {id: _id, slideId: _sid, ...rest} = obj;
-                    addObject(activeSlideId, {
-                        ...rest,
-                        x: rest.x + 2,
-                        y: rest.y + 2
-                    } as Omit<SlideObject, 'id' | 'slideId'>);
+                    const pasteObj = {...rest, x: rest.x + 2, y: rest.y + 2};
+
+                    if (obj.type === 'image' && obj.sourcePath) {
+                        if (obj.sourcePath.parentId !== mediaFolderId) {
+                            reUploadImage(obj.src).then((result) => {
+                                if (result) {
+                                    addObject(activeSlideId, {
+                                        ...pasteObj,
+                                        src: result.src,
+                                        sourcePath: result.sourcePath,
+                                    } as Omit<SlideObject, 'id' | 'slideId'>);
+                                } else {
+                                    addObject(activeSlideId, pasteObj as Omit<SlideObject, 'id' | 'slideId'>);
+                                }
+                            });
+                            return;
+                        }
+                    }
+
+                    addObject(activeSlideId, pasteObj as Omit<SlideObject, 'id' | 'slideId'>);
                 } catch { /* not a valid slide object, ignore */
                 }
                 return;
@@ -161,7 +203,7 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
             document.removeEventListener('copy', handleCopy);
             document.removeEventListener('paste', handlePaste);
         };
-    }, [selectedObjectId, deck.objects, activeSlideId, canWrite, addObject, handleImageFile]);
+    }, [selectedObjectId, deck.objects, activeSlideId, canWrite, addObject, handleImageFile, reUploadImage, mediaFolderId]);
 
     const handleAddText = useCallback((obj: typeof DEFAULT_TEXT_OBJECT & {text: string}) => {
         if (!activeSlideId) return;
