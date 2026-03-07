@@ -164,6 +164,9 @@ For S3 mounts: `metadata.db`, `tmp/`, and `thumbs/` stay local; file data goes t
 
 ### Collab document (per doc)
 
-| Table         | Purpose                                     |
-|---------------|---------------------------------------------|
-| `doc_updates` | Y.js update blobs for collaborative editing |
+| Table           | Purpose                                                                             |
+|-----------------|-------------------------------------------------------------------------------------|
+| `doc_updates`   | Incremental Y.js update blobs for real-time collaborative editing                   |
+| `doc_snapshots` | Periodic full Y.js state snapshots for fast loading (created every 100 updates)     |
+
+*Note: The system keeps a maximum of 50 revisions in `doc_snapshots` and clears `doc_updates` when a new snapshot is created to manage database size.*
