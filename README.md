@@ -149,6 +149,7 @@ docker-compose restart
 - [Organizations & Teams](docs/ORGANISATIONS-AND-TEAMS.md) - Organization and team management
 - [Chat System](docs/CHAT.md) - Real-time chat with slash commands and collaboration
 - [ACL System](docs/ACL.md) - Access control and sharing permissions
+- [Clipboard System](docs/CLIPBOARD.md) - Inter-app copy-paste data preservation
 - [Sheets App](docs/SHEETS.md) - Collaborative spreadsheet editor
 - [Docker Deployment](docs/DOCKER.md) - Building and deploying with Docker
 
