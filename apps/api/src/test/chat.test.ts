@@ -1,5 +1,6 @@
 import {beforeAll, describe, expect, test} from 'bun:test';
 import {authedRequest, chatGet, chatPost, driveGet, drivePost, getTestContext} from './setup';
+import {DRIVE_MIME_CHAT} from "@workspace/lib/types";
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
 
@@ -34,7 +35,7 @@ describe('Chat', () => {
                 `folder/${aliceRootId}/chat`, {fileName: 'Team Chat'});
             expect(data.name).toBe('Team Chat.eigenchat');
             expect(data.type).toBe('chat');
-            expect(data.mimeType).toBe('DRIVE_MIME_CHAT');
+            expect(data.mimeType).toBe(DRIVE_MIME_CHAT);
             chatId = data.id;
         });
 

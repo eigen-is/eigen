@@ -13,32 +13,39 @@ import {
     Folder,
     MessageSquare,
     Presentation,
+    Sheet,
     StickyNote
 } from 'lucide-react';
+import {
+    DRIVE_MIME_CHAT,
+    DRIVE_MIME_DOC,
+    DRIVE_MIME_SHEETS,
+    DRIVE_MIME_SLIDES,
+    DRIVE_MIME_STICKIES,
+    DRIVE_TYPE_FOLDER
+} from "@workspace/lib/types";
 
 type FileIconProps = React.ComponentProps<typeof File>;
 
-/**
- * Returns the appropriate icon component based on the MIME type
- * @param mimeType - The MIME type of the file
- * @param type - The type of the item (file or folder)
- * @param props - Props to pass to the icon component
- */
 export function getFileIcon(mimeType: string, type: string, props?: FileIconProps) {
-    // Return folder icon for folders
-    if (type === 'folder') {
+    if (type === DRIVE_TYPE_FOLDER) {
         return <Folder {...props} />;
     }
-    // Return folder icon for folders
-    if (type === 'doc') {
+
+    if (mimeType === DRIVE_MIME_DOC) {
         return <FileText {...props} />;
     }
-    // Return folder icon for folders
-    if (type === 'stickies') {
+    if (mimeType === DRIVE_MIME_STICKIES) {
         return <StickyNote {...props} />;
     }
-    if (type === 'chat') {
+    if (mimeType === DRIVE_MIME_CHAT) {
         return <MessageSquare {...props} />;
+    }
+    if (mimeType === DRIVE_MIME_SLIDES) {
+        return <Presentation {...props} />;
+    }
+    if (mimeType === DRIVE_MIME_SHEETS) {
+        return <Sheet {...props} />;
     }
 
     // Handle different file types based on MIME type
