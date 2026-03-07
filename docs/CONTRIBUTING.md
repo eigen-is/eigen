@@ -76,10 +76,10 @@ All protected routes include `{auth: true}`.
 
 ### Hooks
 
-Place hooks in `packages/lib/src/lib/[domain]/hooks/use-[name].ts`:
+Place hooks in `packages/lib/src/core/[domain]/hooks/use-[name].ts`:
 
 ```typescript
-// packages/lib/src/lib/drive/hooks/use-drive.ts
+// packages/core/src/core/drive/hooks/use-drive.ts
 export function useFolderContent(ownerId: string, pathId: string) {
     return useQuery({
         queryKey: driveKeys.folder(pathId),
@@ -107,7 +107,7 @@ Export invalidation functions alongside hooks for reuse.
 Each domain module has an `index.ts` that re-exports its public API:
 
 ```typescript
-// packages/lib/src/lib/drive/index.ts
+// packages/core/src/core/drive/index.ts
 export * from './hooks';
 export * from './sse-handlers';
 ```
@@ -116,10 +116,10 @@ Import from `@workspace/lib/[domain]`, not deep paths.
 
 ## API Client
 
-Use the Treaty client from `packages/lib/src/lib/api.ts`:
+Use the Treaty client from `packages/lib/src/core/api.ts`:
 
 ```typescript
-import {driveApi, mailApi, contactsApi} from '@workspace/lib/api';
+import {driveApi, mailApi, contactsApi} from '@workspace/core/api';
 
 // Type-safe API calls
 const response = await driveApi.folder({ownerId})({pathId}).get();
@@ -131,7 +131,7 @@ Server-Sent Events handle real-time cache invalidation across tabs/devices.
 
 ### SSE Handlers (Frontend)
 
-Location: `packages/lib/src/lib/[domain]/sse-handlers.ts`
+Location: `packages/lib/src/core/[domain]/sse-handlers.ts`
 
 ```typescript
 export function handleDriveSSEvent(event: SSEvent, queryClient: QueryClient): boolean {

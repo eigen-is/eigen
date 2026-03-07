@@ -38,7 +38,7 @@ to `docs/*.md`.
 - **Comments**: Keep them minimal. Code should be self-documenting. No JSDoc.
 - **Imports**: Import from `@workspace/lib/[domain]` and `@workspace/ui/components/...`. Avoid deep relative paths.
 - **Data Fetching**: NEVER use `useQuery`/`useMutation` directly in frontend apps. All data-fetching logic MUST live in
-  `packages/lib/src/lib/[domain]/hooks/`.
+  `packages/lib/src/core/[domain]/hooks/`.
 - **Validation**: Shared validation logic lives in `packages/lib/src/validation/`. Do not duplicate in FE/BE.
 
 ## Backend Architecture
@@ -65,7 +65,7 @@ See:
 - **Real-Time**:
     - Mutations invalidate local TanStack Query cache.
     - Backend emits SSE via `home.notify()`.
-    - FE listens via handlers in `packages/lib/src/lib/[domain]/sse-handlers.ts` to invalidate cache across tabs.
+  - FE listens via handlers in `packages/lib/src/core/[domain]/sse-handlers.ts` to invalidate cache across tabs.
 - **File Types**: `.eigendoc` (Docs), `.eigenstickies` (Stickies), `.eigenchat` (Chat), `.eigenslides` (Slides),
   `.eigensheets` (Sheets). They are directories with internal `data.db` SQLite files.
 

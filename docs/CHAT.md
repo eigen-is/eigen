@@ -160,7 +160,7 @@ apps/chat/src/
 └── main.tsx
 ```
 
-### Hooks (`packages/lib/src/lib/chat/`)
+### Hooks (`packages/lib/src/core/chat/`)
 
 - `useChats(ownerId, mountId)` — own + shared chats (filtered by `application/eigenchat`)
 - `useMessages(ownerId, mountId, chatId)` — GET messages with polling
@@ -171,22 +171,22 @@ apps/chat/src/
 
 ### Implemented
 
-| File | Purpose |
-|------|----------|
-| `apps/api/src/lib/chat/chat.ts` | ChatRoom class (messages, read state, whisper filtering) |
-| `apps/api/src/lib/chat/schema.ts` | Drizzle schemas (messages, read_state) |
-| `apps/api/src/lib/chat/db-config.ts` | Database config + migrations |
-| `apps/api/src/lib/chat/sse-events.ts` | SSE event builders |
-| `apps/api/src/routes/chat.ts` | Chat API routes (messages, read) |
-| `packages/lib/src/types/chat.ts` | Chat types (ChatMessage, ChatReadState) |
-| `packages/lib/src/types/drive.ts` | `DriveChatType`, `isChatType()`, updated `DriveContainerType` |
-| `packages/lib/src/types/sse.ts` | Chat SSE event types |
-| `apps/api/src/lib/drive/drive.ts` | `createChat()`, `getChat()`, chat/ subfolder in createDoc/createStickies |
-| `apps/api/src/lib/drive/sharedDrive.ts` | Delegated `createChat()`, `getChat()` |
-| `apps/api/src/routes/drive.ts` | `POST .../folder/:pathId/chat` route |
-| `apps/api/src/test/chat.test.ts` | Tests: creation, messages, whisper visibility (3 users) |
-| `apps/chat/` | Standalone chat app (PoC) |
-| `packages/lib/src/lib/chat/` | FE hooks (useChats, useMessages, usePostMessage, useCreateChat) |
+| File                                    | Purpose                                                                  |
+|-----------------------------------------|--------------------------------------------------------------------------|
+| `apps/api/src/lib/chat/chat.ts`         | ChatRoom class (messages, read state, whisper filtering)                 |
+| `apps/api/src/lib/chat/schema.ts`       | Drizzle schemas (messages, read_state)                                   |
+| `apps/api/src/lib/chat/db-config.ts`    | Database config + migrations                                             |
+| `apps/api/src/lib/chat/sse-events.ts`   | SSE event builders                                                       |
+| `apps/api/src/routes/chat.ts`           | Chat API routes (messages, read)                                         |
+| `packages/lib/src/types/chat.ts`        | Chat types (ChatMessage, ChatReadState)                                  |
+| `packages/lib/src/types/drive.ts`       | `DriveChatType`, `isChatType()`, updated `DriveContainerType`            |
+| `packages/lib/src/types/sse.ts`         | Chat SSE event types                                                     |
+| `apps/api/src/lib/drive/drive.ts`       | `createChat()`, `getChat()`, chat/ subfolder in createDoc/createStickies |
+| `apps/api/src/lib/drive/sharedDrive.ts` | Delegated `createChat()`, `getChat()`                                    |
+| `apps/api/src/routes/drive.ts`          | `POST .../folder/:pathId/chat` route                                     |
+| `apps/api/src/test/chat.test.ts`        | Tests: creation, messages, whisper visibility (3 users)                  |
+| `apps/chat/`                            | Standalone chat app (PoC)                                                |
+| `packages/lib/src/core/chat/`           | FE hooks (useChats, useMessages, usePostMessage, useCreateChat)          |
 
 ## 8. Slash Commands
 

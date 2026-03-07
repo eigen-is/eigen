@@ -79,7 +79,7 @@ Enable external users (guests) to authenticate via Email OTP and access shared r
 Register the `emailOTP` plugin with `disableSignUp: true`.
 
 ```typescript
-// apps/api/src/lib/auth/auth.ts
+// apps/api/src/core/auth/auth.ts
 emailOTP({
     disableSignUp: true, // Crucial: forces users through the custom endpoint
     async sendVerificationOTP({email, otp, type}, request) {
@@ -113,7 +113,7 @@ export const guestAuthRouter = new Elysia({ prefix: '/guest-auth' })
 Dummy drive satisfying the `Home.drive` interface.
 
 ```typescript
-// apps/api/src/lib/drive/guest-drive.ts
+// apps/api/src/core/drive/guest-drive.ts
 export class GuestDrive extends Drive {
     async init(): Promise<void> {}
     async size(): Promise<number> { return 0; }
@@ -126,7 +126,7 @@ export class GuestDrive extends Drive {
 Sandboxed `Home` instance overriding `init()`.
 
 ```typescript
-// apps/api/src/lib/home/guest-home.ts
+// apps/api/src/core/home/guest-home.ts
 export class GuestHome extends Home {
     public async init() {
         if (this.guestInitialized) return this;
@@ -143,7 +143,7 @@ export class GuestHome extends Home {
 Return `GuestHome` when applicable.
 
 ```typescript
-// apps/api/src/lib/home/get-home.ts
+// apps/api/src/core/home/get-home.ts
 const home = user.role === 'guest' ? new GuestHome(user) : new Home(user);
 ```
 

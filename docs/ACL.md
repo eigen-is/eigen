@@ -115,6 +115,6 @@ When ACLs change, `acl-propagation.ts` updates each affected user's `shared.db` 
 | `apps/api/src/lib/drive/drive.ts`                                    | `updateACL()`                                                             |
 | `apps/api/src/lib/drive/acl-propagation.ts`                          | Propagate changes to shared DBs                                           |
 | `apps/api/src/routes/drive.ts`                                       | PUT `/drive/:ownerId/:mountId/path/:pathId/acl`                           |
-| `packages/lib/src/lib/drive/hooks/use-drive.ts`                      | `useUpdateACL` hook                                                       |
+| `packages/lib/src/core/drive/hooks/use-drive.ts`                     | `useUpdateACL` hook                                                       |
 | `packages/ui/src/components/layout/drive/drive-access-list-edit.tsx` | Share dialog UI                                                           |
 | `packages/ui/src/components/layout/drive/drive-share-summary.tsx`    | Share column UI                                                           |
