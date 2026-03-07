@@ -12,6 +12,7 @@ import {
     DRIVE_MIME_SHEETS,
     DRIVE_MIME_SLIDES,
     DRIVE_MIME_STICKIES,
+    type DriveContainerType,
     type DrivePath,
     type MountConfig
 } from '@workspace/lib/types';
@@ -176,7 +177,7 @@ export class Mount {
         }
     }
 
-    async createFolder(parentId: string, name: string, type: 'folder' | 'doc' | 'stickies' | 'slides' | 'sheets' | 'chat' = 'folder'): Promise<string> {
+    async createFolder(parentId: string, name: string, type: DriveContainerType = 'folder'): Promise<string> {
         validateName(name);
         await this.assertUniqueName(parentId, name);
         const folderId = randomUUID();

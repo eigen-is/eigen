@@ -3,7 +3,7 @@ import {BunSQLiteDatabase} from 'drizzle-orm/bun-sqlite';
 import {eq} from 'drizzle-orm';
 import {ApiError, type DatabaseConfig, type ManagedDatabase, type SchemaType} from '../core';
 import {createDefaultMountConfig, Mount} from '../mount';
-import type {MountConfig, MountInfo} from '@workspace/lib/types';
+import {DRIVE_TYPE_DOC, type MountConfig, type MountInfo} from '@workspace/lib/types';
 import {
     type DriveACL,
     type DrivePath,
@@ -144,7 +144,7 @@ export default class Drive {
         }
 
         const safeName = `${docName}.eigendoc`;
-        const pathId = await mount.createFolder(parentId, safeName, 'doc');
+        const pathId = await mount.createFolder(parentId, safeName, DRIVE_TYPE_DOC);
         await CollabDocument.create(this, mountId, pathId);
         const doc = await mount.getPath(pathId);
         if (!doc) throw new ApiError(500, 'Failed to create doc');
