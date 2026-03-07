@@ -56,23 +56,25 @@ Same pattern as stickies `normalize-board.ts`:
 ## File Structure
 
 ```
-apps/slides/src/components/slides/
-  types.ts                    — SlideItem, SlideObject, TextObject, ImageObject, DeckData
-  normalize-deck.ts           — Yjs normalization
-  editor.tsx                  — Main editor (connects Yjs, renders layout)
-  toolbar.tsx                 — File menu, undo/redo, insert controls, present
-  sidebar.tsx                 — App sidebar (already exists, move+clean)
-  slide-panel.tsx             — Left panel with draggable slide thumbnails
-  slide-canvas.tsx            — The main slide editing area (scaled 16:9)
-  slide-object.tsx            — Renders a single object (text or image) with selection/resize
-  slide-thumbnail.tsx         — Thumbnail preview of a slide for the left panel
-  add-text-dialog.tsx         — Dialog to add/edit text object
-  add-image-dialog.tsx        — Dialog to add image object
-  object-settings-dialog.tsx  — Edit object properties (position, size, color, etc.)
-  hooks/
-    use-deck.ts               — Yjs document management (like stickies use-board.ts)
-    use-slide-dnd.ts          — dnd-kit for slide reorder + object reorder
-    use-object-drag.ts        — Drag/resize objects on the canvas
+apps/slides/src/components/
+  slides-sidebar.tsx          — App sidebar
+  slides/
+    types.ts                    — SlideItem, SlideObject, TextObject, ImageObject, DeckData
+    normalize-deck.ts           — Yjs normalization
+    editor.tsx                  — Main editor (connects Yjs, renders layout)
+    toolbar.tsx                 — File menu, undo/redo, insert controls, present
+    slide-panel.tsx             — Left panel with draggable slide thumbnails
+    slide-canvas.tsx            — The main slide editing area (scaled 16:9)
+    slide-object.tsx            — Renders a single object (text or image) with selection/resize
+    slide-thumbnail.tsx         — Thumbnail preview of a slide for the left panel
+    add-text-dialog.tsx         — Dialog to add/edit text object
+    add-image-dialog.tsx        — Dialog to add image object
+    object-settings-dialog.tsx  — Edit object properties
+    slide-settings-dialog.tsx   — Edit slide properties
+    hooks/
+      use-deck.ts               — Yjs document management
+      use-slide-dnd.ts          — dnd-kit for slide reorder + object reorder
+      use-object-drag.ts        — Drag/resize objects on the canvas
 ```
 
 ### Shared component — packages/ui

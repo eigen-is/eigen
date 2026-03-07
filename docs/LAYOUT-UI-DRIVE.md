@@ -60,7 +60,7 @@ File/folder details: metadata, preview (images, video, audio), and access list.
 
 ### Dialogs
 
-- `DriveCreateFolder`, `DriveCreateDoc`, `DriveCreateStickies`
+- `DriveCreateFolder`, `DriveCreateDoc`, `DriveCreateStickies`, `DriveCreateChat`, `DriveCreateSlides`, `DriveCreateSheets`
 - `DriveDeleteItem`, `DriveRenameItem`
 - `DriveAccessDialog` (sharing/ACL)
 - `DriveUploadFiles`

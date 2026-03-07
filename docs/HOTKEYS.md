@@ -17,7 +17,7 @@ Eigen uses `@tanstack/react-hotkeys` for cross-platform keyboard shortcuts with 
 | Shortcut | Action | Implementation |
 |----------|--------|----------------|
 | `Mod+B` | Toggle sidebar | `SidebarProvider` in `sidebar.tsx` |
-| `Mod+P` | Print document | `use-print-document.ts` (manual listener) |
+| `Mod+P` | Print document | `eigen-app.tsx` (`useHotkey` global) |
 | `Escape` | Close file preview | `FilePreview` component |
 | `Escape` | Deselect media | `ResizableMedia` component |
 | `Delete`/`Backspace` | Delete selected media | `ResizableMedia` component |
@@ -39,7 +39,6 @@ Eigen uses `@tanstack/react-hotkeys` for cross-platform keyboard shortcuts with 
 
 | Component | Shortcut | Implementation |
 |-----------|----------|----------------|
-| Print hook | `Mod+P` | `document.addEventListener('keydown')` |
 | Docs editor | `Ctrl+B/I/U` | Slate's `<Editable>` `onKeyDown` |
 
 ### Unchanged Patterns
@@ -105,10 +104,7 @@ const shortcut = formatForDisplay('Mod+S');
 - Media controls: `Escape`, `Delete`, `Backspace` via `useHotkey`
 - Stickies undo/redo: `Mod+Z`, `Mod+Y` with `formatForDisplay`
 - Docs toolbar: `formatForDisplay` for labels
-
-### ⚠️ Partial
-
-- Print document: Still uses manual `addEventListener` (could migrate)
+- Print document: `Mod+P` via `useHotkey` (global)
 
 ### 🔄 Not Applicable
 

@@ -41,9 +41,15 @@ Users are created via `auth.api.signUpEmail()` (falls back to `signInEmail()` if
 | `contacts.test.ts`  | Contact CRUD, labels CRUD, cross-user isolation, me endpoint                                                                             |
 | `mail.test.ts`      | Mailbox listing, create mailbox, Bob isolation                                                                                           |
 | `chat.test.ts`      | Chat creation, messages, whisper visibility, slash commands, read-only ACL, backend validation                                           |
+| `collab.test.ts`    | Collaborative document (Yjs) operations, database handling, storage                                                                      |
+| `integration.test.ts`| End-to-end integration tests                                                                                                            |
+| `mount.test.ts`     | Mount operations, metadata database, storage typing                                                                                      |
+| `storage.test.ts`   | Local key storage, path operations, file creation/deletion                                                                               |
 | `org.test.ts`       | Org creation, teams, admin roles, members                                                                                                |
 | `org-drive.test.ts` | Team drives, team ACL on personal drives, redundant ACL filtering                                                                        |
 | `sse.test.ts`       | SSE endpoint, connection management, SSE ACL events                                                                                      |
+| `public.test.ts`    | Public user info, waitlist endpoints                                                                                                     |
+| `setup.test.ts`     | Initial setup wizard, configuration saving                                                                                               |
 
 ## Key Implementation Details
 
