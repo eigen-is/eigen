@@ -23,6 +23,7 @@ const apps = [
         className: 'text-blue-600',
         href: import.meta.env.VITE_APP_CALENDAR_URL,
         icon: 'calendar',
+        description: 'Keep track of your schedule',
     },
     {
         name: 'Chat',
