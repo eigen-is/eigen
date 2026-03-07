@@ -1,12 +1,12 @@
-// Export all modules from the lib package
-export * from './lib/api';
-export * from './lib/apps';
-export * from './lib/contacts';
-export * from './lib/public';
-export * from './lib/media';
-export * from './lib/home';
-export * from './lib/auth';
-export * from './lib/drive';
-export * from './lib/mail';
+// Export all modules from the core package
+export * from '@workspace/ui/core/api';
+export * from '@workspace/ui/core/apps';
+export * from '@workspace/ui/core/contacts';
+export * from '@workspace/ui/core/public';
+export * from '@workspace/ui/core/media';
+export * from '@workspace/ui/core/home';
+export * from '@workspace/ui/core/auth';
+export * from '@workspace/ui/core/drive';
+export * from '@workspace/ui/core/mail';
 
 

@@ -1,4 +1,4 @@
-import {useMutation, useQuery, useQueryClient, type QueryClient} from '@tanstack/react-query';
+import {type QueryClient, useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {getMailComposeUrl, mailApi} from '@workspace/lib/api.ts';
 import {Email} from "@workspace/lib/types/mail";
 import {useAuth} from '@workspace/lib/auth';

@@ -16,15 +16,15 @@ User Action → API Mutation → home.notify() → SSE Stream → Client Handler
 
 ## File Locations
 
-| Purpose | Location |
-|---------|----------|
-| Type definitions | `packages/lib/src/types/sse.ts` |
-| Event builders (backend) | `apps/api/src/lib/[domain]/sse-events.ts` |
-| SSE handlers (frontend) | `packages/lib/src/lib/[domain]/sse-handlers.ts` |
-| useSSE hook | `packages/lib/src/lib/sse/hooks/use-sse.ts` |
-| SSE Provider (toasts) | `packages/ui/src/components/layout/sse-provider/sse-provider.tsx` |
-| SSE route (backend) | `apps/api/src/routes/sse.ts` |
-| Home class (notify) | `apps/api/src/lib/home/home.ts` |
+| Purpose                  | Location                                                          |
+|--------------------------|-------------------------------------------------------------------|
+| Type definitions         | `packages/lib/src/types/sse.ts`                                   |
+| Event builders (backend) | `apps/api/src/lib/[domain]/sse-events.ts`                         |
+| SSE handlers (frontend)  | `packages/lib/src/core/[domain]/sse-handlers.ts`                  |
+| useSSE hook              | `packages/lib/src/core/sse/hooks/use-sse.ts`                      |
+| SSE Provider (toasts)    | `packages/ui/src/components/layout/sse-provider/sse-provider.tsx` |
+| SSE route (backend)      | `apps/api/src/routes/sse.ts`                                      |
+| Home class (notify)      | `apps/api/src/lib/home/home.ts`                                   |
 
 ## 1. Type Definitions
 
@@ -69,7 +69,7 @@ The `Home` class at `apps/api/src/lib/home/home.ts` manages:
 
 ### 3.1 useSSE Hook
 
-Location: `packages/lib/src/lib/sse/hooks/use-sse.ts`
+Location: `packages/lib/src/core/sse/hooks/use-sse.ts`
 
 - Establishes EventSource connection when authenticated
 - Dispatches to domain handlers for cache invalidation
@@ -77,16 +77,17 @@ Location: `packages/lib/src/lib/sse/hooks/use-sse.ts`
 
 ### 3.2 SSE Handlers (Cache Invalidation)
 
-Each domain has a handler at `packages/lib/src/lib/[domain]/sse-handlers.ts`:
+Each domain has a handler at `packages/lib/src/core/[domain]/sse-handlers.ts`:
 
 - Checks event type prefix (`drive:`, `mail:`, `contacts:`)
 - Calls appropriate invalidation functions from hooks
 - Returns `true` if handled
 
 See existing implementations:
-- `packages/lib/src/lib/drive/sse-handlers.ts`
-- `packages/lib/src/lib/mail/sse-handlers.ts`
-- `packages/lib/src/lib/contacts/sse-handlers.ts`
+
+- `packages/lib/src/core/drive/sse-handlers.ts`
+- `packages/lib/src/core/mail/sse-handlers.ts`
+- `packages/lib/src/core/contacts/sse-handlers.ts`
 
 ### 3.3 SSEProvider (Toast Notifications)
 
@@ -108,10 +109,10 @@ Wraps `useSSE` and displays toasts via sonner for notification events.
 3. **Emit from business logic** in `apps/api/src/lib/[domain]/[domain].ts`
    - Add `emit()` helper method
    - Call after mutations
-4. **Create SSE handler** at `packages/lib/src/lib/[domain]/sse-handlers.ts`
+4. **Create SSE handler** at `packages/lib/src/core/[domain]/sse-handlers.ts`
    - Export `handle[Domain]SSEvent()` function
    - Call invalidation functions from hooks
-5. **Register handler** in `packages/lib/src/lib/sse/hooks/use-sse.ts`
+5. **Register handler** in `packages/lib/src/core/sse/hooks/use-sse.ts`
    - Import handler
    - Add to `handleEvent` callback
 6. **Clean up UI code**
@@ -120,15 +121,15 @@ Wraps `useSSE` and displays toasts via sonner for notification events.
 
 ## 5. Summary
 
-| Layer      | Location                                        | Responsibility                      |
-|------------|-------------------------------------------------|-------------------------------------|
-| Types      | `packages/lib/src/types/sse.ts`                 | Event type definitions              |
-| Templates  | `apps/api/src/lib/{domain}/sse-events.ts`       | Text strings + event builder        |
-| Emit       | `apps/api/src/lib/{domain}/{domain}.ts`         | Call `this.emit()` after mutations  |
-| Broadcast  | `apps/api/src/lib/home/home.ts`                 | `notify()` sends to all subscribers |
-| Receive    | `packages/lib/src/lib/sse/hooks/use-sse.ts`     | EventSource connection              |
-| Invalidate | `packages/lib/src/lib/{domain}/sse-handlers.ts` | Cache invalidation logic            |
-| Toast      | `packages/ui/.../sse-provider.tsx`              | Display notifications               |
+| Layer      | Location                                         | Responsibility                      |
+|------------|--------------------------------------------------|-------------------------------------|
+| Types      | `packages/lib/src/types/sse.ts`                  | Event type definitions              |
+| Templates  | `apps/api/src/lib/{domain}/sse-events.ts`        | Text strings + event builder        |
+| Emit       | `apps/api/src/lib/{domain}/{domain}.ts`          | Call `this.emit()` after mutations  |
+| Broadcast  | `apps/api/src/lib/home/home.ts`                  | `notify()` sends to all subscribers |
+| Receive    | `packages/lib/src/core/sse/hooks/use-sse.ts`     | EventSource connection              |
+| Invalidate | `packages/lib/src/core/{domain}/sse-handlers.ts` | Cache invalidation logic            |
+| Toast      | `packages/ui/.../sse-provider.tsx`               | Display notifications               |
 
 ### Benefits
 

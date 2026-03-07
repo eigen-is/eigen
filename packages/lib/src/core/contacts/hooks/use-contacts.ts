@@ -1,4 +1,4 @@
-import {useMutation, useQuery, useQueryClient, type QueryClient} from '@tanstack/react-query';
+import {type QueryClient, useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {contactsApi} from '@workspace/lib/api.ts';
 import {type Contact} from '@workspace/lib/types/contact';
 import {invalidateHomeSize} from '../../home';

@@ -32,19 +32,19 @@
 
 ## Architecture Patterns
 - API routes: `/apps/api/src/routes/[domain].ts` with `auth: true` for protected routes
-- Shared logic: `/packages/lib/src/lib/[domain]/`
+- Shared logic: `/packages/lib/src/core/[domain]/`
 - UI components: `/packages/ui/src/components/`
 - Backend domain classes: `apps/api/src/lib/[domain]/[domain].ts` via `Home` singleton
-- Hooks: `packages/lib/src/lib/[domain]/hooks/use-[name].ts`
+- Hooks: `packages/lib/src/core/[domain]/hooks/use-[name].ts`
 
 ## Real-Time Updates (SSE)
 - Use Server-Sent Events for cache invalidation
-- SSE handlers: `packages/lib/src/lib/[domain]/sse-handlers.ts`
+- SSE handlers: `packages/lib/src/core/[domain]/sse-handlers.ts`
 - Event builders: `apps/api/src/lib/[domain]/sse-events.ts`
 - Create invalidate functions for both SSE handlers and mutation callbacks
 
 ## API Client & Data
-- Use Treaty client from `packages/lib/src/lib/api.ts`
+- Use Treaty client from `packages/lib/src/core/api.ts`
 - Query keys: `[domain, 'list'|'detail', ...params]`
 - Import from `@workspace/lib/[domain]` not deep paths
 - Invalidate queries when mutating data
