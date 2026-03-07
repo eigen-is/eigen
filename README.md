@@ -91,6 +91,9 @@ bun serve:sheets
 # Run TypeScript type check across all packages
 bun run typecheck
 
+# Run tests 
+bun run test
+
 # Build for production
 bun run build
 ```
