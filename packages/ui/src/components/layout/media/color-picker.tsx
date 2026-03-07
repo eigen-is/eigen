@@ -131,6 +131,8 @@ export function ColorPicker({
         onChange(color);
     };
 
+    const stopFocus = (e: React.MouseEvent) => e.preventDefault();
+
     return (
         <div className="flex flex-col gap-2">
             {showReset && (
@@ -139,7 +141,7 @@ export function ColorPicker({
                     className="flex items-center gap-2 px-2 py-1.5 -mx-1 rounded-md text-sm hover:bg-accent transition-colors"
                     title={resetLabel}
                     onClick={(e) => handleClick('', e)}
-                    onMouseDown={preventFocusLoss ? (e) => e.preventDefault() : undefined}
+                    onMouseDown={stopFocus}
                 >
                     <RotateCcw className="h-4 w-4"/>
                     <span>{resetLabel}</span>
@@ -158,7 +160,7 @@ export function ColorPicker({
                             )}
                             style={{backgroundColor: color.value}}
                             onClick={(e) => handleClick(color.value, e)}
-                            onMouseDown={preventFocusLoss ? (e) => e.preventDefault() : undefined}
+                            onMouseDown={stopFocus}
                         >
                             {normalizedValue === color.value.toLowerCase() && (
                                 <Check className="h-3 w-3"
