@@ -3,7 +3,17 @@ import {BunSQLiteDatabase} from 'drizzle-orm/bun-sqlite';
 import {eq} from 'drizzle-orm';
 import {ApiError, type DatabaseConfig, type ManagedDatabase, type SchemaType} from '../core';
 import {createDefaultMountConfig, Mount} from '../mount';
-import {DRIVE_TYPE_DOC, type MountConfig, type MountInfo} from '@workspace/lib/types';
+import {
+    DRIVE_TYPE_CHAT,
+    DRIVE_TYPE_DOC,
+    DRIVE_TYPE_FILE,
+    DRIVE_TYPE_FOLDER,
+    DRIVE_TYPE_SHEETS,
+    DRIVE_TYPE_SLIDES,
+    DRIVE_TYPE_STICKIES,
+    type MountConfig,
+    type MountInfo
+} from '@workspace/lib/types';
 import {
     type DriveACL,
     type DrivePath,
@@ -159,7 +169,7 @@ export default class Drive {
         }
 
         const safeName = `${stickiesName}.eigenstickies`;
-        const pathId = await mount.createFolder(parentId, safeName, 'stickies');
+        const pathId = await mount.createFolder(parentId, safeName, DRIVE_TYPE_STICKIES);
         await CollabDocument.create(this, mountId, pathId);
         const stickies = await mount.getPath(pathId);
         if (!stickies) throw new ApiError(500, 'Failed to create stickies');
@@ -174,7 +184,7 @@ export default class Drive {
         }
 
         const safeName = `${slidesName}.eigenslides`;
-        const pathId = await mount.createFolder(parentId, safeName, 'slides');
+        const pathId = await mount.createFolder(parentId, safeName, DRIVE_TYPE_SLIDES);
         await CollabDocument.create(this, mountId, pathId);
         const slides = await mount.getPath(pathId);
         if (!slides) throw new ApiError(500, 'Failed to create slides');
@@ -189,7 +199,7 @@ export default class Drive {
         }
 
         const safeName = `${sheetsName}.eigensheets`;
-        const pathId = await mount.createFolder(parentId, safeName, 'sheets');
+        const pathId = await mount.createFolder(parentId, safeName, DRIVE_TYPE_SHEETS);
         await CollabDocument.create(this, mountId, pathId);
         const sheets = await mount.getPath(pathId);
         if (!sheets) throw new ApiError(500, 'Failed to create sheets');
@@ -204,7 +214,7 @@ export default class Drive {
         }
 
         const safeName = `${chatName}.eigenchat`;
-        const pathId = await mount.createFolder(parentId, safeName, 'chat');
+        const pathId = await mount.createFolder(parentId, safeName, DRIVE_TYPE_CHAT);
         await ChatRoom.create(this, mountId, pathId);
         const chat = await mount.getPath(pathId);
         if (!chat) throw new ApiError(500, 'Failed to create chat');
@@ -215,7 +225,7 @@ export default class Drive {
     async getChat(mountId: string, chatId: string): Promise<ChatRoom> {
         const mount = this.getMount(mountId);
         const path = await mount.getPath(chatId);
-        if (!path || path.type !== 'chat') {
+        if (!path || path.type !== DRIVE_TYPE_CHAT) {
             throw new ApiError(404, 'Chat not found');
         }
         const chatRoom = new ChatRoom(this, this.home, path);
@@ -356,7 +366,7 @@ export default class Drive {
         const oldParentId = path.parentId;
 
         const targetParent = await mount.getPath(targetParentId);
-        if (!targetParent || targetParent.type !== 'folder') {
+        if (!targetParent || targetParent.type !== DRIVE_TYPE_FOLDER) {
             throw new ApiError(404, 'Target parent is not a folder');
         }
 
@@ -391,7 +401,7 @@ export default class Drive {
     async downloadFile(mountId: string, pathId: string): Promise<ArrayBuffer | null> {
         const mount = this.getMount(mountId);
         const path = await mount.getPath(pathId);
-        if (!path || path.type !== 'file') {
+        if (!path || path.type !== DRIVE_TYPE_FILE) {
             return null;
         }
         return await mount.readFile(pathId);
