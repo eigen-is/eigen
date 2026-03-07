@@ -1,10 +1,11 @@
 import {useCallback, useEffect, useRef, useState} from 'react';
 import * as Y from 'yjs';
 import {WebsocketProvider} from 'y-websocket';
-import {DeckData, SlideObject, DEFAULT_TEXT_OBJECT} from '../types';
+import {DeckData, DEFAULT_TEXT_OBJECT, SlideObject} from '../types';
 import {nanoid} from 'nanoid';
 import {normalizeDeck} from '../normalize-deck';
 import {getCollabWebSocketUrl} from '@workspace/lib/api';
+
 const OBJECT_FIELDS = ['id', 'slideId', 'type', 'x', 'y', 'w', 'h', 'rotation', 'text', 'fontSize', 'fontWeight', 'fontStyle', 'textAlign', 'color', 'src', 'objectFit'] as const;
 
 function yMapToObject(yMap: Y.Map<any>): Record<string, any> {
@@ -119,8 +120,12 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
     }, [ownerId, mountId, pathId, initializeDefaultDeck]);
 
     useEffect(() => {
-        if (!activeSlideId && deck.slideOrder.length > 0) {
-            setActiveSlideId(deck.slideOrder[0]);
+        if (deck.slideOrder.length > 0) {
+            if (!activeSlideId || !deck.slideOrder.includes(activeSlideId)) {
+                setActiveSlideId(deck.slideOrder[0]);
+            }
+        } else {
+            setActiveSlideId(null);
         }
     }, [activeSlideId, deck.slideOrder]);
 
