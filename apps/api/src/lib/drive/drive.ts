@@ -414,11 +414,13 @@ export default class Drive {
         return data ? new Uint8Array(data).buffer : null;
     }
 
-    async getMimeTypeContents(mimeType: string): Promise<DrivePath[]> {
+    async getMimeTypeContents(mimeType: string, options?: {
+        excludeDocumentChildren?: boolean
+    } = {excludeDocumentChildren: true}): Promise<DrivePath[]> {
         // Aggregate results from all mounts
         const allResults: DrivePath[] = [];
         for (const mount of this.mounts.values()) {
-            const mountResults = await mount.getPathsByMimeType(mimeType);
+            const mountResults = await mount.getPathsByMimeType(mimeType, options);
             allResults.push(...mountResults);
         }
 
@@ -444,7 +446,9 @@ export default class Drive {
             updatedAt: r.updatedAt ?? new Date()
         }));
 
-        return [...allResults, ...mapped];
+        const seen = new Set(allResults.map(r => r.id));
+        const unique = mapped.filter(r => !seen.has(r.id));
+        return [...allResults, ...unique];
     }
 
     async breadCrumb(mountId: string, pathId: string): Promise<DrivePath[]> {

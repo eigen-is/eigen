@@ -57,7 +57,9 @@ export default class SharedDrive extends Drive {
         return 0;
     }
 
-    public async getMimeTypeContents(_mimeType: string): Promise<DrivePath[]> {
+    public async getMimeTypeContents(_mimeType: string, _options?: {
+        excludeDocumentChildren?: boolean
+    }): Promise<DrivePath[]> {
         return [];
     }
 
