@@ -1,3 +1,4 @@
+export * from './clipboard';
 export * from './collab';
 export * from './contact';
 export * from './drive';
