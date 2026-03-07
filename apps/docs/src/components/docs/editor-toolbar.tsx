@@ -94,6 +94,8 @@ export const EditorToolbar = ({editor, path, canWrite, onAccessDialogOpen, onDel
     const [createDocOpen, setCreateDocOpen] = useState(false);
     const [renameDialogOpen, setRenameDialogOpen] = useState(false);
     const [revisionsOpen, setRevisionsOpen] = useState(false);
+    const [textColorOpen, setTextColorOpen] = useState(false);
+    const [highlightColorOpen, setHighlightColorOpen] = useState(false);
     const imageInputRef = useRef<HTMLInputElement>(null);
     const {user} = useAuth();
     const {data: rootFolder} = useRootFolder(user?.id || '');
@@ -409,7 +411,7 @@ export const EditorToolbar = ({editor, path, canWrite, onAccessDialogOpen, onDel
                     <ToolbarSeparator />
 
                     {/* Text color */}
-                    <Popover>
+                    <Popover open={textColorOpen} onOpenChange={setTextColorOpen}>
                         <PopoverTrigger asChild>
                             <Button variant="ghost" size="icon" className="h-8 w-8"
                                     onMouseDown={(e) => e.preventDefault()}>
@@ -436,13 +438,14 @@ export const EditorToolbar = ({editor, path, canWrite, onAccessDialogOpen, onDel
                                     } else {
                                         editor.chain().focus().unsetColor().run();
                                     }
+                                    setTextColorOpen(false);
                                 }}
                             />
                         </PopoverContent>
                     </Popover>
 
                     {/* Highlight color */}
-                    <Popover>
+                    <Popover open={highlightColorOpen} onOpenChange={setHighlightColorOpen}>
                         <PopoverTrigger asChild>
                             <Button variant={editor.isActive('highlight') ? "secondary" : "ghost"}
                                     size="icon" className="h-8 w-8"
@@ -466,6 +469,7 @@ export const EditorToolbar = ({editor, path, canWrite, onAccessDialogOpen, onDel
                                     } else {
                                         editor.chain().focus().unsetHighlight().run();
                                     }
+                                    setHighlightColorOpen(false);
                                 }}
                             />
                         </PopoverContent>
