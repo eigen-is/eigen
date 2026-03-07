@@ -2,11 +2,11 @@ import type {QueryClient} from '@tanstack/react-query';
 import type {SSEvent} from '@workspace/lib/types/sse';
 import {SSEventType} from '@workspace/lib/types/sse';
 import {
-    invalidateMailReceived,
+    invalidateDraftUpdated,
     invalidateMailDeleted,
     invalidateMailMoved,
     invalidateMailReadChanged,
-    invalidateDraftUpdated
+    invalidateMailReceived
 } from './hooks/use-emails';
 import {invalidateMailboxes} from './hooks/use-mailboxes';
 import {invalidateHomeSize} from '../home';

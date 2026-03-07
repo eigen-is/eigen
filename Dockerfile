@@ -22,7 +22,7 @@ RUN apt-get update && apt-get install -y \
     python3 \
     make \
     g++ \
-    && rm -rf /var/lib/apt/lists/*
+    && rm -rf /var/core/apt/lists/*
 
 # Tell sharp to use system libvips
 ENV SHARP_IGNORE_GLOBAL_LIBVIPS=0

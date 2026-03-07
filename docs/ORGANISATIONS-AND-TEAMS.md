@@ -131,7 +131,7 @@ The share dialog (`drive-access-list-edit.tsx`) supports teams:
 - **Inherited team ACL**: shows team name with group icon and source folder.
 - **Team name resolution**: handled natively by `UserPublicItem`.
 
-### Auth Hooks (`packages/lib/src/lib/auth/hooks/`)
+### Auth Hooks (`packages/lib/src/core/auth/hooks/`)
 
 | Hook | Purpose |
 |------|---------|
@@ -152,17 +152,17 @@ type Memberships = {
 
 ## Files
 
-| File | Purpose |
-|------|---------|
-| `packages/lib/src/types/owner.ts` | `parseOwnerId`, `teamOwnerId`, `userOwnerId`, `OwnerType` |
-| `packages/lib/src/types/drive.ts` | `DriveACL` with `type`/`targetId` fields |
-| `apps/api/src/lib/home/team-home.ts` | `TeamHome` class + `getTeamHome()` factory |
-| `apps/api/src/lib/drive/get-drive.ts` | `getSharedDrive()` — dispatches by owner type |
-| `apps/api/src/lib/drive/acl.ts` | `canRead`, `canWrite`, `filterRedundantACL` with team support |
-| `apps/api/src/lib/drive/membership.ts` | `getMemberships()` — resolves user's org+team memberships |
-| `apps/api/src/lib/drive/drive.ts` | `updateACL()` with redundant ACL filtering |
-| `apps/api/src/routes/drive.ts` | ACL route accepting `type: 'team'` |
-| `apps/drive/src/components/drive/drive-sidebar.tsx` | Team drives in sidebar |
-| `packages/ui/src/components/layout/drive/drive-access-list-edit.tsx` | Share dialog with team support |
-| `packages/lib/src/lib/auth/hooks/use-organization.ts` | `useOrganization`, `useTeams`, `useMembers` |
-| `apps/api/src/test/org-drive.test.ts` | Team drive + team ACL + redundant ACL tests |
+| File                                                                 | Purpose                                                       |
+|----------------------------------------------------------------------|---------------------------------------------------------------|
+| `packages/lib/src/types/owner.ts`                                    | `parseOwnerId`, `teamOwnerId`, `userOwnerId`, `OwnerType`     |
+| `packages/lib/src/types/drive.ts`                                    | `DriveACL` with `type`/`targetId` fields                      |
+| `apps/api/src/lib/home/team-home.ts`                                 | `TeamHome` class + `getTeamHome()` factory                    |
+| `apps/api/src/lib/drive/get-drive.ts`                                | `getSharedDrive()` — dispatches by owner type                 |
+| `apps/api/src/lib/drive/acl.ts`                                      | `canRead`, `canWrite`, `filterRedundantACL` with team support |
+| `apps/api/src/lib/drive/membership.ts`                               | `getMemberships()` — resolves user's org+team memberships     |
+| `apps/api/src/lib/drive/drive.ts`                                    | `updateACL()` with redundant ACL filtering                    |
+| `apps/api/src/routes/drive.ts`                                       | ACL route accepting `type: 'team'`                            |
+| `apps/drive/src/components/drive/drive-sidebar.tsx`                  | Team drives in sidebar                                        |
+| `packages/ui/src/components/layout/drive/drive-access-list-edit.tsx` | Share dialog with team support                                |
+| `packages/lib/src/core/auth/hooks/use-organization.ts`               | `useOrganization`, `useTeams`, `useMembers`                   |
+| `apps/api/src/test/org-drive.test.ts`                                | Team drive + team ACL + redundant ACL tests                   |

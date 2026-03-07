@@ -2,7 +2,7 @@
 
 ## Avatar Resolution
 
-`packages/lib/src/lib/media/hooks/avatar.ts` resolves names and emails for avatars, while the actual image loading
+`packages/lib/src/core/media/hooks/avatar.ts` resolves names and emails for avatars, while the actual image loading
 relies on a public gravatar-like service.
 
 ### Components

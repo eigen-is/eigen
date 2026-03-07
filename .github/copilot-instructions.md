@@ -93,7 +93,7 @@ User Action → API mutation → home.notify(event) → SSE stream → Client ha
 **Key locations:**
 - Type definitions: `packages/lib/src/types/sse.ts`
 - Event builders (backend): `apps/api/src/lib/[domain]/sse-events.ts`
-- SSE handlers (frontend): `packages/lib/src/lib/[domain]/sse-handlers.ts`
+- SSE handlers (frontend): `packages/lib/src/core/[domain]/sse-handlers.ts`
 - Provider with toasts: `packages/ui/src/components/layout/sse-provider/sse-provider.tsx`
 
 **Invalidation pattern:** Create dedicated invalidate functions called from both:
@@ -150,7 +150,7 @@ All SQLite, managed by `ManagedDatabase` with:
 - Types: `packages/lib/src/types/[domain].ts`
 - Import: `@workspace/lib/types/[domain]` or `@workspace/lib/types`
 - **Always discuss with user before adding/modifying types**
-- Shared logic: `packages/lib/src/lib/[domain]/`
+- Shared logic: `packages/lib/src/core/[domain]/`
 - Import: `@workspace/lib/[domain]` (not deep paths)
 
 ### API Routes
@@ -161,7 +161,7 @@ All SQLite, managed by `ManagedDatabase` with:
 
 ### Hooks & Data Fetching
 - **CRITICAL:** NEVER use `useQuery`/`useMutation` directly in frontend apps (`apps/*/src/`)
-- ALL data-fetching logic MUST live in hooks in `packages/lib/src/lib/[domain]/hooks/`
+- ALL data-fetching logic MUST live in hooks in `packages/lib/src/core/[domain]/hooks/`
 - FE components only import and call these hooks
 - Query keys pattern:
   ```typescript
@@ -173,7 +173,8 @@ All SQLite, managed by `ManagedDatabase` with:
   ```
 
 ### API Client (Eden Treaty)
-- Use Treaty client from `packages/lib/src/lib/api.ts`
+
+- Use Treaty client from `packages/lib/src/core/api.ts`
 - Type-safe, auto-generated from Elysia routes
 - Imports: `import {driveApi, mailApi, contactsApi} from '@workspace/lib/api';`
 - Error handling: Eden populates `response.error` on API errors, makes `response.data` null
@@ -242,17 +243,18 @@ Used by `DriveTable`, `EmailList`, `ContactsList` following the same pattern.
 4. For new DB tables: add schema in `schema.ts`, migration in `db-config.ts`
 
 ### New Frontend Hook
-1. Create `packages/lib/src/lib/[domain]/hooks/use-[name].ts`
+
+1. Create `packages/lib/src/core/[domain]/hooks/use-[name].ts`
 2. Define query keys in the same file
-3. Export from `packages/lib/src/lib/[domain]/index.ts`
+3. Export from `packages/lib/src/core/[domain]/index.ts`
 4. Import as `@workspace/lib/[domain]`
 
 ### New SSE Events for a Domain
 1. Define event types in `packages/lib/src/types/sse.ts`
 2. Create event builders in `apps/api/src/lib/[domain]/sse-events.ts`
 3. Emit from business logic via `this.home.notify(buildEvent(...))`
-4. Create handler in `packages/lib/src/lib/[domain]/sse-handlers.ts`
-5. Register handler in `packages/lib/src/lib/sse/hooks/use-sse.ts`
+4. Create handler in `packages/lib/src/core/[domain]/sse-handlers.ts`
+5. Register handler in `packages/lib/src/core/sse/hooks/use-sse.ts`
 
 ### New Frontend App
 1. Create `apps/{appname}/` with `main.tsx`, `routes/__root.tsx`, `vite.config.ts`
