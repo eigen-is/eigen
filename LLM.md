@@ -18,7 +18,7 @@ to `docs/*.md`.
 ## Project Structure
 
 - `/apps/api`: Backend server (`port 8000`)
-- `/apps/*`: Frontend applications (e.g., `mail`, `drive`, `contacts`, `chat`, `docs`, `slides`, `sheets`)
+- `/apps/*`: Frontend applications (e.g., `mail`, `drive`, `contacts`, `chat`, `docs`, `slides`, `sheets`, `stickies`, `calendar`, `space`, `index`, `people`, `setup`)
 - `/packages/lib`: `@workspace/lib` — Shared types, hooks, API client, SSE handlers
 - `/packages/ui`: `@workspace/ui` — Shared UI components (shadcn defaults)
 - `/data`: Runtime storage (databases, user files)
@@ -45,7 +45,8 @@ to `docs/*.md`.
 
 - **Home Singleton**: The core abstraction. `apps/api/src/lib/home/home.ts`. Owns DB connections and domain classes (
   `Drive`, `Maildir`, `Contacts`).
-- **TeamHome**: Used for team-owned drives.
+- **TeamHome**: Team-owned drives using synthetic user ID `team_{teamId}`. Extends Home with Drive only.
+- **OrgHome**: Organization-level operations and management.
 - **Routing**: `apps/api/src/routes/[domain].ts`. Routes are thin and call domain class methods.
 - **Databases**: SQLite managed by `ManagedDatabase`. Uses versioned migrations. Stored in user's `/data/home/{userId}/`
   or `/data/team/{teamId}/`.
@@ -58,6 +59,7 @@ See:
 - [Storage & Mounts](docs/STORAGE.md)
 - [Organizations & Teams](docs/ORGANISATIONS-AND-TEAMS.md)
 - [ACL & Sharing](docs/ACL.md)
+- [Chat System](docs/CHAT.md)
 
 ## Frontend Architecture
 
@@ -83,5 +85,7 @@ Read these for specific implementation details:
 - `docs/CONTRIBUTING.md`: Full architecture patterns and guidelines.
 - `docs/CHAT.md`: Chat system architecture.
 - `docs/STICKIES.md`: Kanban board collaborative structure.
+- `docs/SLIDES.md`: Slides app implementation plan.
+- `docs/SHEETS.md`: Spreadsheet editor overview.
 - `docs/TESTING.md`: Test setup and guidelines.
 - `docs/DOCKER.md`: Deployment structure.
