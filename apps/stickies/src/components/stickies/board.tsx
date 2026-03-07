@@ -7,8 +7,6 @@ import {CardItem, ColumnItem} from './types';
 import {AddCardDialog} from './add-card-dialog';
 import {AddColumnDialog} from './add-column-dialog';
 import {ColumnSettingsDialog} from './column-settings-dialog';
-import {Plus} from 'lucide-react';
-import {Button} from '@workspace/ui/components/button';
 import {Card, CardContent} from '@workspace/ui/components/card';
 import {useIsMobile} from '@workspace/lib/media';
 import {useBoard} from './hooks/use-board';
@@ -159,12 +157,13 @@ export function StickiesBoard({ownerId, path, canWrite, chatFolderId, onAccessDi
     return (
         <div className="flex flex-col h-full w-full">
             <Toolbar path={path} canWrite={canWrite} undoManager={undoManager}
-                     onAccessDialogOpen={onAccessDialogOpen} onRestore={handleRestore}/>
-            <div className="flex-1 w-full flex bg-gray-200 overflow-hidden">
+                     onAccessDialogOpen={onAccessDialogOpen} onRestore={handleRestore}
+                     onAddColumn={() => setIsAddColumnDialogOpen(true)}/>
+            <div className="flex-1 w-full flex overflow-hidden">
                 <div
                     className="overflow-x-auto overflow-y-hidden flex-1"
                     style={board.columnOrder.length > 1 ? {
-                        padding: isMobile ? 0 : '0.75rem',
+                        padding: 0,
                         scrollSnapType: 'x mandatory',
                         scrollBehavior: 'smooth',
                     } : {
@@ -183,7 +182,7 @@ export function StickiesBoard({ownerId, path, canWrite, chatFolderId, onAccessDi
                             layoutShiftCompensation: false,
                         }}
                     >
-                        <div className={`flex ${isMobile ? 'gap-0' : 'gap-3'} h-full`}>
+                        <div className={`flex gap-0 h-full bg-muted`}>
                             <SortableContext items={board.columnOrder} strategy={horizontalListSortingStrategy}>
                                 {board.columnOrder.map((columnId) => {
                                     const column = board.columns[columnId];
@@ -203,21 +202,6 @@ export function StickiesBoard({ownerId, path, canWrite, chatFolderId, onAccessDi
                                     );
                                 })}
                             </SortableContext>
-
-                            <div
-                                className={`${isMobile ? 'mx-[4vw] min-w-[92vw] w-[92vw]' : 'mx-1.5 min-w-[280px] w-[280px]'} flex items-start h-full`}
-                                style={{scrollSnapAlign: 'center', scrollSnapStop: 'normal'}}
-                            >
-                                <Button
-                                    variant="secondary"
-                                    size="sm"
-                                    onClick={() => setIsAddColumnDialogOpen(true)}
-                                    className="w-full justify-start h-auto py-2"
-                                >
-                                    <Plus size={16}/>
-                                    <span>Add Column</span>
-                                </Button>
-                            </div>
                         </div>
 
                         <DragOverlay adjustScale={false}>
