@@ -15,7 +15,9 @@ A modern workspace platform providing integrated productivity and collaboration 
 - **Space**: Team collaboration workspace
 - **Stickies**: Kanban board
 - **Chat**: Real-time chat with slash commands and whispers
-- **People**: Admin dashboard
+- **Slides**: Collaborative presentation editor
+- **Sheets**: Collaborative spreadsheet editor
+- **People**: Organization and team management
 - **Setup**: First-run setup wizard
 
 ## Technology Stack
@@ -79,6 +81,8 @@ bun serve:docs
 bun serve:stickies
 bun serve:chat
 bun serve:calendar
+bun serve:slides
+bun serve:sheets
 ```
 
 ### Type Checking and Building
@@ -142,6 +146,10 @@ docker-compose restart
 - [SSE Architecture](docs/SSE.md) - Real-time updates and cache invalidation
 - [Layout System](docs/LAYOUT.md) - Responsive layout system and components
 - [Shared UI Components](docs/LAYOUT-SHARED-COMPONENTS.md) - UI component lookup reference
+- [Organizations & Teams](docs/ORGANISATIONS-AND-TEAMS.md) - Organization and team management
+- [Chat System](docs/CHAT.md) - Real-time chat with slash commands and collaboration
+- [ACL System](docs/ACL.md) - Access control and sharing permissions
+- [Sheets App](docs/SHEETS.md) - Collaborative spreadsheet editor
 - [Docker Deployment](docs/DOCKER.md) - Building and deploying with Docker
 
 ## License
