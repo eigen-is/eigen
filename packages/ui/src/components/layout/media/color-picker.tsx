@@ -12,6 +12,7 @@ type ColorPickerProps = {
     colors?: ColorOption[][];
     columns?: number;
     resetLabel?: string;
+    showReset?: boolean;
     preventFocusLoss?: boolean;
 }
 
@@ -120,6 +121,7 @@ export function ColorPicker({
                                 colors = DEFAULT_COLORS,
                                 columns = 10,
                                 resetLabel = 'Reset',
+                                showReset = true,
                                 preventFocusLoss
                             }: ColorPickerProps) {
     const normalizedValue = value.toLowerCase();
@@ -131,16 +133,18 @@ export function ColorPicker({
 
     return (
         <div className="flex flex-col gap-2">
-            <button
-                type="button"
-                className="flex items-center gap-2 px-2 py-1.5 -mx-1 rounded-md text-sm hover:bg-accent transition-colors"
-                title={resetLabel}
-                onClick={(e) => handleClick('', e)}
-                onMouseDown={preventFocusLoss ? (e) => e.preventDefault() : undefined}
-            >
-                <RotateCcw className="h-4 w-4"/>
-                <span>{resetLabel}</span>
-            </button>
+            {showReset && (
+                <button
+                    type="button"
+                    className="flex items-center gap-2 px-2 py-1.5 -mx-1 rounded-md text-sm hover:bg-accent transition-colors"
+                    title={resetLabel}
+                    onClick={(e) => handleClick('', e)}
+                    onMouseDown={preventFocusLoss ? (e) => e.preventDefault() : undefined}
+                >
+                    <RotateCcw className="h-4 w-4"/>
+                    <span>{resetLabel}</span>
+                </button>
+            )}
             {colors.map((row, rowIdx) => (
                 <div key={rowIdx} className={`grid gap-1`} style={{gridTemplateColumns: `repeat(${columns}, 1fr)`}}>
                     {row.map((color) => (
