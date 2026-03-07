@@ -12,9 +12,25 @@ import {DEFAULT_IMAGE_OBJECT, DEFAULT_TEXT_OBJECT, type ImageObject, SlideObject
 import type {DrivePath} from '@workspace/lib/types/drive';
 import {getDriveEmbedUrl} from '@workspace/lib/api';
 import {useUploadFile} from '@workspace/lib/drive';
+import {
+    EIGEN_CLIPBOARD_MIME,
+    readEigenClipboard,
+    writeEigenClipboard,
+    writeEigenClipboardAsync,
+    needsReUpload,
+    reUploadImage,
+} from '@workspace/lib/clipboard';
+import type {EigenClipboardData, EigenClipboardItem} from '@workspace/lib/types/clipboard';
 import * as Y from 'yjs';
 
-const CLIPBOARD_MIME = 'application/eigen-slides';
+function buildClipboardItem(obj: SlideObject): EigenClipboardItem {
+    const rect = {x: obj.x, y: obj.y, w: obj.w, h: obj.h, rotation: obj.rotation};
+    if (obj.type === 'image') {
+        return {type: 'image', src: obj.src, sourcePath: obj.sourcePath, meta: {...rect, objectFit: obj.objectFit}};
+    }
+    return {type: 'text', text: obj.text, meta: {...rect, fontSize: obj.fontSize, fontWeight: obj.fontWeight, fontStyle: obj.fontStyle, textAlign: obj.textAlign, color: obj.color}};
+}
+
 
 function jsonToYType(value: unknown): unknown {
     if (Array.isArray(value)) {
@@ -113,28 +129,10 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
         e.target.value = '';
     }, [handleImageFile]);
 
-    const reUploadImage = useCallback(async (srcUrl: string): Promise<{
-        src: string;
-        sourcePath: DrivePath
-    } | null> => {
+    const handleReUploadImage = useCallback(async (srcUrl: string) => {
         if (!mediaFolderId) return null;
-        try {
-            const response = await fetch(srcUrl, {credentials: 'include'});
-            if (!response.ok) return null;
-            const blob = await response.blob();
-            const file = new File([blob], 'image', {type: blob.type || 'image/png'});
-            const result = await uploadFile.mutateAsync({parentId: mediaFolderId, file});
-            if (result) {
-                return {
-                    src: getDriveEmbedUrl(path.ownerId, path.mountId, result.id, 'image'),
-                    sourcePath: result,
-                };
-            }
-        } catch (e) {
-            console.error('Re-upload failed:', e);
-        }
-        return null;
-    }, [mediaFolderId, uploadFile, path.ownerId, path.mountId]);
+        return reUploadImage(srcUrl, mediaFolderId, uploadFile.mutateAsync, path.ownerId, path.mountId);
+    }, [mediaFolderId, uploadFile.mutateAsync, path.ownerId, path.mountId]);
 
     useEffect(() => {
         const handleCopy = (e: ClipboardEvent) => {
@@ -144,7 +142,8 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
             const obj = deck.objects[selectedObjectId];
             if (!obj) return;
             e.preventDefault();
-            e.clipboardData?.setData(CLIPBOARD_MIME, JSON.stringify(obj));
+            const data: EigenClipboardData = {version: 1, items: [buildClipboardItem(obj)]};
+            writeEigenClipboard(e, data, obj.type === 'text' ? obj.text : undefined);
         };
         const handlePaste = (e: ClipboardEvent) => {
             const tag = (document.activeElement?.tagName ?? '').toLowerCase();
@@ -158,33 +157,52 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
                 return;
             }
 
-            const eigenData = e.clipboardData?.getData(CLIPBOARD_MIME) ?? '';
+            const eigenData = e.clipboardData ? readEigenClipboard(e.clipboardData) : null;
             if (eigenData) {
                 e.preventDefault();
-                try {
-                    const obj = JSON.parse(eigenData) as SlideObject;
-                    const {id: _id, slideId: _sid, ...rest} = obj;
-                    const pasteObj = {...rest, x: rest.x + 2, y: rest.y + 2};
-
-                    if (obj.type === 'image' && obj.sourcePath) {
-                        if (obj.sourcePath.parentId !== mediaFolderId) {
-                            reUploadImage(obj.src).then((result) => {
-                                if (result) {
-                                    addObject(activeSlideId, {
-                                        ...pasteObj,
-                                        src: result.src,
-                                        sourcePath: result.sourcePath,
-                                    } as Omit<ImageObject, 'id' | 'slideId'>);
-                                } else {
-                                    addObject(activeSlideId, pasteObj as Omit<SlideObject, 'id' | 'slideId'>);
-                                }
+                for (const item of eigenData.items) {
+                    const m = item.meta ?? {};
+                    if (item.type === 'text') {
+                        addObject(activeSlideId, {
+                            ...DEFAULT_TEXT_OBJECT,
+                            text: item.text,
+                            ...m.x != null && {x: m.x as number + 2},
+                            ...m.y != null && {y: m.y as number + 2},
+                            ...m.w != null && {w: m.w},
+                            ...m.h != null && {h: m.h},
+                            ...m.rotation != null && {rotation: m.rotation},
+                            ...m.fontSize != null && {fontSize: m.fontSize},
+                            ...m.fontWeight != null && {fontWeight: m.fontWeight},
+                            ...m.fontStyle != null && {fontStyle: m.fontStyle},
+                            ...m.textAlign != null && {textAlign: m.textAlign},
+                            ...m.color != null && {color: m.color},
+                        } as Omit<SlideObject, 'id' | 'slideId'>);
+                    } else if (item.type === 'image') {
+                        const imageProps = {
+                            ...DEFAULT_IMAGE_OBJECT,
+                            ...m.x != null && {x: m.x as number + 2},
+                            ...m.y != null && {y: m.y as number + 2},
+                            ...m.w != null && {w: m.w},
+                            ...m.h != null && {h: m.h},
+                            ...m.rotation != null && {rotation: m.rotation},
+                            ...m.objectFit != null && {objectFit: m.objectFit},
+                        };
+                        if (needsReUpload(item.sourcePath, mediaFolderId)) {
+                            handleReUploadImage(item.src).then((result) => {
+                                addObject(activeSlideId, {
+                                    ...imageProps,
+                                    src: result?.src ?? item.src,
+                                    sourcePath: result?.sourcePath ?? item.sourcePath,
+                                } as Omit<ImageObject, 'id' | 'slideId'>);
                             });
-                            return;
+                        } else {
+                            addObject(activeSlideId, {
+                                ...imageProps,
+                                src: item.src,
+                                sourcePath: item.sourcePath,
+                            } as Omit<ImageObject, 'id' | 'slideId'>);
                         }
                     }
-
-                    addObject(activeSlideId, pasteObj as Omit<SlideObject, 'id' | 'slideId'>);
-                } catch { /* not a valid slide object, ignore */
                 }
                 return;
             }
@@ -204,7 +222,7 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
             document.removeEventListener('copy', handleCopy);
             document.removeEventListener('paste', handlePaste);
         };
-    }, [selectedObjectId, deck.objects, activeSlideId, canWrite, addObject, handleImageFile, reUploadImage, mediaFolderId]);
+    }, [selectedObjectId, deck.objects, activeSlideId, canWrite, addObject, handleImageFile, handleReUploadImage, mediaFolderId]);
 
     const handleAddText = useCallback((obj: typeof DEFAULT_TEXT_OBJECT & {text: string}) => {
         if (!activeSlideId) return;
@@ -220,12 +238,8 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
     const handleCopyObject = useCallback((objId: string) => {
         const obj = deck.objects[objId];
         if (!obj) return;
-        const json = JSON.stringify(obj);
-        const blob = new Blob([json], {type: CLIPBOARD_MIME});
-        const textBlob = new Blob([json], {type: 'text/plain'});
-        navigator.clipboard.write([new ClipboardItem({[CLIPBOARD_MIME]: blob, 'text/plain': textBlob})]).catch(() => {
-            navigator.clipboard.writeText(json);
-        });
+        const data: EigenClipboardData = {version: 1, items: [buildClipboardItem(obj)]};
+        writeEigenClipboardAsync(data, obj.type === 'text' ? obj.text : undefined);
     }, [deck.objects]);
 
     const handleDeleteObject = useCallback((objId: string) => {

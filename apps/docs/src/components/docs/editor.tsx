@@ -29,6 +29,13 @@ import {Column, EigenLoader} from "@workspace/ui";
 import {DrivePath} from "@workspace/lib/types/drive";
 import {getCollabWebSocketUrl, getDriveEmbedUrl} from "@workspace/lib/api";
 import {useUploadFile} from "@workspace/lib/drive";
+import {
+    EIGEN_CLIPBOARD_MIME,
+    readEigenClipboard,
+    needsReUpload,
+    reUploadImage,
+} from '@workspace/lib/clipboard';
+import type {EigenClipboardData, EigenClipboardImageItem} from '@workspace/lib/types/clipboard';
 import {CreateCommentDialog, ViewCommentDialog} from "./comment-dialog";
 import {CommentMark} from "./extensions/comment-mark";
 import {ResizableImage} from "./extensions/resizable-image";
@@ -235,6 +242,18 @@ const TiptapEditor = ({
             },
             handlePaste: (_view, event) => {
                 if (!event.clipboardData) return false;
+
+                const eigenData = readEigenClipboard(event.clipboardData);
+                if (eigenData) {
+                    const imageItem = eigenData.items.find((i): i is EigenClipboardImageItem => i.type === 'image');
+                    if (imageItem) {
+                        event.preventDefault();
+                        const width = imageItem.meta?.width as number | undefined;
+                        handleEigenImagePaste(imageItem.src, imageItem.sourcePath, width);
+                        return true;
+                    }
+                }
+
                 const files = Array.from(event.clipboardData.files);
                 const imageFile = files.find(f => f.type.startsWith('image/'));
                 if (imageFile && mediaFolderId) {
@@ -258,6 +277,48 @@ const TiptapEditor = ({
             editorRef.current.chain().focus().setResizableImage({src}).run();
         }
     };
+
+    const handleEigenImagePaste = async (src: string, sourcePath?: DrivePath, width?: number) => {
+        if (needsReUpload(sourcePath, mediaFolderId) && mediaFolderId) {
+            const result = await reUploadImage(src, mediaFolderId, uploadFile.mutateAsync, path.ownerId, path.mountId);
+            if (result && editorRef.current) {
+                editorRef.current.chain().focus().setResizableImage({src: result.src, width}).run();
+                return;
+            }
+        }
+        if (editorRef.current) {
+            editorRef.current.chain().focus().setResizableImage({src, width}).run();
+        }
+    };
+
+    useEffect(() => {
+        if (!editor) return;
+        const handleCopy = (e: ClipboardEvent) => {
+            if (!editor.isFocused) return;
+            const {from, to} = editor.state.selection;
+            if (from === to) return;
+
+            const items: EigenClipboardData['items'] = [];
+            editor.state.doc.nodesBetween(from, to, (node) => {
+                if (node.type.name === 'resizableImage' && node.attrs.src) {
+                    const width = node.attrs.width ?? undefined;
+                    items.push({type: 'image', src: node.attrs.src, meta: {width}});
+                }
+            });
+
+            const text = editor.state.doc.textBetween(from, to, '\n');
+            if (text.trim()) {
+                items.push({type: 'text', text: text.trim()});
+            }
+
+            if (items.length > 0) {
+                const data: EigenClipboardData = {version: 1, items};
+                e.clipboardData?.setData(EIGEN_CLIPBOARD_MIME, JSON.stringify(data));
+            }
+        };
+        document.addEventListener('copy', handleCopy);
+        return () => document.removeEventListener('copy', handleCopy);
+    }, [editor]);
 
     const handleAddComment = () => {
         if (!editor || !chatFolderId) return;

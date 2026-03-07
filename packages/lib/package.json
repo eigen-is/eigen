@@ -24,6 +24,7 @@
     "./auth": "./src/core/auth/index.ts",
     "./home": "./src/core/home/index.ts",
     "./chat": "./src/core/chat/index.ts",
+    "./clipboard": "./src/core/clipboard/index.ts",
     "./collab": "./src/core/collab/index.ts",
     "./public": "./src/core/public/index.ts",
     "./auth/hooks": "./src/core/auth/hooks/index.ts",
@@ -41,6 +42,7 @@
     "./types/public": "./src/types/public.ts",
     "./types/mount": "./src/types/mount.ts",
     "./types/owner": "./src/types/owner.ts",
-    "./types/people": "./src/types/people.ts"
+    "./types/people": "./src/types/people.ts",
+    "./types/clipboard": "./src/types/clipboard.ts"
   }
 }
