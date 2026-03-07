@@ -4,8 +4,8 @@ import {Button} from '@workspace/ui/components/button';
 import {Input} from '@workspace/ui/components/input';
 import {Textarea} from '@workspace/ui/components/textarea';
 import {Label} from '@workspace/ui/components/label';
-import {ColorPicker} from './color-picker';
-import {CardItem} from './types';
+import {ColorPicker} from '@workspace/ui/components/layout/media/color-picker';
+import {CardItem, STICKY_COLORS} from './types';
 import {useAuth} from '@workspace/lib/auth';
 
 type AddCardDialogProps = {
@@ -75,7 +75,7 @@ export function AddCardDialog({isOpen, onClose, onAddCard, columnId}: AddCardDia
                         </div>
                         <div className="grid gap-2">
                             <Label>Color</Label>
-                            <ColorPicker value={color} onChange={setColor}/>
+                            <ColorPicker value={color} onChange={setColor} colors={STICKY_COLORS} columns={8}/>
                         </div>
                     </div>
                     <DialogFooter>

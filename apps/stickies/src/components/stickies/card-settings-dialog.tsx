@@ -4,7 +4,8 @@ import {Button} from '@workspace/ui/components/button';
 import {Input} from '@workspace/ui/components/input';
 import {Label} from '@workspace/ui/components/label';
 import {Textarea} from '@workspace/ui/components/textarea';
-import {ColorPicker} from './color-picker';
+import {ColorPicker} from '@workspace/ui/components/layout/media/color-picker';
+import {STICKY_COLORS} from './types';
 import * as Y from 'yjs';
 
 type CardSettingsDialogProps = {
@@ -93,7 +94,7 @@ export function CardSettingsDialog({isOpen, onClose, cardId, cardTitle, cardDesc
                             </div>
                             <div className="grid gap-2">
                                 <Label>Color</Label>
-                                <ColorPicker value={color} onChange={setColor}/>
+                                <ColorPicker value={color} onChange={setColor} colors={STICKY_COLORS} columns={8}/>
                             </div>
                         </div>
                         <DialogFooter className="sm:justify-between">
