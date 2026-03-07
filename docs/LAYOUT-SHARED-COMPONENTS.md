@@ -43,10 +43,8 @@ See `docs/LAYOUT.md` for detailed architecture documentation.
 
 | Component          | File                     | Description                                                                             |
 |--------------------|--------------------------|-----------------------------------------------------------------------------------------|
-| `UserAvatar`       | `user-avatar.tsx`        | Avatar with auto-fetch from API when no imageUrl. DigiDoodle fallback. sm/md/lg sizes   |
-| `UserPublicAvatar` | `user-public-avatar.tsx` | `UserAvatar` wrapped in tooltip showing user name. Fetches user data by email           |
+| `UserAvatar`       | `user-avatar.tsx`        | Avatar with auto-fetch from API when no imageUrl. DigiDoodle fallback. sm/md/lg sizes, with optional tooltip |
 | `UserItem`         | `user-item.tsx`          | Avatar + name + email row. Optional `mailLink`, `label`, and `autoFetch`                |
-| `UserPublicItem`   | `user-item.tsx`          | Thin wrapper around `UserItem` with `autoFetch` enabled (resolves user data from email) |
 
 ## Labels
 
@@ -99,6 +97,9 @@ See `docs/LAYOUT.md` for detailed architecture documentation.
 | `AppLogo`                 | `app/app-logo.tsx`       | `eigen\|appname>` logo with expandable app switcher on click |
 | `EigenLoader`             | `braket/eigen-loader.tsx`   | Animated chevron loading indicator with delayed start        |
 | `LoadingScreen`           | `pages/loading-screen.tsx` | Full-screen centered `EigenLoader`                           |
+| `Bra`                     | `braket/bra.tsx`           | SVG `〈` bracket for branding                                 |
+| `Ket`                     | `braket/ket.tsx`           | SVG `〉` bracket for branding                                 |
+| `Bar`                     | `braket/bar.tsx`           | SVG `\|` bar for branding                                    |
 | `LoginPage`               | `pages/loginpage.tsx`      | Login form with email/password, uses `useAuth`               |
 | `createLoginRouteOptions` | `pages/login-route.tsx`    | Factory for TanStack Router login route config with redirect |
 
