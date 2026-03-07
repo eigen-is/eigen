@@ -23,7 +23,6 @@ Eigen is a self-hosted Google Workspace alternative built with modern web techno
 ```
 /apps
   /api          # Backend API server
-  /admin        # Admin dashboard
   /calendar     # Calendar app
   /chat         # Chat app
   /contacts     # Contacts app
@@ -31,7 +30,10 @@ Eigen is a self-hosted Google Workspace alternative built with modern web techno
   /drive        # File storage
   /index        # Landing page
   /mail         # Email client
+  /people       # Organization and team management
   /setup        # Initial setup wizard
+  /sheets       # Spreadsheet editor
+  /slides       # Presentation editor
   /space        # Team workspace
   /stickies     # Kanban board
 
@@ -171,6 +173,9 @@ Create dedicated invalidate functions and call them from both:
 |------|-----------|-----------|
 | Document | `application/eigendoc` | `.eigendoc` |
 | Stickies | `application/eigenstickies` | `.eigenstickies` |
+| Chat | `application/eigenchat` | `.eigenchat` |
+| Slides | `application/eigenslides` | `.eigenslides` |
+| Sheets | `application/eigensheets` | `.eigensheets` |
 
 URL params use hyphens (`application-eigendoc`), database uses slashes.
 

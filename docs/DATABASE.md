@@ -20,6 +20,7 @@ The application uses SQLite databases managed through Drizzle ORM. Databases are
 | **Contacts** | `{home}/eigen.contacts/contacts.db` | `Home.getLocalDatabase()` | User contacts |
 | **Mail** | `{home}/eigen.mail/mail.db` | `Home.getLocalDatabase()` | Email metadata |
 | **Collab Docs** | Mount storage backend (key: `{dataDbPathId}`) | `Mount.openDatabase()` | YJS document updates |
+| **Chat Rooms** | Mount storage backend (key: `{dataDbPathId}`) | `Mount.openDatabase()` | Chat messages and read state |
 
 ## Core Components
 
@@ -53,6 +54,7 @@ type SyncCallbacks = {
 Each domain has a `db-config.ts` defining its schema and migrations:
 
 - `src/lib/collab/db-config.ts` - COLLAB_DB_CONFIG
+- `src/lib/chat/db-config.ts` - CHAT_ROOM_DB_CONFIG
 - `src/lib/contacts/db-config.ts` - CONTACTS_DB_CONFIG
 - `src/lib/mail/db-config.ts` - MAIL_DB_CONFIG
 - `src/lib/drive/db-config.ts` - SHARED_DB_CONFIG
@@ -80,13 +82,16 @@ The mount metadata database is opened via `ManagedDatabase` using `MOUNT_DB_CONF
 - The file lives at `{home}/mounts/{id}/metadata.db`
 - Schema is versioned via `__schema_version` like other user databases
 
-### Mount-Based Databases (Collab Documents)
+### Mount-Based Databases (Collab Documents & Chats)
 
-Eigendocs and Stickies are represented as folders. When a collab document is opened, the system ensures there is a `data.db` file under that folder and uses that file's `pathId` as the storage key for the SQLite database.
+Eigendocs, Stickies, Slides, Sheets, and Chats are represented as folders. When a collab document or chat is opened, the system ensures there is a `data.db` file under that folder and uses that file's `pathId` as the storage key for the SQLite database.
 
 ```
 test.eigendoc/          (pathId: abc123, mimeType: application/eigendoc)
 └── data.db             (pathId: xyz789, mimeType: application/x-sqlite3)
+
+my-room.eigenchat/      (pathId: def456, mimeType: application/eigenchat)
+└── data.db             (pathId: uvw012, mimeType: application/x-sqlite3)
 ```
 
 Key points:
