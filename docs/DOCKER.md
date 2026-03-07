@@ -40,6 +40,10 @@ VITE_APP_CONTACTS_URL=https://eigen.is/contacts
 VITE_APP_DRIVE_URL=https://eigen.is/drive
 VITE_APP_DOCS_URL=https://eigen.is/docs
 VITE_APP_STICKIES_URL=https://eigen.is/stickies
+VITE_APP_CHAT_URL=https://eigen.is/chat
+VITE_APP_PEOPLE_URL=https://eigen.is/people
+VITE_APP_SLIDES_URL=https://eigen.is/slides
+VITE_APP_SHEETS_URL=https://eigen.is/sheets
 ```
 
 **Important:** Update these URLs before building!
@@ -134,13 +138,16 @@ Two volumes are created for data persistence:
 
 Once running, access the applications at:
 - `http://localhost/` - Index/Home page
-- `http://localhost/admin` - Admin setup and dashboard
+- `http://localhost/people` - Organization and team management
 - `http://localhost/mail` - Mail application
 - `http://localhost/contacts` - Contacts application
 - `http://localhost/calendar` - Calendar application
 - `http://localhost/drive` - Drive application
 - `http://localhost/docs` - Docs application
 - `http://localhost/stickies` - Stickies application
+- `http://localhost/chat` - Chat application
+- `http://localhost/slides` - Slides application
+- `http://localhost/sheets` - Sheets application
 - `http://localhost/space` - Space application
 
 API is available at `http://localhost/api/*`

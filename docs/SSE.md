@@ -12,7 +12,7 @@ User Action → API Mutation → home.notify() → SSE Stream → Client Handler
                                                Cache Invalidation    Toast Notification
 ```
 
-**Currently implemented:** Drive, Mail, Contacts
+**Currently implemented:** Drive, Mail, Contacts, Chat
 
 ## File Locations
 
@@ -34,8 +34,8 @@ See `packages/lib/src/types/sse.ts` for all types.
 
 1. **All events have `title`** - Used for toast headings
 2. **Notification events have `body`** - Checked via `isSSEventNotification()` type guard
-3. **Domain-specific data** - Drive uses `path: DrivePath`, Mail uses `mail: SSEventMailData`, Contacts uses `contact` or `label`
-4. **Type prefixes** - Events are namespaced (`drive:`, `mail:`, `contacts:`)
+3. **Domain-specific data** - Drive uses `path: DrivePath`, Mail uses `mail: SSEventMailData`, Contacts uses `contact` or `label`, Chat uses `chat: SSEventChatData`
+4. **Type prefixes** - Events are namespaced (`drive:`, `mail:`, `contacts:`, `chat:`)
 
 ## 2. Backend: Emitting Events
 
@@ -88,6 +88,7 @@ See existing implementations:
 - `packages/lib/src/core/drive/sse-handlers.ts`
 - `packages/lib/src/core/mail/sse-handlers.ts`
 - `packages/lib/src/core/contacts/sse-handlers.ts`
+- `packages/lib/src/core/chat/sse-handlers.ts`
 
 ### 3.3 SSEProvider (Toast Notifications)
 
