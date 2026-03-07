@@ -8,13 +8,13 @@ import {Toolbar} from './toolbar';
 import {AddTextDialog} from './add-text-dialog';
 import {ObjectSettingsDialog} from './object-settings-dialog';
 import {SlideSettingsDialog} from './slide-settings-dialog';
-import {DEFAULT_IMAGE_OBJECT, DEFAULT_TEXT_OBJECT, SlideObject} from './types';
+import {DEFAULT_IMAGE_OBJECT, DEFAULT_TEXT_OBJECT, type ImageObject, SlideObject} from './types';
 import type {DrivePath} from '@workspace/lib/types/drive';
 import {getDriveEmbedUrl} from '@workspace/lib/api';
 import {useUploadFile} from '@workspace/lib/drive';
 import * as Y from 'yjs';
 
-const CLIPBOARD_MARKER = 'eigenslides:object:';
+const CLIPBOARD_MIME = 'application/eigen-slides';
 
 function jsonToYType(value: unknown): unknown {
     if (Array.isArray(value)) {
@@ -144,7 +144,7 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
             const obj = deck.objects[selectedObjectId];
             if (!obj) return;
             e.preventDefault();
-            e.clipboardData?.setData('text/plain', CLIPBOARD_MARKER + JSON.stringify(obj));
+            e.clipboardData?.setData(CLIPBOARD_MIME, JSON.stringify(obj));
         };
         const handlePaste = (e: ClipboardEvent) => {
             const tag = (document.activeElement?.tagName ?? '').toLowerCase();
@@ -158,11 +158,11 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
                 return;
             }
 
-            const text = e.clipboardData?.getData('text/plain') ?? '';
-            if (text.startsWith(CLIPBOARD_MARKER)) {
+            const eigenData = e.clipboardData?.getData(CLIPBOARD_MIME) ?? '';
+            if (eigenData) {
                 e.preventDefault();
                 try {
-                    const obj = JSON.parse(text.slice(CLIPBOARD_MARKER.length)) as SlideObject;
+                    const obj = JSON.parse(eigenData) as SlideObject;
                     const {id: _id, slideId: _sid, ...rest} = obj;
                     const pasteObj = {...rest, x: rest.x + 2, y: rest.y + 2};
 
@@ -174,7 +174,7 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
                                         ...pasteObj,
                                         src: result.src,
                                         sourcePath: result.sourcePath,
-                                    } as Omit<SlideObject, 'id' | 'slideId'>);
+                                    } as Omit<ImageObject, 'id' | 'slideId'>);
                                 } else {
                                     addObject(activeSlideId, pasteObj as Omit<SlideObject, 'id' | 'slideId'>);
                                 }
@@ -189,6 +189,7 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
                 return;
             }
 
+            const text = e.clipboardData?.getData('text/plain') ?? '';
             if (text.trim()) {
                 e.preventDefault();
                 addObject(activeSlideId, {
@@ -218,7 +219,13 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
 
     const handleCopyObject = useCallback((objId: string) => {
         const obj = deck.objects[objId];
-        if (obj) navigator.clipboard.writeText(CLIPBOARD_MARKER + JSON.stringify(obj));
+        if (!obj) return;
+        const json = JSON.stringify(obj);
+        const blob = new Blob([json], {type: CLIPBOARD_MIME});
+        const textBlob = new Blob([json], {type: 'text/plain'});
+        navigator.clipboard.write([new ClipboardItem({[CLIPBOARD_MIME]: blob, 'text/plain': textBlob})]).catch(() => {
+            navigator.clipboard.writeText(json);
+        });
     }, [deck.objects]);
 
     const handleDeleteObject = useCallback((objId: string) => {
@@ -226,7 +233,7 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
         if (selectedObjectId === objId) setSelectedObjectId(null);
     }, [deleteObject, selectedObjectId]);
 
-    const handleDropImage = useCallback(async (file: File) => {
+    const handleDropImage = useCallback((file: File) => {
         handleImageFile(file);
     }, [handleImageFile]);
 
