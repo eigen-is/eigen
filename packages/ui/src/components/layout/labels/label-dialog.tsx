@@ -49,6 +49,7 @@ export function LabelDialog({
                                 onDelete,
                             }: LabelDialogProps) {
     const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
+    const [colorPickerOpen, setColorPickerOpen] = useState(false);
     const isEditMode = !!selectedLabel;
     const [isLoading, setIsLoading] = useState(false);
 
@@ -116,7 +117,7 @@ export function LabelDialog({
                                         <FormItem>
                                             <FormLabel className="invisible">Color</FormLabel>
                                             <FormControl>
-                                                <Popover>
+                                                <Popover open={colorPickerOpen} onOpenChange={setColorPickerOpen}>
                                                     <PopoverTrigger asChild>
                                                         <button
                                                             type="button"
@@ -128,7 +129,10 @@ export function LabelDialog({
                                                     <PopoverContent className="w-auto p-3" align="start">
                                                         <ColorPicker
                                                             value={field.value}
-                                                            onChange={field.onChange}
+                                                            onChange={(color) => {
+                                                                field.onChange(color);
+                                                                setColorPickerOpen(false);
+                                                            }}
                                                             showReset={false}
                                                         />
                                                     </PopoverContent>
