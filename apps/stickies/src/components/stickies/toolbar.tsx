@@ -1,6 +1,6 @@
 import {useEffect, useState} from 'react';
 import {formatForDisplay} from '@tanstack/react-hotkeys';
-import {FileText, Folder, Pencil, Redo, Trash2, Undo, UserPlus, UserRoundPlus} from 'lucide-react';
+import {FileText, Folder, Pencil, Plus, Redo, Trash2, Undo, UserPlus, UserRoundPlus} from 'lucide-react';
 import {Button} from '@workspace/ui/components/button';
 import {
     DropdownMenu,
@@ -27,10 +27,11 @@ type ToolbarProps = {
     undoManager: Y.UndoManager | null;
     onAccessDialogOpen: () => void;
     onRestore: (state: Uint8Array) => void;
+    onAddColumn: () => void;
     path: DrivePath;
 }
 
-export function Toolbar({canWrite, undoManager, onAccessDialogOpen, onRestore, path}: ToolbarProps) {
+export function Toolbar({canWrite, undoManager, onAccessDialogOpen, onRestore, onAddColumn, path}: ToolbarProps) {
     const [canUndo, setCanUndo] = useState(false);
     const [canRedo, setCanRedo] = useState(false);
     const [createStickiesOpen, setCreateStickiesOpen] = useState(false);
@@ -108,6 +109,12 @@ export function Toolbar({canWrite, undoManager, onAccessDialogOpen, onRestore, p
                             tooltipText={`Redo (${formatForDisplay('Mod+Y')})`}
                             onClick={() => undoManager?.redo?.()}
                             disabled={!canRedo}
+                        />
+                        <Separator orientation="vertical" className="h-4"/>
+                        <TooltipButton
+                            icon={Plus}
+                            tooltipText="Add column"
+                            onClick={onAddColumn}
                         />
                     </>
                 )}
