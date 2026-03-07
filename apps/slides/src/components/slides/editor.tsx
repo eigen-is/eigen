@@ -9,10 +9,27 @@ import {AddTextDialog} from './add-text-dialog';
 import {AddImageDialog} from './add-image-dialog';
 import {ObjectSettingsDialog} from './object-settings-dialog';
 import {SlideSettingsDialog} from './slide-settings-dialog';
-import {DEFAULT_TEXT_OBJECT, DEFAULT_IMAGE_OBJECT, SlideObject} from './types';
+import {DEFAULT_IMAGE_OBJECT, DEFAULT_TEXT_OBJECT, SlideObject} from './types';
 import type {DrivePath} from '@workspace/lib/types/drive';
 import {getDriveEmbedUrl} from '@workspace/lib/api';
 import {useUploadFile} from '@workspace/lib/drive';
+import * as Y from 'yjs';
+
+function jsonToYType(value: unknown): unknown {
+    if (Array.isArray(value)) {
+        const arr = new Y.Array();
+        arr.push(value.map(jsonToYType));
+        return arr;
+    }
+    if (value !== null && typeof value === 'object') {
+        const map = new Y.Map();
+        for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+            map.set(k, jsonToYType(v));
+        }
+        return map;
+    }
+    return value;
+}
 
 type SlideEditorProps = {
     ownerId: string;
@@ -148,6 +165,32 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
         }
     }, []);
 
+    const handleRestore = useCallback((state: Uint8Array) => {
+        if (!yjsDoc) return;
+        const tempDoc = new Y.Doc();
+        Y.applyUpdate(tempDoc, state);
+
+        const allKeys = new Set([...yjsDoc.share.keys(), ...tempDoc.share.keys()]);
+
+        yjsDoc.transact(() => {
+            for (const key of allKeys) {
+                const localType = yjsDoc.get(key);
+                if (localType instanceof Y.Map) {
+                    const json = tempDoc.getMap(key).toJSON();
+                    for (const k of [...localType.keys()]) localType.delete(k);
+                    for (const [k, v] of Object.entries(json)) {
+                        localType.set(k, jsonToYType(v));
+                    }
+                } else if (localType instanceof Y.Array) {
+                    const json = tempDoc.getArray(key).toJSON();
+                    localType.delete(0, localType.length);
+                    localType.push(json);
+                }
+            }
+        });
+        tempDoc.destroy();
+    }, [yjsDoc]);
+
     const activeSlide = activeSlideId ? deck.slides[activeSlideId] : null;
     const activeObjects = activeSlide
         ? activeSlide.objectIds.map(id => deck.objects[id]).filter(Boolean)
@@ -229,6 +272,7 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
                 canWrite={canWrite}
                 undoManager={undoManager}
                 onAccessDialogOpen={onAccessDialogOpen}
+                onRestore={handleRestore}
                 onAddText={() => setIsAddTextOpen(true)}
                 onAddImage={() => setIsAddImageOpen(true)}
                 onAddSlide={() => addSlide()}

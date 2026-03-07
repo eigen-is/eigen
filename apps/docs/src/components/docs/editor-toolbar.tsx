@@ -17,7 +17,6 @@ import {
     Heading2,
     Heading3,
     Highlighter,
-    History,
     ImagePlus,
     Italic,
     Link,
@@ -60,6 +59,7 @@ import {Tooltip, TooltipContent, TooltipTrigger} from "@workspace/ui/components/
 import {Popover, PopoverContent, PopoverTrigger} from "@workspace/ui/components/popover";
 import {Toolbar, TooltipButton} from "@workspace/ui";
 import {ColorPicker} from "@workspace/ui/components/layout/media/color-picker";
+import {RevisionHistory} from "@workspace/ui/components/layout/collab/revision-history";
 import {printDocument} from "@workspace/ui/lib/printElement";
 import {DocumentModeButton} from "@workspace/ui/components/layout/toolbar/document-mode-button";
 import {DriveCreateDoc} from "@workspace/ui/components/layout/drive/drive-create-doc";
@@ -70,8 +70,6 @@ import {useNavigate} from '@tanstack/react-router';
 import {useIsMobile} from "@workspace/lib/media";
 import {DriveRenameItem} from "@workspace/ui/components/layout/drive/drive-rename-item";
 import {Label} from "@workspace/ui/components/label";
-import {fetchRevisionState, useCollabRevisions} from "@workspace/lib/collab";
-import {formatDateTime} from "@workspace/lib/date";
 import {yDocToProsemirrorJSON} from "y-prosemirror";
 import * as Y from "yjs";
 
@@ -93,7 +91,6 @@ export const EditorToolbar = ({editor, path, canWrite, onAccessDialogOpen, onDel
     const [linkDialogOpen, setLinkDialogOpen] = useState(false);
     const [createDocOpen, setCreateDocOpen] = useState(false);
     const [renameDialogOpen, setRenameDialogOpen] = useState(false);
-    const [revisionsOpen, setRevisionsOpen] = useState(false);
     const [textColorOpen, setTextColorOpen] = useState(false);
     const [highlightColorOpen, setHighlightColorOpen] = useState(false);
     const imageInputRef = useRef<HTMLInputElement>(null);
@@ -101,17 +98,13 @@ export const EditorToolbar = ({editor, path, canWrite, onAccessDialogOpen, onDel
     const {data: rootFolder} = useRootFolder(user?.id || '');
     const navigate = useNavigate();
     const isMobile = useIsMobile();
-    const {data: revisions} = useCollabRevisions(path.ownerId, path.mountId, path.id, revisionsOpen);
 
-    const handleRestore = async (revisionId: number) => {
-        const state = await fetchRevisionState(path.ownerId, path.mountId, path.id, revisionId);
-        if (!state) return;
+    const handleRestore = (state: Uint8Array) => {
         const tempDoc = new Y.Doc();
         Y.applyUpdate(tempDoc, state);
         const json = yDocToProsemirrorJSON(tempDoc, 'default');
         editor.commands.setContent(json);
         tempDoc.destroy();
-        setRevisionsOpen(false);
     };
 
     const handleLinkOperation = () => {
@@ -657,28 +650,7 @@ export const EditorToolbar = ({editor, path, canWrite, onAccessDialogOpen, onDel
                 {onAddComment && (
                     <TooltipButton icon={MessageSquare} tooltipText="Add comment" onClick={onAddComment}/>
                 )}
-                <DropdownMenu open={revisionsOpen} onOpenChange={setRevisionsOpen}>
-                    <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="icon" className="h-8 w-8">
-                            <Tooltip>
-                                <TooltipTrigger asChild>
-                                    <History className="h-4 w-4"/>
-                                </TooltipTrigger>
-                                <TooltipContent>Version history</TooltipContent>
-                            </Tooltip>
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end" className="max-h-64 overflow-y-auto min-w-[240px]">
-                        {revisions && revisions.length > 0 ? revisions.map((rev) => (
-                            <DropdownMenuItem key={rev.id} className="flex items-center justify-between gap-4" onClick={() => handleRestore(rev.id)}>
-                                <span>{rev.createdAt ? formatDateTime(new Date(rev.createdAt)) : `Revision #${rev.id}`}</span>
-                                <span className="text-xs text-muted-foreground">Restore</span>
-                            </DropdownMenuItem>
-                        )) : (
-                            <DropdownMenuItem disabled>No revisions yet</DropdownMenuItem>
-                        )}
-                    </DropdownMenuContent>
-                </DropdownMenu>
+                <RevisionHistory path={path} onRestore={handleRestore}/>
                 {canWrite ? (
                     <TooltipButton icon={UserRoundPlus} tooltipText="Share" onClick={onAccessDialogOpen}/>
                 ) : (
