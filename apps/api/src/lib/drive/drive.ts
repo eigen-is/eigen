@@ -414,7 +414,7 @@ export default class Drive {
         return data ? new Uint8Array(data).buffer : null;
     }
 
-    async getMimeTypeContents(mimeType: string, options?: {
+    async getMimeTypeContents(mimeType: string, options: {
         excludeDocumentChildren?: boolean
     } = {excludeDocumentChildren: true}): Promise<DrivePath[]> {
         // Aggregate results from all mounts
