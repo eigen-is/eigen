@@ -169,7 +169,7 @@ export const driveRouter = new Elysia({name: "drive"})
     // Mime type filter (aggregates over all mounts)
     .get("/drive/:ownerId/mime/:mimeType", async ({params, user}) => {
         const drive = await getSharedDrive(params.ownerId, user);
-        return await drive.getMimeTypeContents(params.mimeType.replace('-', '/'));
+        return await drive.getMimeTypeContents(params.mimeType.replace('-', '/'), {excludeDocumentChildren: true});
     }, {auth: true})
     // Thumbnail
     .get("/drive/:ownerId/:mountId/thumb/:fileName", async ({params, user, set}) => {

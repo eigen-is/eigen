@@ -517,11 +517,67 @@ export class Mount {
         return result?.count ?? 0;
     }
 
-    async getPathsByMimeType(mimeTypePrefix: string): Promise<DrivePath[]> {
-        const results = await this.db.select().from(paths)
-            .where(sql`${paths.mimeType} LIKE ${mimeTypePrefix + '%'}`)
-            .all();
+    async getPathsByMimeType(mimeTypePrefix: string, options?: {
+        excludeDocumentChildren?: boolean
+    }): Promise<DrivePath[]> {
+        const conditions = [];
+        if (mimeTypePrefix) {
+            conditions.push(sql`${paths.mimeType}
+            LIKE
+            ${mimeTypePrefix + '%'}`);
+        }
+        if (options?.excludeDocumentChildren) {
+            conditions.push(sql`${paths.parentId}
+            NOT IN (
+                WITH RECURSIVE doc_tree AS (
+                    SELECT
+            ${paths.id}
+            FROM
+            ${paths}
+            WHERE
+            ${paths.type}
+            IN
+            (
+            'doc',
+            'stickies',
+            'slides',
+            'sheets',
+            'chat'
+            )
+            UNION
+            ALL
+            SELECT
+            p
+            .
+            id
+            FROM
+            ${paths}
+            p
+            INNER
+            JOIN
+            doc_tree
+            dt
+            ON
+            p
+            .
+            parentId
+            =
+            dt
+            .
+            id
+            )
+            SELECT
+            id
+            FROM
+            doc_tree
+            )`);
+        }
 
+        const query = conditions.length > 0
+            ? this.db.select().from(paths).where(and(...conditions))
+            : this.db.select().from(paths);
+
+        const results = await query.all();
         return results.map(r => this.toDrivePath(r));
     }
 
