@@ -1,4 +1,4 @@
-import {useCallback, useRef, useState} from 'react';
+import {useCallback, useEffect, useState} from 'react';
 import {useHotkey} from '@tanstack/react-hotkeys';
 import {useDeck} from './hooks/use-deck';
 import {useSlideDnd} from './hooks/use-slide-dnd';
@@ -14,6 +14,8 @@ import type {DrivePath} from '@workspace/lib/types/drive';
 import {getDriveEmbedUrl} from '@workspace/lib/api';
 import {useUploadFile} from '@workspace/lib/drive';
 import * as Y from 'yjs';
+
+const CLIPBOARD_MARKER = 'eigenslides:object:';
 
 function jsonToYType(value: unknown): unknown {
     if (Array.isArray(value)) {
@@ -60,7 +62,6 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
     const {dragState, handleDragStart, handleDragEnd} = useSlideDnd({deck, yjsDoc});
 
     const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null);
-    const clipboardRef = useRef<SlideObject | null>(null);
     const [isAddTextOpen, setIsAddTextOpen] = useState(false);
     const [isAddImageOpen, setIsAddImageOpen] = useState(false);
     const [isObjectSettingsOpen, setIsObjectSettingsOpen] = useState(false);
@@ -68,6 +69,8 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
     const [isPresenting, setIsPresenting] = useState(false);
 
     const uploadFile = useUploadFile(ownerId, path.mountId);
+
+    const isDialogOpen = isAddTextOpen || isAddImageOpen || isObjectSettingsOpen || isSlideSettingsOpen;
 
     useHotkey('Mod+Z', (e) => { e.preventDefault(); undoManager?.undo(); }, {enabled: canWrite && !!undoManager});
     useHotkey('Mod+Y', (e) => { e.preventDefault(); undoManager?.redo(); }, {enabled: canWrite && !!undoManager});
@@ -77,35 +80,52 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
             deleteObject(selectedObjectId);
             setSelectedObjectId(null);
         }
-    }, {enabled: canWrite && !!selectedObjectId});
+    }, {enabled: canWrite && !!selectedObjectId && !isDialogOpen});
     useHotkey('Backspace', () => {
         if (selectedObjectId && canWrite) {
             deleteObject(selectedObjectId);
             setSelectedObjectId(null);
         }
-    }, {enabled: canWrite && !!selectedObjectId});
+    }, {enabled: canWrite && !!selectedObjectId && !isDialogOpen});
     useHotkey('Escape', () => {
         if (isPresenting) setIsPresenting(false);
         else setSelectedObjectId(null);
-    });
-    useHotkey('Mod+C', (e) => {
-        const tag = (document.activeElement?.tagName ?? '').toLowerCase();
-        if (tag === 'input' || tag === 'textarea' || (document.activeElement as HTMLElement)?.isContentEditable) return;
-        e.preventDefault();
-        if (selectedObjectId) {
+    }, {enabled: !isDialogOpen});
+    useEffect(() => {
+        const handleCopy = (e: ClipboardEvent) => {
+            const tag = (document.activeElement?.tagName ?? '').toLowerCase();
+            if (tag === 'input' || tag === 'textarea' || (document.activeElement as HTMLElement)?.isContentEditable) return;
+            if (!selectedObjectId) return;
             const obj = deck.objects[selectedObjectId];
-            if (obj) clipboardRef.current = {...obj};
-        }
-    }, {enabled: !!selectedObjectId});
-    useHotkey('Mod+V', (e) => {
-        const tag = (document.activeElement?.tagName ?? '').toLowerCase();
-        if (tag === 'input' || tag === 'textarea' || (document.activeElement as HTMLElement)?.isContentEditable) return;
-        e.preventDefault();
-        if (!clipboardRef.current || !activeSlideId || !canWrite) return;
-        const src = clipboardRef.current;
-        const {id: _id, slideId: _sid, ...rest} = src;
-        addObject(activeSlideId, {...rest, x: rest.x + 2, y: rest.y + 2} as Omit<SlideObject, 'id' | 'slideId'>);
-    }, {enabled: canWrite && !!activeSlideId});
+            if (!obj) return;
+            e.preventDefault();
+            e.clipboardData?.setData('text/plain', CLIPBOARD_MARKER + JSON.stringify(obj));
+        };
+        const handlePaste = (e: ClipboardEvent) => {
+            const tag = (document.activeElement?.tagName ?? '').toLowerCase();
+            if (tag === 'input' || tag === 'textarea' || (document.activeElement as HTMLElement)?.isContentEditable) return;
+            if (!activeSlideId || !canWrite) return;
+            const text = e.clipboardData?.getData('text/plain') ?? '';
+            if (!text.startsWith(CLIPBOARD_MARKER)) return;
+            e.preventDefault();
+            try {
+                const obj = JSON.parse(text.slice(CLIPBOARD_MARKER.length)) as SlideObject;
+                const {id: _id, slideId: _sid, ...rest} = obj;
+                addObject(activeSlideId, {
+                    ...rest,
+                    x: rest.x + 2,
+                    y: rest.y + 2
+                } as Omit<SlideObject, 'id' | 'slideId'>);
+            } catch { /* not a valid slide object, ignore */
+            }
+        };
+        document.addEventListener('copy', handleCopy);
+        document.addEventListener('paste', handlePaste);
+        return () => {
+            document.removeEventListener('copy', handleCopy);
+            document.removeEventListener('paste', handlePaste);
+        };
+    }, [selectedObjectId, deck.objects, activeSlideId, canWrite, addObject]);
 
     const handleAddText = useCallback((obj: typeof DEFAULT_TEXT_OBJECT & {text: string}) => {
         if (!activeSlideId) return;
@@ -137,7 +157,7 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
 
     const handleCopyObject = useCallback((objId: string) => {
         const obj = deck.objects[objId];
-        if (obj) clipboardRef.current = {...obj};
+        if (obj) navigator.clipboard.writeText(CLIPBOARD_MARKER + JSON.stringify(obj));
     }, [deck.objects]);
 
     const handleDeleteObject = useCallback((objId: string) => {
