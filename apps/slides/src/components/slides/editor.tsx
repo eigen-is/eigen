@@ -1,9 +1,10 @@
-import {useCallback, useEffect, useRef, useState} from 'react';
+import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {useHotkey} from '@tanstack/react-hotkeys';
 import {useDeck} from './hooks/use-deck';
 import {useSlideDnd} from './hooks/use-slide-dnd';
 import {SlidePanel} from './slide-panel';
 import {SlideCanvas} from './slide-canvas';
+import {SlidePropertiesPanel} from './slide-properties-panel';
 import {Toolbar} from './toolbar';
 import {SlideSettingsDialog} from './slide-settings-dialog';
 import {DEFAULT_IMAGE_OBJECT, DEFAULT_TEXT_OBJECT, type ImageObject, SlideObject} from './types';
@@ -35,7 +36,11 @@ function buildClipboardItem(obj: SlideObject): EigenClipboardItem {
             fontStyle: obj.fontStyle,
             textDecoration: obj.textDecoration,
             textAlign: obj.textAlign,
-            color: obj.color
+            color: obj.color,
+            letterSpacing: obj.letterSpacing,
+            lineHeight: obj.lineHeight,
+            highlightColor: obj.highlightColor,
+            backgroundColor: obj.backgroundColor,
         }
     };
 }
@@ -76,7 +81,9 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
         updateSlideBackground,
         addObject,
         updateObject,
+        updateObjects,
         deleteObject,
+        deleteObjects,
         yjsDoc,
         undoManager,
         moveObjectToFront,
@@ -85,7 +92,7 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
 
     const {dragState, handleDragStart, handleDragEnd} = useSlideDnd({deck, yjsDoc});
 
-    const [selectedObjectId, setSelectedObjectId] = useState<string | null>(null);
+    const [selectedObjectIds, setSelectedObjectIds] = useState<string[]>([]);
     const [editingObjectId, setEditingObjectId] = useState<string | null>(null);
     const [isSlideSettingsOpen, setIsSlideSettingsOpen] = useState(false);
     const [isPresenting, setIsPresenting] = useState(false);
@@ -93,6 +100,7 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
 
     const uploadFile = useUploadFile(ownerId, path.mountId);
 
+    const hasSelection = selectedObjectIds.length > 0;
     const isEditing = editingObjectId !== null;
     const isDialogOpen = isSlideSettingsOpen;
 
@@ -100,21 +108,21 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
     useHotkey('Mod+Y', (e) => { e.preventDefault(); undoManager?.redo(); }, {enabled: canWrite && !!undoManager});
     useHotkey('Mod+Shift+Z', (e) => { e.preventDefault(); undoManager?.redo(); }, {enabled: canWrite && !!undoManager});
     useHotkey('Delete', () => {
-        if (selectedObjectId && canWrite) {
-            deleteObject(selectedObjectId);
-            setSelectedObjectId(null);
+        if (hasSelection && canWrite) {
+            deleteObjects(selectedObjectIds);
+            setSelectedObjectIds([]);
         }
-    }, {enabled: canWrite && !!selectedObjectId && !isDialogOpen && !isEditing});
+    }, {enabled: canWrite && hasSelection && !isDialogOpen && !isEditing});
     useHotkey('Backspace', () => {
-        if (selectedObjectId && canWrite) {
-            deleteObject(selectedObjectId);
-            setSelectedObjectId(null);
+        if (hasSelection && canWrite) {
+            deleteObjects(selectedObjectIds);
+            setSelectedObjectIds([]);
         }
-    }, {enabled: canWrite && !!selectedObjectId && !isDialogOpen && !isEditing});
+    }, {enabled: canWrite && hasSelection && !isDialogOpen && !isEditing});
     useHotkey('Escape', () => {
         if (isPresenting) setIsPresenting(false);
         else if (isEditing) setEditingObjectId(null);
-        else setSelectedObjectId(null);
+        else setSelectedObjectIds([]);
     }, {enabled: !isDialogOpen});
     const handleImageFile = useCallback(async (file: File) => {
         if (!activeSlideId || !mediaFolderId || !file.type.startsWith('image/')) return;
@@ -148,12 +156,15 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
         const handleCopy = (e: ClipboardEvent) => {
             const tag = (document.activeElement?.tagName ?? '').toLowerCase();
             if (tag === 'input' || tag === 'textarea' || (document.activeElement as HTMLElement)?.isContentEditable) return;
-            if (!selectedObjectId) return;
-            const obj = deck.objects[selectedObjectId];
-            if (!obj) return;
+            if (selectedObjectIds.length === 0) return;
+            const items = selectedObjectIds.map(id => deck.objects[id]).filter(Boolean).map(buildClipboardItem);
+            if (items.length === 0) return;
             e.preventDefault();
-            const data: EigenClipboardData = {version: 1, items: [buildClipboardItem(obj)]};
-            writeEigenClipboard(e, data, obj.type === 'text' ? obj.text : undefined);
+            const data: EigenClipboardData = {version: 1, items};
+            const textPreview = selectedObjectIds.length === 1 && deck.objects[selectedObjectIds[0]]?.type === 'text'
+                ? (deck.objects[selectedObjectIds[0]] as any).text as string
+                : undefined;
+            writeEigenClipboard(e, data, textPreview);
         };
         const handlePaste = (e: ClipboardEvent) => {
             const tag = (document.activeElement?.tagName ?? '').toLowerCase();
@@ -176,7 +187,7 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
                         const overrides: Record<string, unknown> = {};
                         if (m.x != null) overrides.x = (m.x as number) + 2;
                         if (m.y != null) overrides.y = (m.y as number) + 2;
-                        for (const k of ['w', 'h', 'rotation', 'fontSize', 'fontWeight', 'fontStyle', 'textDecoration', 'textAlign', 'color'] as const) {
+                        for (const k of ['w', 'h', 'rotation', 'fontSize', 'fontWeight', 'fontStyle', 'textDecoration', 'textAlign', 'color', 'letterSpacing', 'lineHeight', 'highlightColor', 'backgroundColor'] as const) {
                             if (m[k] != null) overrides[k] = m[k];
                         }
                         addObject(activeSlideId, {
@@ -226,7 +237,7 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
             document.removeEventListener('copy', handleCopy);
             document.removeEventListener('paste', handlePaste);
         };
-    }, [selectedObjectId, deck.objects, activeSlideId, canWrite, addObject, handleImageFile, handleReUploadImage, mediaFolderId]);
+    }, [selectedObjectIds, deck.objects, activeSlideId, canWrite, addObject, handleImageFile, handleReUploadImage, mediaFolderId]);
 
     const handleAddText = useCallback(() => {
         if (!activeSlideId) return;
@@ -234,7 +245,7 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
     }, [activeSlideId, addObject]);
 
     const handleStartEditing = useCallback((objId: string) => {
-        setSelectedObjectId(objId);
+        setSelectedObjectIds([objId]);
         setEditingObjectId(objId);
     }, []);
 
@@ -251,8 +262,30 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
 
     const handleDeleteObject = useCallback((objId: string) => {
         deleteObject(objId);
-        if (selectedObjectId === objId) setSelectedObjectId(null);
-    }, [deleteObject, selectedObjectId]);
+        setSelectedObjectIds(prev => prev.filter(id => id !== objId));
+    }, [deleteObject]);
+
+    const handleDeleteSelectedObjects = useCallback((ids: string[]) => {
+        deleteObjects(ids);
+        setSelectedObjectIds([]);
+    }, [deleteObjects]);
+
+    const handleSelectObject = useCallback((id: string | null, additive?: boolean) => {
+        if (!id) {
+            setSelectedObjectIds([]);
+            setEditingObjectId(null);
+            return;
+        }
+        if (additive) {
+            setSelectedObjectIds(prev =>
+                prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
+            );
+            setEditingObjectId(null);
+        } else {
+            setSelectedObjectIds([id]);
+            if (id !== editingObjectId) setEditingObjectId(null);
+        }
+    }, [editingObjectId]);
 
     const handleDropImage = useCallback((file: File) => {
         handleImageFile(file);
@@ -295,6 +328,10 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
     const activeObjects = activeSlide
         ? activeSlide.objectIds.map(id => deck.objects[id]).filter(Boolean)
         : [];
+    const selectedObjects = useMemo(
+        () => selectedObjectIds.map(id => deck.objects[id]).filter(Boolean),
+        [selectedObjectIds, deck.objects]
+    );
 
     if (isPresenting && activeSlide) {
         return (
@@ -326,7 +363,10 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
                         backgroundColor: activeSlide.backgroundColor,
                     }}
                 >
-                    {activeObjects.map((obj) => (
+                    {activeObjects.map((obj) => {
+                        const shadow = (obj.shadowBlur || obj.shadowOffsetX || obj.shadowOffsetY) && obj.shadowColor && obj.shadowColor !== 'rgba(0,0,0,0)'
+                            ? `${obj.shadowOffsetX}px ${obj.shadowOffsetY}px ${obj.shadowBlur}px ${obj.shadowColor}` : undefined;
+                        return (
                         <div
                             key={obj.id}
                             className="absolute"
@@ -336,6 +376,8 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
                                 width: `${obj.w}%`,
                                 height: `${obj.h}%`,
                                 transform: obj.rotation ? `rotate(${obj.rotation}deg)` : undefined,
+                                backgroundColor: obj.type === 'text' && obj.backgroundColor ? obj.backgroundColor : undefined,
+                                boxShadow: shadow,
                             }}
                         >
                             {obj.type === 'text' && (
@@ -349,7 +391,9 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
                                         textAlign: obj.textAlign,
                                         color: obj.color,
                                         justifyContent: obj.textAlign === 'center' ? 'center' : obj.textAlign === 'right' ? 'flex-end' : 'flex-start',
-                                        lineHeight: 1.2,
+                                        lineHeight: obj.lineHeight || 1.2,
+                                        letterSpacing: obj.letterSpacing ? `${obj.letterSpacing}px` : undefined,
+                                        backgroundColor: obj.highlightColor || undefined,
                                     }}
                                 >
                                     {obj.text}
@@ -359,7 +403,8 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
                                 <img src={obj.src} className="w-full h-full" style={{objectFit: obj.objectFit}} draggable={false} alt=""/>
                             )}
                         </div>
-                    ))}
+                        );
+                    })}
                 </div>
             </div>
         );
@@ -382,7 +427,7 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
                 <SlidePanel
                     deck={deck}
                     activeSlideId={activeSlideId}
-                    onSelectSlide={(id) => { setActiveSlideId(id); setSelectedObjectId(null); }}
+                    onSelectSlide={(id) => { setActiveSlideId(id); setSelectedObjectIds([]); }}
                     onDragStart={handleDragStart}
                     onDragEnd={handleDragEnd}
                     dragActiveId={dragState.activeId}
@@ -390,37 +435,43 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
                     onDuplicateSlide={canWrite ? duplicateSlide : undefined}
                 />
                 {activeSlide ? (
-                    <div className="flex-1 flex flex-col overflow-hidden">
-                        <SlideCanvas
-                            slide={activeSlide}
-                            objects={activeObjects}
-                            selectedObjectId={selectedObjectId}
-                            editingObjectId={editingObjectId}
-                            onSelectObject={(id) => {
-                                setSelectedObjectId(id);
-                                if (id !== editingObjectId) setEditingObjectId(null);
-                            }}
-                            onStartEditing={handleStartEditing}
-                            onStopEditing={handleStopEditing}
-                            onUpdateObject={updateObject}
-                            onDropImage={canWrite ? handleDropImage : undefined}
-                            onCopyObject={handleCopyObject}
-                            onDeleteObject={canWrite ? handleDeleteObject : undefined}
-                            onMoveToFront={canWrite ? moveObjectToFront : undefined}
-                            onMoveToBack={canWrite ? moveObjectToBack : undefined}
-                            canWrite={canWrite}
-                        />
-                        <div className="h-8 bg-muted border-t flex items-center justify-between px-4 text-xs text-muted-foreground">
-                            <span>Slide {deck.slideOrder.indexOf(activeSlideId!) + 1} of {deck.slideOrder.length}</span>
-                            {canWrite && (
-                                <button
-                                    className="hover:underline"
-                                    onClick={() => setIsSlideSettingsOpen(true)}
-                                >
-                                    Slide settings
-                                </button>
-                            )}
+                    <div className="flex-1 flex overflow-hidden">
+                        <div className="flex-1 flex flex-col overflow-hidden">
+                            <SlideCanvas
+                                slide={activeSlide}
+                                objects={activeObjects}
+                                selectedObjectIds={selectedObjectIds}
+                                editingObjectId={editingObjectId}
+                                onSelectObject={handleSelectObject}
+                                onStartEditing={handleStartEditing}
+                                onStopEditing={handleStopEditing}
+                                onUpdateObject={updateObject}
+                                onDropImage={canWrite ? handleDropImage : undefined}
+                                onCopyObject={handleCopyObject}
+                                onDeleteObject={canWrite ? handleDeleteObject : undefined}
+                                onMoveToFront={canWrite ? moveObjectToFront : undefined}
+                                onMoveToBack={canWrite ? moveObjectToBack : undefined}
+                                canWrite={canWrite}
+                            />
+                            <div className="h-8 bg-muted border-t flex items-center justify-between px-4 text-xs text-muted-foreground">
+                                <span>Slide {deck.slideOrder.indexOf(activeSlideId!) + 1} of {deck.slideOrder.length}</span>
+                                {canWrite && (
+                                    <button
+                                        className="hover:underline"
+                                        onClick={() => setIsSlideSettingsOpen(true)}
+                                    >
+                                        Slide settings
+                                    </button>
+                                )}
+                            </div>
                         </div>
+                        {selectedObjects.length > 0 && canWrite && (
+                            <SlidePropertiesPanel
+                                objects={selectedObjects}
+                                onUpdate={updateObjects}
+                                onDelete={handleDeleteSelectedObjects}
+                            />
+                        )}
                     </div>
                 ) : (
                     <div className="flex-1 flex items-center justify-center text-muted-foreground">

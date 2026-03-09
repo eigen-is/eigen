@@ -1,14 +1,21 @@
 import type {DrivePath} from '@workspace/lib/types/drive';
 
-export type TextObject = {
+type BaseObject = {
     id: string;
     slideId: string;
-    type: 'text';
     x: number;
     y: number;
     w: number;
     h: number;
     rotation: number;
+    shadowColor: string;
+    shadowBlur: number;
+    shadowOffsetX: number;
+    shadowOffsetY: number;
+}
+
+export type TextObject = BaseObject & {
+    type: 'text';
     text: string;
     fontSize: number;
     fontWeight: 'normal' | 'bold';
@@ -16,17 +23,14 @@ export type TextObject = {
     textDecoration: 'none' | 'underline' | 'line-through';
     textAlign: 'left' | 'center' | 'right';
     color: string;
+    letterSpacing: number;
+    lineHeight: number;
+    highlightColor: string;
+    backgroundColor: string;
 }
 
-export type ImageObject = {
-    id: string;
-    slideId: string;
+export type ImageObject = BaseObject & {
     type: 'image';
-    x: number;
-    y: number;
-    w: number;
-    h: number;
-    rotation: number;
     src: string;
     objectFit: 'contain' | 'cover' | 'fill';
     sourcePath?: DrivePath;
@@ -50,6 +54,13 @@ export const SLIDE_ASPECT_RATIO = 16 / 9;
 export const SLIDE_BASE_WIDTH = 1920;
 export const SLIDE_BASE_HEIGHT = 1080;
 
+const DEFAULT_SHADOW = {
+    shadowColor: 'rgba(0,0,0,0)',
+    shadowBlur: 0,
+    shadowOffsetX: 0,
+    shadowOffsetY: 0,
+};
+
 export const DEFAULT_TEXT_OBJECT: Omit<TextObject, 'id' | 'slideId'> = {
     type: 'text',
     x: 10,
@@ -64,6 +75,11 @@ export const DEFAULT_TEXT_OBJECT: Omit<TextObject, 'id' | 'slideId'> = {
     textDecoration: 'none',
     textAlign: 'center',
     color: '#000000',
+    letterSpacing: 0,
+    lineHeight: 1.2,
+    highlightColor: '',
+    backgroundColor: '',
+    ...DEFAULT_SHADOW,
 };
 
 export const DEFAULT_IMAGE_OBJECT: Omit<ImageObject, 'id' | 'slideId' | 'src'> = {
@@ -74,6 +90,7 @@ export const DEFAULT_IMAGE_OBJECT: Omit<ImageObject, 'id' | 'slideId' | 'src'> =
     h: 70,
     rotation: 0,
     objectFit: 'contain',
+    ...DEFAULT_SHADOW,
 };
 
 export const SLIDE_BACKGROUNDS = [
