@@ -7,7 +7,7 @@ import {SlideCanvas} from './slide-canvas';
 import {SlidePropertiesPanel} from './slide-properties-panel';
 import {Toolbar} from './toolbar';
 import {SlideSettingsDialog} from './slide-settings-dialog';
-import {DEFAULT_IMAGE_OBJECT, DEFAULT_TEXT_OBJECT, type ImageObject, SlideObject} from './types';
+import {DEFAULT_IMAGE_OBJECT, DEFAULT_TEXT_OBJECT, type ImageObject, SLIDE_BACKGROUNDS, SlideObject} from './types';
 import type {DrivePath} from '@workspace/lib/types/drive';
 import {getDriveEmbedUrl} from '@workspace/lib/api';
 import {useUploadFile} from '@workspace/lib/drive';
@@ -36,6 +36,7 @@ function buildClipboardItem(obj: SlideObject): EigenClipboardItem {
             fontStyle: obj.fontStyle,
             textDecoration: obj.textDecoration,
             textAlign: obj.textAlign,
+            verticalAlign: obj.verticalAlign,
             color: obj.color,
             letterSpacing: obj.letterSpacing,
             lineHeight: obj.lineHeight,
@@ -187,7 +188,7 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
                         const overrides: Record<string, unknown> = {};
                         if (m.x != null) overrides.x = (m.x as number) + 2;
                         if (m.y != null) overrides.y = (m.y as number) + 2;
-                        for (const k of ['w', 'h', 'rotation', 'fontSize', 'fontWeight', 'fontStyle', 'textDecoration', 'textAlign', 'color', 'letterSpacing', 'lineHeight', 'highlightColor', 'backgroundColor'] as const) {
+                        for (const k of ['w', 'h', 'rotation', 'fontSize', 'fontWeight', 'fontStyle', 'textDecoration', 'textAlign', 'verticalAlign', 'color', 'letterSpacing', 'lineHeight', 'highlightColor', 'backgroundColor'] as const) {
                             if (m[k] != null) overrides[k] = m[k];
                         }
                         addObject(activeSlideId, {
@@ -366,6 +367,7 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
                     {activeObjects.map((obj) => {
                         const shadow = (obj.shadowBlur || obj.shadowOffsetX || obj.shadowOffsetY) && obj.shadowColor && obj.shadowColor !== 'rgba(0,0,0,0)'
                             ? `${obj.shadowOffsetX}px ${obj.shadowOffsetY}px ${obj.shadowBlur}px ${obj.shadowColor}` : undefined;
+                        const vAlign = obj.type === 'text' ? (obj.verticalAlign || 'top') : undefined;
                         return (
                         <div
                             key={obj.id}
@@ -376,28 +378,38 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
                                 width: `${obj.w}%`,
                                 height: `${obj.h}%`,
                                 transform: obj.rotation ? `rotate(${obj.rotation}deg)` : undefined,
+                                transformOrigin: 'center center',
                                 backgroundColor: obj.type === 'text' && obj.backgroundColor ? obj.backgroundColor : undefined,
-                                boxShadow: shadow,
+                                ...(obj.type === 'image' && shadow ? {boxShadow: shadow} : {}),
                             }}
                         >
                             {obj.type === 'text' && (
-                                <p
-                                    className="whitespace-pre-wrap break-words w-full h-full flex items-center"
+                                <div
+                                    className="w-full h-full flex"
                                     style={{
-                                        fontSize: `${obj.fontSize / 1080 * 100}vh`,
-                                        fontWeight: obj.fontWeight,
-                                        fontStyle: obj.fontStyle,
-                                        textDecoration: obj.textDecoration !== 'none' ? obj.textDecoration : undefined,
-                                        textAlign: obj.textAlign,
-                                        color: obj.color,
-                                        justifyContent: obj.textAlign === 'center' ? 'center' : obj.textAlign === 'right' ? 'flex-end' : 'flex-start',
-                                        lineHeight: obj.lineHeight || 1.2,
-                                        letterSpacing: obj.letterSpacing ? `${obj.letterSpacing}px` : undefined,
-                                        backgroundColor: obj.highlightColor || undefined,
+                                        alignItems: vAlign === 'center' ? 'center' : vAlign === 'bottom' ? 'flex-end' : 'flex-start',
                                     }}
                                 >
-                                    {obj.text}
-                                </p>
+                                    <p
+                                        className="whitespace-pre-wrap break-words w-full"
+                                        style={{
+                                            fontSize: `${obj.fontSize / 1080 * 100}vh`,
+                                            fontWeight: obj.fontWeight,
+                                            fontStyle: obj.fontStyle,
+                                            textDecoration: obj.textDecoration !== 'none' ? obj.textDecoration : undefined,
+                                            textAlign: obj.textAlign,
+                                            color: obj.color,
+                                            lineHeight: obj.lineHeight || 1.2,
+                                            letterSpacing: obj.letterSpacing ? `${obj.letterSpacing}px` : undefined,
+                                            textShadow: shadow,
+                                        }}
+                                    >
+                                        {obj.highlightColor
+                                            ? <span style={{backgroundColor: obj.highlightColor, boxDecorationBreak: 'clone', WebkitBoxDecorationBreak: 'clone'}}>{obj.text}</span>
+                                            : obj.text
+                                        }
+                                    </p>
+                                </div>
                             )}
                             {obj.type === 'image' && (
                                 <img src={obj.src} className="w-full h-full" style={{objectFit: obj.objectFit}} draggable={false} alt=""/>
@@ -465,13 +477,18 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
                                 )}
                             </div>
                         </div>
-                        {selectedObjects.length > 0 && canWrite && (
+                        {selectedObjects.length > 0 && canWrite ? (
                             <SlidePropertiesPanel
                                 objects={selectedObjects}
                                 onUpdate={updateObjects}
                                 onDelete={handleDeleteSelectedObjects}
                             />
-                        )}
+                        ) : canWrite && activeSlideId ? (
+                            <SlideBackgroundPanel
+                                currentBackground={activeSlide.backgroundColor}
+                                onUpdateBackground={(color) => updateSlideBackground(activeSlideId!, color)}
+                            />
+                        ) : null}
                     </div>
                 ) : (
                     <div className="flex-1 flex items-center justify-center text-muted-foreground">
@@ -499,6 +516,33 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
                     slideCount={deck.slideOrder.length}
                 />
             )}
+        </div>
+    );
+}
+
+function SlideBackgroundPanel({currentBackground, onUpdateBackground}: {
+    currentBackground: string;
+    onUpdateBackground: (color: string) => void;
+}) {
+    return (
+        <div className="w-64 border-l bg-background shrink-0 h-full flex flex-col overflow-hidden">
+            <div className="px-3 py-2 border-b">
+                <span className="text-sm font-medium">Slide</span>
+            </div>
+            <div className="border-b px-3 py-3">
+                <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2.5">Background</h4>
+                <div className="flex gap-2 flex-wrap">
+                    {SLIDE_BACKGROUNDS.map(({label, value}) => (
+                        <button
+                            key={value}
+                            title={label}
+                            onClick={() => onUpdateBackground(value)}
+                            className={`w-7 h-7 rounded border-2 ${currentBackground === value ? 'border-blue-500' : 'border-border'}`}
+                            style={{backgroundColor: value}}
+                        />
+                    ))}
+                </div>
+            </div>
         </div>
     );
 }

@@ -21,7 +21,8 @@ export type TextObject = BaseObject & {
     fontWeight: 'normal' | 'bold';
     fontStyle: 'normal' | 'italic';
     textDecoration: 'none' | 'underline' | 'line-through';
-    textAlign: 'left' | 'center' | 'right';
+    textAlign: 'left' | 'center' | 'right' | 'justify';
+    verticalAlign: 'top' | 'center' | 'bottom';
     color: string;
     letterSpacing: number;
     lineHeight: number;
@@ -74,6 +75,7 @@ export const DEFAULT_TEXT_OBJECT: Omit<TextObject, 'id' | 'slideId'> = {
     fontStyle: 'normal',
     textDecoration: 'none',
     textAlign: 'center',
+    verticalAlign: 'top',
     color: '#000000',
     letterSpacing: 0,
     lineHeight: 1.2,
