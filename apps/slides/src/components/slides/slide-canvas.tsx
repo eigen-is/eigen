@@ -7,9 +7,9 @@ import {useSnapTargets} from './hooks/use-snap-lines';
 type SlideCanvasProps = {
     slide: SlideItem;
     objects: SlideObject[];
-    selectedObjectId: string | null;
+    selectedObjectIds: string[];
     editingObjectId: string | null;
-    onSelectObject: (objId: string | null) => void;
+    onSelectObject: (objId: string | null, additive?: boolean) => void;
     onStartEditing: (objId: string) => void;
     onStopEditing: () => void;
     onUpdateObject: (objId: string, updates: Partial<SlideObject>) => void;
@@ -24,7 +24,7 @@ type SlideCanvasProps = {
 export function SlideCanvas({
                                 slide,
                                 objects,
-                                selectedObjectId,
+                                selectedObjectIds,
                                 editingObjectId,
                                 onSelectObject,
                                 onStartEditing,
@@ -38,7 +38,8 @@ export function SlideCanvas({
                                 canWrite
                             }: SlideCanvasProps) {
     const canvasRef = useRef<HTMLDivElement>(null);
-    const {vSnaps, hSnaps} = useSnapTargets(objects, selectedObjectId);
+    const primarySelectedId = selectedObjectIds.length === 1 ? selectedObjectIds[0] : null;
+    const {vSnaps, hSnaps} = useSnapTargets(objects, primarySelectedId);
 
     const {startDrag, activeSnapLines, dragPreview} = useObjectDrag({
         onUpdate: onUpdateObject,
@@ -98,7 +99,7 @@ export function SlideCanvas({
                     <SlideObjectView
                         key={obj.id}
                         obj={displayObj}
-                        selected={selectedObjectId === obj.id}
+                        selected={selectedObjectIds.includes(obj.id)}
                         editing={editingObjectId === obj.id}
                         editable={canWrite}
                         onSelect={onSelectObject}
