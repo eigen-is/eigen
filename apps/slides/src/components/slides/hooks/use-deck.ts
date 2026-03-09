@@ -6,7 +6,7 @@ import {nanoid} from 'nanoid';
 import {normalizeDeck} from '../normalize-deck';
 import {getCollabWebSocketUrl} from '@workspace/lib/api';
 
-const OBJECT_FIELDS = ['id', 'slideId', 'type', 'x', 'y', 'w', 'h', 'rotation', 'text', 'fontSize', 'fontWeight', 'fontStyle', 'textAlign', 'color', 'src', 'objectFit'] as const;
+const OBJECT_FIELDS = ['id', 'slideId', 'type', 'x', 'y', 'w', 'h', 'rotation', 'shadowColor', 'shadowBlur', 'shadowOffsetX', 'shadowOffsetY', 'text', 'fontSize', 'fontWeight', 'fontStyle', 'textDecoration', 'textAlign', 'color', 'letterSpacing', 'lineHeight', 'highlightColor', 'backgroundColor', 'src', 'objectFit'] as const;
 
 function yMapToObject(yMap: Y.Map<any>): Record<string, any> {
     const obj: Record<string, any> = {};
@@ -299,6 +299,47 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
         });
     }, [deck.objects]);
 
+    const updateObjects = useCallback((objIds: string[], updates: Partial<SlideObject>) => {
+        const doc = docRef.current;
+        if (!doc) return;
+        doc.transact(() => {
+            const objectsMap = doc.getMap('objects');
+            for (const objId of objIds) {
+                const objMap = objectsMap.get(objId) as Y.Map<any> | undefined;
+                if (!objMap) continue;
+                for (const [k, v] of Object.entries(updates)) {
+                    if (k === 'id' || k === 'slideId') continue;
+                    objMap.set(k, v);
+                }
+            }
+        });
+    }, []);
+
+    const deleteObjects = useCallback((objIds: string[]) => {
+        const doc = docRef.current;
+        if (!doc) return;
+        doc.transact(() => {
+            const objectsMap = doc.getMap('objects');
+            const slidesMap = doc.getMap('slides');
+            for (const objId of objIds) {
+                const obj = objectsMap.get(objId) as Y.Map<any> | undefined;
+                if (obj) {
+                    const slideId = obj.get('slideId') as string;
+                    const slideMap = slidesMap.get(slideId) as Y.Map<any> | undefined;
+                    if (slideMap) {
+                        const objIdsArr = slideMap.get('objectIds') as Y.Array<any>;
+                        if (objIdsArr) {
+                            const arr = objIdsArr.toArray() as string[];
+                            const idx = arr.indexOf(objId);
+                            if (idx !== -1) objIdsArr.delete(idx, 1);
+                        }
+                    }
+                }
+                objectsMap.delete(objId);
+            }
+        });
+    }, []);
+
     const deleteObject = useCallback((objId: string) => {
         const doc = docRef.current;
         if (!doc) return;
@@ -332,7 +373,9 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
         updateSlideBackground,
         addObject,
         updateObject,
+        updateObjects,
         deleteObject,
+        deleteObjects,
         moveObjectToFront,
         moveObjectToBack,
         yjsDoc: docRef.current,
