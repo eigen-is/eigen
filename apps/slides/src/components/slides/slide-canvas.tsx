@@ -76,8 +76,14 @@ export function SlideCanvas({
         e.dataTransfer.dropEffect = 'copy';
     }, []);
 
+    const handleOuterMouseDown = useCallback((e: React.MouseEvent) => {
+        if (e.target === e.currentTarget) {
+            onSelectObject(null);
+        }
+    }, [onSelectObject]);
+
     return (
-        <div className="flex-1 flex items-center justify-center p-6 bg-muted overflow-hidden">
+        <div className="flex-1 flex items-center justify-center p-6 bg-muted overflow-hidden" onMouseDown={handleOuterMouseDown}>
             <div
                 ref={canvasRef}
                 className="relative w-full shadow-lg rounded-sm overflow-hidden"

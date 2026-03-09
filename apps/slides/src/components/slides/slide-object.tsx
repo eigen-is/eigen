@@ -84,7 +84,7 @@ export const SlideObjectView = memo(function SlideObjectView({
         }
     };
 
-    const shadowStyle = buildShadowStyle(obj);
+    const shadowStr = buildShadowString(obj);
 
     const textStyle = obj.type === 'text' ? {
         fontSize: `${obj.fontSize / 1080 * 100}vh`,
@@ -95,8 +95,10 @@ export const SlideObjectView = memo(function SlideObjectView({
         color: obj.color,
         lineHeight: obj.lineHeight || 1.2,
         letterSpacing: obj.letterSpacing ? `${obj.letterSpacing}px` : undefined,
-        backgroundColor: obj.highlightColor || undefined,
+        textShadow: shadowStr,
     } : undefined;
+
+    const verticalAlign = obj.type === 'text' ? (obj.verticalAlign || 'top') : undefined;
 
     const objectDiv = (
         <div
@@ -107,27 +109,32 @@ export const SlideObjectView = memo(function SlideObjectView({
                 width: `${obj.w}%`,
                 height: `${obj.h}%`,
                 transform: obj.rotation ? `rotate(${obj.rotation}deg)` : undefined,
+                transformOrigin: 'center center',
                 backgroundColor: obj.type === 'text' && obj.backgroundColor ? obj.backgroundColor : undefined,
-                ...shadowStyle,
+                ...(obj.type === 'image' && shadowStr ? {boxShadow: shadowStr} : {}),
             }}
             onMouseDown={handleMouseDown}
             onDoubleClick={handleDoubleClick}
         >
             {obj.type === 'text' && !editing && (
                 <div
-                    className="w-full h-full flex items-center overflow-hidden select-none pointer-events-none"
+                    className="w-full h-full flex overflow-hidden select-none pointer-events-none"
                     style={{
+                        alignItems: verticalAlign === 'center' ? 'center' : verticalAlign === 'bottom' ? 'flex-end' : 'flex-start',
                         justifyContent: obj.textAlign === 'center' ? 'center' : obj.textAlign === 'right' ? 'flex-end' : 'flex-start',
                     }}
                 >
                     <p className="whitespace-pre-wrap break-words w-full" style={textStyle}>
-                        {obj.text}
+                        {obj.highlightColor
+                            ? <span style={{backgroundColor: obj.highlightColor, boxDecorationBreak: 'clone', WebkitBoxDecorationBreak: 'clone'}}>{obj.text}</span>
+                            : obj.text
+                        }
                     </p>
                 </div>
             )}
 
             {obj.type === 'text' && editing && (
-                <div className="w-full h-full flex items-center overflow-hidden">
+                <div className="w-full h-full flex overflow-hidden" style={{alignItems: verticalAlign === 'center' ? 'center' : verticalAlign === 'bottom' ? 'flex-end' : 'flex-start'}}>
                     <textarea
                         ref={textareaRef}
                         className="w-full resize-none bg-transparent border-none outline-none whitespace-pre-wrap break-words p-0"
@@ -149,7 +156,7 @@ export const SlideObjectView = memo(function SlideObjectView({
                 <img
                     src={obj.src}
                     className="w-full h-full select-none pointer-events-none"
-                    style={{objectFit: obj.objectFit, ...shadowStyle}}
+                    style={{objectFit: obj.objectFit}}
                     draggable={false}
                     alt=""
                 />
@@ -195,10 +202,8 @@ export const SlideObjectView = memo(function SlideObjectView({
     );
 });
 
-function buildShadowStyle(obj: SlideObject): React.CSSProperties {
-    if (!obj.shadowBlur && !obj.shadowOffsetX && !obj.shadowOffsetY) return {};
-    if (!obj.shadowColor || obj.shadowColor === 'rgba(0,0,0,0)') return {};
-    return {
-        boxShadow: `${obj.shadowOffsetX}px ${obj.shadowOffsetY}px ${obj.shadowBlur}px ${obj.shadowColor}`,
-    };
+function buildShadowString(obj: SlideObject): string | undefined {
+    if (!obj.shadowBlur && !obj.shadowOffsetX && !obj.shadowOffsetY) return undefined;
+    if (!obj.shadowColor || obj.shadowColor === 'rgba(0,0,0,0)') return undefined;
+    return `${obj.shadowOffsetX}px ${obj.shadowOffsetY}px ${obj.shadowBlur}px ${obj.shadowColor}`;
 }

@@ -1,8 +1,12 @@
 import {useCallback, useMemo, useState} from 'react';
 import {
     AlignCenter,
+    AlignJustify,
     AlignLeft,
     AlignRight,
+    AlignVerticalJustifyCenter,
+    AlignVerticalJustifyEnd,
+    AlignVerticalJustifyStart,
     Bold,
     Italic,
     Strikethrough,
@@ -142,6 +146,7 @@ function TextProperties({objects, onUpdate}: {
     const fontStyle = getMergedValue(objects, o => o.fontStyle);
     const textDecoration = getMergedValue(objects, o => o.textDecoration);
     const textAlign = getMergedValue(objects, o => o.textAlign);
+    const verticalAlign = getMergedValue(objects, o => o.verticalAlign);
     const color = getMergedValue(objects, o => o.color);
     const letterSpacing = getMergedValue(objects, o => o.letterSpacing);
     const lineHeight = getMergedValue(objects, o => o.lineHeight);
@@ -210,6 +215,37 @@ function TextProperties({objects, onUpdate}: {
                         onPressedChange={() => onUpdate({textAlign: 'right'})}
                     >
                         <AlignRight className="h-4 w-4"/>
+                    </Toggle>
+                    <Toggle
+                        size="sm"
+                        pressed={textAlign === 'justify'}
+                        onPressedChange={() => onUpdate({textAlign: 'justify'})}
+                    >
+                        <AlignJustify className="h-4 w-4"/>
+                    </Toggle>
+                </div>
+
+                <div className="flex items-center gap-1 pt-1">
+                    <Toggle
+                        size="sm"
+                        pressed={verticalAlign === 'top'}
+                        onPressedChange={() => onUpdate({verticalAlign: 'top'})}
+                    >
+                        <AlignVerticalJustifyStart className="h-4 w-4"/>
+                    </Toggle>
+                    <Toggle
+                        size="sm"
+                        pressed={verticalAlign === 'center'}
+                        onPressedChange={() => onUpdate({verticalAlign: 'center'})}
+                    >
+                        <AlignVerticalJustifyCenter className="h-4 w-4"/>
+                    </Toggle>
+                    <Toggle
+                        size="sm"
+                        pressed={verticalAlign === 'bottom'}
+                        onPressedChange={() => onUpdate({verticalAlign: 'bottom'})}
+                    >
+                        <AlignVerticalJustifyEnd className="h-4 w-4"/>
                     </Toggle>
                 </div>
             </PropertySection>
@@ -349,16 +385,34 @@ function MergedNumberInput({value, onChange, min, max, step}: {
     step?: number;
 }) {
     const mixed = isMixed(value);
+    const [localValue, setLocalValue] = useState(() => mixed ? '' : String(value ?? ''));
+    const [focused, setFocused] = useState(false);
+
+    const externalStr = mixed ? '' : String(value ?? '');
+    if (!focused && localValue !== externalStr) {
+        setLocalValue(externalStr);
+    }
 
     return (
         <Input
             type="number"
             className="h-7 text-xs"
-            value={mixed ? '' : (value ?? '')}
+            value={focused ? localValue : externalStr}
             placeholder={mixed ? '—' : undefined}
             onChange={(e) => {
-                const v = Number(e.target.value);
-                if (!isNaN(v)) onChange(v);
+                const raw = e.target.value;
+                setLocalValue(raw);
+                if (raw !== '' && raw !== '-') {
+                    const v = Number(raw);
+                    if (!isNaN(v)) onChange(v);
+                }
+            }}
+            onFocus={() => setFocused(true)}
+            onBlur={() => {
+                setFocused(false);
+                if (localValue === '' || localValue === '-') {
+                    setLocalValue(externalStr);
+                }
             }}
             min={min}
             max={max}
