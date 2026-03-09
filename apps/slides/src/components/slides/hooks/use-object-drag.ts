@@ -78,8 +78,8 @@ export const useObjectDrag = ({onUpdate, canvasRef, vSnaps = [], hSnaps = []}: U
             let h = s.startObjH;
 
             if (s.mode === 'move') {
-                x = clamp(s.startObjX + dx, 0, 100 - w);
-                y = clamp(s.startObjY + dy, 0, 100 - h);
+                x = s.startObjX + dx;
+                y = s.startObjY + dy;
             } else {
                 const resized = applyResize(s.mode, dx, dy, s.startObjX, s.startObjY, s.startObjW, s.startObjH);
                 x = resized.x; y = resized.y; w = resized.w; h = resized.h;
@@ -112,10 +112,6 @@ export const useObjectDrag = ({onUpdate, canvasRef, vSnaps = [], hSnaps = []}: U
     return {isDragging, startDrag, activeSnapLines, dragPreview};
 };
 
-function clamp(v: number, min: number, max: number) {
-    return Math.max(min, Math.min(max, v));
-}
-
 const MIN_SIZE = 3;
 
 function applyResize(
@@ -129,9 +125,6 @@ function applyResize(
     if (mode?.includes('w')) { w = Math.max(MIN_SIZE, ow - dx); x = ox + ow - w; }
     if (mode?.includes('s')) { h = Math.max(MIN_SIZE, oh + dy); }
     if (mode?.includes('n')) { h = Math.max(MIN_SIZE, oh - dy); y = oy + oh - h; }
-
-    x = clamp(x, 0, 97);
-    y = clamp(y, 0, 97);
 
     return {x, y, w, h};
 }
