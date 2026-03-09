@@ -7,7 +7,8 @@ import {SlideCanvas} from './slide-canvas';
 import {SlidePropertiesPanel} from './slide-properties-panel';
 import {Toolbar} from './toolbar';
 import {SlideSettingsDialog} from './slide-settings-dialog';
-import {DEFAULT_IMAGE_OBJECT, DEFAULT_TEXT_OBJECT, type ImageObject, SLIDE_BACKGROUNDS, SlideObject} from './types';
+import {DEFAULT_IMAGE_OBJECT, DEFAULT_TEXT_OBJECT, type ImageObject, SlideObject} from './types';
+import {ColorPicker} from '@workspace/ui/components/layout/media/color-picker';
 import type {DrivePath} from '@workspace/lib/types/drive';
 import {getDriveEmbedUrl} from '@workspace/lib/api';
 import {useUploadFile} from '@workspace/lib/drive';
@@ -23,14 +24,16 @@ import * as Y from 'yjs';
 
 function buildClipboardItem(obj: SlideObject): EigenClipboardItem {
     const rect = {x: obj.x, y: obj.y, w: obj.w, h: obj.h, rotation: obj.rotation};
+    const shadow = {shadowColor: obj.shadowColor, shadowBlur: obj.shadowBlur, shadowOffsetX: obj.shadowOffsetX, shadowOffsetY: obj.shadowOffsetY};
     if (obj.type === 'image') {
-        return {type: 'image', src: obj.src, sourcePath: obj.sourcePath, meta: {...rect, objectFit: obj.objectFit}};
+        return {type: 'image', src: obj.src, sourcePath: obj.sourcePath, meta: {...rect, ...shadow, objectFit: obj.objectFit}};
     }
     return {
         type: 'text',
         text: obj.text,
         meta: {
             ...rect,
+            ...shadow,
             fontSize: obj.fontSize,
             fontWeight: obj.fontWeight,
             fontStyle: obj.fontStyle,
@@ -87,6 +90,8 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
         deleteObjects,
         yjsDoc,
         undoManager,
+        moveObjectUp,
+        moveObjectDown,
         moveObjectToFront,
         moveObjectToBack,
     } = useDeck(ownerId, path.mountId, path.id);
@@ -186,9 +191,9 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
                     const m = item.meta ?? {};
                     if (item.type === 'text') {
                         const overrides: Record<string, unknown> = {};
-                        if (m.x != null) overrides.x = (m.x as number) + 2;
-                        if (m.y != null) overrides.y = (m.y as number) + 2;
-                        for (const k of ['w', 'h', 'rotation', 'fontSize', 'fontWeight', 'fontStyle', 'textDecoration', 'textAlign', 'verticalAlign', 'color', 'letterSpacing', 'lineHeight', 'highlightColor', 'backgroundColor'] as const) {
+                        if (m.x != null) overrides.x = m.x;
+                        if (m.y != null) overrides.y = m.y;
+                        for (const k of ['w', 'h', 'rotation', 'shadowColor', 'shadowBlur', 'shadowOffsetX', 'shadowOffsetY', 'fontSize', 'fontWeight', 'fontStyle', 'textDecoration', 'textAlign', 'verticalAlign', 'color', 'letterSpacing', 'lineHeight', 'highlightColor', 'backgroundColor'] as const) {
                             if (m[k] != null) overrides[k] = m[k];
                         }
                         addObject(activeSlideId, {
@@ -197,9 +202,9 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
                         } as Omit<SlideObject, 'id' | 'slideId'>);
                     } else if (item.type === 'image') {
                         const overrides: Record<string, unknown> = {};
-                        if (m.x != null) overrides.x = (m.x as number) + 2;
-                        if (m.y != null) overrides.y = (m.y as number) + 2;
-                        for (const k of ['w', 'h', 'rotation', 'objectFit'] as const) {
+                        if (m.x != null) overrides.x = m.x;
+                        if (m.y != null) overrides.y = m.y;
+                        for (const k of ['w', 'h', 'rotation', 'shadowColor', 'shadowBlur', 'shadowOffsetX', 'shadowOffsetY', 'objectFit'] as const) {
                             if (m[k] != null) overrides[k] = m[k];
                         }
                         const imageProps = {...DEFAULT_IMAGE_OBJECT, ...overrides};
@@ -461,6 +466,8 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
                                 onDropImage={canWrite ? handleDropImage : undefined}
                                 onCopyObject={handleCopyObject}
                                 onDeleteObject={canWrite ? handleDeleteObject : undefined}
+                                onMoveUp={canWrite ? moveObjectUp : undefined}
+                                onMoveDown={canWrite ? moveObjectDown : undefined}
                                 onMoveToFront={canWrite ? moveObjectToFront : undefined}
                                 onMoveToBack={canWrite ? moveObjectToBack : undefined}
                                 canWrite={canWrite}
@@ -531,17 +538,11 @@ function SlideBackgroundPanel({currentBackground, onUpdateBackground}: {
             </div>
             <div className="border-b px-3 py-3">
                 <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2.5">Background</h4>
-                <div className="flex gap-2 flex-wrap">
-                    {SLIDE_BACKGROUNDS.map(({label, value}) => (
-                        <button
-                            key={value}
-                            title={label}
-                            onClick={() => onUpdateBackground(value)}
-                            className={`w-7 h-7 rounded border-2 ${currentBackground === value ? 'border-blue-500' : 'border-border'}`}
-                            style={{backgroundColor: value}}
-                        />
-                    ))}
-                </div>
+                <ColorPicker
+                    value={currentBackground}
+                    onChange={(c) => onUpdateBackground(c || '#ffffff')}
+                    showReset={false}
+                />
             </div>
         </div>
     );

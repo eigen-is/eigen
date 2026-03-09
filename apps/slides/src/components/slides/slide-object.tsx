@@ -2,6 +2,8 @@ import {memo, useEffect, useRef} from 'react';
 import {
     ArrowDownToLine,
     ArrowUpToLine,
+    ChevronDown,
+    ChevronUp,
     Copy,
     Trash2,
 } from 'lucide-react';
@@ -27,6 +29,8 @@ type SlideObjectViewProps = {
     onResizeStart: (e: React.MouseEvent, objId: string, mode: string, x: number, y: number, w: number, h: number) => void;
     onCopy?: (objId: string) => void;
     onDelete?: (objId: string) => void;
+    onMoveUp?: (objId: string) => void;
+    onMoveDown?: (objId: string) => void;
     onMoveToFront?: (objId: string) => void;
     onMoveToBack?: (objId: string) => void;
 }
@@ -55,6 +59,8 @@ export const SlideObjectView = memo(function SlideObjectView({
                                                                  onResizeStart,
                                                                  onCopy,
                                                                  onDelete,
+                                                                 onMoveUp,
+                                                                 onMoveDown,
                                                                  onMoveToFront,
                                                                  onMoveToBack,
 }: SlideObjectViewProps) {
@@ -187,6 +193,12 @@ export const SlideObjectView = memo(function SlideObjectView({
                     <Copy className="h-4 w-4 mr-2"/> Copy
                 </ContextMenuItem>
                 <ContextMenuSeparator/>
+                <ContextMenuItem onClick={() => onMoveUp?.(obj.id)}>
+                    <ChevronUp className="h-4 w-4 mr-2"/> Move up
+                </ContextMenuItem>
+                <ContextMenuItem onClick={() => onMoveDown?.(obj.id)}>
+                    <ChevronDown className="h-4 w-4 mr-2"/> Move down
+                </ContextMenuItem>
                 <ContextMenuItem onClick={() => onMoveToFront?.(obj.id)}>
                     <ArrowUpToLine className="h-4 w-4 mr-2"/> Bring to front
                 </ContextMenuItem>
