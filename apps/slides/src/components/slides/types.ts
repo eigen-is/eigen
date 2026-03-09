@@ -75,7 +75,7 @@ export const DEFAULT_TEXT_OBJECT: Omit<TextObject, 'id' | 'slideId'> = {
     fontStyle: 'normal',
     textDecoration: 'none',
     textAlign: 'center',
-    verticalAlign: 'top',
+    verticalAlign: 'center',
     color: '#000000',
     letterSpacing: 0,
     lineHeight: 1.2,

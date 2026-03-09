@@ -16,6 +16,8 @@ type SlideCanvasProps = {
     onDropImage?: (file: File) => void;
     onCopyObject?: (objId: string) => void;
     onDeleteObject?: (objId: string) => void;
+    onMoveUp?: (objId: string) => void;
+    onMoveDown?: (objId: string) => void;
     onMoveToFront?: (objId: string) => void;
     onMoveToBack?: (objId: string) => void;
     canWrite: boolean;
@@ -33,6 +35,8 @@ export function SlideCanvas({
                                 onDropImage,
                                 onCopyObject,
                                 onDeleteObject,
+                                onMoveUp,
+                                onMoveDown,
                                 onMoveToFront,
                                 onMoveToBack,
                                 canWrite
@@ -116,6 +120,8 @@ export function SlideCanvas({
                         onResizeStart={handleResizeStart}
                         onCopy={onCopyObject}
                         onDelete={onDeleteObject}
+                        onMoveUp={onMoveUp}
+                        onMoveDown={onMoveDown}
                         onMoveToFront={onMoveToFront}
                         onMoveToBack={onMoveToBack}
                     />

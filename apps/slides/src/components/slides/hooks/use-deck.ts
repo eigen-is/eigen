@@ -261,6 +261,44 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
         });
     }, []);
 
+    const moveObjectUp = useCallback((objId: string) => {
+        const doc = docRef.current;
+        if (!doc) return;
+        const obj = deck.objects[objId];
+        if (!obj) return;
+        doc.transact(() => {
+            const slidesMap = doc.getMap('slides');
+            const slideMap = slidesMap.get(obj.slideId) as Y.Map<any> | undefined;
+            if (!slideMap) return;
+            const objIdsArr = slideMap.get('objectIds') as Y.Array<any>;
+            if (!objIdsArr) return;
+            const arr = objIdsArr.toArray() as string[];
+            const idx = arr.indexOf(objId);
+            if (idx === -1 || idx === arr.length - 1) return;
+            objIdsArr.delete(idx, 1);
+            objIdsArr.insert(idx + 1, [objId]);
+        });
+    }, [deck.objects]);
+
+    const moveObjectDown = useCallback((objId: string) => {
+        const doc = docRef.current;
+        if (!doc) return;
+        const obj = deck.objects[objId];
+        if (!obj) return;
+        doc.transact(() => {
+            const slidesMap = doc.getMap('slides');
+            const slideMap = slidesMap.get(obj.slideId) as Y.Map<any> | undefined;
+            if (!slideMap) return;
+            const objIdsArr = slideMap.get('objectIds') as Y.Array<any>;
+            if (!objIdsArr) return;
+            const arr = objIdsArr.toArray() as string[];
+            const idx = arr.indexOf(objId);
+            if (idx <= 0) return;
+            objIdsArr.delete(idx, 1);
+            objIdsArr.insert(idx - 1, [objId]);
+        });
+    }, [deck.objects]);
+
     const moveObjectToFront = useCallback((objId: string) => {
         const doc = docRef.current;
         if (!doc) return;
@@ -376,6 +414,8 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
         updateObjects,
         deleteObject,
         deleteObjects,
+        moveObjectUp,
+        moveObjectDown,
         moveObjectToFront,
         moveObjectToBack,
         yjsDoc: docRef.current,
