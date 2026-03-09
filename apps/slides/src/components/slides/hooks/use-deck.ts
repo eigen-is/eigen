@@ -6,7 +6,7 @@ import {nanoid} from 'nanoid';
 import {normalizeDeck} from '../normalize-deck';
 import {getCollabWebSocketUrl} from '@workspace/lib/api';
 
-const OBJECT_FIELDS = ['id', 'slideId', 'type', 'x', 'y', 'w', 'h', 'rotation', 'shadowColor', 'shadowBlur', 'shadowOffsetX', 'shadowOffsetY', 'text', 'fontSize', 'fontWeight', 'fontStyle', 'textDecoration', 'textAlign', 'color', 'letterSpacing', 'lineHeight', 'highlightColor', 'backgroundColor', 'src', 'objectFit'] as const;
+const OBJECT_FIELDS = ['id', 'slideId', 'type', 'x', 'y', 'w', 'h', 'rotation', 'shadowColor', 'shadowBlur', 'shadowOffsetX', 'shadowOffsetY', 'text', 'fontSize', 'fontWeight', 'fontStyle', 'textDecoration', 'textAlign', 'verticalAlign', 'color', 'letterSpacing', 'lineHeight', 'highlightColor', 'backgroundColor', 'src', 'objectFit'] as const;
 
 function yMapToObject(yMap: Y.Map<any>): Record<string, any> {
     const obj: Record<string, any> = {};
