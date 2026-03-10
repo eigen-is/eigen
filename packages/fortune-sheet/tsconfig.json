@@ -2,6 +2,7 @@
   "extends": "../../tsconfig.json",
   "compilerOptions": {
     "baseUrl": ".",
+    "noFallthroughCasesInSwitch": false,
     "paths": {
       "@workspace/ui/*": [
         "../ui/src/*"

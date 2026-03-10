@@ -34,7 +34,7 @@ import {
   fixColumnStyleOverflowInFreeze,
   handleKeydownForZoom,
   api,
-} from "@fortune-sheet/core";
+} from "../../core";
 import _ from "lodash";
 import WorkbookContext, { SetContextOptions } from "../../context";
 import ColumnHeader from "./ColumnHeader";
