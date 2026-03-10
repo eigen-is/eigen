@@ -73,7 +73,7 @@ const SheetTab: React.FC = () => {
 
   return (
     <div
-      className="luckysheet-sheet-area luckysheet-noselected-text"
+      className="luckysheet-sheet-area luckysheet-noselected-text border-t"
       onContextMenu={(e) => e.preventDefault()}
       id="luckysheet-sheet-area"
     >

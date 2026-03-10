@@ -40,6 +40,8 @@ html::-webkit-scrollbar-button {
   display: flex;
   justify-content: flex-end;
   align-items: center;
+  line-height: 0;
+  height: 0;
 }
 
 .sr-only {
