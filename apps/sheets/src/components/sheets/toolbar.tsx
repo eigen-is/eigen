@@ -26,19 +26,14 @@ import {useAuth} from '@workspace/lib/auth';
 import {useRootFolder} from '@workspace/lib/drive';
 import type {DrivePath} from '@workspace/lib/types/drive';
 
-type SheetToolbarProps = {
+type ToolbarItemsProps = {
     canWrite: boolean;
     onAccessDialogOpen: () => void;
     onRestore: (state: Uint8Array) => void;
     path: DrivePath;
 }
 
-export function SheetToolbar({
-                                 canWrite,
-                                 onAccessDialogOpen,
-                                 onRestore,
-                                 path,
-                             }: SheetToolbarProps) {
+export function ToolbarLeftItems({path, onAccessDialogOpen, canWrite}: ToolbarItemsProps) {
     const [createSheetsOpen, setCreateSheetsOpen] = useState(false);
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
     const [renameDialogOpen, setRenameDialogOpen] = useState(false);
@@ -47,50 +42,35 @@ export function SheetToolbar({
     const navigate = useNavigate();
 
     return (
-        <div className="bg-white h-10 flex items-center justify-between px-4 border-b no-print">
-            <div className="flex items-center gap-0.5">
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="sm" className="h-7 px-2 text-xs">File</Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="start">
-                        <DropdownMenuItem onClick={() => rootFolder && setCreateSheetsOpen(true)}>
-                            <FileText className="w-4 h-4 mr-2"/> New sheet
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => navigate({to: `/`})}>
-                            <Folder className="w-4 h-4 mr-2"/> Open
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => path && setRenameDialogOpen(true)}>
-                            <Pencil className="w-4 h-4 mr-2"/> Rename
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator/>
-                        <DropdownMenuItem onClick={onAccessDialogOpen}>
-                            <UserRoundPlus className="w-4 h-4 mr-2"/> Edit access
-                        </DropdownMenuItem>
-                        {canWrite && (
-                            <>
-                                <DropdownMenuSeparator/>
-                                <DropdownMenuItem onClick={() => path && setDeleteDialogOpen(true)}>
-                                    <Trash2 className="w-4 h-4 mr-2"/> Delete
-                                </DropdownMenuItem>
-                            </>
-                        )}
-                    </DropdownMenuContent>
-                </DropdownMenu>
-            </div>
-
-            <div className="flex items-center gap-1">
-                <RevisionHistory path={path} onRestore={onRestore}/>
-                {canWrite ? (
-                    <TooltipButton
-                        icon={UserPlus}
-                        tooltipText="Share"
-                        onClick={onAccessDialogOpen}
-                    />
-                ) : (
-                    <DocumentModeButton canWrite={canWrite}/>
-                )}
-            </div>
+        <>
+            <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                    <Button variant="ghost" size="sm" className="h-7 px-2 text-xs">File</Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="start">
+                    <DropdownMenuItem onClick={() => rootFolder && setCreateSheetsOpen(true)}>
+                        <FileText className="w-4 h-4 mr-2"/> New sheet
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => navigate({to: `/`})}>
+                        <Folder className="w-4 h-4 mr-2"/> Open
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => path && setRenameDialogOpen(true)}>
+                        <Pencil className="w-4 h-4 mr-2"/> Rename
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator/>
+                    <DropdownMenuItem onClick={onAccessDialogOpen}>
+                        <UserRoundPlus className="w-4 h-4 mr-2"/> Edit access
+                    </DropdownMenuItem>
+                    {canWrite && (
+                        <>
+                            <DropdownMenuSeparator/>
+                            <DropdownMenuItem onClick={() => path && setDeleteDialogOpen(true)}>
+                                <Trash2 className="w-4 h-4 mr-2"/> Delete
+                            </DropdownMenuItem>
+                        </>
+                    )}
+                </DropdownMenuContent>
+            </DropdownMenu>
 
             {rootFolder && (
                 <DriveCreateSheets
@@ -116,6 +96,23 @@ export function SheetToolbar({
                     onOpenChange={setRenameDialogOpen}
                 />
             )}
-        </div>
+        </>
+    );
+}
+
+export function ToolbarRightItems({path, canWrite, onAccessDialogOpen, onRestore}: ToolbarItemsProps) {
+    return (
+        <>
+            <RevisionHistory path={path} onRestore={onRestore}/>
+            {canWrite ? (
+                <TooltipButton
+                    icon={UserPlus}
+                    tooltipText="Share"
+                    onClick={onAccessDialogOpen}
+                />
+            ) : (
+                <DocumentModeButton canWrite={canWrite}/>
+            )}
+        </>
     );
 }

@@ -2,7 +2,7 @@ import {useCallback, useEffect, useRef, useState} from 'react';
 import * as Y from 'yjs';
 import {WebsocketProvider} from 'y-websocket';
 import {getCollabWebSocketUrl} from '@workspace/lib/api';
-import type {WorkbookInstance} from '@fortune-sheet/react';
+import type {WorkbookInstance} from '@workspace/fortune-sheet';
 
 export type SheetData = Record<string, any> & { name: string };
 
@@ -28,6 +28,21 @@ export function useSheet(
     const isLocalOpRef = useRef(false);
     const readyForOpsRef = useRef(false);
     const snapshotTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+    const pendingSnapshotRef = useRef<string | null>(null);
+
+    const flushSnapshot = useCallback(() => {
+        const doc = docRef.current;
+        const pending = pendingSnapshotRef.current;
+        if (!doc || !pending) return;
+        pendingSnapshotRef.current = null;
+        if (snapshotTimerRef.current) {
+            clearTimeout(snapshotTimerRef.current);
+            snapshotTimerRef.current = null;
+        }
+        doc.transact(() => {
+            doc.getMap('state').set('snapshot', pending);
+        });
+    }, []);
 
     useEffect(() => {
         const doc = new Y.Doc();
@@ -86,7 +101,20 @@ export function useSheet(
             }
         });
 
+        const handleBeforeUnload = () => {
+            const pending = pendingSnapshotRef.current;
+            if (pending && docRef.current) {
+                docRef.current.transact(() => {
+                    docRef.current!.getMap('state').set('snapshot', pending);
+                });
+                pendingSnapshotRef.current = null;
+            }
+        };
+        window.addEventListener('beforeunload', handleBeforeUnload);
+
         return () => {
+            window.removeEventListener('beforeunload', handleBeforeUnload);
+            handleBeforeUnload();
             if (snapshotTimerRef.current) clearTimeout(snapshotTimerRef.current);
             readyForOpsRef.current = false;
             wsProvider.disconnect();
@@ -107,21 +135,38 @@ export function useSheet(
     }, []);
 
     const saveSnapshot = useCallback((data: SheetData[]) => {
+        pendingSnapshotRef.current = JSON.stringify(data);
         if (snapshotTimerRef.current) clearTimeout(snapshotTimerRef.current);
-        snapshotTimerRef.current = setTimeout(() => {
-            const doc = docRef.current;
-            if (!doc) return;
-            doc.transact(() => {
-                const stateMap = doc.getMap('state');
-                stateMap.set('snapshot', JSON.stringify(data));
-            });
-        }, 2000);
-    }, []);
+        snapshotTimerRef.current = setTimeout(flushSnapshot, 1000);
+    }, [flushSnapshot]);
 
     const handleRestore = useCallback((state: Uint8Array) => {
         const doc = docRef.current;
         if (!doc) return;
-        Y.applyUpdate(doc, state);
+
+        const tempDoc = new Y.Doc();
+        Y.applyUpdate(tempDoc, state);
+
+        const allKeys = new Set([...doc.share.keys(), ...tempDoc.share.keys()]);
+
+        doc.transact(() => {
+            for (const key of allKeys) {
+                const localType = doc.get(key);
+                if (localType instanceof Y.Map) {
+                    const json = tempDoc.getMap(key).toJSON();
+                    for (const k of [...localType.keys()]) localType.delete(k);
+                    for (const [k, v] of Object.entries(json)) {
+                        localType.set(k, v as any);
+                    }
+                } else if (localType instanceof Y.Array) {
+                    const json = tempDoc.getArray(key).toJSON();
+                    localType.delete(0, localType.length);
+                    localType.push(json);
+                }
+            }
+        });
+        tempDoc.destroy();
+
         const stateMap = doc.getMap('state');
         const snapshot = stateMap.get('snapshot') as string | undefined;
         if (snapshot) {
