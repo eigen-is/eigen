@@ -2,6 +2,12 @@
 
 All shared components live in `packages/ui/src/components/layout/`. This document provides a quick reference.
 
+## Bugs
+
+- Find and Replace dialog is not 'in front of canvas'. Maybe it should use useDialog? Currently when you press a button it selects a cell below. Also make sure buttons are in footer of dialog and layout 'the shadcn way'.
+- Learn more dialog of functions is completely broken in layout.
+- Change color of a tab via context menu should open a submenu.
+
 ## Core Layout
 
 | Component | File | Description |

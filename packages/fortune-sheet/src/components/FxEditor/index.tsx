@@ -298,7 +298,7 @@ const FxEditor: React.FC = () => {
     <aside>
       <div className="flex flex-row h-7 border-b border-[#d4d4d4]">
         <NameBox />
-        <div className="flex items-center mx-3">
+        <div className="flex items-center  pl-2 pr-2">
           <SVGIcon name="fx" width={18} height={18} />
         </div>
         <div ref={inputContainerRef} className="overflow-visible p-0 flex-1 flex items-center relative border-l border-[#e5e5e5]">
