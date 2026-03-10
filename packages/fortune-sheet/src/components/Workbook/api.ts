@@ -277,7 +277,7 @@ export function generateAPIs(
       setContext((draftCtx) => api.deleteSheet(draftCtx, options)),
 
     updateSheet: (data: Sheet[]) =>
-      setContext((draftCtx) => api.updateSheet(draftCtx, data)),
+      setContext((draftCtx) => api.updateSheet(draftCtx, _.cloneDeep(data))),
 
     activateSheet: (options: api.CommonOptions = {}) =>
       setContext((draftCtx) => api.activateSheet(draftCtx, options)),

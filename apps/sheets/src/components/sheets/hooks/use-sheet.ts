@@ -29,30 +29,39 @@ export function useSheet(
     const readyForOpsRef = useRef(false);
     const snapshotTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const pendingSnapshotRef = useRef<string | null>(null);
+    const hasFlushedRef = useRef(false);
 
     const flushSnapshot = useCallback(() => {
         const doc = docRef.current;
         const pending = pendingSnapshotRef.current;
-        if (!doc || !pending) return;
+        if (!doc || !pending) {
+            console.log('[sheet] flushSnapshot: skip (doc=%s, pending=%s)', !!doc, !!pending);
+            return;
+        }
         pendingSnapshotRef.current = null;
         if (snapshotTimerRef.current) {
             clearTimeout(snapshotTimerRef.current);
             snapshotTimerRef.current = null;
         }
+        console.log('[sheet] flushSnapshot: writing %d bytes to Y.Map', pending.length);
         doc.transact(() => {
             doc.getMap('state').set('snapshot', pending);
         });
+        hasFlushedRef.current = true;
+        console.log('[sheet] flushSnapshot: done');
     }, []);
 
     useEffect(() => {
         const doc = new Y.Doc();
         docRef.current = doc;
         readyForOpsRef.current = false;
+        hasFlushedRef.current = false;
 
         const stateMap = doc.getMap('state');
         const opsArray = doc.getArray('ops');
 
         const wsUrl = getCollabWebSocketUrl(ownerId, mountId, pathId);
+        console.log('[sheet] connecting to', wsUrl);
         const wsProvider = new WebsocketProvider(wsUrl, '', doc, {
             resyncInterval: 5000,
             connect: true,
@@ -72,7 +81,7 @@ export function useSheet(
                         try {
                             workbookRef.current!.applyOp(ops);
                         } catch (e) {
-                            console.error('Failed to apply remote op:', e);
+                            console.error('[sheet] Failed to apply remote op:', e);
                         }
                     });
                 }
@@ -80,30 +89,34 @@ export function useSheet(
         });
 
         wsProvider.on('sync', (isSynced: boolean) => {
-            if (isSynced) {
-                const snapshot = stateMap.get('snapshot') as string | undefined;
-                let data: SheetData[];
-                if (snapshot) {
-                    try {
-                        data = JSON.parse(snapshot);
-                    } catch {
-                        data = DEFAULT_SHEETS;
-                    }
-                } else {
+            if (!isSynced) return;
+            const snapshot = stateMap.get('snapshot') as string | undefined;
+            console.log('[sheet] sync: snapshot present=%s, length=%d', !!snapshot, snapshot?.length ?? 0);
+
+            let data: SheetData[];
+            if (snapshot) {
+                try {
+                    data = JSON.parse(snapshot);
+                } catch {
+                    console.warn('[sheet] sync: failed to parse snapshot, using defaults');
                     data = DEFAULT_SHEETS;
-                    doc.transact(() => {
-                        stateMap.set('snapshot', JSON.stringify(data));
-                    });
                 }
-                setInitialData(data);
-                setSynced(true);
-                readyForOpsRef.current = true;
+            } else {
+                console.log('[sheet] sync: no snapshot, initializing with defaults');
+                data = DEFAULT_SHEETS;
+                doc.transact(() => {
+                    stateMap.set('snapshot', JSON.stringify(data));
+                });
             }
+            setInitialData(data);
+            setSynced(true);
+            readyForOpsRef.current = true;
         });
 
         const handleBeforeUnload = () => {
             const pending = pendingSnapshotRef.current;
             if (pending && docRef.current) {
+                console.log('[sheet] beforeunload: flushing pending snapshot');
                 docRef.current.transact(() => {
                     docRef.current!.getMap('state').set('snapshot', pending);
                 });
@@ -129,20 +142,27 @@ export function useSheet(
         if (!doc || ops.length === 0) return;
         isLocalOpRef.current = true;
         doc.transact(() => {
-            const opsArray = doc.getArray('ops');
-            opsArray.push([ops]);
+            doc.getArray('ops').push([ops]);
         });
     }, []);
 
     const saveSnapshot = useCallback((data: SheetData[]) => {
+        let json: string;
         try {
-            pendingSnapshotRef.current = JSON.stringify(data);
+            json = JSON.stringify(data);
         } catch (e) {
-            console.error('Failed to serialize sheet data for snapshot:', e);
+            console.error('[sheet] saveSnapshot: JSON.stringify failed:', e);
             return;
         }
+        pendingSnapshotRef.current = json;
+        console.log('[sheet] saveSnapshot: queued %d bytes (%d sheets)', json.length, data.length);
+
         if (snapshotTimerRef.current) clearTimeout(snapshotTimerRef.current);
-        snapshotTimerRef.current = setTimeout(flushSnapshot, 1000);
+        if (!hasFlushedRef.current) {
+            flushSnapshot();
+        } else {
+            snapshotTimerRef.current = setTimeout(flushSnapshot, 1000);
+        }
     }, [flushSnapshot]);
 
     const handleRestore = useCallback((state: Uint8Array) => {
@@ -174,16 +194,16 @@ export function useSheet(
 
         const stateMap = doc.getMap('state');
         const snapshot = stateMap.get('snapshot') as string | undefined;
+        console.log('[sheet] handleRestore: snapshot present=%s', !!snapshot);
         if (snapshot) {
             try {
                 const data = JSON.parse(snapshot) as SheetData[];
                 setInitialData(data);
                 if (workbookRef.current) {
-                    const cloned = JSON.parse(snapshot) as SheetData[];
-                    workbookRef.current.updateSheet(cloned);
+                    workbookRef.current.updateSheet(data);
                 }
             } catch (e) {
-                console.error('Failed to restore sheet data:', e);
+                console.error('[sheet] handleRestore: failed:', e);
             }
         }
     }, [workbookRef]);
