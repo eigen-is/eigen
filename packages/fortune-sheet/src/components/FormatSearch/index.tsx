@@ -4,7 +4,7 @@ import {
   getSheetIndex,
   locale,
   update,
-} from "@fortune-sheet/core";
+} from "../../core";
 import _ from "lodash";
 import { Button } from "@workspace/ui/components/button";
 import { Input } from "@workspace/ui/components/input";
