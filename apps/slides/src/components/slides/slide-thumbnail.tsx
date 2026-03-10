@@ -1,5 +1,5 @@
 import {memo} from 'react';
-import {SlideItem, SlideObject, SLIDE_ASPECT_RATIO, pxToPercent} from './types';
+import {SlideItem, SlideObject, SLIDE_ASPECT_RATIO, pxToPercent, BORDER_RADIUS_ROUND} from './types';
 import {cn} from '@workspace/ui/lib/utils';
 
 type SlideThumbnailProps = {
@@ -55,7 +55,7 @@ const ThumbnailObject = memo(function ThumbnailObject({obj, bgColor}: {obj: Slid
                 height: `${pxToPercent(obj.h, 'y')}%`,
                 transform: obj.rotation ? `rotate(${obj.rotation}deg)` : undefined,
                 ...(obj.borderWidth && obj.borderColor ? {border: `${obj.borderWidth * 0.1}px solid ${obj.borderColor}`} : {}),
-                ...(obj.borderRadius ? {borderRadius: `${obj.borderRadius * 0.1}px`} : {}),
+                ...(obj.borderRadius ? {borderRadius: obj.borderRadius >= BORDER_RADIUS_ROUND ? '50%' : `${obj.borderRadius * 0.1}px`, overflow: 'hidden' as const} : {}),
             }}
         >
             {obj.type === 'text' && (
