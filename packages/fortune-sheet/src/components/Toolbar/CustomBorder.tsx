@@ -71,12 +71,16 @@ export function CustomBorder({ onPick }: Props) {
           </div>
         </DropdownMenuSubTrigger>
         <DropdownMenuSubContent>
-          <DropdownMenuItem onClick={() => { setChangeStyle("1"); onPick(changeColor, "1"); }}>
+          <DropdownMenuItem
+            onSelect={(e) => e.preventDefault()}
+            onClick={() => { setChangeStyle("1"); onPick(changeColor, "1"); }}
+          >
             {border.borderDefault ?? "Default"}
           </DropdownMenuItem>
           {BORDER_STYLES.map((item) => (
             <DropdownMenuItem
               key={item.text}
+              onSelect={(e) => e.preventDefault()}
               onClick={() => { setChangeStyle(item.text); onPick(changeColor, item.text); }}
             >
               <svg height="10" width="80">
