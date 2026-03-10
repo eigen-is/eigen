@@ -38,7 +38,7 @@ import { SplitColumn } from "../SplitColumn";
 import { LocationCondition } from "../LocationCondition";
 import DataVerification from "../DataVerification";
 import ConditionalFormat from "../ConditionFormat";
-import { CustomColor } from "./CustomColor";
+import { ColorPicker } from "@workspace/ui/components/layout/media/color-picker";
 import CustomBorder from "./CustomBorder";
 import { FormatSearch } from "../FormatSearch";
 import {
@@ -134,10 +134,11 @@ const ColorCombo: React.FC<{
             <ChevronDown className="h-3 w-3 text-muted-foreground" />
           </div>
         </PopoverTrigger>
-        <PopoverContent className="w-auto p-0" align="start">
-          <CustomColor
-            onCustomPick={(color) => { onPick(color); setOpen(false); }}
-            onColorPick={(color) => { onPick(color); setOpen(false); }}
+        <PopoverContent className="w-auto p-3" align="start">
+          <ColorPicker
+            value={recentColor ?? ""}
+            resetLabel="Reset color"
+            onChange={(color) => { onPick(color || undefined); setOpen(false); }}
           />
         </PopoverContent>
       </Popover>

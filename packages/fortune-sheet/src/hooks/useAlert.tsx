@@ -1,26 +1,20 @@
-import { useContext, useCallback } from "react";
-import MessageBox from "../components/MessageBox";
-import { ModalContext } from "../context/modal";
+import { useCallback } from "react";
+import { useDialog } from "./useDialog";
 
 export function useAlert() {
-  const { showModal, hideModal } = useContext(ModalContext);
+  const { showDialog, hideDialog } = useDialog();
+
   const showAlert = useCallback(
     (
       message: string,
       type: "ok" | "yesno" = "ok",
-      onOk: () => void = hideModal,
-      onCancel: () => void = hideModal
+      onOk: () => void = hideDialog,
+      onCancel: () => void = hideDialog
     ) => {
-      showModal(
-        <MessageBox type={type} onOk={onOk} onCancel={onCancel}>
-          {message}
-        </MessageBox>
-      );
+      showDialog(message, type, onOk, onCancel);
     },
-    [hideModal, showModal]
+    [hideDialog, showDialog]
   );
-  return {
-    showAlert,
-    hideAlert: hideModal,
-  };
+
+  return { showAlert, hideAlert: hideDialog };
 }
