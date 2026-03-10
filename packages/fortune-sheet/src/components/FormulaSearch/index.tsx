@@ -3,7 +3,7 @@ import {
   cancelNormalSelected,
   locale,
   setCaretPosition,
-} from "@fortune-sheet/core";
+} from "../../core";
 import _ from "lodash";
 import WorkbookContext from "../../context";
 import { Button } from "@workspace/ui/components/button";

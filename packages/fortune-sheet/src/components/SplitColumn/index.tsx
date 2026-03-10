@@ -5,7 +5,7 @@ import {
   getRegStr,
   locale,
   updateMoreCell,
-} from "@fortune-sheet/core";
+} from "../../core";
 import _ from "lodash";
 import React, {
   useContext,

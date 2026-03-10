@@ -1,5 +1,5 @@
 import React, { useCallback, useContext } from "react";
-import { locale, updateItem } from "@fortune-sheet/core";
+import { locale, updateItem } from "../../core";
 import WorkbookContext from "../../context";
 import { useDialog } from "../../hooks/useDialog";
 import ConditionRules from "./ConditionRules";

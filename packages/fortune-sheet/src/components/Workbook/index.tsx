@@ -21,7 +21,7 @@ import {
   calcSelectionInfo,
   groupValuesRefresh,
   setFormulaCellInfoMap,
-} from "@fortune-sheet/core";
+} from "../../core";
 import React, {
   useMemo,
   useState,
@@ -126,16 +126,16 @@ const Workbook = React.forwardRef<WorkbookInstance, Settings & AdditionalProps>(
     const [calInfo, setCalInfo] = useState<{
       numberC: number;
       count: number;
-      sum: number;
-      max: number;
-      min: number;
+      sum: string;
+      max: string;
+      min: string;
       average: string;
     }>({
       numberC: 0,
       count: 0,
-      sum: 0,
-      max: 0,
-      min: 0,
+      sum: "0",
+      max: "0",
+      min: "0",
       average: "",
     });
 
