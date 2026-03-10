@@ -52,10 +52,10 @@ export function SlidePropertiesPanel({objects, onUpdate, onDelete}: SlidePropert
         onUpdate(ids, updates);
     }, [ids, onUpdate]);
 
-    const x = getMergedValue(objects, o => roundTo(o.x, 1));
-    const y = getMergedValue(objects, o => roundTo(o.y, 1));
-    const w = getMergedValue(objects, o => roundTo(o.w, 1));
-    const h = getMergedValue(objects, o => roundTo(o.h, 1));
+    const x = getMergedValue(objects, o => Math.round(o.x));
+    const y = getMergedValue(objects, o => Math.round(o.y));
+    const w = getMergedValue(objects, o => Math.round(o.w));
+    const h = getMergedValue(objects, o => Math.round(o.h));
     const rotation = getMergedValue(objects, o => o.rotation);
 
     const shadowColor = getMergedValue(objects, o => o.shadowColor);
@@ -77,16 +77,16 @@ export function SlidePropertiesPanel({objects, onUpdate, onDelete}: SlidePropert
             <PropertySection title="Transform">
                 <div className="grid grid-cols-2 gap-2">
                     <PropertyRow label="X">
-                        <MergedNumberInput value={x} onChange={v => handleUpdate({x: v})} step={0.1}/>
+                        <MergedNumberInput value={x} onChange={v => handleUpdate({x: v})} step={1}/>
                     </PropertyRow>
                     <PropertyRow label="Y">
-                        <MergedNumberInput value={y} onChange={v => handleUpdate({y: v})} step={0.1}/>
+                        <MergedNumberInput value={y} onChange={v => handleUpdate({y: v})} step={1}/>
                     </PropertyRow>
                     <PropertyRow label="W">
-                        <MergedNumberInput value={w} onChange={v => handleUpdate({w: v})} step={0.1} min={1}/>
+                        <MergedNumberInput value={w} onChange={v => handleUpdate({w: v})} step={1} min={1}/>
                     </PropertyRow>
                     <PropertyRow label="H">
-                        <MergedNumberInput value={h} onChange={v => handleUpdate({h: v})} step={0.1} min={1}/>
+                        <MergedNumberInput value={h} onChange={v => handleUpdate({h: v})} step={1} min={1}/>
                     </PropertyRow>
                 </div>
                 <PropertyRow label="°">
@@ -421,7 +421,3 @@ function MergedNumberInput({value, onChange, min, max, step}: {
     );
 }
 
-function roundTo(n: number, decimals: number): number {
-    const f = Math.pow(10, decimals);
-    return Math.round(n * f) / f;
-}

@@ -1,5 +1,5 @@
 import {memo} from 'react';
-import {SlideItem, SlideObject, SLIDE_ASPECT_RATIO} from './types';
+import {SlideItem, SlideObject, SLIDE_ASPECT_RATIO, pxToPercent} from './types';
 import {cn} from '@workspace/ui/lib/utils';
 
 type SlideThumbnailProps = {
@@ -29,7 +29,10 @@ export const SlideThumbnail = memo(function SlideThumbnail({slide, objects, inde
                 )}
                 style={{aspectRatio: SLIDE_ASPECT_RATIO}}
             >
-                <div className="w-full h-full relative" style={{backgroundColor: slide.backgroundColor}}>
+                <div className="w-full h-full relative" style={{
+                    backgroundColor: slide.backgroundColor,
+                    ...(slide.backgroundImage ? {backgroundImage: `url(${slide.backgroundImage})`, backgroundSize: 'cover', backgroundPosition: 'center'} : {}),
+                }}>
                     {objects.map((obj) => (
                         <ThumbnailObject key={obj.id} obj={obj} bgColor={slide.backgroundColor}/>
                     ))}
@@ -46,10 +49,10 @@ const ThumbnailObject = memo(function ThumbnailObject({obj, bgColor}: {obj: Slid
         <div
             className="absolute overflow-hidden"
             style={{
-                left: `${obj.x}%`,
-                top: `${obj.y}%`,
-                width: `${obj.w}%`,
-                height: `${obj.h}%`,
+                left: `${pxToPercent(obj.x, 'x')}%`,
+                top: `${pxToPercent(obj.y, 'y')}%`,
+                width: `${pxToPercent(obj.w, 'x')}%`,
+                height: `${pxToPercent(obj.h, 'y')}%`,
                 transform: obj.rotation ? `rotate(${obj.rotation}deg)` : undefined,
             }}
         >

@@ -43,6 +43,8 @@ export type SlideItem = {
     id: string;
     objectIds: string[];
     backgroundColor: string;
+    backgroundImage: string;
+    backgroundImageSourcePath?: DrivePath;
 }
 
 export type DeckData = {
@@ -55,6 +57,14 @@ export const SLIDE_ASPECT_RATIO = 16 / 9;
 export const SLIDE_BASE_WIDTH = 1920;
 export const SLIDE_BASE_HEIGHT = 1080;
 
+export function pxToPercent(val: number, axis: 'x' | 'y'): number {
+    return (val / (axis === 'x' ? SLIDE_BASE_WIDTH : SLIDE_BASE_HEIGHT)) * 100;
+}
+
+export function percentToPx(val: number, axis: 'x' | 'y'): number {
+    return (val / 100) * (axis === 'x' ? SLIDE_BASE_WIDTH : SLIDE_BASE_HEIGHT);
+}
+
 const DEFAULT_SHADOW = {
     shadowColor: 'rgba(0,0,0,0)',
     shadowBlur: 0,
@@ -64,10 +74,10 @@ const DEFAULT_SHADOW = {
 
 export const DEFAULT_TEXT_OBJECT: Omit<TextObject, 'id' | 'slideId'> = {
     type: 'text',
-    x: 10,
-    y: 10,
-    w: 80,
-    h: 15,
+    x: 192,
+    y: 108,
+    w: 1536,
+    h: 162,
     rotation: 0,
     text: 'New text',
     fontSize: 48,
@@ -86,10 +96,10 @@ export const DEFAULT_TEXT_OBJECT: Omit<TextObject, 'id' | 'slideId'> = {
 
 export const DEFAULT_IMAGE_OBJECT: Omit<ImageObject, 'id' | 'slideId' | 'src'> = {
     type: 'image',
-    x: 20,
-    y: 15,
-    w: 60,
-    h: 70,
+    x: 384,
+    y: 162,
+    w: 1152,
+    h: 756,
     rotation: 0,
     objectFit: 'contain',
     ...DEFAULT_SHADOW,

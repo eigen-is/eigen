@@ -7,7 +7,7 @@ import {
     Copy,
     Trash2,
 } from 'lucide-react';
-import {SlideObject} from './types';
+import {SlideObject, pxToPercent} from './types';
 import {
     ContextMenu,
     ContextMenuContent,
@@ -110,10 +110,10 @@ export const SlideObjectView = memo(function SlideObjectView({
         <div
             className={`absolute ${selected ? 'ring-2 ring-blue-500' : obj.type === 'text' ? 'border border-dashed border-gray-300' : ''} ${editable && !editing ? 'cursor-move' : 'cursor-default'}`}
             style={{
-                left: `${obj.x}%`,
-                top: `${obj.y}%`,
-                width: `${obj.w}%`,
-                height: `${obj.h}%`,
+                left: `${pxToPercent(obj.x, 'x')}%`,
+                top: `${pxToPercent(obj.y, 'y')}%`,
+                width: `${pxToPercent(obj.w, 'x')}%`,
+                height: `${pxToPercent(obj.h, 'y')}%`,
                 transform: obj.rotation ? `rotate(${obj.rotation}deg)` : undefined,
                 transformOrigin: 'center center',
                 backgroundColor: obj.type === 'text' && obj.backgroundColor ? obj.backgroundColor : undefined,
