@@ -26,6 +26,12 @@ to `docs/*.md`.
 
 ## Development Workflow
 
+> **🔥 IMPORTANT: DEVELOPMENT DATA HANDLING**
+> 
+> During development, **DO NOT worry about migrations and/or backward compatibility**. We throw away all existing data after each new feature. This allows rapid iteration without being constrained by legacy data structures.
+> 
+> **ALWAYS** prefer clean, simple schemas over complex migration strategies. Break compatibility freely when it improves the codebase.
+
 - **Never run package install commands** - always ask the user.
 - **Run dev server**: `bun run serve`
 - **Tests & Types**: Always run `bun run typecheck` and `bun run test` after changes.
@@ -36,6 +42,7 @@ to `docs/*.md`.
 - **Types**: Always use `type` instead of `interface` (except when methods are involved).
 - **Naming**: `camelCase` for functions, `PascalCase` for components, domain-based for routes.
 - **Comments**: Keep them minimal. Code should be self-documenting. No JSDoc.
+- **Data Schema**: **NO migrations or backward compatibility needed** - throw away data after each feature. Prioritize clean schemas over compatibility.
 - **Imports**: Import from `@workspace/lib/[domain]` and `@workspace/ui/components/...`. Avoid deep relative paths.
 - **Data Fetching**: NEVER use `useQuery`/`useMutation` directly in frontend apps. All data-fetching logic MUST live in
   `packages/lib/src/core/[domain]/hooks/`.
