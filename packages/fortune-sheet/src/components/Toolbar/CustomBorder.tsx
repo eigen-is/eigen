@@ -1,9 +1,8 @@
 import React, { useCallback, useContext, useRef, useState } from "react";
-import "./index.css";
 import { locale } from "@fortune-sheet/core";
 import _ from "lodash";
 import WorkbookContext from "../../context";
-import SVGIcon from "../SVGIcon";
+import { ChevronRight } from "lucide-react";
 import { CustomColor } from "./CustomColor";
 
 const size = [
@@ -140,7 +139,7 @@ const CustomBorder: React.FC<Props> = ({ onPick }) => {
     <div>
       {/* 边框颜色 */}
       <div
-        className="fortune-border-select-option"
+        className="text-xs h-6 leading-6 min-w-[60px] px-3 py-2 hover:bg-accent cursor-pointer"
         key="borderColor"
         onMouseEnter={(e) => {
           showBorderSubMenu(e);
@@ -149,18 +148,18 @@ const CustomBorder: React.FC<Props> = ({ onPick }) => {
           hideBorderSubMenu();
         }}
       >
-        <div className="fortune-toolbar-menu-line">
+        <div className="flex items-center justify-between relative">
           {border.borderColor}
-          <SVGIcon name="rightArrow" style={{ width: "14px" }} />
+          <ChevronRight className="h-3.5 w-3.5" />
         </div>
         <div
           ref={colorPreviewRef}
-          className="fortune-border-color-preview"
+          className="h-[3px]"
           style={{ backgroundColor: changeColor }}
         />
         <div
           ref={colorRef}
-          className="fortune-border-select-menu"
+          className="absolute bottom-0 z-10"
           style={{ display: "none", width: "166px" }}
         >
           <CustomColor
@@ -178,7 +177,7 @@ const CustomBorder: React.FC<Props> = ({ onPick }) => {
       </div>
       {/* 边框样式 */}
       <div
-        className="fortune-border-select-option"
+        className="text-xs h-6 leading-6 min-w-[60px] px-3 py-2 hover:bg-accent cursor-pointer"
         key="borderStyle"
         onMouseEnter={(e) => {
           showBorderSubMenu(e);
@@ -187,11 +186,11 @@ const CustomBorder: React.FC<Props> = ({ onPick }) => {
           hideBorderSubMenu();
         }}
       >
-        <div className="fortune-toolbar-menu-line">
+        <div className="flex items-center justify-between relative">
           {border.borderStyle}
-          <SVGIcon name="rightArrow" style={{ width: "14px" }} />
+          <ChevronRight className="h-3.5 w-3.5" />
         </div>
-        <div className="fortune-border-style-preview">
+        <div className="h-[3px] overflow-hidden">
           <svg width="90">
             <g fill="none" stroke="black" strokeWidth={previewWith}>
               <path strokeDasharray={previewdasharry} d="M0 0 l90 0" />
@@ -200,11 +199,11 @@ const CustomBorder: React.FC<Props> = ({ onPick }) => {
         </div>
         <div
           ref={styleRef}
-          className="fortune-border-select-menu fortune-toolbar-select"
+          className="absolute bottom-0 z-10 rounded-md border bg-popover shadow-md"
           style={{ display: "none", width: "110px" }}
         >
           <div
-            className="fortune-border-style-picker-menu fortune-border-style-reset"
+            className="px-2.5 hover:bg-accent cursor-pointer"
             onClick={() => {
               onPick(changeColor, "1");
               changePreviewStyle("1", "1,0");
@@ -213,11 +212,11 @@ const CustomBorder: React.FC<Props> = ({ onPick }) => {
           >
             {border.borderDefault}
           </div>
-          <div className="fortune-boder-style-picker">
+          <div>
             {size.map((items, i) => (
               <div
                 key={i}
-                className="fortune-border-style-picker-menu"
+                className="px-2.5 hover:bg-accent cursor-pointer"
                 onClick={() => {
                   onPick(changeColor, items.Text);
                   setchangeStyle(items.Text);
