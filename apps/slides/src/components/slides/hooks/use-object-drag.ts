@@ -1,5 +1,6 @@
 import {useCallback, useRef, useState} from 'react';
 import {snapRect, SnapLine} from './use-snap-lines';
+import {SLIDE_BASE_WIDTH, SLIDE_BASE_HEIGHT} from '../types';
 
 type DragMode = 'move' | 'resize-se' | 'resize-sw' | 'resize-ne' | 'resize-nw' | 'resize-e' | 'resize-w' | 'resize-n' | 'resize-s' | null;
 
@@ -69,8 +70,8 @@ export const useObjectDrag = ({onUpdate, canvasRef, vSnaps = [], hSnaps = []}: U
             const s = stateRef.current;
             if (!s.objId || !s.mode) return;
             const canvas = getCanvasSize();
-            const dx = ((me.clientX - s.startX) / canvas.w) * 100;
-            const dy = ((me.clientY - s.startY) / canvas.h) * 100;
+            const dx = ((me.clientX - s.startX) / canvas.w) * SLIDE_BASE_WIDTH;
+            const dy = ((me.clientY - s.startY) / canvas.h) * SLIDE_BASE_HEIGHT;
 
             let x = s.startObjX;
             let y = s.startObjY;
@@ -112,7 +113,7 @@ export const useObjectDrag = ({onUpdate, canvasRef, vSnaps = [], hSnaps = []}: U
     return {isDragging, startDrag, activeSnapLines, dragPreview};
 };
 
-const MIN_SIZE = 3;
+const MIN_SIZE = 30;
 
 function applyResize(
     mode: DragMode,

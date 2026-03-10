@@ -2,11 +2,14 @@ import {useCallback, useEffect, useRef, useState} from 'react';
 import * as Y from 'yjs';
 import {WebsocketProvider} from 'y-websocket';
 import {DeckData, DEFAULT_TEXT_OBJECT, SlideObject} from '../types';
+import type {DrivePath} from '@workspace/lib/types/drive';
 import {nanoid} from 'nanoid';
 import {normalizeDeck} from '../normalize-deck';
 import {getCollabWebSocketUrl} from '@workspace/lib/api';
 
-const OBJECT_FIELDS = ['id', 'slideId', 'type', 'x', 'y', 'w', 'h', 'rotation', 'shadowColor', 'shadowBlur', 'shadowOffsetX', 'shadowOffsetY', 'text', 'fontSize', 'fontWeight', 'fontStyle', 'textDecoration', 'textAlign', 'verticalAlign', 'color', 'letterSpacing', 'lineHeight', 'highlightColor', 'backgroundColor', 'src', 'objectFit'] as const;
+type ApplyTo = 'this' | 'this-and-following' | 'all';
+
+const OBJECT_FIELDS = ['id', 'slideId', 'type', 'x', 'y', 'w', 'h', 'rotation', 'shadowColor', 'shadowBlur', 'shadowOffsetX', 'shadowOffsetY', 'text', 'fontSize', 'fontWeight', 'fontStyle', 'textDecoration', 'textAlign', 'verticalAlign', 'color', 'letterSpacing', 'lineHeight', 'highlightColor', 'backgroundColor', 'src', 'objectFit', 'sourcePath'] as const;
 
 function yMapToObject(yMap: Y.Map<any>): Record<string, any> {
     const obj: Record<string, any> = {};
@@ -44,8 +47,8 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
             }
             objYMap.set('text', 'Welcome to Slides');
             objYMap.set('fontSize', 64);
-            objYMap.set('y', 35);
-            objYMap.set('h', 30);
+            objYMap.set('y', 378);
+            objYMap.set('h', 324);
             objectsMap.set(objId, objYMap);
 
             const slideYMap = new Y.Map();
@@ -92,6 +95,8 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
                     id: slideId,
                     objectIds: objIds,
                     backgroundColor: slideMap.get('backgroundColor') || '#ffffff',
+                    backgroundImage: slideMap.get('backgroundImage') || '',
+                    backgroundImageSourcePath: slideMap.get('backgroundImageSourcePath') || undefined,
                 };
             }
             for (const [objId, objMapValue] of objectsMap) {
@@ -201,6 +206,8 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
             const slideYMap = new Y.Map();
             slideYMap.set('id', newSlideId);
             slideYMap.set('backgroundColor', slide.backgroundColor);
+            slideYMap.set('backgroundImage', slide.backgroundImage || '');
+            if (slide.backgroundImageSourcePath) slideYMap.set('backgroundImageSourcePath', slide.backgroundImageSourcePath);
             const objIdsArr = new Y.Array();
             objIdsArr.push(newObjIds);
             slideYMap.set('objectIds', objIdsArr);
@@ -213,15 +220,46 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
         setActiveSlideId(newSlideId);
     }, [deck]);
 
-    const updateSlideBackground = useCallback((slideId: string, color: string) => {
+    const getTargetSlideIds = useCallback((slideId: string, applyTo: ApplyTo): string[] => {
+        if (applyTo === 'this') return [slideId];
+        const order = deck.slideOrder;
+        if (applyTo === 'all') return [...order];
+        const idx = order.indexOf(slideId);
+        if (idx === -1) return [slideId];
+        return order.slice(idx);
+    }, [deck.slideOrder]);
+
+    const updateSlideBackground = useCallback((slideId: string, color: string, applyTo: ApplyTo = 'this') => {
         const doc = docRef.current;
         if (!doc) return;
+        const targetIds = getTargetSlideIds(slideId, applyTo);
         doc.transact(() => {
             const slidesMap = doc.getMap('slides');
-            const slideMap = slidesMap.get(slideId) as Y.Map<any> | undefined;
-            if (slideMap) slideMap.set('backgroundColor', color);
+            for (const id of targetIds) {
+                const slideMap = slidesMap.get(id) as Y.Map<any> | undefined;
+                if (slideMap) slideMap.set('backgroundColor', color);
+            }
         });
-    }, []);
+    }, [getTargetSlideIds]);
+
+    const updateSlideBackgroundImage = useCallback((slideId: string, url: string, sourcePath: DrivePath | undefined, applyTo: ApplyTo = 'this') => {
+        const doc = docRef.current;
+        if (!doc) return;
+        const targetIds = getTargetSlideIds(slideId, applyTo);
+        doc.transact(() => {
+            const slidesMap = doc.getMap('slides');
+            for (const id of targetIds) {
+                const slideMap = slidesMap.get(id) as Y.Map<any> | undefined;
+                if (!slideMap) continue;
+                slideMap.set('backgroundImage', url);
+                if (sourcePath) {
+                    slideMap.set('backgroundImageSourcePath', sourcePath);
+                } else {
+                    slideMap.delete('backgroundImageSourcePath');
+                }
+            }
+        });
+    }, [getTargetSlideIds]);
 
     const addObject = useCallback((slideId: string, obj: Omit<SlideObject, 'id' | 'slideId'>) => {
         const doc = docRef.current;
@@ -409,6 +447,7 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
         deleteSlide,
         duplicateSlide,
         updateSlideBackground,
+        updateSlideBackgroundImage,
         addObject,
         updateObject,
         updateObjects,
