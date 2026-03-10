@@ -18,8 +18,10 @@ import {
 import { ColorPicker } from "@workspace/ui/components/layout/media/color-picker";
 import { Separator } from "@workspace/ui/components/separator";
 import {
-  Undo2,
-  Redo2,
+  Undo,
+  Redo,
+  Grid3x2,
+  TableCellsMerge,
   Paintbrush,
   RemoveFormatting,
   Bold,
@@ -61,8 +63,10 @@ import {
 import SVGIcon from "../SVGIcon";
 
 export const ICON_MAP: Record<string, LucideIcon> = {
-  undo: Undo2,
-  redo: Redo2,
+  undo: Undo,
+  redo: Redo,
+  "border-all": Grid3x2,
+  "merge-all": TableCellsMerge,
   "format-painter": Paintbrush,
   "clear-format": RemoveFormatting,
   bold: Bold,
