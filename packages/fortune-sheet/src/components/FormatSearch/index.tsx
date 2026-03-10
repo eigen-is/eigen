@@ -1,4 +1,4 @@
-import React, { useContext, useState, useCallback, useMemo } from "react";
+import { useContext, useState, useCallback, useMemo } from "react";
 import {
   cancelNormalSelected,
   getSheetIndex,
@@ -6,14 +6,20 @@ import {
   update,
 } from "@fortune-sheet/core";
 import _ from "lodash";
+import { Button } from "@workspace/ui/components/button";
+import { Input } from "@workspace/ui/components/input";
+import { Label } from "@workspace/ui/components/label";
+import { cn } from "@workspace/ui/lib/utils";
 import WorkbookContext from "../../context";
-import "./index.css";
 import { useDialog } from "../../hooks/useDialog";
 
-export const FormatSearch: React.FC<{
+export function FormatSearch({
+  type,
+  onCancel: _onCancel,
+}: {
   type: "currency" | "date" | "number";
   onCancel: () => void;
-}> = ({ type, onCancel: _onCancel }) => {
+}) {
   const {
     context,
     setContext,
@@ -33,9 +39,9 @@ export const FormatSearch: React.FC<{
     [currencyDetail, dateFmtList, numberFmtList]
   );
 
-  type toolbarFormatType = { name: string; pos?: string; value: string };
+  type ToolbarFormatType = { name: string; pos?: string; value: string };
 
-  const toolbarFormat: toolbarFormatType[] = useMemo(
+  const toolbarFormat: ToolbarFormatType[] = useMemo(
     () => toolbarFormatAll[type],
     [toolbarFormatAll, type]
   );
@@ -64,7 +70,7 @@ export const FormatSearch: React.FC<{
               ctx.luckysheetfile[index].data?.[r][c]?.ct?.t === "n"
             ) {
               const zero = 0;
-              if (selectedFormatPos === "after") {
+              if (selectedFormatPos! === "after") {
                 ctx.luckysheetfile[index].data![r][c]!.ct!.fa = zero
                   .toFixed(decimalPlace)
                   .concat(`${selectedFormatVal}`);
@@ -107,61 +113,45 @@ export const FormatSearch: React.FC<{
   }, [_onCancel, cellInput, setContext]);
 
   return (
-    <div id="luckysheet-search-format">
-      <div className="listbox" style={{ height: 200 }}>
-        <div style={{ marginBottom: 16 }}>
-          {tips}
-          {format.format}：
-        </div>
-        <div className="inpbox" style={{ display: "block" }}>
-          {format.decimalPlaces}：
-          <input
-            className="decimal-places-input"
-            id="decimal-places-input"
+    <div className="w-[340px]">
+      <div className="mb-3">
+        <p className="text-sm font-medium mb-2">{tips}{format.format}:</p>
+        <div className="flex items-center gap-2 mb-3">
+          <Label className="text-sm whitespace-nowrap">{format.decimalPlaces}:</Label>
+          <Input
+            type="number"
             min={0}
             max={9}
             defaultValue={2}
-            type="number"
-            onChange={(e) => {
-              setDecimalPlace(parseInt(e.target.value, 10));
-            }}
+            className="w-20 h-8"
+            onChange={(e) => setDecimalPlace(parseInt(e.target.value, 10))}
           />
         </div>
-        <div className="format-list">
-          {toolbarFormat.map((v: any, index: number) => (
+        <div className="border rounded-md max-h-[200px] overflow-auto">
+          {toolbarFormat.map((v: ToolbarFormatType, index: number) => (
             <div
-              className={`listBox${index === selectedFormatIndex ? " on" : ""}`}
+              className={cn(
+                "flex items-center justify-between px-3 py-1.5 text-sm cursor-pointer hover:bg-accent",
+                index === selectedFormatIndex && "bg-accent font-medium"
+              )}
               key={v.name}
-              onClick={() => {
-                setSelectedFormatIndex(index);
-              }}
+              onClick={() => setSelectedFormatIndex(index)}
               tabIndex={0}
             >
-              <div>{v.name}</div>
-              <div>{v.value}</div>
+              <span>{v.name}</span>
+              <span className="text-muted-foreground">{v.value}</span>
             </div>
           ))}
         </div>
       </div>
-      <div
-        className="fortune-dialog-box-button-container"
-        style={{ marginTop: 40 }}
-      >
-        <div
-          className="fortune-message-box-button button-primary"
-          onClick={onConfirm}
-          tabIndex={0}
-        >
-          {button.confirm}
-        </div>
-        <div
-          className="fortune-message-box-button button-default"
-          onClick={onCancel}
-          tabIndex={0}
-        >
+      <div className="flex items-center justify-end gap-2">
+        <Button variant="outline" size="sm" onClick={onCancel}>
           {button.cancel}
-        </div>
+        </Button>
+        <Button size="sm" onClick={onConfirm}>
+          {button.confirm}
+        </Button>
       </div>
     </div>
   );
-};
+}

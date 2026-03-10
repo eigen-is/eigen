@@ -1,11 +1,16 @@
-import React, { useCallback, useContext, useEffect, useState } from "react";
-import "./index.css";
+import { useCallback, useContext, useEffect, useState } from "react";
 import { locale, setConditionRules } from "@fortune-sheet/core";
 import produce from "immer";
+import { Button } from "@workspace/ui/components/button";
+import { Input } from "@workspace/ui/components/input";
+import { Checkbox } from "@workspace/ui/components/checkbox";
+import { Label } from "@workspace/ui/components/label";
+import { Popover, PopoverContent, PopoverTrigger } from "@workspace/ui/components/popover";
+import { ColorPicker } from "@workspace/ui/components/layout/media/color-picker";
 import WorkbookContext from "../../context";
 import { useDialog } from "../../hooks/useDialog";
 
-const ConditionRules: React.FC<{ type: string }> = ({ type }) => {
+export function ConditionRules({ type }: { type: string }) {
   const { context, setContext } = useContext(WorkbookContext);
   const { hideDialog } = useDialog();
   const { conditionformat, button, protection, generalDialog } =
@@ -14,23 +19,6 @@ const ConditionRules: React.FC<{ type: string }> = ({ type }) => {
     textColor: string;
     cellColor: string;
   }>({ textColor: "#000000", cellColor: "#000000" });
-
-  // 开启鼠标选区
-  // const dataSelectRange = useCallback(
-  //   (selectType: string) => {
-  //     hideDialog();
-  //     setContext((ctx) => {
-  //       ctx.conditionRules.textColor.color = colorRules.textColor;
-  //       ctx.conditionRules.cellColor.color = colorRules.cellColor;
-
-  //       ctx.rangeDialog!.show = true;
-  //       ctx.rangeDialog!.type = selectType;
-  //       ctx.rangeDialog!.rangeTxt = ctx.conditionRules.rulesValue;
-  //       ctx.rangeDialog!.singleSelect = true;
-  //     });
-  //   },
-  //   [colorRules.cellColor, colorRules.textColor, hideDialog, setContext]
-  // );
 
   const close = useCallback(
     (closeType: string) => {
@@ -71,7 +59,6 @@ const ConditionRules: React.FC<{ type: string }> = ({ type }) => {
     ]
   );
 
-  // rulesValue初始化
   useEffect(() => {
     setContext((ctx) => {
       ctx.conditionRules.rulesType = type;
@@ -100,115 +87,81 @@ const ConditionRules: React.FC<{ type: string }> = ({ type }) => {
       ctx.rangeDialog.type = "";
       ctx.rangeDialog.rangeTxt = "";
     });
-
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return (
-    <div className="condition-rules">
-      <div className="condition-rules-title">
+    <div className="p-6 min-w-[320px]">
+      <h3 className="text-base font-semibold mb-3">
         {(conditionformat as any)[`conditionformat_${type}`]}
-      </div>
+      </h3>
 
-      <div className="conditin-rules-value">
+      <p className="text-sm font-medium mb-2">
         {(conditionformat as any)[`conditionformat_${type}_title`]}
-      </div>
+      </p>
 
       {(type === "greaterThan" ||
         type === "lessThan" ||
         type === "equal" ||
         type === "textContains") && (
-        <div className="condition-rules-inpbox">
-          <input
-            className="condition-rules-input"
-            type="text"
-            value={context.conditionRules.rulesValue}
-            onChange={(e) => {
-              const { value } = e.target;
-              setContext((ctx) => {
-                ctx.conditionRules.rulesValue = value;
-              });
-            }}
-          />
-          {/* <i
-            className="condition-relues-inputicon"
-            aria-hidden="true"
-            onClick={() => {
-              dataSelectRange(`conditionRules${type}`);
-            }}
-          >
-            <SVGIcon name="tab" width={18} />
-          </i> */}
-        </div>
+        <Input
+          className="mb-3 h-8"
+          type="text"
+          value={context.conditionRules.rulesValue}
+          onChange={(e) => {
+            const { value } = e.target;
+            setContext((ctx) => {
+              ctx.conditionRules.rulesValue = value;
+            });
+          }}
+        />
       )}
 
       {type === "between" && (
-        <div className="condition-rules-between-box">
-          <div className="condition-rules-between-inpbox">
-            <input
-              className="condition-rules-between-input"
-              type="text"
-              value={context.conditionRules.betweenValue.value1}
-              onChange={(e) => {
-                const { value } = e.target;
-                setContext((ctx) => {
-                  ctx.conditionRules.betweenValue.value1 = value;
-                });
-              }}
-            />
-            {/* <i
-              className="condition-relues-inputicon"
-              aria-hidden="true"
-              onClick={() => {
-                dataSelectRange(`conditionRules${type}1`);
-              }}
-            >
-              <SVGIcon name="tab" width={18} />
-            </i> */}
-          </div>
-          <span style={{ margin: "0px 4px" }}>{conditionformat.to}</span>
-          <div className="condition-rules-between-inpbox">
-            <input
-              className="condition-rules-between-input"
-              type="text"
-              value={context.conditionRules.betweenValue.value2}
-              onChange={(e) => {
-                const { value } = e.target;
-                setContext((ctx) => {
-                  ctx.conditionRules.betweenValue.value2 = value;
-                });
-              }}
-            />
-            {/* <i
-              className="condition-relues-inputicon"
-              aria-hidden="true"
-              onClick={() => {
-                dataSelectRange(`conditionRules${type}2`);
-              }}
-            >
-              <SVGIcon name="tab" width={18} />
-            </i> */}
-          </div>
-        </div>
-      )}
-      {type === "occurrenceDate" && (
-        <div className="condition-rules-inpbox">
-          <input
-            type="date"
-            className="condition-rules-date"
-            value={context.conditionRules.dateValue}
+        <div className="flex items-center gap-2 mb-3">
+          <Input
+            className="h-8 w-24"
+            type="text"
+            value={context.conditionRules.betweenValue.value1}
             onChange={(e) => {
               const { value } = e.target;
               setContext((ctx) => {
-                ctx.conditionRules.dateValue = value;
+                ctx.conditionRules.betweenValue.value1 = value;
+              });
+            }}
+          />
+          <span className="text-sm">{conditionformat.to}</span>
+          <Input
+            className="h-8 w-24"
+            type="text"
+            value={context.conditionRules.betweenValue.value2}
+            onChange={(e) => {
+              const { value } = e.target;
+              setContext((ctx) => {
+                ctx.conditionRules.betweenValue.value2 = value;
               });
             }}
           />
         </div>
       )}
+
+      {type === "occurrenceDate" && (
+        <Input
+          type="date"
+          className="mb-3 h-8 w-48"
+          value={context.conditionRules.dateValue}
+          onChange={(e) => {
+            const { value } = e.target;
+            setContext((ctx) => {
+              ctx.conditionRules.dateValue = value;
+            });
+          }}
+        />
+      )}
+
       {type === "duplicateValue" && (
         <select
-          className="condition-rules-select"
+          className="mb-3 h-8 rounded-md border border-input bg-background px-3 text-sm"
           onChange={(e) => {
             const { value } = e.target;
             setContext((ctx) => {
@@ -225,13 +178,12 @@ const ConditionRules: React.FC<{ type: string }> = ({ type }) => {
         type === "top10_percent" ||
         type === "last10" ||
         type === "last10_percent") && (
-        <div className="condition-rules-project-box">
+        <div className="flex items-center gap-2 mb-3 text-sm">
           {type === "top10" || type === "top10_percent"
             ? conditionformat.top
             : conditionformat.last}
-
-          <input
-            className="condition-rules-project-input"
+          <Input
+            className="h-8 w-16"
             type="number"
             value={context.conditionRules.projectValue}
             onChange={(e) => {
@@ -241,106 +193,105 @@ const ConditionRules: React.FC<{ type: string }> = ({ type }) => {
               });
             }}
           />
-
           {type === "top10" || type === "last10"
             ? conditionformat.oneself
             : "%"}
         </div>
       )}
 
-      <div className="condition-rules-set-title">
-        {`${conditionformat.setAs}：`}
+      <p className="text-sm font-medium mt-3 mb-2">
+        {`${conditionformat.setAs}:`}
+      </p>
+
+      <div className="rounded-md border p-3 space-y-3 mb-4">
+        <div className="flex items-center gap-3">
+          <Checkbox
+            id="checkTextColor"
+            checked={context.conditionRules.textColor.check}
+            onCheckedChange={(checked) => {
+              setContext((ctx) => {
+                ctx.conditionRules.textColor.check = !!checked;
+              });
+            }}
+          />
+          <Label htmlFor="checkTextColor" className="text-sm w-20">
+            {conditionformat.textColor}
+          </Label>
+          <Popover>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                className="h-6 w-10 rounded border border-input"
+                style={{ backgroundColor: colorRules.textColor }}
+              />
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-3">
+              <ColorPicker
+                value={colorRules.textColor}
+                showReset={false}
+                onChange={(color) => {
+                  if (color) {
+                    setColorRules(
+                      produce((draft) => {
+                        draft.textColor = color;
+                      })
+                    );
+                  }
+                }}
+              />
+            </PopoverContent>
+          </Popover>
+        </div>
+        <div className="flex items-center gap-3">
+          <Checkbox
+            id="checkCellColor"
+            checked={context.conditionRules.cellColor.check}
+            onCheckedChange={(checked) => {
+              setContext((ctx) => {
+                ctx.conditionRules.cellColor.check = !!checked;
+              });
+            }}
+          />
+          <Label htmlFor="checkCellColor" className="text-sm w-20">
+            {conditionformat.cellColor}
+          </Label>
+          <Popover>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                className="h-6 w-10 rounded border border-input"
+                style={{ backgroundColor: colorRules.cellColor }}
+              />
+            </PopoverTrigger>
+            <PopoverContent className="w-auto p-3">
+              <ColorPicker
+                value={colorRules.cellColor}
+                showReset={false}
+                onChange={(color) => {
+                  if (color) {
+                    setColorRules(
+                      produce((draft) => {
+                        draft.cellColor = color;
+                      })
+                    );
+                  }
+                }}
+              />
+            </PopoverContent>
+          </Popover>
+        </div>
       </div>
 
-      <div className="condition-rules-setbox">
-        <div className="condition-rules-set">
-          <div className="condition-rules-color">
-            <input
-              id="checkTextColor"
-              type="checkbox"
-              className="condition-rules-check"
-              checked={context.conditionRules.textColor.check}
-              onChange={(e) => {
-                const { checked } = e.target;
-                setContext((ctx) => {
-                  ctx.conditionRules.textColor.check = checked;
-                });
-              }}
-            />
-            <label htmlFor="checkTextColor" className="condition-rules-label">
-              {conditionformat.textColor}
-            </label>
-            <input
-              type="color"
-              className="condition-rules-select-color"
-              value={colorRules.textColor}
-              onChange={(e) => {
-                const { value } = e.target;
-                setColorRules(
-                  produce((draft) => {
-                    draft.textColor = value;
-                  })
-                );
-              }}
-            />
-          </div>
-        </div>
-        <div className="condition-rules-set">
-          <div className="condition-rules-color">
-            <input
-              id="checkCellColor"
-              type="checkbox"
-              className="condition-rules-check"
-              checked={context.conditionRules.cellColor.check}
-              onChange={(e) => {
-                const { checked } = e.target;
-                setContext((ctx) => {
-                  ctx.conditionRules.cellColor.check = checked;
-                });
-              }}
-            />
-            <label htmlFor="checkCellColor" className="condition-rules-label">
-              {conditionformat.cellColor}
-            </label>
-            <input
-              type="color"
-              className="condition-rules-select-color"
-              value={colorRules.cellColor}
-              onChange={(e) => {
-                const { value } = e.target;
-                setColorRules(
-                  produce((draft) => {
-                    draft.cellColor = value;
-                  })
-                );
-              }}
-            />
-          </div>
-        </div>
-      </div>
-
-      <div
-        className="button-basic button-primary"
-        onClick={() => {
-          // hideDialog();
-          close("confirm");
-        }}
-        tabIndex={0}
-      >
-        {button.confirm}
-      </div>
-      <div
-        className="button-basic button-close"
-        onClick={() => {
-          // hideDialog();
-          close("close");
-        }}
-        tabIndex={0}
-      >
-        {button.cancel}
+      <div className="flex items-center justify-end gap-2">
+        <Button variant="outline" size="sm" onClick={() => close("close")}>
+          {button.cancel}
+        </Button>
+        <Button size="sm" onClick={() => close("confirm")}>
+          {button.confirm}
+        </Button>
       </div>
     </div>
   );
-};
+}
 
 export default ConditionRules;

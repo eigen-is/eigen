@@ -1,244 +1,95 @@
-import React, { useCallback, useContext, useRef, useState } from "react";
+import { useContext, useState } from "react";
 import { locale } from "@fortune-sheet/core";
-import _ from "lodash";
 import WorkbookContext from "../../context";
-import { ChevronRight } from "lucide-react";
-import { CustomColor } from "./CustomColor";
+import { ColorPicker } from "@workspace/ui/components/layout/media/color-picker";
+import {
+  DropdownMenuSub,
+  DropdownMenuSubContent,
+  DropdownMenuSubTrigger,
+  DropdownMenuItem,
+} from "@workspace/ui/components/dropdown-menu";
 
-const size = [
-  {
-    Text: "1",
-    value: "Thin",
-    strokeDasharray: "1,0",
-    strokeWidth: "1",
-  },
-  {
-    Text: "2",
-    value: "Hair",
-    strokeDasharray: "1,5",
-    strokeWidth: "1",
-  },
-  {
-    Text: "3",
-    value: "Dotted",
-    strokeDasharray: "2,5",
-    strokeWidth: "2",
-  },
-  {
-    Text: "4",
-    value: "Dashed",
-    strokeDasharray: "5,5",
-    strokeWidth: "2",
-  },
-  {
-    Text: "5",
-    value: "DashDot",
-    strokeDasharray: "20,5,5,10,5,5",
-    strokeWidth: "2",
-  },
-  {
-    Text: "6",
-    value: "DashDotDot",
-    strokeDasharray: "20,5,5,5,5,10,5,5,5,5",
-    strokeWidth: "2",
-  },
-  // {
-  //   Text: "7",
-  //   value: "Double",
-  // },
-  {
-    Text: "8",
-    value: "Medium",
-    strokeDasharray: "2,0",
-    strokeWidth: "2",
-  },
-  {
-    Text: "9",
-    value: "MediumDashed",
-    strokeDasharray: "3,5",
-    strokeWidth: "3",
-  },
-  {
-    Text: "10",
-    value: "MediumDashDot",
-    strokeDasharray: "20,5,5,10,5,5",
-    strokeWidth: "3",
-  },
-  {
-    Text: "11",
-    value: "MediumDashDotDot",
-    strokeDasharray: "5,5,5,5,20,5,5,5,5,10",
-    strokeWidth: "3",
-  },
-  // {
-  //   Text: "12",
-  //   value: "SlantedDashDot",
-  // },
-  {
-    Text: "13",
-    value: "Thick",
-    strokeDasharray: "2,0",
-    strokeWidth: "3",
-  },
+const BORDER_STYLES = [
+  { text: "1", value: "Thin", strokeDasharray: "1,0", strokeWidth: "1" },
+  { text: "2", value: "Hair", strokeDasharray: "1,5", strokeWidth: "1" },
+  { text: "3", value: "Dotted", strokeDasharray: "2,5", strokeWidth: "2" },
+  { text: "4", value: "Dashed", strokeDasharray: "5,5", strokeWidth: "2" },
+  { text: "5", value: "DashDot", strokeDasharray: "20,5,5,10,5,5", strokeWidth: "2" },
+  { text: "6", value: "DashDotDot", strokeDasharray: "20,5,5,5,5,10,5,5,5,5", strokeWidth: "2" },
+  { text: "8", value: "Medium", strokeDasharray: "2,0", strokeWidth: "2" },
+  { text: "9", value: "MediumDashed", strokeDasharray: "3,5", strokeWidth: "3" },
+  { text: "10", value: "MediumDashDot", strokeDasharray: "20,5,5,10,5,5", strokeWidth: "3" },
+  { text: "11", value: "MediumDashDotDot", strokeDasharray: "5,5,5,5,20,5,5,5,5,10", strokeWidth: "3" },
+  { text: "13", value: "Thick", strokeDasharray: "2,0", strokeWidth: "3" },
 ];
 
 type Props = {
   onPick: (changeColor?: string, changeStyle?: string) => void;
 };
 
-const CustomBorder: React.FC<Props> = ({ onPick }) => {
-  const { context, refs } = useContext(WorkbookContext);
+export function CustomBorder({ onPick }: Props) {
+  const { context } = useContext(WorkbookContext);
   const { border } = locale(context);
-  const [changeColor, setchangeColor] = useState("#000000");
-  const [changeStyle, setchangeStyle] = useState("1");
-  const colorRef = useRef<HTMLDivElement | null>(null);
-  const styleRef = useRef<HTMLDivElement | null>(null);
-  const colorPreviewRef = useRef<HTMLDivElement | null>(null);
-  const [previewWith, setPreviewWith] = useState<string | undefined>("");
-  const [previewdasharry, setPreviewdasharray] = useState<string | undefined>(
-    ""
-  );
-
-  const showBorderSubMenu = useCallback(
-    (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => {
-      const target = e.target as HTMLDivElement;
-      const menuItemRect = target.getBoundingClientRect();
-      const subMenuItem = target.querySelector(
-        ".fortune-border-select-menu"
-      ) as HTMLDivElement;
-      if (_.isNil(subMenuItem)) return;
-      subMenuItem.style.display = "block";
-      const workbookContainerRect =
-        refs.workbookContainer.current!.getBoundingClientRect();
-      if (
-        workbookContainerRect.width - menuItemRect!.right >
-        parseFloat(subMenuItem.style.width.replace("px", ""))
-      ) {
-        subMenuItem.style.left = `${menuItemRect?.width}px`;
-      } else {
-        subMenuItem.style.left = `-${subMenuItem.style.width}`;
-      }
-    },
-    [refs.workbookContainer]
-  );
-
-  const hideBorderSubMenu = useCallback(() => {
-    styleRef.current!.style.display = "none";
-    colorRef.current!.style.display = "none";
-  }, []);
-
-  const changePreviewStyle = useCallback(
-    (width: string | undefined, dasharray: string | undefined) => {
-      setPreviewWith(width);
-      setPreviewdasharray(dasharray);
-    },
-    []
-  );
+  const [changeColor, setChangeColor] = useState("#000000");
+  const [changeStyle, setChangeStyle] = useState("1");
 
   return (
-    <div>
-      {/* 边框颜色 */}
-      <div
-        className="text-xs h-6 leading-6 min-w-[60px] px-3 py-2 hover:bg-accent cursor-pointer"
-        key="borderColor"
-        onMouseEnter={(e) => {
-          showBorderSubMenu(e);
-        }}
-        onMouseLeave={() => {
-          hideBorderSubMenu();
-        }}
-      >
-        <div className="flex items-center justify-between relative">
-          {border.borderColor}
-          <ChevronRight className="h-3.5 w-3.5" />
-        </div>
-        <div
-          ref={colorPreviewRef}
-          className="h-[3px]"
-          style={{ backgroundColor: changeColor }}
-        />
-        <div
-          ref={colorRef}
-          className="absolute bottom-0 z-10"
-          style={{ display: "none", width: "166px" }}
-        >
-          <CustomColor
-            onCustomPick={(color) => {
-              onPick(color, changeStyle);
-              colorPreviewRef.current!.style.backgroundColor = changeColor;
-              setchangeColor(color as string);
-            }}
-            onColorPick={(color) => {
-              onPick(color, changeStyle);
-              setchangeColor(color as string);
+    <>
+      <DropdownMenuSub>
+        <DropdownMenuSubTrigger>
+          <div className="flex items-center gap-2 w-full">
+            <span>{border.borderColor}</span>
+            <div className="ml-auto h-3 w-6 rounded border" style={{ backgroundColor: changeColor }} />
+          </div>
+        </DropdownMenuSubTrigger>
+        <DropdownMenuSubContent className="p-3">
+          <ColorPicker
+            value={changeColor}
+            showReset={false}
+            onChange={(color) => {
+              if (color) {
+                setChangeColor(color);
+                onPick(color, changeStyle);
+              }
             }}
           />
-        </div>
-      </div>
-      {/* 边框样式 */}
-      <div
-        className="text-xs h-6 leading-6 min-w-[60px] px-3 py-2 hover:bg-accent cursor-pointer"
-        key="borderStyle"
-        onMouseEnter={(e) => {
-          showBorderSubMenu(e);
-        }}
-        onMouseLeave={() => {
-          hideBorderSubMenu();
-        }}
-      >
-        <div className="flex items-center justify-between relative">
-          {border.borderStyle}
-          <ChevronRight className="h-3.5 w-3.5" />
-        </div>
-        <div className="h-[3px] overflow-hidden">
-          <svg width="90">
-            <g fill="none" stroke="black" strokeWidth={previewWith}>
-              <path strokeDasharray={previewdasharry} d="M0 0 l90 0" />
-            </g>
-          </svg>
-        </div>
-        <div
-          ref={styleRef}
-          className="absolute bottom-0 z-10 rounded-md border bg-popover shadow-md"
-          style={{ display: "none", width: "110px" }}
-        >
-          <div
-            className="px-2.5 hover:bg-accent cursor-pointer"
-            onClick={() => {
-              onPick(changeColor, "1");
-              changePreviewStyle("1", "1,0");
-            }}
-            tabIndex={0}
-          >
-            {border.borderDefault}
+        </DropdownMenuSubContent>
+      </DropdownMenuSub>
+
+      <DropdownMenuSub>
+        <DropdownMenuSubTrigger>
+          <div className="flex items-center gap-2 w-full">
+            <span>{border.borderStyle}</span>
+            <svg className="ml-auto" height="6" width="50">
+              <g fill="none" stroke="currentColor" strokeWidth={BORDER_STYLES.find(s => s.text === changeStyle)?.strokeWidth ?? "1"}>
+                <path
+                  strokeDasharray={BORDER_STYLES.find(s => s.text === changeStyle)?.strokeDasharray ?? "1,0"}
+                  d="M0 3 l50 0"
+                />
+              </g>
+            </svg>
           </div>
-          <div>
-            {size.map((items, i) => (
-              <div
-                key={i}
-                className="px-2.5 hover:bg-accent cursor-pointer"
-                onClick={() => {
-                  onPick(changeColor, items.Text);
-                  setchangeStyle(items.Text);
-                  changePreviewStyle(items.strokeWidth, items.strokeDasharray);
-                }}
-                tabIndex={0}
-              >
-                <svg height="10" width="90">
-                  <g fill="none" stroke="black" strokeWidth={items.strokeWidth}>
-                    <path
-                      strokeDasharray={items.strokeDasharray}
-                      d="M0 5 l85 0"
-                    />
-                  </g>
-                </svg>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-    </div>
+        </DropdownMenuSubTrigger>
+        <DropdownMenuSubContent>
+          <DropdownMenuItem onClick={() => { setChangeStyle("1"); onPick(changeColor, "1"); }}>
+            {border.borderDefault ?? "Default"}
+          </DropdownMenuItem>
+          {BORDER_STYLES.map((item) => (
+            <DropdownMenuItem
+              key={item.text}
+              onClick={() => { setChangeStyle(item.text); onPick(changeColor, item.text); }}
+            >
+              <svg height="10" width="80">
+                <g fill="none" stroke="currentColor" strokeWidth={item.strokeWidth}>
+                  <path strokeDasharray={item.strokeDasharray} d="M0 5 l80 0" />
+                </g>
+              </svg>
+            </DropdownMenuItem>
+          ))}
+        </DropdownMenuSubContent>
+      </DropdownMenuSub>
+    </>
   );
-};
+}
 
 export default CustomBorder;
