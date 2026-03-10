@@ -1,8 +1,7 @@
 import { Context, getSheetIndex, locale } from "@fortune-sheet/core";
 import React, { useCallback, useContext, useEffect, useState } from "react";
 import WorkbookContext from "../../context";
-import ColorPicker from "../Toolbar/ColorPicker";
-import "./index.css";
+import { ColorPicker } from "@workspace/ui/components/layout/media/color-picker";
 
 type Props = {
   triggerParentUpdate: (state: boolean) => void;
@@ -11,19 +10,17 @@ type Props = {
 export const ChangeColor: React.FC<Props> = ({ triggerParentUpdate }) => {
   const { context, setContext } = useContext(WorkbookContext);
   const { toolbar, sheetconfig, button } = locale(context);
-  const [inputColor, setInputColor] = useState<string>("#000000");
+  const [inputColor, setInputColor] = useState("#000000");
   const [selectColor, setSelectColor] = useState<undefined | string>(
     context.luckysheetfile[
       getSheetIndex(context, context.currentSheetId) as number
     ].color
   );
 
-  // 确定按钮
   const certainBtn = useCallback(() => {
     setSelectColor(inputColor);
   }, [inputColor]);
 
-  // 把用户选择的颜色记录在ctx中
   useEffect(() => {
     setContext((ctx: Context) => {
       if (ctx.allowEdit === false) return;
@@ -33,42 +30,39 @@ export const ChangeColor: React.FC<Props> = ({ triggerParentUpdate }) => {
   }, [selectColor, setContext]);
 
   return (
-    <div id="fortune-change-color">
-      <div
-        className="color-reset"
+    <div className="min-w-[164px] rounded-md border bg-popover p-2 shadow-md text-xs">
+      <button
+        className="w-full text-left px-2 py-1.5 rounded hover:bg-accent cursor-pointer"
         onClick={() => setSelectColor(undefined)}
-        tabIndex={0}
+        type="button"
       >
         {sheetconfig.resetColor}
-      </div>
-      <div className="custom-color">
-        <div>{toolbar.customColor}:</div>
+      </button>
+      <div className="flex items-center gap-2 px-2 py-1.5">
+        <span>{toolbar.customColor}:</span>
         <input
           type="color"
           value={inputColor}
           onChange={(e) => setInputColor(e.target.value)}
-          onFocus={() => {
-            triggerParentUpdate(true);
-          }}
-          onBlur={() => {
-            triggerParentUpdate(false);
-          }}
+          onFocus={() => triggerParentUpdate(true)}
+          onBlur={() => triggerParentUpdate(false)}
+          className="w-6 h-6 border-none cursor-pointer"
         />
-        <div
-          className="button-basic button-primary"
-          onClick={() => {
-            certainBtn();
-          }}
-          tabIndex={0}
+        <button
+          className="px-2 py-1 rounded bg-primary text-primary-foreground text-xs hover:bg-primary/90"
+          onClick={() => certainBtn()}
+          type="button"
         >
           {button.confirm}
-        </div>
+        </button>
       </div>
       <ColorPicker
-        onPick={(color) => {
+        value={selectColor ?? ""}
+        onChange={(color) => {
           setInputColor(color);
           setSelectColor(color);
         }}
+        showReset={false}
       />
     </div>
   );
