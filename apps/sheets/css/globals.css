@@ -10,3 +10,18 @@
     width: 100% !important;
     height: 100% !important;
 }
+
+.fortune-container {
+    font-family: inherit !important;
+}
+
+.fortune-toolbar {
+    border-bottom: 1px solid hsl(var(--border)) !important;
+    background: white !important;
+    padding: 2px 8px !important;
+}
+
+.fortune-fx-editor {
+    border-bottom: 1px solid hsl(var(--border)) !important;
+    background: white !important;
+}
