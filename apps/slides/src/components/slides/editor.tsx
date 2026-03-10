@@ -4,14 +4,9 @@ import {useDeck} from './hooks/use-deck';
 import {useSlideDnd} from './hooks/use-slide-dnd';
 import {SlidePanel} from './slide-panel';
 import {SlideCanvas} from './slide-canvas';
-import {SlidePropertiesPanel} from './slide-properties-panel';
+import {SlidePropertiesPanel, SlideBackgroundPanel} from './slide-properties-panel';
 import {Toolbar} from './toolbar';
-import {DEFAULT_IMAGE_OBJECT, DEFAULT_TEXT_OBJECT, type ImageObject, SlideObject, pxToPercent, type DeckData} from './types';
-import {ColorPicker} from '@workspace/ui/components/layout/media/color-picker';
-import {Popover, PopoverContent, PopoverTrigger} from '@workspace/ui/components/popover';
-import {Button} from '@workspace/ui/components/button';
-import {ImageIcon, Trash2} from 'lucide-react';
-import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '@workspace/ui/components/select';
+import {DEFAULT_IMAGE_OBJECT, DEFAULT_TEXT_OBJECT, type ImageObject, SlideObject, pxToPercent} from './types';
 import type {DrivePath} from '@workspace/lib/types/drive';
 import {getDriveEmbedUrl} from '@workspace/lib/api';
 import {useUploadFile} from '@workspace/lib/drive';
@@ -28,8 +23,9 @@ import * as Y from 'yjs';
 function buildClipboardItem(obj: SlideObject): EigenClipboardItem {
     const rect = {x: obj.x, y: obj.y, w: obj.w, h: obj.h, rotation: obj.rotation};
     const shadow = {shadowColor: obj.shadowColor, shadowBlur: obj.shadowBlur, shadowOffsetX: obj.shadowOffsetX, shadowOffsetY: obj.shadowOffsetY};
+    const border = {borderColor: obj.borderColor, borderWidth: obj.borderWidth, borderRadius: obj.borderRadius};
     if (obj.type === 'image') {
-        return {type: 'image', src: obj.src, sourcePath: obj.sourcePath, meta: {...rect, ...shadow, objectFit: obj.objectFit}};
+        return {type: 'image', src: obj.src, sourcePath: obj.sourcePath, meta: {...rect, ...shadow, ...border, objectFit: obj.objectFit}};
     }
     return {
         type: 'text',
@@ -37,6 +33,7 @@ function buildClipboardItem(obj: SlideObject): EigenClipboardItem {
         meta: {
             ...rect,
             ...shadow,
+            ...border,
             fontSize: obj.fontSize,
             fontWeight: obj.fontWeight,
             fontStyle: obj.fontStyle,
@@ -503,13 +500,11 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
                             />
                         ) : canWrite && activeSlideId ? (
                             <SlideBackgroundPanel
-                                deck={deck}
-                                activeSlideId={activeSlideId!}
                                 currentBackground={activeSlide.backgroundColor}
                                 currentBackgroundImage={activeSlide.backgroundImage}
                                 currentBackgroundImageSourcePath={activeSlide.backgroundImageSourcePath}
-                                onUpdateBackground={(color, applyTo) => updateSlideBackground(activeSlideId!, color, applyTo)}
-                                onUpdateBackgroundImage={(url, sourcePath, applyTo) => updateSlideBackgroundImage(activeSlideId!, url, sourcePath, applyTo)}
+                                onUpdateBackground={(color: string, applyTo: 'this' | 'this-and-following' | 'all') => updateSlideBackground(activeSlideId!, color, applyTo)}
+                                onUpdateBackgroundImage={(url: string, sourcePath: DrivePath | undefined, applyTo: 'this' | 'this-and-following' | 'all') => updateSlideBackgroundImage(activeSlideId!, url, sourcePath, applyTo)}
                                 onUploadImage={handleBackgroundImageUpload}
                             />
                         ) : null}
@@ -528,127 +523,6 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
                 className="hidden"
                 onChange={handleImageSelect}
             />
-        </div>
-    );
-}
-
-type ApplyTo = 'this' | 'this-and-following' | 'all';
-
-function SlideBackgroundPanel({currentBackground, currentBackgroundImage, currentBackgroundImageSourcePath, onUpdateBackground, onUpdateBackgroundImage, onUploadImage}: {
-    deck: DeckData;
-    activeSlideId: string;
-    currentBackground: string;
-    currentBackgroundImage: string;
-    currentBackgroundImageSourcePath?: DrivePath;
-    onUpdateBackground: (color: string, applyTo: ApplyTo) => void;
-    onUpdateBackgroundImage: (url: string, sourcePath: DrivePath | undefined, applyTo: ApplyTo) => void;
-    onUploadImage: (file: File) => Promise<{src: string; sourcePath: DrivePath} | null>;
-}) {
-    const [colorOpen, setColorOpen] = useState(false);
-    const [applyTo, setApplyTo] = useState<ApplyTo>('this');
-    const bgImageInputRef = useRef<HTMLInputElement>(null);
-
-    const handleImageSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (!file) return;
-        const result = await onUploadImage(file);
-        if (result) onUpdateBackgroundImage(result.src, result.sourcePath, applyTo);
-        e.target.value = '';
-    }, [onUploadImage, onUpdateBackgroundImage, applyTo]);
-
-    const handleApply = useCallback(() => {
-        onUpdateBackground(currentBackground, applyTo);
-        if (currentBackgroundImage) {
-            onUpdateBackgroundImage(currentBackgroundImage, currentBackgroundImageSourcePath, applyTo);
-        } else {
-            onUpdateBackgroundImage('', undefined, applyTo);
-        }
-    }, [applyTo, currentBackground, currentBackgroundImage, currentBackgroundImageSourcePath, onUpdateBackground, onUpdateBackgroundImage]);
-
-    return (
-        <div className="w-64 border-l bg-background shrink-0 h-full flex flex-col overflow-hidden">
-            <div className="px-3 py-2 border-b">
-                <span className="text-sm font-medium">Slide</span>
-            </div>
-
-            <div className="border-b px-3 py-3 space-y-3">
-                <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Background color</h4>
-                <Popover open={colorOpen} onOpenChange={setColorOpen}>
-                    <PopoverTrigger asChild>
-                        <button className="flex items-center gap-2 h-8 px-2 rounded hover:bg-accent text-sm w-full">
-                            <div
-                                className="h-5 w-5 rounded border border-border shrink-0"
-                                style={{backgroundColor: currentBackground}}
-                            />
-                            <span className="text-xs flex-1 text-left">Color</span>
-                            <span className="text-xs text-muted-foreground">{currentBackground}</span>
-                        </button>
-                    </PopoverTrigger>
-                    <PopoverContent side="left" align="start" className="w-auto">
-                        <ColorPicker
-                            value={currentBackground}
-                            onChange={(c) => { onUpdateBackground(c || '#ffffff', 'this'); setColorOpen(false); }}
-                            showReset={false}
-                        />
-                    </PopoverContent>
-                </Popover>
-            </div>
-
-            <div className="border-b px-3 py-3 space-y-3">
-                <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider">Background image</h4>
-                {currentBackgroundImage ? (
-                    <div className="space-y-2">
-                        <div className="rounded border overflow-hidden">
-                            <img src={currentBackgroundImage} alt="" className="w-full h-20 object-cover"/>
-                        </div>
-                        <Button
-                            variant="outline"
-                            size="sm"
-                            className="w-full"
-                            onClick={() => onUpdateBackgroundImage('', undefined, 'this')}
-                        >
-                            <Trash2 className="h-3.5 w-3.5 mr-1.5"/>
-                            Remove image
-                        </Button>
-                    </div>
-                ) : (
-                    <Button
-                        variant="outline"
-                        size="sm"
-                        className="w-full"
-                        onClick={() => bgImageInputRef.current?.click()}
-                    >
-                        <ImageIcon className="h-3.5 w-3.5 mr-1.5"/>
-                        Upload image
-                    </Button>
-                )}
-                <input
-                    ref={bgImageInputRef}
-                    type="file"
-                    accept="image/*"
-                    className="hidden"
-                    onChange={handleImageSelect}
-                />
-            </div>
-
-            <div className="px-3 py-3">
-                <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Apply to</h4>
-                <div className="flex gap-2">
-                    <Select value={applyTo} onValueChange={(v) => setApplyTo(v as ApplyTo)}>
-                        <SelectTrigger className="h-8 text-xs flex-1">
-                            <SelectValue/>
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="this">This slide</SelectItem>
-                            <SelectItem value="this-and-following">This and following</SelectItem>
-                            <SelectItem value="all">All slides</SelectItem>
-                        </SelectContent>
-                    </Select>
-                    <Button size="sm" className="h-8 text-xs" onClick={handleApply}>
-                        Apply
-                    </Button>
-                </div>
-            </div>
         </div>
     );
 }

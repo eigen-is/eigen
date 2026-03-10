@@ -118,6 +118,8 @@ export const SlideObjectView = memo(function SlideObjectView({
                 transformOrigin: 'center center',
                 backgroundColor: obj.type === 'text' && obj.backgroundColor ? obj.backgroundColor : undefined,
                 ...(obj.type === 'image' && shadowStr ? {boxShadow: shadowStr} : {}),
+                ...(obj.borderWidth && obj.borderColor ? {border: `${obj.borderWidth}px solid ${obj.borderColor}`} : {}),
+                ...(obj.borderRadius ? {borderRadius: `${obj.borderRadius}px`} : {}),
             }}
             onMouseDown={handleMouseDown}
             onDoubleClick={handleDoubleClick}

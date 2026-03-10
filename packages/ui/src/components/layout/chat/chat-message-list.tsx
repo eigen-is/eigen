@@ -7,6 +7,7 @@ import {useContacts} from "@workspace/lib/contacts";
 import {Paperclip} from "lucide-react";
 import {useFileInfo} from "@workspace/lib/chat";
 import {getDriveDownloadUrl, getDriveThumbnailUrl, getMailComposeUrl} from "@workspace/lib/api";
+import {usePreview} from "../preview-provider";
 import {formatTime} from "@workspace/lib/date";
 import {EMAIL_FIND_REGEX} from "@workspace/lib/validation";
 import type {ChatMessage} from "@workspace/lib/types/chat";
@@ -31,11 +32,20 @@ function isSameAuthorAndClose(prev: ChatMessage, curr: ChatMessage): boolean {
 
 function AttachmentChip({pathId, ownerId, mountId}: { pathId: string; ownerId: string; mountId: string }) {
     const {data: fileInfo} = useFileInfo(ownerId, mountId, pathId);
+    const {openPreview, canPreview} = usePreview();
 
     const name = fileInfo?.details?.originalName || fileInfo?.name || pathId;
     const downloadUrl = getDriveDownloadUrl(ownerId, mountId, pathId);
     const thumbnailUrl = fileInfo?.thumbnail ? getDriveThumbnailUrl(ownerId, mountId, fileInfo.thumbnail) : null;
     const isImage = fileInfo?.mimeType?.startsWith('image/');
+    const previewable = fileInfo ? canPreview(fileInfo) : false;
+
+    const handleClick = (e: React.MouseEvent) => {
+        if (previewable && fileInfo) {
+            e.preventDefault();
+            openPreview(fileInfo);
+        }
+    };
 
     return (
         <a
@@ -43,6 +53,7 @@ function AttachmentChip({pathId, ownerId, mountId}: { pathId: string; ownerId: s
             target="_blank"
             rel="noopener noreferrer"
             className="inline-flex items-center gap-1.5 rounded-md bg-muted text-xs text-foreground hover:bg-muted/80 transition-colors border overflow-hidden"
+            onClick={handleClick}
         >
             {thumbnailUrl && isImage ? (
                 <img src={thumbnailUrl} alt={name} className="h-10 w-10 object-cover rounded-l-md"/>

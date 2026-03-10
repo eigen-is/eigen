@@ -1,13 +1,13 @@
 import {createFileRoute, useNavigate} from '@tanstack/react-router';
 import {EigenLoader} from "@workspace/ui";
 import {useFolderContent, usePathInfo} from '@workspace/lib/drive';
-import {useContext, useEffect, useState} from "react";
+import {useContext, useEffect} from "react";
 import {DriveLayout} from "@workspace/ui/components/layout/drive/drive-layout";
 import {DrivePath, DriveSearchParams, isDocumentType, isFolderType} from "@workspace/lib/types/drive";
 import {useLayout} from "@workspace/ui/components/layout/app/layout-context.tsx";
 import {DriveContext} from "./__root";
-import {FilePreview} from '@workspace/ui/components/layout/drive/file-preview';
-import {getDriveDownloadUrl, getDriveEmbedUrl, openDocument} from "@workspace/lib/api";
+import {usePreview} from '@workspace/ui/components/layout/preview-provider';
+import {getDriveDownloadUrl, openDocument} from "@workspace/lib/api";
 
 export const Route = createFileRoute('/_auth/fs/$ownerId/$mountId/$pathId')({
     component: DriveRoute,
@@ -23,7 +23,7 @@ function DriveRoute() {
     const navigate = useNavigate();
     const {isMobile} = useLayout();
     const {rootPath} = useContext(DriveContext);
-    const [preview, setPreview] = useState<{ url: string; mimeType: string; aspectRatio?: number } | null>(null);
+    const {openPreview, updatePreview, closePreview, isPreviewOpen, canPreview} = usePreview();
 
     // If pathId is "root", navigate to the actual root folder ID when available
     useEffect(() => {
@@ -49,18 +49,11 @@ function DriveRoute() {
 
     // Handle row click to show path details
     const onRowSelect = (path: DrivePath) => {
-        // Handle preview behavior when using keyboard navigation
-        const mimeType = path.mimeType || "";
-        if (preview !== null) {
-            // If a preview is already open
-            if (mimeType.startsWith("image/") || mimeType.startsWith("video/")) {
-                // Update the preview if new selection is also previewable
-                const url = getDriveEmbedUrl(path.ownerId, path.mountId, path.id, path.name);
-                const aspectRatio = path.details?.width && path.details?.height ? path.details.width / path.details.height : undefined;
-                setPreview({url, mimeType, aspectRatio});
+        if (isPreviewOpen) {
+            if (canPreview(path)) {
+                updatePreview(path);
             } else {
-                // Close the preview if the new selection isn't previewable
-                setPreview(null);
+                closePreview();
             }
         }
 
@@ -82,8 +75,6 @@ function DriveRoute() {
     };
 
     const onRowActivate = (path: DrivePath) => {
-        const mimeType = path.mimeType || "";
-
         if (path.type === 'folder') {
             navigate({
                 to: Route.fullPath,
@@ -92,10 +83,8 @@ function DriveRoute() {
             });
         } else if (isDocumentType(path.type)) {
             openDocument(path);
-        } else if (mimeType.startsWith("image/") || mimeType.startsWith("video/")) {
-            const url = getDriveEmbedUrl(path.ownerId, path.mountId, path.id, path.name);
-            const aspectRatio = path.details?.width && path.details?.height ? path.details.width / path.details.height : undefined;
-            setPreview({url, mimeType, aspectRatio});
+        } else if (canPreview(path)) {
+            openPreview(path);
         } else {
             const url = getDriveDownloadUrl(path.ownerId, path.mountId, path.id);
             window.open(url, "_blank");
@@ -142,13 +131,6 @@ function DriveRoute() {
 
     return (
         <>
-            <FilePreview
-                url={preview?.url || ''}
-                mimeType={preview?.mimeType || ''}
-                onClose={() => setPreview(null)}
-                open={preview !== null}
-                aspectRatio={preview?.aspectRatio ? `${preview.aspectRatio}` : undefined}
-            />
             <DriveLayout
                 ownerId={ownerId}
                 mountId={mountId}

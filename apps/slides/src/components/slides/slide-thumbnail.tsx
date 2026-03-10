@@ -54,6 +54,8 @@ const ThumbnailObject = memo(function ThumbnailObject({obj, bgColor}: {obj: Slid
                 width: `${pxToPercent(obj.w, 'x')}%`,
                 height: `${pxToPercent(obj.h, 'y')}%`,
                 transform: obj.rotation ? `rotate(${obj.rotation}deg)` : undefined,
+                ...(obj.borderWidth && obj.borderColor ? {border: `${obj.borderWidth * 0.1}px solid ${obj.borderColor}`} : {}),
+                ...(obj.borderRadius ? {borderRadius: `${obj.borderRadius * 0.1}px`} : {}),
             }}
         >
             {obj.type === 'text' && (
