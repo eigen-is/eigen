@@ -46,7 +46,6 @@ import SheetTab from "../SheetTab";
 import ContextMenu from "../ContextMenu";
 import SVGDefines from "../SVGDefines";
 import SheetTabContextMenu from "../ContextMenu/SheetTab";
-import MoreItemsContaier from "../Toolbar/MoreItemsContainer";
 import { generateAPIs } from "./api";
 import { ModalProvider } from "../../context/modal";
 import FilterMenu from "../ContextMenu/FilterMenu";
@@ -105,8 +104,6 @@ const Workbook = React.forwardRef<WorkbookInstance, Settings & AdditionalProps>(
     const [context, setContext] = useState(defaultContext(refs));
     const { formula, info } = locale(context);
 
-    const [moreToolbarItems, setMoreToolbarItems] =
-      useState<React.ReactNode>(null);
 
     const [calInfo, setCalInfo] = useState<{
       numberC: number;
@@ -708,9 +705,6 @@ const Workbook = React.forwardRef<WorkbookInstance, Settings & AdditionalProps>(
       [context, setContextWithProduce]
     );
 
-    const onMoreToolbarItemsClose = useCallback(() => {
-      setMoreToolbarItems(null);
-    }, []);
 
     useEffect(() => {
       document.addEventListener("paste", onPaste);
@@ -781,8 +775,6 @@ const Workbook = React.forwardRef<WorkbookInstance, Settings & AdditionalProps>(
             <div className="fortune-workarea">
               {mergedSettings.showToolbar && (
                 <Toolbar
-                  moreItemsOpen={moreToolbarItems !== null}
-                  setMoreItems={setMoreToolbarItems}
                   leftItems={toolbarLeftItems}
                   rightItems={toolbarRightItems}
                 />
@@ -795,11 +787,6 @@ const Workbook = React.forwardRef<WorkbookInstance, Settings & AdditionalProps>(
             <FilterMenu />
             <SheetTabContextMenu />
             {context.showSheetList && <SheetList />}
-            {moreToolbarItems && (
-              <MoreItemsContaier onClose={onMoreToolbarItemsClose}>
-                {moreToolbarItems}
-              </MoreItemsContaier>
-            )}
             {!_.isEmpty(context.contextMenu) && (
               <div
                 onMouseDown={() => {
