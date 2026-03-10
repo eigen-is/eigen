@@ -5,3 +5,8 @@
 .text-app {
     color: var(--app-sheets-color);
 }
+
+.fortune-sheet-container {
+    width: 100% !important;
+    height: 100% !important;
+}

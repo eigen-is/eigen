@@ -117,6 +117,7 @@ See `docs/LAYOUT.md` for detailed architecture documentation.
 | `ChatMessageList`       | `chat/chat-message-list.tsx`         | List of chat messages with auto-scroll and keyboard navigation                            |
 | `ChatPlayerSuggest`     | `chat/chat-player-suggest.tsx`       | Autosuggest for player mentions in chat                                                  |
 | `ChatSlashSuggest`      | `chat/chat-slash-suggest.tsx`        | Autosuggest for slash commands in chat                                                   |
+| `chat-utils`            | `chat/chat-utils.ts`                 | Utility functions for chat processing and formatting                                      |
 
 ## Toolbar
 
@@ -139,6 +140,21 @@ See `docs/LAYOUT.md` for detailed architecture documentation.
 | Component               | File                                 | Description                                                                              |
 |-------------------------|--------------------------------------|------------------------------------------------------------------------------------------|
 | `RevisionHistory`       | `collab/revision-history.tsx`        | History panel showing Yjs document revisions                                             |
+
+## Properties Panel
+
+| Component               | File                                 | Description                                                                              |
+|-------------------------|--------------------------------------|------------------------------------------------------------------------------------------|
+| `PropertiesPanel`       | `properties-panel/properties-panel.tsx` | Right-side panel container with scroll area for property controls                        |
+| `PropertySection`       | `properties-panel/properties-panel.tsx` | Section within properties panel with title and spacing for grouped controls              |
+| `PropertyRow`           | `properties-panel/properties-panel.tsx` | Row within property section with label and content area for form controls                 |
+
+## Preview Provider
+
+| Component/Hook          | File                                 | Description                                                                              |
+|-------------------------|--------------------------------------|------------------------------------------------------------------------------------------|
+| `PreviewProvider`       | `preview-provider/preview-provider.tsx` | Context provider for file preview functionality (images, videos, PDFs)                  |
+| `usePreview`            | `preview-provider/preview-provider.tsx` | Hook to access preview functions: openPreview, updatePreview, closePreview, isPreviewOpen |
 
 ## Drive (domain-specific shared)
 
