@@ -7,7 +7,6 @@ import {
   initFreeze,
   Sheet as SheetType,
 } from "@fortune-sheet/core";
-import "./index.css";
 import WorkbookContext from "../../context";
 import SheetOverlay from "../SheetOverlay";
 
@@ -268,11 +267,11 @@ const Sheet: React.FC<Props> = ({ sheet }) => {
   }, [onWheel]);
 
   return (
-    <div ref={containerRef} className="fortune-sheet-container">
+    <div ref={containerRef} className="flex flex-1 flex-col min-h-0 relative">
       {/* this is a placeholder div to help measure the empty space between toolbar and footer, directly measuring the canvas element is inaccurate, don't know why */}
-      <div ref={placeholderRef} className="fortune-sheet-canvas-placeholder" />
+      <div ref={placeholderRef} className="w-full h-full block" />
       <canvas
-        className="fortune-sheet-canvas"
+        className="w-full h-full block absolute"
         ref={refs.canvas}
         aria-hidden="true"
       />

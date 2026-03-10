@@ -6,7 +6,7 @@ import {
 } from "@fortune-sheet/core";
 import _ from "lodash";
 import WorkbookContext from "../../context";
-import "./index.css";
+import { Button } from "@workspace/ui/components/button";
 
 export const FormulaSearch: React.FC<{ onCancel: () => void }> = ({
   onCancel: _onCancel,
@@ -130,18 +130,18 @@ export const FormulaSearch: React.FC<{ onCancel: () => void }> = ({
   }, [_onCancel, cellInput, setContext]);
 
   return (
-    <div id="luckysheet-search-formula">
-      <div className="inpbox">
+    <div id="luckysheet-search-formula" className="text-xs">
+      <div className="mb-1.5 [&>div]:block [&>div]:mb-1.5">
         <div>{formulaMore.findFunctionTitle}：</div>
         <input
-          className="formulaInputFocus"
+          className="w-full h-6 leading-6 border border-[#d4d4d4] px-2.5 text-xs box-border"
           id="searchFormulaListInput"
           placeholder={formulaMore.tipInputFunctionName}
           spellCheck="false"
           onChange={(e) => setSearchText(e.target.value)}
         />
       </div>
-      <div className="selbox">
+      <div className="mb-1.5">
         <span>{formulaMore.selectCategory}：</span>
         <select
           id="formulaTypeSelect"
@@ -157,12 +157,12 @@ export const FormulaSearch: React.FC<{ onCancel: () => void }> = ({
           ))}
         </select>
       </div>
-      <div className="listbox" style={{ height: 200 }}>
+      <div className="[&>label]:block [&>label]:mb-1.5" style={{ height: 200 }}>
         <div>{formulaMore.selectFunctionTitle}：</div>
-        <div className="formulaList">
+        <div className="w-[300px] h-[170px] border border-[#d4d4d4] overflow-y-auto">
           {filteredFunctionList.map((v, index) => (
             <div
-              className={`listBox${index === selectedFuncIndex ? " on" : ""}`}
+              className={`p-1.5 border-b border-[#d4d4d4] cursor-pointer ${index === selectedFuncIndex ? "bg-[#8c89fe] text-white" : ""}`}
               key={v.n}
               onClick={() => setSelectedFuncIndex(index)}
               tabIndex={0}
@@ -173,21 +173,13 @@ export const FormulaSearch: React.FC<{ onCancel: () => void }> = ({
           ))}
         </div>
       </div>
-      <div className="fortune-dialog-box-button-container">
-        <div
-          className="fortune-message-box-button button-primary"
-          onClick={onConfirm}
-          tabIndex={0}
-        >
+      <div className="flex gap-2 mt-3">
+        <Button size="sm" onClick={onConfirm}>
           {button.confirm}
-        </div>
-        <div
-          className="fortune-message-box-button button-default"
-          onClick={onCancel}
-          tabIndex={0}
-        >
+        </Button>
+        <Button variant="outline" size="sm" onClick={onCancel}>
           {button.cancel}
-        </div>
+        </Button>
       </div>
     </div>
   );

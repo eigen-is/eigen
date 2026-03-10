@@ -23,7 +23,6 @@ import React, {
   useRef,
   useMemo,
 } from "react";
-import "./index.css";
 import _ from "lodash";
 import WorkbookContext from "../../context";
 import SVGIcon from "../SVGIcon";
@@ -297,17 +296,17 @@ const FxEditor: React.FC = () => {
 
   return (
     <aside>
-      <div className="fortune-fx-editor">
+      <div className="flex flex-row h-7 border-b border-[#d4d4d4]">
         <NameBox />
-        <div className="fortune-fx-icon">
+        <div className="flex items-center mx-3">
           <SVGIcon name="fx" width={18} height={18} />
         </div>
-        <div ref={inputContainerRef} className="fortune-fx-input-container">
+        <div ref={inputContainerRef} className="overflow-visible p-0 flex-1 flex items-center relative border-l border-[#e5e5e5]">
           <ContentEditable
             innerRef={(e) => {
               refs.fxInput.current = e;
             }}
-            className="fortune-fx-input"
+            className="flex-1 h-full overflow-y-auto pl-0.5 text-sm leading-[14px] m-0 outline-none cursor-text whitespace-pre-wrap break-words bg-white pt-[7px] box-border text-black text-left"
             role="textbox"
             id="luckysheet-functionbox-cell"
             aria-label={info.currentCellInput}

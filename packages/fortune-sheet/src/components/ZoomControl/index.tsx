@@ -9,7 +9,6 @@ import {
 import WorkbookContext from "../../context";
 import SVGIcon from "../SVGIcon";
 import { useOutsideClick } from "../../hooks/useOutsideClick";
-import "./index.css";
 
 const presets = [
   {
@@ -86,9 +85,9 @@ const ZoomControl: React.FC = () => {
   );
 
   return (
-    <aside title="Zoom settings" className="fortune-zoom-container">
+    <aside title="Zoom settings" className="whitespace-nowrap overflow-visible flex items-center select-none">
       <div
-        className="fortune-zoom-button"
+        className="flex cursor-pointer items-center justify-center w-6 h-6 hover:bg-muted rounded"
         aria-label={info.zoomOut}
         onClick={(e) => {
           zoomTo(context.zoomRatio - 0.1);
@@ -99,19 +98,19 @@ const ZoomControl: React.FC = () => {
       >
         <SVGIcon name="minus" width={16} height={16} />
       </div>
-      <div className="fortune-zoom-ratio">
+      <div className="relative flex justify-center w-12 text-xs cursor-pointer">
         <div
-          className="fortune-zoom-ratio-current fortune-zoom-button"
+          className="w-full flex cursor-pointer items-center justify-center w-6 h-6 hover:bg-muted rounded"
           onClick={() => setRadioMenuOpen(true)}
           tabIndex={0}
         >
           {(context.zoomRatio * 100).toFixed(0)}%
         </div>
         {radioMenuOpen && (
-          <div className="fortune-zoom-ratio-menu" ref={menuRef}>
+          <div className="absolute bottom-[30px] left-0 leading-6 shadow-md py-2.5 rounded-md bg-popover z-[1004]" ref={menuRef}>
             {presets.map((v) => (
               <div
-                className="fortune-zoom-ratio-item"
+                className="hover:bg-muted"
                 key={v.text}
                 onClick={(e) => {
                   zoomTo(v.value);
@@ -119,14 +118,14 @@ const ZoomControl: React.FC = () => {
                 }}
                 tabIndex={0}
               >
-                <div className="fortune-zoom-ratio-text">{v.text}</div>
+                <div className="px-2.5">{v.text}</div>
               </div>
             ))}
           </div>
         )}
       </div>
       <div
-        className="fortune-zoom-button"
+        className="flex cursor-pointer items-center justify-center w-6 h-6 hover:bg-muted rounded"
         aria-label={info.zoomIn}
         onClick={(e) => {
           zoomTo(context.zoomRatio + 0.1);

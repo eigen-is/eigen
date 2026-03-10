@@ -10,7 +10,7 @@ import _ from "lodash";
 import React, { useContext, useState, useCallback } from "react";
 import WorkbookContext from "../../context";
 import { useDialog } from "../../hooks/useDialog";
-import "./index.css";
+import { Button } from "@workspace/ui/components/button";
 
 export const LocationCondition: React.FC<{}> = () => {
   const { context, setContext } = useContext(WorkbookContext);
@@ -145,11 +145,11 @@ export const LocationCondition: React.FC<{}> = () => {
   );
 
   return (
-    <div id="fortune-location-condition">
-      <div className="title">{findAndReplace.location}</div>
-      <div className="listbox">
+    <div className="min-w-[500px]">
+      <div className="text-base leading-[48px]">{findAndReplace.location}</div>
+      <div className="border border-[#dfdfdf] p-2.5 text-sm">
         {/* 常量 */}
-        <div className="listItem">
+        <div className="py-1.5">
           <input
             type="radio"
             name="locationType"
@@ -162,7 +162,7 @@ export const LocationCondition: React.FC<{}> = () => {
           <label htmlFor="locationConstant">
             {findAndReplace.locationConstant}
           </label>
-          <div className="subbox">
+          <div className="h-[30px] px-2.5 flex gap-1">
             {[
               "locationDate",
               "locationDigital",
@@ -170,7 +170,7 @@ export const LocationCondition: React.FC<{}> = () => {
               "locationBool",
               "locationError",
             ].map((v) => (
-              <div className="subItem" key={v}>
+              <div className="float-left mr-1.5" key={v}>
                 <input
                   type="checkbox"
                   disabled={!isSelect("locationConstant")}
@@ -196,7 +196,7 @@ export const LocationCondition: React.FC<{}> = () => {
           </div>
         </div>
         {/* 公式 */}
-        <div className="listItem">
+        <div className="py-1.5">
           <input
             type="radio"
             name="locationType"
@@ -209,7 +209,7 @@ export const LocationCondition: React.FC<{}> = () => {
           <label htmlFor="locationFormula">
             {findAndReplace.locationFormula}
           </label>
-          <div className="subbox">
+          <div className="h-[30px] px-2.5 flex gap-1">
             {[
               "locationDate",
               "locationDigital",
@@ -217,7 +217,7 @@ export const LocationCondition: React.FC<{}> = () => {
               "locationBool",
               "locationError",
             ].map((v) => (
-              <div className="subItem" key={v}>
+              <div className="float-left mr-1.5" key={v}>
                 <input
                   type="checkbox"
                   disabled={!isSelect("locationFormula")}
@@ -244,7 +244,7 @@ export const LocationCondition: React.FC<{}> = () => {
         </div>
         {/* TODO 条件格式 */}
         {["locationNull", "locationRowSpan", "locationColumnSpan"].map((v) => (
-          <div className="listItem" key={v}>
+          <div className="py-1.5" key={v}>
             <input
               type="radio"
               name={v}
@@ -258,24 +258,13 @@ export const LocationCondition: React.FC<{}> = () => {
         ))}
       </div>
 
-      <div
-        className="button-basic button-primary"
-        onClick={() => {
-          hideDialog();
-          onConfirm();
-        }}
-        tabIndex={0}
-      >
-        {button.confirm}
-      </div>
-      <div
-        className="button-basic button-close"
-        onClick={() => {
-          hideDialog();
-        }}
-        tabIndex={0}
-      >
-        {button.cancel}
+      <div className="flex gap-2 mt-3">
+        <Button size="sm" onClick={() => { hideDialog(); onConfirm(); }}>
+          {button.confirm}
+        </Button>
+        <Button variant="outline" size="sm" onClick={() => hideDialog()}>
+          {button.cancel}
+        </Button>
       </div>
     </div>
   );

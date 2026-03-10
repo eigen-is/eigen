@@ -135,7 +135,12 @@ export function useSheet(
     }, []);
 
     const saveSnapshot = useCallback((data: SheetData[]) => {
-        pendingSnapshotRef.current = JSON.stringify(data);
+        try {
+            pendingSnapshotRef.current = JSON.stringify(data);
+        } catch (e) {
+            console.error('Failed to serialize sheet data for snapshot:', e);
+            return;
+        }
         if (snapshotTimerRef.current) clearTimeout(snapshotTimerRef.current);
         snapshotTimerRef.current = setTimeout(flushSnapshot, 1000);
     }, [flushSnapshot]);
@@ -174,10 +179,11 @@ export function useSheet(
                 const data = JSON.parse(snapshot) as SheetData[];
                 setInitialData(data);
                 if (workbookRef.current) {
-                    workbookRef.current.updateSheet(data);
+                    const cloned = JSON.parse(snapshot) as SheetData[];
+                    workbookRef.current.updateSheet(cloned);
                 }
-            } catch {
-                // ignore
+            } catch (e) {
+                console.error('Failed to restore sheet data:', e);
             }
         }
     }, [workbookRef]);
