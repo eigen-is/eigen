@@ -24,6 +24,7 @@ import {ColorPicker} from '@workspace/ui/components/layout/media/color-picker';
 import {usePreview} from '@workspace/ui/components/layout/preview-provider';
 import type {DrivePath} from '@workspace/lib/types/drive';
 import type {SlideObject, TextObject, ImageObject} from './types';
+import {BORDER_RADIUS_ROUND} from './types';
 
 const MIXED = 'mixed' as const;
 type MergedValue<T> = T | typeof MIXED | undefined;
@@ -333,6 +334,7 @@ function BorderProperties({objects, onUpdate}: {
     const borderColor = getMergedValue(objects, o => o.borderColor);
     const borderWidth = getMergedValue(objects, o => o.borderWidth);
     const borderRadius = getMergedValue(objects, o => o.borderRadius);
+    const isRounded = !isMixed(borderRadius) && borderRadius !== undefined && borderRadius >= BORDER_RADIUS_ROUND;
 
     return (
         <PropertySection title="Border">
@@ -340,12 +342,26 @@ function BorderProperties({objects, onUpdate}: {
                 onChange={(c) => { onUpdate({borderColor: c}); setColorOpen(false); }}
                 showReset
             />
+            <PropertyRow label="Width">
+                <MergedNumberInput value={borderWidth} onChange={v => onUpdate({borderWidth: v})} step={1} min={0} max={20}/>
+            </PropertyRow>
             <div className="grid grid-cols-2 gap-2">
-                <PropertyRow label="Width">
-                    <MergedNumberInput value={borderWidth} onChange={v => onUpdate({borderWidth: v})} step={1} min={0} max={20}/>
-                </PropertyRow>
                 <PropertyRow label="Radius">
-                    <MergedNumberInput value={borderRadius} onChange={v => onUpdate({borderRadius: v})} step={2} min={0} max={100}/>
+                    <MergedNumberInput
+                        value={isRounded ? 0 : borderRadius}
+                        onChange={v => onUpdate({borderRadius: v})}
+                        step={2} min={0} max={100}
+                    />
+                </PropertyRow>
+                <PropertyRow label="Rounded">
+                    <Toggle
+                        pressed={isRounded}
+                        onPressedChange={(pressed) => onUpdate({borderRadius: pressed ? BORDER_RADIUS_ROUND : 0})}
+                        size="sm"
+                        className="h-7 w-full text-xs"
+                    >
+                        50%
+                    </Toggle>
                 </PropertyRow>
             </div>
         </PropertySection>

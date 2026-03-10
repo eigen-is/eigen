@@ -75,6 +75,8 @@ const DEFAULT_SHADOW = {
     shadowOffsetY: 0,
 };
 
+export const BORDER_RADIUS_ROUND = 9999;
+
 const DEFAULT_BORDER = {
     borderColor: '',
     borderWidth: 0,
