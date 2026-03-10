@@ -17,8 +17,6 @@ const TOOLBAR_ITEMS = [
     '|',
     'format',
     '|',
-    'font-size',
-    '|',
     'bold', 'italic', 'strike-through', 'underline',
     '|',
     'font-color', 'background', 'border', 'merge-cell',
@@ -75,6 +73,9 @@ export function SheetEditor({ownerId, path, canWrite, onAccessDialogOpen}: Sheet
                     toolbarItems={TOOLBAR_ITEMS}
                     toolbarLeftItems={leftItems}
                     toolbarRightItems={rightItems}
+                    defaultRowHeight={25}
+                    defaultFontSize={11}
+                    currency="€"
                     column={26}
                     row={100}
                 />

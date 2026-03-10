@@ -7,6 +7,7 @@ import { Checkbox } from "@workspace/ui/components/checkbox";
 import { Label } from "@workspace/ui/components/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@workspace/ui/components/popover";
 import { ColorPicker } from "@workspace/ui/components/layout/media/color-picker";
+import { DialogHeader, DialogTitle, DialogFooter } from "@workspace/ui/components/dialog";
 import WorkbookContext from "../../context";
 import { useDialog } from "../../hooks/useDialog";
 
@@ -91,12 +92,15 @@ export function ConditionRules({ type }: { type: string }) {
   }, []);
 
   return (
-    <div className="p-6 min-w-[320px]">
-      <h3 className="text-base font-semibold mb-3">
-        {(conditionformat as any)[`conditionformat_${type}`]}
-      </h3>
+    <div className="min-w-[340px]">
+      <DialogHeader className="p-6 pb-4">
+        <DialogTitle className="text-base">
+          {(conditionformat as any)[`conditionformat_${type}`]}
+        </DialogTitle>
+      </DialogHeader>
 
-      <p className="text-sm font-medium mb-2">
+      <div className="px-6">
+      <p className="text-sm text-muted-foreground mb-2">
         {(conditionformat as any)[`conditionformat_${type}_title`]}
       </p>
 
@@ -199,7 +203,7 @@ export function ConditionRules({ type }: { type: string }) {
         </div>
       )}
 
-      <p className="text-sm font-medium mt-3 mb-2">
+      <p className="text-sm text-muted-foreground mt-3 mb-2">
         {`${conditionformat.setAs}:`}
       </p>
 
@@ -282,14 +286,15 @@ export function ConditionRules({ type }: { type: string }) {
         </div>
       </div>
 
-      <div className="flex items-center justify-end gap-2">
+      </div>
+      <DialogFooter className="p-6 pt-4">
         <Button variant="outline" size="sm" onClick={() => close("close")}>
           {button.cancel}
         </Button>
         <Button size="sm" onClick={() => close("confirm")}>
           {button.confirm}
         </Button>
-      </div>
+      </DialogFooter>
     </div>
   );
 }
