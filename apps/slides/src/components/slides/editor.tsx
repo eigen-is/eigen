@@ -6,7 +6,6 @@ import {SlidePanel} from './slide-panel';
 import {SlideCanvas} from './slide-canvas';
 import {SlidePropertiesPanel} from './slide-properties-panel';
 import {Toolbar} from './toolbar';
-import {SlideSettingsDialog} from './slide-settings-dialog';
 import {DEFAULT_IMAGE_OBJECT, DEFAULT_TEXT_OBJECT, type ImageObject, SlideObject, pxToPercent, type DeckData} from './types';
 import {ColorPicker} from '@workspace/ui/components/layout/media/color-picker';
 import {Popover, PopoverContent, PopoverTrigger} from '@workspace/ui/components/popover';
@@ -105,7 +104,6 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
 
     const [selectedObjectIds, setSelectedObjectIds] = useState<string[]>([]);
     const [editingObjectId, setEditingObjectId] = useState<string | null>(null);
-    const [isSlideSettingsOpen, setIsSlideSettingsOpen] = useState(false);
     const [isPresenting, setIsPresenting] = useState(false);
     const imageInputRef = useRef<HTMLInputElement>(null);
 
@@ -113,7 +111,6 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
 
     const hasSelection = selectedObjectIds.length > 0;
     const isEditing = editingObjectId !== null;
-    const isDialogOpen = isSlideSettingsOpen;
 
     useHotkey('Mod+Z', (e) => { e.preventDefault(); undoManager?.undo(); }, {enabled: canWrite && !!undoManager});
     useHotkey('Mod+Y', (e) => { e.preventDefault(); undoManager?.redo(); }, {enabled: canWrite && !!undoManager});
@@ -123,18 +120,18 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
             deleteObjects(selectedObjectIds);
             setSelectedObjectIds([]);
         }
-    }, {enabled: canWrite && hasSelection && !isDialogOpen && !isEditing});
+    }, {enabled: canWrite && hasSelection && !isEditing});
     useHotkey('Backspace', () => {
         if (hasSelection && canWrite) {
             deleteObjects(selectedObjectIds);
             setSelectedObjectIds([]);
         }
-    }, {enabled: canWrite && hasSelection && !isDialogOpen && !isEditing});
+    }, {enabled: canWrite && hasSelection && !isEditing});
     useHotkey('Escape', () => {
         if (isPresenting) setIsPresenting(false);
         else if (isEditing) setEditingObjectId(null);
         else setSelectedObjectIds([]);
-    }, {enabled: !isDialogOpen});
+    }, {enabled: true});
     const handleImageFile = useCallback(async (file: File) => {
         if (!activeSlideId || !mediaFolderId || !file.type.startsWith('image/')) return;
         try {
@@ -496,14 +493,6 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
                             />
                             <div className="h-8 bg-muted border-t flex items-center justify-between px-4 text-xs text-muted-foreground">
                                 <span>Slide {deck.slideOrder.indexOf(activeSlideId!) + 1} of {deck.slideOrder.length}</span>
-                                {canWrite && (
-                                    <button
-                                        className="hover:underline"
-                                        onClick={() => setIsSlideSettingsOpen(true)}
-                                    >
-                                        Slide settings
-                                    </button>
-                                )}
                             </div>
                         </div>
                         {selectedObjects.length > 0 && canWrite ? (
@@ -539,27 +528,13 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
                 className="hidden"
                 onChange={handleImageSelect}
             />
-            {activeSlideId && activeSlide && (
-                <SlideSettingsDialog
-                    isOpen={isSlideSettingsOpen}
-                    onClose={() => setIsSlideSettingsOpen(false)}
-                    slideId={activeSlideId}
-                    currentBackground={activeSlide.backgroundColor}
-                    currentBackgroundImage={activeSlide.backgroundImage}
-                    onUpdateBackground={updateSlideBackground}
-                    onUpdateBackgroundImage={updateSlideBackgroundImage}
-                    onDeleteSlide={deleteSlide}
-                    onDuplicateSlide={duplicateSlide}
-                    slideCount={deck.slideOrder.length}
-                />
-            )}
         </div>
     );
 }
 
 type ApplyTo = 'this' | 'this-and-following' | 'all';
 
-function SlideBackgroundPanel({deck, activeSlideId, currentBackground, currentBackgroundImage, currentBackgroundImageSourcePath, onUpdateBackground, onUpdateBackgroundImage, onUploadImage}: {
+function SlideBackgroundPanel({currentBackground, currentBackgroundImage, currentBackgroundImageSourcePath, onUpdateBackground, onUpdateBackgroundImage, onUploadImage}: {
     deck: DeckData;
     activeSlideId: string;
     currentBackground: string;
