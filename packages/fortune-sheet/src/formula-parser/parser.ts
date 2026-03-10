@@ -47,12 +47,9 @@ class Parser {
   private emitter: any;
 
   constructor() {
-    console.log('Parser constructor starting');
     // @ts-ignore - tiny-emitter instantiation
     this.emitter = new TinyEmitter();
-    console.log('emitter created:', this.emitter);
     this.parser = new GrammarParser();
-    console.log('grammar parser created:', this.parser);
     this.parser.yy = {
       toNumber,
       trimEdges,

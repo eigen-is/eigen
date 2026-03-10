@@ -120,10 +120,7 @@ export class FormulaCache {
     this.execFunctionGlobalData = {};
     this.formulaCellInfoMap = null;
     this.cellTextToIndexList = {};
-    console.log('About to create Parser instance');
     this.parser = new Parser();
-    console.log('Parser created:', this.parser);
-    console.log('Parser.on method:', this.parser.on);
     this.parser.on(
       "callCellValue",
       (cellCoord: any, options: any, done: any) => {
