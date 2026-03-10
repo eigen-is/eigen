@@ -12,6 +12,9 @@ type BaseObject = {
     shadowBlur: number;
     shadowOffsetX: number;
     shadowOffsetY: number;
+    borderColor: string;
+    borderWidth: number;
+    borderRadius: number;
 }
 
 export type TextObject = BaseObject & {
@@ -72,6 +75,12 @@ const DEFAULT_SHADOW = {
     shadowOffsetY: 0,
 };
 
+const DEFAULT_BORDER = {
+    borderColor: '',
+    borderWidth: 0,
+    borderRadius: 0,
+};
+
 export const DEFAULT_TEXT_OBJECT: Omit<TextObject, 'id' | 'slideId'> = {
     type: 'text',
     x: 192,
@@ -92,6 +101,7 @@ export const DEFAULT_TEXT_OBJECT: Omit<TextObject, 'id' | 'slideId'> = {
     highlightColor: '',
     backgroundColor: '',
     ...DEFAULT_SHADOW,
+    ...DEFAULT_BORDER,
 };
 
 export const DEFAULT_IMAGE_OBJECT: Omit<ImageObject, 'id' | 'slideId' | 'src'> = {
@@ -103,6 +113,7 @@ export const DEFAULT_IMAGE_OBJECT: Omit<ImageObject, 'id' | 'slideId' | 'src'> =
     rotation: 0,
     objectFit: 'contain',
     ...DEFAULT_SHADOW,
+    ...DEFAULT_BORDER,
 };
 
 export const SLIDE_BACKGROUNDS = [

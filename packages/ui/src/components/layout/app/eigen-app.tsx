@@ -3,6 +3,7 @@
 import React from "react"
 import {Toaster} from "../../sonner.tsx"
 import {UploadProvider} from "../upload-provider/upload-provider.tsx"
+import {PreviewProvider} from "../preview-provider/preview-provider.tsx"
 import {AuthProvider} from "@workspace/lib/auth/auth-context.tsx"
 import {QueryClient, QueryClientProvider} from '@tanstack/react-query';
 import {ReactQueryDevtools} from '@tanstack/react-query-devtools';
@@ -34,9 +35,11 @@ export function EigenApp({children}: EigenAppProps) {
                     <AuthProvider>
                         <SSEProvider>
                             <UploadProvider>
-                                <GlobalHotkeys/>
-                                {children}
-                                <Toaster/>
+                                <PreviewProvider>
+                                    <GlobalHotkeys/>
+                                    {children}
+                                    <Toaster/>
+                                </PreviewProvider>
                             </UploadProvider>
                         </SSEProvider>
                         <ReactQueryDevtools initialIsOpen={false}/>

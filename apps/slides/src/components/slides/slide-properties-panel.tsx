@@ -1,4 +1,4 @@
-import {useCallback, useMemo, useState} from 'react';
+import {useCallback, useMemo, useRef, useState} from 'react';
 import {
     AlignCenter,
     AlignJustify,
@@ -8,6 +8,7 @@ import {
     AlignVerticalJustifyEnd,
     AlignVerticalJustifyStart,
     Bold,
+    ImageIcon,
     Italic,
     Strikethrough,
     Trash2,
@@ -20,6 +21,8 @@ import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '@wo
 import {Toggle} from '@workspace/ui/components/toggle';
 import {Popover, PopoverContent, PopoverTrigger} from '@workspace/ui/components/popover';
 import {ColorPicker} from '@workspace/ui/components/layout/media/color-picker';
+import {usePreview} from '@workspace/ui/components/layout/preview-provider';
+import type {DrivePath} from '@workspace/lib/types/drive';
 import type {SlideObject, TextObject, ImageObject} from './types';
 
 const MIXED = 'mixed' as const;
@@ -107,6 +110,11 @@ export function SlidePropertiesPanel({objects, onUpdate, onDelete}: SlidePropert
                     onUpdate={handleUpdate}
                 />
             )}
+
+            <BorderProperties
+                objects={objects}
+                onUpdate={handleUpdate}
+            />
 
             <ShadowProperties
                 shadowColor={shadowColor}
@@ -283,11 +291,18 @@ function ImageProperties({objects, onUpdate}: {
     onUpdate: (updates: Partial<SlideObject>) => void;
 }) {
     const objectFit = getMergedValue(objects, o => o.objectFit);
+    const {openPreview} = usePreview();
 
     return (
         <PropertySection title="Image">
             {objects.length === 1 && (
-                <div className="border rounded overflow-hidden mb-2">
+                <div
+                    className="border rounded overflow-hidden mb-2 cursor-pointer"
+                    onClick={() => {
+                        const sp = objects[0].sourcePath;
+                        if (sp) openPreview(sp);
+                    }}
+                >
                     <img src={objects[0].src} alt="" className="max-h-24 mx-auto object-contain"/>
                 </div>
             )}
@@ -306,6 +321,33 @@ function ImageProperties({objects, onUpdate}: {
                     </SelectContent>
                 </Select>
             </PropertyRow>
+        </PropertySection>
+    );
+}
+
+function BorderProperties({objects, onUpdate}: {
+    objects: SlideObject[];
+    onUpdate: (updates: Partial<SlideObject>) => void;
+}) {
+    const [colorOpen, setColorOpen] = useState(false);
+    const borderColor = getMergedValue(objects, o => o.borderColor);
+    const borderWidth = getMergedValue(objects, o => o.borderWidth);
+    const borderRadius = getMergedValue(objects, o => o.borderRadius);
+
+    return (
+        <PropertySection title="Border">
+            <ColorRow label="Color" value={borderColor} onOpen={setColorOpen} open={colorOpen}
+                onChange={(c) => { onUpdate({borderColor: c}); setColorOpen(false); }}
+                showReset
+            />
+            <div className="grid grid-cols-2 gap-2">
+                <PropertyRow label="Width">
+                    <MergedNumberInput value={borderWidth} onChange={v => onUpdate({borderWidth: v})} step={1} min={0} max={20}/>
+                </PropertyRow>
+                <PropertyRow label="Radius">
+                    <MergedNumberInput value={borderRadius} onChange={v => onUpdate({borderRadius: v})} step={2} min={0} max={100}/>
+                </PropertyRow>
+            </div>
         </PropertySection>
     );
 }
@@ -374,6 +416,129 @@ function ColorRow({label, value, open, onOpen, onChange, showReset}: {
                 />
             </PopoverContent>
         </Popover>
+    );
+}
+
+type ApplyTo = 'this' | 'this-and-following' | 'all';
+
+type SlideBackgroundPanelProps = {
+    currentBackground: string;
+    currentBackgroundImage: string;
+    currentBackgroundImageSourcePath?: DrivePath;
+    onUpdateBackground: (color: string, applyTo: ApplyTo) => void;
+    onUpdateBackgroundImage: (url: string, sourcePath: DrivePath | undefined, applyTo: ApplyTo) => void;
+    onUploadImage: (file: File) => Promise<{src: string; sourcePath: DrivePath} | null>;
+}
+
+export function SlideBackgroundPanel({currentBackground, currentBackgroundImage, currentBackgroundImageSourcePath, onUpdateBackground, onUpdateBackgroundImage, onUploadImage}: SlideBackgroundPanelProps) {
+    const [colorOpen, setColorOpen] = useState(false);
+    const [applyTo, setApplyTo] = useState<ApplyTo>('this');
+    const bgImageInputRef = useRef<HTMLInputElement>(null);
+    const {openPreview} = usePreview();
+
+    const handleImageSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+        const result = await onUploadImage(file);
+        if (result) onUpdateBackgroundImage(result.src, result.sourcePath, applyTo);
+        e.target.value = '';
+    }, [onUploadImage, onUpdateBackgroundImage, applyTo]);
+
+    const handleApply = useCallback(() => {
+        onUpdateBackground(currentBackground, applyTo);
+        if (currentBackgroundImage) {
+            onUpdateBackgroundImage(currentBackgroundImage, currentBackgroundImageSourcePath, applyTo);
+        } else {
+            onUpdateBackgroundImage('', undefined, applyTo);
+        }
+    }, [applyTo, currentBackground, currentBackgroundImage, currentBackgroundImageSourcePath, onUpdateBackground, onUpdateBackgroundImage]);
+
+    return (
+        <PropertiesPanel>
+            <div className="px-3 py-2 border-b">
+                <span className="text-sm font-medium">Slide</span>
+            </div>
+
+            <PropertySection title="Background color">
+                <Popover open={colorOpen} onOpenChange={setColorOpen}>
+                    <PopoverTrigger asChild>
+                        <button className="flex items-center gap-2 h-8 px-2 rounded hover:bg-accent text-sm w-full">
+                            <div
+                                className="h-5 w-5 rounded border border-border shrink-0"
+                                style={{backgroundColor: currentBackground}}
+                            />
+                            <span className="text-xs flex-1 text-left">Color</span>
+                            <span className="text-xs text-muted-foreground">{currentBackground}</span>
+                        </button>
+                    </PopoverTrigger>
+                    <PopoverContent side="left" align="start" className="w-auto">
+                        <ColorPicker
+                            value={currentBackground}
+                            onChange={(c) => { onUpdateBackground(c || '#ffffff', 'this'); setColorOpen(false); }}
+                            showReset={false}
+                        />
+                    </PopoverContent>
+                </Popover>
+            </PropertySection>
+
+            <PropertySection title="Background image">
+                {currentBackgroundImage ? (
+                    <div className="space-y-2">
+                        <div
+                            className="rounded border overflow-hidden cursor-pointer"
+                            onClick={() => { if (currentBackgroundImageSourcePath) openPreview(currentBackgroundImageSourcePath); }}
+                        >
+                            <img src={currentBackgroundImage} alt="" className="w-full h-20 object-cover"/>
+                        </div>
+                        <Button
+                            variant="outline"
+                            size="sm"
+                            className="w-full"
+                            onClick={() => onUpdateBackgroundImage('', undefined, 'this')}
+                        >
+                            <Trash2 className="h-3.5 w-3.5 mr-1.5"/>
+                            Remove image
+                        </Button>
+                    </div>
+                ) : (
+                    <Button
+                        variant="outline"
+                        size="sm"
+                        className="w-full"
+                        onClick={() => bgImageInputRef.current?.click()}
+                    >
+                        <ImageIcon className="h-3.5 w-3.5 mr-1.5"/>
+                        Upload image
+                    </Button>
+                )}
+                <input
+                    ref={bgImageInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleImageSelect}
+                />
+            </PropertySection>
+
+            <div className="px-3 py-3">
+                <h4 className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-2">Apply to</h4>
+                <div className="flex gap-2">
+                    <Select value={applyTo} onValueChange={(v) => setApplyTo(v as ApplyTo)}>
+                        <SelectTrigger className="h-8 text-xs flex-1">
+                            <SelectValue/>
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value="this">This slide</SelectItem>
+                            <SelectItem value="this-and-following">This and following</SelectItem>
+                            <SelectItem value="all">All slides</SelectItem>
+                        </SelectContent>
+                    </Select>
+                    <Button size="sm" className="h-8 text-xs" onClick={handleApply}>
+                        Apply
+                    </Button>
+                </div>
+            </div>
+        </PropertiesPanel>
     );
 }
 
