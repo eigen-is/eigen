@@ -660,22 +660,22 @@ const Toolbar: React.FC<{
           "deleteRule",
         ];
         return (
-          <Popover key={name}>
+          <DropdownMenu key={name}>
             <Tooltip>
               <TooltipTrigger asChild>
-                <PopoverTrigger asChild>
+                <DropdownMenuTrigger asChild>
                   <div className={TB}>
                     <SVGIcon name="conditionFormat" />
                     <ChevronDown className="h-3 w-3 text-muted-foreground" />
                   </div>
-                </PopoverTrigger>
+                </DropdownMenuTrigger>
               </TooltipTrigger>
               <TooltipContent side="bottom" className="text-xs">{toolbar.conditionalFormat}</TooltipContent>
             </Tooltip>
-            <PopoverContent className="w-auto p-0" align="start">
-              <ConditionalFormat items={items} setOpen={() => {}} />
-            </PopoverContent>
-          </Popover>
+            <DropdownMenuContent align="start">
+              <ConditionalFormat items={items} />
+            </DropdownMenuContent>
+          </DropdownMenu>
         );
       }
 
