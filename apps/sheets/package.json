@@ -9,7 +9,11 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
+    "@fortune-sheet/react": "^1.0.4",
+    "@tanstack/react-hotkeys": "^0.1.1",
     "@workspace/lib": "workspace:*",
-    "@workspace/ui": "workspace:*"
+    "@workspace/ui": "workspace:*",
+    "y-websocket": "^3.0.0",
+    "yjs": "^13.6.27"
   }
 }
