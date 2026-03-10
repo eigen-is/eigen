@@ -697,22 +697,26 @@ export function Toolbar({
           { text: formula.min, value: "MIN" },
         ];
         return (
-          <ToolbarDropdown
+          <ToolbarMenuButton
             iconId="formula-sum"
             key={name}
             tooltip={toolbar.autoSum}
-            onClick={() =>
-              setContext((ctx) => {
-                handleSum(
-                  ctx,
-                  refs.cellInput.current!,
-                  refs.fxInput.current,
-                  refs.globalCache!
-                );
-              })
-            }
           >
-            {itemData.map(({ value, text }) => (
+            <DropdownMenuItem
+              onClick={() =>
+                setContext((ctx) => {
+                  handleSum(
+                    ctx,
+                    refs.cellInput.current!,
+                    refs.fxInput.current,
+                    refs.globalCache!
+                  );
+                })
+              }
+            >
+              {formula.sum} (SUM)
+            </DropdownMenuItem>
+            {itemData.slice(1).map(({ value, text }) => (
               <DropdownMenuItem
                 key={value}
                 onClick={() => {
@@ -741,7 +745,7 @@ export function Toolbar({
             >
               {`${formula.find}...`}
             </DropdownMenuItem>
-          </ToolbarDropdown>
+          </ToolbarMenuButton>
         );
       }
 
@@ -753,15 +757,10 @@ export function Toolbar({
           { text: merge.mergeCancel, value: "merge-cancel" },
         ];
         return (
-          <ToolbarDropdown
+          <ToolbarMenuButton
             iconId="merge-all"
             key={name}
             tooltip={tooltip}
-            onClick={() =>
-              setContext((ctx) => {
-                handleMerge(ctx, "merge-all");
-              })
-            }
           >
             {itemdata.map(({ text, value }) => (
               <DropdownMenuItem
@@ -772,13 +771,10 @@ export function Toolbar({
                   });
                 }}
               >
-                <div className="flex items-center gap-2">
-                  <ToolbarIcon name={value} className="h-4 w-4" />
-                  <span>{text}</span>
-                </div>
+                {text}
               </DropdownMenuItem>
             ))}
-          </ToolbarDropdown>
+          </ToolbarMenuButton>
         );
       }
 
@@ -800,15 +796,10 @@ export function Toolbar({
           { text: "", value: "divider" },
         ];
         return (
-          <ToolbarDropdown
+          <ToolbarMenuButton
             iconId="border-all"
             key={name}
             tooltip={tooltip}
-            onClick={() =>
-              setContext((ctx) => {
-                handleBorder(ctx, "border-all", customColor, customStyle);
-              })
-            }
           >
             {items.map(({ text, value }, ii) =>
               value !== "divider" ? (
@@ -820,10 +811,7 @@ export function Toolbar({
                     });
                   }}
                 >
-                  <div className="flex items-center gap-2">
-                    <ToolbarIcon name={value} className="h-4 w-4" />
-                    <span>{text}</span>
-                  </div>
+                  {text}
                 </DropdownMenuItem>
               ) : (
                 <DropdownMenuSeparator key={`divider-${ii}`} />
@@ -833,9 +821,12 @@ export function Toolbar({
               onPick={(color, style) => {
                 setCustomColor(color as string);
                 setCustomStyle(style as string);
+                setContext((ctx) => {
+                  handleBorder(ctx, "border-all", color as string, style as string);
+                });
               }}
             />
-          </ToolbarDropdown>
+          </ToolbarMenuButton>
         );
       }
 
@@ -1108,6 +1099,8 @@ export function Toolbar({
         <div className="flex items-center gap-0.5 shrink-0">
           {leftItems}
           {leftItems ? <ToolbarSeparator /> : null}
+          {getToolbarItem("undo", -1)}
+          {getToolbarItem("redo", -2)}
         </div>
         <div className="flex items-center gap-0.5 flex-wrap">
           {settings.customToolbarItems.length > 0 && (
@@ -1123,9 +1116,14 @@ export function Toolbar({
               <ToolbarSeparator />
             </>
           )}
-          {settings.toolbarItems.map((name, i) => getToolbarItem(name, i))}
+          {settings.toolbarItems
+            .filter((n) => !["undo", "redo", "format-painter", "clear-format"].includes(n))
+            .map((name, i) => getToolbarItem(name, i))}
         </div>
         <div className="flex items-center gap-0.5 shrink-0">
+          {getToolbarItem("format-painter", -3)}
+          {getToolbarItem("clear-format", -4)}
+          {rightItems && <ToolbarSeparator />}
           {rightItems}
         </div>
       </SharedToolbar>
