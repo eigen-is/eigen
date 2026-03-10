@@ -1,5 +1,11 @@
 import React, { useContext, useCallback } from "react";
 import { Button } from "@workspace/ui/components/button";
+import {
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@workspace/ui/components/dialog";
 import { ModalContext } from "../context/modal";
 
 export function useDialog() {
@@ -40,11 +46,14 @@ function DialogWrapper({
   children?: React.ReactNode;
 }) {
   return (
-    <div className="p-6 min-w-[280px]">
-      <div className="flex items-center justify-center py-4 text-sm">
+    <div className="min-w-[280px]">
+      <DialogHeader className="p-6 pb-0">
+        <DialogTitle className="text-base">Notice</DialogTitle>
+      </DialogHeader>
+      <DialogDescription className="px-6 py-4 text-sm text-foreground">
         {children}
-      </div>
-      <div className="flex items-center justify-end gap-2 pt-2">
+      </DialogDescription>
+      <DialogFooter className="p-6 pt-0">
         {type === "yesno" && (
           <Button variant="outline" size="sm" onClick={onCancel}>
             Cancel
@@ -53,7 +62,7 @@ function DialogWrapper({
         <Button size="sm" onClick={onOk}>
           OK
         </Button>
-      </div>
+      </DialogFooter>
     </div>
   );
 }
