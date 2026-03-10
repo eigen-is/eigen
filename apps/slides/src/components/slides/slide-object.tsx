@@ -7,7 +7,7 @@ import {
     Copy,
     Trash2,
 } from 'lucide-react';
-import {SlideObject, pxToPercent} from './types';
+import {SlideObject, pxToPercent, BORDER_RADIUS_ROUND} from './types';
 import {
     ContextMenu,
     ContextMenuContent,
@@ -119,7 +119,7 @@ export const SlideObjectView = memo(function SlideObjectView({
                 backgroundColor: obj.type === 'text' && obj.backgroundColor ? obj.backgroundColor : undefined,
                 ...(obj.type === 'image' && shadowStr ? {boxShadow: shadowStr} : {}),
                 ...(obj.borderWidth && obj.borderColor ? {border: `${obj.borderWidth}px solid ${obj.borderColor}`} : {}),
-                ...(obj.borderRadius ? {borderRadius: `${obj.borderRadius}px`} : {}),
+                ...(obj.borderRadius ? {borderRadius: obj.borderRadius >= BORDER_RADIUS_ROUND ? '50%' : `${obj.borderRadius}px`, overflow: 'hidden'} : {}),
             }}
             onMouseDown={handleMouseDown}
             onDoubleClick={handleDoubleClick}
