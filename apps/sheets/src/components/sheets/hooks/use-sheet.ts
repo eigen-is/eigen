@@ -2,111 +2,40 @@ import {useCallback, useEffect, useRef, useState} from 'react';
 import * as Y from 'yjs';
 import {WebsocketProvider} from 'y-websocket';
 import {getCollabWebSocketUrl} from '@workspace/lib/api';
+import type {WorkbookInstance} from '@fortune-sheet/react';
 
-export type SheetData = {
-    name: string;
-    id?: string;
-    order?: number;
-    celldata?: CellData[];
-    config?: Record<string, any>;
-    [key: string]: any;
-}
+export type SheetData = Record<string, any> & { name: string };
 
-type CellData = {
-    r: number;
-    c: number;
-    v: CellValue | null;
-}
-
-type CellValue = {
-    v?: string | number;
-    m?: string;
-    ct?: { fa?: string; t?: string };
-    bl?: number;
-    it?: number;
-    fc?: string;
-    bg?: string;
-    fs?: number;
-    ff?: string;
-    un?: number;
-    cl?: number;
-    ht?: number;
-    vt?: number;
-    [key: string]: any;
-}
-
-const DEFAULT_SHEET: SheetData = {
+const DEFAULT_SHEETS: SheetData[] = [{
     name: 'Sheet1',
     id: 'sheet-1',
     order: 0,
     celldata: [],
     config: {},
-};
+}];
 
-export function useSheet(ownerId: string, mountId: string, pathId: string) {
-    const [sheetData, setSheetData] = useState<SheetData[] | null>(null);
+export function useSheet(
+    ownerId: string,
+    mountId: string,
+    pathId: string,
+    workbookRef: React.RefObject<WorkbookInstance | null>,
+) {
+    const [initialData, setInitialData] = useState<SheetData[] | null>(null);
     const [synced, setSynced] = useState(false);
 
     const docRef = useRef<Y.Doc | null>(null);
     const providerRef = useRef<WebsocketProvider | null>(null);
-    const undoManagerRef = useRef<Y.UndoManager | null>(null);
-    const isLocalChangeRef = useRef(false);
-
-    const initializeDefault = useCallback((doc: Y.Doc) => {
-        const sheetsMap = doc.getMap('sheets');
-        if (sheetsMap.size > 0) return;
-        doc.transact(() => {
-            const sheetYMap = new Y.Map();
-            for (const [k, v] of Object.entries(DEFAULT_SHEET)) {
-                if (k === 'celldata') {
-                    sheetYMap.set(k, new Y.Array());
-                } else if (typeof v === 'object' && v !== null) {
-                    sheetYMap.set(k, JSON.parse(JSON.stringify(v)));
-                } else {
-                    sheetYMap.set(k, v);
-                }
-            }
-            sheetsMap.set('sheet-1', sheetYMap);
-
-            const orderArray = doc.getArray<string>('sheetOrder');
-            orderArray.push(['sheet-1']);
-        });
-    }, []);
-
-    const readSheetData = useCallback((doc: Y.Doc): SheetData[] => {
-        const sheetsMap = doc.getMap('sheets');
-        const orderArray = doc.getArray<string>('sheetOrder');
-        const order = orderArray.toArray();
-
-        const result: SheetData[] = [];
-        for (const sheetId of order) {
-            const sheetYMap = sheetsMap.get(sheetId) as Y.Map<any> | undefined;
-            if (!sheetYMap) continue;
-
-            const sheet: SheetData = {name: 'Sheet'};
-            for (const [k, v] of sheetYMap) {
-                if (v instanceof Y.Array) {
-                    sheet[k] = v.toJSON();
-                } else if (v instanceof Y.Map) {
-                    sheet[k] = v.toJSON();
-                } else {
-                    sheet[k] = v;
-                }
-            }
-            result.push(sheet);
-        }
-
-        return result.length > 0 ? result : [DEFAULT_SHEET];
-    }, []);
+    const isLocalOpRef = useRef(false);
+    const readyForOpsRef = useRef(false);
+    const snapshotTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
     useEffect(() => {
         const doc = new Y.Doc();
         docRef.current = doc;
+        readyForOpsRef.current = false;
 
-        const sheetsMap = doc.getMap('sheets');
-        const orderArray = doc.getArray<string>('sheetOrder');
-
-        undoManagerRef.current = new Y.UndoManager([sheetsMap, orderArray]);
+        const stateMap = doc.getMap('state');
+        const opsArray = doc.getArray('ops');
 
         const wsUrl = getCollabWebSocketUrl(ownerId, mountId, pathId);
         const wsProvider = new WebsocketProvider(wsUrl, '', doc, {
@@ -115,106 +44,104 @@ export function useSheet(ownerId: string, mountId: string, pathId: string) {
         });
         providerRef.current = wsProvider;
 
-        const updateReactState = () => {
-            if (isLocalChangeRef.current) {
-                isLocalChangeRef.current = false;
+        opsArray.observe((event) => {
+            if (!readyForOpsRef.current) return;
+            if (isLocalOpRef.current) {
+                isLocalOpRef.current = false;
                 return;
             }
-            const data = readSheetData(doc);
-            setSheetData(data);
-        };
-
-        sheetsMap.observeDeep(updateReactState);
-        orderArray.observe(updateReactState);
+            if (!workbookRef.current) return;
+            event.changes.delta.forEach((delta) => {
+                if (delta.insert && Array.isArray(delta.insert)) {
+                    (delta.insert as any[][]).forEach((ops) => {
+                        try {
+                            workbookRef.current!.applyOp(ops);
+                        } catch (e) {
+                            console.error('Failed to apply remote op:', e);
+                        }
+                    });
+                }
+            });
+        });
 
         wsProvider.on('sync', (isSynced: boolean) => {
             if (isSynced) {
-                if (sheetsMap.size === 0) {
-                    initializeDefault(doc);
+                const snapshot = stateMap.get('snapshot') as string | undefined;
+                let data: SheetData[];
+                if (snapshot) {
+                    try {
+                        data = JSON.parse(snapshot);
+                    } catch {
+                        data = DEFAULT_SHEETS;
+                    }
+                } else {
+                    data = DEFAULT_SHEETS;
+                    doc.transact(() => {
+                        stateMap.set('snapshot', JSON.stringify(data));
+                    });
                 }
-                const data = readSheetData(doc);
-                setSheetData(data);
+                setInitialData(data);
                 setSynced(true);
+                readyForOpsRef.current = true;
             }
         });
 
         return () => {
+            if (snapshotTimerRef.current) clearTimeout(snapshotTimerRef.current);
+            readyForOpsRef.current = false;
             wsProvider.disconnect();
             doc.destroy();
             docRef.current = null;
             providerRef.current = null;
-            undoManagerRef.current = null;
         };
-    }, [ownerId, mountId, pathId, initializeDefault, readSheetData]);
+    }, [ownerId, mountId, pathId, workbookRef]);
 
-    const saveSheetData = useCallback((data: SheetData[]) => {
+    const handleOp = useCallback((ops: any[]) => {
         const doc = docRef.current;
-        if (!doc) return;
-
-        isLocalChangeRef.current = true;
-
+        if (!doc || ops.length === 0) return;
+        isLocalOpRef.current = true;
         doc.transact(() => {
-            const sheetsMap = doc.getMap('sheets');
-            const orderArray = doc.getArray<string>('sheetOrder');
-
-            const newIds = new Set(data.map(s => s.id || s.name));
-            const existingIds = new Set<string>();
-            for (const [key] of sheetsMap) existingIds.add(key);
-
-            for (const id of existingIds) {
-                if (!newIds.has(id)) {
-                    sheetsMap.delete(id);
-                }
-            }
-
-            const newOrder: string[] = [];
-            for (let i = 0; i < data.length; i++) {
-                const sheet = data[i];
-                const id = sheet.id || sheet.name;
-                newOrder.push(id);
-
-                let sheetYMap = sheetsMap.get(id) as Y.Map<any> | undefined;
-                if (!sheetYMap) {
-                    sheetYMap = new Y.Map();
-                    sheetsMap.set(id, sheetYMap);
-                }
-
-                for (const [k, v] of Object.entries(sheet)) {
-                    if (k === 'celldata') {
-                        let cellArray = sheetYMap.get('celldata') as Y.Array<any> | undefined;
-                        if (!cellArray) {
-                            cellArray = new Y.Array();
-                            sheetYMap.set('celldata', cellArray);
-                        }
-                        cellArray.delete(0, cellArray.length);
-                        if (Array.isArray(v) && v.length > 0) {
-                            cellArray.push(v.map((c: any) => JSON.parse(JSON.stringify(c))));
-                        }
-                    } else if (k === 'config' && typeof v === 'object' && v !== null) {
-                        sheetYMap.set('config', JSON.parse(JSON.stringify(v)));
-                    } else {
-                        sheetYMap.set(k, v);
-                    }
-                }
-            }
-
-            if (orderArray.length > 0) orderArray.delete(0, orderArray.length);
-            if (newOrder.length > 0) orderArray.push(newOrder);
+            const opsArray = doc.getArray('ops');
+            opsArray.push([ops]);
         });
+    }, []);
+
+    const saveSnapshot = useCallback((data: SheetData[]) => {
+        if (snapshotTimerRef.current) clearTimeout(snapshotTimerRef.current);
+        snapshotTimerRef.current = setTimeout(() => {
+            const doc = docRef.current;
+            if (!doc) return;
+            doc.transact(() => {
+                const stateMap = doc.getMap('state');
+                stateMap.set('snapshot', JSON.stringify(data));
+            });
+        }, 2000);
     }, []);
 
     const handleRestore = useCallback((state: Uint8Array) => {
         const doc = docRef.current;
         if (!doc) return;
         Y.applyUpdate(doc, state);
-    }, []);
+        const stateMap = doc.getMap('state');
+        const snapshot = stateMap.get('snapshot') as string | undefined;
+        if (snapshot) {
+            try {
+                const data = JSON.parse(snapshot) as SheetData[];
+                setInitialData(data);
+                if (workbookRef.current) {
+                    workbookRef.current.updateSheet(data);
+                }
+            } catch {
+                // ignore
+            }
+        }
+    }, [workbookRef]);
 
     return {
-        sheetData,
+        initialData,
         synced,
-        saveSheetData,
+        handleOp,
+        saveSnapshot,
         handleRestore,
-        yjsDoc: docRef.current,
-        undoManager: undoManagerRef.current,
     };
 }
