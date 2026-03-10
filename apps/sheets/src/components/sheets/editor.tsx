@@ -1,8 +1,7 @@
-import {useCallback, useRef} from 'react';
-import {Workbook, type WorkbookInstance} from '@fortune-sheet/react';
-import '@fortune-sheet/react/dist/index.css';
+import {useCallback, useMemo, useRef} from 'react';
+import {Workbook, type WorkbookInstance} from '@workspace/fortune-sheet';
 import {useSheet} from './hooks/use-sheet';
-import {SheetToolbar} from './toolbar';
+import {ToolbarLeftItems, ToolbarRightItems} from './toolbar';
 import {EigenLoader} from '@workspace/ui';
 import type {DrivePath} from '@workspace/lib/types/drive';
 
@@ -16,9 +15,9 @@ type SheetEditorProps = {
 const TOOLBAR_ITEMS = [
     'undo', 'redo', 'format-painter', 'clear-format',
     '|',
-    'currency-format', 'percentage-format', 'number-decrease', 'number-increase', 'format',
+    'format',
     '|',
-    'font', '|', 'font-size',
+    'font-size',
     '|',
     'bold', 'italic', 'strike-through', 'underline',
     '|',
@@ -49,18 +48,20 @@ export function SheetEditor({ownerId, path, canWrite, onAccessDialogOpen}: Sheet
         saveSnapshot(data as any);
     }, [saveSnapshot]);
 
+    const leftItems = useMemo(() => (
+        <ToolbarLeftItems path={path} canWrite={canWrite} onAccessDialogOpen={onAccessDialogOpen} onRestore={handleRestore}/>
+    ), [path, canWrite, onAccessDialogOpen, handleRestore]);
+
+    const rightItems = useMemo(() => (
+        <ToolbarRightItems path={path} canWrite={canWrite} onAccessDialogOpen={onAccessDialogOpen} onRestore={handleRestore}/>
+    ), [path, canWrite, onAccessDialogOpen, handleRestore]);
+
     if (!synced || !initialData) {
         return <EigenLoader/>;
     }
 
     return (
         <div className="flex flex-col h-full w-full">
-            <SheetToolbar
-                path={path}
-                canWrite={canWrite}
-                onAccessDialogOpen={onAccessDialogOpen}
-                onRestore={handleRestore}
-            />
             <div className="flex-1 overflow-hidden">
                 <Workbook
                     ref={workbookRef}
@@ -72,6 +73,8 @@ export function SheetEditor({ownerId, path, canWrite, onAccessDialogOpen}: Sheet
                     showSheetTabs={true}
                     allowEdit={canWrite}
                     toolbarItems={TOOLBAR_ITEMS}
+                    toolbarLeftItems={leftItems}
+                    toolbarRightItems={rightItems}
                     column={26}
                     row={100}
                 />

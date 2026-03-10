@@ -1,0 +1,22 @@
+{
+  "name": "@workspace/fortune-sheet",
+  "version": "1.0.0",
+  "private": true,
+  "main": "src/index.ts",
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@fortune-sheet/core": "^1.0.4",
+    "@workspace/ui": "workspace:*",
+    "immer": "^9.0.12",
+    "lodash": "^4.17.21"
+  },
+  "devDependencies": {
+    "@types/lodash": "^4.17.16"
+  },
+  "peerDependencies": {
+    "react": ">= 18.2",
+    "react-dom": ">= 18.2"
+  }
+}
