@@ -5,19 +5,24 @@ import {Label} from '@workspace/ui/components/label';
 import {SLIDE_BACKGROUNDS} from './types';
 import {cn} from '@workspace/ui/lib/utils';
 import {Check} from 'lucide-react';
+import type {DrivePath} from '@workspace/lib/types/drive';
+
+type ApplyTo = 'this' | 'this-and-following' | 'all';
 
 type SlideSettingsDialogProps = {
     isOpen: boolean;
     onClose: () => void;
     slideId: string | null;
     currentBackground: string;
-    onUpdateBackground: (slideId: string, color: string) => void;
+    currentBackgroundImage: string;
+    onUpdateBackground: (slideId: string, color: string, applyTo?: ApplyTo) => void;
+    onUpdateBackgroundImage: (slideId: string, url: string, sourcePath: DrivePath | undefined, applyTo?: ApplyTo) => void;
     onDeleteSlide: (slideId: string) => void;
     onDuplicateSlide: (slideId: string) => void;
     slideCount: number;
 }
 
-export function SlideSettingsDialog({isOpen, onClose, slideId, currentBackground, onUpdateBackground, onDeleteSlide, onDuplicateSlide, slideCount}: SlideSettingsDialogProps) {
+export function SlideSettingsDialog({isOpen, onClose, slideId, currentBackground, currentBackgroundImage, onUpdateBackground, onUpdateBackgroundImage, onDeleteSlide, onDuplicateSlide, slideCount}: SlideSettingsDialogProps) {
     const [bg, setBg] = useState(currentBackground);
 
     if (!slideId) return null;
@@ -37,7 +42,7 @@ export function SlideSettingsDialog({isOpen, onClose, slideId, currentBackground
                 <form onSubmit={handleSubmit}>
                     <div className="grid gap-4 py-4">
                         <div className="grid gap-2">
-                            <Label>Background</Label>
+                            <Label>Background color</Label>
                             <div className="flex gap-2 flex-wrap">
                                 {SLIDE_BACKGROUNDS.map(({label, value}) => (
                                     <button
@@ -56,6 +61,22 @@ export function SlideSettingsDialog({isOpen, onClose, slideId, currentBackground
                                 ))}
                             </div>
                         </div>
+                        {currentBackgroundImage && (
+                            <div className="grid gap-2">
+                                <Label>Background image</Label>
+                                <div className="rounded border overflow-hidden">
+                                    <img src={currentBackgroundImage} alt="" className="w-full h-20 object-cover"/>
+                                </div>
+                                <Button
+                                    type="button"
+                                    variant="outline"
+                                    size="sm"
+                                    onClick={() => { onUpdateBackgroundImage(slideId, '', undefined); }}
+                                >
+                                    Remove image
+                                </Button>
+                            </div>
+                        )}
                     </div>
                     <DialogFooter className="sm:justify-between">
                         <div className="flex gap-2">

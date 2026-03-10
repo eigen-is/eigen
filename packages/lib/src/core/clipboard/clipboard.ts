@@ -1,6 +1,6 @@
 import type {DrivePath} from '../../types/drive';
 import type {EigenClipboardData} from '../../types/clipboard';
-import {getDriveEmbedUrl} from '../api';
+import {getDriveDownloadUrl, getDriveEmbedUrl} from '../api';
 
 export const EIGEN_CLIPBOARD_MIME = 'application/eigen-clipboard';
 const HTML_MARKER = 'data-eigen-clipboard';
@@ -60,12 +60,17 @@ export async function reUploadImage(
     uploadFn: (args: {parentId: string; file: File}) => Promise<DrivePath | null>,
     ownerId: string,
     mountId: string,
+    sourcePath?: DrivePath,
 ): Promise<{src: string; sourcePath: DrivePath} | null> {
     try {
-        const response = await fetch(srcUrl, {credentials: 'include'});
+        const downloadUrl = sourcePath
+            ? getDriveDownloadUrl(sourcePath.ownerId, sourcePath.mountId, sourcePath.id)
+            : srcUrl;
+        const response = await fetch(downloadUrl, {credentials: 'include'});
         if (!response.ok) return null;
         const blob = await response.blob();
-        const file = new File([blob], 'image', {type: blob.type || 'image/png'});
+        const fileName = sourcePath?.name || 'image';
+        const file = new File([blob], fileName, {type: blob.type || 'image/png'});
         const result = await uploadFn({parentId: mediaFolderId, file});
         if (result) {
             return {

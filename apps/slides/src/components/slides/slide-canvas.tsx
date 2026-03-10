@@ -1,5 +1,5 @@
 import {useCallback, useRef} from 'react';
-import {SLIDE_ASPECT_RATIO, SlideItem, SlideObject} from './types';
+import {SLIDE_ASPECT_RATIO, SlideItem, SlideObject, pxToPercent} from './types';
 import {SlideObjectView} from './slide-object';
 import {useObjectDrag} from './hooks/use-object-drag';
 import {useSnapTargets} from './hooks/use-snap-lines';
@@ -96,6 +96,7 @@ export function SlideCanvas({
                     maxHeight: '100%',
                     maxWidth: '100%',
                     backgroundColor: slide.backgroundColor,
+                    ...(slide.backgroundImage ? {backgroundImage: `url(${slide.backgroundImage})`, backgroundSize: 'cover', backgroundPosition: 'center'} : {}),
                 }}
                 onMouseDown={handleCanvasMouseDown}
                 onDrop={handleDrop}
@@ -132,8 +133,8 @@ export function SlideCanvas({
                         key={i}
                         className="absolute pointer-events-none z-50"
                         style={line.orientation === 'vertical'
-                            ? {left: `${line.position}%`, top: 0, bottom: 0, width: '1px', backgroundColor: '#3b82f6'}
-                            : {top: `${line.position}%`, left: 0, right: 0, height: '1px', backgroundColor: '#3b82f6'}
+                            ? {left: `${pxToPercent(line.position, 'x')}%`, top: 0, bottom: 0, width: '1px', backgroundColor: '#3b82f6'}
+                            : {top: `${pxToPercent(line.position, 'y')}%`, left: 0, right: 0, height: '1px', backgroundColor: '#3b82f6'}
                         }
                     />
                 ))}

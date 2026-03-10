@@ -1,7 +1,7 @@
 import {useMemo} from 'react';
-import {SlideObject} from '../types';
+import {SlideObject, SLIDE_BASE_WIDTH, SLIDE_BASE_HEIGHT} from '../types';
 
-const SNAP_THRESHOLD = 1.5;
+const SNAP_THRESHOLD = 15;
 
 export type SnapLine = {
     orientation: 'horizontal' | 'vertical';
@@ -33,8 +33,8 @@ export function computeSnapLines(
     objects: SlideObject[],
     dragObjId: string,
 ): {vSnaps: number[]; hSnaps: number[]} {
-    const vSnaps: number[] = [0, 50, 100];
-    const hSnaps: number[] = [0, 50, 100];
+    const vSnaps: number[] = [0, SLIDE_BASE_WIDTH / 2, SLIDE_BASE_WIDTH];
+    const hSnaps: number[] = [0, SLIDE_BASE_HEIGHT / 2, SLIDE_BASE_HEIGHT];
 
     for (const obj of objects) {
         if (obj.id === dragObjId) continue;
