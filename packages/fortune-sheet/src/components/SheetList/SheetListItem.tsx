@@ -5,7 +5,6 @@ import {
 } from "@fortune-sheet/core";
 import React, { useContext, useEffect, useRef } from "react";
 import WorkbookContext from "../../context";
-import "./index.css";
 import SheetHiddenButton from "./SheetHiddenButton";
 import SVGIcon from "../SVGIcon";
 
@@ -38,7 +37,7 @@ const SheetListItem: React.FC<Props> = ({ sheet, isDropPlaceholder }) => {
 
   return (
     <div
-      className="fortune-sheet-list-item"
+      className="h-[30px] leading-[30px] w-full mr-[46px] cursor-pointer hover:bg-[#efefef]"
       key={sheet.id}
       ref={containerRef}
       onClick={() => {
@@ -59,7 +58,7 @@ const SheetListItem: React.FC<Props> = ({ sheet, isDropPlaceholder }) => {
       }}
       tabIndex={0}
     >
-      <span className="fortune-sheet-selected-check-sapce">
+      <span className="w-5 inline-block ml-[15px]">
         {sheet.id === context.currentSheetId && (
           <SVGIcon
             name="check"
@@ -70,12 +69,12 @@ const SheetListItem: React.FC<Props> = ({ sheet, isDropPlaceholder }) => {
         )}
       </span>
       <span
-        className="luckysheet-sheets-item-name fortune-sheet-list-item-name"
+        className="mr-[15px] relative"
         spellCheck="false"
       >
         {!!sheet.color && (
           <div
-            className="luckysheet-sheets-list-item-color"
+            className="w-[6%] h-full absolute bottom-0 -left-1.5"
             style={{ background: sheet.color }}
           />
         )}

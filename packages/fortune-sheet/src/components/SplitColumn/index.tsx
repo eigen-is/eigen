@@ -16,7 +16,7 @@ import React, {
 } from "react";
 import WorkbookContext from "../../context";
 import { useDialog } from "../../hooks/useDialog";
-import "./index.css";
+import { Button } from "@workspace/ui/components/button";
 
 export const SplitColumn: React.FC<{}> = () => {
   const { context, setContext } = useContext(WorkbookContext);
@@ -77,12 +77,12 @@ export const SplitColumn: React.FC<{}> = () => {
   }, [context, splitOperate]);
 
   return (
-    <div id="fortune-split-column">
-      <div className="title">{splitText.splitTextTitle}</div>
-      <div className="splitDelimiters">{splitText.splitDelimiters}</div>
-      <div className="splitSymbols" ref={splitSymbols}>
+    <div className="min-w-[500px] select-none [&_table]:border-collapse [&_td]:border [&_td]:border-[#333]">
+      <div className="text-base">{splitText.splitTextTitle}</div>
+      <div className="mt-2.5">{splitText.splitDelimiters}</div>
+      <div className="relative border border-[#dfdfdf] p-1.5 my-1.5" ref={splitSymbols}>
         {splitText.splitSymbols.map((o) => (
-          <div key={o.value} className="splitSymbol">
+          <div key={o.value} className="text-sm">
             <input
               id={o.value}
               name={o.value}
@@ -97,7 +97,7 @@ export const SplitColumn: React.FC<{}> = () => {
             <label htmlFor={o.value}>{o.name}</label>
           </div>
         ))}
-        <div className="splitSymbol">
+        <div className="text-sm">
           <input
             id="other"
             name="other"
@@ -114,6 +114,7 @@ export const SplitColumn: React.FC<{}> = () => {
           <input
             id="otherValue"
             name="otherValue"
+            className="ml-1.5 w-[50px] px-1.5"
             type="text"
             onBlur={() => {
               if (otherFlag) {
@@ -124,7 +125,7 @@ export const SplitColumn: React.FC<{}> = () => {
             }}
           />
         </div>
-        <div className="splitSymbol splitSimple">
+        <div className="text-sm absolute top-[114px] left-0">
           <input
             id="splitsimple"
             name="splitsimple"
@@ -139,8 +140,8 @@ export const SplitColumn: React.FC<{}> = () => {
           <label htmlFor="splitsimple">{splitText.splitContinueSymbol}</label>
         </div>
       </div>
-      <div className="splitDataPreview">{splitText.splitDataPreview}</div>
-      <div className="splitColumnData">
+      <div className="text-sm mt-6">{splitText.splitDataPreview}</div>
+      <div className="border border-[#dfdfdf] p-1.5 my-1.5 h-[100px] overflow-y-auto">
         <table>
           <tbody>
             {tableData.map((o, index) => {
@@ -162,23 +163,13 @@ export const SplitColumn: React.FC<{}> = () => {
           </tbody>
         </table>
       </div>
-      <div
-        className="button-basic button-primary"
-        onClick={() => {
-          certainBtn();
-        }}
-        tabIndex={0}
-      >
-        {button.confirm}
-      </div>
-      <div
-        className="button-basic button-close"
-        onClick={() => {
-          hideDialog();
-        }}
-        tabIndex={0}
-      >
-        {button.cancel}
+      <div className="flex gap-2 mt-3">
+        <Button size="sm" onClick={() => certainBtn()}>
+          {button.confirm}
+        </Button>
+        <Button variant="outline" size="sm" onClick={() => hideDialog()}>
+          {button.cancel}
+        </Button>
       </div>
     </div>
   );

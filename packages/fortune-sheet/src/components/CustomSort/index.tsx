@@ -13,7 +13,6 @@ import React, {
   useState,
 } from "react";
 import WorkbookContext from "../../context";
-import "./index.css";
 import { useDialog } from "../../hooks/useDialog";
 
 type RadioChangeEvent = React.ChangeEvent<HTMLInputElement>;
@@ -86,7 +85,7 @@ const CustomSort: React.FC<{}> = () => {
 
   return (
     <div className="fortune-sort">
-      <div className="fortune-sort-title">
+      <div className="text-base mb-4">
         <span>
           <span>{sort.sortRangeTitle}</span>
           {indexToColumnChar(col_start)}
@@ -98,7 +97,7 @@ const CustomSort: React.FC<{}> = () => {
       </div>
 
       <div>
-        <div className="fortune-sort-modal">
+        <div className="space-y-2.5">
           <div>
             <input
               type="checkbox"
@@ -108,7 +107,7 @@ const CustomSort: React.FC<{}> = () => {
             <span>{sort.hasTitle}</span>
           </div>
 
-          <div className="fortune-sort-tablec">
+          <div className="[&_td]:p-1.5 [&_td]:whitespace-nowrap">
             <table cellSpacing="0">
               <tbody>
                 <tr>
@@ -152,7 +151,7 @@ const CustomSort: React.FC<{}> = () => {
         </div>
       </div>
 
-      <div className="fortune-sort-button">
+      <div className="mt-2.5 mb-6">
         <div
           className="button-basic button-primary"
           onClick={() => {

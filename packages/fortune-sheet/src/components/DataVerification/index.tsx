@@ -13,7 +13,7 @@ import React, { useCallback, useContext, useEffect, useState } from "react";
 import WorkbookContext from "../../context";
 import { useDialog } from "../../hooks/useDialog";
 import SVGIcon from "../SVGIcon";
-import "./index.css";
+import { Button } from "@workspace/ui/components/button";
 
 const DataVerification: React.FC = () => {
   const { context, setContext } = useContext(WorkbookContext);
@@ -219,14 +219,14 @@ const DataVerification: React.FC = () => {
   }, []);
 
   return (
-    <div id="fortune-data-verification">
-      <div className="title">{toolbar.dataVerification}</div>
-      <div className="box">
-        <div className="box-item" style={{ borderTop: "1px solid #E1E4E8" }}>
-          <div className="box-item-title">{dataVerification.cellRange}</div>
-          <div className="data-verification-range">
+    <div className="min-w-[500px] py-2.5 select-none">
+      <div className="text-base">{toolbar.dataVerification}</div>
+      <div className="text-sm">
+        <div className="p-2.5 border-t border-b border-[#e1e4e8]">
+          <div className="text-sm font-semibold mb-2.5">{dataVerification.cellRange}</div>
+          <div className="w-full h-[30px] border border-[#d4d4d4] flex">
             <input
-              className="formulaInputFocus"
+              className="flex-1 h-[30px] px-2.5 border-none outline-none"
               spellCheck="false"
               value={context.dataVerification!.dataRegulation?.rangeTxt}
               onChange={(e) => {
@@ -237,7 +237,7 @@ const DataVerification: React.FC = () => {
               }}
             />
             <i
-              className="icon"
+              className="float-right mt-1 mr-1.5 cursor-pointer"
               aria-hidden="true"
               onClick={() => {
                 hideDialog();
@@ -252,12 +252,12 @@ const DataVerification: React.FC = () => {
             </i>
           </div>
         </div>
-        <div className="box-item">
-          <div className="box-item-title">
+        <div className="p-2.5 border-b border-[#e1e4e8]">
+          <div className="text-sm font-semibold mb-2.5">
             {dataVerification.verificationCondition}
           </div>
           <select
-            className="data-verification-type-select"
+            className="w-full h-[30px] border-[#d4d4d4] outline-none"
             value={context.dataVerification!.dataRegulation!.type}
             onChange={(e) => {
               const { value } = e.target;
@@ -302,10 +302,10 @@ const DataVerification: React.FC = () => {
           </select>
 
           {context.dataVerification?.dataRegulation?.type === "dropdown" && (
-            <div className="show-box-item">
-              <div className="data-verification-range">
+            <div className="mt-1.5 text-xs">
+              <div className="w-full h-[30px] border border-[#d4d4d4] flex">
                 <input
-                  className="formulaInputFocus"
+                  className="flex-1 h-[30px] px-2.5 border-none outline-none"
                   spellCheck="false"
                   value={context.dataVerification!.dataRegulation!.value1}
                   placeholder={dataVerification.placeholder1}
@@ -317,7 +317,7 @@ const DataVerification: React.FC = () => {
                   }}
                 />
                 <i
-                  className="icon"
+                  className="float-right mt-1 mr-1.5 cursor-pointer"
                   aria-hidden="true"
                   onClick={() =>
                     dataSelectRange(
@@ -330,9 +330,10 @@ const DataVerification: React.FC = () => {
                   <SVGIcon name="tab" width={18} />
                 </i>
               </div>
-              <div className="check">
+              <div className="text-xs leading-6">
                 <input
                   type="checkbox"
+                  className="align-text-top"
                   checked={
                     context.dataVerification!.dataRegulation!.type2 === "true"
                   }
@@ -350,12 +351,12 @@ const DataVerification: React.FC = () => {
           )}
 
           {context.dataVerification?.dataRegulation?.type === "checkbox" && (
-            <div className="show-box-item">
-              <div className="check-box">
+            <div className="mt-1.5 text-xs">
+              <div className="h-[30px] leading-[30px] mb-2.5">
                 <span>{dataVerification.selected} —— </span>
                 <input
                   type="text"
-                  className="data-verification-value1"
+                  className="h-[30px] px-2.5 border border-[#d4d4d4] box-border"
                   placeholder={dataVerification.placeholder2}
                   value={context.dataVerification?.dataRegulation?.value1}
                   onChange={(e) => {
@@ -366,11 +367,11 @@ const DataVerification: React.FC = () => {
                   }}
                 />
               </div>
-              <div className="check-box">
+              <div className="h-[30px] leading-[30px] mb-2.5">
                 <span>{dataVerification.notSelected} —— </span>
                 <input
                   type="text"
-                  className="data-verification-value2"
+                  className="h-[30px] px-2.5 border border-[#d4d4d4] box-border"
                   placeholder={dataVerification.placeholder2}
                   value={context.dataVerification?.dataRegulation?.value2}
                   onChange={(e) => {
@@ -393,7 +394,7 @@ const DataVerification: React.FC = () => {
               "text_length") && (
             <div className="show-box-item">
               <select
-                className="data-verification-type-select"
+                className="w-full h-[30px] border-[#d4d4d4] outline-none"
                 value={context.dataVerification.dataRegulation.type2}
                 onChange={(e) => {
                   const { value } = e.target;
@@ -460,7 +461,7 @@ const DataVerification: React.FC = () => {
             "text_content" && (
             <div className="show-box-item">
               <select
-                className="data-verification-type-select"
+                className="w-full h-[30px] border-[#d4d4d4] outline-none"
                 value={context.dataVerification.dataRegulation.type2}
                 onChange={(e) => {
                   const { value } = e.target;
@@ -497,7 +498,7 @@ const DataVerification: React.FC = () => {
           {context.dataVerification?.dataRegulation?.type === "date" && (
             <div className="show-box-item">
               <select
-                className="data-verification-type-select"
+                className="w-full h-[30px] border-[#d4d4d4] outline-none"
                 value={context.dataVerification.dataRegulation.type2}
                 onChange={(e) => {
                   const { value } = e.target;
@@ -563,7 +564,7 @@ const DataVerification: React.FC = () => {
           {context.dataVerification?.dataRegulation?.type === "validity" && (
             <div className="show-box-item">
               <select
-                className="data-verification-type-select"
+                className="w-full h-[30px] border-[#d4d4d4] outline-none"
                 value={context.dataVerification.dataRegulation.type2}
                 onChange={(e) => {
                   const { value } = e.target;
@@ -635,33 +636,16 @@ const DataVerification: React.FC = () => {
         </div>
       </div>
 
-      <div
-        className="button-basic button-primary"
-        onClick={() => {
-          // hideDialog();
-          btn("confirm");
-        }}
-        tabIndex={0}
-      >
-        {button.confirm}
-      </div>
-      <div
-        className="button-basic button-close"
-        onClick={() => {
-          btn("delete");
-        }}
-        tabIndex={0}
-      >
-        {dataVerification.deleteVerification}
-      </div>
-      <div
-        className="button-basic button-close"
-        onClick={() => {
-          btn("close");
-        }}
-        tabIndex={0}
-      >
-        {button.cancel}
+      <div className="flex gap-2 mt-2.5">
+        <Button size="sm" onClick={() => btn("confirm")}>
+          {button.confirm}
+        </Button>
+        <Button variant="outline" size="sm" onClick={() => btn("delete")}>
+          {dataVerification.deleteVerification}
+        </Button>
+        <Button variant="outline" size="sm" onClick={() => btn("close")}>
+          {button.cancel}
+        </Button>
       </div>
     </div>
   );
