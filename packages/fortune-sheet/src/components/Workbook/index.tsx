@@ -480,12 +480,20 @@ const Workbook = React.forwardRef<WorkbookInstance, Settings & AdditionalProps>(
             draftCtx.luckysheetfile.forEach((newDatum) => {
               const index = getSheetIndex(draftCtx, newDatum.id!) as number;
               const sheet = draftCtx.luckysheetfile?.[index];
-              const cellMatrixData = initSheetData(draftCtx, sheet, index);
-              setFormulaCellInfoMap(
-                draftCtx,
-                sheet.calcChain,
-                cellMatrixData || undefined
-              );
+              if (sheet.data && sheet.data.length > 0) {
+                setFormulaCellInfoMap(
+                  draftCtx,
+                  sheet.calcChain,
+                  sheet.data
+                );
+              } else {
+                const cellMatrixData = initSheetData(draftCtx, sheet, index);
+                setFormulaCellInfoMap(
+                  draftCtx,
+                  sheet.calcChain,
+                  cellMatrixData || undefined
+                );
+              }
             });
           }
           if (mergedSettings.devicePixelRatio > 0) {
