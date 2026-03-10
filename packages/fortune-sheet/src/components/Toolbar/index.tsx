@@ -821,9 +821,6 @@ export function Toolbar({
               onPick={(color, style) => {
                 setCustomColor(color as string);
                 setCustomStyle(style as string);
-                setContext((ctx) => {
-                  handleBorder(ctx, "border-all", color as string, style as string);
-                });
               }}
             />
           </ToolbarMenuButton>

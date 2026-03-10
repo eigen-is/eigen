@@ -31,7 +31,7 @@ import React, {
   useImperativeHandle,
 } from "react";
 import "./index.css";
-import produce, {
+import {
   applyPatches,
   enablePatches,
   Patch,
@@ -183,11 +183,8 @@ const Workbook = React.forwardRef<WorkbookInstance, Settings & AdditionalProps>(
             // TODO setCellValue(draftCtx, d.r, d.c, expandedData, d.v);
             expandedData[d.r][d.c] = d.v;
           });
-          draftCtx.luckysheetfile = produce(draftCtx.luckysheetfile, (d) => {
-            d[index!].data = expandedData;
-            delete d[index!].celldata;
-            return d;
-          });
+          draftCtx.luckysheetfile[index].data = expandedData;
+          delete draftCtx.luckysheetfile[index].celldata;
           return expandedData;
         }
         return null;
@@ -475,11 +472,12 @@ const Workbook = React.forwardRef<WorkbookInstance, Settings & AdditionalProps>(
           draftCtx.defaultFontSize = mergedSettings.defaultFontSize;
           patchLocaleDefaults(draftCtx);
           if (_.isEmpty(draftCtx.luckysheetfile)) {
-            const newData = produce(originalData, (draftData) => {
-              ensureSheetIndex(draftData, mergedSettings.generateSheetId);
-            });
-            draftCtx.luckysheetfile = newData;
-            newData.forEach((newDatum) => {
+            draftCtx.luckysheetfile = _.cloneDeep(originalData);
+            ensureSheetIndex(
+              draftCtx.luckysheetfile,
+              mergedSettings.generateSheetId
+            );
+            draftCtx.luckysheetfile.forEach((newDatum) => {
               const index = getSheetIndex(draftCtx, newDatum.id!) as number;
               const sheet = draftCtx.luckysheetfile?.[index];
               const cellMatrixData = initSheetData(draftCtx, sheet, index);

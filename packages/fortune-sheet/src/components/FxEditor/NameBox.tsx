@@ -29,8 +29,8 @@ const LocationBox: React.FC = () => {
   }, [context.currentSheetId, context.luckysheet_select_save]);
 
   return (
-    <div className="fortune-name-box-container">
-      <div className="fortune-name-box" tabIndex={0} dir="ltr">
+    <div className="w-[99px] border-r border-[#d4d4d4] text-sm flex items-center">
+      <div className="w-full text-center m-0 outline-none cursor-text whitespace-nowrap overflow-hidden bg-white break-words" tabIndex={0} dir="ltr">
         {rangeText}
       </div>
     </div>

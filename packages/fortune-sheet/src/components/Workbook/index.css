@@ -8,6 +8,7 @@
   font-family: inherit;
   background-color: white;
   position: relative;
+  overflow: hidden;
 }
 
 .fortune-workarea {
