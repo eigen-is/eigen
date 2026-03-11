@@ -2,6 +2,10 @@
 
 Full audit of `packages/fortune-sheet/src/` — identifying cleanup, shadcn/Tailwind migration, shared component adoption, and structural improvements.
 
+## Known Bugs
+
+When you have columns with conditional formatting, pressing ctrl+c to copy (a larege amount of) cells freezes the browser. Without condtional formatted cells it works fine.
+
 ## Legend
 
 - **CSS** = has legacy `.css` file to migrate to Tailwind
