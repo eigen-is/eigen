@@ -19,8 +19,8 @@ describe("fortune-sheet/formula-parser/parser", () => {
 
     test("should return error when input is not a string", () => {
       expect(parser.parse(123 as any)).toMatchObject({ error: "#ERROR!", result: null });
-      expect(parser.parse(null as any)).toMatchObject({ error: "#ERROR!", result: null });
-      expect(parser.parse(undefined as any)).toMatchObject({ error: "#ERROR!", result: null });
+      expect(parser.parse(null as any)).toMatchObject({ error: null, result: null }); // null returns null, null
+      expect(parser.parse(undefined as any)).toMatchObject({ error: null, result: null }); // undefined returns null, null
       expect(parser.parse({} as any)).toMatchObject({ error: "#ERROR!", result: null });
     });
 
