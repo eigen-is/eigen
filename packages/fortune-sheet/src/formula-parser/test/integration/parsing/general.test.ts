@@ -44,7 +44,7 @@ describe("fortune-sheet/formula-parser/integration/parsing/general", () => {
 
   test("should handle function type data", () => {
     const fn = () => {};
-    expect(parser.parse(fn as any)).toMatchObject({ error: null, result: null });
+    expect(parser.parse(fn as any)).toMatchObject({ error: "#ERROR!", result: null });
   });
 
   test("should not parse a symbol type data", () => {
