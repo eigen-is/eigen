@@ -1,58 +1,58 @@
-import { useContext, useCallback, useRef, useState } from "react";
+import {useCallback, useContext, useMemo, useRef, useState} from "react";
 import {
-  toolbarItemClickHandler,
-  handleTextBackground,
-  handleTextColor,
-  handleTextSize,
-  normalizedCellAttr,
-  getFlowdata,
-  newComment,
-  editComment,
-  deleteComment,
-  showHideComment,
-  showHideAllComments,
-  autoSelectionFormula,
-  handleSum,
-  locale,
-  handleMerge,
-  handleBorder,
-  toolbarItemSelectedFunc,
-  handleFreeze,
-  showImgChooser,
-  updateFormat,
-  handleSort,
-  handleHorizontalAlign,
-  handleVerticalAlign,
-  handleScreenShot,
-  createFilter,
-  clearFilter,
-  applyLocation,
+    applyLocation,
+    autoSelectionFormula,
+    clearFilter,
+    createFilter,
+    deleteComment,
+    editComment,
+    getFlowdata,
+    handleBorder,
+    handleFreeze,
+    handleHorizontalAlign,
+    handleMerge,
+    handleScreenShot,
+    handleSort,
+    handleSum,
+    handleTextBackground,
+    handleTextColor,
+    handleTextSize,
+    handleVerticalAlign,
+    locale,
+    newComment,
+    normalizedCellAttr,
+    showHideAllComments,
+    showHideComment,
+    showImgChooser,
+    toolbarItemClickHandler,
+    toolbarItemSelectedFunc,
+    updateFormat,
 } from "../../core";
 import _ from "lodash";
 import {
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-  DropdownMenuSub,
-  DropdownMenuSubContent,
-  DropdownMenuSubTrigger,
+    DropdownMenuItem,
+    DropdownMenuSeparator,
+    DropdownMenuSub,
+    DropdownMenuSubContent,
+    DropdownMenuSubTrigger,
 } from "@workspace/ui/components/dropdown-menu";
-import { Toolbar as SharedToolbar, TooltipButton } from "@workspace/ui";
+import {Toolbar as SharedToolbar, TooltipButton} from "@workspace/ui";
 import WorkbookContext from "../../context";
-import { useDialog } from "../../hooks/useDialog";
-import { FormulaSearch } from "../FormulaSearch";
-import { SplitColumn } from "../SplitColumn";
-import { LocationCondition } from "../LocationCondition";
+import {useDialog} from "../../hooks/useDialog";
+import {FormulaSearch} from "../FormulaSearch";
+import {SplitColumn} from "../SplitColumn";
+import {LocationCondition} from "../LocationCondition";
 import DataVerification from "../DataVerification";
 import ConditionalFormat from "../ConditionFormat";
-import { CustomBorder } from "./CustomBorder";
-import { FormatSearch } from "../FormatSearch";
+import {CustomBorder} from "./CustomBorder";
+import {FormatSearch} from "../FormatSearch";
 import {
-  ICON_MAP,
-  ToolbarSeparator,
-  ToolbarIcon,
-  ColorCombo,
-  ToolbarDropdown,
-  ToolbarMenuButton,
+    ColorCombo,
+    ICON_MAP,
+    ToolbarDropdown,
+    ToolbarIcon,
+    ToolbarMenuButton,
+    ToolbarSeparator,
 } from "./toolbar-helpers";
 
 export function Toolbar({
@@ -403,15 +403,15 @@ export function Toolbar({
             icon={ICON_MAP[name]!}
             tooltipText={tooltip}
             onClick={() => {
-              if (context.allowEdit === false) return;
-              if (_.isUndefined(context.luckysheet_select_save)) {
+                if (contextRef.current.allowEdit === false) return;
+                if (_.isUndefined(contextRef.current.luckysheet_select_save)) {
                 showDialog(splitText.tipNoSelect, "ok");
               } else {
                 const currentColumn =
-                  context.luckysheet_select_save[
-                    context.luckysheet_select_save.length - 1
+                    contextRef.current.luckysheet_select_save[
+                    contextRef.current.luckysheet_select_save.length - 1
                   ].column;
-                if (context.luckysheet_select_save.length > 1) {
+                    if (contextRef.current.luckysheet_select_save.length > 1) {
                   showDialog(splitText.tipNoMulti, "ok");
                 } else if (currentColumn[0] !== currentColumn[1]) {
                   showDialog(splitText.tipNoMultiColumn, "ok");
@@ -431,7 +431,7 @@ export function Toolbar({
             icon={ICON_MAP[name]!}
             tooltipText={tooltip}
             onClick={() => {
-              if (context.allowEdit === false) return;
+                if (contextRef.current.allowEdit === false) return;
               showDialog(<DataVerification />);
             }}
           />
@@ -459,128 +459,84 @@ export function Toolbar({
               <DropdownMenuItem
                 key={value}
                 onClick={() => {
-                  if (context.luckysheet_select_save == null) {
+                    const ctx = contextRef.current;
+                    if (ctx.luckysheet_select_save == null) {
                     showDialog(freezen.noSeletionError, "ok");
                     return;
                   }
-                  const last = context.luckysheet_select_save[0];
+                    const last = ctx.luckysheet_select_save[0];
+                    const fd = getFlowdata(ctx);
                   let range: { row: any[]; column: any[] }[];
                   let rangeArr: any[] = [];
                   if (
-                    context.luckysheet_select_save?.length === 0 ||
-                    (context.luckysheet_select_save?.length === 1 &&
+                      ctx.luckysheet_select_save?.length === 0 ||
+                      (ctx.luckysheet_select_save?.length === 1 &&
                       last.row[0] === last.row[1] &&
                       last.column[0] === last.column[1])
                   ) {
                     range = [
                       {
-                        row: [0, flowdata!.length - 1],
-                        column: [0, flowdata![0].length - 1],
+                          row: [0, fd!.length - 1],
+                          column: [0, fd![0].length - 1],
                       },
                     ];
                   } else {
-                    range = _.assignIn([], context.luckysheet_select_save);
+                      range = _.assignIn([], ctx.luckysheet_select_save);
                   }
                   if (value === "location") {
                     showDialog(<LocationCondition />);
                   } else if (value === "locationFormula") {
-                    setContext((ctx) => {
-                      rangeArr = applyLocation(
-                        range,
-                        "locationFormula",
-                        "all",
-                        ctx
-                      );
-                    });
+                      setContext((c) => {
+                          rangeArr = applyLocation(range, "locationFormula", "all", c);
+                      });
                   } else if (value === "locationDate") {
-                    setContext((ctx) => {
-                      rangeArr = applyLocation(
-                        range,
-                        "locationConstant",
-                        "d",
-                        ctx
-                      );
-                    });
+                      setContext((c) => {
+                          rangeArr = applyLocation(range, "locationConstant", "d", c);
+                      });
                   } else if (value === "locationDigital") {
-                    setContext((ctx) => {
-                      rangeArr = applyLocation(
-                        range,
-                        "locationConstant",
-                        "n",
-                        ctx
-                      );
-                    });
+                      setContext((c) => {
+                          rangeArr = applyLocation(range, "locationConstant", "n", c);
+                      });
                   } else if (value === "locationString") {
-                    setContext((ctx) => {
-                      rangeArr = applyLocation(
-                        range,
-                        "locationConstant",
-                        "s,g",
-                        ctx
-                      );
-                    });
+                      setContext((c) => {
+                          rangeArr = applyLocation(range, "locationConstant", "s,g", c);
+                      });
                   } else if (value === "locationError") {
-                    setContext((ctx) => {
-                      rangeArr = applyLocation(
-                        range,
-                        "locationConstant",
-                        "e",
-                        ctx
-                      );
-                    });
+                      setContext((c) => {
+                          rangeArr = applyLocation(range, "locationConstant", "e", c);
+                      });
                   } else if (value === "locationCondition") {
-                    setContext((ctx) => {
-                      rangeArr = applyLocation(
-                        range,
-                        "locationCF",
-                        undefined,
-                        ctx
-                      );
-                    });
+                      setContext((c) => {
+                          rangeArr = applyLocation(range, "locationCF", undefined, c);
+                      });
                   } else if (value === "locationRowSpan") {
                     if (
-                      context.luckysheet_select_save?.length === 0 ||
-                      (context.luckysheet_select_save?.length === 1 &&
-                        context.luckysheet_select_save[0].row[0] ===
-                          context.luckysheet_select_save[0].row[1])
+                        ctx.luckysheet_select_save?.length === 0 ||
+                        (ctx.luckysheet_select_save?.length === 1 &&
+                            ctx.luckysheet_select_save[0].row[0] ===
+                            ctx.luckysheet_select_save[0].row[1])
                     ) {
-                      showDialog(
-                        findAndReplace.locationTiplessTwoRow,
-                        "ok"
-                      );
+                        showDialog(findAndReplace.locationTiplessTwoRow, "ok");
                       return;
                     }
-                    range = _.assignIn([], context.luckysheet_select_save);
-                    setContext((ctx) => {
-                      rangeArr = applyLocation(
-                        range,
-                        "locationRowSpan",
-                        undefined,
-                        ctx
-                      );
-                    });
+                      range = _.assignIn([], ctx.luckysheet_select_save);
+                      setContext((c) => {
+                          rangeArr = applyLocation(range, "locationRowSpan", undefined, c);
+                      });
                   } else if (value === "locationColumnSpan") {
                     if (
-                      context.luckysheet_select_save?.length === 0 ||
-                      (context.luckysheet_select_save?.length === 1 &&
-                        context.luckysheet_select_save[0].column[0] ===
-                          context.luckysheet_select_save[0].column[1])
+                        ctx.luckysheet_select_save?.length === 0 ||
+                        (ctx.luckysheet_select_save?.length === 1 &&
+                            ctx.luckysheet_select_save[0].column[0] ===
+                            ctx.luckysheet_select_save[0].column[1])
                     ) {
-                      showDialog(
-                        findAndReplace.locationTiplessTwoColumn,
-                        "ok"
-                      );
+                        showDialog(findAndReplace.locationTiplessTwoColumn, "ok");
                       return;
                     }
-                    range = _.assignIn([], context.luckysheet_select_save);
-                    setContext((ctx) => {
-                      rangeArr = applyLocation(
-                        range,
-                        "locationColumnSpan",
-                        undefined,
-                        ctx
-                      );
-                    });
+                      range = _.assignIn([], ctx.luckysheet_select_save);
+                      setContext((c) => {
+                          rangeArr = applyLocation(range, "locationColumnSpan", undefined, c);
+                      });
                   }
                   if (rangeArr.length === 0 && value !== "location")
                     showDialog(findAndReplace.locationTipNotFindCell, "ok");
@@ -618,7 +574,7 @@ export function Toolbar({
             icon={ICON_MAP[name]!}
             tooltipText={toolbar.insertImage}
             onClick={() => {
-              if (context.allowEdit === false) return;
+                if (contextRef.current.allowEdit === false) return;
               showImgChooser();
             }}
           />
@@ -627,8 +583,8 @@ export function Toolbar({
 
       if (name === "comment") {
         const last =
-          context.luckysheet_select_save?.[
-            context.luckysheet_select_save.length - 1
+            contextRef.current.luckysheet_select_save?.[
+            contextRef.current.luckysheet_select_save.length - 1
           ];
         let row_index = last?.row_focus;
         let col_index = last?.column_focus;
@@ -639,30 +595,19 @@ export function Toolbar({
           if (row_index == null) [row_index] = last.row;
           if (col_index == null) [col_index] = last.column;
         }
+          const fd = getFlowdata(contextRef.current);
         let itemData: { key: string; text: string; onClick: any }[];
-        if (flowdata?.[row_index]?.[col_index]?.ps != null) {
+          if (fd?.[row_index]?.[col_index]?.ps != null) {
           itemData = [
             { key: "edit", text: comment.edit, onClick: editComment },
             { key: "delete", text: comment.delete, onClick: deleteComment },
-            {
-              key: "showOrHide",
-              text: comment.showOne,
-              onClick: showHideComment,
-            },
-            {
-              key: "showOrHideAll",
-              text: comment.showAll,
-              onClick: showHideAllComments,
-            },
+              {key: "showOrHide", text: comment.showOne, onClick: showHideComment},
+              {key: "showOrHideAll", text: comment.showAll, onClick: showHideAllComments},
           ];
         } else {
           itemData = [
             { key: "new", text: comment.insert, onClick: newComment },
-            {
-              key: "showOrHideAll",
-              text: comment.showAll,
-              onClick: showHideAllComments,
-            },
+              {key: "showOrHideAll", text: comment.showAll, onClick: showHideAllComments},
           ];
         }
         return (
@@ -672,12 +617,7 @@ export function Toolbar({
                 key={key}
                 onClick={() => {
                   setContext((draftContext) =>
-                    onClick(
-                      draftContext,
-                      refs.globalCache,
-                      row_index,
-                      col_index
-                    )
+                      onClick(draftContext, refs.globalCache, row_index, col_index)
                   );
                 }}
               >
@@ -697,22 +637,11 @@ export function Toolbar({
           { text: formula.min, value: "MIN" },
         ];
         return (
-          <ToolbarMenuButton
-            iconId="formula-sum"
-            key={name}
-            tooltip={toolbar.autoSum}
-          >
+            <ToolbarMenuButton iconId="formula-sum" key={name} tooltip={toolbar.autoSum}>
             <DropdownMenuItem
-              onClick={() =>
-                setContext((ctx) => {
-                  handleSum(
-                    ctx,
-                    refs.cellInput.current!,
-                    refs.fxInput.current,
-                    refs.globalCache!
-                  );
-                })
-              }
+                onClick={() => setContext((ctx) => {
+                    handleSum(ctx, refs.cellInput.current!, refs.fxInput.current, refs.globalCache!);
+                })}
             >
               {formula.sum} (SUM)
             </DropdownMenuItem>
@@ -721,13 +650,7 @@ export function Toolbar({
                 key={value}
                 onClick={() => {
                   setContext((ctx) => {
-                    autoSelectionFormula(
-                      ctx,
-                      refs.cellInput.current!,
-                      refs.fxInput.current,
-                      value,
-                      refs.globalCache
-                    );
+                      autoSelectionFormula(ctx, refs.cellInput.current!, refs.fxInput.current, value, refs.globalCache);
                   });
                 }}
               >
@@ -738,11 +661,7 @@ export function Toolbar({
               </DropdownMenuItem>
             ))}
             <DropdownMenuSeparator />
-            <DropdownMenuItem
-              onClick={() =>
-                showDialog(<FormulaSearch onCancel={hideDialog} />)
-              }
-            >
+                <DropdownMenuItem onClick={() => showDialog(<FormulaSearch onCancel={hideDialog}/>)}>
               {`${formula.find}...`}
             </DropdownMenuItem>
           </ToolbarMenuButton>
@@ -757,20 +676,13 @@ export function Toolbar({
           { text: merge.mergeCancel, value: "merge-cancel" },
         ];
         return (
-          <ToolbarMenuButton
-            iconId="merge-all"
-            key={name}
-            tooltip={tooltip}
-          >
+            <ToolbarMenuButton iconId="merge-all" key={name} tooltip={tooltip}>
             {itemdata.map(({ text, value }) => (
-              <DropdownMenuItem
-                key={value}
-                onClick={() => {
-                  setContext((ctx) => {
-                    handleMerge(ctx, value);
-                  });
-                }}
-              >
+                <DropdownMenuItem key={value} onClick={() => {
+                    setContext((ctx) => {
+                        handleMerge(ctx, value);
+                    });
+                }}>
                 {text}
               </DropdownMenuItem>
             ))}
@@ -796,33 +708,24 @@ export function Toolbar({
           { text: "", value: "divider" },
         ];
         return (
-          <ToolbarMenuButton
-            iconId="border-all"
-            key={name}
-            tooltip={tooltip}
-          >
+            <ToolbarMenuButton iconId="border-all" key={name} tooltip={tooltip}>
             {items.map(({ text, value }, ii) =>
               value !== "divider" ? (
-                <DropdownMenuItem
-                  key={value}
-                  onClick={() => {
-                    setContext((ctx) => {
-                      handleBorder(ctx, value, customColor, customStyle);
-                    });
-                  }}
-                >
+                  <DropdownMenuItem key={value} onClick={() => {
+                      setContext((ctx) => {
+                          handleBorder(ctx, value, customColor, customStyle);
+                      });
+                  }}>
                   {text}
                 </DropdownMenuItem>
               ) : (
                 <DropdownMenuSeparator key={`divider-${ii}`} />
               )
             )}
-            <CustomBorder
-              onPick={(color, style) => {
-                setCustomColor(color as string);
-                setCustomStyle(style as string);
-              }}
-            />
+                <CustomBorder onPick={(color, style) => {
+                    setCustomColor(color as string);
+                    setCustomStyle(style as string);
+                }}/>
           </ToolbarMenuButton>
         );
       }
@@ -835,20 +738,13 @@ export function Toolbar({
           { text: freezen.freezenCancel, value: "freeze-cancel" },
         ];
         return (
-          <ToolbarMenuButton
-            iconId="freeze-row-col"
-            key={name}
-            tooltip={tooltip}
-          >
+            <ToolbarMenuButton iconId="freeze-row-col" key={name} tooltip={tooltip}>
             {items.map(({ text, value }) => (
-              <DropdownMenuItem
-                key={value}
-                onClick={() => {
-                  setContext((ctx) => {
-                    handleFreeze(ctx, value);
-                  });
-                }}
-              >
+                <DropdownMenuItem key={value} onClick={() => {
+                    setContext((ctx) => {
+                        handleFreeze(ctx, value);
+                    });
+                }}>
                 <div className="flex items-center gap-2">
                   <ToolbarIcon name={value} className="h-4 w-4" />
                   <span>{text}</span>
@@ -866,22 +762,15 @@ export function Toolbar({
           { text: textWrap.wrap, id: "text-wrap", value: "wrap" },
         ];
         return (
-          <ToolbarMenuButton
-            iconId="text-wrap"
-            key={name}
-            tooltip={toolbar.textWrap}
-          >
+            <ToolbarMenuButton iconId="text-wrap" key={name} tooltip={toolbar.textWrap}>
             {items.map(({ text, id, value }) => (
-              <DropdownMenuItem
-                key={value}
-                onClick={() => {
-                  setContext((ctx) => {
-                    const d = getFlowdata(ctx);
-                    if (d == null) return;
-                    updateFormat(ctx, refs.cellInput.current!, d, "tb", value);
-                  });
-                }}
-              >
+                <DropdownMenuItem key={value} onClick={() => {
+                    setContext((ctx) => {
+                        const d = getFlowdata(ctx);
+                        if (d == null) return;
+                        updateFormat(ctx, refs.cellInput.current!, d, "tb", value);
+                    });
+                }}>
                 <div className="flex items-center gap-2">
                   <ToolbarIcon name={id} className="h-4 w-4" />
                   <span>{text}</span>
@@ -895,49 +784,22 @@ export function Toolbar({
       if (name === "text-rotation") {
         const items = [
           { text: rotation.none, id: "text-rotation-none", value: "none" },
-          {
-            text: rotation.angleup,
-            id: "text-rotation-angleup",
-            value: "angleup",
-          },
-          {
-            text: rotation.angledown,
-            id: "text-rotation-angledown",
-            value: "angledown",
-          },
-          {
-            text: rotation.vertical,
-            id: "text-rotation-vertical",
-            value: "vertical",
-          },
-          {
-            text: rotation.rotationUp,
-            id: "text-rotation-up",
-            value: "rotation-up",
-          },
-          {
-            text: rotation.rotationDown,
-            id: "text-rotation-down",
-            value: "rotation-down",
-          },
+            {text: rotation.angleup, id: "text-rotation-angleup", value: "angleup"},
+            {text: rotation.angledown, id: "text-rotation-angledown", value: "angledown"},
+            {text: rotation.vertical, id: "text-rotation-vertical", value: "vertical"},
+            {text: rotation.rotationUp, id: "text-rotation-up", value: "rotation-up"},
+            {text: rotation.rotationDown, id: "text-rotation-down", value: "rotation-down"},
         ];
         return (
-          <ToolbarMenuButton
-            iconId="text-rotation-none"
-            key={name}
-            tooltip={toolbar.textRotate}
-          >
+            <ToolbarMenuButton iconId="text-rotation-none" key={name} tooltip={toolbar.textRotate}>
             {items.map(({ text, id, value }) => (
-              <DropdownMenuItem
-                key={value}
-                onClick={() => {
-                  setContext((ctx) => {
-                    const d = getFlowdata(ctx);
-                    if (d == null) return;
-                    updateFormat(ctx, refs.cellInput.current!, d, "tr", value);
-                  });
-                }}
-              >
+                <DropdownMenuItem key={value} onClick={() => {
+                    setContext((ctx) => {
+                        const d = getFlowdata(ctx);
+                        if (d == null) return;
+                        updateFormat(ctx, refs.cellInput.current!, d, "tr", value);
+                    });
+                }}>
                 <div className="flex items-center gap-2">
                   <ToolbarIcon name={id} className="h-4 w-4" />
                   <span>{text}</span>
@@ -950,50 +812,30 @@ export function Toolbar({
 
       if (name === "filter") {
         const items = [
-          {
-            id: "sort-asc",
-            value: "sort-asc",
-            text: sort.asc,
-            onClick: () =>
-              setContext((ctx) => {
-                handleSort(ctx, true);
-              }),
-          },
-          {
-            id: "sort-desc",
-            value: "sort-desc",
-            text: sort.desc,
-            onClick: () =>
-              setContext((ctx) => {
-                handleSort(ctx, false);
-              }),
-          },
+            {
+                id: "sort-asc", value: "sort-asc", text: sort.asc, onClick: () => setContext((ctx) => {
+                    handleSort(ctx, true);
+                })
+            },
+            {
+                id: "sort-desc", value: "sort-desc", text: sort.desc, onClick: () => setContext((ctx) => {
+                    handleSort(ctx, false);
+                })
+            },
           { id: "", value: "divider" },
-          {
-            id: "filter1",
-            value: "filter",
-            text: filter.filter,
-            onClick: () =>
-              setContext((draftCtx) => {
-                createFilter(draftCtx);
-              }),
-          },
-          {
-            id: "eraser",
-            value: "eraser",
-            text: filter.clearFilter,
-            onClick: () =>
-              setContext((draftCtx) => {
-                clearFilter(draftCtx);
-              }),
-          },
+            {
+                id: "filter1", value: "filter", text: filter.filter, onClick: () => setContext((draftCtx) => {
+                    createFilter(draftCtx);
+                })
+            },
+            {
+                id: "eraser", value: "eraser", text: filter.clearFilter, onClick: () => setContext((draftCtx) => {
+                    clearFilter(draftCtx);
+                })
+            },
         ];
         return (
-          <ToolbarMenuButton
-            iconId="filter"
-            key={name}
-            tooltip={toolbar.sortAndFilter}
-          >
+            <ToolbarMenuButton iconId="filter" key={name} tooltip={toolbar.sortAndFilter}>
             {items.map(({ text, id, value, onClick }, index) =>
               value !== "divider" ? (
                 <DropdownMenuItem key={value} onClick={() => onClick?.()}>
@@ -1022,11 +864,7 @@ export function Toolbar({
               active={!!selected}
               onClick={() =>
                 setContext((draftCtx) => {
-                  toolbarItemClickHandler(name)?.(
-                    draftCtx,
-                    refs.cellInput.current!,
-                    refs.globalCache
-                  );
+                    toolbarItemClickHandler(name)?.(draftCtx, refs.cellInput.current!, refs.globalCache);
                 })
               }
             />
@@ -1038,11 +876,7 @@ export function Toolbar({
             <DropdownMenuItem
               onClick={() =>
                 setContext((draftCtx) => {
-                  toolbarItemClickHandler(name)?.(
-                    draftCtx,
-                    refs.cellInput.current!,
-                    refs.globalCache
-                  );
+                    toolbarItemClickHandler(name)?.(draftCtx, refs.cellInput.current!, refs.globalCache);
                 })
               }
             >
@@ -1052,45 +886,23 @@ export function Toolbar({
         );
       }
     },
+      // Only rebuild when the focused cell or relevant toolbar state changes.
+      // During drag selection, cell/row/col don't change, so this is stable.
     [
-      toolbar,
-      cell,
-      setContext,
-      refs.cellInput,
-      refs.fxInput,
-      refs.globalCache,
-      defaultFormat,
-      align,
-      handleUndo,
-      handleRedo,
-      flowdata,
-      formula,
-      showDialog,
-      hideDialog,
-      merge,
-      border,
-      freezen,
-      screenshot,
-      sort,
-      textWrap,
-      rotation,
-      filter,
-      splitText,
-      findAndReplace,
-      context.luckysheet_select_save,
-      context.defaultFontSize,
-      context.allowEdit,
-      comment,
-      fontarray,
-      refs.canvas,
-      customColor,
-      customStyle,
-      toolbarFormat.moreCurrency,
-      toolbarFormat.moreNumber,
+        cell, row, col,
+        toolbar, setContext, refs.cellInput, refs.fxInput, refs.globalCache, refs.canvas,
+        defaultFormat, align, handleUndo, handleRedo, formula, showDialog, hideDialog,
+        merge, border, freezen, screenshot, sort, textWrap, rotation, filter,
+        splitText, findAndReplace, comment, fontarray,
+        context.defaultFontSize, context.allowEdit,
+        customColor, customStyle, toolbarFormat.moreCurrency, toolbarFormat.moreNumber,
     ]
   );
 
-  return (
+    // Memoize the entire toolbar output. During drag selection, none of these
+    // deps change (cell stays the same, focused row/col don't move), so React
+    // reuses the cached JSX and skips reconciliation of 1100+ lines of toolbar.
+    return useMemo(() => (
     <header className="border-b border-border">
       <SharedToolbar>
         <div className="flex items-center gap-0.5 shrink-0">
@@ -1125,7 +937,7 @@ export function Toolbar({
         </div>
       </SharedToolbar>
     </header>
-  );
+    ), [getToolbarItem, leftItems, rightItems, settings.customToolbarItems, settings.toolbarItems]);
 }
 
 export default Toolbar;

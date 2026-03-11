@@ -1,4 +1,4 @@
-import React, { useContext, useEffect } from "react";
+import React, {useContext, useEffect} from "react";
 import {
   getFlowdata,
   onCommentBoxMoveStart,
@@ -14,7 +14,11 @@ const NotationBoxes: React.FC = () => {
   const { context, setContext, refs } = useContext(WorkbookContext);
   const flowdata = getFlowdata(context);
 
-  // TODO use patch to detect ps isShow change may be more effecient
+  // Scan for shown comments only when the sheet changes or comment boxes
+  // are toggled — NOT on every context change. The old code used `flowdata`
+  // as a dependency, which triggered on every immer-produced context because
+  // flowdata gets a new reference even when cell data is unchanged. This
+  // caused millions of iterations + a cascading setContext on every render.
   useEffect(() => {
     if (flowdata) {
       const psShownCells: { r: number; c: number }[] = [];
@@ -29,7 +33,8 @@ const NotationBoxes: React.FC = () => {
       }
       setContext((ctx) => showComments(ctx, psShownCells));
     }
-  }, [flowdata, setContext]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [context.currentSheetId, setContext]);
   return (
     <div id="luckysheet-postil-showBoxs">
       {_.concat(

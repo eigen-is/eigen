@@ -1,17 +1,11 @@
 import _ from "lodash";
-import { defaultContext, getFlowdata } from "./context";
-import { getRealCellValue, normalizedAttr } from "./modules/cell";
-import {
-  clearMeasureTextCache,
-  defaultFont,
-  getCellTextInfo,
-  getFontSet,
-  getMeasureText,
-} from "./modules/text";
-import { isInlineStringCell } from "./modules/inline-string";
-import { getSheetIndex, indexToColumnChar } from "./utils";
-import { getBorderInfoComputeRange } from "./modules/border";
-import { checkCF, getComputeMap, validateCellData } from "./modules";
+import {defaultContext, getFlowdata} from "./context";
+import {getRealCellValue, normalizedAttr} from "./modules/cell";
+import {clearMeasureTextCache, defaultFont, getCellTextInfo, getFontSet, getMeasureText,} from "./modules/text";
+import {isInlineStringCell} from "./modules/inline-string";
+import {getSheetIndex, indexToColumnChar} from "./utils";
+import {getBorderInfoComputeRange} from "./modules/border";
+import {checkCF, getComputeMap, validateCellData} from "./modules";
 
 export const defaultStyle = {
   fillStyle: "#000000",
@@ -99,14 +93,17 @@ function setLineDash(
   }
 }
 
+// Module-level cache that persists across Canvas instances.
+// Previously this lived on the Canvas class and was reset to {} on every
+// new Canvas(), making it completely useless. The existing setTimeout in
+// drawMain invalidates it after 100ms of idle time.
+let sharedCellOverflowMapCache: any = {};
+let sharedMeasureTextCacheTimeOut: any;
+
 export class Canvas {
   private canvasElement: HTMLCanvasElement;
 
   private sheetCtx: ReturnType<typeof defaultContext>;
-
-  private measureTextCacheTimeOut: any;
-
-  private cellOverflowMapCache: any;
 
   constructor(
     canvasElement: HTMLCanvasElement,
@@ -114,7 +111,6 @@ export class Canvas {
   ) {
     this.canvasElement = canvasElement;
     this.sheetCtx = ctx;
-    this.cellOverflowMapCache = {};
   }
 
   public drawRowHeader(scrollHeight: number, drawHeight?: number, offsetTop?: number) {
@@ -518,7 +514,7 @@ export class Canvas {
       return;
     }
 
-    clearTimeout(this.measureTextCacheTimeOut);
+    clearTimeout(sharedMeasureTextCacheTimeOut);
 
     // Handle undefined parameters
     if (drawWidth === undefined) {
@@ -1056,9 +1052,9 @@ export class Canvas {
 
     renderCtx.restore();
 
-    this.measureTextCacheTimeOut = setTimeout(() => {
+    sharedMeasureTextCacheTimeOut = setTimeout(() => {
       clearMeasureTextCache();
-      this.cellOverflowMapCache = {};
+      sharedCellOverflowMapCache = {};
     }, 100);
   }
 
@@ -1082,14 +1078,20 @@ export class Canvas {
         continue;
       }
 
-      if (this.cellOverflowMapCache[r]) {
-        map[r] = this.cellOverflowMapCache[r];
+      if (sharedCellOverflowMapCache[r]) {
+        map[r] = sharedCellOverflowMapCache[r];
         continue;
       }
 
       let hasCellOver = false;
 
-      for (let c = 0; c < data[r].length; c += 1) {
+      // Only scan columns near the visible range. Text overflow from cells
+      // far outside the viewport cannot reach the visible area. A buffer of
+      // 50 columns on each side is generous for even very wide text.
+      const scanStart = Math.max(0, colStart - 50);
+      const scanEnd = Math.min(data[r].length - 1, colEnd + 50);
+
+      for (let c = scanStart; c <= scanEnd; c += 1) {
         const cell = data[r][c];
 
         if (this.sheetCtx.config?.colhidden?.[c] != null) {
@@ -1211,7 +1213,7 @@ export class Canvas {
       }
 
       if (hasCellOver) {
-        this.cellOverflowMapCache[r] = map[r];
+        sharedCellOverflowMapCache[r] = map[r];
       }
     }
 
