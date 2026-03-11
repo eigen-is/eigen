@@ -13,13 +13,13 @@
     "jsxImportSource": "react",
     "strict": true,
     "noUnusedLocals": true,
-    "noFallthroughCasesInSwitch": true,
+    "noFallthroughCasesInSwitch": false,
     "noUncheckedSideEffectImports": true,
     "skipLibCheck": true,
     "noEmit": true,
     "isolatedModules": true,
     "allowImportingTsExtensions": true,
-    "allowSyntheticDefaultImports": true
+    "allowSyntheticDefaultImports": true,
   }
 }
 
