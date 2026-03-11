@@ -24,7 +24,7 @@ import {
 } from "../../core";
 import React, {useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState,} from "react";
 import "./index.css";
-import {applyPatches, enablePatches, Patch, produceWithPatches,} from "immer";
+import {applyPatches, enablePatches, Patch, produce, produceWithPatches,} from "immer";
 import _ from "lodash";
 import Sheet from "../Sheet";
 import WorkbookContext, {RefValues, SetContextOptions} from "../../context";
@@ -281,6 +281,18 @@ const Workbook = React.forwardRef<WorkbookInstance, Settings & AdditionalProps>(
                 ctx.scrollLeft = globalCache.current.scrollLeft;
                 ctx.scrollTop = globalCache.current.scrollTop;
             };
+
+            // Fast path: skip expensive produceWithPatches when no undo
+            // history is needed (e.g. mouse-move during drag selection).
+            // produceWithPatches generates JSON patches for every mutation,
+            // but selection changes are filtered out by filterPatch anyway.
+            if (options.noHistory) {
+                return produce(
+                    ctx_,
+                    concatProducer(syncScroll, recipe, triggerGroupValuesRefresh)
+                );
+            }
+
           const [result, patches, inversePatches] = produceWithPatches(
             ctx_,
               concatProducer(syncScroll, recipe, triggerGroupValuesRefresh)
