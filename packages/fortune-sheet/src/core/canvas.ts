@@ -638,6 +638,9 @@ export class Canvas {
     const borderOffset: any = {};
 
     const bodrder05 = 0.5; // Default 0.5
+    const drawGridLines =
+      !this.sheetCtx.luckysheetcurrentisPivotTable &&
+      this.sheetCtx.showGridLines;
 
     this.sheetCtx.hooks.beforeRenderCellArea?.(flowdata, renderCtx);
 
@@ -783,7 +786,9 @@ export class Canvas {
           colEnd,
           scrollHeight,
           scrollWidth,
-          bodrder05
+          bodrder05,
+          flowdata,
+          drawGridLines
         );
       } else {
         const cell = flowdata[r][c];
@@ -813,7 +818,9 @@ export class Canvas {
             colEnd,
             scrollHeight,
             scrollWidth,
-            bodrder05
+            bodrder05,
+            flowdata,
+            drawGridLines
           );
         } else {
           if (`${r}_${c}` in dynamicArrayCompute) {
@@ -838,7 +845,9 @@ export class Canvas {
             colEnd,
             scrollHeight,
             scrollWidth,
-            bodrder05
+            bodrder05,
+            flowdata,
+            drawGridLines
           );
         }
       }
@@ -909,6 +918,8 @@ export class Canvas {
           scrollHeight,
           scrollWidth,
           bodrder05,
+          flowdata,
+          drawGridLines,
           true
         );
       } else {
@@ -934,6 +945,8 @@ export class Canvas {
           scrollHeight,
           scrollWidth,
           bodrder05,
+          flowdata,
+          drawGridLines,
           true
         );
       }
@@ -941,151 +954,21 @@ export class Canvas {
 
     // Border rendering
     if ((this.sheetCtx.config?.borderInfo?.length ?? 0) > 0) {
-      type BorderRender = (
+      const renderBorder = (
         style: any,
         color: string,
-        startY: number,
-        startX: number,
-        endY: number,
-        endX: number,
-        _offsetLeft: number,
-        _offsetTop: number,
-        canvas: CanvasRenderingContext2D
-      ) => void;
-
-      const borderSlashRender: BorderRender = (
-        style,
-        color,
-        startY,
-        startX,
-        endY,
-        endX,
-        _offsetLeft,
-        _offsetTop,
-        canvas
+        dir: string,
+        moveX: number,
+        moveY: number,
+        toX: number,
+        toY: number
       ) => {
-        const linetype = style;
-
-        const moveX = startX - 2 + bodrder05 + _offsetLeft;
-        const moveY = startY + _offsetTop;
-        const toX = endX - 2 + bodrder05 + _offsetLeft;
-        const toY = endY - 2 + bodrder05 + _offsetTop;
-        canvas.save();
-        setLineDash(canvas, linetype, "v", moveX, moveY, toX, toY);
-
-        canvas.strokeStyle = color;
-
-        canvas.stroke();
-        canvas.closePath();
-        canvas.restore();
-      };
-
-      const borderLeftRender: BorderRender = (
-        style,
-        color,
-        startY,
-        startX,
-        endY,
-        endX,
-        _offsetLeft,
-        _offsetTop,
-        canvas
-      ) => {
-        const linetype = style;
-
-        const moveX = startX - 2 + bodrder05 + _offsetLeft;
-        const moveY = startY + _offsetTop - 1;
-        const toX = startX - 2 + bodrder05 + _offsetLeft;
-        const toY = endY - 2 + bodrder05 + _offsetTop;
-        canvas.save();
-        setLineDash(canvas, linetype, "v", moveX, moveY, toX, toY);
-
-        canvas.strokeStyle = color;
-
-        canvas.stroke();
-        canvas.closePath();
-        canvas.restore();
-      };
-
-      const borderRightRender: BorderRender = (
-        style,
-        color,
-        startY,
-        startX,
-        endY,
-        endX,
-        _offsetLeft,
-        _offsetTop,
-        canvas
-      ) => {
-        const linetype = style;
-
-        const moveX = endX - 2 + bodrder05 + _offsetLeft;
-        const moveY = startY + _offsetTop - 1;
-        const toX = endX - 2 + bodrder05 + _offsetLeft;
-        const toY = endY - 2 + bodrder05 + _offsetTop;
-        canvas.save();
-        setLineDash(canvas, linetype, "v", moveX, moveY, toX, toY);
-
-        canvas.strokeStyle = color;
-
-        canvas.stroke();
-        canvas.closePath();
-        canvas.restore();
-      };
-
-      const borderBottomRender: BorderRender = (
-        style,
-        color,
-        startY,
-        startX,
-        endY,
-        endX,
-        _offsetLeft,
-        _offsetTop,
-        canvas
-      ) => {
-        const linetype = style;
-
-        const moveX = startX - 2 + bodrder05 + _offsetLeft;
-        const moveY = endY - 2 + bodrder05 + _offsetTop;
-        const toX = endX - 2 + bodrder05 + _offsetLeft;
-        const toY = endY - 2 + bodrder05 + _offsetTop;
-        canvas.save();
-        setLineDash(canvas, linetype, "h", moveX, moveY, toX, toY);
-
-        canvas.strokeStyle = color;
-
-        canvas.stroke();
-        canvas.closePath();
-        canvas.restore();
-      };
-
-      const borderTopRender: BorderRender = (
-        style,
-        color,
-        startY,
-        startX,
-        endY,
-        endX,
-        _offsetLeft,
-        _offsetTop,
-        canvas
-      ) => {
-        const linetype = style;
-
-        const moveX = startX - 2 + bodrder05 + _offsetLeft;
-        const moveY = startY - 1 + bodrder05 + _offsetTop;
-        const toX = endX - 2 + bodrder05 + _offsetLeft;
-        const toY = startY - 1 + bodrder05 + _offsetTop;
-        canvas.save();
-        setLineDash(canvas, linetype, "h", moveX, moveY, toX, toY);
-
-        canvas.strokeStyle = color;
-
-        canvas.stroke();
-        canvas.closePath();
-        canvas.restore();
+        renderCtx.save();
+        setLineDash(renderCtx, style, dir, moveX, moveY, toX, toY);
+        renderCtx.strokeStyle = color;
+        renderCtx.stroke();
+        renderCtx.closePath();
+        renderCtx.restore();
       };
 
       const borderInfoCompute = getBorderInfoComputeRange(
@@ -1096,123 +979,69 @@ export class Canvas {
         colEnd
       );
 
-      Object.keys(borderInfoCompute).forEach((x) => {
-        const bdRow = Number(x.substring(0, x.indexOf("_")));
-        const bdCol = Number(x.substring(x.indexOf("_") + 1));
+      const oL = offsetLeft!;
+      const oT = offsetTop!;
 
-        if (borderOffset[`${bdRow}_${bdCol}`]) {
-          const { startY } = borderOffset[`${bdRow}_${bdCol}`];
-          const { startX } = borderOffset[`${bdRow}_${bdCol}`];
-          const { endY } = borderOffset[`${bdRow}_${bdCol}`];
-          const { endX } = borderOffset[`${bdRow}_${bdCol}`];
+      for (const [x, bdInfo] of Object.entries(borderInfoCompute)) {
+        const sepIdx = x.indexOf("_");
+        const bdRow = Number(x.substring(0, sepIdx));
+        const bdCol = Number(x.substring(sepIdx + 1));
 
-          const cellOverflow_colInObj = this.cellOverflow_colIn(
-            cellOverflowMap,
-            bdRow,
-            bdCol,
-            colStart,
-            colEnd
-          );
+        const bdOffset = borderOffset[x];
+        if (!bdOffset) continue;
 
-          const borderSlash = borderInfoCompute[x].s;
-          if (
-            borderSlash &&
-            (!cellOverflow_colInObj.colIn ||
-              cellOverflow_colInObj.stc === bdCol)
-          ) {
-            const mergeMap = this.sheetCtx.config.merge;
-            const mergeCell = mergeMap?.[`${bdRow}_${bdCol}`];
-            let mergeCellEndX;
-            let mergeCellEndY;
-            if (mergeCell) {
-              const mergeCellOffset =
-                borderOffset[
-                  `${bdRow + mergeCell.rs - 1}_${bdCol + mergeCell.cs - 1}`
-                ];
-              mergeCellEndX = mergeCellOffset.endX;
-              mergeCellEndY = mergeCellOffset.endY;
-            }
-            borderSlashRender(
-              borderSlash.style,
-              borderSlash.color,
-              startY,
-              startX,
-              mergeCellEndY ?? endY,
-              mergeCellEndX ?? endX,
-              offsetLeft!,
-              offsetTop!,
-              renderCtx
-            );
+        const { startY, startX, endY, endX } = bdOffset;
+
+        const leftX = startX - 2 + bodrder05 + oL;
+        const rightX = endX - 2 + bodrder05 + oL;
+        const topY = startY + oT;
+        const bottomY = endY - 2 + bodrder05 + oT;
+
+        const cellOverflow_colInObj = this.cellOverflow_colIn(
+          cellOverflowMap,
+          bdRow,
+          bdCol,
+          colStart,
+          colEnd
+        );
+
+        const notOverflowOrFirst =
+          !cellOverflow_colInObj.colIn ||
+          cellOverflow_colInObj.stc === bdCol;
+
+        if (bdInfo.s && notOverflowOrFirst) {
+          const mergeMap = this.sheetCtx.config.merge;
+          const mergeCell = mergeMap?.[x];
+          let slashEndX = rightX;
+          let slashEndY = bottomY;
+          if (mergeCell) {
+            const mergeCellOffset =
+              borderOffset[
+                `${bdRow + mergeCell.rs - 1}_${bdCol + mergeCell.cs - 1}`
+              ];
+            slashEndX = mergeCellOffset.endX - 2 + bodrder05 + oL;
+            slashEndY = mergeCellOffset.endY - 2 + bodrder05 + oT;
           }
-
-          const borderLeft = borderInfoCompute[x].l;
-          if (
-            borderLeft &&
-            (!cellOverflow_colInObj.colIn ||
-              cellOverflow_colInObj.stc === bdCol)
-          ) {
-            borderLeftRender(
-              borderLeft.style,
-              borderLeft.color,
-              startY,
-              startX,
-              endY,
-              endX,
-              offsetLeft!,
-              offsetTop!,
-              renderCtx
-            );
-          }
-
-          const borderRight = borderInfoCompute[x].r;
-          if (
-            borderRight &&
-            (!cellOverflow_colInObj.colIn || cellOverflow_colInObj.colLast)
-          ) {
-            borderRightRender(
-              borderRight.style,
-              borderRight.color,
-              startY,
-              startX,
-              endY,
-              endX,
-              offsetLeft!,
-              offsetTop!,
-              renderCtx
-            );
-          }
-
-          const borderTop = borderInfoCompute[x].t;
-          if (borderTop) {
-            borderTopRender(
-              borderTop.style,
-              borderTop.color,
-              startY,
-              startX,
-              endY,
-              endX,
-              offsetLeft!,
-              offsetTop!,
-              renderCtx
-            );
-          }
-
-          const borderBottom = borderInfoCompute[x].b;
-          if (borderBottom) {
-            borderBottomRender(
-              borderBottom.style,
-              borderBottom.color,
-              startY,
-              startX,
-              endY,
-              endX,
-              offsetLeft!,
-              offsetTop!,
-              renderCtx
-            );
-          }
+          renderBorder(bdInfo.s.style, bdInfo.s.color, "v", leftX, topY, slashEndX, slashEndY);
         }
-      });
+
+        if (bdInfo.l && notOverflowOrFirst) {
+          renderBorder(bdInfo.l.style, bdInfo.l.color, "v", leftX, topY - 1, leftX, bottomY);
+        }
+
+        if (bdInfo.r && (!cellOverflow_colInObj.colIn || cellOverflow_colInObj.colLast)) {
+          renderBorder(bdInfo.r.style, bdInfo.r.color, "v", rightX, topY - 1, rightX, bottomY);
+        }
+
+        if (bdInfo.t) {
+          const tY = startY - 1 + bodrder05 + oT;
+          renderBorder(bdInfo.t.style, bdInfo.t.color, "h", leftX, tY, rightX, tY);
+        }
+
+        if (bdInfo.b) {
+          renderBorder(bdInfo.b.style, bdInfo.b.color, "h", leftX, bottomY, rightX, bottomY);
+        }
+      }
     }
 
     // Clear right gray area when last column is rendered to prevent overflow
@@ -1408,11 +1237,11 @@ export class Canvas {
     scrollHeight: number,
     scrollWidth: number,
     bodrder05: any,
+    flowdata: any,
+    drawGridLines = false,
     isMerge = false
   ) {
     const checksCF = checkCF(r, c, cfCompute);
-    const flowdata = getFlowdata(this.sheetCtx);
-    if (!flowdata) return;
 
     const borderfix = BORDER_FIX;
 
@@ -1516,17 +1345,15 @@ export class Canvas {
         scrollWidth,
         offsetLeft,
         offsetTop,
-        cfCompute
+        cfCompute,
+        flowdata
       );
     }
 
     // Overflow cell spans this cell, skip right border
     if (!cellOverflow_colInObj.colIn || cellOverflow_colInObj.colLast) {
-      // Right border (always drawn regardless of background)
-      if (
-        !this.sheetCtx.luckysheetcurrentisPivotTable &&
-        this.sheetCtx.showGridLines
-      ) {
+      // Right border
+      if (drawGridLines) {
         renderCtx.beginPath();
         renderCtx.moveTo(endX + offsetLeft - 2 + bodrder05, startY + offsetTop);
         renderCtx.lineTo(endX + offsetLeft - 2 + bodrder05, endY + offsetTop);
@@ -1537,11 +1364,8 @@ export class Canvas {
       }
     }
 
-    // Bottom border (always drawn regardless of background)
-    if (
-      !this.sheetCtx.luckysheetcurrentisPivotTable &&
-      this.sheetCtx.showGridLines
-    ) {
+    // Bottom border
+    if (drawGridLines) {
       renderCtx.beginPath();
       renderCtx.moveTo(
         startX + offsetLeft - 1,
@@ -1549,7 +1373,6 @@ export class Canvas {
       );
       renderCtx.lineTo(endX + offsetLeft - 1, endY + offsetTop - 2 + bodrder05);
       renderCtx.lineWidth = 1;
-
       renderCtx.strokeStyle = defaultStyle.strokeStyle;
       renderCtx.stroke();
       renderCtx.closePath();
@@ -1589,12 +1412,10 @@ export class Canvas {
     scrollHeight: number,
     scrollWidth: number,
     bodrder05: number,
+    flowdata: any,
+    drawGridLines = false,
     isMerge = false
   ) {
-    const flowdata = getFlowdata(this.sheetCtx);
-    if (!flowdata) {
-      return;
-    }
     const cell = flowdata[r][c];
     const cellWidth = endX - startX - 2;
     const cellHeight = endY - startY - 2;
@@ -1720,7 +1541,8 @@ export class Canvas {
           scrollWidth,
           offsetLeft,
           offsetTop,
-          cfCompute
+          cfCompute,
+          flowdata
         );
       } else {
         cellOverflow_bd_r_render = false;
@@ -1961,27 +1783,19 @@ export class Canvas {
       renderCtx.restore();
     }
 
-    if (cellOverflow_bd_r_render) {
+    if (cellOverflow_bd_r_render && drawGridLines) {
       // Right border
-      if (
-        !this.sheetCtx.luckysheetcurrentisPivotTable &&
-        this.sheetCtx.showGridLines
-      ) {
-        renderCtx.beginPath();
-        renderCtx.moveTo(endX + offsetLeft - 2 + bodrder05, startY + offsetTop);
-        renderCtx.lineTo(endX + offsetLeft - 2 + bodrder05, endY + offsetTop);
-        renderCtx.lineWidth = 1;
-        renderCtx.strokeStyle = defaultStyle.strokeStyle;
-        renderCtx.stroke();
-        renderCtx.closePath();
-      }
+      renderCtx.beginPath();
+      renderCtx.moveTo(endX + offsetLeft - 2 + bodrder05, startY + offsetTop);
+      renderCtx.lineTo(endX + offsetLeft - 2 + bodrder05, endY + offsetTop);
+      renderCtx.lineWidth = 1;
+      renderCtx.strokeStyle = defaultStyle.strokeStyle;
+      renderCtx.stroke();
+      renderCtx.closePath();
     }
 
     // Bottom border
-    if (
-      !this.sheetCtx.luckysheetcurrentisPivotTable &&
-      this.sheetCtx.showGridLines
-    ) {
+    if (drawGridLines) {
       renderCtx.beginPath();
       renderCtx.moveTo(
         startX + offsetLeft - 1,
@@ -2020,9 +1834,10 @@ export class Canvas {
     scrollWidth: number,
     offsetLeft: number,
     offsetTop: number,
-    cfCompute: any
+    cfCompute: any,
+    flowdata: any
   ) {
-    // 溢出单元格 起止行列坐标
+    // Overflow cell start/end row/column coordinates
     let startY;
     if (r === 0) {
       startY = -scrollHeight - 1;
@@ -2041,16 +1856,11 @@ export class Canvas {
 
     const endX = this.sheetCtx.visibledatacolumn[edc] - scrollWidth;
 
-    //
-    const flowdata = getFlowdata(this.sheetCtx);
-    if (!flowdata) {
-      return;
-    }
     const cell = flowdata[r][c];
     const cellWidth = endX - startX - 2;
     const cellHeight = endY - startY - 2;
     const space_width = 2;
-    const space_height = 2; // 宽高方向 间隙
+    const space_height = 2;
 
     const pos_x = startX + offsetLeft;
     const pos_y = startY + offsetTop + 1;
@@ -2221,34 +2031,37 @@ export class Canvas {
     col_st: number,
     col_ed: number
   ) {
-    let colIn = false; // 此单元格 是否在 某个溢出单元格的渲染范围
-    let colLast = false; // 此单元格 是否是 某个溢出单元格的渲染范围的最后一列
-    let rowIndex: number | undefined; // 溢出单元格 行下标
-    let colIndex: number | undefined; // 溢出单元格 列下标
+    let colIn = false; // Whether this cell is within an overflow cell's render range
+    let colLast = false; // Whether this cell is the last column in an overflow cell's render range
+    let rowIndex: number | undefined; // Overflow cell row index
+    let colIndex: number | undefined; // Overflow cell column index
     let stc: number | undefined;
     let edc: number | undefined;
 
-    _.forEach(map, (row, rkey) => {
-      _.forEach(row, (mapItem, ckey) => {
-        rowIndex = Number(rkey);
-        colIndex = Number(ckey);
-        stc = mapItem.stc;
-        edc = mapItem.edc;
+    if (map) {
+      for (const rkey of Object.keys(map)) {
+        const row = map[rkey];
+        for (const ckey of Object.keys(row)) {
+          const mapItem = row[ckey];
+          const ri = Number(rkey);
+          const ci = Number(ckey);
 
-        if (rowIndex === r) {
-          if (c >= (stc as number) && c <= (edc as number)) {
+          if (ri === r && c >= mapItem.stc && c <= mapItem.edc) {
             colIn = true;
+            rowIndex = ri;
+            colIndex = ci;
+            stc = mapItem.stc;
+            edc = mapItem.edc;
 
-            if (c === edc || c === col_ed) {
+            if (c === mapItem.edc || c === col_ed) {
               colLast = true;
-              return false;
+              break;
             }
           }
         }
-        return true;
-      });
-      return !colLast;
-    });
+        if (colLast) break;
+      }
+    }
 
     return {
       colIn,
@@ -2270,8 +2083,6 @@ export class Canvas {
     if (!values) {
       return;
     }
-    // console.log(textInfo, pos_x, pos_y, values[0].width, values[0].left, ctx);
-
     if (textInfo.rotate !== 0 && textInfo.type !== "verticalWrap") {
       ctx.save();
       ctx.translate(
