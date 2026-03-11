@@ -12,6 +12,6 @@ describe("fortune-sheet/formula-parser/operator/divide", () => {
     expect(func("10", "2")).toBe(5);
     expect(() => func("foo", " ", "bar", " baz")).not.toThrow();
     expect(() => func("foo", 2)).not.toThrow();
-    expect(() => func(10, 0)).not.toThrow(); // Division by zero returns "VALUE" not "DIV_ZERO"
+    expect(() => func(10, 0)).toThrow("DIV_ZERO");
   });
 });
