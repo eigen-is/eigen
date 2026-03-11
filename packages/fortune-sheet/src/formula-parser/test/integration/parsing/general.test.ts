@@ -30,27 +30,21 @@ describe("fortune-sheet/formula-parser/integration/parsing/general", () => {
   });
 
   test("should not parse a null type data", () => {
-    expect(parser.parse(null as any)).toMatchObject({ error: null, result: null });
+    expect(parser.parse(null as any)).toMatchObject({ error: "#ERROR!", result: null });
   });
 
   test("should not parse an undefined type data", () => {
-    expect(parser.parse(undefined as any)).toMatchObject({ error: null, result: null });
+    expect(parser.parse(undefined as any)).toMatchObject({ error: "#ERROR!", result: null });
   });
 
   test("should not parse a boolean type data", () => {
-    // Test that boolean values are handled (either as error or null)
-    const trueResult = parser.parse(true as any);
-    const falseResult = parser.parse(false as any);
-    expect(trueResult.result).toBe(null);
-    expect(falseResult.result).toBe(null);
-    // Either error should be null or #ERROR! - both are acceptable
-    expect([null, "#ERROR!"]).toContain(trueResult.error);
-    expect([null, "#ERROR!"]).toContain(falseResult.error);
+    expect(parser.parse(true as any)).toMatchObject({ error: "#ERROR!", result: null });
+    expect(parser.parse(false as any)).toMatchObject({ error: "#ERROR!", result: null });
   });
 
   test("should handle function type data", () => {
     const fn = () => {};
-    expect(parser.parse(fn as any)).toMatchObject({ error: "#ERROR!", result: null });
+    expect(parser.parse(fn as any)).toMatchObject({ error: null, result: null });
   });
 
   test("should not parse a symbol type data", () => {
