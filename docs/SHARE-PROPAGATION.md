@@ -56,11 +56,10 @@ These routes are useful for:
 
 Lives in the **auth database** (`users3.db`) alongside `user`, `member`, `teamMember`:
 
-| Column             | Type    | Description                                           |
-|--------------------|---------|-------------------------------------------------------|
-| `fromUserId`       | TEXT    | User who created the share                            |
-| `targetIdentifier` | TEXT    | Email address (for users) or `team_{id}` (for teams)  |
-| `createdAt`        | INTEGER | Unix timestamp                                        |
+| Column             | Type | Description                                          |
+|--------------------|------|------------------------------------------------------|
+| `fromUserId`       | TEXT | User who created the share                           |
+| `targetIdentifier` | TEXT | Email address (for users) or `team_{id}` (for teams) |
 
 **Primary key**: `(fromUserId, targetIdentifier)`
 
