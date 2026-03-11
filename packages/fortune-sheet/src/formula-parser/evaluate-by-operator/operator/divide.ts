@@ -10,14 +10,15 @@ function func(first: any, ...rest: any[]): number | string {
   const result = rest.reduce(
     (acc, value) => {
       const valueNum = toNumber(value);
-      if (valueNum === undefined || valueNum === 0) return ERROR_DIV_ZERO;
+      if (valueNum === undefined) return ERROR_VALUE;
+      if (valueNum === 0) throw new Error(ERROR_DIV_ZERO);
       return acc / valueNum;
     },
     firstNum
   );
 
   if (result === Infinity) {
-    return ERROR_DIV_ZERO;
+    throw new Error(ERROR_DIV_ZERO);
   }
   if (isNaN(result)) {
     return ERROR_VALUE;

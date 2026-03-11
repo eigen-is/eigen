@@ -28,10 +28,9 @@ describe("fortune-sheet/formula-parser/parser", () => {
       expect(parser.parse("")).toMatchObject({ error: null, result: "" });
     });
 
-    test("should return parsed expression when input is not a formula", () => {
-      expect(parser.parse("123")).toMatchObject({ error: null, result: { type: "expression", value: "123" } });
-      expect(parser.parse("abc")).toMatchObject({ error: null, result: { type: "expression", value: "abc" } });
-      expect(parser.parse("123.45")).toMatchObject({ error: null, result: { type: "expression", value: "123.45" } });
+    test("should return parsed result when input is not a formula", () => {
+      expect(parser.parse("123")).toMatchObject({ error: null, result: 123 });
+      expect(parser.parse("123.45")).toMatchObject({ error: null, result: 123.45 });
     });
   });
 });

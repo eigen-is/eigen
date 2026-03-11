@@ -24,8 +24,7 @@ describe("fortune-sheet/formula-parser/integration/parsing/formula", () => {
   });
 
   test("should handle formula errors gracefully", () => {
-    // The parser treats unknown formulas as expressions, not errors
-    expect(parser.parse("INVALID()")).toMatchObject({ error: null, result: { type: "expression" } });
+    expect(parser.parse("INVALID()")).toMatchObject({ error: "#NAME?", result: null });
     expect(parser.parse("SUM(")).toMatchObject({ error: "#ERROR!" });
     expect(parser.parse("SUM(1,")).toMatchObject({ error: "#ERROR!" });
   });
