@@ -173,27 +173,43 @@ const SheetOverlay: React.FC = () => {
     [debouncedShowLinkCard]
   );
 
+  const pendingMouseMoveRef = useRef<MouseEvent | null>(null);
+  const mouseMoveRafRef = useRef(0);
+
   const onMouseMove = useCallback(
     (nativeEvent: MouseEvent) => {
-      setContext((draftCtx) => {
-        overShowLinkCard(
-          draftCtx,
-          refs.globalCache,
-          nativeEvent,
-          containerRef.current!,
-          refs.scrollbarX.current!,
-          refs.scrollbarY.current!
-        );
-        handleOverlayMouseMove(
-          draftCtx,
-          refs.globalCache,
-          nativeEvent,
-          refs.cellInput.current!,
-          refs.scrollbarX.current!,
-          refs.scrollbarY.current!,
-          containerRef.current!,
-          refs.fxInput.current
-        );
+      // Store the latest event and coalesce via rAF so that multiple
+      // mousemove events within one frame produce only one state update.
+      pendingMouseMoveRef.current = nativeEvent;
+      if (mouseMoveRafRef.current) return;
+      mouseMoveRafRef.current = requestAnimationFrame(() => {
+        mouseMoveRafRef.current = 0;
+        const ev = pendingMouseMoveRef.current;
+        if (!ev) return;
+        pendingMouseMoveRef.current = null;
+        setContext((draftCtx) => {
+          // Skip link-card hover detection during active selection drag
+          if (!draftCtx.luckysheet_select_status && !draftCtx.luckysheet_scroll_status) {
+            overShowLinkCard(
+                draftCtx,
+                refs.globalCache,
+                ev,
+                containerRef.current!,
+                refs.scrollbarX.current!,
+                refs.scrollbarY.current!
+            );
+          }
+          handleOverlayMouseMove(
+              draftCtx,
+              refs.globalCache,
+              ev,
+              refs.cellInput.current!,
+              refs.scrollbarX.current!,
+              refs.scrollbarY.current!,
+              containerRef.current!,
+              refs.fxInput.current
+          );
+        }, {noHistory: true});
       });
     },
     [
@@ -398,6 +414,7 @@ const SheetOverlay: React.FC = () => {
     document.addEventListener("mousemove", onMouseMove);
     return () => {
       document.removeEventListener("mousemove", onMouseMove);
+      cancelAnimationFrame(mouseMoveRafRef.current);
     };
   }, [onMouseMove]);
 
