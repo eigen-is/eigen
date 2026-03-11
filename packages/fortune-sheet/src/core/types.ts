@@ -1,5 +1,5 @@
-import { Patch as ImmerPatch } from "immer";
-import { PatchOptions } from "./utils";
+import {Patch as ImmerPatch} from "immer";
+import {PatchOptions} from "./utils";
 
 export type Op = {
   op:
@@ -267,6 +267,14 @@ export type GlobalCache = {
   redoList: History[];
   editingCommentBoxEle?: HTMLDivElement;
   freezen?: Record<string, Freezen>;
+
+  // Scroll state stored outside React/immer to avoid triggering full
+  // re-render cascades across all context consumers on every scroll tick.
+  // Components that need scroll position subscribe via scrollListeners.
+  scrollLeft: number;
+  scrollTop: number;
+  scrollListeners: Set<() => void>;
+  notifyScrollListeners: () => void;
   image?: {
     imgInitialPosition: Rect | undefined;
     cursorMoveStartPosition: { x: number; y: number } | undefined;

@@ -1,53 +1,41 @@
 import {
-  defaultContext,
-  defaultSettings,
-  Settings,
-  Context,
-  initSheetIndex,
-  CellWithRowAndCol,
-  GlobalCache,
-  Sheet as SheetType,
-  handleGlobalKeyDown,
-  getSheetIndex,
-  handlePaste,
-  filterPatch,
-  patchToOp,
-  Op,
-  inverseRowColOptions,
-  ensureSheetIndex,
-  CellMatrix,
-  insertRowCol,
-  locale,
-  calcSelectionInfo,
-  groupValuesRefresh,
-  setFormulaCellInfoMap,
+    calcSelectionInfo,
+    CellMatrix,
+    CellWithRowAndCol,
+    Context,
+    defaultContext,
+    defaultSettings,
+    ensureSheetIndex,
+    filterPatch,
+    getSheetIndex,
+    GlobalCache,
+    groupValuesRefresh,
+    handleGlobalKeyDown,
+    handlePaste,
+    initSheetIndex,
+    insertRowCol,
+    inverseRowColOptions,
+    locale,
+    Op,
+    patchToOp,
+    setFormulaCellInfoMap,
+    Settings,
+    Sheet as SheetType,
 } from "../../core";
-import React, {
-  useMemo,
-  useState,
-  useCallback,
-  useEffect,
-  useRef,
-  useImperativeHandle,
-} from "react";
+import React, {useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState,} from "react";
 import "./index.css";
-import {
-  applyPatches,
-  enablePatches,
-  Patch,
-  produceWithPatches,
-} from "immer";
+import {applyPatches, enablePatches, Patch, produceWithPatches,} from "immer";
 import _ from "lodash";
 import Sheet from "../Sheet";
-import WorkbookContext, { RefValues, SetContextOptions } from "../../context";
+import WorkbookContext, {RefValues, SetContextOptions} from "../../context";
 import Toolbar from "../Toolbar";
 import FxEditor from "../FxEditor";
 import SheetTab from "../SheetTab";
 import ContextMenu from "../ContextMenu";
 import SVGDefines from "../SVGDefines";
 import SheetTabContextMenu from "../ContextMenu/SheetTab";
-import { generateAPIs } from "./api";
-import { ModalProvider } from "../../context/modal";
+import {generateAPIs} from "./api";
+import {ModalProvider} from "../../context/modal";
 import FilterMenu from "../ContextMenu/FilterMenu";
 import SheetList from "../SheetList";
 
@@ -96,7 +84,17 @@ const concatProducer = (...producers: ((ctx: Context) => void)[]) => {
 
 const Workbook = React.forwardRef<WorkbookInstance, Settings & AdditionalProps>(
   ({ onChange, onOp, toolbarLeftItems, toolbarRightItems, data: originalData, ...props }, ref) => {
-    const globalCache = useRef<GlobalCache>({ undoList: [], redoList: [] });
+      const scrollListeners = useRef(new Set<() => void>());
+      const globalCache = useRef<GlobalCache>({
+          undoList: [],
+          redoList: [],
+          scrollLeft: 0,
+          scrollTop: 0,
+          scrollListeners: scrollListeners.current,
+          notifyScrollListeners: () => {
+              scrollListeners.current.forEach((fn) => fn());
+          },
+      });
     const cellInput = useRef<HTMLDivElement>(null);
     const fxInput = useRef<HTMLDivElement>(null);
     const canvas = useRef<HTMLCanvasElement>(null);
@@ -274,9 +272,18 @@ const Workbook = React.forwardRef<WorkbookInstance, Settings & AdditionalProps>(
     const setContextWithProduce = useCallback(
       (recipe: (ctx: Context) => void, options: SetContextOptions = {}) => {
         setContext((ctx_) => {
+            // Sync scroll position from globalCache into the immer draft.
+            // Scroll state lives in globalCache to avoid re-rendering all
+            // context consumers on every scroll tick. We lazily sync it here
+            // so that business logic (e.g. handleCellAreaMouseDown) that reads
+            // ctx.scrollLeft/ctx.scrollTop inside recipes gets fresh values.
+            const syncScroll = (ctx: Context) => {
+                ctx.scrollLeft = globalCache.current.scrollLeft;
+                ctx.scrollTop = globalCache.current.scrollTop;
+            };
           const [result, patches, inversePatches] = produceWithPatches(
             ctx_,
-            concatProducer(recipe, triggerGroupValuesRefresh)
+              concatProducer(syncScroll, recipe, triggerGroupValuesRefresh)
           );
           if (patches.length > 0 && !options.noHistory) {
             if (options.logPatch) {

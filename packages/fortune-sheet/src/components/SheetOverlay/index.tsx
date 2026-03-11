@@ -1,42 +1,34 @@
-import React, {
-  useContext,
-  useCallback,
-  useRef,
-  useEffect,
-  useLayoutEffect,
-  useMemo,
-  useState,
-} from "react";
+import React, {useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState,} from "react";
 import "./index.css";
 import {
-  getRangetxt,
-  locale,
+  api,
+  Context,
+  createDropCellRange,
   drawArrow,
+  fixColumnStyleOverflowInFreeze,
+  fixRowStyleOverflowInFreeze,
+  getCellHyperlink,
+  getCellRowColumn,
+  getRangetxt,
+  getSheetIndex,
+  GlobalCache,
   handleCellAreaDoubleClick,
   handleCellAreaMouseDown,
   handleContextMenu,
+  handleKeydownForZoom,
   handleOverlayMouseMove,
   handleOverlayMouseUp,
-  selectAll,
   handleOverlayTouchEnd,
   handleOverlayTouchMove,
   handleOverlayTouchStart,
-  createDropCellRange,
-  getCellRowColumn,
-  getCellHyperlink,
-  showLinkCard,
-  Context,
-  GlobalCache,
-  onCellsMoveStart,
   insertRowCol,
-  getSheetIndex,
-  fixRowStyleOverflowInFreeze,
-  fixColumnStyleOverflowInFreeze,
-  handleKeydownForZoom,
-  api,
+  locale,
+  onCellsMoveStart,
+  selectAll,
+  showLinkCard,
 } from "../../core";
 import _ from "lodash";
-import WorkbookContext, { SetContextOptions } from "../../context";
+import WorkbookContext, {SetContextOptions} from "../../context";
 import ColumnHeader from "./ColumnHeader";
 import RowHeader from "./RowHeader";
 import InputBox from "./InputBox";
@@ -44,11 +36,11 @@ import ScrollBar from "./ScrollBar";
 import SearchReplace from "../SearchReplace";
 import LinkEditCard from "../LinkEidtCard";
 import FilterOptions from "../FilterOption";
-import { useAlert } from "../../hooks/useAlert";
+import {useAlert} from "../../hooks/useAlert";
 import ImgBoxs from "../ImgBoxs";
 import NotationBoxes from "../NotationBoxes";
 import RangeDialog from "../DataVerification/RangeDialog";
-import { useDialog } from "../../hooks/useDialog";
+import {useDialog} from "../../hooks/useDialog";
 import SVGIcon from "../SVGIcon";
 import DropDownList from "../DataVerification/DropdownList";
 
@@ -275,19 +267,15 @@ const SheetOverlay: React.FC = () => {
 
   const onTouchMove = useCallback(
     (e: React.TouchEvent<HTMLDivElement>) => {
-      const { nativeEvent } = e;
-      setContext((draftCtx) => {
-        handleOverlayTouchMove(
-          draftCtx,
-          nativeEvent,
+      handleOverlayTouchMove(
+          context,
+          e.nativeEvent,
           refs.globalCache,
           refs.scrollbarX.current!,
           refs.scrollbarY.current!
-        );
-      });
-      // e.stopPropagation();
+      );
     },
-    [refs.globalCache, refs.scrollbarX, refs.scrollbarY, setContext]
+      [context, refs.globalCache, refs.scrollbarX, refs.scrollbarY]
   );
 
   const onTouchEnd = useCallback(() => {
@@ -353,13 +341,24 @@ const SheetOverlay: React.FC = () => {
   useEffect(() => {
     refs.cellArea.current!.scrollLeft = context.scrollLeft;
     refs.cellArea.current!.scrollTop = context.scrollTop;
-  }, [
-    context.scrollLeft,
-    context.scrollTop,
-    refs.cellArea,
-    refs.cellArea.current?.scrollLeft,
-    refs.cellArea.current?.scrollTop,
-  ]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [context.scrollLeft, context.scrollTop, refs.cellArea]);
+
+  // Sync cellArea scroll position imperatively from globalCache,
+  // bypassing React state to avoid re-rendering 20+ context consumers.
+  useEffect(() => {
+    const syncScroll = () => {
+      const {globalCache} = refs;
+      if (refs.cellArea.current) {
+        refs.cellArea.current.scrollLeft = globalCache.scrollLeft;
+        refs.cellArea.current.scrollTop = globalCache.scrollTop;
+      }
+    };
+    refs.globalCache.scrollListeners.add(syncScroll);
+    return () => {
+      refs.globalCache.scrollListeners.delete(syncScroll);
+    };
+  }, [refs]);
 
   // useEffect(() => {
   //   // ensure cell input is always focused to accept first key stroke on cell
@@ -889,6 +888,8 @@ const SheetOverlay: React.FC = () => {
                   <span
                     className="fortune-add-row-button"
                     onClick={() => {
+                      refs.globalCache.scrollTop = 0;
+                      refs.globalCache.notifyScrollListeners();
                       setContext((ctx) => {
                         ctx.scrollTop = 0;
                       });
