@@ -19,7 +19,8 @@
     "build": "bun --filter '*' build",
     "build:prod": "bun --filter './apps/*' build && bun --filter '@apps/api' buildfordocker",
     "typecheck": "bun --filter '*' typecheck",
-    "test": "bun --elide-lines=0 --filter '@apps/api' test",
+    "test": "bun  --elide-lines=0 --filter '*' test",
+    "test:fortune-sheets": "bun --filter '@workspace/fortune-sheet' test",
     "check": "bun run typecheck && bun run test"
   },
   "workspaces": [
