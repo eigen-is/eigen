@@ -1,25 +1,18 @@
 import {
-  rowLocation,
-  rowLocationByIndex,
-  selectTitlesMap,
-  selectTitlesRange,
-  handleContextMenu,
-  handleRowHeaderMouseDown,
-  handleRowSizeHandleMouseDown,
-  fixRowStyleOverflowInFreeze,
-  handleRowFreezeHandleMouseDown,
-  getSheetIndex,
-  fixPositionOnFrozenCells,
+    fixPositionOnFrozenCells,
+    fixRowStyleOverflowInFreeze,
+    getSheetIndex,
+    handleContextMenu,
+    handleRowFreezeHandleMouseDown,
+    handleRowHeaderMouseDown,
+    handleRowSizeHandleMouseDown,
+    rowLocation,
+    rowLocationByIndex,
+    selectTitlesMap,
+    selectTitlesRange,
 } from "../../core";
 import _ from "lodash";
-import React, {
-  useContext,
-  useState,
-  useRef,
-  useCallback,
-  useEffect,
-  useMemo,
-} from "react";
+import React, {useCallback, useContext, useEffect, useMemo, useRef, useState,} from "react";
 import WorkbookContext from "../../context";
 
 const RowHeader: React.FC = () => {
@@ -192,6 +185,19 @@ const RowHeader: React.FC = () => {
   useEffect(() => {
     containerRef.current!.scrollTop = context.scrollTop;
   }, [context.scrollTop]);
+
+    // Sync row header scroll position imperatively from globalCache
+    useEffect(() => {
+        const syncScroll = () => {
+            if (containerRef.current) {
+                containerRef.current.scrollTop = refs.globalCache.scrollTop;
+            }
+        };
+        refs.globalCache.scrollListeners.add(syncScroll);
+        return () => {
+            refs.globalCache.scrollListeners.delete(syncScroll);
+        };
+    }, [refs.globalCache]);
 
   return (
     <div

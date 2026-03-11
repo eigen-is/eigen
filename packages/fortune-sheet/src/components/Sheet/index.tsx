@@ -13,12 +13,15 @@ import WorkbookContext from "../../context";
 import SheetOverlay from "../SheetOverlay";
 
 // ---------------------------------------------------------------------------
-// Canvas drawing helpers (extracted from the old monolithic useEffect)
+// Canvas drawing helpers
 // ---------------------------------------------------------------------------
+
+type ScrollPos = { scrollLeft: number; scrollTop: number };
 
 function drawFrozenBoth(
     tc: Canvas,
     ctx: Context,
+    scroll: ScrollPos,
     horizontalData: any[],
     verticalData: any[]
 ) {
@@ -27,29 +30,25 @@ function drawFrozenBoth(
   const vOffset = vPx - vScrollWidth;
   const hOffset = hPx - hScrollTop;
 
-  // main (bottom-right)
   tc.drawMain({
-    scrollWidth: ctx.scrollLeft + vOffset,
-    scrollHeight: ctx.scrollTop + hOffset,
+    scrollWidth: scroll.scrollLeft + vOffset,
+    scrollHeight: scroll.scrollTop + hOffset,
     offsetLeft: vOffset + ctx.rowHeaderWidth,
     offsetTop: hOffset + ctx.columnHeaderHeight,
     clear: true,
   });
-  // top-right
   tc.drawMain({
-    scrollWidth: ctx.scrollLeft + vOffset,
+    scrollWidth: scroll.scrollLeft + vOffset,
     scrollHeight: hScrollTop,
     drawHeight: hPx,
     offsetLeft: vOffset + ctx.rowHeaderWidth,
   });
-  // bottom-left
   tc.drawMain({
     scrollWidth: vScrollWidth,
-    scrollHeight: ctx.scrollTop + hOffset,
+    scrollHeight: scroll.scrollTop + hOffset,
     drawWidth: vPx,
     offsetTop: hOffset + ctx.columnHeaderHeight,
   });
-  // top-left
   tc.drawMain({
     scrollWidth: vScrollWidth,
     scrollHeight: hScrollTop,
@@ -57,9 +56,9 @@ function drawFrozenBoth(
     drawHeight: hPx,
   });
 
-  tc.drawColumnHeader(ctx.scrollLeft + vOffset, undefined, vOffset + ctx.rowHeaderWidth);
+  tc.drawColumnHeader(scroll.scrollLeft + vOffset, undefined, vOffset + ctx.rowHeaderWidth);
   tc.drawColumnHeader(vScrollWidth, vPx);
-  tc.drawRowHeader(ctx.scrollTop + hOffset, undefined, hOffset + ctx.columnHeaderHeight);
+  tc.drawRowHeader(scroll.scrollTop + hOffset, undefined, hOffset + ctx.columnHeaderHeight);
   tc.drawRowHeader(hScrollTop, hPx);
   tc.drawFreezeLine({
     horizontalTop: hOffset + ctx.columnHeaderHeight - 2,
@@ -67,45 +66,45 @@ function drawFrozenBoth(
   });
 }
 
-function drawFrozenHorizontal(tc: Canvas, ctx: Context, horizontalData: any[]) {
+function drawFrozenHorizontal(tc: Canvas, ctx: Context, scroll: ScrollPos, horizontalData: any[]) {
   const [hPx, , hScrollTop] = horizontalData;
   const hOffset = hPx - hScrollTop;
 
   tc.drawMain({
-    scrollWidth: ctx.scrollLeft,
-    scrollHeight: ctx.scrollTop + hOffset,
+    scrollWidth: scroll.scrollLeft,
+    scrollHeight: scroll.scrollTop + hOffset,
     offsetTop: hOffset + ctx.columnHeaderHeight,
     clear: true,
   });
   tc.drawMain({
-    scrollWidth: ctx.scrollLeft,
+    scrollWidth: scroll.scrollLeft,
     scrollHeight: hScrollTop,
     drawHeight: hPx,
   });
 
-  tc.drawColumnHeader(ctx.scrollLeft);
-  tc.drawRowHeader(ctx.scrollTop + hOffset, undefined, hOffset + ctx.columnHeaderHeight);
+  tc.drawColumnHeader(scroll.scrollLeft);
+  tc.drawRowHeader(scroll.scrollTop + hOffset, undefined, hOffset + ctx.columnHeaderHeight);
   tc.drawRowHeader(hScrollTop, hPx);
   tc.drawFreezeLine({horizontalTop: hOffset + ctx.columnHeaderHeight - 2});
 }
 
-function drawFrozenVertical(tc: Canvas, ctx: Context, verticalData: any[]) {
+function drawFrozenVertical(tc: Canvas, ctx: Context, scroll: ScrollPos, verticalData: any[]) {
   const [vPx, , vScrollWidth] = verticalData;
   const vOffset = vPx - vScrollWidth;
 
   tc.drawMain({
-    scrollWidth: ctx.scrollLeft + vOffset,
-    scrollHeight: ctx.scrollTop,
+    scrollWidth: scroll.scrollLeft + vOffset,
+    scrollHeight: scroll.scrollTop,
     offsetLeft: vOffset + ctx.rowHeaderWidth,
   });
   tc.drawMain({
     scrollWidth: vScrollWidth,
-    scrollHeight: ctx.scrollTop,
+    scrollHeight: scroll.scrollTop,
     drawWidth: vPx,
   });
 
-  tc.drawRowHeader(ctx.scrollTop);
-  tc.drawColumnHeader(ctx.scrollLeft + vOffset, undefined, vOffset + ctx.rowHeaderWidth);
+  tc.drawRowHeader(scroll.scrollTop);
+  tc.drawColumnHeader(scroll.scrollLeft + vOffset, undefined, vOffset + ctx.rowHeaderWidth);
   tc.drawColumnHeader(vScrollWidth, vPx);
   tc.drawFreezeLine({verticalLeft: vOffset + ctx.rowHeaderWidth - 2});
 }
@@ -113,6 +112,7 @@ function drawFrozenVertical(tc: Canvas, ctx: Context, verticalData: any[]) {
 function drawSheet(
     canvasEl: HTMLCanvasElement,
     ctx: Context,
+    scroll: ScrollPos,
     freeze: Freezen | undefined
 ) {
   const tc = new Canvas(canvasEl, ctx);
@@ -120,21 +120,20 @@ function drawSheet(
   const verticalData = freeze?.vertical?.freezenverticaldata;
 
   if (horizontalData && verticalData) {
-    drawFrozenBoth(tc, ctx, horizontalData, verticalData);
+    drawFrozenBoth(tc, ctx, scroll, horizontalData, verticalData);
   } else if (horizontalData) {
-    drawFrozenHorizontal(tc, ctx, horizontalData);
+    drawFrozenHorizontal(tc, ctx, scroll, horizontalData);
   } else if (verticalData) {
-    drawFrozenVertical(tc, ctx, verticalData);
+    drawFrozenVertical(tc, ctx, scroll, verticalData);
   } else {
-    tc.drawMain({scrollWidth: ctx.scrollLeft, scrollHeight: ctx.scrollTop, clear: true});
-    tc.drawColumnHeader(ctx.scrollLeft);
-    tc.drawRowHeader(ctx.scrollTop);
+    tc.drawMain({scrollWidth: scroll.scrollLeft, scrollHeight: scroll.scrollTop, clear: true});
+    tc.drawColumnHeader(scroll.scrollLeft);
+    tc.drawRowHeader(scroll.scrollTop);
   }
 }
 
 // ---------------------------------------------------------------------------
-// Stable serialization for object-type dependency values so effects only
-// re-fire when the actual values change, not on every immer-produced reference.
+// Stable serialization for object-type dependency values
 // ---------------------------------------------------------------------------
 
 function useStableJson(value: unknown): string {
@@ -145,8 +144,7 @@ function useStableJson(value: unknown): string {
 }
 
 // ---------------------------------------------------------------------------
-// Memoized overlay – prevents re-render when only the parent Sheet re-renders
-// due to a sheet prop change without a context change.
+// Memoized overlay
 // ---------------------------------------------------------------------------
 
 const MemoizedSheetOverlay = memo(SheetOverlay);
@@ -165,15 +163,11 @@ const Sheet: React.FC<Props> = ({ sheet }) => {
   const placeholderRef = useRef<HTMLDivElement>(null);
   const { context, setContext, refs, settings } = useContext(WorkbookContext);
 
-  // Keep a mutable ref to the latest context so the rAF callback always
-  // reads the most recent snapshot without needing to re-schedule.
   const contextRef = useRef(context);
   contextRef.current = context;
 
   const rafIdRef = useRef(0);
 
-  // Stable keys for object-typed config values so effects 2 won't re-fire
-  // on every unrelated context change (immer produces new object refs).
   const rowlenKey = useStableJson(context.config?.rowlen);
   const columnlenKey = useStableJson(context.config?.columnlen);
   const rowhiddenKey = useStableJson(context.config?.rowhidden);
@@ -218,20 +212,12 @@ const Sheet: React.FC<Props> = ({ sheet }) => {
   }, [refs.globalCache, sheet.frozen, context.currentSheetId, context.visibledatacolumn, context.visibledatarow]);
 
   // -----------------------------------------------------------------------
-  // Canvas redraw – throttled to one repaint per animation frame.
+  // Canvas redraw – rAF-throttled, reads scroll from globalCache.
   //
-  // WHY THIS MATTERS:
-  //   The old code used `context` (the entire app state object) as a useEffect
-  //   dependency. Because immer produces a new object reference for ANY state
-  //   mutation, every single change – scroll, selection, cell edit, formula
-  //   refresh – triggered a synchronous full canvas redraw. On scroll the
-  //   problem was doubled: handleGlobalWheel sets the scrollbar DOM value,
-  //   then the scrollbar's onScroll handler sets context.scrollTop again,
-  //   causing TWO state updates → TWO redraws per wheel tick.
-  //
-  //   By scheduling the actual draw via requestAnimationFrame and always
-  //   reading from contextRef.current (the latest snapshot), multiple rapid
-  //   context changes within one frame collapse into a single draw call.
+  // Two triggers:
+  //   1. context changes (cell edits, selection, zoom, etc.) → useEffect
+  //   2. scroll changes (wheel/scrollbar) → globalCache scroll listener
+  // Both call scheduleRedraw which coalesces to one paint per frame.
   // -----------------------------------------------------------------------
 
   const scheduleRedraw = useCallback(() => {
@@ -241,30 +227,46 @@ const Sheet: React.FC<Props> = ({ sheet }) => {
       if (ctx.groupValuesRefreshData.length > 0) return;
       if (!refs.canvas.current) return;
       const freeze = refs.globalCache.freezen?.[sheet.id!];
-      drawSheet(refs.canvas.current, ctx, freeze);
+      const scroll: ScrollPos = {
+        scrollLeft: refs.globalCache.scrollLeft,
+        scrollTop: refs.globalCache.scrollTop,
+      };
+      drawSheet(refs.canvas.current, ctx, scroll, freeze);
     });
   }, [refs.canvas, refs.globalCache, sheet.id]);
 
-  // Trigger a redraw whenever context changes (same semantic as before),
-  // but the actual paint is coalesced by the rAF above.
+  // Redraw on context changes (non-scroll: cell edits, selection, etc.)
   useEffect(() => {
     scheduleRedraw();
   }, [context, scheduleRedraw]);
+
+  // Redraw on scroll changes (from globalCache listener, bypasses React)
+  useEffect(() => {
+    const {scrollListeners} = refs.globalCache;
+    scrollListeners.add(scheduleRedraw);
+    return () => {
+      scrollListeners.delete(scheduleRedraw);
+    };
+  }, [refs.globalCache, scheduleRedraw]);
 
   // Cancel pending rAF on unmount
   useEffect(() => {
     return () => cancelAnimationFrame(rafIdRef.current);
   }, []);
 
-  // Wheel handler
+  // Wheel handler — reads from contextRef, writes to scrollbar DOM + cache.
+  // Does NOT call setContext. Scroll state flows through globalCache.
   const onWheel = useCallback(
     (e: WheelEvent) => {
-      setContext((draftCtx) => {
-        handleGlobalWheel(draftCtx, e, refs.globalCache, refs.scrollbarX.current!, refs.scrollbarY.current!);
-      });
-      // handleGlobalWheel already calls e.preventDefault() internally
+      handleGlobalWheel(
+          contextRef.current,
+          e,
+          refs.globalCache,
+          refs.scrollbarX.current!,
+          refs.scrollbarY.current!
+      );
     },
-    [refs.globalCache, refs.scrollbarX, refs.scrollbarY, setContext]
+      [refs.globalCache, refs.scrollbarX, refs.scrollbarY]
   );
 
   useEffect(() => {

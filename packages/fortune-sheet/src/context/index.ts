@@ -1,12 +1,5 @@
 import React from "react";
-import {
-  defaultContext,
-  Context,
-  defaultSettings,
-  Settings,
-  GlobalCache,
-  PatchOptions,
-} from "../core";
+import {Context, defaultContext, defaultSettings, GlobalCache, PatchOptions, Settings,} from "../core";
 
 export type RefValues = {
   globalCache: GlobalCache;
@@ -24,8 +17,20 @@ export type SetContextOptions = {
   logPatch?: boolean;
 } & PatchOptions;
 
+const defaultScrollListeners = new Set<() => void>();
+const defaultGlobalCache = {
+  undoList: [] as any[],
+  redoList: [] as any[],
+  scrollLeft: 0,
+  scrollTop: 0,
+  scrollListeners: defaultScrollListeners,
+  notifyScrollListeners: () => {
+    defaultScrollListeners.forEach((fn) => fn());
+  },
+};
+
 const defaultRefs = {
-  globalCache: { undoList: [], redoList: [] },
+  globalCache: defaultGlobalCache as any,
   cellInput: React.createRef<HTMLDivElement | null>(),
   fxInput: React.createRef<HTMLDivElement | null>(),
   canvas: React.createRef<HTMLCanvasElement | null>(),
@@ -51,7 +56,7 @@ const WorkbookContext = React.createContext<{
   handleUndo: () => {},
   handleRedo: () => {},
   refs: {
-    globalCache: { undoList: [], redoList: [] },
+    globalCache: defaultGlobalCache as any,
     cellInput: React.createRef<HTMLDivElement | null>(),
     fxInput: React.createRef<HTMLDivElement | null>(),
     canvas: React.createRef<HTMLCanvasElement | null>(),
