@@ -1,0 +1,43 @@
+import Parser from "../../../parser";
+import { expect, describe, test, beforeEach, afterEach } from "bun:test";
+
+describe("fortune-sheet/formula-parser/integration/parsing/formula", () => {
+  let parser: Parser;
+
+  beforeEach(() => {
+    parser = new Parser();
+  });
+  
+  afterEach(() => {
+    parser = null as any;
+  });
+
+  test("should parse basic formulas", () => {
+    expect(parser.parse("SUM(1,2,3)")).toMatchObject({ error: null });
+    expect(parser.parse("AVERAGE(1,2,3)")).toMatchObject({ error: null });
+    expect(parser.parse("COUNT(1,2,3)")).toMatchObject({ error: null });
+  });
+
+  test("should parse nested formulas", () => {
+    expect(parser.parse("SUM(1, AVERAGE(2,3), 4)")).toMatchObject({ error: null });
+    expect(parser.parse("MAX(1, MIN(2,3), 4)")).toMatchObject({ error: null });
+  });
+
+  test("should handle formula errors gracefully", () => {
+    // The parser treats unknown formulas as expressions, not errors
+    expect(parser.parse("INVALID()")).toMatchObject({ error: null, result: { type: "expression" } });
+    expect(parser.parse("SUM(")).toMatchObject({ error: "#ERROR!" });
+    expect(parser.parse("SUM(1,")).toMatchObject({ error: "#ERROR!" });
+  });
+
+  test("should parse cell references", () => {
+    expect(parser.parse("A1")).toMatchObject({ error: null });
+    expect(parser.parse("B10")).toMatchObject({ error: null });
+    expect(parser.parse("AA100")).toMatchObject({ error: null });
+  });
+
+  test("should parse ranges", () => {
+    expect(parser.parse("A1:B10")).toMatchObject({ error: null });
+    expect(parser.parse("Sheet1!A1:B10")).toMatchObject({ error: null });
+  });
+});
