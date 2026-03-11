@@ -1,5 +1,5 @@
-import { Context } from "..";
-import { GlobalCache } from "../types";
+import {Context} from "..";
+import {GlobalCache} from "../types";
 
 // export default function mobileinit(ctx: Context) {
 //   ctx.cellMainSrollBarSize = 0;
@@ -36,8 +36,8 @@ export function handleOverlayTouchMove(
     if (!globalCache.touchMoveStartPos) return;
     const slideX = touch.pageX - globalCache.touchMoveStartPos.x;
     const slideY = touch.pageY - globalCache.touchMoveStartPos.y;
-    let { scrollLeft } = ctx;
-    let { scrollTop } = ctx;
+    let scrollLeft = globalCache.scrollLeft;
+    let scrollTop = globalCache.scrollTop;
     scrollLeft -= slideX;
     scrollTop -= slideY;
     scrollbarY.scrollTop = scrollTop;

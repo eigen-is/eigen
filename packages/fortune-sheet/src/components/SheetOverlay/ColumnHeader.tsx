@@ -1,27 +1,20 @@
 import {
-  colLocation,
-  colLocationByIndex,
-  selectTitlesMap,
-  selectTitlesRange,
-  handleColSizeHandleMouseDown,
-  handleColumnHeaderMouseDown,
-  handleContextMenu,
-  isAllowEdit,
-  getFlowdata,
-  fixColumnStyleOverflowInFreeze,
-  handleColFreezeHandleMouseDown,
-  getSheetIndex,
-  fixPositionOnFrozenCells,
+    colLocation,
+    colLocationByIndex,
+    fixColumnStyleOverflowInFreeze,
+    fixPositionOnFrozenCells,
+    getFlowdata,
+    getSheetIndex,
+    handleColFreezeHandleMouseDown,
+    handleColSizeHandleMouseDown,
+    handleColumnHeaderMouseDown,
+    handleContextMenu,
+    isAllowEdit,
+    selectTitlesMap,
+    selectTitlesRange,
 } from "../../core";
 import _ from "lodash";
-import React, {
-  useContext,
-  useState,
-  useRef,
-  useCallback,
-  useEffect,
-  useMemo,
-} from "react";
+import React, {useCallback, useContext, useEffect, useMemo, useRef, useState,} from "react";
 import WorkbookContext from "../../context";
 import SVGIcon from "../SVGIcon";
 
@@ -203,6 +196,19 @@ const ColumnHeader: React.FC = () => {
   useEffect(() => {
     containerRef.current!.scrollLeft = context.scrollLeft;
   }, [context.scrollLeft]);
+
+    // Sync column header scroll position imperatively from globalCache
+    useEffect(() => {
+        const syncScroll = () => {
+            if (containerRef.current) {
+                containerRef.current.scrollLeft = refs.globalCache.scrollLeft;
+            }
+        };
+        refs.globalCache.scrollListeners.add(syncScroll);
+        return () => {
+            refs.globalCache.scrollListeners.delete(syncScroll);
+        };
+    }, [refs.globalCache]);
 
   return (
     <div

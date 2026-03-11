@@ -1250,4 +1250,4 @@ const SVGDefines: React.FC<{ currency: string }> = ({ currency }) => (
   </svg>
 );
 
-export default SVGDefines;
+export default React.memo(SVGDefines);
