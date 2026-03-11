@@ -100,13 +100,13 @@ function setLineDash(
 }
 
 export class Canvas {
-  canvasElement: HTMLCanvasElement;
+  private canvasElement: HTMLCanvasElement;
 
-  sheetCtx: ReturnType<typeof defaultContext>;
+  private sheetCtx: ReturnType<typeof defaultContext>;
 
-  measureTextCacheTimeOut: any;
+  private measureTextCacheTimeOut: any;
 
-  cellOverflowMapCache: any;
+  private cellOverflowMapCache: any;
 
   constructor(
     canvasElement: HTMLCanvasElement,
@@ -117,7 +117,7 @@ export class Canvas {
     this.cellOverflowMapCache = {};
   }
 
-  drawRowHeader(scrollHeight: number, drawHeight?: number, offsetTop?: number) {
+  public drawRowHeader(scrollHeight: number, drawHeight?: number, offsetTop?: number) {
     if (drawHeight == null) {
       [, drawHeight] = this.sheetCtx.luckysheetTableContentHW;
     }
@@ -300,7 +300,7 @@ export class Canvas {
     renderCtx.restore();
   }
 
-  drawColumnHeader(
+  public drawColumnHeader(
     scrollWidth: number,
     drawWidth?: number,
     offsetLeft?: number
@@ -492,7 +492,7 @@ export class Canvas {
     renderCtx.restore();
   }
 
-  drawMain({
+  public drawMain({
     scrollWidth,
     scrollHeight,
     drawWidth,
@@ -1063,7 +1063,7 @@ export class Canvas {
   }
 
   // Get overflow cells for the render range
-  getCellOverflowMap(
+  private getCellOverflowMap(
     canvas: CanvasRenderingContext2D,
     colStart: number,
     colEnd: number,
@@ -1219,7 +1219,7 @@ export class Canvas {
   }
 
   // Empty cell rendering
-  nullCellRender(
+  private nullCellRender(
     r: number,
     c: number,
     startY: number,
@@ -1393,7 +1393,7 @@ export class Canvas {
     );
   }
 
-  cellRender(
+  private cellRender(
     r: number,
     c: number,
     startY: number,
@@ -1824,7 +1824,7 @@ export class Canvas {
   }
 
   // Overflow cell rendering
-  cellOverflowRender(
+  private cellOverflowRender(
     r: number,
     c: number,
     stc: number,
@@ -1911,7 +1911,7 @@ export class Canvas {
     renderCtx.restore();
   }
 
-  cellOverflow_trace(
+  private cellOverflow_trace(
     r: number,
     curC: number,
     traceC: number,
@@ -1923,7 +1923,7 @@ export class Canvas {
     if (!flowdata) return {};
     const data = flowdata;
 
-    // 追溯单元格列超出数组范围 则追溯终止
+    // Trace terminates if column index is out of array bounds
     if (traceDir === "forward" && traceC < 0) {
       return {
         success: false,
@@ -1940,7 +1940,7 @@ export class Canvas {
       };
     }
 
-    // 追溯单元格是 非空单元格或合并单元格 则追溯终止
+    // Trace terminates if cell is non-empty or merged
     const cell = data[r][traceC];
     if (cell && (!_.isEmpty(cell.v) || cell.mc)) {
       return {
@@ -1957,14 +1957,14 @@ export class Canvas {
     const w = textMetrics - (end_curC - start_curC);
 
     if (horizonAlign === "0") {
-      // 居中对齐
+      // Center align
       start_curC -= w / 2;
       end_curC += w / 2;
     } else if (horizonAlign === "1") {
-      // 左对齐
+      // Left align
       end_curC += w;
     } else if (horizonAlign === "2") {
-      // 右对齐
+      // Right align
       start_curC -= w;
     }
 
@@ -2024,7 +2024,7 @@ export class Canvas {
     return null;
   }
 
-  cellOverflow_colIn(
+  private cellOverflow_colIn(
     map: any,
     r: number,
     c: number,
@@ -2073,7 +2073,7 @@ export class Canvas {
     };
   }
 
-  cellTextRender(textInfo: any, ctx: CanvasRenderingContext2D, option: any) {
+  private cellTextRender(textInfo: any, ctx: CanvasRenderingContext2D, option: any) {
     if (!textInfo) {
       return;
     }
@@ -2151,7 +2151,7 @@ export class Canvas {
     }
   }
 
-  drawFreezeLine({
+  public drawFreezeLine({
     horizontalTop,
     verticalLeft,
   }: {
