@@ -229,6 +229,293 @@ This is the **recipient-side** table, populated via push propagation (like Drive
 6. The route handler checks Alice's `calendars.shares` to verify Bob has access before returning data.
 7. Bob can toggle `visible` and override `color` locally on his `shared_calendars` entry.
 
+## API Data Format
+
+What the backend accepts and returns. These types live in `packages/lib/src/types/calendar.ts` and are used by both
+the Elysia routes and the frontend hooks.
+
+### Calendar
+
+```typescript
+type CalendarShare = {
+    targetId: string                              // email or team_{id}
+    permission: 'free-busy' | 'read' | 'write'
+}
+
+type CalendarItem = {
+    id: string
+    name: string
+    color: string                                 // hex, e.g. "#4285f4"
+    isDefault: boolean
+    shares: CalendarShare[] | null
+    createdAt: number                             // unix timestamp
+    updatedAt: number
+}
+```
+
+**Create** (`POST /calendar/:ownerId/calendars`):
+```json
+{
+    "name": "Work",
+    "color": "#4285f4"
+}
+```
+
+**Update** (`PUT /calendar/:ownerId/calendars/:id`):
+```json
+{
+    "name": "Work Projects",
+    "color": "#34a853",
+    "shares": [
+        { "targetId": "bob@eigen.local", "permission": "write" },
+        { "targetId": "team_engineering", "permission": "read" }
+    ]
+}
+```
+All fields optional. When `shares` changes, propagation runs.
+
+**Response** — list and single calendar return `CalendarItem`:
+```json
+{
+    "id": "a1b2c3d4-...",
+    "name": "Work Projects",
+    "color": "#34a853",
+    "isDefault": false,
+    "shares": [
+        { "targetId": "bob@eigen.local", "permission": "write" },
+        { "targetId": "team_engineering", "permission": "read" }
+    ],
+    "createdAt": 1741718400,
+    "updatedAt": 1741718400
+}
+```
+
+### Event
+
+```typescript
+type CalendarEvent = {
+    id: string
+    calendarId: string
+    uid: string                                   // iCalendar UID (auto-generated)
+    title: string
+    description: string | null
+    location: string | null
+    startTime: number                             // unix timestamp
+    endTime: number                               // unix timestamp
+    allDay: boolean
+    rrule: string | null                          // RFC 5545 RRULE string
+    parentEventId: string | null                  // set for recurrence exceptions
+    recurrenceDate: string | null                 // ISO date, e.g. "2026-03-15"
+    status: 'confirmed' | 'tentative' | 'cancelled'
+    data: EventData | null
+    createdAt: number
+    updatedAt: number
+}
+
+type EventData = {
+    reminders?: Reminder[]
+    attendees?: Attendee[]                        // Phase 2
+    organizer?: { userId: string, email: string } // Phase 2, set on linked events
+    organizerEventId?: string                     // Phase 2, set on linked events
+    url?: string
+    notes?: string
+    color?: string                                // per-event color override
+}
+
+type Reminder = {
+    type: 'notification' | 'email'
+    minutes: number                               // minutes before event (e.g. 10, 30, 1440)
+}
+
+type Attendee = {
+    email: string
+    status: 'pending' | 'accepted' | 'declined' | 'tentative'
+    role: 'required' | 'optional'
+}
+```
+
+**Create** (`POST /calendar/:ownerId/calendars/:calId/events`):
+```json
+{
+    "title": "Weekly Sync",
+    "startTime": 1741773600,
+    "endTime": 1741777200,
+    "allDay": false,
+    "description": "Sprint progress review",
+    "location": "Meeting Room A",
+    "rrule": "FREQ=WEEKLY;BYDAY=WE",
+    "data": {
+        "reminders": [{ "type": "notification", "minutes": 10 }]
+    }
+}
+```
+
+Minimal create (only required fields):
+```json
+{
+    "title": "Lunch",
+    "startTime": 1741780800,
+    "endTime": 1741784400,
+    "allDay": false
+}
+```
+
+All-day event:
+```json
+{
+    "title": "Company Holiday",
+    "startTime": 1741737600,
+    "endTime": 1741824000,
+    "allDay": true
+}
+```
+
+**Update** (`PUT /calendar/:ownerId/events/:id`) — partial, all fields optional:
+```json
+{
+    "title": "Weekly Sync (updated)",
+    "location": "Room B",
+    "data": {
+        "reminders": [
+            { "type": "notification", "minutes": 10 },
+            { "type": "notification", "minutes": 1440 }
+        ]
+    }
+}
+```
+
+**Cancel a single recurrence** (`POST /calendar/:ownerId/calendars/:calId/events`):
+```json
+{
+    "title": "Weekly Sync",
+    "startTime": 1742378400,
+    "endTime": 1742382000,
+    "allDay": false,
+    "parentEventId": "a1b2c3d4-...",
+    "recurrenceDate": "2026-03-19",
+    "status": "cancelled"
+}
+```
+
+**Modify a single recurrence** (same route, different time/title):
+```json
+{
+    "title": "Weekly Sync (moved)",
+    "startTime": 1742464800,
+    "endTime": 1742468400,
+    "allDay": false,
+    "parentEventId": "a1b2c3d4-...",
+    "recurrenceDate": "2026-03-19"
+}
+```
+
+### Events Response (Range Query)
+
+`GET /calendar/:ownerId/events?from=1741737600&to=1742342400` returns a flat list with recurring events expanded
+into individual **occurrences** for the requested range:
+
+```json
+[
+    {
+        "id": "a1b2c3d4-...",
+        "calendarId": "cal-1",
+        "uid": "a1b2c3d4-...",
+        "title": "Weekly Sync",
+        "startTime": 1741773600,
+        "endTime": 1741777200,
+        "allDay": false,
+        "rrule": "FREQ=WEEKLY;BYDAY=WE",
+        "status": "confirmed",
+        "location": "Meeting Room A",
+        "description": "Sprint progress review",
+        "data": { "reminders": [{ "type": "notification", "minutes": 10 }] },
+        "recurrenceDate": null,
+        "parentEventId": null,
+        "createdAt": 1741718400,
+        "updatedAt": 1741718400,
+        "occurrenceDate": "2026-03-12"
+    },
+    {
+        "id": "a1b2c3d4-...",
+        "calendarId": "cal-1",
+        "uid": "a1b2c3d4-...",
+        "title": "Weekly Sync (moved)",
+        "startTime": 1742464800,
+        "endTime": 1742468400,
+        "allDay": false,
+        "rrule": null,
+        "status": "confirmed",
+        "location": "Meeting Room A",
+        "description": "Sprint progress review",
+        "data": null,
+        "recurrenceDate": "2026-03-19",
+        "parentEventId": "a1b2c3d4-...",
+        "createdAt": 1741718400,
+        "updatedAt": 1741718400,
+        "occurrenceDate": "2026-03-20"
+    }
+]
+```
+
+Each item in the response is a **CalendarEventOccurrence** — the full event data plus an `occurrenceDate` field
+(ISO date string) indicating which date this instance falls on. For non-recurring events, `occurrenceDate` equals
+the event's start date. For recurring events, it's the specific occurrence date within the range.
+
+```typescript
+type CalendarEventOccurrence = CalendarEvent & {
+    occurrenceDate: string    // ISO date, e.g. "2026-03-12"
+}
+```
+
+Cancelled occurrences are **excluded** from the response (the backend skips them during expansion). Modified
+occurrences are **substituted** (the exception event replaces the original occurrence at that date).
+
+### Free-Busy Response
+
+When the requester has `free-busy` permission, the events endpoint returns stripped data:
+
+```json
+[
+    {
+        "startTime": 1741773600,
+        "endTime": 1741777200,
+        "allDay": false,
+        "status": "confirmed"
+    }
+]
+```
+
+No title, description, location, data, or any identifying fields. Just time blocks and status.
+
+```typescript
+type FreeBusyBlock = {
+    startTime: number
+    endTime: number
+    allDay: boolean
+    status: 'confirmed' | 'tentative'
+}
+```
+
+### Shared Calendar (Recipient View)
+
+```typescript
+type SharedCalendar = {
+    id: string                // local record id
+    ownerUserId: string
+    calendarId: string        // id in the owner's DB
+    calendarName: string
+    calendarColor: string     // owner's color
+    permission: 'free-busy' | 'read' | 'write'
+    color: string | null      // local override
+    visible: boolean
+    createdAt: number
+    updatedAt: number
+}
+```
+
+`GET /calendar/:ownerId/shared` returns the user's `SharedCalendar[]` list. The frontend uses `ownerUserId` +
+`calendarId` to fetch events: `GET /calendar/:ownerUserId/calendars/:calendarId/events?from=...&to=...`.
+
 ## Backend Architecture
 
 ### File Structure
