@@ -15,7 +15,7 @@ import React, {
 } from "react";
 import WorkbookContext from "../../context";
 import { useAlert } from "../../hooks/useAlert";
-import SVGIcon from "../SVGIcon";
+import {SVGIcon} from "../icon-map";
 
 type Props = {
   sheet: Sheet;
@@ -245,7 +245,7 @@ const SheetItem: React.FC<Props> = ({ sheet, isDropPlaceholder }) => {
         tabIndex={0}
         aria-label={info.sheetOptions}
       >
-        <SVGIcon name="downArrow" width={12} style={{ fill: svgColor }} />
+        <SVGIcon name="downArrow" width={12} style={{color: svgColor}}/>
       </span>
       {!!sheet.color && (
         <div

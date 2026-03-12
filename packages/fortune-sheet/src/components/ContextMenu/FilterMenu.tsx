@@ -23,10 +23,11 @@ import _ from "lodash";
 import produce from "immer";
 import WorkbookContext from "../../context";
 import Divider from "./Divider";
-import Menu from "./Menu";
-import SVGIcon from "../SVGIcon";
+import {Menu} from "./Menu";
+import {SVGIcon} from "../icon-map";
 import { useAlert } from "../../hooks/useAlert";
 import { useOutsideClick } from "../../hooks/useOutsideClick";
+import {Button} from "@workspace/ui/components/button";
 
 const SelectItem: React.FC<{
   item: FilterValue;
@@ -144,7 +145,7 @@ const DateSelectTree: React.FC<{
   );
 };
 
-const FilterMenu: React.FC = () => {
+export const FilterMenu: React.FC = () => {
   const { context, setContext, settings, refs } = useContext(WorkbookContext);
   const containerRef = useRef<HTMLDivElement>(null);
   const contextRef = useRef<Context>(context);
@@ -662,8 +663,8 @@ const FilterMenu: React.FC = () => {
         })}
         <Divider />
         <div className="fortune-menuitem-row">
-          <div
-            className="button-basic button-primary"
+          <Button
+              size="sm"
             onClick={() => {
               if (col == null) return;
               setContext((draftCtx) => {
@@ -690,32 +691,31 @@ const FilterMenu: React.FC = () => {
                 draftCtx.filterContextMenu = undefined;
               });
             }}
-            tabIndex={0}
           >
             {filter.filterConform}
-          </div>
-          <div
-            className="button-basic button-default"
+          </Button>
+          <Button
+              variant="outline"
+              size="sm"
             onClick={() => {
               setContext((draftCtx) => {
                 draftCtx.filterContextMenu = undefined;
               });
             }}
-            tabIndex={0}
           >
             {filter.filterCancel}
-          </div>
-          <div
-            className="button-basic button-danger"
+          </Button>
+          <Button
+              variant="destructive"
+              size="sm"
             onClick={() => {
               setContext((draftCtx) => {
                 clearFilter(draftCtx);
               });
             }}
-            tabIndex={0}
           >
             {filter.clearFilter}
-          </div>
+          </Button>
         </div>
       </div>
       {showSubMenu && (
@@ -752,8 +752,8 @@ const FilterMenu: React.FC = () => {
               ].map((v) =>
                 renderColorList(v.key, v.title, v.colors, onColorSelectChange)
               )}
-              <div
-                className="button-basic button-primary"
+              <Button
+                  size="sm"
                 onClick={() => {
                   if (col == null) return;
                   setContext((draftCtx) => {
@@ -785,10 +785,9 @@ const FilterMenu: React.FC = () => {
                     draftCtx.filterContextMenu = undefined;
                   });
                 }}
-                tabIndex={0}
               >
                 {filter.filterConform}
-              </div>
+              </Button>
             </>
           )}
         </div>
@@ -797,4 +796,3 @@ const FilterMenu: React.FC = () => {
   );
 };
 
-export default FilterMenu;

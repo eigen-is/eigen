@@ -18,6 +18,7 @@ import {
   replaceHtml,
 } from "../utils";
 import { hasPartMC } from "./validation";
+import {getComputeMap} from "./ConditionFormat";
 import { update } from "./format";
 // @ts-ignore
 import SSF from "./ssf";
@@ -1571,6 +1572,9 @@ export function rangeValueToHtml(
   const d = sheet.data;
   if (!d) return null;
 
+  // Precompute conditional formatting map once for the entire copy operation
+  const cfCompute = getComputeMap(ctx);
+
   let colgroup = "";
 
   // rowIndexArr = rowIndexArr.sort();
@@ -1630,7 +1634,7 @@ export function rangeValueToHtml(
           c_value = getCellValue(r, c, d, "m");
         }
 
-        const styleObj = getStyleByCell(ctx, d, r, c);
+        const styleObj = getStyleByCell(ctx, d, r, c, cfCompute);
         style += _.map(styleObj, (v, key) => {
           return `${_.kebabCase(key)}:${_.isNumber(v) ? `${v}px` : v};`;
         }).join("");

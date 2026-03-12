@@ -15,9 +15,8 @@ import React, {
 } from "react";
 import WorkbookContext from "../../context";
 import { useOutsideClick } from "../../hooks/useOutsideClick";
-import SVGIcon from "../SVGIcon";
+import {SVGIcon} from "../icon-map";
 
-import "./index.css";
 
 const DropDownList: React.FC = () => {
   const { context, setContext } = useContext(WorkbookContext);
@@ -35,7 +34,7 @@ const DropDownList: React.FC = () => {
 
   useOutsideClick(containerRef, close, [close]);
 
-  // 初始化
+    // Initialize multi-select dropdown
   useEffect(() => {
     if (!context.luckysheet_select_save) return;
     const last =
@@ -71,7 +70,7 @@ const DropDownList: React.FC = () => {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // 设置下拉列表的值
+    // Update dropdown value on sheet change
   useEffect(() => {
     if (!context.luckysheet_select_save) return;
     const last =
@@ -95,7 +94,7 @@ const DropDownList: React.FC = () => {
 
   return (
     <div
-      id="luckysheet-dataVerification-dropdown-List"
+        className="absolute z-[10000] bg-background border border-border shadow-md box-border text-xs"
       style={position}
       ref={containerRef}
       onClick={(e) => e.stopPropagation()}
@@ -107,7 +106,7 @@ const DropDownList: React.FC = () => {
     >
       {list.map((v, i) => (
         <div
-          className="dropdown-List-item"
+            className="px-2.5 py-1.5 box-border cursor-pointer hover:bg-accent"
           key={i}
           onClick={() => {
             setContext((ctx) => {

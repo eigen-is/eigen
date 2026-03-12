@@ -4,7 +4,7 @@ import WorkbookContext from "../../context";
 import { useOutsideClick } from "../../hooks/useOutsideClick";
 import SheetListItem from "./SheetListItem";
 
-const SheetList: React.FC = () => {
+export const SheetList: React.FC = () => {
   const { context, setContext } = useContext(WorkbookContext);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -29,4 +29,3 @@ const SheetList: React.FC = () => {
   );
 };
 
-export default SheetList;

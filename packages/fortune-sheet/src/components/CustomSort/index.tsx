@@ -14,6 +14,7 @@ import React, {
 } from "react";
 import WorkbookContext from "../../context";
 import { useDialog } from "../../hooks/useDialog";
+import {Button} from "@workspace/ui/components/button";
 
 type RadioChangeEvent = React.ChangeEvent<HTMLInputElement>;
 
@@ -37,7 +38,7 @@ const CustomSort: React.FC<{}> = () => {
     setSelectedValue(event.target.value);
   };
 
-  // 改变排序方式
+  // Change sort direction
   const handleRadioChange = useCallback((e: RadioChangeEvent) => {
     const sortValue = e.target.value;
     setAscOrDesc(sortValue === "asc");
@@ -51,12 +52,11 @@ const CustomSort: React.FC<{}> = () => {
     []
   );
 
-  // 获取排序列
+  // Build column list for sort selector
   useEffect(() => {
     const list: string[] = [];
     if (isTitleChange) {
       for (let i = col_start; i <= col_end; i += 1) {
-        // 判断列首是否为空
         const cell = context.luckysheetfile[sheetIndex].data?.[row_start]?.[i];
         const colHeaderValue = cell?.m || cell?.v;
         if (colHeaderValue) {
@@ -152,8 +152,8 @@ const CustomSort: React.FC<{}> = () => {
       </div>
 
       <div className="mt-2.5 mb-6">
-        <div
-          className="button-basic button-primary"
+        <Button
+            size="sm"
           onClick={() => {
             setContext((draftCtx: Context) => {
               sortSelection(draftCtx, ascOrDesc, parseInt(selectedValue, 10));
@@ -161,10 +161,9 @@ const CustomSort: React.FC<{}> = () => {
             });
             hideDialog();
           }}
-          tabIndex={0}
         >
           {sort.confirm}
-        </div>
+        </Button>
       </div>
     </div>
   );

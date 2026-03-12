@@ -7,7 +7,7 @@ import {
   locale,
 } from "../../core";
 import WorkbookContext from "../../context";
-import SVGIcon from "../SVGIcon";
+import {SVGIcon} from "../icon-map";
 import { useOutsideClick } from "../../hooks/useOutsideClick";
 
 const presets = [

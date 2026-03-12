@@ -41,7 +41,7 @@ import ImgBoxs from "../ImgBoxs";
 import NotationBoxes from "../NotationBoxes";
 import RangeDialog from "../DataVerification/RangeDialog";
 import {useDialog} from "../../hooks/useDialog";
-import SVGIcon from "../SVGIcon";
+import {SVGIcon} from "../icon-map";
 import DropDownList from "../DataVerification/DropdownList";
 
 const SheetOverlay: React.FC = () => {
@@ -491,6 +491,12 @@ const SheetOverlay: React.FC = () => {
     }
   }, [context.sheetFocused]); // Runs only when sheet focus toggles
 
+  useEffect(() => {
+    if (context.showSearch || context.showReplace) {
+      showDialog(<SearchReplace/>);
+    }
+  }, [context.showSearch, context.showReplace]);
+
   return (
     <main
       className="fortune-sheet-overlay"
@@ -516,9 +522,6 @@ const SheetOverlay: React.FC = () => {
         />
         <ColumnHeader />
       </div>
-      {(context.showSearch || context.showReplace) && (
-        <SearchReplace getContainer={() => containerRef.current!} />
-      )}
       <div className="fortune-row-body">
         <RowHeader />
         <ScrollBar axis="x" />

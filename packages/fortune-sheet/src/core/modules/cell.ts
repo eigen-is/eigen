@@ -1339,7 +1339,8 @@ export function getStyleByCell(
   ctx: Context,
   d: CellMatrix,
   r: number,
-  c: number
+  c: number,
+  cfCompute?: any
 ) {
   let style: any = {};
 
@@ -1348,7 +1349,7 @@ export function getStyleByCell(
   //   const checksAF = alternateformat.checksAF(r, c, af_compute);
   const checksAF: any = [];
   // 条件格式
-  const cf_compute = getComputeMap(ctx);
+  const cf_compute = cfCompute ?? getComputeMap(ctx);
   const checksCF = checkCF(r, c, cf_compute);
 
   const cell = d?.[r]?.[c];

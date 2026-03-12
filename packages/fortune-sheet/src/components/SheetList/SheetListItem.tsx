@@ -6,7 +6,7 @@ import {
 import React, { useContext, useEffect, useRef } from "react";
 import WorkbookContext from "../../context";
 import SheetHiddenButton from "./SheetHiddenButton";
-import SVGIcon from "../SVGIcon";
+import {SVGIcon} from "../icon-map";
 
 type Props = {
   sheet: Sheet;
@@ -37,7 +37,7 @@ const SheetListItem: React.FC<Props> = ({ sheet, isDropPlaceholder }) => {
 
   return (
     <div
-      className="h-[30px] leading-[30px] w-full mr-[46px] cursor-pointer hover:bg-[#efefef]"
+        className="h-[30px] leading-[30px] w-full mr-[46px] cursor-pointer hover:bg-accent"
       key={sheet.id}
       ref={containerRef}
       onClick={() => {

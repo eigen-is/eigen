@@ -1,6 +1,6 @@
 import { Sheet, api } from "../../core";
 import React, { CSSProperties, useCallback, useContext } from "react";
-import SVGIcon from "../SVGIcon";
+import {SVGIcon} from "../icon-map";
 import WorkbookContext from "../../context";
 
 type Props = {
@@ -26,7 +26,7 @@ const SheetHiddenButton: React.FC<Props> = ({ style, sheet }) => {
         showSheet();
       }}
       tabIndex={0}
-      className="mr-[15px] inline-flex absolute right-0 justify-end hover:bg-[#d0d0d0]"
+      className="mr-[15px] inline-flex absolute right-0 justify-end hover:bg-muted"
     >
       {sheet?.hide === 1 ? (
         <SVGIcon
