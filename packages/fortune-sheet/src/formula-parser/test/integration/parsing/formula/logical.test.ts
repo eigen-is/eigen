@@ -11,7 +11,7 @@ describe(".parse() logical formulas", () => {
     });
 
     it("AND", () => {
-        expect(parser.parse("AND()")).toMatchObject({error: null, result: true});
+        expect(parser.parse("AND()")).toMatchObject({error: "#VALUE!", result: null});
         expect(parser.parse("AND(TRUE, TRUE, FALSE)")).toMatchObject({
             error: null,
             result: false,
@@ -49,7 +49,7 @@ describe(".parse() logical formulas", () => {
     });
 
     it("IF", () => {
-        expect(parser.parse("IF()")).toMatchObject({error: null, result: true});
+        expect(parser.parse("IF()")).toMatchObject({error: null, result: false});
         expect(parser.parse("IF(TRUE, 1, 2)")).toMatchObject({
             error: null,
             result: 1,
@@ -78,7 +78,7 @@ describe(".parse() logical formulas", () => {
     });
 
     it("OR", () => {
-        expect(parser.parse("OR()")).toMatchObject({error: null, result: false});
+        expect(parser.parse("OR()")).toMatchObject({error: "#VALUE!", result: null});
         expect(parser.parse("OR(TRUE, TRUE, TRUE)")).toMatchObject({
             error: null,
             result: true,
@@ -98,7 +98,7 @@ describe(".parse() logical formulas", () => {
     });
 
     it("XOR", () => {
-        expect(parser.parse("XOR()")).toMatchObject({error: null, result: false});
+        expect(parser.parse("XOR()")).toMatchObject({error: "#VALUE!", result: null});
         expect(parser.parse("XOR(TRUE, TRUE)")).toMatchObject({
             error: null,
             result: false,

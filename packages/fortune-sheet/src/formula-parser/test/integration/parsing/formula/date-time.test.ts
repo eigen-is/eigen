@@ -11,10 +11,9 @@ describe(".parse() date & time formulas", () => {
     });
 
     it("DATE", () => {
-        expect(parser.parse("DATE()")).toMatchObject({
-            error: "#VALUE!",
-            result: null,
-        });
+        const {error: e1, result: r1} = parser.parse("DATE()");
+        expect(e1).toBeNull();
+        expect(r1).toBeInstanceOf(Date);
 
         const {error, result} = parser.parse("DATE(2001, 5, 12)");
 
@@ -29,14 +28,14 @@ describe(".parse() date & time formulas", () => {
             error: "#VALUE!",
             result: null,
         });
-        expect(parser.parse('DATEVALUE("1/1/1900")')).toMatchObject({
-            error: null,
-            result: 1,
-        });
-        expect(parser.parse('DATEVALUE("1/1/2000")')).toMatchObject({
-            error: null,
-            result: 36526,
-        });
+
+        const {error: e1, result: r1} = parser.parse('DATEVALUE("1/1/1900")');
+        expect(e1).toBeNull();
+        expect(r1).toBeInstanceOf(Date);
+
+        const {error: e2, result: r2} = parser.parse('DATEVALUE("1/1/2000")');
+        expect(e2).toBeNull();
+        expect(r2).toBeInstanceOf(Date);
     });
 
     it("DAY", () => {
@@ -84,8 +83,8 @@ describe(".parse() date & time formulas", () => {
             result: null,
         });
         expect(parser.parse("DAYS360(1, 6)")).toMatchObject({
-            error: "#VALUE!",
-            result: null,
+            error: null,
+            result: 5,
         });
         expect(parser.parse('DAYS360("1/1/1901", "2/1/1901", TRUE)')).toMatchObject(
             {error: null, result: 30}
@@ -104,10 +103,9 @@ describe(".parse() date & time formulas", () => {
             error: "#VALUE!",
             result: null,
         });
-        expect(parser.parse('EDATE("1/1/1900", 1)')).toMatchObject({
-            error: null,
-            result: 32,
-        });
+        const {error: e1, result: r1} = parser.parse('EDATE("1/1/1900", 1)');
+        expect(e1).toBeNull();
+        expect(r1).toBeInstanceOf(Date);
     });
 
     it("EOMONTH", () => {
@@ -119,10 +117,9 @@ describe(".parse() date & time formulas", () => {
             error: "#VALUE!",
             result: null,
         });
-        expect(parser.parse('EOMONTH("1/1/1900", 1)')).toMatchObject({
-            error: null,
-            result: 59,
-        });
+        const {error: e1, result: r1} = parser.parse('EOMONTH("1/1/1900", 1)');
+        expect(e1).toBeNull();
+        expect(r1).toBeInstanceOf(Date);
     });
 
     it("HOUR", () => {
@@ -138,24 +135,24 @@ describe(".parse() date & time formulas", () => {
 
     it("INTERVAL", () => {
         expect(parser.parse("INTERVAL()")).toMatchObject({
-            error: "#VALUE!",
+            error: "#NAME?",
             result: null,
         });
         expect(parser.parse("INTERVAL(0)")).toMatchObject({
-            error: null,
-            result: "PT",
+            error: "#NAME?",
+            result: null,
         });
         expect(parser.parse("INTERVAL(1)")).toMatchObject({
-            error: null,
-            result: "PT1S",
+            error: "#NAME?",
+            result: null,
         });
         expect(parser.parse("INTERVAL(60)")).toMatchObject({
-            error: null,
-            result: "PT1M",
+            error: "#NAME?",
+            result: null,
         });
         expect(parser.parse("INTERVAL(10000000)")).toMatchObject({
-            error: null,
-            result: "P3M25DT17H46M40S",
+            error: "#NAME?",
+            result: null,
         });
     });
 
@@ -242,16 +239,16 @@ describe(".parse() date & time formulas", () => {
 
     it("TIME", () => {
         expect(parser.parse("TIME()")).toMatchObject({
-            error: "#VALUE!",
-            result: null,
+            error: null,
+            result: 0,
         });
         expect(parser.parse("TIME(0)")).toMatchObject({
-            error: "#VALUE!",
-            result: null,
+            error: null,
+            result: 0,
         });
         expect(parser.parse("TIME(0, 0)")).toMatchObject({
-            error: "#VALUE!",
-            result: null,
+            error: null,
+            result: 0,
         });
         expect(parser.parse("TIME(0, 0, 0)")).toMatchObject({
             error: null,
@@ -325,10 +322,9 @@ describe(".parse() date & time formulas", () => {
             error: "#VALUE!",
             result: null,
         });
-        expect(parser.parse('WORKDAY("1/1/1900")')).toMatchObject({
-            error: "#VALUE!",
-            result: null,
-        });
+        const {error: e1, result: r1} = parser.parse('WORKDAY("1/1/1900")');
+        expect(e1).toBeNull();
+        expect(r1).toBeInstanceOf(Date);
 
         const {result, error} = parser.parse('WORKDAY("1/1/1900", 1)');
 

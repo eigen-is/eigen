@@ -239,13 +239,13 @@ class Parser {
             }
             return (row?.index ?? 0) + 1;
         } else if (row?.index === -1) {
-            throw Error(ERROR_NAME);
+            return this._callVariable(label);
         }
         let value: any = void 0;
 
         this.emit(
             "callCellValue",
-            {label, row, column, sheetName},
+            {label: toLabel(row!, column!), row, column, sheetName},
             this.options,
             (_value: any) => {
                 value = _value;

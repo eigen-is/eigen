@@ -1,0 +1,2 @@
+[test]
+preload = ["./src/formula-parser/test/index.test.ts"]
