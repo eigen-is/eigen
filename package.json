@@ -21,7 +21,7 @@
     "typecheck": "bun --filter '*' typecheck",
     "test": "bun  --elide-lines=0 --filter '*' test",
     "test:api": "bun  --elide-lines=0  --filter '@apps/api' test",
-    "test:fortune-sheets": "bun  --elide-lines=0  --filter '@workspace/fortune-sheet' test",
+    "test:fortune-sheet": "bun  --elide-lines=0  --filter '@workspace/fortune-sheet' test",
     "check": "bun run typecheck && bun run test"
   },
   "workspaces": [
