@@ -11097,9 +11097,9 @@ export default {
     shortcuts: "Keyboard Shortcuts",
   },
   currencyDetail: [
+    {name: "EUR", pos: "before", value: "€"},
     { name: "RMB", pos: "before", value: "¥" },
     { name: "US dollar", pos: "before", value: "$" },
-    { name: "EUR", pos: "before", value: "€" },
     { name: "GBP", pos: "before", value: "￡" },
     { name: "HK", pos: "before", value: "$" },
     { name: "JPY", pos: "before", value: "￥" },
@@ -11346,8 +11346,8 @@ export default {
   fontFamily: {
     MicrosoftYaHei: "YaHei",
   },
-  fontarray: ["Times New Roman", "Arial", "Tahoma", "Verdana"],
-  fontjson: { "times new roman": 0, arial: 1, tahoma: 2, verdana: 3 },
+  fontarray: ["Arial", "Helvetica", "Verdana", "Tahoma"],
+  fontjson: {arial: 0, helvetica: 1, verdana: 2, tahoma: 3},
   border: {
     borderTop: "Top border",
     borderBottom: "Bottom border",

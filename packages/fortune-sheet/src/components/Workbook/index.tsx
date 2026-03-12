@@ -39,23 +39,6 @@ import {ModalProvider} from "../../context/modal";
 import FilterMenu from "../ContextMenu/FilterMenu";
 import SheetList from "../SheetList";
 
-const SANS_SERIF_FONTS = ["Arial", "Helvetica", "Verdana", "Tahoma"];
-const patchedLocales = new WeakSet<object>();
-function patchLocaleDefaults(ctx: Context) {
-  const loc = locale(ctx);
-  if (patchedLocales.has(loc)) return;
-  patchedLocales.add(loc);
-  loc.fontarray = SANS_SERIF_FONTS;
-  if (Array.isArray(loc.currencyDetail)) {
-    const eurIdx = loc.currencyDetail.findIndex(
-      (c: any) => c.value === "€"
-    );
-    if (eurIdx > 0) {
-      const [eur] = loc.currencyDetail.splice(eurIdx, 1);
-      loc.currencyDetail.unshift(eur);
-    }
-  }
-}
 
 enablePatches();
 
@@ -489,7 +472,6 @@ const Workbook = React.forwardRef<WorkbookInstance, Settings & AdditionalProps>(
           draftCtx.defaultcolumnNum = mergedSettings.column;
           draftCtx.defaultrowNum = mergedSettings.row;
           draftCtx.defaultFontSize = mergedSettings.defaultFontSize;
-          patchLocaleDefaults(draftCtx);
           if (_.isEmpty(draftCtx.luckysheetfile)) {
             draftCtx.luckysheetfile = _.cloneDeep(originalData);
             ensureSheetIndex(
@@ -576,7 +558,7 @@ const Workbook = React.forwardRef<WorkbookInstance, Settings & AdditionalProps>(
 
           draftCtx.config = _.isNil(sheet.config) ? {} : sheet.config;
           draftCtx.insertedImgs = sheet.images;
-          draftCtx.currency = mergedSettings.currency || "¥";
+            draftCtx.currency = mergedSettings.currency || "€";
 
           draftCtx.zoomRatio = _.isNil(sheet.zoomRatio) ? 1 : sheet.zoomRatio;
           draftCtx.rowHeaderWidth =

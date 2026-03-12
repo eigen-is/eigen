@@ -12979,6 +12979,11 @@ export default {
   },
   currencyDetail: [
     {
+      name: "Евро",
+      pos: "before",
+      value: "€",
+    },
+    {
       name: "Юань",
       pos: "before",
       value: "¥",
@@ -12987,11 +12992,6 @@ export default {
       name: "Доллар США",
       pos: "before",
       value: "$",
-    },
-    {
-      name: "Евро",
-      pos: "before",
-      value: "€",
     },
     {
       name: "Фунт стерлингов",
@@ -13911,12 +13911,12 @@ export default {
   fontFamily: {
     MicrosoftYaHei: "YaHei",
   },
-  fontarray: ["Times New Roman", "Arial", "Tahoma", "Verdana"],
+  fontarray: ["Arial", "Helvetica", "Verdana", "Tahoma"],
   fontjson: {
-    "times new roman": 0,
-    arial: 1,
-    tahoma: 2,
-    verdana: 3,
+    arial: 0,
+    helvetica: 1,
+    verdana: 2,
+    tahoma: 3,
   },
   border: {
     borderTop: "Верхняя граница",

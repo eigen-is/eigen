@@ -11102,9 +11102,9 @@ export default {
     shortcuts: "कुंजीपटल अल्प मार्ग",
   },
   currencyDetail: [
+    {name: "यूरो", pos: "before", value: "€"},
     { name: "चीनी युआन", pos: "before", value: "¥" },
     { name: "अमेरिकी डॉलर", pos: "before", value: "$" },
-    { name: "यूरो", pos: "before", value: "€" },
     { name: "ब्रिटिश पाउंड", pos: "before", value: "￡" },
     { name: "हांगकांग डॉलर", pos: "before", value: "$" },
     { name: "जापानी येन", pos: "before", value: "￥" },
@@ -11351,8 +11351,8 @@ export default {
   fontFamily: {
     MicrosoftYaHei: "YaHei",
   },
-  fontarray: ["Times New Roman", "Arial", "Tahoma", "Verdana"],
-  fontjson: { "times new roman": 0, arial: 1, tahoma: 2, verdana: 3 },
+  fontarray: ["Arial", "Helvetica", "Verdana", "Tahoma"],
+  fontjson: {arial: 0, helvetica: 1, verdana: 2, tahoma: 3},
   border: {
     borderTop: "ऊपरी सीमा",
     borderBottom: "निचली सीमा",
