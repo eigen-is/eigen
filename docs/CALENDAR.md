@@ -8,8 +8,8 @@ Calendar follows the **Contacts/Mail pattern**: a `Calendar` class owned by each
 in a per-user (or per-team) SQLite database at `{home}/eigen.calendar/calendar.db`. Sharing uses **push-based
 propagation** (like Drive's `shared.db` / `acl-propagation.ts`) — not polling. Team calendars live in `TeamHome`
 (like team drives). The schema is relational-first with CalDAV-ready columns (`uid`, `etag`, `ctag`, `uri`). RRULE is
-stored as **RFC 5545** in the DB but exposed as a **JSON object** (`RecurrenceRule`) over the API for easier FE
-development.
+stored as **RFC 5545 RRULE strings** in both the DB and the API. The `rrule` npm package handles parsing
+and expansion on both backend and frontend.
 
 ## Design Decisions
 
@@ -84,37 +84,33 @@ truth: every update must modify both relational columns AND regenerate the .ics 
 When CalDAV is added later: add `icalData` TEXT column, generate .ics from relational data for CalDAV responses, parse
 incoming .ics into relational columns on write.
 
-### 5. Recurrence: RRULE in DB, JSON over API
+### 5. Recurrence: RRULE Strings End-to-End
 
-The database stores **RFC 5545 RRULE strings** (CalDAV-ready). The API exposes a **`RecurrenceRule` JSON object** that
-maps 1:1 to RRULE but is easier to work with in the frontend:
+The `rrule` field stores and transmits **RFC 5545 RRULE strings** as-is — same format in the DB, same format in
+the API. No conversion layer, no data loss.
 
-```typescript
-type RecurrenceRule = {
-    frequency: 'daily' | 'weekly' | 'monthly' | 'yearly'
-    interval?: number          // default 1
-    count?: number             // end after N occurrences
-    until?: string             // ISO date string, e.g. "2026-12-31"
-    byDay?: string[]           // ['MO', 'WE', 'FR'] — RFC 5545 day abbreviations
-    byMonthDay?: number[]      // [1, 15]
-    byMonth?: number[]         // [1, 6] (January, June)
-    bySetPos?: number[]        // [-1] for "last weekday of month"
-    weekStart?: string         // 'MO' (default), 'SU', etc.
-}
-```
+**Why not a JSON intermediate?** A custom JSON type (e.g. `RecurrenceRule` with `frequency`, `byDay`, etc.) would
+only map a subset of RRULE properties. When CalDAV support arrives, external clients may send RRULEs with `BYHOUR`,
+`BYMINUTE`, `BYYEARDAY`, `BYWEEKNO`, `TZID`, etc. A thin JSON layer would silently drop these on round-trip.
+Sending the raw string is 100% lossless.
 
-**Conversion examples** (backend handles this transparently):
+**Frontend developer experience** is still good: the `rrule` npm package (already installed) provides:
+- `RRule.fromString(str)` → parse for form binding via `.origOptions`
+- `new RRule(options).toString()` → build string from form state
+- `.toText()` → human-readable description ("Every week on Wednesday")
 
-| `RecurrenceRule` JSON | RRULE in DB |
-|-----------------------|-------------|
-| `{ frequency: 'weekly', interval: 2, byDay: ['MO', 'WE', 'FR'] }` | `FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,WE,FR` |
-| `{ frequency: 'monthly', byMonthDay: [15], count: 12 }` | `FREQ=MONTHLY;BYMONTHDAY=15;COUNT=12` |
-| `{ frequency: 'yearly', byMonth: [3], byMonthDay: [11] }` | `FREQ=YEARLY;BYMONTH=3;BYMONTHDAY=11` |
-| `{ frequency: 'monthly', byDay: ['FR'], bySetPos: [-1] }` | `FREQ=MONTHLY;BYDAY=FR;BYSETPOS=-1` |
+Add `rrule` as a dependency of the calendar frontend app.
 
-The conversion is a thin layer — just key renaming and array joining/splitting. Lives in
-`packages/lib/src/core/calendar/rrule.ts` so both backend and frontend can use it. The `rrule` npm package
-(or the existing `Recur` class in `calendar.test.ts`, adapted) handles **occurrence expansion** on the backend.
+**Examples:**
+
+| RRULE string | Meaning |
+|---|---|
+| `FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,WE,FR` | Every 2 weeks on Mon/Wed/Fri |
+| `FREQ=MONTHLY;BYMONTHDAY=15;COUNT=12` | 15th of every month, 12 times |
+| `FREQ=MONTHLY;BYDAY=FR;BYSETPOS=-1` | Last Friday of every month |
+| `FREQ=YEARLY;BYMONTH=3;BYMONTHDAY=11` | March 11 every year |
+
+The `rrule` npm package handles **occurrence expansion** on the backend via `RRule.fromString().between(from, to)`.
 
 **Never store expanded occurrences.** A recurring event is one row with an `rrule` column. When the frontend requests
 a date range, the backend expands recurrences in memory for that window.
@@ -336,7 +332,7 @@ type CalendarEvent = {
     startTime: number                             // unix timestamp
     endTime: number                               // unix timestamp
     allDay: boolean
-    rrule: RecurrenceRule | null                    // JSON object (converted to/from RRULE in DB)
+    rrule: string | null                             // RFC 5545 RRULE string, e.g. "FREQ=WEEKLY;BYDAY=WE"
     parentEventId: string | null                  // set for recurrence exceptions
     recurrenceDate: string | null                 // ISO date, e.g. "2026-03-15"
     status: 'confirmed' | 'tentative' | 'cancelled'
@@ -376,7 +372,7 @@ type Attendee = {
     "allDay": false,
     "description": "Sprint progress review",
     "location": "Meeting Room A",
-    "rrule": { "frequency": "weekly", "byDay": ["WE"] },
+    "rrule": "FREQ=WEEKLY;BYDAY=WE",
     "data": {
         "reminders": [{ "type": "notification", "minutes": 10 }]
     }
@@ -402,6 +398,13 @@ All-day event:
     "allDay": true
 }
 ```
+
+> **All-day event convention:** When `allDay: true`, `startTime` and `endTime` are **midnight UTC** of the
+> respective dates. RFC 5545 uses `VALUE=DATE` (e.g. `20260315`) — no time component, no timezone. "March 15" is
+> March 15 everywhere. The frontend must extract the **UTC date portion** and never convert to local time for
+> display. `endTime` follows the RFC 5545 `DTEND` convention: it is the midnight UTC of the day **after** the last
+> day (exclusive). A single all-day event on March 15 has `startTime = midnight UTC March 15`,
+> `endTime = midnight UTC March 16`.
 
 **Update** (`PUT /calendar/:ownerId/events/:id`) — partial, all fields optional:
 ```json
@@ -767,8 +770,8 @@ events response as a virtual read-only calendar.
 - Share propagation (`share-propagation.ts`) for user-to-user shares
 - Team calendars via `TeamHome` (direct access, no propagation)
 - Permission checks on cross-user and team calendar access
-- `RecurrenceRule` JSON ↔ RFC 5545 RRULE conversion (`packages/lib/src/core/calendar/rrule.ts`)
-- Recurrence expansion on the backend
+- RRULE strings stored and transmitted as-is (no JSON conversion layer)
+- Recurrence expansion via `rrule` npm package on the backend
 - Default "Personal" calendar on init (user calendars only)
 - SSE events
 - Frontend hooks in `packages/lib/src/core/calendar/`
@@ -816,22 +819,20 @@ API tests live in `apps/api/src/test/calendar.test.ts` together with the rest of
 - `ctag` increments on any event change in the calendar
 - `uid` and `uri` auto-generated on create
 
-### RecurrenceRule ↔ RRULE Conversion
+### RRULE Storage and Round-Trip
 
-- `{ frequency: 'weekly', byDay: ['MO', 'WE', 'FR'] }` → `FREQ=WEEKLY;BYDAY=MO,WE,FR`
-- `{ frequency: 'monthly', byMonthDay: [15], count: 12 }` → `FREQ=MONTHLY;BYMONTHDAY=15;COUNT=12`
-- `{ frequency: 'yearly', byMonth: [3], byMonthDay: [11] }` → `FREQ=YEARLY;BYMONTH=3;BYMONTHDAY=11`
-- `{ frequency: 'monthly', byDay: ['FR'], bySetPos: [-1] }` → `FREQ=MONTHLY;BYDAY=FR;BYSETPOS=-1`
-- `{ frequency: 'daily', interval: 3 }` → `FREQ=DAILY;INTERVAL=3`
-- Round-trip: JSON → RRULE → JSON is identity
-- RRULE → JSON → RRULE is identity
-- Omitted optional fields (interval=1, no count/until) produce clean RRULE without redundant parts
+- RRULE string stored as-is in DB and returned as-is in API
+- `FREQ=WEEKLY;BYDAY=WE` survives create → read round-trip
+- `FREQ=MONTHLY;BYMONTHDAY=15;COUNT=12` survives round-trip
+- `FREQ=MONTHLY;BYDAY=FR;BYSETPOS=-1` survives round-trip
+- Complex RRULE with `BYHOUR`/`BYMINUTE` (CalDAV) survives round-trip — no data loss
+- Non-recurring event has `rrule: null`
 
 ### Recurrence Expansion
 
 - Daily recurrence: returns correct dates in range
-- Weekly with `byDay: ['MO', 'WE', 'FR']`: returns only those weekdays
-- Monthly with `byMonthDay: [15]`: returns 15th of each month in range
+- Weekly with `BYDAY=MO,WE,FR`: returns only those weekdays
+- Monthly with `BYMONTHDAY=15`: returns 15th of each month in range
 - Yearly: returns correct date each year
 - `interval: 2` (every other week/month): skips correctly
 - `count: 5`: stops after 5 occurrences
@@ -894,8 +895,7 @@ API tests live in `apps/api/src/test/calendar.test.ts` together with the rest of
 | `apps/api/src/lib/calendar/share-propagation.ts`       | Push shares to recipients (like Drive)         |
 | `apps/api/src/lib/calendar/sse-events.ts`              | SSE event builders                             |
 | `apps/api/src/routes/calendar.ts`                      | Elysia route definitions                       |
-| `packages/lib/src/types/calendar.ts`                   | Shared types (incl. `RecurrenceRule`)          |
-| `packages/lib/src/core/calendar/rrule.ts`              | RecurrenceRule ↔ RRULE conversion              |
+| `packages/lib/src/types/calendar.ts`                   | Shared types (`CalendarEvent`, `CalendarItem`, etc.) |
 | `packages/lib/src/core/calendar/hooks/use-calendar.ts` | Query hooks + invalidation                     |
 | `packages/lib/src/core/calendar/sse-handlers.ts`       | SSE → cache invalidation                       |
 | `apps/api/src/lib/core/constants.ts`                   | Add `PATHS.CALENDAR`                           |

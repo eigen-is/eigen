@@ -1,5 +1,6 @@
 import type {DrivePath} from './drive';
 import type {ChatMessage} from './chat';
+import type {CalendarShare} from './calendar';
 
 // Lightweight mail event data (IDs and minimal fields)
 export type SSEventMailData = {
@@ -48,6 +49,15 @@ export const SSEventType = {
     CHAT_MEMBER_ENTERED: 'chat:member-entered',
     CHAT_MEMBER_LEFT: 'chat:member-left',
     CHAT_TYPING: 'chat:typing',
+    // Calendar events
+    CALENDAR_EVENT_CREATED: 'calendar:event-created',
+    CALENDAR_EVENT_UPDATED: 'calendar:event-updated',
+    CALENDAR_EVENT_DELETED: 'calendar:event-deleted',
+    CALENDAR_CREATED: 'calendar:calendar-created',
+    CALENDAR_UPDATED: 'calendar:calendar-updated',
+    CALENDAR_DELETED: 'calendar:calendar-deleted',
+    CALENDAR_SHARED: 'calendar:shared',
+    CALENDAR_UNSHARED: 'calendar:unshared',
     // Contact events
     CONTACT_CREATED: 'contacts:contact-created',
     CONTACT_UPDATED: 'contacts:contact-updated',
@@ -106,6 +116,37 @@ type SSEventContactLabelNotification = SSEventBase & SSEventNotification & {
 
 type SSEventContacts = SSEventContactNotification | SSEventContactLabelNotification;
 
+// Calendar event data
+export type SSEventCalendarData = {
+    calendarId: string;
+    eventId?: string;
+    title?: string;
+};
+
+export type SSEventCalendarShareData = {
+    calendarId: string;
+    calendarName: string;
+    ownerUserId: string;
+    permission?: CalendarShare['permission'];
+};
+
+type SSEventCalendarNotification = SSEventBase & SSEventNotification & {
+    type: typeof SSEventType.CALENDAR_EVENT_CREATED
+        | typeof SSEventType.CALENDAR_EVENT_UPDATED
+        | typeof SSEventType.CALENDAR_EVENT_DELETED
+        | typeof SSEventType.CALENDAR_CREATED
+        | typeof SSEventType.CALENDAR_UPDATED
+        | typeof SSEventType.CALENDAR_DELETED;
+    calendar: SSEventCalendarData;
+};
+
+type SSEventCalendarShare = SSEventBase & SSEventNotification & {
+    type: typeof SSEventType.CALENDAR_SHARED | typeof SSEventType.CALENDAR_UNSHARED;
+    calendarShare: SSEventCalendarShareData;
+};
+
+type SSEventCalendar = SSEventCalendarNotification | SSEventCalendarShare;
+
 // Chat event data
 export type SSEventChatData = {
     chatId: string;
@@ -122,7 +163,7 @@ type SSEventChat = SSEventBase & SSEventNotification & {
 };
 
 // Union of all events
-export type SSEvent = SSEventDrive | SSEventMail | SSEventContacts | SSEventChat;
+export type SSEvent = SSEventDrive | SSEventMail | SSEventContacts | SSEventChat | SSEventCalendar;
 
 // Type guard to check if event is a notification (has body, should show toast)
 export function isSSEventNotification(event: SSEvent): event is SSEvent & SSEventNotification {
@@ -130,4 +171,4 @@ export function isSSEventNotification(event: SSEvent): event is SSEvent & SSEven
 }
 
 // Export individual types for consumers
-export type {SSEventBase, SSEventDrive, SSEventMail, SSEventContacts, SSEventChat};
+export type {SSEventBase, SSEventDrive, SSEventMail, SSEventContacts, SSEventChat, SSEventCalendar};
