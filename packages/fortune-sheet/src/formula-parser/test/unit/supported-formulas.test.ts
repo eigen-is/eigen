@@ -3,6 +3,6 @@ import {describe, expect, test} from "bun:test";
 
 describe("fortune-sheet/formula-parser/supported-formulas", () => {
     test("should be defined", () => {
-        expect(SUPPORTED_FORMULAS.length).toBe(392);
+        expect(SUPPORTED_FORMULAS.length).toBe(453);
     });
 });

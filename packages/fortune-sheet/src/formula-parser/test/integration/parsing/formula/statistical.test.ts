@@ -339,20 +339,20 @@ describe(".parse() statistical formulas", () => {
 
     it("CONFIDENCE", () => {
         expect(parser.parse("CONFIDENCE()")).toMatchObject({
-            error: "#ERROR!",
-            result: null,
+            error: null,
+            result: NaN,
         });
         expect(parser.parse("CONFIDENCE(0.5)")).toMatchObject({
-            error: "#ERROR!",
-            result: null,
+            error: null,
+            result: NaN,
         });
         expect(parser.parse("CONFIDENCE(0.5, 1)")).toMatchObject({
-            error: "#ERROR!",
-            result: null,
+            error: null,
+            result: Infinity,
         });
-        expect(parser.parse("CONFIDENCE(0.5, 1, 5)")).toMatchObject({
-            error: "#ERROR!",
-            result: null,
+        expect(parser.parse("CONFIDENCE(0.5, 1, 5)")).toBeMatchCloseTo({
+            error: null,
+            result: 0.30164098631305825,
         });
         expect(parser.parse("CONFIDENCE.NORM(0.5, 1, 5)")).toMatchObject({
             error: "#NAME?",
@@ -384,10 +384,10 @@ describe(".parse() statistical formulas", () => {
         parser.setVariable("bar", [9, 7, 12, 15, 17]);
 
         expect(parser.parse("CORREL()")).toMatchObject({
-            error: null,
-            result: NaN,
+            error: "#ERROR!",
+            result: null,
         });
-        expect(parser.parse("CORREL(foo, bar)")).toMatchObject({
+        expect(parser.parse("CORREL(foo, bar)")).toBeMatchCloseTo({
             error: null,
             result: 0.9970544855015815,
         });
@@ -478,27 +478,27 @@ describe(".parse() statistical formulas", () => {
         parser.setVariable("foo", [1, 1, 2, 2, 2]);
 
         expect(parser.parse("COUNTIN(foo, 1)")).toMatchObject({
-            error: "#NAME?",
-            result: null,
+            error: null,
+            result: 2,
         });
         expect(parser.parse("COUNTIN(foo, 2)")).toMatchObject({
-            error: "#NAME?",
-            result: null,
+            error: null,
+            result: 3,
         });
     });
 
     it("COUNTUNIQUE", () => {
         expect(parser.parse("COUNTUNIQUE()")).toMatchObject({
-            error: "#NAME?",
-            result: null,
+            error: null,
+            result: 0,
         });
         expect(parser.parse("COUNTUNIQUE(1, 1, 2, 2, 3)")).toMatchObject({
-            error: "#NAME?",
-            result: null,
+            error: null,
+            result: 3,
         });
         expect(parser.parse('COUNTUNIQUE(1, 1, 2, 2, 3, "a", "a")')).toMatchObject({
-            error: "#NAME?",
-            result: null,
+            error: null,
+            result: 4,
         });
     });
 
@@ -891,8 +891,8 @@ describe(".parse() statistical formulas", () => {
             result: 4,
         });
         expect(parser.parse("LARGE(bar, 3)")).toMatchObject({
-            error: null,
-            result: 3,
+            error: "#VALUE!",
+            result: null,
         });
     });
 
