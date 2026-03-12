@@ -5,16 +5,16 @@
  * @returns Converted number or undefined.
  */
 export function toNumber(number: string | number): number | undefined {
-  let result: number | undefined;
+    let result: number | undefined;
 
-  if (typeof number === "number") {
-    result = number;
-  } else if (typeof number === "string") {
-    result =
-      number.indexOf(".") > -1 ? parseFloat(number) : parseInt(number, 10);
-  }
+    if (typeof number === "number") {
+        result = number;
+    } else if (typeof number === "string") {
+        result =
+            number.indexOf(".") > -1 ? parseFloat(number) : parseInt(number, 10);
+    }
 
-  return result;
+    return result;
 }
 
 /**
@@ -24,6 +24,6 @@ export function toNumber(number: string | number): number | undefined {
  * @returns Returns inverted number.
  */
 export function invertNumber(number: string | number): number | undefined {
-  const num = toNumber(number);
-  return num !== undefined ? -1 * num : undefined;
+    const num = toNumber(number);
+    return num !== undefined ? -1 * num : undefined;
 }
