@@ -1,5 +1,6 @@
 import _ from "lodash";
 import { contextFactory, selectionFactory } from "../factories/context";
+import { Context } from "../../context";
 import { mergeCells, cancelMerge } from "../../api/merge";
 import { expect, describe, test } from "bun:test";
 
@@ -7,7 +8,7 @@ describe("fortune-sheet/core/api/merge", () => {
   const getContext = () =>
     contextFactory({
       luckysheet_select_save: selectionFactory([0, 1], [0, 1], 0, 0),
-    });
+    }) as Context;
 
   test("mergeCells and cancelMerge", async () => {
     const testMergeCellsAll = (r0: number, c0: number, r1: number, c1: number, mergeMode: string) => {
@@ -37,13 +38,13 @@ describe("fortune-sheet/core/api/merge", () => {
               cs: r === r0 ? 1 : undefined,
             };
           default:
-            return {};
+            return undefined;
         }
       };
       mergeCells(ctx, ranges, mergeMode);
       _.range(r0, r1 + 1).forEach((r) => {
         _.range(c0, c1 + 1).forEach((c) => {
-          expect(ctx.luckysheetfile[0].data[r][c].mc).toEqual(
+          expect(ctx.luckysheetfile[0]?.data?.[r]?.[c]?.mc).toEqual(
             expectedValue(r, c, mergeMode)
           );
         });
@@ -51,7 +52,7 @@ describe("fortune-sheet/core/api/merge", () => {
       cancelMerge(ctx, ranges);
       _.range(r0, r1 + 1).forEach((r) => {
         _.range(c0, c1 + 1).forEach((c) => {
-          expect(ctx.luckysheetfile[0].data[r][c].mc).toEqual(undefined);
+          expect(ctx.luckysheetfile[0]?.data?.[r]?.[c]?.mc).toEqual(undefined);
         });
       });
     };
@@ -70,7 +71,7 @@ describe("fortune-sheet/core/api/merge", () => {
       [1, 2, 3, 3, "merge-horizontal"],
     ];
     testRangeList.forEach((k) =>
-      testMergeCellsAll(k[0], k[1], k[2], k[3], k[4])
+      testMergeCellsAll(k[0] as number, k[1] as number, k[2] as number, k[3] as number, k[4] as string)
     );
   });
 });

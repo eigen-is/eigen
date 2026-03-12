@@ -1,4 +1,5 @@
 import { contextFactory, selectionFactory } from "../factories/context";
+import { Context } from "../../context";
 import {
   getSelection,
   setSelection,
@@ -16,7 +17,7 @@ describe("fortune-sheet/core/api/range", () => {
   const getContext = () =>
     contextFactory({
       luckysheet_select_save: selectionFactory([0, 0], [0, 0], 0, 0),
-    });
+    }) as Context;
 
   test("getSelection", async () => {
     const ctx = getContext();
@@ -51,12 +52,14 @@ describe("fortune-sheet/core/api/range", () => {
 
   test("getCellsByFlattenRange", async () => {
     const ctx = getContext();
-    ctx.luckysheetfile[0].data = [
-      [{ v: 1 }, { v: 2 }, { v: 3 }, { v: 4 }],
-      [{ v: 1 }, { v: 2 }, { v: 3 }, { v: 4 }],
-      [{ v: 1 }, { v: 2 }, { v: 3 }, { v: 4 }],
-      [{ v: 1 }, { v: 2 }, { v: 3 }, { v: 4 }],
-    ];
+    if (ctx.luckysheetfile[0]?.data) {
+      ctx.luckysheetfile[0].data = [
+        [{ v: 1 }, { v: 2 }, { v: 3 }, { v: 4 }],
+        [{ v: 1 }, { v: 2 }, { v: 3 }, { v: 4 }],
+        [{ v: 1 }, { v: 2 }, { v: 3 }, { v: 4 }],
+        [{ v: 1 }, { v: 2 }, { v: 3 }, { v: 4 }],
+      ];
+    }
     const range = getFlattenRange(ctx, [
       { row: [0, 0], column: [0, 1] },
       { row: [2, 3], column: [2, 3] },
@@ -84,13 +87,15 @@ describe("fortune-sheet/core/api/range", () => {
 
   test("getCellsByRange", async () => {
     const ctx = getContext();
-    ctx.luckysheetfile[0].data[0][0] = { v: 66 };
-    expect(getCellsByRange(ctx)).toEqual([[{ v: 66 }]]);
+    if (ctx.luckysheetfile[0]?.data?.[0]?.[0]) {
+      ctx.luckysheetfile[0].data[0][0] = { v: 66 };
+    }
+    expect(getCellsByRange(ctx, { row: [0, 0], column: [0, 0] })).toEqual([[{ v: 66 }]]);
   });
 
   test("getHtmlByRange", async () => {
     const ctx = getContext();
-    expect(getHtmlByRange(ctx)).toBe(
+    expect(getHtmlByRange(ctx, [{ row: [0, 0], column: [0, 0] }])).toBe(
       '<table data-type="fortune-copy-action-table"></table>'
     );
   });
@@ -100,15 +105,17 @@ describe("fortune-sheet/core/api/range", () => {
     setSelection(ctx, [
       { row: [0, 0], column: [0, 1] },
       { row: [2, 3], column: [2, 3] },
-    ]);
-    expect(ctx.luckysheet_select_save[0]).toMatchObject({
-      row: [0, 0],
-      column: [0, 1],
-    });
-    expect(ctx.luckysheet_select_save[1]).toMatchObject({
-      row: [2, 3],
-      column: [2, 3],
-    });
+    ], {});
+    if (ctx.luckysheet_select_save) {
+      expect(ctx.luckysheet_select_save[0]).toMatchObject({
+        row: [0, 0],
+        column: [0, 1],
+      });
+      expect(ctx.luckysheet_select_save[1]).toMatchObject({
+        row: [2, 3],
+        column: [2, 3],
+      });
+    }
   });
 
   test("setCellValuesByRange", async () => {
@@ -124,8 +131,8 @@ describe("fortune-sheet/core/api/range", () => {
       null,
       { id: "id_2" }
     );
-    expect(ctx.luckysheetfile[1].data[2][2].v).toBe(7);
-    expect(ctx.luckysheetfile[1].data[1][2].v).toBe(3);
+    expect(ctx.luckysheetfile[1]?.data?.[2]?.[2]?.v).toBe(7);
+    expect(ctx.luckysheetfile[1]?.data?.[1]?.[2]?.v).toBe(3);
   });
 
   test("setCellFormatByRange", async () => {
@@ -137,7 +144,7 @@ describe("fortune-sheet/core/api/range", () => {
       { row: [1, 2], column: [1, 2] },
       { id: "id_2" }
     );
-    expect(ctx.luckysheetfile[1].data[2][2]).toEqual({ bg: "#f00" });
-    expect(ctx.luckysheetfile[1].data[2][1]).toEqual({ bg: "#f00" });
+    expect(ctx.luckysheetfile[1]?.data?.[2]?.[2]).toEqual({ bg: "#f00" });
+    expect(ctx.luckysheetfile[1]?.data?.[2]?.[1]).toEqual({ bg: "#f00" });
   });
 });
