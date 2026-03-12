@@ -4,6 +4,8 @@ Full audit of `packages/fortune-sheet/src/` — identifying cleanup, shadcn/Tail
 
 ## Known Bugs
 
+- Find (and replace) dialog don't get focus (and is probably not using shadcn/useDialog) so when you click on a button
+  in the dialog you select a cell below it.
 - Replace as much lodash with modern typescript, use for( const item of items) instead of _.forEach, etc.
 - When you have columns with conditional formatting, pressing ctrl+c to copy (a larege amount of) cells freezes the browser. Without condtional formatted cells it works fine.
 - It looks like having one big sheet (with conditional formatting?) also slows down work on other sheets in the same workbook. Can we handle data of the sheets somehow more seperatable?
