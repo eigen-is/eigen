@@ -1,16 +1,17 @@
-import Parser from "../../../src/parser";
+import Parser from "../../../parser";
+import {afterEach, beforeEach, describe, expect, test} from "bun:test";
 
 describe(".parse() logical", () => {
-    let parser;
+    let parser: Parser;
 
     beforeEach(() => {
         parser = new Parser();
     });
     afterEach(() => {
-        parser = null;
+        parser = null as any;
     });
 
-    it("operator: =", () => {
+    test("operator: =", () => {
         expect(parser.parse("10 = 10")).toMatchObject({
             error: null,
             result: true,
@@ -22,7 +23,7 @@ describe(".parse() logical", () => {
         });
     });
 
-    it("operator: >", () => {
+    test("operator: >", () => {
         expect(parser.parse("11 > 10")).toMatchObject({
             error: null,
             result: true,
@@ -50,7 +51,7 @@ describe(".parse() logical", () => {
         });
     });
 
-    it("operator: <", () => {
+    test("operator: <", () => {
         expect(parser.parse("10 < 11")).toMatchObject({
             error: null,
             result: true,
@@ -78,7 +79,7 @@ describe(".parse() logical", () => {
         });
     });
 
-    it("operator: >=", () => {
+    test("operator: >=", () => {
         expect(parser.parse("11 >= 10")).toMatchObject({
             error: null,
             result: true,
@@ -110,7 +111,7 @@ describe(".parse() logical", () => {
         });
     });
 
-    it("operator: <=", () => {
+    test("operator: <=", () => {
         expect(parser.parse("10 <= 10")).toMatchObject({
             error: null,
             result: true,
@@ -138,7 +139,7 @@ describe(".parse() logical", () => {
         });
     });
 
-    it("operator: <>", () => {
+    test("operator: <>", () => {
         expect(parser.parse("10 <> 11")).toMatchObject({
             error: null,
             result: true,

@@ -1,7 +1,8 @@
-import {invertNumber, toNumber} from "../../../src/helper/number";
+import {describe, expect, test} from "bun:test";
+import {invertNumber, toNumber} from "../../../helper/number";
 
 describe(".toNumber()", () => {
-    it("should correctly convert passed value into number", () => {
+    test("should correctly convert passed value into number", () => {
         expect(toNumber(-100)).toBe(-100);
         expect(toNumber(-1)).toBe(-1);
         expect(toNumber(19)).toBe(19);
@@ -16,7 +17,7 @@ describe(".toNumber()", () => {
 });
 
 describe(".invertNumber()", () => {
-    it("should correctly invert number", () => {
+    test("should correctly invert number", () => {
         expect(invertNumber(-100)).toBe(100);
         expect(invertNumber(-1)).toBe(1);
         expect(invertNumber(19)).toBe(-19);

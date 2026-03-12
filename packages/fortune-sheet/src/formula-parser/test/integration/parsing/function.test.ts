@@ -1,16 +1,17 @@
-import Parser from "../../../src/parser";
+import Parser from "../../../parser";
+import {afterEach, beforeEach, describe, expect, test} from "bun:test";
 
 describe(".parse() custom function", () => {
-    let parser;
+    let parser: Parser;
 
     beforeEach(() => {
         parser = new Parser();
     });
     afterEach(() => {
-        parser = null;
+        parser = null as any;
     });
 
-    it("should evaluate custom functions", () => {
+    test("should evaluate custom functions", () => {
         expect(parser.parse("foo()")).toMatchObject({
             error: "#NAME?",
             result: null,
@@ -34,7 +35,7 @@ describe(".parse() custom function", () => {
         });
     });
 
-    it("should evaluate function with arguments passed as an stringified array", () => {
+    test("should evaluate function with arguments passed as an stringified array", () => {
         expect(parser.parse("SUM([])")).toMatchObject({error: null, result: 0});
         expect(parser.parse("SUM([1])")).toMatchObject({error: null, result: 1});
         expect(parser.parse("SUM([1,2,3])")).toMatchObject({
