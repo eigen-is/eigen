@@ -1,17 +1,17 @@
-import { contextFactory, selectionFactory } from "../factories/context";
-import { Context } from "../../context";
+import {contextFactory, selectionFactory} from "../factories/context";
+import {Context} from "../../context";
 import {
-  getSelection,
-  setSelection,
-  setCellValuesByRange,
-  setCellFormatByRange,
-  getFlattenRange,
   getCellsByFlattenRange,
-  getSelectionCoordinates,
   getCellsByRange,
+  getFlattenRange,
   getHtmlByRange,
+  getSelection,
+  getSelectionCoordinates,
+  setCellFormatByRange,
+  setCellValuesByRange,
+  setSelection,
 } from "../../api/range";
-import { expect, describe, test } from "bun:test";
+import {describe, expect, test} from "bun:test";
 
 describe("fortune-sheet/core/api/range", () => {
   const getContext = () =>
@@ -87,7 +87,7 @@ describe("fortune-sheet/core/api/range", () => {
 
   test("getCellsByRange", async () => {
     const ctx = getContext();
-    if (ctx.luckysheetfile[0]?.data?.[0]?.[0]) {
+    if (ctx.luckysheetfile[0]?.data?.[0]) {
       ctx.luckysheetfile[0].data[0][0] = { v: 66 };
     }
     expect(getCellsByRange(ctx, { row: [0, 0], column: [0, 0] })).toEqual([[{ v: 66 }]]);
@@ -96,7 +96,7 @@ describe("fortune-sheet/core/api/range", () => {
   test("getHtmlByRange", async () => {
     const ctx = getContext();
     expect(getHtmlByRange(ctx, [{ row: [0, 0], column: [0, 0] }])).toBe(
-      '<table data-type="fortune-copy-action-table"></table>'
+        '<table data-type="fortune-copy-action-table"><colgroup width="72px"></colgroup><tr><td  style="height:19px;"></td></tr></table>'
     );
   });
 
