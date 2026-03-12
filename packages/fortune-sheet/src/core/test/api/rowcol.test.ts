@@ -1,5 +1,6 @@
 import _ from "lodash";
 import { contextFactory, selectionFactory } from "../factories/context";
+import { Context } from "../../context";
 import {
   freeze,
   insertRowOrColumn,
@@ -15,7 +16,7 @@ describe("fortune-sheet/core/api/rowcol", () => {
   const getContext = () =>
     contextFactory({
       luckysheet_select_save: selectionFactory([0, 0], [0, 0], 0, 0),
-    });
+    }) as Context;
 
   test("freeze", () => {
     [
@@ -24,12 +25,12 @@ describe("fortune-sheet/core/api/rowcol", () => {
       { t: "column", rs: "rangeColumn" },
     ].forEach((item) => {
       const ctx = getContext();
-      freeze(ctx, item.t, { row: 2, column: 2 }, { id: "id_2" });
-      expect(ctx.luckysheetfile[1].frozen.range).toEqual({
+      freeze(ctx, item.t as "both" | "row" | "column", { row: 2, column: 2 }, { id: "id_2" });
+      expect(ctx.luckysheetfile[1]?.frozen?.range).toEqual({
         column_focus: 2,
         row_focus: 2,
       });
-      expect(ctx.luckysheetfile[1].frozen.type).toBe(item.rs);
+      expect(ctx.luckysheetfile[1]?.frozen?.type).toBe(item.rs as "both" | "row" | "column");
     });
   });
 
@@ -46,13 +47,19 @@ describe("fortune-sheet/core/api/rowcol", () => {
     ].forEach((k) => {
       const ctx = getContext();
       if (k.t === "row") {
-        ctx.luckysheetfile[0].data[k.i] = [cellTmpl, null, cellTmpl, null];
+        if (ctx.luckysheetfile[0]?.data?.[k.i]) {
+          ctx.luckysheetfile[0].data[k.i] = [cellTmpl, null, cellTmpl, null];
+        }
       } else {
-        ctx.luckysheetfile[0].data[0][k.i] = cellTmpl;
-        ctx.luckysheetfile[0].data[2][k.i] = cellTmpl;
+        if (ctx.luckysheetfile[0]?.data?.[0]?.[k.i]) {
+          ctx.luckysheetfile[0].data[0][k.i] = cellTmpl;
+        }
+        if (ctx.luckysheetfile[0]?.data?.[2]?.[k.i]) {
+          ctx.luckysheetfile[0].data[2][k.i] = cellTmpl;
+        }
       }
       ctx.defaultCell = { v: "inserted" };
-      insertRowOrColumn(ctx, k.t, k.i, k.c, k.d, { id: "id_1" });
+      insertRowOrColumn(ctx, k.t as "row" | "column", k.i, k.c, k.d as "lefttop" | "rightbottom", { id: "id_1" });
       for (let i = 0; i < k.c; i += 1) {
         for (let j = 0; j < 4; j += 1) {
           let l = 0;
@@ -61,9 +68,9 @@ describe("fortune-sheet/core/api/rowcol", () => {
           }
           let receivedValue;
           if (k.t === "row") {
-            receivedValue = ctx.luckysheetfile[0].data[k.i + i + l][j];
+            receivedValue = ctx.luckysheetfile[0]?.data?.[k.i + i + l]?.[j];
           } else {
-            receivedValue = ctx.luckysheetfile[0].data[j][k.i + i + l];
+            receivedValue = ctx.luckysheetfile[0]?.data?.[j]?.[k.i + i + l];
           }
           expect(receivedValue).toEqual(
             _.includes([0, 2], j) ? emptyTmpl : null
@@ -97,9 +104,11 @@ describe("fortune-sheet/core/api/rowcol", () => {
       { type: "row", start: 1, end: 3, rawData: rawDataSecond },
       { type: "column", start: 1, end: 1, rawData: rawDataSecond },
     ].forEach((k) => {
-      ctx.luckysheetfile[0].data = k.rawData();
+      if (ctx.luckysheetfile[0]) {
+        ctx.luckysheetfile[0].data = k.rawData();
+      }
       const slen = k.end - k.start + 1;
-      deleteRowOrColumn(ctx, k.type, k.start, k.end);
+      deleteRowOrColumn(ctx, k.type as "row" | "column", k.start, k.end);
       _.range(0, k.rawData().length - slen).forEach((i) => {
         _.range(0, k.rawData()[0].length - slen).forEach((j) => {
           let expectedValue;
@@ -121,7 +130,7 @@ describe("fortune-sheet/core/api/rowcol", () => {
               return null;
             };
           }
-          expect(ctx.luckysheetfile[0].data[i][j]).toEqual(expectedValue());
+          expect(ctx.luckysheetfile[0]?.data?.[i]?.[j]).toEqual(expectedValue());
         });
       });
     });

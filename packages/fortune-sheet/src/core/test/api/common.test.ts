@@ -1,4 +1,5 @@
 import { contextFactory } from "../factories/context";
+import { Context } from "../../context";
 import { getSheet } from "../../api/common";
 import { expect, describe, test } from "bun:test";
 
@@ -27,7 +28,7 @@ describe("fortune-sheet/core/api/common", () => {
         },
         expectedSheet,
       ],
-    } as any);
+    }) as Context;
 
   test("getSheet", async () => {
     const ctx = getContext();

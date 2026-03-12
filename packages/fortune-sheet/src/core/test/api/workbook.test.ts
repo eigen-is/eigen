@@ -1,4 +1,5 @@
 import { contextFactory, selectionFactory } from "../factories/context";
+import { Context } from "../../context";
 import {
   addSheet,
   deleteSheet,
@@ -25,13 +26,13 @@ describe("fortune-sheet/core/api/workbook", () => {
   const getContext = () =>
     contextFactory({
       luckysheet_select_save: selectionFactory([0, 0], [0, 0], 0, 0),
-    });
+    }) as Context;
 
   test("addSheet", () => {
     const ctx = getContext();
     const settings = { allowEdit: true, row: 60, column: 84 };
     (settings as any).generateSheetId = () => "id_3";
-    addSheet(ctx, settings);
+    addSheet(ctx, settings as any);
     expect(ctx.luckysheetfile.length).toBe(3);
     expect(ctx.luckysheetfile[2].id).toBe("id_3");
   });

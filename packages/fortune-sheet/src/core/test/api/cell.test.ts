@@ -1,4 +1,5 @@
 import { contextFactory, selectionFactory } from "../factories/context";
+import { Context } from "../../context";
 import {
   getCellValue,
   setCellValue,
@@ -24,6 +25,7 @@ describe("fortune-sheet/core/api/cell", () => {
       luckysheetfile: [
         {
           id: "id_1",
+          name: "Sheet1",
           data: [
             [null, null],
             [
@@ -34,13 +36,14 @@ describe("fortune-sheet/core/api/cell", () => {
         },
         {
           id: "id_2",
+          name: "Sheet2",
           data: [
             [null, null],
             [null, { m: "4", v: "4", bl: 0, bg: "#ff0" }],
           ],
         },
       ],
-    });
+    }) as Context;
 
   test("getCellValue", async () => {
     const ctx = getContext();
@@ -73,7 +76,7 @@ describe("fortune-sheet/core/api/cell", () => {
   test("clearCell", async () => {
     const ctx = getContext();
     clearCell(ctx, 1, 0, { id: "id_1" });
-    expect(ctx.luckysheetfile[0].data[1][0]).toEqual({});
+    expect(ctx.luckysheetfile[0]?.data?.[1]?.[0]).toEqual({});
   });
 
   test("setCellFormat", async () => {
@@ -81,7 +84,7 @@ describe("fortune-sheet/core/api/cell", () => {
     setCellFormat(ctx, 0, 0, "bl", 1, { id: "id_1" });
     setCellFormat(ctx, 0, 0, "bg", "#ff0", { id: "id_1" });
     setCellFormat(ctx, 0, 0, "ct", { fa: "General", t: "n" }, { id: "id_1" });
-    expect(ctx.luckysheetfile[0].data[0][0]).toEqual({
+    expect(ctx.luckysheetfile[0]?.data?.[0]?.[0]).toEqual({
       bg: "#ff0",
       bl: 1,
       ct: { fa: "General", t: "n" },
