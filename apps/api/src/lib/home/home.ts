@@ -4,6 +4,7 @@ import * as path from 'path';
 import {type DatabaseConfig, ManagedDatabase, openLocalDatabase, type SchemaType} from '../core';
 import {Contacts} from '../contacts/contacts';
 import Maildir from '../mail/maildir';
+import type {Calendar} from '../calendar/calendar';
 import type {SSEvent} from '@workspace/lib/types/sse';
 import {createAsyncSingleton} from '../../utils/singleton';
 import {Drive} from '../drive';
@@ -17,6 +18,7 @@ export class Home {
     public drive!: Drive;
     public contacts!: Contacts;
     public mail!: Maildir;
+    public calendar!: Calendar;
 
     protected initialized: boolean = false;
     protected initializationStarted: boolean = false;
@@ -46,6 +48,7 @@ export class Home {
         await this.drive?.init();
         await this.contacts?.init();
         await this.mail?.init();
+        await this.calendar?.init();
 
         this.initialized = true;
         for (const resolve of this.initWaiters) {
@@ -110,6 +113,12 @@ export class Home {
             await this.mail?.destruct();
         } catch (error) {
             console.error('Failed to destruct mail:', error);
+        }
+
+        try {
+            await this.calendar?.destruct();
+        } catch (error) {
+            console.error('Failed to destruct calendar:', error);
         }
 
         for (const [key, getter] of this.managedDatabases) {

@@ -22,6 +22,10 @@ export const PATHS = {
         ROOT: 'eigen.contacts',
         DB: 'eigen.contacts/contacts.db',
         AVATARS: 'avatars'
+    },
+    CALENDAR: {
+        ROOT: 'eigen.calendar',
+        DB: 'eigen.calendar/calendar.db'
     }
 } as const;
 
