@@ -75,7 +75,6 @@ export function SheetEditor({ownerId, path, canWrite, onAccessDialogOpen}: Sheet
                     toolbarRightItems={rightItems}
                     defaultRowHeight={25}
                     defaultFontSize={11}
-                    currency="€"
                     column={26}
                     row={100}
                 />
