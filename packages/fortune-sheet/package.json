@@ -8,7 +8,7 @@
     "test": "bun test"
   },
   "dependencies": {
-    "@formulajs/formulajs": "^4.1.0",
+    "@formulajs/formulajs": "^2.9.3",
     "@workspace/lib": "workspace:*",
     "@workspace/ui": "workspace:*",
     "dayjs": "^1.11.0",

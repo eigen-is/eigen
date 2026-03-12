@@ -12,36 +12,36 @@ describe(".parse() financial formulas", () => {
 
     it("ACCRINT", () => {
         expect(parser.parse("ACCRINT()")).toMatchObject({
-            error: "#NUM!",
+            error: "#VALUE!",
             result: null,
         });
         expect(parser.parse('ACCRINT("2/2/2012")')).toMatchObject({
-            error: "#NUM!",
+            error: "#VALUE!",
             result: null,
         });
         expect(parser.parse('ACCRINT("2/2/2012", "3/30/2012")')).toMatchObject({
-            error: "#NUM!",
+            error: "#VALUE!",
             result: null,
         });
         expect(
             parser.parse('ACCRINT("2/2/2012", "3/30/2012", "12/4/2013")')
-        ).toMatchObject({error: "#NUM!", result: null});
+        ).toMatchObject({ error: "#NUM!", result: null });
         expect(
             parser.parse('ACCRINT("2/2/2012", "3/30/2012", "12/4/2013", 0.1)')
-        ).toMatchObject({error: "#NUM!", result: null});
+        ).toMatchObject({ error: "#NUM!", result: null });
         expect(
             parser.parse('ACCRINT("2/2/2012", "3/30/2012", "12/4/2013", 0.1, 1000)')
-        ).toMatchObject({error: "#NUM!", result: null});
+        ).toMatchObject({ error: "#NUM!", result: null });
         expect(
             parser.parse(
                 'ACCRINT("2/2/2012", "3/30/2012", "12/4/2013", 0.1, 1000, 1)'
             )
-        ).toMatchObject({error: null, result: 183.88888888888889});
+        ).toMatchObject({ error: "#NUM!", result: null });
         expect(
             parser.parse(
                 'ACCRINT("2/2/2012", "3/30/2012", "12/4/2013", 0.1, 1000, 1, 0)'
             )
-        ).toMatchObject({error: null, result: 183.88888888888889});
+        ).toMatchObject({ error: null, result: 183.88888888888889 });
     });
 
     it("CUMIPMT", () => {
@@ -458,11 +458,11 @@ describe(".parse() financial formulas", () => {
     it("RATE", () => {
         expect(parser.parse("RATE()")).toMatchObject({
             error: null,
-            result: 0.1,
+            result: 0.01,
         });
         expect(parser.parse("RATE(24)")).toMatchObject({
             error: null,
-            result: 0.1,
+            result: 0.01,
         });
         expect(parser.parse("RATE(24, -1000)")).toMatchObject({
             error: "#NUM!",
@@ -474,15 +474,15 @@ describe(".parse() financial formulas", () => {
         });
         expect(parser.parse("RATE(24, -1000, -10000, 10000)")).toMatchObject({
             error: null,
-            result: -0.09999999999999938,
+            result: -0.1,
         });
-        expect(parser.parse("RATE(24, -1000, -10000, 10000, 1)")).toMatchObject({
+        expect(parser.parse("RATE(24, -1000, -10000, 10000, 1)")).toBeMatchCloseTo({
             error: null,
-            result: -0.09090909090909084,
+            result: -0.09090909090909093,
         });
         expect(
             parser.parse("RATE(24, -1000, -10000, 10000, 1, 0.1)")
-        ).toBeMatchCloseTo({error: null, result: -0.09090909090909091});
+        ).toBeMatchCloseTo({ error: null, result: -0.09090909090909091 });
     });
 
     it("RRI", () => {
