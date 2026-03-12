@@ -54,7 +54,9 @@ These routes are useful for:
 
 ### Table: `share_registry`
 
-Lives in the **auth database** (`users3.db`) alongside `user`, `member`, `teamMember`:
+Lives in a **separate server-level database** (`eigen.db`) at `getServerDataPath('eigen.db')` — not in `users3.db`
+which is managed by better-auth. Uses `ManagedDatabase` with its own schema and migrations, same pattern as any other
+Eigen DB but at server level instead of per-user:
 
 | Column             | Type | Description                                          |
 |--------------------|------|------------------------------------------------------|
@@ -80,19 +82,18 @@ Home database. The pull routes handle domain-specific resolution.
 
 ```typescript
 async function reconcileSharesForNewUser(newUser: User): Promise<void> {
-    const db = getAuthDrizzleDb();
-    const entries = await db.select().from(shareRegistry)
+    const db = getEigenDb();
+    const entries = db.select().from(shareRegistry)
         .where(eq(shareRegistry.targetIdentifier, newUser.email.toLowerCase()))
         .all();
 
     for (const entry of entries) {
-        // Pull shares from each flagged user
         const home = await getHome(entry.fromUserId);
         await home.calendar.pushSharesTo(newUser);
         await home.drive.pushSharesTo(newUser);
     }
 
-    await db.delete(shareRegistry)
+    db.delete(shareRegistry)
         .where(eq(shareRegistry.targetIdentifier, newUser.email.toLowerCase()))
         .run();
 }
@@ -102,8 +103,8 @@ async function reconcileSharesForNewUser(newUser: User): Promise<void> {
 
 ```typescript
 async function reconcileSharesForNewTeamMember(userId: string, teamId: string): Promise<void> {
-    const db = getAuthDrizzleDb();
-    const entries = await db.select().from(shareRegistry)
+    const db = getEigenDb();
+    const entries = db.select().from(shareRegistry)
         .where(eq(shareRegistry.targetIdentifier, `team_${teamId}`))
         .all();
 
@@ -147,12 +148,9 @@ are cached as singletons — once created, they stay in memory.
 If this ever becomes a bottleneck (10,000-person organization), the propagation could be made async (queue + worker).
 But for typical Eigen deployments (small to medium teams), it's a non-issue.
 
-## Alternative: Team-Owned Calendars
+## Team-Owned Calendars
 
-For team calendars specifically, there's an even simpler model: **let the team own the calendar directly.**
-
-Currently, `TeamHome` only has Drive. If it also had a Calendar instance, team calendars would live in the team's Home
-— not in any user's Home. No propagation at all for team-level calendars:
+Teams own calendars directly, same as team drives. `TeamHome` gets a `Calendar` instance:
 
 ```
 /data/home/team_{teamId}/
@@ -168,11 +166,11 @@ Currently, `TeamHome` only has Drive. If it also had a Calendar instance, team c
 - **Viewing team events**: `GET /calendar/team_{teamId}/calendars/:calId/events`
 - **Permission check**: `getMemberships(user.id).teamIds.includes(teamId)` — same as team drive
 
-This eliminates team-targeted propagation entirely. The `share_registry` and propagation only handle user-to-user
-shares (which are far less common and involve fewer recipients).
+This eliminates team-targeted share propagation entirely. The `share_registry` and propagation only handle
+user-to-user shares (which are far less common and involve fewer recipients).
 
-Whether this is worth adding depends on how important team calendars are. It adds a Calendar instance to TeamHome, but
-the code is identical — just initialized in a different Home.
+Team calendars use the exact same `Calendar` class — just initialized in a `TeamHome` instead of `UserHome`.
+See `docs/CALENDAR.md` for details.
 
 ## Future: Federation
 
@@ -189,7 +187,7 @@ the pull route is already an HTTP endpoint. Switching from local to remote is sw
 | Mechanism | When | What happens |
 |-----------|------|-------------|
 | Direct push | On share, target exists | Write to recipient's DB immediately |
-| Share registry | On share, target missing | Store `(fromUserId, targetId)` in auth DB |
+| Share registry | On share, target missing | Store `(fromUserId, targetId)` in `eigen.db` |
 | Reconciliation | Account or team join | Pull from flagged users, write to own DB |
 | Pull route | On demand | `GET /:domain/:ownerId/shared-with-me` |
 
@@ -197,8 +195,8 @@ the pull route is already an HTTP endpoint. Switching from local to remote is sw
 
 | File | Purpose |
 |------|---------|
-| `apps/api/auth-schema.ts` | Add `shareRegistry` table |
-| `apps/api/src/lib/auth/auth.ts` | Reconciliation in user create hook |
+| `apps/api/src/lib/share/schema.ts` | `shareRegistry` table definition |
+| `apps/api/src/lib/share/db.ts` | `getEigenDb()` — server-level `eigen.db` |
 | `apps/api/src/lib/share/propagation.ts` | Shared propagation logic (push + registry) |
 | `apps/api/src/routes/calendar.ts` | Add `/shared-with-me` pull route |
 | `apps/api/src/routes/drive.ts` | Add `/shared-with-me` pull route |

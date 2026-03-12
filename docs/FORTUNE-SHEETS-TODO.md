@@ -4,7 +4,8 @@ Full audit of `packages/fortune-sheet/src/` — identifying cleanup, shadcn/Tail
 
 ## Known Bugs
 
-When you have columns with conditional formatting, pressing ctrl+c to copy (a larege amount of) cells freezes the browser. Without condtional formatted cells it works fine.
+- When you have columns with conditional formatting, pressing ctrl+c to copy (a larege amount of) cells freezes the browser. Without condtional formatted cells it works fine.
+- It looks like having one big sheet (with conditional formatting?) also slows down work on other sheets in the same workbook. Can we handle data of the sheets somehow more seperatable?
 
 ## Legend
 

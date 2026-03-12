@@ -30,6 +30,7 @@
     "linkify-it": "^5.0.0",
     "nodemailer": "^6.10.0",
     "punycode.js": "^2.3.1",
+    "rrule": "^2.8.1",
     "sharp": "^0.34.0",
     "tlds": "^1.256.0",
     "uuid": "^13.0.0",
