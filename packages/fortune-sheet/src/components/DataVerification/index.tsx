@@ -1,4 +1,3 @@
-import _ from "lodash";
 import {
     confirmMessage,
     getDropdownList,
@@ -9,13 +8,13 @@ import {
     locale,
     setCellValue,
 } from "../../core";
-import React, {useCallback, useContext, useEffect, useState} from "react";
+import {useCallback, useContext, useEffect, useState} from "react";
 import WorkbookContext from "../../context";
 import {useDialog} from "../../hooks/useDialog";
 import {SVGIcon} from "../icon-map";
 import {Button} from "@workspace/ui/components/button";
 
-const DataVerification: React.FC = () => {
+export function DataVerification() {
     const {context, setContext} = useContext(WorkbookContext);
     const {showDialog, hideDialog} = useDialog();
     const {dataVerification, toolbar, button, generalDialog} = locale(context);
@@ -41,7 +40,7 @@ const DataVerification: React.FC = () => {
         "noLaterThan",
     ]);
 
-    // 开启鼠标选区
+    // Enable mouse selection
     const dataSelectRange = useCallback(
         (type: string, value: string) => {
             hideDialog();
@@ -54,7 +53,7 @@ const DataVerification: React.FC = () => {
         [hideDialog, setContext]
     );
 
-    // 确定和取消按钮
+    // Confirm and cancel buttons
     const btn = useCallback(
         (type: string) => {
             if (type === "confirm") {
@@ -73,7 +72,7 @@ const DataVerification: React.FC = () => {
                         const {value1} = regulation;
                         const item = {
                             ...regulation,
-                            checked: false, // checkbox默认在单元格中false为未选中，true为选中
+                            checked: false, // checkbox defaults to false in cell (unchecked), true for checked
                         };
                         if (verifacationT === "dropdown") {
                             const list = getDropdownList(ctx, value1);
@@ -91,10 +90,10 @@ const DataVerification: React.FC = () => {
                         const d = getFlowdata(ctx);
                         if (
                             !d ||
-                            _.isNil(str) ||
-                            _.isNil(stc) ||
-                            _.isNil(edr) ||
-                            _.isNil(edc)
+                            str == null ||
+                            stc == null ||
+                            edr == null ||
+                            edc == null
                         )
                             return;
                         for (let r = str; r <= edr; r += 1) {
@@ -128,7 +127,7 @@ const DataVerification: React.FC = () => {
                     const edr = range[range.length - 1]?.row[1];
                     const stc = range[range.length - 1]?.column[0];
                     const edc = range[range.length - 1]?.column[1];
-                    if (_.isNil(str) || _.isNil(stc) || _.isNil(edr) || _.isNil(edc))
+                    if (str == null || stc == null || edr == null || edc == null)
                         return;
                     for (let r = str; r <= edr; r += 1) {
                         for (let c = stc; c <= edc; c += 1) {
@@ -142,12 +141,12 @@ const DataVerification: React.FC = () => {
         [dataVerification, generalDialog, hideDialog, setContext, showDialog]
     );
 
-    // 初始化
+    // Initialize
     useEffect(() => {
         setContext((ctx) => {
             let rangeT = "";
 
-            // 如果有选区得把选区转为字符形式然后进行显示
+            // If there's a selection, convert it to string form for display
             if (ctx.luckysheet_select_save) {
                 const range =
                     ctx.luckysheet_select_save[ctx.luckysheet_select_save.length - 1];
@@ -159,7 +158,7 @@ const DataVerification: React.FC = () => {
                 );
             }
 
-            // 初始化值
+            // Initialize values
             const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
             const ctxDataVerification =
                 ctx.luckysheetfile[index].dataVerification || {};
@@ -172,14 +171,14 @@ const DataVerification: React.FC = () => {
             const item = ctxDataVerification[`${rowIndex}_${colIndex}`];
             const defaultItem = item ?? {};
             let rangValue = defaultItem.value1 ?? "";
-            // 选区赋值相关
+            // Range assignment related
             if (
                 ctx.rangeDialog?.type === "dropDown" &&
                 ctx.dataVerification &&
                 ctx.dataVerification.dataRegulation &&
                 ctx.dataVerification.dataRegulation.rangeTxt
             ) {
-                // 当是下拉列表选区的时候，则下拉选区赋值，范围保持不变
+                // When it's a dropdown list selection, assign dropdown selection, keep range unchanged
                 rangeT = ctx.dataVerification.dataRegulation.rangeTxt;
                 rangValue = ctx.rangeDialog.rangeTxt;
             } else if (
@@ -188,7 +187,7 @@ const DataVerification: React.FC = () => {
                 ctx.dataVerification.dataRegulation &&
                 ctx.dataVerification.dataRegulation.value1
             ) {
-                // 当是选区范围的时候，则范围赋值，下拉选区不变
+                // When it's a range selection, assign range, keep dropdown selection unchanged
                 rangValue = ctx.dataVerification.dataRegulation.value1;
                 rangeT = ctx.rangeDialog.rangeTxt;
             }
@@ -649,6 +648,5 @@ const DataVerification: React.FC = () => {
             </div>
         </div>
     );
-};
+}
 
-export default DataVerification;

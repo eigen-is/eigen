@@ -1,8 +1,8 @@
-import React, {useCallback, useContext} from "react";
+import {useCallback, useContext} from "react";
 import {locale, updateItem} from "../../core";
 import WorkbookContext from "../../context";
 import {useDialog} from "../../hooks/useDialog";
-import ConditionRules from "./ConditionRules";
+import {ConditionRules} from "./ConditionRules";
 import {
     DropdownMenuItem,
     DropdownMenuSeparator,
@@ -11,9 +11,11 @@ import {
     DropdownMenuSubTrigger,
 } from "@workspace/ui/components/dropdown-menu";
 
-const ConditionalFormat: React.FC<{
+export function ConditionalFormat({
+                                      items,
+                                  }: {
     items: string[];
-}> = ({items}) => {
+}) {
     const {context, setContext} = useContext(WorkbookContext);
     const {showDialog} = useDialog();
     const {conditionformat} = locale(context);
@@ -116,6 +118,5 @@ const ConditionalFormat: React.FC<{
     );
 
     return <>{items.map((v) => getConditionFormatItem(v))}</>;
-};
+}
 
-export default ConditionalFormat;

@@ -1,10 +1,9 @@
-import _ from "lodash";
-import React, {useCallback, useContext, useRef} from "react";
+import {useCallback, useContext, useRef} from "react";
 import WorkbookContext from "../../context";
 import {useOutsideClick} from "../../hooks/useOutsideClick";
-import SheetListItem from "./SheetListItem";
+import {SheetListItem} from "./SheetListItem";
 
-export const SheetList: React.FC = () => {
+export function SheetList() {
     const {context, setContext} = useContext(WorkbookContext);
     const containerRef = useRef<HTMLDivElement>(null);
 
@@ -20,11 +19,12 @@ export const SheetList: React.FC = () => {
             className="fortune-context-menu luckysheet-cols-menu overflow-y-auto overflow-x-hidden min-w-[120px] absolute z-[10002] bottom-[53px] ml-[72px] max-h-[60%]"
             ref={containerRef}
         >
-            {_.sortBy(context.luckysheetfile, (s) => Number(s.order)).map(
-                (singleSheet) => {
+            {context.luckysheetfile
+                .slice()
+                .sort((s1, s2) => Number(s1.order) - Number(s2.order))
+                .map((singleSheet) => {
                     return <SheetListItem sheet={singleSheet} key={singleSheet.id}/>;
-                }
-            )}
+                })}
         </div>
     );
 };

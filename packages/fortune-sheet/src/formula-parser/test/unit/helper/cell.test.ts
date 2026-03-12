@@ -1,3 +1,4 @@
+import {describe, expect, test} from 'bun:test';
 import {
     columnIndexToLabel,
     columnLabelToIndex,
@@ -6,7 +7,6 @@ import {
     rowLabelToIndex,
     toLabel,
 } from "../../../helper/cell";
-import {describe, expect, test} from "bun:test";
 
 describe("fortune-sheet/formula-parser/helper/cell", () => {
     describe(".extractLabel()", () => {

@@ -1,7 +1,8 @@
+import {afterEach, beforeEach, describe, expect, it, xit} from 'bun:test';
 import Parser from "../../../../parser";
 
 describe(".parse() miscellaneous formulas", () => {
-    let parser;
+    let parser: Parser | null;
 
     beforeEach(() => {
         parser = new Parser();
@@ -11,12 +12,12 @@ describe(".parse() miscellaneous formulas", () => {
     });
 
     it("UNIQUE", () => {
-        expect(parser.parse("UNIQUE()")).toMatchObject({error: null, result: []});
-        expect(parser.parse("UNIQUE(1, 2, 3, 4, 2, 3)")).toMatchObject({
+        expect(parser!.parse("UNIQUE()")).toMatchObject({error: null, result: []});
+        expect(parser!.parse("UNIQUE(1, 2, 3, 4, 2, 3)")).toMatchObject({
             error: null,
             result: [1, 2, 3, 4],
         });
-        expect(parser.parse('UNIQUE("foo", "bar", "foo")')).toMatchObject({
+        expect(parser!.parse('UNIQUE("foo", "bar", "foo")')).toMatchObject({
             error: null,
             result: ["foo", "bar"],
         });
@@ -24,7 +25,7 @@ describe(".parse() miscellaneous formulas", () => {
 
     xit("ARGS2ARRAY", () => {
         // ARGS2ARRAY is not available in @formulajs/formulajs
-        expect(parser.parse("ARGS2ARRAY()")).toMatchObject({
+        expect(parser!.parse("ARGS2ARRAY()")).toMatchObject({
             error: "#NAME?",
             result: null,
         });
@@ -32,7 +33,7 @@ describe(".parse() miscellaneous formulas", () => {
 
     xit("FLATTEN", () => {
         // FLATTEN is not available in @formulajs/formulajs
-        expect(parser.parse("FLATTEN(A1:B3)")).toMatchObject({
+        expect(parser!.parse("FLATTEN(A1:B3)")).toMatchObject({
             error: "#NAME?",
             result: null,
         });
@@ -40,7 +41,7 @@ describe(".parse() miscellaneous formulas", () => {
 
     xit("JOIN", () => {
         // JOIN is not available in @formulajs/formulajs
-        expect(parser.parse("JOIN(A1:B3)")).toMatchObject({
+        expect(parser!.parse("JOIN(A1:B3)")).toMatchObject({
             error: "#NAME?",
             result: null,
         });
@@ -48,7 +49,7 @@ describe(".parse() miscellaneous formulas", () => {
 
     xit("NUMBERS", () => {
         // NUMBERS is not available in @formulajs/formulajs
-        expect(parser.parse("NUMBERS()")).toMatchObject({
+        expect(parser!.parse("NUMBERS()")).toMatchObject({
             error: "#NAME?",
             result: null,
         });
@@ -56,7 +57,7 @@ describe(".parse() miscellaneous formulas", () => {
 
     xit("REFERENCE", () => {
         // REFERENCE is not available in @formulajs/formulajs
-        expect(parser.parse("REFERENCE()")).toMatchObject({
+        expect(parser!.parse("REFERENCE()")).toMatchObject({
             error: "#NAME?",
             result: null,
         });

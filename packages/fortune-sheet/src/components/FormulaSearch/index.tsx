@@ -1,12 +1,11 @@
-import React, {useCallback, useContext, useMemo, useState} from "react";
+import {useCallback, useContext, useMemo, useState} from "react";
 import {cancelNormalSelected, locale, setCaretPosition,} from "../../core";
-import _ from "lodash";
 import WorkbookContext from "../../context";
 import {Button} from "@workspace/ui/components/button";
 
-export const FormulaSearch: React.FC<{ onCancel: () => void }> = ({
-                                                                      onCancel: _onCancel,
-                                                                  }) => {
+export function FormulaSearch({
+                                  onCancel: _onCancel,
+                              }: { onCancel: () => void }) {
     const {
         context,
         setContext,
@@ -42,7 +41,7 @@ export const FormulaSearch: React.FC<{ onCancel: () => void }> = ({
     const filteredFunctionList = useMemo(() => {
         if (searchText) {
             const list = [];
-            const text = _.cloneDeep(searchText.toUpperCase());
+            const text = searchText.toUpperCase();
             for (let i = 0; i < functionlist.length; i += 1) {
                 if (/^[a-zA-Z]+$/.test(text)) {
                     if (functionlist[i].n.indexOf(text) !== -1) {
@@ -54,7 +53,7 @@ export const FormulaSearch: React.FC<{ onCancel: () => void }> = ({
             }
             return list;
         }
-        return _.filter(functionlist, (v) => v.t === selectedType);
+        return functionlist.filter((v) => v.t === selectedType);
     }, [functionlist, selectedType, searchText]);
 
     const onConfirm = useCallback(() => {
@@ -84,7 +83,7 @@ export const FormulaSearch: React.FC<{ onCancel: () => void }> = ({
                 globalCache.doNotUpdateCell = true;
                 cellInput.current.innerHTML = formulaTxt;
                 const spans = cellInput.current.childNodes;
-                if (!_.isEmpty(spans)) {
+                if (spans.length > 0) {
                     setCaretPosition(
                         ctx,
                         spans[spans.length - 1] as HTMLSpanElement,
@@ -95,7 +94,7 @@ export const FormulaSearch: React.FC<{ onCancel: () => void }> = ({
                 ctx.functionHint =
                     filteredFunctionList[selectedFuncIndex].n.toUpperCase();
                 ctx.functionCandidates = [];
-                if (_.isEmpty(ctx.formulaCache.functionlistMap)) {
+                if (Object.keys(ctx.formulaCache.functionlistMap).length === 0) {
                     for (let i = 0; i < functionlist.length; i += 1) {
                         ctx.formulaCache.functionlistMap[functionlist[i].n] =
                             functionlist[i];
@@ -179,4 +178,4 @@ export const FormulaSearch: React.FC<{ onCancel: () => void }> = ({
             </div>
         </div>
     );
-};
+}

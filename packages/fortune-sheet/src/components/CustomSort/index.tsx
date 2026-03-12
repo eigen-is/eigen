@@ -6,7 +6,7 @@ import {Button} from "@workspace/ui/components/button";
 
 type RadioChangeEvent = React.ChangeEvent<HTMLInputElement>;
 
-const CustomSort: React.FC<{}> = () => {
+export function CustomSort() {
     const [rangeColChar, setRangeColChar] = useState<String[]>([]);
     const [ascOrDesc, setAscOrDesc] = useState(true);
     const {context, setContext} = useContext(WorkbookContext);
@@ -155,6 +155,5 @@ const CustomSort: React.FC<{}> = () => {
             </div>
         </div>
     );
-};
+}
 
-export default CustomSort;

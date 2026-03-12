@@ -1,12 +1,11 @@
 import {applyLocation, getFlowdata, getOptionValue, getSelectRange, locale,} from "../../core";
 import produce from "immer";
-import _ from "lodash";
-import React, {useCallback, useContext, useState} from "react";
+import {useCallback, useContext, useState} from "react";
 import WorkbookContext from "../../context";
 import {useDialog} from "../../hooks/useDialog";
 import {Button} from "@workspace/ui/components/button";
 
-export const LocationCondition: React.FC<{}> = () => {
+export function LocationCondition() {
     const {context, setContext} = useContext(WorkbookContext);
     const {showDialog, hideDialog} = useDialog();
     const {findAndReplace, button} = locale(context);
@@ -25,7 +24,7 @@ export const LocationCondition: React.FC<{}> = () => {
         locationBool: true,
         locationError: true,
     });
-    // 确定按钮
+    // Confirm button
     const onConfirm = useCallback(() => {
         if (conditionType === "locationConstant") {
             const value = getOptionValue(constants);
@@ -53,7 +52,7 @@ export const LocationCondition: React.FC<{}> = () => {
                 showDialog(findAndReplace.locationTiplessTwoRow, "ok");
                 return;
             }
-            const selectRange = _.assignIn([], context.luckysheet_select_save);
+            const selectRange = [...(context.luckysheet_select_save ?? [])];
             setContext((ctx) => {
                 const rangeArr = applyLocation(
                     selectRange,
@@ -74,7 +73,7 @@ export const LocationCondition: React.FC<{}> = () => {
                 showDialog(findAndReplace.locationTiplessTwoColumn, "ok");
                 return;
             }
-            const selectRange = _.assignIn([], context.luckysheet_select_save);
+            const selectRange = [...(context.luckysheet_select_save ?? [])];
             setContext((ctx) => {
                 const rangeArr = applyLocation(
                     selectRange,
@@ -86,7 +85,7 @@ export const LocationCondition: React.FC<{}> = () => {
                     showDialog(findAndReplace.locationTipNotFindCell, "ok");
             });
         } else {
-            // 空值处理
+            // Empty value handling
             let selectRange: {
                 row: (number | undefined)[];
                 column: any[];
@@ -107,7 +106,7 @@ export const LocationCondition: React.FC<{}> = () => {
                     },
                 ];
             } else {
-                selectRange = _.assignIn([], context.luckysheet_select_save);
+                selectRange = [...(context.luckysheet_select_save ?? [])];
             }
             setContext((ctx) => {
                 const rangeArr = applyLocation(
@@ -132,7 +131,7 @@ export const LocationCondition: React.FC<{}> = () => {
         showDialog,
     ]);
 
-    // 选中事件处理
+    // Selection event handler
     const isSelect = useCallback(
         (currentType: string) => conditionType === currentType,
         [conditionType]
@@ -142,7 +141,7 @@ export const LocationCondition: React.FC<{}> = () => {
         <div className="min-w-[500px]">
             <div className="text-base leading-[48px]">{findAndReplace.location}</div>
             <div className="border border-[#dfdfdf] p-2.5 text-sm">
-                {/* 常量 */}
+                {/* Constants */}
                 <div className="py-1.5">
                     <input
                         type="radio"
@@ -172,7 +171,7 @@ export const LocationCondition: React.FC<{}> = () => {
                                     onChange={() => {
                                         setConstants(
                                             produce((draft) => {
-                                                _.set(draft, v, !draft[v]);
+                                                draft[v] = !draft[v];
                                             })
                                         );
                                     }}
@@ -189,7 +188,7 @@ export const LocationCondition: React.FC<{}> = () => {
                         ))}
                     </div>
                 </div>
-                {/* 公式 */}
+                {/* Formula */}
                 <div className="py-1.5">
                     <input
                         type="radio"
@@ -219,7 +218,7 @@ export const LocationCondition: React.FC<{}> = () => {
                                     onChange={() => {
                                         setFormulas(
                                             produce((draft) => {
-                                                _.set(draft, v, !draft[v]);
+                                                draft[v] = !draft[v];
                                             })
                                         );
                                     }}
@@ -236,7 +235,7 @@ export const LocationCondition: React.FC<{}> = () => {
                         ))}
                     </div>
                 </div>
-                {/* TODO 条件格式 */}
+                {/* TODO Conditional format */}
                 {["locationNull", "locationRowSpan", "locationColumnSpan"].map((v) => (
                     <div className="py-1.5" key={v}>
                         <input
@@ -265,4 +264,4 @@ export const LocationCondition: React.FC<{}> = () => {
             </div>
         </div>
     );
-};
+}

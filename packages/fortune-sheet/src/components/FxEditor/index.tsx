@@ -15,17 +15,16 @@ import {
     updateCell,
     valueShowEs,
 } from "../../core";
-import React, {useCallback, useContext, useEffect, useMemo, useRef, useState,} from "react";
-import _ from "lodash";
+import {useCallback, useContext, useEffect, useMemo, useRef, useState,} from "react";
 import WorkbookContext from "../../context";
 import {SVGIcon} from "../icon-map";
 import ContentEditable from "../SheetOverlay/ContentEditable";
 import FormulaSearch from "../SheetOverlay/FormulaSearch";
 import FormulaHint from "../SheetOverlay/FormulaHint";
-import NameBox from "./NameBox";
+import {NameBox} from "./NameBox";
 import {usePrevious} from "../../hooks/usePrevious";
 
-export const FxEditor: React.FC = () => {
+export function FxEditor() {
     const {context, setContext, refs} = useContext(WorkbookContext);
     const [focused, setFocused] = useState(false);
     const lastKeyDownEventRef = useRef<KeyboardEvent>(null);
@@ -38,10 +37,10 @@ export const FxEditor: React.FC = () => {
     const {info} = locale(context);
 
     useEffect(() => {
-        // 当选中行列是处于隐藏状态的话则不允许编辑
+        // If selected row/column is in hidden state, don't allow editing
         setIsHidenRC(isShowHidenCR(context));
         if (
-            _.isEqual(prevFirstSelection, firstSelection) &&
+            JSON.stringify(prevFirstSelection) === JSON.stringify(firstSelection) &&
             context.currentSheetId === prevSheetId
         ) {
             // data change by a collabrative update should not trigger this effect
@@ -52,7 +51,7 @@ export const FxEditor: React.FC = () => {
         if (firstSelection) {
             const r = firstSelection.row_focus;
             const c = firstSelection.column_focus;
-            if (_.isNil(r) || _.isNil(c)) return;
+            if (r == null || c == null) return;
 
             const cell = d?.[r]?.[c];
             if (cell) {
@@ -134,7 +133,7 @@ export const FxEditor: React.FC = () => {
                             //     )
                             //   );
                             // } else {
-                            const lastCellUpdate = _.clone(draftCtx.luckysheetCellUpdate);
+                            const lastCellUpdate = [...draftCtx.luckysheetCellUpdate];
                             updateCell(
                                 draftCtx,
                                 draftCtx.luckysheetCellUpdate[0],
@@ -329,5 +328,5 @@ export const FxEditor: React.FC = () => {
             </div>
         </aside>
     );
-};
+}
 

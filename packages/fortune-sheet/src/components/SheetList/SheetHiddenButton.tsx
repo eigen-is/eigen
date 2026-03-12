@@ -1,5 +1,5 @@
 import {api, Sheet} from "../../core";
-import React, {CSSProperties, useCallback, useContext} from "react";
+import {CSSProperties, useCallback, useContext} from "react";
 import {SVGIcon} from "../icon-map";
 import WorkbookContext from "../../context";
 
@@ -8,7 +8,7 @@ type Props = {
     sheet?: Sheet;
 };
 
-const SheetHiddenButton: React.FC<Props> = ({style, sheet}) => {
+export function SheetHiddenButton({style, sheet}: Props) {
     const {context, setContext} = useContext(WorkbookContext);
     const showSheet = useCallback(() => {
         if (context.allowEdit === false) return;
@@ -44,4 +44,3 @@ const SheetHiddenButton: React.FC<Props> = ({style, sheet}) => {
     );
 };
 
-export default SheetHiddenButton;
