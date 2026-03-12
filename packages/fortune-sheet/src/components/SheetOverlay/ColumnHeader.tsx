@@ -16,7 +16,7 @@ import {
 import _ from "lodash";
 import React, {useCallback, useContext, useEffect, useMemo, useRef, useState,} from "react";
 import WorkbookContext from "../../context";
-import SVGIcon from "../SVGIcon";
+import {SVGIcon} from "../icon-map";
 
 const ColumnHeader: React.FC = () => {
   const { context, setContext, settings, refs } = useContext(WorkbookContext);

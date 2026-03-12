@@ -12,7 +12,7 @@ import {
 import React, { useCallback, useContext, useEffect, useState } from "react";
 import WorkbookContext from "../../context";
 import { useDialog } from "../../hooks/useDialog";
-import SVGIcon from "../SVGIcon";
+import {SVGIcon} from "../icon-map";
 import { Button } from "@workspace/ui/components/button";
 
 const DataVerification: React.FC = () => {

@@ -23,21 +23,19 @@ import {
     Sheet as SheetType,
 } from "../../core";
 import React, {useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState,} from "react";
-import "./index.css";
 import {applyPatches, enablePatches, Patch, produce, produceWithPatches,} from "immer";
 import _ from "lodash";
-import Sheet from "../Sheet";
+import {Sheet} from "../Sheet";
 import WorkbookContext, {RefValues, SetContextOptions} from "../../context";
-import Toolbar from "../Toolbar";
-import FxEditor from "../FxEditor";
-import SheetTab from "../SheetTab";
-import ContextMenu from "../ContextMenu";
-import SVGDefines from "../SVGDefines";
-import SheetTabContextMenu from "../ContextMenu/SheetTab";
+import {Toolbar} from "../Toolbar";
+import {FxEditor} from "../FxEditor";
+import {SheetTab} from "../SheetTab";
+import {ContextMenu} from "../ContextMenu";
+import {SheetTabContextMenu} from "../ContextMenu/SheetTab";
 import {generateAPIs} from "./api";
 import {ModalProvider} from "../../context/modal";
-import FilterMenu from "../ContextMenu/FilterMenu";
-import SheetList from "../SheetList";
+import {FilterMenu} from "../ContextMenu/FilterMenu";
+import {SheetList} from "../SheetList";
 
 
 enablePatches();
@@ -65,7 +63,7 @@ const concatProducer = (...producers: ((ctx: Context) => void)[]) => {
   };
 };
 
-const Workbook = React.forwardRef<WorkbookInstance, Settings & AdditionalProps>(
+export const Workbook = React.forwardRef<WorkbookInstance, Settings & AdditionalProps>(
   ({ onChange, onOp, toolbarLeftItems, toolbarRightItems, data: originalData, ...props }, ref) => {
       const scrollListeners = useRef(new Set<() => void>());
       const globalCache = useRef<GlobalCache>({
@@ -769,7 +767,7 @@ const Workbook = React.forwardRef<WorkbookInstance, Settings & AdditionalProps>(
       <WorkbookContext.Provider value={providerValue}>
         <ModalProvider>
           <div
-            className="fortune-container"
+              className="flex flex-col w-full h-full m-0 p-0 font-[inherit] bg-white relative overflow-hidden"
             ref={workbookContainer}
             onKeyDown={onKeyDown}
           >
@@ -797,8 +795,7 @@ const Workbook = React.forwardRef<WorkbookInstance, Settings & AdditionalProps>(
                 <li>{info.moveLeftShortcut}</li>
               </ul>
             </section>
-            <SVGDefines currency={mergedSettings.currency} />
-            <div className="fortune-workarea">
+              <div className="w-full">
               {mergedSettings.showToolbar && (
                 <Toolbar
                   leftItems={toolbarLeftItems}
@@ -828,10 +825,10 @@ const Workbook = React.forwardRef<WorkbookInstance, Settings & AdditionalProps>(
                   e.preventDefault();
                   e.stopPropagation();
                 }}
-                className="fortune-popover-backdrop"
+                className="absolute top-0 left-0 z-[1003] h-full w-full"
               />
             )}
-            <div className="fortune-stat-area">
+              <div className="flex justify-end items-center leading-[0] h-0">
               <div className="luckysheet-sheet-selection-calInfo">
                 {!!calInfo.count && (
                   <div style={{ width: "60px" }}>
@@ -867,4 +864,3 @@ const Workbook = React.forwardRef<WorkbookInstance, Settings & AdditionalProps>(
   }
 );
 
-export default Workbook;

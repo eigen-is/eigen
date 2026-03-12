@@ -10,7 +10,7 @@ export default class clipboard {
         ele.style.height = "0";
         ele.style.width = "0";
         ele.style.left = "-10000px";
-        document.querySelector(".fortune-container")?.append(ele);
+        document.body.append(ele);
       }
       const previouslyFocusedElement = document.activeElement as HTMLElement;
       ele.style.display = "block";
@@ -19,9 +19,8 @@ export default class clipboard {
       document.execCommand("selectAll");
       document.execCommand("copy");
 
-      // Fallback setup
-      const plainText = ele.innerText || ele.textContent || ""; // In order to match the clipboard which only stores the visible text without formatting
-      sessionStorage.setItem("localClipboard", plainText); // Also store in sessionStorage for fallback access
+      const plainText = ele.innerText || ele.textContent || "";
+      sessionStorage.setItem("localClipboard", plainText);
 
       setTimeout(() => {
         ele?.blur();

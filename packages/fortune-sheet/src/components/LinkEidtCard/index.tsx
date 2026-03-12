@@ -21,7 +21,8 @@ import {
 import "./index.css";
 import _ from "lodash";
 import WorkbookContext from "../../context";
-import SVGIcon from "../SVGIcon";
+import {SVGIcon} from "../icon-map";
+import {Button} from "@workspace/ui/components/button";
 
 export const LinkEditCard: React.FC<LinkCardProps> = ({
   r,
@@ -87,20 +88,12 @@ export const LinkEditCard: React.FC<LinkCardProps> = ({
   const renderBottomButton = useCallback(
     (onOk: () => void, onCancel: () => void) => (
       <div className="button-group">
-        <div
-          className="button-basic button-default"
-          onClick={onCancel}
-          tabIndex={0}
-        >
+          <Button variant="outline" size="sm" onClick={onCancel}>
           {button.cancel}
-        </div>
-        <div
-          className="button-basic button-primary"
-          onClick={onOk}
-          tabIndex={0}
-        >
+          </Button>
+          <Button size="sm" onClick={onOk}>
           {button.confirm}
-        </div>
+          </Button>
       </div>
     ),
     [button]

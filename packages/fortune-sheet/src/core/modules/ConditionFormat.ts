@@ -1112,12 +1112,42 @@ export function compute(ctx: Context, ruleArr: any, d: CellMatrix) {
   return computeMap;
 }
 
+// Cache for getComputeMap — avoids recomputing the entire CF map on every
+// canvas paint / getStyleByCell call. Invalidates when sheet, rules or data change.
+let _cfCache: {
+  sheetId: string | undefined;
+  rules: any;
+  data: any;
+  result: any;
+} | null = null;
+
+export function invalidateCFCache() {
+  _cfCache = null;
+}
+
 export function getComputeMap(ctx: Context) {
   const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
   const ruleArr = ctx.luckysheetfile[index].luckysheet_conditionformat_save;
   const { data } = ctx.luckysheetfile[index];
   if (_.isNil(data)) return null;
+
+  // Return cached result if inputs haven't changed (reference equality)
+  if (
+      _cfCache &&
+      _cfCache.sheetId === ctx.currentSheetId &&
+      _cfCache.rules === ruleArr &&
+      _cfCache.data === data
+  ) {
+    return _cfCache.result;
+  }
+
   const computeMap = compute(ctx, ruleArr, data);
+  _cfCache = {
+    sheetId: ctx.currentSheetId,
+    rules: ruleArr,
+    data,
+    result: computeMap,
+  };
   return computeMap;
 }
 

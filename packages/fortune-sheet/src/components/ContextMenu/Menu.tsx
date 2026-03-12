@@ -15,7 +15,7 @@ type Props = React.PropsWithChildren<{
   ) => void;
 }>;
 
-const Menu: React.FC<Props> = ({
+export const Menu: React.FC<Props> = ({
   onClick,
   onMouseLeave,
   onMouseEnter,
@@ -46,4 +46,3 @@ const Menu: React.FC<Props> = ({
   );
 };
 
-export default Menu;
