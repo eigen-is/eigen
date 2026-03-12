@@ -1,24 +1,24 @@
 import _ from "lodash";
-import { SheetConfig } from ".";
-import { FormulaCache } from "./modules";
-import { normalizeSelection } from "./modules/selection";
-import { Hooks } from "./settings";
+import {SheetConfig} from ".";
+import {FormulaCache} from "./modules";
+import {normalizeSelection} from "./modules/selection";
+import {Hooks} from "./settings";
 import {
-  Sheet,
-  Selection,
   Cell,
   CommentBox,
-  Rect,
-  Image,
-  Presence,
-  LinkCardProps,
-  FilterOptions,
-  RangeDialogProps,
-  DataRegulationProps,
   ConditionRulesProps,
+  DataRegulationProps,
+  FilterOptions,
   GlobalCache,
+  Image,
+  LinkCardProps,
+  Presence,
+  RangeDialogProps,
+  Rect,
+  Selection,
+  Sheet,
 } from "./types";
-import { getSheetIndex } from "./utils";
+import {getSheetIndex} from "./utils";
 
 interface MutableRefObject<T> {
   current: T;
@@ -241,7 +241,7 @@ export function defaultContext(refs: RefValues): Context {
     config: {},
     // 提醒弹窗
     warnDialog: undefined,
-    currency: "¥",
+    currency: "€",
     rangeDialog: {
       show: false,
       rangeTxt: "",
