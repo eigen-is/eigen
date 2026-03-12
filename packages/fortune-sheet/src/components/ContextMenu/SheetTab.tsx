@@ -11,12 +11,12 @@ import WorkbookContext from "../../context";
 import { useAlert } from "../../hooks/useAlert";
 import { useOutsideClick } from "../../hooks/useOutsideClick";
 import { ChangeColor } from "../ChangeColor";
-import SVGIcon from "../SVGIcon";
+import {SVGIcon} from "../icon-map";
 import Divider from "./Divider";
 import "./index.css";
-import Menu from "./Menu";
+import {Menu} from "./Menu";
 
-const SheetTabContextMenu: React.FC = () => {
+export const SheetTabContextMenu: React.FC = () => {
   const { context, setContext, settings } = useContext(WorkbookContext);
   const { x, y, sheet, onRename } = context.sheetTabContextMenu;
   const { sheetconfig } = locale(context);
@@ -250,4 +250,3 @@ const SheetTabContextMenu: React.FC = () => {
   );
 };
 
-export default SheetTabContextMenu;

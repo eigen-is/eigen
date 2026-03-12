@@ -4,145 +4,147 @@ import {
   searchNext,
   SearchResult,
   normalizeSelection,
-  onSearchDialogMoveStart,
   replace,
   replaceAll,
   scrollToHighlightCell,
 } from "../../core";
-import produce from "immer";
-import React, { useContext, useState, useCallback } from "react";
-import _ from "lodash";
+import {useContext, useState, useCallback} from "react";
 import WorkbookContext from "../../context";
 import { useAlert } from "../../hooks/useAlert";
+import {useDialog} from "../../hooks/useDialog";
 import { Button } from "@workspace/ui/components/button";
 import { Input } from "@workspace/ui/components/input";
 import { Checkbox } from "@workspace/ui/components/checkbox";
 import { Label } from "@workspace/ui/components/label";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@workspace/ui/components/tabs";
-import { X } from "lucide-react";
+import {
+  Tabs,
+  TabsList,
+  TabsTrigger,
+  TabsContent,
+} from "@workspace/ui/components/tabs";
+import {
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from "@workspace/ui/components/dialog";
 
-const SearchReplace: React.FC<{
-  getContainer: () => HTMLDivElement;
-}> = ({ getContainer }) => {
-  const { context, setContext, refs } = useContext(WorkbookContext);
+export default function SearchReplace() {
+  const {context, setContext} = useContext(WorkbookContext);
   const { findAndReplace, button } = locale(context);
   const [searchText, setSearchText] = useState("");
   const [replaceText, setReplaceText] = useState("");
-  const [showReplace, setShowReplace] = useState(context.showReplace);
+  const [showReplace, setShowReplace] = useState(!!context.showReplace);
   const [searchResult, setSearchResult] = useState<SearchResult[]>([]);
   const [selectedCell, setSelectedCell] = useState<{ r: number; c: number }>();
   const { showAlert } = useAlert();
-  const [checkMode, checkModeReplace] = useState({
+  const {hideDialog} = useDialog();
+  const [checkMode, setCheckMode] = useState({
     regCheck: false,
     wordCheck: false,
     caseCheck: false,
   });
 
   const closeDialog = useCallback(() => {
-    _.set(refs.globalCache, "searchDialog.mouseEnter", false);
     setContext((draftCtx) => {
       draftCtx.showSearch = false;
       draftCtx.showReplace = false;
     });
-  }, [refs.globalCache, setContext]);
+    hideDialog();
+  }, [setContext, hideDialog]);
 
-  const setCheckMode = useCallback(
-    (mode: string, value: boolean) =>
-      checkModeReplace(
-        produce((draft) => {
-          _.set(draft, mode, value);
-        })
-      ),
+  const updateCheckMode = useCallback(
+      (mode: keyof typeof checkMode, value: boolean) => {
+        setCheckMode((prev) => ({...prev, [mode]: value}));
+      },
     []
   );
 
-  const getInitialPosition = useCallback((container: HTMLDivElement) => {
-    const rect = container.getBoundingClientRect();
-    return {
-      left: (rect.width - 500) / 2,
-      top: (rect.height - 200) / 3,
-    };
-  }, []);
+  const checkboxes = (
+      <div className="space-y-2 pt-5">
+        <Label className="flex items-center gap-2">
+          <Checkbox
+              checked={checkMode.regCheck}
+              onCheckedChange={(v) => updateCheckMode("regCheck", !!v)}
+          />
+          {findAndReplace.regexTextbox}
+        </Label>
+        <Label className="flex items-center gap-2">
+          <Checkbox
+              checked={checkMode.wordCheck}
+              onCheckedChange={(v) => updateCheckMode("wordCheck", !!v)}
+          />
+          {findAndReplace.wholeTextbox}
+        </Label>
+        <Label className="flex items-center gap-2">
+          <Checkbox
+              checked={checkMode.caseCheck}
+              onCheckedChange={(v) => updateCheckMode("caseCheck", !!v)}
+          />
+          {findAndReplace.distinguishTextbox}
+        </Label>
+      </div>
+  );
+
+  const handleSearchAll = useCallback(() => {
+    setContext((draftCtx) => {
+      setSelectedCell(undefined);
+      if (!searchText) return;
+      const res = searchAll(draftCtx, searchText, checkMode);
+      setSearchResult(res);
+      if (res.length === 0) showAlert(findAndReplace.noFindTip);
+    });
+  }, [searchText, checkMode, setContext, showAlert, findAndReplace.noFindTip]);
+
+  const handleSearchNext = useCallback(() => {
+    setContext((draftCtx) => {
+      setSearchResult([]);
+      const alertMsg = searchNext(draftCtx, searchText, checkMode);
+      if (alertMsg != null) showAlert(alertMsg);
+    });
+  }, [searchText, checkMode, setContext, showAlert]);
 
   return (
-    <div
-      id="fortune-search-replace"
-      className="absolute z-[1002] bg-background border rounded-lg shadow-lg p-4 min-w-[520px]"
-      style={getInitialPosition(getContainer())}
-      onMouseEnter={() => {
-        _.set(refs.globalCache, "searchDialog.mouseEnter", true);
-      }}
-      onMouseLeave={() => {
-        _.set(refs.globalCache, "searchDialog.mouseEnter", false);
-      }}
-      onMouseDown={(e) => {
-        const { nativeEvent } = e;
-        onSearchDialogMoveStart(refs.globalCache, nativeEvent, getContainer());
-        e.stopPropagation();
-      }}
-    >
-      <div onMouseDown={(e) => e.stopPropagation()}>
-        <Button
-          variant="ghost"
-          size="icon-xs"
-          className="absolute right-2 top-2"
-          onClick={closeDialog}
-        >
-          <X className="size-4" />
-        </Button>
+      <div className="min-w-[480px]">
+        <DialogHeader className="p-6 pb-0">
+          <DialogTitle>{findAndReplace.find}</DialogTitle>
+        </DialogHeader>
 
+        <div className="px-6 py-4">
         <Tabs
           value={showReplace ? "replace" : "find"}
           onValueChange={(v) => setShowReplace(v === "replace")}
         >
           <TabsList>
             <TabsTrigger value="find">{findAndReplace.find}</TabsTrigger>
-            <TabsTrigger value="replace">{findAndReplace.replace}</TabsTrigger>
+            <TabsTrigger value="replace">
+              {findAndReplace.replace}
+            </TabsTrigger>
           </TabsList>
 
           <TabsContent value="find" className="space-y-3 pt-3">
             <div className="flex gap-4">
               <div className="flex-1 space-y-2">
-                <Label htmlFor="searchInput">{findAndReplace.findTextbox}</Label>
+                <Label htmlFor="searchInput">
+                  {findAndReplace.findTextbox}
+                </Label>
                 <Input
                   id="searchInput"
                   autoFocus
                   spellCheck={false}
-                  onKeyDown={(e) => e.stopPropagation()}
                   value={searchText}
                   onChange={(e) => setSearchText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleSearchNext();
+                  }}
                 />
               </div>
-              <div className="space-y-2 pt-5">
-                <Label className="flex items-center gap-2">
-                  <Checkbox checked={checkMode.regCheck} onCheckedChange={(v) => setCheckMode("regCheck", !!v)} />
-                  {findAndReplace.regexTextbox}
-                </Label>
-                <Label className="flex items-center gap-2">
-                  <Checkbox checked={checkMode.wordCheck} onCheckedChange={(v) => setCheckMode("wordCheck", !!v)} />
-                  {findAndReplace.wholeTextbox}
-                </Label>
-                <Label className="flex items-center gap-2">
-                  <Checkbox checked={checkMode.caseCheck} onCheckedChange={(v) => setCheckMode("caseCheck", !!v)} />
-                  {findAndReplace.distinguishTextbox}
-                </Label>
-              </div>
+              {checkboxes}
             </div>
             <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={() => setContext((draftCtx) => {
-                setSelectedCell(undefined);
-                if (!searchText) return;
-                const res = searchAll(draftCtx, searchText, checkMode);
-                setSearchResult(res);
-                if (_.isEmpty(res)) showAlert(findAndReplace.noFindTip);
-              })}>
+              <Button variant="outline" size="sm" onClick={handleSearchAll}>
                 {findAndReplace.allFindBtn}
               </Button>
-              <Button variant="outline" size="sm" onClick={() => setContext((draftCtx) => {
-                setSearchResult([]);
-                const alertMsg = searchNext(draftCtx, searchText, checkMode);
-                if (alertMsg != null) showAlert(alertMsg);
-              })}>
+              <Button variant="outline" size="sm" onClick={handleSearchNext}>
                 {findAndReplace.findBtn}
               </Button>
             </div>
@@ -151,94 +153,97 @@ const SearchReplace: React.FC<{
           <TabsContent value="replace" className="space-y-3 pt-3">
             <div className="flex gap-4">
               <div className="flex-1 space-y-2">
-                <Label htmlFor="searchInputR">{findAndReplace.findTextbox}</Label>
+                <Label htmlFor="searchInputR">
+                  {findAndReplace.findTextbox}
+                </Label>
                 <Input
                   id="searchInputR"
                   autoFocus
                   spellCheck={false}
-                  onKeyDown={(e) => e.stopPropagation()}
                   value={searchText}
                   onChange={(e) => setSearchText(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Enter") handleSearchNext();
+                  }}
                 />
-                <Label htmlFor="replaceInput">{findAndReplace.replaceTextbox}</Label>
+                <Label htmlFor="replaceInput">
+                  {findAndReplace.replaceTextbox}
+                </Label>
                 <Input
                   id="replaceInput"
                   spellCheck={false}
-                  onKeyDown={(e) => e.stopPropagation()}
                   value={replaceText}
                   onChange={(e) => setReplaceText(e.target.value)}
                 />
               </div>
-              <div className="space-y-2 pt-5">
-                <Label className="flex items-center gap-2">
-                  <Checkbox checked={checkMode.regCheck} onCheckedChange={(v) => setCheckMode("regCheck", !!v)} />
-                  {findAndReplace.regexTextbox}
-                </Label>
-                <Label className="flex items-center gap-2">
-                  <Checkbox checked={checkMode.wordCheck} onCheckedChange={(v) => setCheckMode("wordCheck", !!v)} />
-                  {findAndReplace.wholeTextbox}
-                </Label>
-                <Label className="flex items-center gap-2">
-                  <Checkbox checked={checkMode.caseCheck} onCheckedChange={(v) => setCheckMode("caseCheck", !!v)} />
-                  {findAndReplace.distinguishTextbox}
-                </Label>
-              </div>
+              {checkboxes}
             </div>
             <div className="flex gap-2">
-              <Button variant="outline" size="sm" onClick={() => {
-                setContext((draftCtx) => {
-                  setSelectedCell(undefined);
-                  const alertMsg = replaceAll(draftCtx, searchText, replaceText, checkMode);
-                  showAlert(alertMsg);
-                });
-              }}>
+              <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setContext((draftCtx) => {
+                      setSelectedCell(undefined);
+                      const alertMsg = replaceAll(
+                          draftCtx,
+                          searchText,
+                          replaceText,
+                          checkMode
+                      );
+                      showAlert(alertMsg);
+                    });
+                  }}
+              >
                 {findAndReplace.allReplaceBtn}
               </Button>
-              <Button variant="outline" size="sm" onClick={() => setContext((draftCtx) => {
-                setSelectedCell(undefined);
-                const alertMsg = replace(draftCtx, searchText, replaceText, checkMode);
-                if (alertMsg != null) showAlert(alertMsg);
-              })}>
+              <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    setContext((draftCtx) => {
+                      setSelectedCell(undefined);
+                      const alertMsg = replace(
+                          draftCtx,
+                          searchText,
+                          replaceText,
+                          checkMode
+                      );
+                      if (alertMsg != null) showAlert(alertMsg);
+                    });
+                  }}
+              >
                 {findAndReplace.replaceBtn}
               </Button>
-              <Button variant="outline" size="sm" onClick={() => setContext((draftCtx) => {
-                setSelectedCell(undefined);
-                if (!searchText) return;
-                const res = searchAll(draftCtx, searchText, checkMode);
-                setSearchResult(res);
-                if (_.isEmpty(res)) showAlert(findAndReplace.noFindTip);
-              })}>
+              <Button variant="outline" size="sm" onClick={handleSearchAll}>
                 {findAndReplace.allFindBtn}
               </Button>
-              <Button variant="outline" size="sm" onClick={() => setContext((draftCtx) => {
-                setSearchResult([]);
-                const alertMsg = searchNext(draftCtx, searchText, checkMode);
-                if (alertMsg != null) showAlert(alertMsg);
-              })}>
+              <Button variant="outline" size="sm" onClick={handleSearchNext}>
                 {findAndReplace.findBtn}
               </Button>
             </div>
           </TabsContent>
         </Tabs>
 
-        <div className="mt-2">
-          <Button variant="outline" size="sm" onClick={closeDialog}>
-            {button.close}
-          </Button>
-        </div>
-
         {searchResult.length > 0 && (
           <div className="h-[210px] border rounded mt-3 overflow-y-auto relative">
-            <div className="sticky top-0 bg-background h-[30px] leading-[29px] px-1.5 border-b flex">
-              <span className="w-1/4 text-center text-sm">{findAndReplace.searchTargetSheet}</span>
-              <span className="w-1/4 text-center text-sm">{findAndReplace.searchTargetCell}</span>
-              <span className="w-1/2 text-center text-sm">{findAndReplace.searchTargetValue}</span>
+            <div
+                className="sticky top-0 bg-background h-[30px] leading-[29px] px-1.5 border-b flex text-sm font-medium">
+              <span className="w-1/4 text-center">
+                {findAndReplace.searchTargetSheet}
+              </span>
+              <span className="w-1/4 text-center">
+                {findAndReplace.searchTargetCell}
+              </span>
+              <span className="w-1/2 text-center">
+                {findAndReplace.searchTargetValue}
+              </span>
             </div>
             <div>
               {searchResult.map((v) => (
                 <div
-                  className={`h-[30px] leading-[29px] border-b px-1.5 flex cursor-pointer ${
-                    _.isEqual(selectedCell, { r: v.r, c: v.c })
+                    className={`h-[30px] leading-[29px] border-b px-1.5 flex cursor-pointer text-sm ${
+                        selectedCell?.r === v.r && selectedCell?.c === v.c
                       ? "bg-primary text-primary-foreground"
                       : "hover:bg-muted"
                   }`}
@@ -255,17 +260,27 @@ const SearchReplace: React.FC<{
                   }}
                   tabIndex={0}
                 >
-                  <span className="w-1/4 text-center truncate text-sm">{v.sheetName}</span>
-                  <span className="w-1/4 text-center truncate text-sm">{v.cellPosition}</span>
-                  <span className="w-1/2 text-center truncate text-sm">{v.value}</span>
+                  <span className="w-1/4 text-center truncate">
+                    {v.sheetName}
+                  </span>
+                  <span className="w-1/4 text-center truncate">
+                    {v.cellPosition}
+                  </span>
+                  <span className="w-1/2 text-center truncate">
+                    {v.value}
+                  </span>
                 </div>
               ))}
             </div>
           </div>
         )}
       </div>
+
+        <DialogFooter className="p-6 pt-0">
+          <Button variant="outline" size="sm" onClick={closeDialog}>
+            {button.close}
+          </Button>
+        </DialogFooter>
     </div>
   );
-};
-
-export default SearchReplace;
+}

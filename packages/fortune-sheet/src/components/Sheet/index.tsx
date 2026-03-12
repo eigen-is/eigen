@@ -157,7 +157,7 @@ type Props = {
   sheet: SheetType;
 };
 
-const Sheet: React.FC<Props> = ({ sheet }) => {
+export const Sheet: React.FC<Props> = ({sheet}) => {
   const { data } = sheet;
   const containerRef = useRef<HTMLDivElement>(null);
   const placeholderRef = useRef<HTMLDivElement>(null);
@@ -288,4 +288,3 @@ const Sheet: React.FC<Props> = ({ sheet }) => {
   );
 };
 
-export default Sheet;

@@ -948,7 +948,7 @@ export function insertRowCol(
     }
 
     // 空列模板
-    const col = [];
+    const col: any[] = [];
     const curd = [...d];
     for (let r = 0; r < d.length; r += 1) {
       const cell = curd[r][index];
@@ -1066,17 +1066,19 @@ export function insertRowCol(
 
     for (let r = 0; r < d.length; r += 1) {
       const row = d[r];
+      const template = col[r];
+      const newCells = Array.from({length: count}, () =>
+          template ? {...template} : null
+      );
 
-      for (let i = 0; i < count; i += 1) {
-        if (direction === "lefttop") {
-          if (index === 0) {
-            row.unshift(col[r]);
-          } else {
-            row.splice(index, 0, col[r]);
-          }
+      if (direction === "lefttop") {
+        if (index === 0) {
+          row.unshift(...newCells);
         } else {
-          row.splice(index + 1, 0, col[r]);
+          row.splice(index, 0, ...newCells);
         }
+      } else {
+        row.splice(index + 1, 0, ...newCells);
       }
     }
   }

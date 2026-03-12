@@ -3,7 +3,7 @@ import _ from "lodash";
 import { getRangetxt } from "../../core";
 import WorkbookContext from "../../context";
 
-const LocationBox: React.FC = () => {
+const NameBox: React.FC = () => {
   const { context } = useContext(WorkbookContext);
 
   const rangeText = useMemo(() => {
@@ -29,7 +29,7 @@ const LocationBox: React.FC = () => {
   }, [context.currentSheetId, context.luckysheet_select_save]);
 
   return (
-    <div className="w-[99px] border-r border-[#d4d4d4] text-sm flex items-center">
+      <div className="w-[99px] border-r border-border text-sm flex items-center">
       <div className="w-full text-center m-0 pl-2 pr-2 outline-none cursor-text whitespace-nowrap overflow-hidden bg-white break-words" tabIndex={0} dir="ltr">
         {rangeText}
       </div>
@@ -37,4 +37,4 @@ const LocationBox: React.FC = () => {
   );
 };
 
-export default LocationBox;
+export default NameBox;

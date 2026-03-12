@@ -9,12 +9,12 @@ import React, {
 import { updateCell, addSheet, locale } from "../../core";
 // @ts-ignore
 import WorkbookContext from "../../context";
-import SVGIcon from "../SVGIcon";
+import {SVGIcon} from "../icon-map";
 import "./index.css";
 import SheetItem from "./SheetItem";
 import ZoomControl from "../ZoomControl";
 
-const SheetTab: React.FC = () => {
+export const SheetTab: React.FC = () => {
   const { context, setContext, settings, refs } = useContext(WorkbookContext);
   const tabContainerRef = useRef<HTMLDivElement>(null);
   const leftScrollRef = useRef<HTMLDivElement>(null);
@@ -173,4 +173,3 @@ const SheetTab: React.FC = () => {
   );
 };
 
-export default SheetTab;

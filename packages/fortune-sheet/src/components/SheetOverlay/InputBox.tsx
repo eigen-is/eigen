@@ -31,7 +31,7 @@ import WorkbookContext from "../../context";
 import ContentEditable from "./ContentEditable";
 import FormulaSearch from "./FormulaSearch";
 import FormulaHint from "./FormulaHint";
-import usePrevious from "../../hooks/usePrevious";
+import {usePrevious} from "../../hooks/usePrevious";
 
 const InputBox: React.FC = () => {
   const { context, setContext, refs } = useContext(WorkbookContext);

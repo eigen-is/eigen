@@ -134,7 +134,7 @@ export const FormulaSearch: React.FC<{ onCancel: () => void }> = ({
       <div className="mb-1.5 [&>div]:block [&>div]:mb-1.5">
         <div>{formulaMore.findFunctionTitle}：</div>
         <input
-          className="w-full h-6 leading-6 border border-[#d4d4d4] px-2.5 text-xs box-border"
+            className="w-full h-6 leading-6 border border-border px-2.5 text-xs box-border"
           id="searchFormulaListInput"
           placeholder={formulaMore.tipInputFunctionName}
           spellCheck="false"
@@ -159,10 +159,10 @@ export const FormulaSearch: React.FC<{ onCancel: () => void }> = ({
       </div>
       <div className="[&>label]:block [&>label]:mb-1.5" style={{ height: 200 }}>
         <div>{formulaMore.selectFunctionTitle}：</div>
-        <div className="w-[300px] h-[170px] border border-[#d4d4d4] overflow-y-auto">
+          <div className="w-[300px] h-[170px] border border-border overflow-y-auto">
           {filteredFunctionList.map((v, index) => (
             <div
-              className={`p-1.5 border-b border-[#d4d4d4] cursor-pointer ${index === selectedFuncIndex ? "bg-[#8c89fe] text-white" : ""}`}
+                className={`p-1.5 border-b border-border cursor-pointer ${index === selectedFuncIndex ? "bg-primary text-primary-foreground" : ""}`}
               key={v.n}
               onClick={() => setSelectedFuncIndex(index)}
               tabIndex={0}

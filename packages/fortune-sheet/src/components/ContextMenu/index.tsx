@@ -24,10 +24,10 @@ import { useAlert } from "../../hooks/useAlert";
 import { useDialog } from "../../hooks/useDialog";
 import Divider from "./Divider";
 import "./index.css";
-import Menu from "./Menu";
+import {Menu} from "./Menu";
 import CustomSort from "../CustomSort";
 
-const ContextMenu: React.FC = () => {
+export const ContextMenu: React.FC = () => {
   const { showDialog } = useDialog();
   const containerRef = useRef<HTMLDivElement>(null);
   const { context, setContext, settings, refs } = useContext(WorkbookContext);
@@ -705,4 +705,3 @@ const ContextMenu: React.FC = () => {
   );
 };
 
-export default ContextMenu;

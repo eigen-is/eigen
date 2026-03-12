@@ -940,4 +940,3 @@ export function Toolbar({
     ), [getToolbarItem, leftItems, rightItems, settings.customToolbarItems, settings.toolbarItems]);
 }
 
-export default Toolbar;

@@ -7,7 +7,7 @@ import {
 import _ from "lodash";
 import React, { useCallback, useContext, useEffect } from "react";
 import WorkbookContext from "../../context";
-import SVGIcon from "../SVGIcon";
+import {SVGIcon} from "../icon-map";
 
 const FilterOptions: React.FC<{ getContainer: () => HTMLDivElement }> = ({
   getContainer,
