@@ -1,12 +1,7 @@
-import {
-  getSheetWithLatestCelldata,
-  CommonOptions,
-  dataToCelldata,
-  celldataToData,
-} from "./common";
+import {celldataToData, CommonOptions, dataToCelldata, getSheetWithLatestCelldata,} from "./common";
 
-export type { CommonOptions };
-export { getSheetWithLatestCelldata, dataToCelldata, celldataToData };
+export type {CommonOptions};
+export {getSheetWithLatestCelldata, dataToCelldata, celldataToData};
 export * from "./cell";
 export * from "./rowcol";
 export * from "./range";

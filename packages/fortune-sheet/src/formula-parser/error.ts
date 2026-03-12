@@ -7,25 +7,25 @@ export const ERROR_NUM = "NUM";
 export const ERROR_REF = "REF";
 export const ERROR_VALUE = "VALUE";
 
-export type ErrorType = 
-  | typeof ERROR
-  | typeof ERROR_DIV_ZERO
-  | typeof ERROR_NAME
-  | typeof ERROR_NOT_AVAILABLE
-  | typeof ERROR_NULL
-  | typeof ERROR_NUM
-  | typeof ERROR_REF
-  | typeof ERROR_VALUE;
+export type ErrorType =
+    | typeof ERROR
+    | typeof ERROR_DIV_ZERO
+    | typeof ERROR_NAME
+    | typeof ERROR_NOT_AVAILABLE
+    | typeof ERROR_NULL
+    | typeof ERROR_NUM
+    | typeof ERROR_REF
+    | typeof ERROR_VALUE;
 
 const errors: Record<string, string> = {
-  [ERROR]: "#ERROR!",
-  [ERROR_DIV_ZERO]: "#DIV/0!",
-  [ERROR_NAME]: "#NAME?",
-  [ERROR_NOT_AVAILABLE]: "#N/A",
-  [ERROR_NULL]: "#NULL!",
-  [ERROR_NUM]: "#NUM!",
-  [ERROR_REF]: "#REF!",
-  [ERROR_VALUE]: "#VALUE!",
+    [ERROR]: "#ERROR!",
+    [ERROR_DIV_ZERO]: "#DIV/0!",
+    [ERROR_NAME]: "#NAME?",
+    [ERROR_NOT_AVAILABLE]: "#N/A",
+    [ERROR_NULL]: "#NULL!",
+    [ERROR_NUM]: "#NUM!",
+    [ERROR_REF]: "#REF!",
+    [ERROR_VALUE]: "#VALUE!",
 };
 
 /**
@@ -35,15 +35,15 @@ const errors: Record<string, string> = {
  * @returns Returns error id.
  */
 export default function error(type: string): string | null {
-  let result: string | undefined;
+    let result: string | undefined;
 
-  const cleanType = (type + "").replace(/#|!|\?/g, "");
+    const cleanType = (type + "").replace(/#|!|\?/g, "");
 
-  if (errors[cleanType]) {
-    result = errors[cleanType];
-  }
+    if (errors[cleanType]) {
+        result = errors[cleanType];
+    }
 
-  return result ?? null;
+    return result ?? null;
 }
 
 /**
@@ -53,5 +53,5 @@ export default function error(type: string): string | null {
  * @return Whether the error type is valid.
  */
 export function isValidStrict(type: string): boolean {
-  return Object.values(errors).includes(type);
+    return Object.values(errors).includes(type);
 }
