@@ -3,25 +3,17 @@ import {ERROR_DIV_ZERO, ERROR_VALUE} from "../../error";
 
 export const SYMBOL = "/";
 
-function func(first: any, ...rest: any[]): number | string {
-    const firstNum = toNumber(first);
-    if (firstNum === undefined) return ERROR_VALUE;
-
+function func(first: any, ...rest: any[]): number {
     const result = rest.reduce(
-        (acc, value) => {
-            const valueNum = toNumber(value);
-            if (valueNum === undefined) return ERROR_VALUE;
-            if (valueNum === 0) throw new Error(ERROR_DIV_ZERO);
-            return acc / valueNum;
-        },
-        firstNum
+        (acc: number, value: any) => acc / toNumber(value)!,
+        toNumber(first)!
     );
 
     if (result === Infinity) {
         throw new Error(ERROR_DIV_ZERO);
     }
     if (isNaN(result)) {
-        return ERROR_VALUE;
+        throw new Error(ERROR_VALUE);
     }
 
     return result;

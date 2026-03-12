@@ -12,20 +12,20 @@ describe(".parse() information formulas", () => {
 
     it("ISBINARY", () => {
         expect(parser.parse("ISBINARY()")).toMatchObject({
-            error: null,
-            result: false,
+            error: "#NAME?",
+            result: null,
         });
         expect(parser.parse("ISBINARY(1)")).toMatchObject({
-            error: null,
-            result: true,
+            error: "#NAME?",
+            result: null,
         });
         expect(parser.parse("ISBINARY(0)")).toMatchObject({
-            error: null,
-            result: true,
+            error: "#NAME?",
+            result: null,
         });
         expect(parser.parse('ISBINARY("1010")')).toMatchObject({
-            error: null,
-            result: true,
+            error: "#NAME?",
+            result: null,
         });
     });
 

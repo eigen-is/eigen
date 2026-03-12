@@ -1,4 +1,4 @@
-import Parser from "../../../src/parser";
+import Parser from "../../../parser";
 
 describe(".parse() coordinates", () => {
     let parser: Parser;
@@ -9,11 +9,11 @@ describe(".parse() coordinates", () => {
     beforeEach(() => {
         parser = new Parser();
 
-        parser.on("callCellValue", (_cellCoord, done) => {
+        parser.on("callCellValue", (_cellCoord: any, _options: any, done: any) => {
             cellCoord = _cellCoord;
             done(55);
         });
-        parser.on("callRangeValue", (_startCellCoord, _endCellCoord, done) => {
+        parser.on("callRangeValue", (_startCellCoord: any, _endCellCoord: any, _options: any, done: any) => {
             startCellCoord = _startCellCoord;
             endCellCoord = _endCellCoord;
             done([[3, 6, 10]]);
