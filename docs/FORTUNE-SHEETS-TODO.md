@@ -12,6 +12,7 @@ functions. So if you encounter things like that: fix it.;
 - When you have columns with conditional formatting, pressing ctrl+c to copy (a larege amount of) cells freezes the browser. Without condtional formatted cells it works fine.
 - It looks like having one big sheet (with conditional formatting?) also slows down work on other sheets in the same workbook. Can we handle data of the sheets somehow more seperatable?
 - Adding extra columns is extremely more slow than adding extra rows. Find out why and try to fix.
+- Modernize copy-paste code, should use shared copy-paste logic for this
 
 ## Legend
 
