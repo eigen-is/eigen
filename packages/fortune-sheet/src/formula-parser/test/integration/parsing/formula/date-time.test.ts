@@ -1,4 +1,4 @@
-import Parser from "../../../../src/parser";
+import Parser from "../../../../parser";
 
 describe(".parse() date & time formulas", () => {
     let parser;

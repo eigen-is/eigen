@@ -1,10 +1,10 @@
 import Parser from "../../../src/parser";
 
 describe(".parse() coordinates", () => {
-    let parser;
-    let cellCoord;
-    let startCellCoord;
-    let endCellCoord;
+    let parser: Parser;
+    let cellCoord: any;
+    let startCellCoord: any;
+    let endCellCoord: any;
 
     beforeEach(() => {
         parser = new Parser();
