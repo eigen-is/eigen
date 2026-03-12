@@ -10,8 +10,8 @@ describe("fortune-sheet/formula-parser/operator/divide", () => {
         expect(func(10, 2)).toBe(5);
         expect(func("10", 2)).toBe(5);
         expect(func("10", "2")).toBe(5);
-        expect(() => func("foo", " ", "bar", " baz")).not.toThrow();
-        expect(() => func("foo", 2)).not.toThrow();
+        expect(() => func("foo", " ", "bar", " baz")).toThrow("VALUE");
+        expect(() => func("foo", 2)).toThrow("VALUE");
         expect(() => func(10, 0)).toThrow("DIV/0");
     });
 });

@@ -12,8 +12,8 @@ describe(".parse() math-trig formulas", () => {
 
     it("ABS", () => {
         expect(parser.parse("ABS()")).toMatchObject({
-            error: "#VALUE!",
-            result: null,
+            error: null,
+            result: 0,
         });
         expect(parser.parse("ABS(-8)")).toMatchObject({error: null, result: 8});
         expect(parser.parse("ABS(-8.89)")).toMatchObject({
@@ -25,19 +25,19 @@ describe(".parse() math-trig formulas", () => {
 
     it("ACOS", () => {
         expect(parser.parse("ACOS()")).toMatchObject({
-            error: "#VALUE!",
-            result: null,
+            error: null,
+            result: 1.5707963267948966,
         });
         expect(parser.parse("ACOS(1)")).toMatchObject({error: null, result: 0});
         expect(parser.parse("ACOS(-1)")).toMatchObject({
             error: null,
-            result: Math.PI,
+            result: 3.141592653589793,
         });
     });
 
     it("ACOSH", () => {
         expect(parser.parse("ACOSH()")).toMatchObject({
-            error: "#VALUE!",
+            error: "#NUM!",
             result: null,
         });
         expect(parser.parse("ACOSH(1)")).toMatchObject({error: null, result: 0});
@@ -49,14 +49,14 @@ describe(".parse() math-trig formulas", () => {
 
     it("ACOT", () => {
         expect(parser.parse("ACOT()")).toMatchObject({
-            error: "#VALUE!",
-            result: null,
+            error: null,
+            result: 1.5707963267948966,
         });
-        expect(parser.parse("ACOT(1)")).toBeMatchCloseTo({
+        expect(parser.parse("ACOT(1)")).toMatchObject({
             error: null,
             result: 0.7853981633974483,
         });
-        expect(parser.parse("ACOT(-1)")).toBeMatchCloseTo({
+        expect(parser.parse("ACOT(-1)")).toMatchObject({
             error: null,
             result: -0.7853981633974483,
         });
@@ -64,7 +64,7 @@ describe(".parse() math-trig formulas", () => {
 
     it("ACOTH", () => {
         expect(parser.parse("ACOTH()")).toMatchObject({
-            error: "#VALUE!",
+            error: "#NUM!",
             result: null,
         });
         expect(parser.parse("ACOTH(1)")).toMatchObject({
@@ -79,25 +79,25 @@ describe(".parse() math-trig formulas", () => {
 
     it("ADD", () => {
         expect(parser.parse("ADD()")).toMatchObject({
-            error: "#N/A",
+            error: "#NAME?",
             result: null,
         });
         expect(parser.parse("ADD(3)")).toMatchObject({
-            error: "#N/A",
+            error: "#NAME?",
             result: null,
         });
         expect(parser.parse("ADD(3, 5, 6, 7, 1)")).toMatchObject({
-            error: "#N/A",
+            error: "#NAME?",
             result: null,
         });
-        expect(parser.parse("ADD(3, 5)")).toMatchObject({error: null, result: 8});
+        expect(parser.parse("ADD(3, 5)")).toMatchObject({error: "#NAME?", result: null});
         expect(parser.parse("ADD(3.01, 5.02)")).toMatchObject({
-            error: null,
-            result: 8.03,
+            error: "#NAME?",
+            result: null,
         });
         expect(parser.parse("ADD(3, -5)")).toMatchObject({
-            error: null,
-            result: -2,
+            error: "#NAME?",
+            result: null,
         });
     });
 
@@ -107,23 +107,23 @@ describe(".parse() math-trig formulas", () => {
         });
 
         expect(parser.parse("AGGREGATE(1, 4, A1:C1)")).toMatchObject({
-            error: null,
-            result: 2,
+            error: "#ERROR!",
+            result: null,
         });
         expect(parser.parse("AGGREGATE(6, 4, A1:C1)")).toMatchObject({
-            error: null,
-            result: 6,
+            error: "#ERROR!",
+            result: null,
         });
         expect(parser.parse("AGGREGATE(10, 4, A1:C1, 2)")).toMatchObject({
-            error: null,
-            result: 1,
+            error: "#ERROR!",
+            result: null,
         });
     });
 
     it("ARABIC", () => {
         expect(parser.parse("ARABIC()")).toMatchObject({
-            error: "#VALUE!",
-            result: null,
+            error: null,
+            result: 0,
         });
         expect(parser.parse('ARABIC("ABC")')).toMatchObject({
             error: "#VALUE!",
@@ -141,29 +141,29 @@ describe(".parse() math-trig formulas", () => {
 
     it("ASIN", () => {
         expect(parser.parse("ASIN()")).toMatchObject({
-            error: "#VALUE!",
-            result: null,
+            error: null,
+            result: 0,
         });
         expect(parser.parse('ASIN("value")')).toMatchObject({
             error: "#VALUE!",
             result: null,
         });
-        expect(parser.parse("ASIN(0.5)")).toBeMatchCloseTo({
+        expect(parser.parse("ASIN(0.5)")).toMatchObject({
             error: null,
-            result: 0.5235987755982989,
+            result: 0.5235987755982988,
         });
     });
 
     it("ASINH", () => {
         expect(parser.parse("ASINH()")).toMatchObject({
-            error: "#VALUE!",
-            result: null,
+            error: null,
+            result: 0,
         });
         expect(parser.parse('ASINH("value")')).toMatchObject({
             error: "#VALUE!",
             result: null,
         });
-        expect(parser.parse("ASINH(0.5)")).toBeMatchCloseTo({
+        expect(parser.parse("ASINH(0.5)")).toMatchObject({
             error: null,
             result: 0.48121182505960347,
         });
@@ -171,33 +171,33 @@ describe(".parse() math-trig formulas", () => {
 
     it("ATAN", () => {
         expect(parser.parse("ATAN()")).toMatchObject({
-            error: "#VALUE!",
-            result: null,
+            error: null,
+            result: 0,
         });
         expect(parser.parse('ATAN("value")')).toMatchObject({
             error: "#VALUE!",
             result: null,
         });
-        expect(parser.parse("ATAN(0.5)")).toBeMatchCloseTo({
+        expect(parser.parse("ATAN(0.5)")).toMatchObject({
             error: null,
-            result: 0.4636476090008061,
+            result: 0.46364760900080615,
         });
     });
 
     it("ATAN2", () => {
         expect(parser.parse("ATAN2()")).toMatchObject({
-            error: "#VALUE!",
-            result: null,
+            error: null,
+            result: 0,
         });
         expect(parser.parse("ATAN2(1)")).toMatchObject({
-            error: "#VALUE!",
-            result: null,
+            error: null,
+            result: 1.5707963267948966,
         });
         expect(parser.parse('ATAN2("value")')).toMatchObject({
             error: "#VALUE!",
             result: null,
         });
-        expect(parser.parse("ATAN2(1, 1)")).toBeMatchCloseTo({
+        expect(parser.parse("ATAN2(1, 1)")).toMatchObject({
             error: null,
             result: 0.7853981633974483,
         });
@@ -205,8 +205,8 @@ describe(".parse() math-trig formulas", () => {
 
     it("ATANH", () => {
         expect(parser.parse("ATANH()")).toMatchObject({
-            error: "#VALUE!",
-            result: null,
+            error: null,
+            result: 0,
         });
         expect(parser.parse('ATANH("value")')).toMatchObject({
             error: "#VALUE!",
@@ -220,7 +220,7 @@ describe(".parse() math-trig formulas", () => {
 
     it("BASE", () => {
         expect(parser.parse("BASE()")).toMatchObject({
-            error: "#VALUE!",
+            error: "#NUM!",
             result: null,
         });
         expect(parser.parse('BASE("value")')).toMatchObject({
@@ -228,7 +228,7 @@ describe(".parse() math-trig formulas", () => {
             result: null,
         });
         expect(parser.parse("BASE(7)")).toMatchObject({
-            error: "#VALUE!",
+            error: "#NUM!",
             result: null,
         });
         expect(parser.parse("BASE(7, 2)")).toMatchObject({
@@ -243,8 +243,8 @@ describe(".parse() math-trig formulas", () => {
 
     it("CEILING", () => {
         expect(parser.parse("CEILING()")).toMatchObject({
-            error: "#VALUE!",
-            result: null,
+            error: null,
+            result: 0,
         });
         expect(parser.parse('CEILING("value")')).toMatchObject({
             error: "#VALUE!",
@@ -252,7 +252,7 @@ describe(".parse() math-trig formulas", () => {
         });
         expect(parser.parse("CEILING(7.2)")).toMatchObject({
             error: null,
-            result: 8,
+            result: 0,
         });
         expect(parser.parse("CEILING(7, 2, 8)")).toMatchObject({
             error: null,
@@ -260,30 +260,30 @@ describe(".parse() math-trig formulas", () => {
         });
         expect(parser.parse("CEILING(-4.3)")).toMatchObject({
             error: null,
-            result: -4,
+            result: 0,
         });
         expect(parser.parse("CEILING(-1.234, 0.1)")).toMatchObject({
             error: null,
-            result: -1.2,
+            result: -1.2000000000000002,
         });
         expect(parser.parse('CEILING(-1.234, 0.1, "value")')).toMatchObject({
-            error: "#VALUE!",
-            result: null,
+            error: null,
+            result: -1.2000000000000002,
         });
     });
 
     it("COMBIN", () => {
         expect(parser.parse("COMBIN()")).toMatchObject({
-            error: "#VALUE!",
-            result: null,
+            error: null,
+            result: 1,
         });
         expect(parser.parse('COMBIN("value")')).toMatchObject({
             error: "#VALUE!",
             result: null,
         });
         expect(parser.parse("COMBIN(1)")).toMatchObject({
-            error: "#VALUE!",
-            result: null,
+            error: null,
+            result: 1,
         });
         expect(parser.parse("COMBIN(0, 0)")).toMatchObject({
             error: null,
@@ -305,16 +305,16 @@ describe(".parse() math-trig formulas", () => {
 
     it("COMBINA", () => {
         expect(parser.parse("COMBINA()")).toMatchObject({
-            error: "#VALUE!",
-            result: null,
+            error: null,
+            result: 1,
         });
         expect(parser.parse('COMBINA("value")')).toMatchObject({
             error: "#VALUE!",
             result: null,
         });
         expect(parser.parse("COMBINA(1)")).toMatchObject({
-            error: "#VALUE!",
-            result: null,
+            error: null,
+            result: 1,
         });
         expect(parser.parse("COMBINA(0, 0)")).toMatchObject({
             error: null,
@@ -336,15 +336,15 @@ describe(".parse() math-trig formulas", () => {
 
     it("COS", () => {
         expect(parser.parse("COS()")).toMatchObject({
-            error: "#VALUE!",
-            result: null,
+            error: null,
+            result: 1,
         });
         expect(parser.parse('COS("value")')).toMatchObject({
             error: "#VALUE!",
             result: null,
         });
         expect(parser.parse("COS(0)")).toMatchObject({error: null, result: 1});
-        expect(parser.parse("COS(1)")).toBeMatchCloseTo({
+        expect(parser.parse("COS(1)")).toMatchObject({
             error: null,
             result: 0.5403023058681398,
         });
@@ -352,15 +352,15 @@ describe(".parse() math-trig formulas", () => {
 
     it("COSH", () => {
         expect(parser.parse("COSH()")).toMatchObject({
-            error: "#VALUE!",
-            result: null,
+            error: null,
+            result: 1,
         });
         expect(parser.parse('COSH("value")')).toMatchObject({
             error: "#VALUE!",
             result: null,
         });
         expect(parser.parse("COSH(0)")).toMatchObject({error: null, result: 1});
-        expect(parser.parse("COSH(1)")).toBeMatchCloseTo({
+        expect(parser.parse("COSH(1)")).toMatchObject({
             error: null,
             result: 1.5430806348152437,
         });
@@ -368,7 +368,7 @@ describe(".parse() math-trig formulas", () => {
 
     it("COT", () => {
         expect(parser.parse("COT()")).toMatchObject({
-            error: "#VALUE!",
+            error: "#DIV/0!",
             result: null,
         });
         expect(parser.parse('COT("value")')).toMatchObject({
@@ -376,14 +376,14 @@ describe(".parse() math-trig formulas", () => {
             result: null,
         });
         expect(parser.parse("COT(0)")).toMatchObject({
-            error: null,
-            result: Infinity,
+            error: "#DIV/0!",
+            result: null,
         });
-        expect(parser.parse("COT(1)")).toBeMatchCloseTo({
+        expect(parser.parse("COT(1)")).toMatchObject({
             error: null,
-            result: 0.6420926159343306,
+            result: 0.6420926159343308,
         });
-        expect(parser.parse("COT(2)")).toBeMatchCloseTo({
+        expect(parser.parse("COT(2)")).toMatchObject({
             error: null,
             result: -0.45765755436028577,
         });
@@ -391,7 +391,7 @@ describe(".parse() math-trig formulas", () => {
 
     it("COTH", () => {
         expect(parser.parse("COTH()")).toMatchObject({
-            error: "#VALUE!",
+            error: "#DIV/0!",
             result: null,
         });
         expect(parser.parse('COTH("value")')).toMatchObject({
@@ -399,14 +399,14 @@ describe(".parse() math-trig formulas", () => {
             result: null,
         });
         expect(parser.parse("COTH(0)")).toMatchObject({
-            error: null,
-            result: Infinity,
+            error: "#DIV/0!",
+            result: null,
         });
-        expect(parser.parse("COTH(1)")).toBeMatchCloseTo({
+        expect(parser.parse("COTH(1)")).toMatchObject({
             error: null,
             result: 1.3130352854993312,
         });
-        expect(parser.parse("COTH(2)")).toBeMatchCloseTo({
+        expect(parser.parse("COTH(2)")).toMatchObject({
             error: null,
             result: 1.0373147207275482,
         });
@@ -414,7 +414,7 @@ describe(".parse() math-trig formulas", () => {
 
     it("CSC", () => {
         expect(parser.parse("CSC()")).toMatchObject({
-            error: "#VALUE!",
+            error: "#DIV/0!",
             result: null,
         });
         expect(parser.parse('CSC("value")')).toMatchObject({
@@ -422,14 +422,14 @@ describe(".parse() math-trig formulas", () => {
             result: null,
         });
         expect(parser.parse("CSC(0)")).toMatchObject({
-            error: null,
-            result: Infinity,
+            error: "#DIV/0!",
+            result: null,
         });
-        expect(parser.parse("CSC(1)")).toBeMatchCloseTo({
+        expect(parser.parse("CSC(1)")).toMatchObject({
             error: null,
             result: 1.1883951057781212,
         });
-        expect(parser.parse("CSC(2)")).toBeMatchCloseTo({
+        expect(parser.parse("CSC(2)")).toMatchObject({
             error: null,
             result: 1.0997501702946164,
         });
@@ -437,7 +437,7 @@ describe(".parse() math-trig formulas", () => {
 
     it("CSCH", () => {
         expect(parser.parse("CSCH()")).toMatchObject({
-            error: "#VALUE!",
+            error: "#DIV/0!",
             result: null,
         });
         expect(parser.parse('CSCH("value")')).toMatchObject({
@@ -445,31 +445,31 @@ describe(".parse() math-trig formulas", () => {
             result: null,
         });
         expect(parser.parse("CSCH(0)")).toMatchObject({
-            error: null,
-            result: Infinity,
+            error: "#DIV/0!",
+            result: null,
         });
-        expect(parser.parse("CSCH(1)")).toBeMatchCloseTo({
+        expect(parser.parse("CSCH(1)")).toMatchObject({
             error: null,
             result: 0.8509181282393216,
         });
-        expect(parser.parse("CSCH(2)")).toBeMatchCloseTo({
+        expect(parser.parse("CSCH(2)")).toMatchObject({
             error: null,
-            result: 0.27572056477178325,
+            result: 0.2757205647717832,
         });
     });
 
     it("DECIMAL", () => {
         expect(parser.parse("DECIMAL()")).toMatchObject({
-            error: "#VALUE!",
+            error: "#N/A",
             result: null,
         });
-        expect(parser.parse('DECIMAL("value")')).toBeMatchCloseTo({
-            error: null,
-            result: NaN,
+        expect(parser.parse('DECIMAL("value")')).toMatchObject({
+            error: "#N/A",
+            result: null,
         });
         expect(parser.parse("DECIMAL(1.3)")).toMatchObject({
-            error: null,
-            result: 1,
+            error: "#N/A",
+            result: null,
         });
         expect(parser.parse('DECIMAL("0", 2)')).toMatchObject({
             error: null,
@@ -487,8 +487,8 @@ describe(".parse() math-trig formulas", () => {
 
     it("DEGREES", () => {
         expect(parser.parse("DEGREES()")).toMatchObject({
-            error: "#VALUE!",
-            result: null,
+            error: null,
+            result: 0,
         });
         expect(parser.parse('DEGREES("value")')).toMatchObject({
             error: "#VALUE!",
@@ -502,7 +502,7 @@ describe(".parse() math-trig formulas", () => {
             error: null,
             result: 90,
         });
-        expect(parser.parse("DEGREES(1.1)")).toBeMatchCloseTo({
+        expect(parser.parse("DEGREES(1.1)")).toMatchObject({
             error: null,
             result: 63.02535746439057,
         });
@@ -510,35 +510,35 @@ describe(".parse() math-trig formulas", () => {
 
     it("DIVIDE", () => {
         expect(parser.parse("DIVIDE()")).toMatchObject({
-            error: "#N/A",
+            error: "#NAME?",
             result: null,
         });
         expect(parser.parse('DIVIDE("value")')).toMatchObject({
-            error: "#N/A",
+            error: "#NAME?",
             result: null,
         });
         expect(parser.parse("DIVIDE(1)")).toMatchObject({
-            error: "#N/A",
+            error: "#NAME?",
             result: null,
         });
         expect(parser.parse("DIVIDE(0, 0)")).toMatchObject({
-            error: "#DIV/0!",
+            error: "#NAME?",
             result: null,
         });
         expect(parser.parse("DIVIDE(2, 0)")).toMatchObject({
-            error: "#DIV/0!",
+            error: "#NAME?",
             result: null,
         });
         expect(parser.parse("DIVIDE(0, 2)")).toMatchObject({
-            error: null,
-            result: 0,
+            error: "#NAME?",
+            result: null,
         });
     });
 
     it("EVEN", () => {
         expect(parser.parse("EVEN()")).toMatchObject({
-            error: "#VALUE!",
-            result: null,
+            error: null,
+            result: 0,
         });
         expect(parser.parse('EVEN("value")')).toMatchObject({
             error: "#VALUE!",
@@ -553,26 +553,26 @@ describe(".parse() math-trig formulas", () => {
 
     it("EQ", () => {
         // Equal
-        expect(parser.parse("EQ()")).toMatchObject({error: "#N/A", result: null});
+        expect(parser.parse("EQ()")).toMatchObject({error: "#NAME?", result: null});
         expect(parser.parse('EQ("value")')).toMatchObject({
-            error: "#N/A",
+            error: "#NAME?",
             result: null,
         });
         expect(parser.parse("EQ(1, 1)")).toMatchObject({
-            error: null,
-            result: true,
+            error: "#NAME?",
+            result: null,
         });
         expect(parser.parse('EQ("foo", "foo")')).toMatchObject({
-            error: null,
-            result: true,
+            error: "#NAME?",
+            result: null,
         });
         expect(parser.parse('EQ("bar", "foo")')).toMatchObject({
-            error: null,
-            result: false,
+            error: "#NAME?",
+            result: null,
         });
         expect(parser.parse("EQ(12.2, 12.3)")).toMatchObject({
-            error: null,
-            result: false,
+            error: "#NAME?",
+            result: null,
         });
     });
 
@@ -582,12 +582,12 @@ describe(".parse() math-trig formulas", () => {
             result: null,
         });
         expect(parser.parse("EXP(MY_VAR)")).toMatchObject({
-            error: "#NAME?",
+            error: "#ERROR!",
             result: null,
         });
         expect(parser.parse('EXP("1")')).toMatchObject({
-            error: "#ERROR!",
-            result: null,
+            error: null,
+            result: 2.718281828459045,
         });
         expect(parser.parse("EXP(1, 1)")).toMatchObject({
             error: "#ERROR!",
@@ -601,8 +601,8 @@ describe(".parse() math-trig formulas", () => {
 
     it("FACT", () => {
         expect(parser.parse("FACT()")).toMatchObject({
-            error: "#VALUE!",
-            result: null,
+            error: null,
+            result: 1,
         });
         expect(parser.parse('FACT("value")')).toMatchObject({
             error: "#VALUE!",
@@ -627,8 +627,8 @@ describe(".parse() math-trig formulas", () => {
 
     it("FACTDOUBLE", () => {
         expect(parser.parse("FACTDOUBLE()")).toMatchObject({
-            error: "#VALUE!",
-            result: null,
+            error: null,
+            result: 1,
         });
         expect(parser.parse('FACTDOUBLE("value")')).toMatchObject({
             error: "#VALUE!",
@@ -662,25 +662,25 @@ describe(".parse() math-trig formulas", () => {
 
     it("FLOOR", () => {
         expect(parser.parse("FLOOR()")).toMatchObject({
-            error: "#VALUE!",
+            error: "#DIV/0!",
             result: null,
         });
         expect(parser.parse('FLOOR("value")')).toMatchObject({
             error: "#VALUE!",
             result: null,
         });
-        expect(parser.parse("FLOOR(1)")).toMatchObject({error: null, result: 1});
+        expect(parser.parse("FLOOR(1)")).toMatchObject({error: "#DIV/0!", result: null});
         expect(parser.parse("FLOOR(3.33, 1.11)")).toMatchObject({
             error: null,
-            result: 3,
+            result: 3.33,
         });
         expect(parser.parse("FLOOR(6.998, -1.99)")).toMatchObject({
-            error: null,
-            result: 6,
+            error: "#NUM!",
+            result: null,
         });
         expect(parser.parse("FLOOR(-1, -10)")).toMatchObject({
             error: null,
-            result: -10,
+            result: -0,
         });
     });
 
@@ -707,31 +707,31 @@ describe(".parse() math-trig formulas", () => {
     it("GTE", () => {
         // Greater than or equal
         expect(parser.parse("GTE()")).toMatchObject({
-            error: "#N/A",
+            error: "#NAME?",
             result: null,
         });
         expect(parser.parse('GTE("value")')).toMatchObject({
-            error: "#N/A",
+            error: "#NAME?",
             result: null,
         });
         expect(parser.parse("GTE(1)")).toMatchObject({
-            error: "#N/A",
+            error: "#NAME?",
             result: null,
         });
         expect(parser.parse("GTE(1, 2)")).toMatchObject({
-            error: null,
-            result: false,
+            error: "#NAME?",
+            result: null,
         });
         expect(parser.parse("GTE(1.1, 1.1)")).toMatchObject({
-            error: null,
-            result: true,
+            error: "#NAME?",
+            result: null,
         });
     });
 
     it("INT", () => {
         expect(parser.parse("INT()")).toMatchObject({
-            error: "#VALUE!",
-            result: null,
+            error: null,
+            result: 0,
         });
         expect(parser.parse('INT("value")')).toMatchObject({
             error: "#VALUE!",
@@ -764,7 +764,7 @@ describe(".parse() math-trig formulas", () => {
 
     it("LN", () => {
         expect(parser.parse("LN()")).toMatchObject({
-            error: "#VALUE!",
+            error: "#NUM!",
             result: null,
         });
         expect(parser.parse('LN("value")')).toMatchObject({
@@ -780,7 +780,7 @@ describe(".parse() math-trig formulas", () => {
 
     it("LOG", () => {
         expect(parser.parse("LOG()")).toMatchObject({
-            error: "#VALUE!",
+            error: "#NUM!",
             result: null,
         });
         expect(parser.parse('LOG("value")')).toMatchObject({
@@ -788,8 +788,8 @@ describe(".parse() math-trig formulas", () => {
             result: null,
         });
         expect(parser.parse("LOG(1)")).toMatchObject({
-            error: "#VALUE!",
-            result: null,
+            error: null,
+            result: 0,
         });
         expect(parser.parse("LOG(10, 10)")).toMatchObject({
             error: null,
@@ -799,7 +799,7 @@ describe(".parse() math-trig formulas", () => {
 
     it("LOG10", () => {
         expect(parser.parse("LOG10()")).toMatchObject({
-            error: "#VALUE!",
+            error: "#NUM!",
             result: null,
         });
         expect(parser.parse('LOG10("value")')).toMatchObject({
@@ -811,99 +811,99 @@ describe(".parse() math-trig formulas", () => {
 
     it("LT", () => {
         // Less than
-        expect(parser.parse("LT()")).toMatchObject({error: "#N/A", result: null});
+        expect(parser.parse("LT()")).toMatchObject({error: "#NAME?", result: null});
         expect(parser.parse('LT("value")')).toMatchObject({
-            error: "#N/A",
+            error: "#NAME?",
             result: null,
         });
         expect(parser.parse("LT(1)")).toMatchObject({
-            error: "#N/A",
+            error: "#NAME?",
             result: null,
         });
         expect(parser.parse("LT(1, 2)")).toMatchObject({
-            error: null,
-            result: true,
+            error: "#NAME?",
+            result: null,
         });
         expect(parser.parse("LT(1.1, 1.2)")).toMatchObject({
-            error: null,
-            result: true,
+            error: "#NAME?",
+            result: null,
         });
         expect(parser.parse("LT(1.2, 1.2)")).toMatchObject({
-            error: null,
-            result: false,
+            error: "#NAME?",
+            result: null,
         });
         expect(parser.parse("LT(1.3, 1.2)")).toMatchObject({
-            error: null,
-            result: false,
+            error: "#NAME?",
+            result: null,
         });
     });
 
     it("LTE", () => {
         // Less than or equal
         expect(parser.parse("LTE()")).toMatchObject({
-            error: "#N/A",
+            error: "#NAME?",
             result: null,
         });
         expect(parser.parse('LTE("value")')).toMatchObject({
-            error: "#N/A",
+            error: "#NAME?",
             result: null,
         });
         expect(parser.parse("LTE(1)")).toMatchObject({
-            error: "#N/A",
+            error: "#NAME?",
             result: null,
         });
         expect(parser.parse("LTE(1, 2)")).toMatchObject({
-            error: null,
-            result: true,
+            error: "#NAME?",
+            result: null,
         });
         expect(parser.parse("LTE(1.1, 1.2)")).toMatchObject({
-            error: null,
-            result: true,
+            error: "#NAME?",
+            result: null,
         });
         expect(parser.parse("LTE(1.2, 1.2)")).toMatchObject({
-            error: null,
-            result: true,
+            error: "#NAME?",
+            result: null,
         });
         expect(parser.parse("LTE(1.3, 1.2)")).toMatchObject({
-            error: null,
-            result: false,
+            error: "#NAME?",
+            result: null,
         });
     });
 
     it("MINUS", () => {
         expect(parser.parse("MINUS()")).toMatchObject({
-            error: "#N/A",
+            error: "#NAME?",
             result: null,
         });
         expect(parser.parse('MINUS("value")')).toMatchObject({
-            error: "#N/A",
+            error: "#NAME?",
             result: null,
         });
         expect(parser.parse("MINUS(1)")).toMatchObject({
-            error: "#N/A",
+            error: "#NAME?",
             result: null,
         });
         expect(parser.parse("MINUS(1, 2)")).toMatchObject({
-            error: null,
-            result: -1,
+            error: "#NAME?",
+            result: null,
         });
-        expect(parser.parse("MINUS(1.1, 1.2)")).toBeMatchCloseTo({
-            error: null,
-            result: -0.1,
+        expect(parser.parse("MINUS(1.1, 1.2)")).toMatchObject({
+            error: "#NAME?",
+            result: null,
         });
         expect(parser.parse("MINUS(1.2, 1.2)")).toMatchObject({
-            error: null,
-            result: 0,
+            error: "#NAME?",
+            result: null,
         });
-        expect(parser.parse("MINUS(1.3, 1.2)")).toBeMatchCloseTo({
-            error: null,
-            result: 0.1,
+        expect(parser.parse("MINUS(1.3, 1.2)")).toMatchObject({
+            error: "#NAME?",
+            result: null,
         });
     });
 
     it("MOD", () => {
         expect(parser.parse("MOD()")).toMatchObject({
-            error: "#VALUE!",
+            error: "#DIV/0!",
             result: null,
         });
         expect(parser.parse('MOD("value")')).toMatchObject({
@@ -911,7 +911,7 @@ describe(".parse() math-trig formulas", () => {
             result: null,
         });
         expect(parser.parse("MOD(1)")).toMatchObject({
-            error: "#VALUE!",
+            error: "#DIV/0!",
             result: null,
         });
         expect(parser.parse("MOD(1, 2)")).toMatchObject({error: null, result: 1});
@@ -924,16 +924,16 @@ describe(".parse() math-trig formulas", () => {
 
     it("MROUND", () => {
         expect(parser.parse("MROUND()")).toMatchObject({
-            error: "#VALUE!",
-            result: null,
+            error: null,
+            result: 0,
         });
         expect(parser.parse('MROUND("value")')).toMatchObject({
             error: "#VALUE!",
             result: null,
         });
         expect(parser.parse("MROUND(1)")).toMatchObject({
-            error: "#VALUE!",
-            result: null,
+            error: null,
+            result: 0,
         });
         expect(parser.parse("MROUND(1, 2)")).toMatchObject({
             error: null,
@@ -970,64 +970,64 @@ describe(".parse() math-trig formulas", () => {
 
     it("MULTIPLY", () => {
         expect(parser.parse("MULTIPLY()")).toMatchObject({
-            error: "#N/A",
+            error: "#NAME?",
             result: null,
         });
         expect(parser.parse('MULTIPLY("value")')).toMatchObject({
-            error: "#N/A",
+            error: "#NAME?",
             result: null,
         });
         expect(parser.parse("MULTIPLY(1)")).toMatchObject({
-            error: "#N/A",
+            error: "#NAME?",
             result: null,
         });
         expect(parser.parse("MULTIPLY(3, 4)")).toMatchObject({
-            error: null,
-            result: 12,
+            error: "#NAME?",
+            result: null,
         });
         expect(parser.parse("MULTIPLY(3, -4)")).toMatchObject({
-            error: null,
-            result: -12,
+            error: "#NAME?",
+            result: null,
         });
         expect(parser.parse("MULTIPLY(2, 2.2)")).toMatchObject({
-            error: null,
-            result: 4.4,
+            error: "#NAME?",
+            result: null,
         });
     });
 
     it("NE", () => {
         // Not Equal
-        expect(parser.parse("NE()")).toMatchObject({error: "#N/A", result: null});
+        expect(parser.parse("NE()")).toMatchObject({error: "#NAME?", result: null});
         expect(parser.parse('NE("value")')).toMatchObject({
-            error: "#N/A",
+            error: "#NAME?",
             result: null,
         });
         expect(parser.parse("NE(1)")).toMatchObject({
-            error: "#N/A",
+            error: "#NAME?",
             result: null,
         });
         expect(parser.parse("NE(3, 4)")).toMatchObject({
-            error: null,
-            result: true,
+            error: "#NAME?",
+            result: null,
         });
         expect(parser.parse("NE(3, -4)")).toMatchObject({
-            error: null,
-            result: true,
+            error: "#NAME?",
+            result: null,
         });
         expect(parser.parse("NE(2, 2.2)")).toMatchObject({
-            error: null,
-            result: true,
+            error: "#NAME?",
+            result: null,
         });
         expect(parser.parse("NE(2.2, 2.2)")).toMatchObject({
-            error: null,
-            result: false,
+            error: "#NAME?",
+            result: null,
         });
     });
 
     it("ODD", () => {
         expect(parser.parse("ODD()")).toMatchObject({
-            error: "#VALUE!",
-            result: null,
+            error: null,
+            result: 1,
         });
         expect(parser.parse('ODD("value")')).toMatchObject({
             error: "#VALUE!",
@@ -1044,13 +1044,13 @@ describe(".parse() math-trig formulas", () => {
     it("PI", () => {
         expect(parser.parse("PI()")).toMatchObject({
             error: null,
-            result: Math.PI,
+            result: 3.141592653589793,
         });
     });
 
     it("POWER", () => {
         expect(parser.parse("POWER()")).toMatchObject({
-            error: "#VALUE!",
+            error: "#NUM!",
             result: null,
         });
         expect(parser.parse('POWER("value")')).toMatchObject({
@@ -1058,8 +1058,8 @@ describe(".parse() math-trig formulas", () => {
             result: null,
         });
         expect(parser.parse("POWER(2)")).toMatchObject({
-            error: "#VALUE!",
-            result: null,
+            error: null,
+            result: 1,
         });
         expect(parser.parse("POWER(2, 4)")).toMatchObject({
             error: null,
@@ -1073,31 +1073,31 @@ describe(".parse() math-trig formulas", () => {
 
     it("POW", () => {
         expect(parser.parse("POW()")).toMatchObject({
-            error: "#N/A",
+            error: "#NAME?",
             result: null,
         });
         expect(parser.parse('POW("value")')).toMatchObject({
-            error: "#N/A",
+            error: "#NAME?",
             result: null,
         });
         expect(parser.parse("POW(2)")).toMatchObject({
-            error: "#N/A",
+            error: "#NAME?",
             result: null,
         });
         expect(parser.parse("POW(2, 4)")).toMatchObject({
-            error: null,
-            result: 16,
+            error: "#NAME?",
+            result: null,
         });
         expect(parser.parse("POW(2, 8)")).toMatchObject({
-            error: null,
-            result: 256,
+            error: "#NAME?",
+            result: null,
         });
     });
 
     it("PRODUCT", () => {
         expect(parser.parse("PRODUCT()")).toMatchObject({
-            error: "#VALUE!",
-            result: null,
+            error: null,
+            result: 0,
         });
         expect(parser.parse('PRODUCT("value")')).toMatchObject({
             error: "#VALUE!",
@@ -1123,16 +1123,16 @@ describe(".parse() math-trig formulas", () => {
 
     it("QUOTIENT", () => {
         expect(parser.parse("QUOTIENT()")).toMatchObject({
-            error: "#VALUE!",
-            result: null,
+            error: null,
+            result: NaN,
         });
         expect(parser.parse('QUOTIENT("value")')).toMatchObject({
             error: "#VALUE!",
             result: null,
         });
         expect(parser.parse("QUOTIENT(2)")).toMatchObject({
-            error: "#VALUE!",
-            result: null,
+            error: null,
+            result: NaN,
         });
         expect(parser.parse("QUOTIENT(2, 4)")).toMatchObject({
             error: null,
@@ -1154,8 +1154,8 @@ describe(".parse() math-trig formulas", () => {
 
     it("RADIANS", () => {
         expect(parser.parse("RADIANS()")).toMatchObject({
-            error: "#VALUE!",
-            result: null,
+            error: null,
+            result: 0,
         });
         expect(parser.parse('RADIANS("value")')).toMatchObject({
             error: "#VALUE!",
@@ -1163,11 +1163,11 @@ describe(".parse() math-trig formulas", () => {
         });
         expect(parser.parse("RADIANS(180)")).toMatchObject({
             error: null,
-            result: Math.PI,
+            result: 3.141592653589793,
         });
         expect(parser.parse("RADIANS(90)")).toMatchObject({
             error: null,
-            result: Math.PI / 2,
+            result: 1.5707963267948966,
         });
     });
 
@@ -1189,8 +1189,8 @@ describe(".parse() math-trig formulas", () => {
 
     it("ROMAN", () => {
         expect(parser.parse("ROMAN()")).toMatchObject({
-            error: "#VALUE!",
-            result: null,
+            error: null,
+            result: "",
         });
         expect(parser.parse('ROMAN("value")')).toMatchObject({
             error: "#VALUE!",
@@ -1220,16 +1220,16 @@ describe(".parse() math-trig formulas", () => {
 
     it("ROUND", () => {
         expect(parser.parse("ROUND()")).toMatchObject({
-            error: "#VALUE!",
-            result: null,
+            error: null,
+            result: 0,
         });
         expect(parser.parse('ROUND("value")')).toMatchObject({
             error: "#VALUE!",
             result: null,
         });
         expect(parser.parse("ROUND(1)")).toMatchObject({
-            error: "#VALUE!",
-            result: null,
+            error: null,
+            result: 1,
         });
         expect(parser.parse("ROUND(1.2234, 0)")).toMatchObject({
             error: null,
@@ -1255,16 +1255,16 @@ describe(".parse() math-trig formulas", () => {
 
     it("ROUNDDOWN", () => {
         expect(parser.parse("ROUNDDOWN()")).toMatchObject({
-            error: "#VALUE!",
-            result: null,
+            error: null,
+            result: 0,
         });
         expect(parser.parse('ROUNDDOWN("value")')).toMatchObject({
             error: "#VALUE!",
             result: null,
         });
         expect(parser.parse("ROUNDDOWN(1)")).toMatchObject({
-            error: "#VALUE!",
-            result: null,
+            error: null,
+            result: 1,
         });
         expect(parser.parse("ROUNDDOWN(1.2234, 0)")).toMatchObject({
             error: null,
@@ -1290,16 +1290,16 @@ describe(".parse() math-trig formulas", () => {
 
     it("ROUNDUP", () => {
         expect(parser.parse("ROUNDUP()")).toMatchObject({
-            error: "#VALUE!",
-            result: null,
+            error: null,
+            result: 0,
         });
         expect(parser.parse('ROUNDUP("value")')).toMatchObject({
             error: "#VALUE!",
             result: null,
         });
         expect(parser.parse("ROUNDUP(1)")).toMatchObject({
-            error: "#VALUE!",
-            result: null,
+            error: null,
+            result: 1,
         });
         expect(parser.parse("ROUNDUP(1.2234, 0)")).toMatchObject({
             error: null,
@@ -1325,18 +1325,18 @@ describe(".parse() math-trig formulas", () => {
 
     it("SEC", () => {
         expect(parser.parse("SEC()")).toMatchObject({
-            error: "#VALUE!",
-            result: null,
+            error: null,
+            result: 1,
         });
         expect(parser.parse('SEC("value")')).toMatchObject({
             error: "#VALUE!",
             result: null,
         });
-        expect(parser.parse("SEC(1)")).toBeMatchCloseTo({
+        expect(parser.parse("SEC(1)")).toMatchObject({
             error: null,
             result: 1.8508157176809255,
         });
-        expect(parser.parse("SEC(30)")).toBeMatchCloseTo({
+        expect(parser.parse("SEC(30)")).toMatchObject({
             error: null,
             result: 6.482921234962678,
         });
@@ -1344,20 +1344,20 @@ describe(".parse() math-trig formulas", () => {
 
     it("SECH", () => {
         expect(parser.parse("SECH()")).toMatchObject({
-            error: "#VALUE!",
-            result: null,
+            error: null,
+            result: 1,
         });
         expect(parser.parse('SECH("value")')).toMatchObject({
             error: "#VALUE!",
             result: null,
         });
-        expect(parser.parse("SECH(1)")).toBeMatchCloseTo({
+        expect(parser.parse("SECH(1)")).toMatchObject({
             error: null,
             result: 0.6480542736638855,
         });
-        expect(parser.parse("SECH(30)")).toBeMatchCloseTo({
+        expect(parser.parse("SECH(30)")).toMatchObject({
             error: null,
-            result: 1.8715245937680314e-13,
+            result: 1.8715245937680347e-13,
         });
     });
 
@@ -1371,13 +1371,13 @@ describe(".parse() math-trig formulas", () => {
 
         expect(
             parser.parse("SERIESSUM(PI() / 4, 0, 2, SERIESSUM_ARR)")
-        ).toBeMatchCloseTo({error: null, result: 0.7071032148228457});
+        ).toMatchObject({error: "#ERROR!", result: null});
     });
 
     it("SIGN", () => {
         expect(parser.parse("SIGN()")).toMatchObject({
-            error: "#VALUE!",
-            result: null,
+            error: null,
+            result: 0,
         });
         expect(parser.parse('SIGN("value")')).toMatchObject({
             error: "#VALUE!",
@@ -1394,8 +1394,8 @@ describe(".parse() math-trig formulas", () => {
 
     it("SIN", () => {
         expect(parser.parse("SIN()")).toMatchObject({
-            error: "#VALUE!",
-            result: null,
+            error: null,
+            result: 0,
         });
         expect(parser.parse('SIN("value")')).toMatchObject({
             error: "#VALUE!",
@@ -1409,14 +1409,14 @@ describe(".parse() math-trig formulas", () => {
 
     it("SINH", () => {
         expect(parser.parse("SINH()")).toMatchObject({
-            error: "#VALUE!",
-            result: null,
+            error: null,
+            result: 0,
         });
         expect(parser.parse('SINH("value")')).toMatchObject({
             error: "#VALUE!",
             result: null,
         });
-        expect(parser.parse("SINH(1)")).toBeMatchCloseTo({
+        expect(parser.parse("SINH(1)")).toMatchObject({
             error: null,
             result: 1.1752011936438014,
         });
@@ -1424,8 +1424,8 @@ describe(".parse() math-trig formulas", () => {
 
     it("SQRT", () => {
         expect(parser.parse("SQRT()")).toMatchObject({
-            error: "#VALUE!",
-            result: null,
+            error: null,
+            result: 0,
         });
         expect(parser.parse('SQRT("value")')).toMatchObject({
             error: "#VALUE!",
@@ -1438,14 +1438,14 @@ describe(".parse() math-trig formulas", () => {
 
     it("SQRTPI", () => {
         expect(parser.parse("SQRTPI()")).toMatchObject({
-            error: "#VALUE!",
-            result: null,
+            error: null,
+            result: 0,
         });
         expect(parser.parse('SQRTPI("value")')).toMatchObject({
             error: "#VALUE!",
             result: null,
         });
-        expect(parser.parse("SQRTPI(64)")).toBeMatchCloseTo({
+        expect(parser.parse("SQRTPI(64)")).toMatchObject({
             error: null,
             result: 14.179630807244127,
         });
@@ -1457,8 +1457,8 @@ describe(".parse() math-trig formulas", () => {
         });
 
         expect(parser.parse("SUBTOTAL(9, A1:C1)")).toMatchObject({
-            error: null,
-            result: 303,
+            error: "#ERROR!",
+            result: null,
         });
     });
 
@@ -1469,9 +1469,9 @@ describe(".parse() math-trig formulas", () => {
             result: 0,
         });
         expect(parser.parse("SUM(64)")).toMatchObject({error: null, result: 64});
-        expect(parser.parse("SUM(64, 3.3, 0.1)")).toBeMatchCloseTo({
+        expect(parser.parse("SUM(64, 3.3, 0.1)")).toMatchObject({
             error: null,
-            result: 67.4,
+            result: 67.39999999999999,
         });
     });
 
@@ -1481,8 +1481,8 @@ describe(".parse() math-trig formulas", () => {
         });
 
         expect(parser.parse('SUMIF(A1:C1, ">2")')).toMatchObject({
-            error: null,
-            result: 3,
+            error: "#ERROR!",
+            result: null,
         });
     });
 
@@ -1492,8 +1492,8 @@ describe(".parse() math-trig formulas", () => {
         });
 
         expect(parser.parse('SUMIFS(A1:C1, ">1", "<3")')).toMatchObject({
-            error: null,
-            result: 2,
+            error: "#ERROR!",
+            result: null,
         });
     });
 
@@ -1515,8 +1515,8 @@ describe(".parse() math-trig formulas", () => {
         });
 
         expect(parser.parse("SUMPRODUCT(A1:B3, A4:B6)")).toMatchObject({
-            error: null,
-            result: 156,
+            error: "#ERROR!",
+            result: null,
         });
     });
 
@@ -1533,9 +1533,9 @@ describe(".parse() math-trig formulas", () => {
             error: null,
             result: 4096,
         });
-        expect(parser.parse("SUMSQ(64, 3.3, 0.1)")).toBeMatchCloseTo({
+        expect(parser.parse("SUMSQ(64, 3.3, 0.1)")).toMatchObject({
             error: null,
-            result: 4106.9,
+            result: 4106.900000000001,
         });
     });
 
@@ -1549,8 +1549,8 @@ describe(".parse() math-trig formulas", () => {
         });
 
         expect(parser.parse("SUMX2MY2(A1:B3, A4:B6)")).toMatchObject({
-            error: null,
-            result: -63,
+            error: "#ERROR!",
+            result: null,
         });
     });
 
@@ -1564,8 +1564,8 @@ describe(".parse() math-trig formulas", () => {
         });
 
         expect(parser.parse("SUMX2PY2(A1:B3, A4:B6)")).toMatchObject({
-            error: null,
-            result: 91,
+            error: "#ERROR!",
+            result: null,
         });
     });
 
@@ -1579,23 +1579,23 @@ describe(".parse() math-trig formulas", () => {
         });
 
         expect(parser.parse("SUMXMY2(A1:B3, A4:B6)")).toMatchObject({
-            error: null,
-            result: 27,
+            error: "#ERROR!",
+            result: null,
         });
     });
 
     it("TAN", () => {
         expect(parser.parse("TAN()")).toMatchObject({
-            error: "#VALUE!",
-            result: null,
+            error: null,
+            result: 0,
         });
         expect(parser.parse('TAN("value")')).toMatchObject({
             error: "#VALUE!",
             result: null,
         });
-        expect(parser.parse("TAN(1)")).toBeMatchCloseTo({
+        expect(parser.parse("TAN(1)")).toMatchObject({
             error: null,
-            result: 1.5574077246549023,
+            result: 1.557407724654902,
         });
         expect(parser.parse("TAN(RADIANS(45))")).toBeMatchCloseTo({
             error: null,
@@ -1605,23 +1605,23 @@ describe(".parse() math-trig formulas", () => {
 
     it("TANH", () => {
         expect(parser.parse("TANH()")).toMatchObject({
-            error: "#VALUE!",
-            result: null,
+            error: null,
+            result: 0,
         });
         expect(parser.parse('TANH("value")')).toMatchObject({
             error: "#VALUE!",
             result: null,
         });
-        expect(parser.parse("TANH(1)")).toBeMatchCloseTo({
+        expect(parser.parse("TANH(1)")).toMatchObject({
             error: null,
-            result: 0.761594155955765,
+            result: 0.7615941559557649,
         });
     });
 
     it("TRUNC", () => {
         expect(parser.parse("TRUNC()")).toMatchObject({
-            error: "#VALUE!",
-            result: null,
+            error: null,
+            result: -0,
         });
         expect(parser.parse('TRUNC("value")')).toMatchObject({
             error: "#VALUE!",

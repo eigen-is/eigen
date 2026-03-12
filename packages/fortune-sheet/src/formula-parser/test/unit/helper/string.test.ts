@@ -1,4 +1,4 @@
-import {trimEdges} from "../../../src/helper/string";
+import {trimEdges} from "../../../helper/string";
 
 describe(".trimEdges()", () => {
     it("should correctly trim edges", () => {
