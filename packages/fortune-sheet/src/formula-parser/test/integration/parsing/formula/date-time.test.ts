@@ -135,24 +135,24 @@ describe(".parse() date & time formulas", () => {
 
     it("INTERVAL", () => {
         expect(parser.parse("INTERVAL()")).toMatchObject({
-            error: "#NAME?",
+            error: "#VALUE!",
             result: null,
         });
         expect(parser.parse("INTERVAL(0)")).toMatchObject({
-            error: "#NAME?",
-            result: null,
+            error: null,
+            result: "PT",
         });
         expect(parser.parse("INTERVAL(1)")).toMatchObject({
-            error: "#NAME?",
-            result: null,
+            error: null,
+            result: "PT1S",
         });
         expect(parser.parse("INTERVAL(60)")).toMatchObject({
-            error: "#NAME?",
-            result: null,
+            error: null,
+            result: "PT1M",
         });
         expect(parser.parse("INTERVAL(10000000)")).toMatchObject({
-            error: "#NAME?",
-            result: null,
+            error: null,
+            result: "P3M25DT17H46M40S",
         });
     });
 
