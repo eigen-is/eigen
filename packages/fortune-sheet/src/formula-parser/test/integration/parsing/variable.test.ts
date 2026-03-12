@@ -1,22 +1,23 @@
-import Parser from "../../../src/parser";
+import Parser from "../../../parser";
+import {afterEach, beforeEach, describe, expect, test} from "bun:test";
 
 describe(".parse() variable", () => {
-    let parser;
+    let parser: Parser;
 
     beforeEach(() => {
         parser = new Parser();
     });
     afterEach(() => {
-        parser = null;
+        parser = null as any;
     });
 
-    it("should evaluate defaults variables", () => {
+    test("should evaluate defaults variables", () => {
         expect(parser.parse("TRUE")).toMatchObject({error: null, result: true});
         expect(parser.parse("FALSE")).toMatchObject({error: null, result: false});
         expect(parser.parse("NULL")).toMatchObject({error: null, result: null});
     });
 
-    it("should evaluate custom variables", () => {
+    test("should evaluate custom variables", () => {
         expect(parser.parse("foo")).toMatchObject({
             error: "#NAME?",
             result: null,

@@ -1,16 +1,17 @@
-import Parser from "../../../src/parser";
+import Parser from "../../../parser";
+import {afterEach, beforeEach, describe, expect, test} from "bun:test";
 
 describe(".parse() math", () => {
-    let parser;
+    let parser: Parser;
 
     beforeEach(() => {
         parser = new Parser();
     });
     afterEach(() => {
-        parser = null;
+        parser = null as any;
     });
 
-    it("operator: +", () => {
+    test("operator: +", () => {
         expect(parser.parse("10+10")).toMatchObject({error: null, result: 20});
         expect(parser.parse("10 + 10")).toMatchObject({error: null, result: 20});
         expect(parser.parse("10 + 11 + 23 + 11 + 2")).toMatchObject({
@@ -27,7 +28,7 @@ describe(".parse() math", () => {
         });
     });
 
-    it("operator: -", () => {
+    test("operator: -", () => {
         expect(parser.parse("10-10")).toMatchObject({error: null, result: 0});
         expect(parser.parse("10 - 10")).toMatchObject({error: null, result: 0});
         expect(parser.parse("10 - 10 - 2")).toMatchObject({
@@ -44,7 +45,7 @@ describe(".parse() math", () => {
         });
     });
 
-    it("operator: /", () => {
+    test("operator: /", () => {
         expect(parser.parse("2 / 1")).toMatchObject({error: null, result: 2});
         expect(parser.parse("64 / 2 / 4")).toMatchObject({
             error: null,
@@ -60,7 +61,7 @@ describe(".parse() math", () => {
         });
     });
 
-    it("operator: *", () => {
+    test("operator: *", () => {
         expect(parser.parse("0 * 0 * 0 * 0 * 0")).toMatchObject({
             error: null,
             result: 0,
@@ -76,7 +77,7 @@ describe(".parse() math", () => {
         });
     });
 
-    it("operator: ^", () => {
+    test("operator: ^", () => {
         expect(parser.parse("2 ^ 5")).toMatchObject({error: null, result: 32});
         expect(parser.parse('"foo" ^ 4')).toMatchObject({
             error: "#VALUE!",
@@ -84,7 +85,7 @@ describe(".parse() math", () => {
         });
     });
 
-    it("operator: &", () => {
+    test("operator: &", () => {
         expect(parser.parse("2 & 5")).toMatchObject({error: null, result: "25"});
         expect(parser.parse("(2 & 5)")).toMatchObject({
             error: null,
@@ -101,7 +102,7 @@ describe(".parse() math", () => {
         });
     });
 
-    it("mixed operators", () => {
+    test("mixed operators", () => {
         expect(parser.parse("1 + 10 - 20 * 3/2")).toMatchObject({
             error: null,
             result: -19,

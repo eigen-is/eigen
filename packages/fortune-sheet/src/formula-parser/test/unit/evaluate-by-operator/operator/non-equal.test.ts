@@ -1,12 +1,12 @@
-/* eslint-disable import/no-named-as-default-member */
-import func from "../../../../src/evaluate-by-operator/operator/not-equal";
+import {describe, expect, test} from "bun:test";
+import func from "../../../../evaluate-by-operator/operator/not-equal";
 
 describe("not equal operator", () => {
-    it("should set SYMBOL const", () => {
+    test("should set SYMBOL const", () => {
         expect(func.SYMBOL).toBe("<>");
     });
 
-    it("should correctly process values", () => {
+    test("should correctly process values", () => {
         expect(func(2, 8.8)).toBe(true);
         expect(func("2", 8.8)).toBe(true);
         expect(func(1, "1")).toBe(true);
