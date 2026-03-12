@@ -227,12 +227,13 @@ rt
 
 </html>
 `;
+
 export function pastedHtmlFactory(source: "WPS" | "Excel") {
-  if (source === "WPS") {
-    return wpsHtml;
-  }
-  if (source === "Excel") {
-    return excelHtml;
-  }
-  return "";
+    if (source === "WPS") {
+        return wpsHtml;
+    }
+    if (source === "Excel") {
+        return excelHtml;
+    }
+    return "";
 }

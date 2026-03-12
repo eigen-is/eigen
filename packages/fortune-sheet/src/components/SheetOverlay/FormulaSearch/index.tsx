@@ -1,33 +1,33 @@
 import _ from "lodash";
-import React, { useContext } from "react";
+import React, {useContext} from "react";
 import WorkbookContext from "../../../context";
 
 const FormulaSearch: React.FC<React.HTMLAttributes<HTMLDivElement>> = (
-  props
+    props
 ) => {
-  const { context } = useContext(WorkbookContext);
-  if (_.isEmpty(context.functionCandidates)) return null;
+    const {context} = useContext(WorkbookContext);
+    if (_.isEmpty(context.functionCandidates)) return null;
 
-  return (
-    <div
-      {...props}
-      id="luckysheet-formula-search-c"
-      className="absolute border border-black/20 shadow-md text-xs bg-white z-[1003] w-[300px]"
-    >
-      {context.functionCandidates.map((v, index) => (
+    return (
         <div
-          key={v.n}
-          data-func={v.n}
-          className={`bg-white px-2.5 py-1.5 cursor-pointer ${
-            index === 0 ? "block border-y border-[#ebebeb] bg-[#f5f5f5]" : ""
-          }`}
+            {...props}
+            id="luckysheet-formula-search-c"
+            className="absolute border border-black/20 shadow-md text-xs bg-white z-[1003] w-[300px]"
         >
-          <div className="text-sm text-[#222]">{v.n}</div>
-          <div className={`text-[#444] ${index === 0 ? "block" : "hidden"}`}>{v.d}</div>
+            {context.functionCandidates.map((v, index) => (
+                <div
+                    key={v.n}
+                    data-func={v.n}
+                    className={`bg-white px-2.5 py-1.5 cursor-pointer ${
+                        index === 0 ? "block border-y border-[#ebebeb] bg-[#f5f5f5]" : ""
+                    }`}
+                >
+                    <div className="text-sm text-[#222]">{v.n}</div>
+                    <div className={`text-[#444] ${index === 0 ? "block" : "hidden"}`}>{v.d}</div>
+                </div>
+            ))}
         </div>
-      ))}
-    </div>
-  );
+    );
 };
 
 export default FormulaSearch;

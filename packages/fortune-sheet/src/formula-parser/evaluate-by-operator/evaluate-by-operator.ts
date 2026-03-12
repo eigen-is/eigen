@@ -11,12 +11,13 @@ import minus from "./operator/minus";
 import multiply from "./operator/multiply";
 import notEqual from "./operator/not-equal";
 import power from "./operator/power";
-import { ERROR_NAME } from "../error";
+import {ERROR_NAME} from "../error";
 
 interface OperatorFunction {
-  (...args: any[]): any;
-  SYMBOL: string | string[];
-  isFactory?: boolean;
+    SYMBOL: string | string[];
+    isFactory?: boolean;
+
+    (...args: any[]): any;
 }
 
 const availableOperators: Record<string, OperatorFunction> = Object.create(null);
@@ -29,13 +30,13 @@ const availableOperators: Record<string, OperatorFunction> = Object.create(null)
  * @returns Evaluation result.
  */
 export default function evaluateByOperator(operator: string, params: any[] = []): any {
-  const upperOperator = operator.toUpperCase();
+    const upperOperator = operator.toUpperCase();
 
-  if (!availableOperators[upperOperator]) {
-    throw Error(ERROR_NAME);
-  }
+    if (!availableOperators[upperOperator]) {
+        throw Error(ERROR_NAME);
+    }
 
-  return availableOperators[upperOperator](...params);
+    return availableOperators[upperOperator](...params);
 }
 
 /**
@@ -45,15 +46,15 @@ export default function evaluateByOperator(operator: string, params: any[] = [])
  * @param func Logic to register for this symbol.
  */
 export function registerOperation(symbol: string | string[], func: OperatorFunction): void {
-  const symbols = Array.isArray(symbol) ? symbol.map(s => s.toUpperCase()) : [symbol.toUpperCase()];
-  
-  symbols.forEach((s) => {
-    if (func.isFactory) {
-      availableOperators[s] = func(s);
-    } else {
-      availableOperators[s] = func;
-    }
-  });
+    const symbols = Array.isArray(symbol) ? symbol.map(s => s.toUpperCase()) : [symbol.toUpperCase()];
+
+    symbols.forEach((s) => {
+        if (func.isFactory) {
+            availableOperators[s] = func(s);
+        } else {
+            availableOperators[s] = func;
+        }
+    });
 }
 
 registerOperation(add.SYMBOL, add);

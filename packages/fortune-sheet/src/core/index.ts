@@ -1,6 +1,6 @@
 import * as api from "./api";
 
-export { api };
+export {api};
 
 export * from "./canvas";
 export * from "./context";
