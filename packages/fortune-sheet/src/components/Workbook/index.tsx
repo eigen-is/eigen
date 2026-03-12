@@ -36,6 +36,9 @@ import {generateAPIs} from "./api";
 import {ModalProvider} from "../../context/modal";
 import {FilterMenu} from "../ContextMenu/FilterMenu";
 import {SheetList} from "../SheetList";
+import {readEigenClipboard} from "@workspace/lib/clipboard";
+import type {EigenClipboardData, EigenClipboardTextItem} from "@workspace/lib/types/clipboard";
+import {consumePendingCopy} from "../../core/modules/clipboard";
 
 
 enablePatches();
@@ -662,6 +665,32 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
       [handleRedo, handleUndo, setContextWithProduce]
     );
 
+      const onCopy = useCallback(
+          (e: ClipboardEvent) => {
+              const pending = consumePendingCopy();
+              if (!pending) return;
+
+              e.preventDefault();
+
+              // Build eigen clipboard data with the cell text
+              const eigenData: EigenClipboardData = {
+                  version: 1,
+                  items: [{type: 'text', text: pending.plainText}],
+              };
+
+              // Embed eigen clipboard marker in the HTML alongside the fortune-sheet table
+              const eigenJson = JSON.stringify(eigenData);
+              const eigenMarker = `<span data-eigen-clipboard="${encodeURIComponent(eigenJson)}"></span>`;
+              const combinedHtml = eigenMarker + pending.html;
+
+              e.clipboardData?.setData("text/html", combinedHtml);
+              e.clipboardData?.setData("text/plain", pending.plainText);
+              // Also set the custom MIME type for same-origin reads
+              e.clipboardData?.setData("application/eigen-clipboard", eigenJson);
+          },
+          []
+      );
+
     const onPaste = useCallback(
       (e: ClipboardEvent) => {
         // deal with multi instance case, only the focused sheet handles the paste
@@ -672,12 +701,43 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
           let { clipboardData } = e;
           if (!clipboardData) {
             // @ts-ignore
-            // for IE
             clipboardData = window.clipboardData;
           }
-          const txtdata =
-            clipboardData!.getData("text/html") ||
-            clipboardData!.getData("text/plain");
+            if (!clipboardData) return;
+
+            // Check for eigen clipboard data from other eigen apps (docs, slides, etc.)
+            // but only if this is NOT a fortune-sheet internal copy (which uses HTML with fortune-copy-action-table)
+            const htmlData = clipboardData.getData("text/html");
+            const isInternalCopy = htmlData?.includes("fortune-copy-action-table");
+
+            if (!isInternalCopy) {
+                const eigenData = readEigenClipboard(clipboardData);
+                if (eigenData) {
+                    // Extract text from eigen clipboard items and paste as plain text
+                    const textParts = eigenData.items
+                        .filter((item): item is EigenClipboardTextItem => item.type === 'text')
+                        .map(item => item.text);
+                    if (textParts.length > 0) {
+                        e.preventDefault();
+                        // Create a synthetic paste with the text — let handlePaste process it
+                        const syntheticTransfer = new DataTransfer();
+                        syntheticTransfer.setData("text/plain", textParts.join("\n"));
+                        const syntheticEvent = new ClipboardEvent("paste", {
+                            clipboardData: syntheticTransfer,
+                        });
+                        setContextWithProduce((draftCtx) => {
+                            try {
+                                handlePaste(draftCtx, syntheticEvent);
+                            } catch (err: any) {
+                                console.error(err);
+                            }
+                        });
+                        return;
+                    }
+                }
+            }
+
+            const txtdata = htmlData || clipboardData.getData("text/plain");
           const ele = document.createElement("div");
           ele.innerHTML = txtdata;
 
@@ -731,11 +791,15 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
 
 
     useEffect(() => {
+        document.addEventListener("copy", onCopy);
+        document.addEventListener("cut", onCopy);
       document.addEventListener("paste", onPaste);
       return () => {
+          document.removeEventListener("copy", onCopy);
+          document.removeEventListener("cut", onCopy);
         document.removeEventListener("paste", onPaste);
       };
-    }, [onPaste]);
+    }, [onCopy, onPaste]);
 
     // expose APIs
     useImperativeHandle(
