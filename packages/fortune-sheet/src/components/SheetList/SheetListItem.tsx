@@ -1,7 +1,7 @@
 import {cancelActiveImgItem, cancelNormalSelected, Sheet,} from "../../core";
-import React, {useContext, useEffect, useRef} from "react";
+import {useContext, useEffect, useRef} from "react";
 import WorkbookContext from "../../context";
-import SheetHiddenButton from "./SheetHiddenButton";
+import {SheetHiddenButton} from "./SheetHiddenButton";
 import {SVGIcon} from "../icon-map";
 
 type Props = {
@@ -9,7 +9,7 @@ type Props = {
     isDropPlaceholder?: boolean;
 };
 
-const SheetListItem: React.FC<Props> = ({sheet, isDropPlaceholder}) => {
+export function SheetListItem({sheet, isDropPlaceholder}: Props) {
     const {context, setContext, refs} = useContext(WorkbookContext);
     const containerRef = useRef<HTMLDivElement>(null);
 
@@ -79,6 +79,5 @@ const SheetListItem: React.FC<Props> = ({sheet, isDropPlaceholder}) => {
             {sheet.hide && <SheetHiddenButton sheet={sheet}/>}
         </div>
     );
-};
+}
 
-export default SheetListItem;

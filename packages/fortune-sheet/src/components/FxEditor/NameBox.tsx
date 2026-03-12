@@ -1,13 +1,12 @@
-import React, {useContext, useMemo} from "react";
-import _ from "lodash";
+import {useContext, useMemo} from "react";
 import {getRangetxt} from "../../core";
 import WorkbookContext from "../../context";
 
-const NameBox: React.FC = () => {
+export function NameBox() {
     const {context} = useContext(WorkbookContext);
 
     const rangeText = useMemo(() => {
-        const lastSelection = _.last(context.luckysheet_select_save);
+        const lastSelection = context.luckysheet_select_save?.[context.luckysheet_select_save.length - 1];
         if (
             !(
                 lastSelection &&
@@ -39,4 +38,3 @@ const NameBox: React.FC = () => {
     );
 };
 
-export default NameBox;

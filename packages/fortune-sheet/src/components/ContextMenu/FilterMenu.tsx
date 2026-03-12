@@ -1,3 +1,4 @@
+import _ from "lodash";
 import {
     clearFilter,
     Context,
@@ -11,10 +12,9 @@ import {
     saveFilter,
 } from "../../core";
 import React, {useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState,} from "react";
-import _ from "lodash";
 import produce from "immer";
 import WorkbookContext from "../../context";
-import Divider from "./Divider";
+import {Divider} from "./Divider";
 import {Menu} from "./Menu";
 import {SVGIcon} from "../icon-map";
 import {useAlert} from "../../hooks/useAlert";
@@ -75,7 +75,7 @@ const DateSelectTreeItem: React.FC<{
                 }}
                 tabIndex={0}
             >
-                {_.isEmpty(item.children) ? (
+                {!item.children || item.children.length === 0 ? (
                     <div style={{width: 10}}/>
                 ) : (
                     <div
@@ -189,7 +189,7 @@ export const FilterMenu: React.FC = () => {
     const mouseHoverSubMenu = useRef<boolean>(false);
     contextRef.current = context;
 
-    // 点击其他区域的时候关闭FilterMenu
+    // Close FilterMenu when clicking other areas
     const close = useCallback(() => {
         setContext((ctx) => {
             ctx.filterContextMenu = undefined;
@@ -335,7 +335,7 @@ export const FilterMenu: React.FC = () => {
             return;
         }
         const menuW = rect.width;
-        // menu最小高度
+        // Minimum menu height
         const menuH = 350;
         let top = filterContextMenu.y;
         let left = filterContextMenu.x;
@@ -353,12 +353,12 @@ export const FilterMenu: React.FC = () => {
             top = 0;
             hasOverflow = true;
         }
-        // 适配小屏
+        // Adapt for small screens
         let containerH = winH - rect.top - 350;
         if (containerH < 0) {
             containerH = 100;
         }
-        // 防止Maximum update depth exceeded错误，如果当前值和前一个filterContextMenu值一样则不进行赋值
+        // Prevent Maximum update depth exceeded error, don't assign if current value is same as previous filterContextMenu
         if (
             filterContextMenu.x === left &&
             filterContextMenu.y === top &&

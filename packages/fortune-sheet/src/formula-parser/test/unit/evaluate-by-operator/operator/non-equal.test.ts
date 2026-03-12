@@ -1,4 +1,4 @@
-import {describe, expect, test} from "bun:test";
+import {describe, expect, test} from 'bun:test';
 import func from "../../../../evaluate-by-operator/operator/not-equal";
 
 describe("not equal operator", () => {

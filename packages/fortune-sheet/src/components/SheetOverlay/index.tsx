@@ -34,15 +34,15 @@ import RowHeader from "./RowHeader";
 import InputBox from "./InputBox";
 import ScrollBar from "./ScrollBar";
 import SearchReplace from "../SearchReplace";
-import LinkEditCard from "../LinkEidtCard";
-import FilterOptions from "../FilterOption";
+import {LinkEditCard} from "../LinkEidtCard";
+import {FilterOptions} from "../FilterOption";
 import {useAlert} from "../../hooks/useAlert";
-import ImgBoxs from "../ImgBoxs";
-import NotationBoxes from "../NotationBoxes";
-import RangeDialog from "../DataVerification/RangeDialog";
+import {ImgBoxs} from "../ImgBoxs";
+import {NotationBoxes} from "../NotationBoxes";
+import {RangeDialog} from "../DataVerification/RangeDialog";
 import {useDialog} from "../../hooks/useDialog";
 import {SVGIcon} from "../icon-map";
-import DropDownList from "../DataVerification/DropdownList";
+import {DropDownList} from "../DataVerification/DropdownList";
 
 const SheetOverlay: React.FC = () => {
     const {context, setContext, settings, refs} = useContext(WorkbookContext);

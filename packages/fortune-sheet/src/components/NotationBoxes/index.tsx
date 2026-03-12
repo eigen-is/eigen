@@ -1,4 +1,4 @@
-import React, {useContext, useEffect} from "react";
+import {useContext, useEffect} from "react";
 import {
     getFlowdata,
     onCommentBoxMoveStart,
@@ -6,11 +6,10 @@ import {
     setEditingComment,
     showComments,
 } from "../../core";
-import _ from "lodash";
 import ContentEditable from "../SheetOverlay/ContentEditable";
 import WorkbookContext from "../../context";
 
-const NotationBoxes: React.FC = () => {
+export function NotationBoxes() {
     const {context, setContext, refs} = useContext(WorkbookContext);
     const flowdata = getFlowdata(context);
 
@@ -37,12 +36,9 @@ const NotationBoxes: React.FC = () => {
     }, [context.currentSheetId, setContext]);
     return (
         <div id="luckysheet-postil-showBoxs">
-            {_.concat(
-                context.commentBoxes?.filter(
-                    (v) => v?.rc !== context.editingCommentBox?.rc
-                ),
-                [context.editingCommentBox, context.hoveredCommentBox]
-            ).map((commentBox) => {
+            {[...(context.commentBoxes?.filter(
+                (v) => v?.rc !== context.editingCommentBox?.rc
+            ) ?? []), context.editingCommentBox, context.hoveredCommentBox].filter(Boolean).map((commentBox) => {
                 if (!commentBox) return null;
                 const {r, c, rc, left, top, width, height, value, autoFocus, size} =
                     commentBox;
@@ -178,6 +174,5 @@ const NotationBoxes: React.FC = () => {
             })}
         </div>
     );
-};
+}
 
-export default NotationBoxes;

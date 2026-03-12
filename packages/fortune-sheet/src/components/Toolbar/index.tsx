@@ -42,8 +42,8 @@ import {useDialog} from "../../hooks/useDialog";
 import {FormulaSearch} from "../FormulaSearch";
 import {SplitColumn} from "../SplitColumn";
 import {LocationCondition} from "../LocationCondition";
-import DataVerification from "../DataVerification";
-import ConditionalFormat from "../ConditionFormat";
+import {DataVerification} from "../DataVerification";
+import {ConditionalFormat} from "../ConditionFormat";
 import {CustomBorder} from "./CustomBorder";
 import {FormatSearch} from "../FormatSearch";
 import {

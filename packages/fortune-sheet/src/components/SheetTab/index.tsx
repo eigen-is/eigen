@@ -6,7 +6,7 @@ import WorkbookContext from "../../context";
 import {SVGIcon} from "../icon-map";
 import "./index.css";
 import SheetItem from "./SheetItem";
-import ZoomControl from "../ZoomControl";
+import {ZoomControl} from "../ZoomControl";
 
 export const SheetTab: React.FC = () => {
     const {context, setContext, settings, refs} = useContext(WorkbookContext);

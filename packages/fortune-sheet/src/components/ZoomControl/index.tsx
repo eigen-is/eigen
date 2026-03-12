@@ -1,4 +1,4 @@
-import React, {useCallback, useContext, useRef, useState} from "react";
+import {useCallback, useContext, useRef, useState} from "react";
 import {Context, getSheetIndex, locale, MAX_ZOOM_RATIO, MIN_ZOOM_RATIO,} from "../../core";
 import WorkbookContext from "../../context";
 import {SVGIcon} from "../icon-map";
@@ -43,7 +43,7 @@ const presets = [
     },
 ];
 
-const ZoomControl: React.FC = () => {
+export function ZoomControl() {
     const {context, setContext} = useContext(WorkbookContext);
     const menuRef = useRef<HTMLDivElement>(null);
     const [radioMenuOpen, setRadioMenuOpen] = useState(false);
@@ -134,6 +134,5 @@ const ZoomControl: React.FC = () => {
             </div>
         </aside>
     );
-};
+}
 
-export default ZoomControl;

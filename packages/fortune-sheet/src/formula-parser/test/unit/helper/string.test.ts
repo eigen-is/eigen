@@ -1,3 +1,4 @@
+import {describe, expect, it} from 'bun:test';
 import {trimEdges} from "../../../helper/string";
 
 describe(".trimEdges()", () => {

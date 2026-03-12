@@ -1,4 +1,4 @@
-import React, {useEffect, useRef} from "react";
+import {useEffect, useRef} from "react";
 
 type Props = React.PropsWithChildren<{
     onClick?: (
@@ -15,12 +15,12 @@ type Props = React.PropsWithChildren<{
     ) => void;
 }>;
 
-export const Menu: React.FC<Props> = ({
-                                          onClick,
-                                          onMouseLeave,
-                                          onMouseEnter,
-                                          children,
-                                      }) => {
+export function Menu({
+    onClick,
+    onMouseLeave,
+    onMouseEnter,
+    children,
+}: Props) {
     useEffect(() => {
         const element = document.querySelector("[data-context-menu-item]");
         if (element) {

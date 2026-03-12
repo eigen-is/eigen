@@ -1,11 +1,11 @@
 import {getCellValue, getDropdownList, getFlowdata, getSheetIndex, mergeBorder, setDropcownValue,} from "../../core";
-import React, {useCallback, useContext, useEffect, useRef, useState,} from "react";
+import {useCallback, useContext, useEffect, useRef, useState,} from "react";
 import WorkbookContext from "../../context";
 import {useOutsideClick} from "../../hooks/useOutsideClick";
 import {SVGIcon} from "../icon-map";
 
 
-const DropDownList: React.FC = () => {
+export function DropDownList() {
     const {context, setContext} = useContext(WorkbookContext);
     const containerRef = useRef<HTMLDivElement>(null);
     const [list, setList] = useState<any[]>([]);
@@ -42,7 +42,7 @@ const DropDownList: React.FC = () => {
         const {dataVerification} = context.luckysheetfile[index];
         const item = dataVerification[`${rowIndex}_${colIndex}`];
         const dropdownList = getDropdownList(context, item.value1);
-        // 初始化多选的下拉列表
+        // Initialize multi-select dropdown
         const cellValue = getCellValue(rowIndex, colIndex, d);
 
         if (cellValue) {
@@ -123,5 +123,4 @@ const DropDownList: React.FC = () => {
             ))}
         </div>
     );
-};
-export default DropDownList;
+}

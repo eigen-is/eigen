@@ -1,16 +1,15 @@
 import {api, deleteSheet, locale} from "../../core";
-import _ from "lodash";
 import React, {useCallback, useContext, useLayoutEffect, useRef, useState,} from "react";
 import WorkbookContext from "../../context";
 import {useAlert} from "../../hooks/useAlert";
 import {useOutsideClick} from "../../hooks/useOutsideClick";
 import {ChangeColor} from "../ChangeColor";
 import {SVGIcon} from "../icon-map";
-import Divider from "./Divider";
+import {Divider} from "./Divider";
 import "./index.css";
 import {Menu} from "./Menu";
 
-export const SheetTabContextMenu: React.FC = () => {
+export function SheetTabContextMenu() {
     const {context, setContext, settings} = useContext(WorkbookContext);
     const {x, y, sheet, onRename} = context.sheetTabContextMenu;
     const {sheetconfig} = locale(context);
@@ -41,12 +40,15 @@ export const SheetTabContextMenu: React.FC = () => {
             if (!sheet) return;
             setContext((ctx) => {
                 let currentOrder = -1;
-                _.sortBy(ctx.luckysheetfile, ["order"]).forEach((_sheet, i) => {
-                    _sheet.order = i;
-                    if (_sheet.id === sheet.id) {
-                        currentOrder = i;
-                    }
-                });
+                ctx.luckysheetfile
+                    .slice()
+                    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
+                    .forEach((_sheet, i) => {
+                        _sheet.order = i;
+                        if (_sheet.id === sheet.id) {
+                            currentOrder = i;
+                        }
+                    });
                 api.setSheetOrder(ctx, {[sheet.id!]: currentOrder + delta});
             });
         },
@@ -58,7 +60,7 @@ export const SheetTabContextMenu: React.FC = () => {
         if (!sheet) return;
         setContext((ctx) => {
             const shownSheets = ctx.luckysheetfile.filter(
-                (oneSheet) => _.isUndefined(oneSheet.hide) || oneSheet?.hide !== 1
+                (oneSheet) => oneSheet.hide === undefined || oneSheet?.hide !== 1
             );
             if (shownSheets.length > 1) {
                 api.hideSheet(ctx, sheet.id as string);
@@ -86,9 +88,9 @@ export const SheetTabContextMenu: React.FC = () => {
         if (context.allowEdit === false) return;
         if (!sheet?.id) return;
         setContext((ctx) => {
-            _.forEach(ctx.luckysheetfile, (sheetfile) => {
+            for (const sheetfile of ctx.luckysheetfile) {
                 sheetfile.status = sheet.id === sheetfile.id ? 1 : 0;
-            });
+            }
         });
     }, [context.allowEdit, setContext, sheet?.id]);
 
@@ -109,7 +111,7 @@ export const SheetTabContextMenu: React.FC = () => {
                             onClick={() => {
                                 const shownSheets = context.luckysheetfile.filter(
                                     (singleSheet) =>
-                                        _.isUndefined(singleSheet.hide) || singleSheet.hide !== 1
+                                        singleSheet.hide === undefined || singleSheet.hide !== 1
                                 );
                                 if (
                                     context.luckysheetfile.length > 1 &&
@@ -242,5 +244,5 @@ export const SheetTabContextMenu: React.FC = () => {
             })}
         </div>
     );
-};
+}
 

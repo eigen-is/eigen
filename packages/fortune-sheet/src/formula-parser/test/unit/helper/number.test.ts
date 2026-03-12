@@ -1,4 +1,4 @@
-import {describe, expect, test} from "bun:test";
+import {describe, expect, test} from 'bun:test';
 import {invertNumber, toNumber} from "../../../helper/number";
 
 describe(".toNumber()", () => {
@@ -12,7 +12,8 @@ describe(".toNumber()", () => {
         expect(toNumber("0")).toBe(0);
         expect(toNumber("-10")).toBe(-10);
         expect(toNumber(" -10 ")).toBe(-10);
-        expect(isNaN(toNumber("foo"))).toBe(true);
+        const result1 = toNumber("foo");
+        expect(result1 === undefined || isNaN(result1)).toBe(true);
     });
 });
 
@@ -27,6 +28,7 @@ describe(".invertNumber()", () => {
         expect(invertNumber("0")).toBe(-0);
         expect(invertNumber("-10")).toBe(10);
         expect(invertNumber(" -10 ")).toBe(10);
-        expect(isNaN(invertNumber("foo"))).toBe(true);
+        const result2 = invertNumber("foo");
+        expect(result2 === undefined || isNaN(result2)).toBe(true);
     });
 });
