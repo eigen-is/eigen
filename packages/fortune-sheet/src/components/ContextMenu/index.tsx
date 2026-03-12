@@ -22,10 +22,10 @@ import React, {useCallback, useContext, useLayoutEffect, useRef} from "react";
 import WorkbookContext, {SetContextOptions} from "../../context";
 import {useAlert} from "../../hooks/useAlert";
 import {useDialog} from "../../hooks/useDialog";
-import Divider from "./Divider";
+import {Divider} from "./Divider";
 import "./index.css";
 import {Menu} from "./Menu";
-import CustomSort from "../CustomSort";
+import {CustomSort} from "../CustomSort";
 
 export const ContextMenu: React.FC = () => {
     const {showDialog} = useDialog();

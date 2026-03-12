@@ -1,12 +1,11 @@
 /* eslint-disable jsx-a11y/control-has-associated-label */
 import {getDataArr, getFlowdata, getRegStr, locale, updateMoreCell,} from "../../core";
-import _ from "lodash";
-import React, {useCallback, useContext, useEffect, useRef, useState,} from "react";
+import {useCallback, useContext, useEffect, useRef, useState,} from "react";
 import WorkbookContext from "../../context";
 import {useDialog} from "../../hooks/useDialog";
 import {Button} from "@workspace/ui/components/button";
 
-export const SplitColumn: React.FC<{}> = () => {
+export function SplitColumn() {
     const {context, setContext} = useContext(WorkbookContext);
     const {splitText, button} = locale(context);
     const [splitOperate, setSplitOperate] = useState("");
@@ -15,7 +14,7 @@ export const SplitColumn: React.FC<{}> = () => {
     const splitSymbols = useRef<HTMLDivElement>(null);
     const {showDialog, hideDialog} = useDialog();
 
-    // 确定按钮
+    // Confirm button
     const certainBtn = useCallback(() => {
         hideDialog();
         const dataArr = getDataArr(splitOperate, context);
@@ -29,7 +28,7 @@ export const SplitColumn: React.FC<{}> = () => {
         for (let i = 0; i < dataArr.length; i += 1) {
             for (let j = 1; j < dataArr[0].length; j += 1) {
                 const cell = data![r + i][c + j];
-                if (!_.isNull(cell) && !_.isNull(cell.v)) {
+                if (cell != null && cell.v != null) {
                     dataCover = true;
                     break;
                 }
@@ -56,7 +55,7 @@ export const SplitColumn: React.FC<{}> = () => {
         splitText.splitConfirmToExe,
     ]);
 
-    // 数据预览
+    // Data preview
     useEffect(() => {
         setTableData((table) => {
             table = getDataArr(splitOperate, context);
@@ -161,4 +160,4 @@ export const SplitColumn: React.FC<{}> = () => {
             </div>
         </div>
     );
-};
+}

@@ -1,12 +1,11 @@
-import _ from "lodash";
 import {onImageMoveStart, onImageResizeStart} from "../../core";
-import React, {useContext, useMemo} from "react";
+import {useContext, useMemo} from "react";
 import WorkbookContext from "../../context";
 
-const ImgBoxs: React.FC = () => {
+export function ImgBoxs() {
     const {context, setContext, refs} = useContext(WorkbookContext);
     const activeImg = useMemo(() => {
-        return _.find(context.insertedImgs, {id: context.activeImg});
+        return context.insertedImgs?.find(img => img.id === context.activeImg);
     }, [context.activeImg, context.insertedImgs]);
 
     return (
@@ -205,4 +204,3 @@ const ImgBoxs: React.FC = () => {
     );
 };
 
-export default ImgBoxs;

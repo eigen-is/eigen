@@ -4,14 +4,15 @@ import {
     fixRowStyleOverflowInFreeze,
     getSheetIndex,
 } from "../../core";
-import _ from "lodash";
-import React, {useCallback, useContext, useEffect} from "react";
+import {useCallback, useContext, useEffect} from "react";
 import WorkbookContext from "../../context";
 import {SVGIcon} from "../icon-map";
 
-const FilterOptions: React.FC<{ getContainer: () => HTMLDivElement }> = ({
-                                                                             getContainer,
-                                                                         }) => {
+export function FilterOptions({
+                                  getContainer,
+                              }: {
+    getContainer: () => HTMLDivElement;
+}) {
     const {context, setContext, refs} = useContext(WorkbookContext);
     const {
         filterOptions,
@@ -70,7 +71,7 @@ const FilterOptions: React.FC<{ getContainer: () => HTMLDivElement }> = ({
                     endRow: filterOptions.endRow,
                     startCol: filterOptions.startCol,
                     endCol: filterOptions.endCol,
-                    hiddenRows: _.keys(draftCtx.filter[i]?.rowhidden).map((r) =>
+                    hiddenRows: Object.keys(draftCtx.filter[i]?.rowhidden ?? {}).map((r) =>
                         parseInt(r, 10)
                     ),
                     listBoxMaxHeight: 400,
@@ -101,7 +102,7 @@ const FilterOptions: React.FC<{ getContainer: () => HTMLDivElement }> = ({
             <div
                 id="luckysheet-filter-selected-sheet"
                 className="luckysheet-cell-selected luckysheet-filter-selected"
-                style={_.assign(
+                style={Object.assign(
                     {
                         left: filterOptions.left,
                         width: filterOptions.width,
@@ -164,7 +165,7 @@ const FilterOptions: React.FC<{ getContainer: () => HTMLDivElement }> = ({
                         onDoubleClick={(e) => e.stopPropagation()}
                         tabIndex={0}
                         key={i}
-                        style={_.assign(rowOverflowFreezeStyle, columnOverflowFreezeStyle, {
+                        style={Object.assign(rowOverflowFreezeStyle, columnOverflowFreezeStyle, {
                             left,
                             top,
                             height: undefined,
@@ -187,6 +188,5 @@ const FilterOptions: React.FC<{ getContainer: () => HTMLDivElement }> = ({
             })}
         </>
     );
-};
+}
 
-export default FilterOptions;

@@ -1,5 +1,5 @@
+import {describe, expect, test} from 'bun:test';
 import func from "../../../../evaluate-by-operator/operator/multiply";
-import {describe, expect, test} from "bun:test";
 
 describe("fortune-sheet/formula-parser/operator/multiply", () => {
     test("should set SYMBOL const", () => {

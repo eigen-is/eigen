@@ -35,7 +35,7 @@ function ModalProvider({children}: { children?: React.ReactNode }) {
                     showCloseButton={false}
                     onPointerDownOutside={(e) => e.preventDefault()}
                     onInteractOutside={(e) => e.preventDefault()}
-                    className="w-auto max-w-[90vw] max-h-[85vh] overflow-y-auto p-0"
+                    className="w-auto max-w-[90vw] max-h-[75vh] overflow-y-auto p-0"
                 >
                     <div
                         onMouseDown={(e) => e.stopPropagation()}

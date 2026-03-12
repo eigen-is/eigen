@@ -12,22 +12,21 @@ import {
     saveHyperlink,
 } from "../../core";
 import "./index.css";
-import _ from "lodash";
 import WorkbookContext from "../../context";
 import {SVGIcon} from "../icon-map";
 import {Button} from "@workspace/ui/components/button";
 
-export const LinkEditCard: React.FC<LinkCardProps> = ({
-                                                          r,
-                                                          c,
-                                                          rc,
-                                                          originText,
-                                                          originType,
-                                                          originAddress,
-                                                          isEditing,
-                                                          position,
-                                                          selectingCellRange,
-                                                      }) => {
+export function LinkEditCard({
+                                 r,
+                                 c,
+                                 rc,
+                                 originText,
+                                 originType,
+                                 originAddress,
+                                 isEditing,
+                                 position,
+                                 selectingCellRange,
+                             }: LinkCardProps) {
     const {context, setContext, refs} = useContext(WorkbookContext);
     const [linkText, setLinkText] = useState<string>(originText);
     const [linkAddress, setLinkAddress] = useState<string>(originAddress);
@@ -44,7 +43,7 @@ export const LinkEditCard: React.FC<LinkCardProps> = ({
     );
 
     const hideLinkCard = useCallback(() => {
-        _.set(refs.globalCache, "linkCard.mouseEnter", false);
+        if (refs.globalCache.linkCard) refs.globalCache.linkCard.mouseEnter = false;
         setContext((draftCtx) => {
             draftCtx.linkCard = undefined;
         });
@@ -62,8 +61,12 @@ export const LinkEditCard: React.FC<LinkCardProps> = ({
 
     const containerEvent = useMemo(
         () => ({
-            onMouseEnter: () => _.set(refs.globalCache, "linkCard.mouseEnter", true),
-            onMouseLeave: () => _.set(refs.globalCache, "linkCard.mouseEnter", false),
+            onMouseEnter: () => {
+                if (refs.globalCache.linkCard) refs.globalCache.linkCard.mouseEnter = true;
+            },
+            onMouseLeave: () => {
+                if (refs.globalCache.linkCard) refs.globalCache.linkCard.mouseEnter = false;
+            },
             onMouseDown: (e: React.MouseEvent<HTMLDivElement, MouseEvent>) =>
                 e.stopPropagation(),
             onMouseMove: (e: React.MouseEvent<HTMLDivElement, MouseEvent>) =>
@@ -119,7 +122,7 @@ export const LinkEditCard: React.FC<LinkCardProps> = ({
             return;
         }
         if (selectingCellRange) {
-            const len = _.size(context.luckysheet_select_save);
+            const len = context.luckysheet_select_save?.length ?? 0;
             if (len > 0) {
                 setLinkAddress(
                     getRangetxt(
@@ -183,7 +186,7 @@ export const LinkEditCard: React.FC<LinkCardProps> = ({
                 {context.allowEdit === true &&
                     renderToolbarButton("unlink", () =>
                         setContext((draftCtx) => {
-                            _.set(refs.globalCache, "linkCard.mouseEnter", false);
+                            if (refs.globalCache.linkCard) refs.globalCache.linkCard.mouseEnter = false;
                             removeHyperlink(draftCtx, r, c);
                         })
                     )}
@@ -195,7 +198,7 @@ export const LinkEditCard: React.FC<LinkCardProps> = ({
         <div
             className="fortune-link-modify-modal range-selection-modal"
             style={{left: position.cellLeft, top: position.cellBottom + 5}}
-            {..._.omit(containerEvent, ["onMouseDown", "onMouseMove", "onMouseUp"])}
+            {...Object.fromEntries(Object.entries(containerEvent).filter(([k]) => !["onMouseDown", "onMouseMove", "onMouseUp"].includes(k)))}
             onMouseDown={(e) => {
                 const {nativeEvent} = e;
                 onRangeSelectionModalMoveStart(context, refs.globalCache, nativeEvent);
@@ -343,7 +346,7 @@ export const LinkEditCard: React.FC<LinkCardProps> = ({
             <div className="modal-footer">
                 {renderBottomButton(() => {
                     if (!isLinkAddressValid.isValid) return;
-                    _.set(refs.globalCache, "linkCard.mouseEnter", false);
+                    if (refs.globalCache.linkCard) refs.globalCache.linkCard.mouseEnter = false;
                     setContext((draftCtx) =>
                         saveHyperlink(draftCtx, r, c, linkText, linkType, linkAddress)
                     );
@@ -351,6 +354,5 @@ export const LinkEditCard: React.FC<LinkCardProps> = ({
             </div>
         </div>
     );
-};
+}
 
-export default LinkEditCard;

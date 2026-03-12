@@ -1,6 +1,6 @@
+import {describe, expect, test} from 'bun:test';
 /* eslint-disable import/no-named-as-default-member */
 import func from "../../../../evaluate-by-operator/operator/add";
-import {describe, expect, test} from "bun:test";
 
 describe("fortune-sheet/formula-parser/operator/add", () => {
     test("should set SYMBOL const", () => {

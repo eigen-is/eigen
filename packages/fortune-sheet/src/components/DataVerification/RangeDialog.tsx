@@ -1,13 +1,13 @@
 import {getRangetxt, locale} from "../../core";
 
-import React, {useCallback, useContext, useEffect, useState} from "react";
-import DataVerification from ".";
+import {useCallback, useContext, useEffect, useState} from "react";
+import {DataVerification} from ".";
 import WorkbookContext from "../../context";
 import {useDialog} from "../../hooks/useDialog";
-import ConditionRules from "../ConditionFormat/ConditionRules";
+import {ConditionRules} from "../ConditionFormat/ConditionRules";
 import {Button} from "@workspace/ui/components/button";
 
-const RangeDialog: React.FC = () => {
+export function RangeDialog() {
     const {context, setContext} = useContext(WorkbookContext);
     const {showDialog} = useDialog();
     const {dataVerification, button} = locale(context);
@@ -98,4 +98,3 @@ const RangeDialog: React.FC = () => {
         </div>
     );
 };
-export default RangeDialog;
