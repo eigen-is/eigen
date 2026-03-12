@@ -239,6 +239,7 @@
       "version": "1.0.0",
       "dependencies": {
         "@formulajs/formulajs": "^4.1.0",
+        "@workspace/lib": "workspace:*",
         "@workspace/ui": "workspace:*",
         "dayjs": "^1.11.0",
         "immer": "^9.0.12",

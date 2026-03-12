@@ -1,6 +1,6 @@
 import _ from "lodash";
-import type { Sheet as SheetType, Freezen, Range } from "../types";
-import { Context, getFlowdata } from "../context";
+import type {Freezen, Range, Sheet as SheetType} from "../types";
+import {Context, getFlowdata} from "../context";
 import {
   getCellValue,
   getdatabyselection,
@@ -9,20 +9,14 @@ import {
   mergeBorder,
   mergeMoveMain,
 } from "./cell";
-import clipboard from "./clipboard";
-import { getBorderInfoCompute } from "./border";
-import {
-  escapeHTMLTag,
-  getSheetIndex,
-  isAllowEdit,
-  replaceHtml,
-} from "../utils";
-import { hasPartMC } from "./validation";
-import {getComputeMap} from "./ConditionFormat";
-import { update } from "./format";
+import {setPendingCopy} from "./clipboard";
+import {getBorderInfoCompute} from "./border";
+import {escapeHTMLTag, getSheetIndex, isAllowEdit, replaceHtml,} from "../utils";
+import {hasPartMC} from "./validation";
+import {CFSplitRange, getComputeMap} from "./ConditionFormat";
+import {update} from "./format";
 // @ts-ignore
 import SSF from "./ssf";
-import { CFSplitRange } from "./ConditionFormat";
 
 export const selectionCache = {
   isPasteAction: false,
@@ -2051,7 +2045,7 @@ export function copy(ctx: Context) {
 
   if (cpdata) {
     ctx.iscopyself = true;
-    clipboard.writeHtml(cpdata);
+      setPendingCopy(cpdata);
   }
 }
 

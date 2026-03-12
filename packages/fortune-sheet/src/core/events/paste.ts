@@ -1,25 +1,19 @@
 import _ from "lodash";
-import { Context, getFlowdata } from "../context";
-import { locale } from "../locale";
-import {
-  delFunctionGroup,
-  execfunction,
-  execFunctionGroup,
-  functionCopy,
-} from "../modules/formula";
-import { getdatabyselection, getQKBorder } from "../modules/cell";
-import { genarate, update } from "../modules/format";
-import { normalizeSelection, selectionCache } from "../modules/selection";
-import { Cell, CellMatrix } from "../types";
-import { getSheetIndex, isAllowEdit } from "../utils";
-import { hasPartMC, isRealNum } from "../modules/validation";
-import { getBorderInfoCompute } from "../modules/border";
-import { expandRowsAndColumns, storeSheetParamALL } from "../modules/sheet";
-import { jfrefreshgrid } from "../modules/refresh";
-import { setRowHeight } from "../api";
-import { CFSplitRange } from "../modules";
-import clipboard from "../modules/clipboard";
-import { setFormulaCellInfo } from "../modules/formulaHelper";
+import {Context, getFlowdata} from "../context";
+import {locale} from "../locale";
+import {delFunctionGroup, execfunction, execFunctionGroup, functionCopy,} from "../modules/formula";
+import {getdatabyselection, getQKBorder} from "../modules/cell";
+import {genarate, update} from "../modules/format";
+import {normalizeSelection, selectionCache} from "../modules/selection";
+import {Cell, CellMatrix} from "../types";
+import {getSheetIndex, isAllowEdit} from "../utils";
+import {hasPartMC, isRealNum} from "../modules/validation";
+import {getBorderInfoCompute} from "../modules/border";
+import {expandRowsAndColumns, storeSheetParamALL} from "../modules/sheet";
+import {jfrefreshgrid} from "../modules/refresh";
+import {setRowHeight} from "../api";
+import {CFSplitRange} from "../modules";
+import {setFormulaCellInfo} from "../modules/formulaHelper";
 
 function postPasteCut(
   ctx: Context,
@@ -2044,52 +2038,27 @@ export function handlePasteByClick(
   const allowEdit = isAllowEdit(ctx);
   if (!allowEdit) return;
 
-  if (clipboardData) clipboard.writeHtml(clipboardData);
-
-  const textarea = document.querySelector("#fortune-copy-content");
-  // textarea.focus();
-  // textarea.select();
-
-  // 等50毫秒，keyPress事件发生了再去处理数据
-  // setTimeout(function () {
-  const data = textarea?.innerHTML || textarea?.textContent;
-  if (!data) return;
-
-  if (ctx.hooks.beforePaste?.(ctx.luckysheet_select_save, data) === false) {
+  if (ctx.hooks.beforePaste?.(ctx.luckysheet_select_save, clipboardData) === false) {
     return;
   }
 
+  // If we have an internal copy/cut save, use that
   if (
-    data.indexOf("fortune-copy-action-table") > -1 &&
     ctx.luckysheet_copy_save?.copyRange != null &&
     ctx.luckysheet_copy_save.copyRange.length > 0
   ) {
     if (ctx.luckysheet_paste_iscut) {
       ctx.luckysheet_paste_iscut = false;
       pasteHandlerOfCutPaste(ctx, ctx.luckysheet_copy_save);
-      // clearcopy(e);
     } else {
       pasteHandlerOfCopyPaste(ctx, ctx.luckysheet_copy_save);
     }
-  } else if (data.indexOf("fortune-copy-action-image") > -1) {
-    // imageCtrl.pasteImgItem();
-  } else if (triggerType !== "btn") {
+  } else if (clipboardData && triggerType !== "btn") {
     const isExcelFormula = clipboardData.startsWith("=");
-
     if (isExcelFormula) {
       handleFormulaStringPaste(ctx, clipboardData);
     } else {
       pasteHandler(ctx, clipboardData);
     }
-  } else {
-    // if (isEditMode()) {
-    //   alert(local_drag.pasteMustKeybordAlert);
-    // } else {
-    //   tooltip.info(
-    //     local_drag.pasteMustKeybordAlertHTMLTitle,
-    //     local_drag.pasteMustKeybordAlertHTML
-    //   );
-    // }
   }
-  // }, 10);
 }

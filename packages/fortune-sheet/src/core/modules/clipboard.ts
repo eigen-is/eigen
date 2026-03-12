@@ -1,33 +1,19 @@
-export default class clipboard {
-  static writeHtml(str: string) {
-    try {
-      let ele = document.getElementById("fortune-copy-content");
-      if (!ele) {
-        ele = document.createElement("div");
-        ele.setAttribute("contentEditable", "true");
-        ele.id = "fortune-copy-content";
-        ele.style.position = "fixed";
-        ele.style.height = "0";
-        ele.style.width = "0";
-        ele.style.left = "-10000px";
-        document.body.append(ele);
-      }
-      const previouslyFocusedElement = document.activeElement as HTMLElement;
-      ele.style.display = "block";
-      ele.innerHTML = str;
-      ele.focus({ preventScroll: true });
-      document.execCommand("selectAll");
-      document.execCommand("copy");
+// Pending copy data — set by the copy handler, consumed by the native copy event listener
+let _pendingCopyHtml: string | null = null;
+let _pendingPlainText: string | null = null;
 
-      const plainText = ele.innerText || ele.textContent || "";
-      sessionStorage.setItem("localClipboard", plainText);
+export function setPendingCopy(html: string) {
+  _pendingCopyHtml = html;
+  const el = document.createElement("div");
+  el.innerHTML = html;
+  _pendingPlainText = el.innerText || el.textContent || "";
+  sessionStorage.setItem("localClipboard", _pendingPlainText);
+}
 
-      setTimeout(() => {
-        ele?.blur();
-        previouslyFocusedElement?.focus?.();
-      }, 10);
-    } catch (e) {
-      console.error(e);
-    }
-  }
+export function consumePendingCopy(): { html: string; plainText: string } | null {
+  if (!_pendingCopyHtml) return null;
+  const result = {html: _pendingCopyHtml, plainText: _pendingPlainText || ""};
+  _pendingCopyHtml = null;
+  _pendingPlainText = null;
+  return result;
 }

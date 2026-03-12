@@ -1,8 +1,5 @@
-import React, { useCallback, useState, useMemo } from "react";
-import {
-  Dialog,
-  DialogContent,
-} from "@workspace/ui/components/dialog";
+import React, {useCallback, useMemo, useState} from "react";
+import {Dialog, DialogContent,} from "@workspace/ui/components/dialog";
 
 type ModalContextType = {
   showModal: (c: React.ReactNode) => void;
@@ -34,7 +31,7 @@ function ModalProvider({ children }: { children?: React.ReactNode }) {
           showCloseButton={false}
           onPointerDownOutside={(e) => e.preventDefault()}
           onInteractOutside={(e) => e.preventDefault()}
-          className="w-auto max-w-[90vw] p-0"
+          className="w-auto max-w-[90vw] max-h-[85vh] overflow-y-auto p-0"
         >
           <div
             onMouseDown={(e) => e.stopPropagation()}
