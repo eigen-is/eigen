@@ -5,6 +5,7 @@ import {Home} from './home';
 import {parseOwnerId} from "@workspace/lib/types";
 import {ApiError, LocalFilesystem} from "../core";
 import { Drive } from '../drive';
+import {Calendar} from '../calendar/calendar';
 
 export function getSyntheticTeamUser(ownerId: string): User {
     const parsed = parseOwnerId(ownerId);
@@ -34,5 +35,6 @@ export class TeamHome extends Home {
         this.fs = new LocalFilesystem(this.homeDir);
 
         this.drive = new Drive(this);
+        this.calendar = new Calendar(this);
     }
 }

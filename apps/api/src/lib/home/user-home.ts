@@ -5,6 +5,7 @@ import {Contacts} from "../contacts/contacts.ts";
 import Maildir from "../mail/maildir.ts";
 import {Drive} from "../drive";
 import {LocalFilesystem} from "../core";
+import {Calendar} from "../calendar/calendar";
 
 export class UserHome extends Home {
     constructor(user: User, cleanUp?: () => void) {
@@ -16,5 +17,6 @@ export class UserHome extends Home {
         this.contacts = new Contacts(this);
         this.mail = new Maildir(this);
         this.drive = new Drive(this);
+        this.calendar = new Calendar(this);
     }
 }

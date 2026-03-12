@@ -14,6 +14,7 @@ import {collabRouter} from "./routes/collab";
 import {sseRouter} from "./routes/sse";
 import {setupRouter} from "./routes/setup";
 import {chatRouter} from "./routes/chat";
+import {calendarRouter} from "./routes/calendar";
 
 export const app = new Elysia()
     .use(swagger())
@@ -28,6 +29,7 @@ export const app = new Elysia()
 
     .use(mailRouter)
     .use(contactsRouter)
+    .use(calendarRouter)
     .use(spaceRouter)
     .use(publicRouter)
     .use(driveRouter)

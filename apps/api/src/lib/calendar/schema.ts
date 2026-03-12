@@ -1,0 +1,52 @@
+import {sql} from 'drizzle-orm';
+import {index, integer, sqliteTable, text} from 'drizzle-orm/sqlite-core';
+import type {CalendarShare, EventData} from '@workspace/lib/types/calendar';
+
+export const calendars = sqliteTable('calendars', {
+    id: text('id').primaryKey(),
+    name: text('name').notNull(),
+    color: text('color').notNull(),
+    isDefault: integer('isDefault', {mode: 'boolean'}).notNull().default(false),
+    ctag: integer('ctag').notNull().default(0),
+    shares: text('shares', {mode: 'json'}).$type<CalendarShare[] | null>(),
+    createdAt: integer('createdAt').default(sql`(unixepoch())`),
+    updatedAt: integer('updatedAt').default(sql`(unixepoch())`),
+});
+
+export const events = sqliteTable('events', {
+    id: text('id').primaryKey(),
+    calendarId: text('calendarId').notNull().references(() => calendars.id, {onDelete: 'cascade'}),
+    uid: text('uid').notNull(),
+    uri: text('uri').notNull(),
+    title: text('title').notNull(),
+    description: text('description'),
+    location: text('location'),
+    startTime: integer('startTime').notNull(),
+    endTime: integer('endTime').notNull(),
+    allDay: integer('allDay', {mode: 'boolean'}).notNull().default(false),
+    rrule: text('rrule'),
+    parentEventId: text('parentEventId'),
+    recurrenceDate: text('recurrenceDate'),
+    status: text('status').notNull().default('confirmed'),
+    etag: text('etag').notNull(),
+    data: text('data', {mode: 'json'}).$type<EventData | null>(),
+    createdAt: integer('createdAt').default(sql`(unixepoch())`),
+    updatedAt: integer('updatedAt').default(sql`(unixepoch())`),
+}, (table) => ({
+    calendarStartTime: index('idx_events_calendar_start').on(table.calendarId, table.startTime),
+    calendarEndTime: index('idx_events_calendar_end').on(table.calendarId, table.endTime),
+    parentEvent: index('idx_events_parent').on(table.parentEventId),
+}));
+
+export const sharedCalendars = sqliteTable('shared_calendars', {
+    id: text('id').primaryKey(),
+    ownerUserId: text('ownerUserId').notNull(),
+    calendarId: text('calendarId').notNull(),
+    calendarName: text('calendarName').notNull(),
+    calendarColor: text('calendarColor').notNull(),
+    permission: text('permission').notNull(),
+    color: text('color'),
+    visible: integer('visible', {mode: 'boolean'}).notNull().default(true),
+    createdAt: integer('createdAt').default(sql`(unixepoch())`),
+    updatedAt: integer('updatedAt').default(sql`(unixepoch())`),
+});
