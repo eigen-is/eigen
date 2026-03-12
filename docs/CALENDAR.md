@@ -4,10 +4,12 @@ How to implement the Calendar backend (`apps/api`) and data model, fitting Eigen
 
 ## Summary
 
-Calendar follows the **Contacts/Mail pattern**: a `Calendar` class owned by each user's `Home` singleton, storing data
-in a per-user SQLite database at `{home}/eigen.calendar/calendar.db`. Sharing uses **push-based propagation** (like
-Drive's `shared.db` / `acl-propagation.ts`) — not polling. The schema is relational-first with CalDAV-ready columns
-(`uid`, `etag`, `ctag`, `uri`) and uses **RFC 5545 RRULE syntax** from day one.
+Calendar follows the **Contacts/Mail pattern**: a `Calendar` class owned by each `Home` singleton, storing data
+in a per-user (or per-team) SQLite database at `{home}/eigen.calendar/calendar.db`. Sharing uses **push-based
+propagation** (like Drive's `shared.db` / `acl-propagation.ts`) — not polling. Team calendars live in `TeamHome`
+(like team drives). The schema is relational-first with CalDAV-ready columns (`uid`, `etag`, `ctag`, `uri`). RRULE is
+stored as **RFC 5545** in the DB but exposed as a **JSON object** (`RecurrenceRule`) over the API for easier FE
+development.
 
 ## Design Decisions
 
@@ -35,12 +37,6 @@ collections.
 backups become all-or-nothing. The Home-per-user model scales cleanly and matches Contacts and Mail.
 
 ### 2. Sharing: Push-Based Propagation (like Drive)
-
-The first version of this document proposed that recipients discover shared calendars by scanning all users' Homes.
-This is obviously terrible — it requires constructing every Home on the server and reading every SQLite database just
-to answer "what's shared with me?".
-
-**Correct approach: mirror Drive's `acl-propagation.ts` pattern exactly.**
 
 Drive solves this problem with push-based propagation:
 
@@ -88,18 +84,37 @@ truth: every update must modify both relational columns AND regenerate the .ics 
 When CalDAV is added later: add `icalData` TEXT column, generate .ics from relational data for CalDAV responses, parse
 incoming .ics into relational columns on write.
 
-### 5. Recurrence: RFC 5545 RRULE, Expand On Query
+### 5. Recurrence: RRULE in DB, JSON over API
 
-Use **standard RFC 5545 RRULE syntax** from day one:
+The database stores **RFC 5545 RRULE strings** (CalDAV-ready). The API exposes a **`RecurrenceRule` JSON object** that
+maps 1:1 to RRULE but is easier to work with in the frontend:
 
+```typescript
+type RecurrenceRule = {
+    frequency: 'daily' | 'weekly' | 'monthly' | 'yearly'
+    interval?: number          // default 1
+    count?: number             // end after N occurrences
+    until?: string             // ISO date string, e.g. "2026-12-31"
+    byDay?: string[]           // ['MO', 'WE', 'FR'] — RFC 5545 day abbreviations
+    byMonthDay?: number[]      // [1, 15]
+    byMonth?: number[]         // [1, 6] (January, June)
+    bySetPos?: number[]        // [-1] for "last weekday of month"
+    weekStart?: string         // 'MO' (default), 'SU', etc.
+}
 ```
-FREQ=WEEKLY;BYDAY=MO,WE,FR;INTERVAL=2
-FREQ=MONTHLY;BYMONTHDAY=15;COUNT=12
-FREQ=YEARLY;BYMONTH=3;BYMONTHDAY=11
-```
 
-This is the same format CalDAV uses, so there's zero conversion needed later. The existing recurrence engine in
-`apps/calendar/calendar.test.ts` uses a custom format — it needs to be adapted to parse/emit RFC 5545 RRULE strings.
+**Conversion examples** (backend handles this transparently):
+
+| `RecurrenceRule` JSON | RRULE in DB |
+|-----------------------|-------------|
+| `{ frequency: 'weekly', interval: 2, byDay: ['MO', 'WE', 'FR'] }` | `FREQ=WEEKLY;INTERVAL=2;BYDAY=MO,WE,FR` |
+| `{ frequency: 'monthly', byMonthDay: [15], count: 12 }` | `FREQ=MONTHLY;BYMONTHDAY=15;COUNT=12` |
+| `{ frequency: 'yearly', byMonth: [3], byMonthDay: [11] }` | `FREQ=YEARLY;BYMONTH=3;BYMONTHDAY=11` |
+| `{ frequency: 'monthly', byDay: ['FR'], bySetPos: [-1] }` | `FREQ=MONTHLY;BYDAY=FR;BYSETPOS=-1` |
+
+The conversion is a thin layer — just key renaming and array joining/splitting. Lives in
+`packages/lib/src/core/calendar/rrule.ts` so both backend and frontend can use it. The `rrule` npm package
+(or the existing `Recur` class in `calendar.test.ts`, adapted) handles **occurrence expansion** on the backend.
 
 **Never store expanded occurrences.** A recurring event is one row with an `rrule` column. When the frontend requests
 a date range, the backend expands recurrences in memory for that window.
@@ -113,7 +128,25 @@ No separate table needed — an exception IS an event.
 - **Modify an occurrence**: insert event with `parentEventId` set, `recurrenceDate` set, different title/time/etc.
 - **When expanding**: query exceptions for the parent event, skip cancelled dates, substitute modified ones
 
-### 6. Invitations & RSVP — How It Works Elsewhere
+### 6. Team Calendars
+
+Teams own calendars directly, same pattern as team drives. `TeamHome` gets a `Calendar` instance:
+
+```
+/data/home/team_{teamId}/
+├── eigen.calendar/
+│   └── calendar.db
+└── mounts/
+    └── ...                 # Team drive already lives here
+```
+
+All team members access team calendars directly — no share propagation needed. Permission check:
+`getMemberships(user.id).teamIds.includes(teamId)` (same as team drive).
+
+This means share propagation only handles **user-to-user** sharing. Team calendars are a simpler, direct-access model.
+See `docs/SHARE-PROPAGATION.md` for details.
+
+### 7. Invitations & RSVP — How It Works Elsewhere
 
 Understanding the standards matters for making good schema decisions now, even though full RSVP is a later phase.
 
@@ -186,7 +219,7 @@ type CalendarShare = {
 | `startTime`      | INTEGER | Unix timestamp (indexed for range queries)                    |
 | `endTime`        | INTEGER | Unix timestamp (indexed for range queries)                    |
 | `allDay`         | INTEGER | Boolean. All-day events use date-only semantics.              |
-| `rrule`          | TEXT    | RFC 5545 RRULE string, nullable. Null = non-recurring.        |
+| `rrule`          | TEXT    | RFC 5545 RRULE string (DB only). Null = non-recurring.        |
 | `parentEventId`  | TEXT FK | → events.id, nullable. Set for recurrence exceptions.        |
 | `recurrenceDate` | TEXT    | ISO date (`2026-03-15`), nullable. Original occurrence date.  |
 | `status`         | TEXT    | `confirmed` / `tentative` / `cancelled`                       |
@@ -303,7 +336,7 @@ type CalendarEvent = {
     startTime: number                             // unix timestamp
     endTime: number                               // unix timestamp
     allDay: boolean
-    rrule: string | null                          // RFC 5545 RRULE string
+    rrule: RecurrenceRule | null                    // JSON object (converted to/from RRULE in DB)
     parentEventId: string | null                  // set for recurrence exceptions
     recurrenceDate: string | null                 // ISO date, e.g. "2026-03-15"
     status: 'confirmed' | 'tentative' | 'cancelled'
@@ -343,7 +376,7 @@ type Attendee = {
     "allDay": false,
     "description": "Sprint progress review",
     "location": "Meeting Room A",
-    "rrule": "FREQ=WEEKLY;BYDAY=WE",
+    "rrule": { "frequency": "weekly", "byDay": ["WE"] },
     "data": {
         "reminders": [{ "type": "notification", "minutes": 10 }]
     }
@@ -424,7 +457,7 @@ into individual **occurrences** for the requested range:
         "startTime": 1741773600,
         "endTime": 1741777200,
         "allDay": false,
-        "rrule": "FREQ=WEEKLY;BYDAY=WE",
+        "rrule": { "frequency": "weekly", "byDay": ["WE"] },
         "status": "confirmed",
         "location": "Meeting Room A",
         "description": "Sprint progress review",
@@ -622,6 +655,9 @@ public calendar!: Calendar;
 // user-home.ts — add to UserHome constructor:
 this.calendar = new Calendar(this);
 
+// team-home.ts — add to TeamHome constructor:
+this.calendar = new Calendar(this);
+
 // home.ts init() — add:
 await this.calendar?.init();
 
@@ -646,10 +682,16 @@ DELETE /calendar/:ownerId/events/:id                             → delete even
 GET    /calendar/:ownerId/shared                                 → list shared-with-me calendars
 PUT    /calendar/:ownerId/shared/:id                             → update local prefs (color, visible)
 DELETE /calendar/:ownerId/shared/:id                             → remove shared calendar from view
+
+GET    /calendar/:ownerId/shared-with-me                         → pull route (see SHARE-PROPAGATION.md)
 ```
 
+`ownerId` can be a user ID or `team_{teamId}`. When it's a team ID, the route resolves to the team's `Calendar`
+via `getHome('team_' + teamId)`. Permission check: `getMemberships(user.id).teamIds.includes(teamId)`.
+
 Note: shares are updated via `PUT /calendar/:ownerId/calendars/:id` (the shares are a field on the calendar, like
-`DrivePath.acl`). No separate share routes needed.
+`DrivePath.acl`). No separate share routes needed. Team calendars don't use shares — access is implicit via team
+membership.
 
 The `GET /calendar/:ownerId/calendars/:calId/events` endpoint serves both own and shared calendars. When Bob requests
 events from Alice's calendar, the route handler calls `getHome(aliceId)`, checks `calendars.shares` for Bob's access
@@ -685,9 +727,9 @@ additional calendars ("Work", "Side Projects") to organize events with different
 
 ### Team Calendar
 
-A team lead creates "Engineering" calendar and shares it `write` to `team_engineering`. All team members can add
-sprint ceremonies, deadlines, retrospectives. New team members automatically get access (resolved via `getMemberships()`
-at query time — the propagation runs when they're added to the team, and the share check runs live).
+A team lead creates a calendar on `team_engineering` via `POST /calendar/team_engineering/calendars`. All team members
+can read and write events directly — no share propagation needed. New team members get access automatically via
+`getMemberships()`. Sprint ceremonies, deadlines, retrospectives all live in the team's own `calendar.db`.
 
 ### Company-Wide Calendar
 
@@ -721,14 +763,17 @@ events response as a virtual read-only calendar.
 
 - `Calendar` class in `apps/api/src/lib/calendar/`
 - Schema: `calendars` (with `shares` JSON), `events` (with `parentEventId`/`recurrenceDate`), `shared_calendars`
-- Routes: CRUD for calendars and events, shared calendar view
-- Share propagation (`share-propagation.ts`)
-- Permission checks on cross-user calendar access
-- RFC 5545 RRULE recurrence expansion
-- Default "Personal" calendar on init
+- Routes: CRUD for calendars and events, shared calendar view, team calendar access
+- Share propagation (`share-propagation.ts`) for user-to-user shares
+- Team calendars via `TeamHome` (direct access, no propagation)
+- Permission checks on cross-user and team calendar access
+- `RecurrenceRule` JSON ↔ RFC 5545 RRULE conversion (`packages/lib/src/core/calendar/rrule.ts`)
+- Recurrence expansion on the backend
+- Default "Personal" calendar on init (user calendars only)
 - SSE events
 - Frontend hooks in `packages/lib/src/core/calendar/`
 - Types in `packages/lib/src/types/calendar.ts`
+- API tests (see Testing section)
 
 Sharing is in Phase 1 because a calendar app without sharing is barely useful in an office setting.
 
@@ -747,21 +792,115 @@ Sharing is in Phase 1 because a calendar app without sharing is barely useful in
 - iCalendar ↔ relational conversion
 - iMIP email integration via Mail system for external invites
 
+## Testing
+
+API tests live in `apps/api/src/test/calendar.test.ts` together with the rest of test suite. Make sure it fits this suite and uses the same test users and teams as other tests. Run with `bun test test`.
+
+### Calendar CRUD
+
+- Create calendar with name and color → returns id, verify fields
+- Update calendar name, color
+- Delete non-default calendar → succeeds
+- Delete default calendar → fails
+- Init creates default "Personal" calendar automatically
+- List calendars returns own calendars
+
+### Event CRUD
+
+- Create event with all fields → verify all fields returned correctly
+- Create event with minimal fields (title, startTime, endTime, allDay) → defaults applied
+- Create all-day event → `allDay: true`, date-only semantics
+- Update event (partial) → only specified fields change, `updatedAt` bumped
+- Delete event → no longer returned
+- `etag` changes on update
+- `ctag` increments on any event change in the calendar
+- `uid` and `uri` auto-generated on create
+
+### RecurrenceRule ↔ RRULE Conversion
+
+- `{ frequency: 'weekly', byDay: ['MO', 'WE', 'FR'] }` → `FREQ=WEEKLY;BYDAY=MO,WE,FR`
+- `{ frequency: 'monthly', byMonthDay: [15], count: 12 }` → `FREQ=MONTHLY;BYMONTHDAY=15;COUNT=12`
+- `{ frequency: 'yearly', byMonth: [3], byMonthDay: [11] }` → `FREQ=YEARLY;BYMONTH=3;BYMONTHDAY=11`
+- `{ frequency: 'monthly', byDay: ['FR'], bySetPos: [-1] }` → `FREQ=MONTHLY;BYDAY=FR;BYSETPOS=-1`
+- `{ frequency: 'daily', interval: 3 }` → `FREQ=DAILY;INTERVAL=3`
+- Round-trip: JSON → RRULE → JSON is identity
+- RRULE → JSON → RRULE is identity
+- Omitted optional fields (interval=1, no count/until) produce clean RRULE without redundant parts
+
+### Recurrence Expansion
+
+- Daily recurrence: returns correct dates in range
+- Weekly with `byDay: ['MO', 'WE', 'FR']`: returns only those weekdays
+- Monthly with `byMonthDay: [15]`: returns 15th of each month in range
+- Yearly: returns correct date each year
+- `interval: 2` (every other week/month): skips correctly
+- `count: 5`: stops after 5 occurrences
+- `until: '2026-06-30'`: stops at date
+- Events outside requested range are excluded
+- Events that START before range but RECUR into range are included
+- `occurrenceDate` is correct for each expanded instance
+
+### Recurrence Exceptions
+
+- Cancel occurrence: create exception with `parentEventId` + `recurrenceDate` + `status: 'cancelled'`
+  → cancelled date excluded from expanded results
+- Modify occurrence: create exception with `parentEventId` + `recurrenceDate` + different title/time
+  → modified event substituted at that date
+- Multiple exceptions on same recurring event: all applied correctly
+- Exception for non-existent recurrence date: handled gracefully
+
+### Sharing (User-to-User)
+
+- Share calendar with user → recipient's `shared_calendars` updated
+- Unshare → removed from recipient's `shared_calendars`
+- Update share permission (read → write) → recipient's record updated
+- Share with non-existent email → share registry entry created (no error)
+- Recipient fetches events from shared calendar → succeeds with correct permission
+- `free-busy` permission: response contains only time blocks (no title, description, location)
+- `read` permission: full event data returned, write rejected
+- `write` permission: full event data returned, write succeeds
+- Unauthorized user (no share) → 403
+
+### Team Calendars
+
+- Create calendar on `team_{teamId}` → stored in team's `calendar.db`
+- Team member can list team calendars
+- Team member can create/read/update/delete events on team calendar
+- Non-member cannot access team calendar → 403
+- `getMemberships()` correctly resolves team access
+
+### Range Queries
+
+- `GET /events?from=...&to=...` returns only events overlapping the range
+- All-day events at range boundaries included correctly
+- Recurring event with no occurrences in range → not returned
+- Large range with many recurring events → returns all expanded occurrences
+- Empty range → empty array
+
+### SSE
+
+- Event created/updated/deleted → SSE fired on owner's Home
+- Calendar shared → `CALENDAR_SHARED` SSE on recipient's Home
+- Calendar unshared → `CALENDAR_UNSHARED` SSE on recipient's Home
+
 ## Files
 
 | File                                                   | Purpose                                        |
 |--------------------------------------------------------|------------------------------------------------|
 | `apps/api/src/lib/calendar/calendar.ts`                | Calendar class (business logic)                |
+| `apps/api/src/lib/calendar/calendar.test.ts`           | API tests                                      |
 | `apps/api/src/lib/calendar/schema.ts`                  | Drizzle ORM schema                             |
 | `apps/api/src/lib/calendar/db-config.ts`               | CALENDAR_DB_CONFIG + migrations                |
 | `apps/api/src/lib/calendar/share-propagation.ts`       | Push shares to recipients (like Drive)         |
 | `apps/api/src/lib/calendar/sse-events.ts`              | SSE event builders                             |
 | `apps/api/src/routes/calendar.ts`                      | Elysia route definitions                       |
-| `packages/lib/src/types/calendar.ts`                   | Shared types                                   |
+| `packages/lib/src/types/calendar.ts`                   | Shared types (incl. `RecurrenceRule`)          |
+| `packages/lib/src/core/calendar/rrule.ts`              | RecurrenceRule ↔ RRULE conversion              |
 | `packages/lib/src/core/calendar/hooks/use-calendar.ts` | Query hooks + invalidation                     |
 | `packages/lib/src/core/calendar/sse-handlers.ts`       | SSE → cache invalidation                       |
 | `apps/api/src/lib/core/constants.ts`                   | Add `PATHS.CALENDAR`                           |
 | `apps/api/src/lib/home/home.ts`                        | Add `calendar` property                        |
-| `apps/api/src/lib/home/user-home.ts`                   | Initialize Calendar in constructor             |
+| `apps/api/src/lib/home/user-home.ts`                   | Initialize Calendar in UserHome                |
+| `apps/api/src/lib/home/team-home.ts`                   | Initialize Calendar in TeamHome                |
 | `apps/api/src/app.ts`                                  | Register `calendarRouter`                      |
 | `packages/lib/src/types/sse.ts`                        | Add calendar SSE event types                   |
