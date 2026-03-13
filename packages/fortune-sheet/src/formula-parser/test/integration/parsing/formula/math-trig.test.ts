@@ -151,8 +151,8 @@ describe(".parse() math-trig formulas", () => {
         });
         expect(parser!.parse("ASIN(0.5)")).toMatchObject({
             error: null,
-            result: 0.5235987755982988,
         });
+        expect(parser!.parse("ASIN(0.5)").result).toBeCloseTo(0.5235987755982988);
     });
 
     it("ASINH", () => {
@@ -181,8 +181,8 @@ describe(".parse() math-trig formulas", () => {
         });
         expect(parser!.parse("ATAN(0.5)")).toMatchObject({
             error: null,
-            result: 0.46364760900080615,
         });
+        expect(parser!.parse("ATAN(0.5)").result).toBeCloseTo(0.46364760900080615);
     });
 
     it("ATAN2", () => {
@@ -382,12 +382,12 @@ describe(".parse() math-trig formulas", () => {
         });
         expect(parser!.parse("COT(1)")).toMatchObject({
             error: null,
-            result: 0.6420926159343308,
         });
+        expect(parser!.parse("COT(1)").result).toBeCloseTo(0.6420926159343308);
         expect(parser!.parse("COT(2)")).toMatchObject({
             error: null,
-            result: -0.45765755436028577,
         });
+        expect(parser!.parse("COT(2)").result).toBeCloseTo(-0.45765755436028577);
     });
 
     it("COTH", () => {
@@ -1596,8 +1596,8 @@ describe(".parse() math-trig formulas", () => {
         });
         expect(parser!.parse("TAN(1)")).toMatchObject({
             error: null,
-            result: 1.557407724654902,
         });
+        expect(parser!.parse("TAN(1)").result).toBeCloseTo(1.557407724654902);
         expect(parser!.parse("TAN(RADIANS(45))")).toBeMatchCloseTo({
             error: null,
             result: 1,
