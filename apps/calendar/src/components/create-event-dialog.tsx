@@ -70,10 +70,15 @@ export function CreateEventDialog({open, onOpenChange, defaultDate, defaultCalen
 
     useEffect(() => {
         if (open) {
-            const now = defaultDate || new Date();
+            const now = new Date();
             const rounded = roundToNext15Minutes(now);
-            const dateStr = toLocalDateString(rounded);
-            const start = toTimeString(rounded);
+            
+            // Use the date from defaultDate if provided, otherwise use today's date
+            const targetDate = defaultDate ? new Date(defaultDate) : rounded;
+            targetDate.setHours(rounded.getHours(), rounded.getMinutes(), 0, 0);
+            
+            const dateStr = toLocalDateString(targetDate);
+            const start = toTimeString(targetDate);
             const end = addMinutes(start, 30);
 
             setTitle('');
