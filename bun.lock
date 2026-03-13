@@ -83,6 +83,7 @@
       "dependencies": {
         "@workspace/lib": "workspace:*",
         "@workspace/ui": "workspace:*",
+        "rrule": "^2.8.1",
       },
     },
     "apps/chat": {
