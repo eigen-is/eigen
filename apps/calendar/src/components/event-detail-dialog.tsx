@@ -7,11 +7,11 @@ import {useDeleteEvent, useCreateEvent, useUpdateEvent} from '@workspace/lib/cal
 import type {CalendarEventOccurrence, CalendarItem, SharedCalendar} from '@workspace/lib/types/calendar';
 import {RRule} from 'rrule';
 import {rruleToText} from './recurrence-picker';
-import {EditEventDialog} from './edit-event-dialog';
 import {RecurringActionDialog} from './recurring-action-dialog';
 import type {RecurringAction} from './recurring-action-dialog';
 import {parseOccurrenceDate, occurrenceDateToString} from './calendar-utils';
-import {UserItem} from '@workspace/ui/components/layout/user-item';
+import {UserName} from '@workspace/ui/components/layout/user-name';
+import { EditEventDialog } from './edit-event-dialog';
 
 type EventDetailDialogProps = {
     open: boolean;
@@ -150,10 +150,10 @@ export function EventDetailDialog({open, onOpenChange, event, calendar, sharedCa
             <Dialog open={open && !showDeleteDialog && !showRecurringDeleteDialog && !editOpen} onOpenChange={onOpenChange}>
                 <DialogContent className="sm:max-w-[450px]">
                     <DialogHeader>
-                        <div className="flex items-start gap-3">
-                            <div className="h-4 w-4 rounded-full mt-1 shrink-0" style={{backgroundColor: color}}/>
+                        {/* <div className="flex items-start gap-3"> */}
+                            {/* <div className="h-4 w-4 rounded-full mt-1 shrink-0" style={{backgroundColor: color}}/> */}
                             <DialogTitle className="text-xl">{event.title}</DialogTitle>
-                        </div>
+                        {/* </div> */}
                     </DialogHeader>
 
                     <div className="space-y-3">
@@ -184,14 +184,11 @@ export function EventDetailDialog({open, onOpenChange, event, calendar, sharedCa
                         )}
 
                         {calendarName && (
-                            <div className="pt-2 border-t space-y-2">
-                                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                                    <div className="h-3 w-3 rounded-full" style={{backgroundColor: color}}/>
-                                    <span>{calendarName}</span>
-                                </div>
-                                {isShared && sharedCalendar && (
-                                    <UserItem userId={sharedCalendar.ownerUserId} label="Owner" className="text-sm"/>
-                                )}
+                            <div className="pt-3 mt-3 border-t">
+                                    <div className="text-sm text-muted-foreground">{calendarName}</div>
+                                    {isShared && sharedCalendar && (
+                                        <div className="text-xs text-muted-foreground">Created by: <UserName userId={sharedCalendar.ownerUserId}/></div>
+                                    )}
                             </div>
                         )}
                     </div>

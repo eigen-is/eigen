@@ -1,3 +1,9 @@
+# Calendar
+
+[] You can't edit an event of a calendar that is shared with you (with edit rights) in FE. Also add to calendar.test.ts if not exist yet
+[] Add createByUserId to events in calendar database / schema and set it when creating an event. You can assume all existing data will be removed so no migration/backward compatibility is needed.
+[] When you delete a single event, you get an alert 'are you sure'. You don't get this extra alert when deleting a recurring event. Add it after the recurring event alert.
+
 # High Priority
 
 [] Add organisation user and home.
@@ -10,7 +16,6 @@
 
 # Med Priority
 
-[] At createdBy to calendar events
 [] Refactor and cleanup Calendar app
 [] Make sure Maildir on server follows exactly the imap folder structure. Monitor changes and update accordingly.
 [] POC: implement imap sync with maildir
