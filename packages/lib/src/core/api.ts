@@ -23,6 +23,7 @@ export const publicApi = api.p;
 export const driveApi = api.drive;
 export const homeApi = api.home;
 export const chatApi = api.chat;
+export const calendarApi = api.calendar;
 export const setupApi = api.setup;
 
 export const SPACE_APP_URL = import.meta.env.VITE_APP_SPACE_URL as string;

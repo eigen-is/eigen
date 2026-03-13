@@ -209,7 +209,7 @@ describe('Calendar', () => {
             expect(delRes.status).toBe(200);
 
             const rangeRes = await authedRequest(ctx.alice.user.sessionToken,
-                `/calendar/${ctx.alice.user.id}/events?from=1741737600&to=1741824000`);
+                `/calendar/${ctx.alice.user.id}/events/1741737600/1741824000`);
             const events = await rangeRes.json() as any[];
             expect(events.find((e: any) => e.id === created.id)).toBeUndefined();
         });
@@ -325,7 +325,7 @@ describe('Calendar', () => {
             const from = 1741737600;
             const to = from + 28 * 86400;
             const res = await authedRequest(ctx.alice.user.sessionToken,
-                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events?from=${from}&to=${to}`);
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events/${from}/${to}`);
             expect(res.status).toBe(200);
             const events = await res.json() as any[];
             const weeklySyncs = events.filter((e: any) => e.title === 'Weekly Sync');
@@ -339,7 +339,7 @@ describe('Calendar', () => {
             const from = 1;
             const to = 100;
             const res = await authedRequest(ctx.alice.user.sessionToken,
-                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events?from=${from}&to=${to}`);
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events/${from}/${to}`);
             const events = await res.json() as any[];
             expect(events.length).toBe(0);
         });
@@ -351,7 +351,7 @@ describe('Calendar', () => {
             const to = from + 28 * 86400;
 
             const beforeRes = await authedRequest(ctx.alice.user.sessionToken,
-                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events?from=${from}&to=${to}`);
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events/${from}/${to}`);
             const beforeEvents = await beforeRes.json() as any[];
             const weeklySyncs = beforeEvents.filter((e: any) => e.title === 'Weekly Sync');
             const targetDate = weeklySyncs[1]?.occurrenceDate;
@@ -374,7 +374,7 @@ describe('Calendar', () => {
                 expect(cancelRes.status).toBe(200);
 
                 const afterRes = await authedRequest(ctx.alice.user.sessionToken,
-                    `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events?from=${from}&to=${to}`);
+                    `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events/${from}/${to}`);
                 const afterEvents = await afterRes.json() as any[];
                 const afterSyncs = afterEvents.filter((e: any) =>
                     e.title === 'Weekly Sync' && e.occurrenceDate === targetDate && !e.parentEventId);
@@ -387,7 +387,7 @@ describe('Calendar', () => {
             const to = from + 28 * 86400;
 
             const beforeRes = await authedRequest(ctx.alice.user.sessionToken,
-                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events?from=${from}&to=${to}`);
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events/${from}/${to}`);
             const beforeEvents = await beforeRes.json() as any[];
             const weeklySyncs = beforeEvents.filter((e: any) =>
                 e.title === 'Weekly Sync' && !e.parentEventId);
@@ -410,7 +410,7 @@ describe('Calendar', () => {
                 expect(modRes.status).toBe(200);
 
                 const afterRes = await authedRequest(ctx.alice.user.sessionToken,
-                    `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events?from=${from}&to=${to}`);
+                    `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events/${from}/${to}`);
                 const afterEvents = await afterRes.json() as any[];
                 const modified = afterEvents.find((e: any) => e.title === 'Weekly Sync (moved)');
                 expect(modified).toBeDefined();
@@ -420,15 +420,9 @@ describe('Calendar', () => {
     });
 
     describe('Range queries', () => {
-        test('missing from/to returns 400', async () => {
-            const res = await authedRequest(ctx.alice.user.sessionToken,
-                `/calendar/${ctx.alice.user.id}/events`);
-            expect(res.status).toBe(400);
-        });
-
         test('empty range returns empty array', async () => {
             const res = await authedRequest(ctx.alice.user.sessionToken,
-                `/calendar/${ctx.alice.user.id}/events?from=1000000000&to=1000000001`);
+                `/calendar/${ctx.alice.user.id}/events/1000000000/1000000001`);
             expect(res.status).toBe(200);
             const events = await res.json() as any[];
             expect(events.length).toBe(0);
@@ -436,7 +430,7 @@ describe('Calendar', () => {
 
         test('range query returns events in range', async () => {
             const res = await authedRequest(ctx.alice.user.sessionToken,
-                `/calendar/${ctx.alice.user.id}/events?from=1741737600&to=1741824000`);
+                `/calendar/${ctx.alice.user.id}/events/1741737600/1741824000`);
             expect(res.status).toBe(200);
             const events = await res.json() as any[];
             expect(events.length).toBeGreaterThan(0);
@@ -493,7 +487,7 @@ describe('Calendar', () => {
 
         test('Bob can read events from shared calendar', async () => {
             const res = await authedRequest(ctx.bob.user.sessionToken,
-                `/calendar/${ctx.alice.user.id}/calendars/${sharedCalendarId}/events?from=1741737600&to=1741824000`);
+                `/calendar/${ctx.alice.user.id}/calendars/${sharedCalendarId}/events/1741737600/1741824000`);
             expect(res.status).toBe(200);
             const events = await res.json() as any[];
             expect(events.length).toBeGreaterThan(0);
@@ -517,7 +511,7 @@ describe('Calendar', () => {
 
         test('Charlie has no access to shared calendar', async () => {
             const res = await authedRequest(ctx.charlie.user.sessionToken,
-                `/calendar/${ctx.alice.user.id}/calendars/${sharedCalendarId}/events?from=1741737600&to=1741824000`);
+                `/calendar/${ctx.alice.user.id}/calendars/${sharedCalendarId}/events/1741737600/1741824000`);
             expect(res.status).toBe(403);
         });
 
@@ -563,7 +557,7 @@ describe('Calendar', () => {
             expect(shareRes.status).toBe(200);
 
             const res = await authedRequest(ctx.charlie.user.sessionToken,
-                `/calendar/${ctx.alice.user.id}/calendars/${sharedCalendarId}/events?from=1741737600&to=1741824000`);
+                `/calendar/${ctx.alice.user.id}/calendars/${sharedCalendarId}/events/1741737600/1741824000`);
             expect(res.status).toBe(200);
             const blocks = await res.json() as any[];
             expect(blocks.length).toBeGreaterThan(0);
@@ -602,6 +596,322 @@ describe('Calendar', () => {
             const bobIds = new Set(bobCals.map((c: any) => c.id));
             const overlap = [...aliceIds].filter(id => bobIds.has(id));
             expect(overlap.length).toBe(0);
+        });
+    });
+
+    describe('Frontend-like event creation and range queries', () => {
+        let freshCalendarId: string;
+
+        beforeAll(async () => {
+            const res = await authedRequest(ctx.bob.user.sessionToken,
+                `/calendar/${ctx.bob.user.id}/calendars`);
+            const calendars = await res.json() as any[];
+            freshCalendarId = calendars.find((c: any) => c.isDefault)!.id;
+        });
+
+        test('create timed event (like FE sends) and verify occurrenceDate in range response', async () => {
+            const startTime = Math.floor(new Date('2026-03-10T09:00:00Z').getTime() / 1000);
+            const endTime = Math.floor(new Date('2026-03-10T10:00:00Z').getTime() / 1000);
+
+            const createRes = await authedRequest(ctx.bob.user.sessionToken,
+                `/calendar/${ctx.bob.user.id}/calendars/${freshCalendarId}/events`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        title: 'Morning Meeting',
+                        startTime,
+                        endTime,
+                        allDay: false,
+                        description: null,
+                        location: null,
+                        rrule: null,
+                    }),
+                });
+            expect(createRes.status).toBe(200);
+            const created = await createRes.json() as any;
+            expect(created.id).toBeDefined();
+            expect(created.title).toBe('Morning Meeting');
+
+            const from = Math.floor(new Date('2026-03-01T00:00:00Z').getTime() / 1000);
+            const to = Math.floor(new Date('2026-03-31T23:59:59Z').getTime() / 1000);
+            const rangeRes = await authedRequest(ctx.bob.user.sessionToken,
+                `/calendar/${ctx.bob.user.id}/events/${from}/${to}`);
+            expect(rangeRes.status).toBe(200);
+            const events = await rangeRes.json() as any[];
+            const found = events.find((e: any) => e.id === created.id);
+            expect(found).toBeDefined();
+            expect(found.occurrenceDate).toBe('2026-03-10');
+            expect(found.title).toBe('Morning Meeting');
+        });
+
+        test('create all-day event (FE style: midnight UTC to next midnight UTC) and verify occurrenceDate', async () => {
+            const startTime = Math.floor(new Date('2026-03-15T00:00:00Z').getTime() / 1000);
+            const endTime = Math.floor(new Date('2026-03-16T00:00:00Z').getTime() / 1000);
+
+            const createRes = await authedRequest(ctx.bob.user.sessionToken,
+                `/calendar/${ctx.bob.user.id}/calendars/${freshCalendarId}/events`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        title: 'All Day Conference',
+                        startTime,
+                        endTime,
+                        allDay: true,
+                    }),
+                });
+            expect(createRes.status).toBe(200);
+
+            const from = Math.floor(new Date('2026-03-01T00:00:00Z').getTime() / 1000);
+            const to = Math.floor(new Date('2026-03-31T23:59:59Z').getTime() / 1000);
+            const rangeRes = await authedRequest(ctx.bob.user.sessionToken,
+                `/calendar/${ctx.bob.user.id}/events/${from}/${to}`);
+            const events = await rangeRes.json() as any[];
+            const found = events.find((e: any) => e.title === 'All Day Conference');
+            expect(found).toBeDefined();
+            expect(found.occurrenceDate).toBe('2026-03-15');
+            expect(found.allDay).toBe(true);
+        });
+
+        test('create multi-day all-day event and verify occurrenceDate is start date', async () => {
+            const startTime = Math.floor(new Date('2026-03-20T00:00:00Z').getTime() / 1000);
+            const endTime = Math.floor(new Date('2026-03-23T00:00:00Z').getTime() / 1000);
+
+            await authedRequest(ctx.bob.user.sessionToken,
+                `/calendar/${ctx.bob.user.id}/calendars/${freshCalendarId}/events`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        title: '3-Day Retreat',
+                        startTime,
+                        endTime,
+                        allDay: true,
+                    }),
+                });
+
+            const from = Math.floor(new Date('2026-03-01T00:00:00Z').getTime() / 1000);
+            const to = Math.floor(new Date('2026-03-31T23:59:59Z').getTime() / 1000);
+            const rangeRes = await authedRequest(ctx.bob.user.sessionToken,
+                `/calendar/${ctx.bob.user.id}/events/${from}/${to}`);
+            const events = await rangeRes.json() as any[];
+            const found = events.find((e: any) => e.title === '3-Day Retreat');
+            expect(found).toBeDefined();
+            expect(found.occurrenceDate).toBe('2026-03-20');
+        });
+
+        test('event at end of day boundary is included in correct range', async () => {
+            const startTime = Math.floor(new Date('2026-03-31T23:00:00Z').getTime() / 1000);
+            const endTime = Math.floor(new Date('2026-04-01T00:30:00Z').getTime() / 1000);
+
+            const createRes = await authedRequest(ctx.bob.user.sessionToken,
+                `/calendar/${ctx.bob.user.id}/calendars/${freshCalendarId}/events`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        title: 'Late Night Event',
+                        startTime,
+                        endTime,
+                        allDay: false,
+                    }),
+                });
+            const created = await createRes.json() as any;
+
+            const marchFrom = Math.floor(new Date('2026-03-01T00:00:00Z').getTime() / 1000);
+            const marchTo = Math.floor(new Date('2026-03-31T23:59:59Z').getTime() / 1000);
+            const marchRes = await authedRequest(ctx.bob.user.sessionToken,
+                `/calendar/${ctx.bob.user.id}/events/${marchFrom}/${marchTo}`);
+            const marchEvents = await marchRes.json() as any[];
+            expect(marchEvents.find((e: any) => e.id === created.id)).toBeDefined();
+
+            const aprilFrom = Math.floor(new Date('2026-04-01T00:00:00Z').getTime() / 1000);
+            const aprilTo = Math.floor(new Date('2026-04-30T23:59:59Z').getTime() / 1000);
+            const aprilRes = await authedRequest(ctx.bob.user.sessionToken,
+                `/calendar/${ctx.bob.user.id}/events/${aprilFrom}/${aprilTo}`);
+            const aprilEvents = await aprilRes.json() as any[];
+            expect(aprilEvents.find((e: any) => e.id === created.id)).toBeDefined();
+        });
+
+        test('event not in range is excluded', async () => {
+            const janFrom = Math.floor(new Date('2026-01-01T00:00:00Z').getTime() / 1000);
+            const janTo = Math.floor(new Date('2026-01-31T23:59:59Z').getTime() / 1000);
+            const res = await authedRequest(ctx.bob.user.sessionToken,
+                `/calendar/${ctx.bob.user.id}/events/${janFrom}/${janTo}`);
+            const events = await res.json() as any[];
+            const marchEvents = events.filter((e: any) =>
+                e.title === 'Morning Meeting' || e.title === 'All Day Conference');
+            expect(marchEvents.length).toBe(0);
+        });
+
+        test('timed event created in UTC+1 style (local midnight = 23:00 UTC prev day) appears correctly', async () => {
+            const startTime = Math.floor(new Date('2026-03-10T08:00:00Z').getTime() / 1000);
+            const endTime = Math.floor(new Date('2026-03-10T09:00:00Z').getTime() / 1000);
+
+            const createRes = await authedRequest(ctx.bob.user.sessionToken,
+                `/calendar/${ctx.bob.user.id}/calendars/${freshCalendarId}/events`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        title: 'UTC+1 Morning',
+                        startTime,
+                        endTime,
+                        allDay: false,
+                    }),
+                });
+            expect(createRes.status).toBe(200);
+
+            const from = Math.floor(new Date('2026-02-22T23:00:00Z').getTime() / 1000);
+            const to = Math.floor(new Date('2026-04-05T22:59:59Z').getTime() / 1000);
+            const rangeRes = await authedRequest(ctx.bob.user.sessionToken,
+                `/calendar/${ctx.bob.user.id}/events/${from}/${to}`);
+            const events = await rangeRes.json() as any[];
+            const found = events.find((e: any) => e.title === 'UTC+1 Morning');
+            expect(found).toBeDefined();
+            expect(found.occurrenceDate).toBe('2026-03-10');
+        });
+
+        test('all-day event with FE UTC midnight matches backend occurrenceDate', async () => {
+            const startTime = Math.floor(new Date('2026-06-15T00:00:00Z').getTime() / 1000);
+            const endTime = Math.floor(new Date('2026-06-16T00:00:00Z').getTime() / 1000);
+
+            await authedRequest(ctx.bob.user.sessionToken,
+                `/calendar/${ctx.bob.user.id}/calendars/${freshCalendarId}/events`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        title: 'Summer Holiday',
+                        startTime,
+                        endTime,
+                        allDay: true,
+                    }),
+                });
+
+            const from = Math.floor(new Date('2026-06-01T00:00:00Z').getTime() / 1000);
+            const to = Math.floor(new Date('2026-06-30T23:59:59Z').getTime() / 1000);
+            const rangeRes = await authedRequest(ctx.bob.user.sessionToken,
+                `/calendar/${ctx.bob.user.id}/events/${from}/${to}`);
+            const events = await rangeRes.json() as any[];
+            const found = events.find((e: any) => e.title === 'Summer Holiday');
+            expect(found).toBeDefined();
+            expect(found.occurrenceDate).toBe('2026-06-15');
+        });
+
+        test('recurring weekly event creates correct occurrences in range', async () => {
+            const startTime = Math.floor(new Date('2026-04-06T14:00:00Z').getTime() / 1000);
+            const endTime = Math.floor(new Date('2026-04-06T15:00:00Z').getTime() / 1000);
+
+            await authedRequest(ctx.bob.user.sessionToken,
+                `/calendar/${ctx.bob.user.id}/calendars/${freshCalendarId}/events`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        title: 'Weekly Standup Bob',
+                        startTime,
+                        endTime,
+                        allDay: false,
+                        rrule: 'FREQ=WEEKLY;BYDAY=MO',
+                    }),
+                });
+
+            const from = Math.floor(new Date('2026-04-01T00:00:00Z').getTime() / 1000);
+            const to = Math.floor(new Date('2026-04-30T23:59:59Z').getTime() / 1000);
+            const rangeRes = await authedRequest(ctx.bob.user.sessionToken,
+                `/calendar/${ctx.bob.user.id}/events/${from}/${to}`);
+            expect(rangeRes.status).toBe(200);
+            const events = await rangeRes.json() as any[];
+            const standups = events.filter((e: any) => e.title === 'Weekly Standup Bob');
+            expect(standups.length).toBeGreaterThanOrEqual(4);
+
+            const dates = standups.map((e: any) => e.occurrenceDate).sort();
+            expect(dates).toContain('2026-04-06');
+            expect(dates).toContain('2026-04-13');
+            expect(dates).toContain('2026-04-20');
+            expect(dates).toContain('2026-04-27');
+
+            for (const s of standups) {
+                expect(s.endTime - s.startTime).toBe(3600);
+            }
+        });
+
+        test('daily recurring event with COUNT limits occurrences', async () => {
+            const startTime = Math.floor(new Date('2026-05-01T10:00:00Z').getTime() / 1000);
+            const endTime = Math.floor(new Date('2026-05-01T11:00:00Z').getTime() / 1000);
+
+            await authedRequest(ctx.bob.user.sessionToken,
+                `/calendar/${ctx.bob.user.id}/calendars/${freshCalendarId}/events`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        title: 'Sprint Countdown',
+                        startTime,
+                        endTime,
+                        allDay: false,
+                        rrule: 'FREQ=DAILY;COUNT=5',
+                    }),
+                });
+
+            const from = Math.floor(new Date('2026-05-01T00:00:00Z').getTime() / 1000);
+            const to = Math.floor(new Date('2026-05-31T23:59:59Z').getTime() / 1000);
+            const rangeRes = await authedRequest(ctx.bob.user.sessionToken,
+                `/calendar/${ctx.bob.user.id}/events/${from}/${to}`);
+            const events = await rangeRes.json() as any[];
+            const countdowns = events.filter((e: any) => e.title === 'Sprint Countdown');
+            expect(countdowns.length).toBe(5);
+            expect(countdowns[0].occurrenceDate).toBe('2026-05-01');
+            expect(countdowns[4].occurrenceDate).toBe('2026-05-05');
+        });
+
+        test('all events in range response have occurrenceDate field', async () => {
+            const from = Math.floor(new Date('2026-03-01T00:00:00Z').getTime() / 1000);
+            const to = Math.floor(new Date('2026-03-31T23:59:59Z').getTime() / 1000);
+            const res = await authedRequest(ctx.bob.user.sessionToken,
+                `/calendar/${ctx.bob.user.id}/events/${from}/${to}`);
+            const events = await res.json() as any[];
+            expect(events.length).toBeGreaterThan(0);
+            for (const e of events) {
+                expect(e.occurrenceDate).toBeDefined();
+                expect(e.occurrenceDate).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+            }
+        });
+
+        test('per-calendar range query only returns events from that calendar', async () => {
+            const createCalRes = await authedRequest(ctx.bob.user.sessionToken,
+                `/calendar/${ctx.bob.user.id}/calendars`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({name: 'Side Project', color: '#ff6600'}),
+                });
+            const sideCal = await createCalRes.json() as any;
+
+            const startTime = Math.floor(new Date('2026-03-12T15:00:00Z').getTime() / 1000);
+            const endTime = Math.floor(new Date('2026-03-12T16:00:00Z').getTime() / 1000);
+            await authedRequest(ctx.bob.user.sessionToken,
+                `/calendar/${ctx.bob.user.id}/calendars/${sideCal.id}/events`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        title: 'Side Project Meeting',
+                        startTime,
+                        endTime,
+                        allDay: false,
+                    }),
+                });
+
+            const from = Math.floor(new Date('2026-03-01T00:00:00Z').getTime() / 1000);
+            const to = Math.floor(new Date('2026-03-31T23:59:59Z').getTime() / 1000);
+
+            const sideRes = await authedRequest(ctx.bob.user.sessionToken,
+                `/calendar/${ctx.bob.user.id}/calendars/${sideCal.id}/events/${from}/${to}`);
+            const sideEvents = await sideRes.json() as any[];
+            expect(sideEvents.length).toBe(1);
+            expect(sideEvents[0].title).toBe('Side Project Meeting');
+
+            const allRes = await authedRequest(ctx.bob.user.sessionToken,
+                `/calendar/${ctx.bob.user.id}/events/${from}/${to}`);
+            const allEvents = await allRes.json() as any[];
+            expect(allEvents.find((e: any) => e.title === 'Side Project Meeting')).toBeDefined();
+            expect(allEvents.find((e: any) => e.title === 'Morning Meeting')).toBeDefined();
+
+            await authedRequest(ctx.bob.user.sessionToken,
+                `/calendar/${ctx.bob.user.id}/calendars/${sideCal.id}`, {method: 'DELETE'});
         });
     });
 });

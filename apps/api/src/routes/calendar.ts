@@ -118,18 +118,18 @@ export const calendarRouter = new Elysia({name: "calendar"})
     }, {auth: true})
 
     // --- Events ---
-    .get("/calendar/:ownerId/events", async ({query, user}) => {
-        const from = Number(query['from']);
-        const to = Number(query['to']);
-        if (!from || !to) throw new ApiError(400, 'Missing from/to query parameters');
+    .get("/calendar/:ownerId/events/:from/:to", async ({params, user}) => {
+        const from = Number(params.from);
+        const to = Number(params.to);
+        if (!from || !to) throw new ApiError(400, 'Invalid from/to parameters');
         const cal = await resolveCalendar(user, user.id);
         return cal.getEventsInRange(from, to);
     }, {auth: true})
 
-    .get("/calendar/:ownerId/calendars/:calId/events", async ({params, query, user}) => {
-        const from = Number(query['from']);
-        const to = Number(query['to']);
-        if (!from || !to) throw new ApiError(400, 'Missing from/to query parameters');
+    .get("/calendar/:ownerId/calendars/:calId/events/:from/:to", async ({params, user}) => {
+        const from = Number(params.from);
+        const to = Number(params.to);
+        if (!from || !to) throw new ApiError(400, 'Invalid from/to parameters');
 
         const parsed = parseOwnerId(params.ownerId);
 
