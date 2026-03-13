@@ -906,15 +906,14 @@ export function Toolbar({
     // deps change (cell stays the same, focused row/col don't move), so React
     // reuses the cached JSX and skips reconciliation of 1100+ lines of toolbar.
     return useMemo(() => (
-        <header className="border-b border-border">
+        <div className="bg-white h-12 flex items-center justify-between px-4 border-b no-print">
             <SharedToolbar>
-                <div className="flex items-center gap-0.5 shrink-0">
+                <div className="flex items-center">
                     {leftItems}
-                    {leftItems ? <ToolbarSeparator/> : null}
                     {getToolbarItem("undo", -1)}
                     {getToolbarItem("redo", -2)}
                 </div>
-                <div className="flex items-center gap-0.5 flex-wrap">
+                <div className="flex items-center">
                     {settings.customToolbarItems.length > 0 && (
                         <>
                             {settings.customToolbarItems.map((n) => (
@@ -932,14 +931,13 @@ export function Toolbar({
                         .filter((n) => !["undo", "redo", "format-painter", "clear-format"].includes(n))
                         .map((name, i) => getToolbarItem(name, i))}
                 </div>
-                <div className="flex items-center gap-0.5 shrink-0">
+                <div className="flex items-center">
                     {getToolbarItem("format-painter", -3)}
                     {getToolbarItem("clear-format", -4)}
-                    {rightItems && <ToolbarSeparator/>}
                     {rightItems}
                 </div>
             </SharedToolbar>
-        </header>
+        </div>
     ), [getToolbarItem, leftItems, rightItems, settings.customToolbarItems, settings.toolbarItems]);
 }
 
