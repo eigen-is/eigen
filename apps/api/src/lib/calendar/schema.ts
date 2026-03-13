@@ -31,6 +31,7 @@ export const events = sqliteTable('events', {
     status: text('status').notNull().default('confirmed'),
     etag: text('etag').notNull(),
     data: text('data', {mode: 'json'}).$type<EventData | null>(),
+    createByUserId: text('createByUserId'),
     createdAt: integer('createdAt').default(sql`(unixepoch())`),
     updatedAt: integer('updatedAt').default(sql`(unixepoch())`),
 }, (table) => ({

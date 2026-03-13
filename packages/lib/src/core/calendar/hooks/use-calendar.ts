@@ -128,11 +128,12 @@ export function useCreateEvent() {
 export function useUpdateEvent() {
     const queryClient = useQueryClient();
     const {user} = useAuth();
-    const ownerId = user?.id || '';
+    const defaultOwnerId = user?.id || '';
 
     return useMutation({
-        mutationFn: async ({id, ...data}: UpdateEventInput) => {
-            const response = await (calendarApi({ownerId}).events as any)({id}).put(data as any);
+        mutationFn: async ({id, ownerId, ...data}: UpdateEventInput) => {
+            const targetOwnerId = ownerId || defaultOwnerId;
+            const response = await (calendarApi({ownerId: targetOwnerId}).events as any)({id}).put(data as any);
             if (response.error) throw new Error(String(response.error));
             return response.data;
         },
@@ -143,10 +144,12 @@ export function useUpdateEvent() {
 export function useDeleteEvent() {
     const queryClient = useQueryClient();
     const {user} = useAuth();
-    const ownerId = user?.id || '';
+    const defaultOwnerId = user?.id || '';
 
     return useMutation({
-        mutationFn: async (id: string) => {
+        mutationFn: async (input: string | {id: string; ownerId: string}) => {
+            const id = typeof input === 'string' ? input : input.id;
+            const ownerId = typeof input === 'string' ? defaultOwnerId : (input.ownerId || defaultOwnerId);
             const response = await (calendarApi({ownerId}).events as any)({id}).delete();
             if (response.error) throw new Error(String(response.error));
             return response.data;

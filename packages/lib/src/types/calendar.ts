@@ -52,6 +52,7 @@ export type CalendarEvent = {
     status: 'confirmed' | 'tentative' | 'cancelled'
     etag: string
     data: EventData | null
+    createByUserId: string | null
     createdAt: number
     updatedAt: number
 }
@@ -85,6 +86,7 @@ export type CreateEventInput = {
 
 export type UpdateEventInput = {
     id: string
+    ownerId?: string
     title?: string
     startTime?: number
     endTime?: number
