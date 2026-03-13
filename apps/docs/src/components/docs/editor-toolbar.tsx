@@ -297,7 +297,7 @@ export const EditorToolbar = ({editor, path, canWrite, onAccessDialogOpen, onDel
                     </>
                 )}
                 {canWrite && (
-                    <div className="flex items-center gap-0.5">
+                    <div className="flex items-center">
                         <TooltipButton
                             icon={Undo}
                             tooltipText={`Undo (${formatForDisplay('Mod+Z')})`}
