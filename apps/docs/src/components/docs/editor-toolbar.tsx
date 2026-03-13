@@ -646,7 +646,7 @@ export const EditorToolbar = ({editor, path, canWrite, onAccessDialogOpen, onDel
                 </div>
             )}
 
-            <div className="flex items-center gap-0.5">
+            <div className="flex items-center">
                 {onAddComment && (
                     <TooltipButton icon={MessageSquare} tooltipText="Add comment" onClick={onAddComment}/>
                 )}
