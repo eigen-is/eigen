@@ -2,6 +2,7 @@ import {createFileRoute, useNavigate} from '@tanstack/react-router'
 import {useCallback, useMemo, useState} from 'react';
 import {Column, ColumnLayout} from "@workspace/ui/components/layout";
 import {useCalendars, useEvents, useSharedCalendars, useAllSharedCalendarEvents} from '@workspace/lib/calendar';
+import {useAuth} from '@workspace/lib/auth';
 import {CalendarToolbar} from '../components/calendar-toolbar';
 import {MonthView} from '../components/month-view';
 import {WeekView} from '../components/week-view';
@@ -17,6 +18,8 @@ export const Route = createFileRoute('/_auth/view/$mode/$from/$to')({
 function CalendarView() {
     const {mode, from: fromStr, to: toStr} = Route.useParams();
     const navigate = useNavigate();
+    const {user} = useAuth();
+    const ownerId = user?.id || '';
 
     const viewMode = (mode === 'week' ? 'week' : 'month') as ViewMode;
     const from = Number(fromStr);
@@ -25,8 +28,8 @@ function CalendarView() {
     const [createEventOpen, setCreateEventOpen] = useState(false);
     const [createEventDate, setCreateEventDate] = useState<Date | undefined>();
 
-    const {data: calendars = []} = useCalendars();
-    const {data: sharedCalendars = []} = useSharedCalendars();
+    const {data: calendars = []} = useCalendars(ownerId);
+    const {data: sharedCalendars = []} = useSharedCalendars(ownerId);
 
     const currentDate = useMemo(() => {
         const midTs = (from + to) / 2;
@@ -37,7 +40,7 @@ function CalendarView() {
         return mid;
     }, [from, to, viewMode]);
 
-    const {data: ownEvents = [], isLoading} = useEvents(from, to);
+    const {data: ownEvents = [], isLoading} = useEvents(ownerId, from, to);
     const {data: sharedEvents = []} = useAllSharedCalendarEvents(sharedCalendars, from, to);
 
     const visibleCalendarIds = useMemo(() => {

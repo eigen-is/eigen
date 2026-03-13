@@ -4,6 +4,7 @@ import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle} from '@w
 import {Button} from '@workspace/ui/components/button';
 import {DeleteDialog} from '@workspace/ui/components/layout/delete/delete-dialog';
 import {useDeleteEvent, useCreateEvent, useUpdateEvent} from '@workspace/lib/calendar';
+import {useAuth} from '@workspace/lib/auth';
 import type {CalendarEventOccurrence, CalendarItem, SharedCalendar} from '@workspace/lib/types/calendar';
 import {RRule} from 'rrule';
 import {rruleToText} from './recurrence-picker';
@@ -79,14 +80,16 @@ function truncateRRule(rruleStr: string, beforeDate: Date): string {
 }
 
 export function EventDetailDialog({open, onOpenChange, event, calendar, sharedCalendar}: EventDetailDialogProps) {
+    const {user} = useAuth();
+    const eventOwnerId = sharedCalendar?.ownerUserId || user?.id || '';
     const [showDeleteDialog, setShowDeleteDialog] = useState(false);
     const [showRecurringDeleteDialog, setShowRecurringDeleteDialog] = useState(false);
     const [showRecurringDeleteConfirm, setShowRecurringDeleteConfirm] = useState(false);
     const [pendingDeleteAction, setPendingDeleteAction] = useState<RecurringAction | null>(null);
     const [editOpen, setEditOpen] = useState(false);
-    const deleteEvent = useDeleteEvent();
-    const createEvent = useCreateEvent();
-    const updateEvent = useUpdateEvent();
+    const deleteEvent = useDeleteEvent(eventOwnerId);
+    const createEvent = useCreateEvent(eventOwnerId);
+    const updateEvent = useUpdateEvent(eventOwnerId);
 
     if (!event) return null;
 
@@ -94,7 +97,6 @@ export function EventDetailDialog({open, onOpenChange, event, calendar, sharedCa
     const isException = !!event.parentEventId;
     const calendarName = calendar?.name || sharedCalendar?.calendarName || null;
     const isShared = !!sharedCalendar;
-    const ownerUserId = sharedCalendar?.ownerUserId;
     const canEdit = !isShared || sharedCalendar?.permission === 'write';
 
     const handleDelete = async (action: RecurringAction) => {
@@ -103,7 +105,6 @@ export function EventDetailDialog({open, onOpenChange, event, calendar, sharedCa
                 if (isRecurring && !isException) {
                     await createEvent.mutateAsync({
                         calendarId: event.calendarId,
-                        ownerId: ownerUserId,
                         title: event.title,
                         startTime: event.startTime,
                         endTime: event.endTime,
@@ -113,7 +114,7 @@ export function EventDetailDialog({open, onOpenChange, event, calendar, sharedCa
                         status: 'cancelled',
                     });
                 } else {
-                    await deleteEvent.mutateAsync(ownerUserId ? {id: event.id, ownerId: ownerUserId} : event.id);
+                    await deleteEvent.mutateAsync(event.id);
                 }
             } else if (action === 'this-and-following') {
                 const parentId = event.parentEventId || event.id;
@@ -121,11 +122,11 @@ export function EventDetailDialog({open, onOpenChange, event, calendar, sharedCa
                 const rrule = event.rrule || (isException && event.parentEventId ? null : null);
                 if (rrule) {
                     const truncated = truncateRRule(rrule, occDate);
-                    await updateEvent.mutateAsync({id: parentId, ownerId: ownerUserId, rrule: truncated});
+                    await updateEvent.mutateAsync({id: parentId, rrule: truncated});
                 }
             } else if (action === 'all') {
                 const targetId = event.parentEventId || event.id;
-                await deleteEvent.mutateAsync(ownerUserId ? {id: targetId, ownerId: ownerUserId} : targetId);
+                await deleteEvent.mutateAsync(targetId);
             }
         } finally {
             setShowRecurringDeleteDialog(false);
@@ -134,7 +135,7 @@ export function EventDetailDialog({open, onOpenChange, event, calendar, sharedCa
     };
 
     const handleNonRecurringDelete = async () => {
-        await deleteEvent.mutateAsync(ownerUserId ? {id: event.id, ownerId: ownerUserId} : event.id);
+        await deleteEvent.mutateAsync(event.id);
         setShowDeleteDialog(false);
         onOpenChange(false);
     };
@@ -266,7 +267,7 @@ export function EventDetailDialog({open, onOpenChange, event, calendar, sharedCa
                     if (!o) onOpenChange(false);
                 }}
                 event={event}
-                ownerUserId={ownerUserId}
+                ownerUserId={sharedCalendar?.ownerUserId}
             />
         </>
     );

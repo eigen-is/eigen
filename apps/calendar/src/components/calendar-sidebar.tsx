@@ -6,6 +6,7 @@ import {Separator} from '@workspace/ui/components/separator';
 import {AppLogo} from '@workspace/ui/components/layout/app/app-logo';
 import {EigenLoader, StorageUsage, TooltipButton} from '@workspace/ui';
 import {useCalendars, useSharedCalendars, useUpdateCalendar, useUpdateSharedCalendar} from '@workspace/lib/calendar';
+import {useAuth} from '@workspace/lib/auth';
 import type {CalendarItem, SharedCalendar} from '@workspace/lib/types/calendar';
 import {CalendarConfigDialog} from './calendar-config-dialog';
 import {SharedCalendarConfigDialog} from './shared-calendar-config-dialog';
@@ -43,10 +44,12 @@ export function CalendarSidebar({
     isMobile = false,
     onClose,
 }: CalendarSidebarProps) {
-    const {data: calendars = [], isLoading: calendarsLoading} = useCalendars();
-    const {data: sharedCalendars = [], isLoading: sharedLoading} = useSharedCalendars();
-    const updateCalendar = useUpdateCalendar();
-    const updateSharedCalendar = useUpdateSharedCalendar();
+    const {user} = useAuth();
+    const ownerId = user?.id || '';
+    const {data: calendars = [], isLoading: calendarsLoading} = useCalendars(ownerId);
+    const {data: sharedCalendars = [], isLoading: sharedLoading} = useSharedCalendars(ownerId);
+    const updateCalendar = useUpdateCalendar(ownerId);
+    const updateSharedCalendar = useUpdateSharedCalendar(ownerId);
 
     const [configCalendar, setConfigCalendar] = useState<CalendarItem | null>(null);
     const [configDialogOpen, setConfigDialogOpen] = useState(false);
