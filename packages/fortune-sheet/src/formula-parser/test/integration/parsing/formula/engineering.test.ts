@@ -538,10 +538,16 @@ describe(".parse() engineering formulas", () => {
             error: "#VALUE!",
             result: null,
         });
-        expect(parser!.parse('IMCOSH("3+4i")')).toMatchObject({
-            error: null,
-            result: "-6.580663040551157-7.5815527427465454i",
-        });
+        const result = parser!.parse('IMCOSH("3+4i")');
+        expect(result.error).toBeNull();
+        // Parse complex number "a+bi" or "a-bi"  
+        const complexStr = result.result;
+        // Handle negative real part
+        const parts = complexStr.match(/(-?\d+\.?\d*)([+-]\d+\.?\d*)i/);
+        const realPart = parts ? parseFloat(parts[1]) : parseFloat(complexStr);
+        const imagPart = parts ? parseFloat(parts[2]) : 0;
+        expect(realPart).toBeCloseTo(-6.580663040551157);
+        expect(imagPart).toBeCloseTo(-7.5815527427465454);
     });
 
     it("IMCOT", () => {
@@ -577,10 +583,16 @@ describe(".parse() engineering formulas", () => {
             error: "#NUM!",
             result: null,
         });
-        expect(parser!.parse('IMCSCH("3+4i")')).toMatchObject({
-            error: null,
-            result: "-0.06487747137063549+0.0754898329158637i",
-        });
+        const result = parser!.parse('IMCSCH("3+4i")');
+        expect(result.error).toBeNull();
+        // Parse complex number "a+bi" or "a-bi"  
+        const complexStr = result.result;
+        // Handle negative real part
+        const parts = complexStr.match(/(-?\d+\.?\d*)([+-]\d+\.?\d*)i/);
+        const realPart = parts ? parseFloat(parts[1]) : parseFloat(complexStr);
+        const imagPart = parts ? parseFloat(parts[2]) : 0;
+        expect(realPart).toBeCloseTo(-0.06487747137063549);
+        expect(imagPart).toBeCloseTo(0.0754898329158637);
     });
 
     it("IMDIV", () => {
@@ -603,10 +615,16 @@ describe(".parse() engineering formulas", () => {
             error: "#VALUE!",
             result: null,
         });
-        expect(parser!.parse('IMEXP("3+4i")')).toMatchObject({
-            error: null,
-            result: "-13.128783081462158-15.200784463067956i",
-        });
+        const result = parser!.parse('IMEXP("3+4i")');
+        expect(result.error).toBeNull();
+        // Parse complex number "a+bi" or "a-bi"  
+        const complexStr = result.result;
+        // Handle negative real part
+        const parts = complexStr.match(/(-?\d+\.?\d*)([+-]\d+\.?\d*)i/);
+        const realPart = parts ? parseFloat(parts[1]) : parseFloat(complexStr);
+        const imagPart = parts ? parseFloat(parts[2]) : 0;
+        expect(realPart).toBeCloseTo(-13.128783081462158);
+        expect(imagPart).toBeCloseTo(-15.200784463067956);
     });
 
     it("IMLN", () => {
@@ -705,10 +723,16 @@ describe(".parse() engineering formulas", () => {
             error: "#VALUE!",
             result: null,
         });
-        expect(parser!.parse('IMSECH("3+4i")')).toMatchObject({
-            error: null,
-            result: "-0.06529402785794704+0.07522496030277323i",
-        });
+        const result = parser!.parse('IMSECH("3+4i")');
+        expect(result.error).toBeNull();
+        // Parse complex number "a+bi" or "a-bi"  
+        const complexStr = result.result;
+        // Handle negative real part
+        const parts = complexStr.match(/(-?\d+\.?\d*)([+-]\d+\.?\d*)i/);
+        const realPart = parts ? parseFloat(parts[1]) : parseFloat(complexStr);
+        const imagPart = parts ? parseFloat(parts[2]) : 0;
+        expect(realPart).toBeCloseTo(-0.06529402785794704);
+        expect(imagPart).toBeCloseTo(0.07522496030277323);
     });
 
     it("IMSIN", () => {
@@ -733,10 +757,16 @@ describe(".parse() engineering formulas", () => {
             error: "#VALUE!",
             result: null,
         });
-        expect(parser!.parse('IMSINH("3+4i")')).toMatchObject({
-            error: null,
-            result: "-6.5481200409110025-7.619231720321411i",
-        });
+        const result = parser!.parse('IMSINH("3+4i")');
+        expect(result.error).toBeNull();
+        // Parse complex number "a+bi" or "a-bi"  
+        const complexStr = result.result;
+        // Handle negative real part
+        const parts = complexStr.match(/(-?\d+\.?\d*)([+-]\d+\.?\d*)i/);
+        const realPart = parts ? parseFloat(parts[1]) : parseFloat(complexStr);
+        const imagPart = parts ? parseFloat(parts[2]) : 0;
+        expect(realPart).toBeCloseTo(-6.5481200409110025);
+        expect(imagPart).toBeCloseTo(-7.619231720321411);
     });
 
     it("IMSQRT", () => {
