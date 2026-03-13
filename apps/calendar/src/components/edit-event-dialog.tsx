@@ -1,13 +1,15 @@
-import {useEffect, useState} from 'react';
+import {useEffect, useMemo, useState} from 'react';
+import {Clock, MapPin, AlignLeft, Calendar} from 'lucide-react';
 import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle} from '@workspace/ui/components/dialog';
 import {Button} from '@workspace/ui/components/button';
 import {Input} from '@workspace/ui/components/input';
 import {Textarea} from '@workspace/ui/components/textarea';
 import {Label} from '@workspace/ui/components/label';
+import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '@workspace/ui/components/select';
 import {Checkbox} from '@workspace/ui/components/checkbox';
-import {useUpdateEvent, useCreateEvent} from '@workspace/lib/calendar';
+import {useUpdateEvent, useCreateEvent, useDeleteEvent, useCalendars, useSharedCalendars} from '@workspace/lib/calendar';
 import {useAuth} from '@workspace/lib/auth';
-import type {CalendarEventOccurrence} from '@workspace/lib/types/calendar';
+import type {CalendarEventOccurrence, CalendarItem, SharedCalendar} from '@workspace/lib/types/calendar';
 import {RRule} from 'rrule';
 import {RecurrencePicker} from './recurrence-picker';
 import {TimeSelect, roundToNext15Minutes, addMinutes} from './time-select';
@@ -15,11 +17,20 @@ import {RecurringActionDialog} from './recurring-action-dialog';
 import type {RecurringAction} from './recurring-action-dialog';
 import {parseOccurrenceDate, occurrenceDateToString} from './calendar-utils';
 
+type CalendarOption = {
+    id: string;
+    name: string;
+    color: string;
+    ownerId: string;
+}
+
 type EditEventDialogProps = {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     event: CalendarEventOccurrence | null;
     ownerUserId?: string;
+    calendars?: CalendarItem[];
+    sharedCalendars?: SharedCalendar[];
 }
 
 function toLocalDateString(date: Date): string {
@@ -46,11 +57,25 @@ function truncateRRule(rruleStr: string, beforeDate: Date): string {
     return result.replace(/^RRULE:/, '');
 }
 
-export function EditEventDialog({open, onOpenChange, event, ownerUserId}: EditEventDialogProps) {
+export function EditEventDialog({open, onOpenChange, event, ownerUserId, calendars: calendarsProp, sharedCalendars: sharedCalendarsProp}: EditEventDialogProps) {
     const {user} = useAuth();
-    const eventOwnerId = ownerUserId || user?.id || '';
-    const updateEvent = useUpdateEvent(eventOwnerId);
-    const createEvent = useCreateEvent(eventOwnerId);
+    const ownerId = user?.id || '';
+    const eventOwnerId = ownerUserId || ownerId;
+
+    const {data: fetchedCalendars = []} = useCalendars(ownerId);
+    const {data: fetchedSharedCalendars = []} = useSharedCalendars(ownerId);
+    const calendars = calendarsProp || fetchedCalendars;
+    const sharedCalendars = sharedCalendarsProp || fetchedSharedCalendars;
+
+    const calendarOptions = useMemo(() => {
+        const options: CalendarOption[] = calendars.map(c => ({id: c.id, name: c.name, color: c.color, ownerId}));
+        for (const sc of sharedCalendars) {
+            if (sc.permission === 'write') {
+                options.push({id: sc.calendarId, name: sc.calendarName, color: sc.color || sc.calendarColor, ownerId: sc.ownerUserId});
+            }
+        }
+        return options;
+    }, [calendars, sharedCalendars, ownerId]);
 
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
@@ -61,8 +86,16 @@ export function EditEventDialog({open, onOpenChange, event, ownerUserId}: EditEv
     const [endDate, setEndDate] = useState('');
     const [endTime, setEndTime] = useState('');
     const [rruleString, setRruleString] = useState<string | null>(null);
+    const [selectedCalKey, setSelectedCalKey] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [showRecurringDialog, setShowRecurringDialog] = useState(false);
+
+    const selectedCal = calendarOptions.find(c => `${c.ownerId}:${c.id}` === selectedCalKey);
+    const calendarChanged = event ? (selectedCal?.id !== event.calendarId || selectedCal?.ownerId !== eventOwnerId) : false;
+
+    const updateEvent = useUpdateEvent(eventOwnerId);
+    const createEvent = useCreateEvent(selectedCal?.ownerId || eventOwnerId);
+    const deleteEventOnSource = useDeleteEvent(eventOwnerId);
 
     useEffect(() => {
         if (event && open) {
@@ -71,6 +104,9 @@ export function EditEventDialog({open, onOpenChange, event, ownerUserId}: EditEv
             setLocation(event.location || '');
             setAllDay(event.allDay);
             setRruleString(event.rrule);
+
+            const currentCal = calendarOptions.find(c => c.id === event.calendarId && c.ownerId === eventOwnerId);
+            setSelectedCalKey(currentCal ? `${currentCal.ownerId}:${currentCal.id}` : calendarOptions[0] ? `${calendarOptions[0].ownerId}:${calendarOptions[0].id}` : '');
 
             if (event.allDay) {
                 const sd = new Date(event.startTime * 1000);
@@ -88,7 +124,7 @@ export function EditEventDialog({open, onOpenChange, event, ownerUserId}: EditEv
                 setEndTime(toLocalTimeString(ed));
             }
         }
-    }, [event, open]);
+    }, [event, open, calendarOptions, eventOwnerId]);
 
     if (!event) return null;
 
@@ -115,11 +151,26 @@ export function EditEventDialog({open, onOpenChange, event, ownerUserId}: EditEv
 
     const handleSaveClick = () => {
         if (!title.trim()) return;
-        if (isRecurring) {
+        if (isRecurring && !calendarChanged) {
             setShowRecurringDialog(true);
         } else {
             doSave('all');
         }
+    };
+
+    const moveEvent = async (updates: Record<string, any>) => {
+        if (!selectedCal) return;
+        await createEvent.mutateAsync({
+            calendarId: selectedCal.id,
+            title: updates.title,
+            startTime: updates.startTime,
+            endTime: updates.endTime,
+            allDay: Boolean(updates.allDay),
+            description: updates.description,
+            location: updates.location,
+            rrule: updates.rrule,
+        });
+        await deleteEventOnSource.mutateAsync(event.parentEventId || event.id);
     };
 
     const doSave = async (action: RecurringAction) => {
@@ -136,7 +187,9 @@ export function EditEventDialog({open, onOpenChange, event, ownerUserId}: EditEv
                 rrule: rruleString,
             };
 
-            if (action === 'all') {
+            if (calendarChanged) {
+                await moveEvent(updates);
+            } else if (action === 'all') {
                 const targetId = event.parentEventId || event.id;
                 await updateEvent.mutateAsync({id: targetId, ...updates});
             } else if (action === 'this') {
@@ -194,70 +247,99 @@ export function EditEventDialog({open, onOpenChange, event, ownerUserId}: EditEv
                             />
                         </div>
 
-                        <div className="space-y-3">
-                            {allDay ? (
-                                <div className="flex items-center gap-2">
-                                    <Input type="date" value={startDate}
-                                           onChange={(e) => setStartDate(e.target.value)} className="flex-1 h-8 text-sm"/>
-                                    <span className="text-muted-foreground text-sm">to</span>
-                                    <Input type="date" value={endDate}
-                                           onChange={(e) => setEndDate(e.target.value)} className="flex-1 h-8 text-sm"/>
-                                </div>
-                            ) : (
-                                <div className="flex items-center gap-2">
-                                    <Input type="date" value={startDate}
-                                           onChange={(e) => {
-                                               setStartDate(e.target.value);
-                                               setEndDate(e.target.value);
-                                           }}
-                                           className="h-8 text-sm"/>
-                                    <TimeSelect value={startTime} onChange={handleStartTimeChange}/>
-                                    <span className="text-muted-foreground text-sm">–</span>
-                                    <TimeSelect value={endTime} onChange={setEndTime} referenceTime={startTime}/>
-                                </div>
-                            )}
+                        <div className="flex items-start gap-3">
+                            <Clock className="h-4 w-4 mt-2 text-muted-foreground shrink-0"/>
+                            <div className="flex-1 space-y-3">
+                                {allDay ? (
+                                    <div className="flex items-center gap-2">
+                                        <Input type="date" value={startDate}
+                                               onChange={(e) => setStartDate(e.target.value)} className="flex-1 h-8 text-sm"/>
+                                        <span className="text-muted-foreground text-sm">to</span>
+                                        <Input type="date" value={endDate}
+                                               onChange={(e) => setEndDate(e.target.value)} className="flex-1 h-8 text-sm"/>
+                                    </div>
+                                ) : (
+                                    <div className="flex items-center gap-2">
+                                        <Input type="date" value={startDate}
+                                               onChange={(e) => {
+                                                   setStartDate(e.target.value);
+                                                   setEndDate(e.target.value);
+                                               }}
+                                               className="h-8 text-sm"/>
+                                        <TimeSelect value={startTime} onChange={handleStartTimeChange}/>
+                                        <span className="text-muted-foreground text-sm">–</span>
+                                        <TimeSelect value={endTime} onChange={setEndTime} referenceTime={startTime}/>
+                                    </div>
+                                )}
 
-                            <div className="flex items-center gap-4">
-                                <div className="flex items-center gap-2">
-                                    <Checkbox
-                                        id="edit-all-day"
-                                        checked={allDay}
-                                        onCheckedChange={(checked) => {
-                                            const isAllDay = !!checked;
-                                            setAllDay(isAllDay);
-                                            if (!isAllDay) {
-                                                const now = roundToNext15Minutes(new Date());
-                                                setStartTime(toLocalTimeString(now));
-                                                setEndTime(addMinutes(toLocalTimeString(now), 30));
-                                            }
-                                        }}
+                                <div className="flex items-center gap-4">
+                                    <div className="flex items-center gap-2">
+                                        <Checkbox
+                                            id="edit-all-day"
+                                            checked={allDay}
+                                            onCheckedChange={(checked) => {
+                                                const isAllDay = !!checked;
+                                                setAllDay(isAllDay);
+                                                if (!isAllDay) {
+                                                    const now = roundToNext15Minutes(new Date());
+                                                    setStartTime(toLocalTimeString(now));
+                                                    setEndTime(addMinutes(toLocalTimeString(now), 30));
+                                                }
+                                            }}
+                                        />
+                                        <Label htmlFor="edit-all-day">All day</Label>
+                                    </div>
+                                    <RecurrencePicker
+                                        value={rruleString}
+                                        onChange={setRruleString}
+                                        startDate={new Date(startDate)}
                                     />
-                                    <Label htmlFor="edit-all-day">All day</Label>
                                 </div>
-                                <RecurrencePicker
-                                    value={rruleString}
-                                    onChange={setRruleString}
-                                    startDate={new Date(startDate)}
-                                />
                             </div>
                         </div>
 
-                        <div>
+                        <div className="flex items-start gap-3">
+                            <MapPin className="h-4 w-4 mt-2.5 text-muted-foreground shrink-0"/>
                             <Input
                                 placeholder="Location"
                                 value={location}
                                 onChange={(e) => setLocation(e.target.value)}
+                                className="flex-1"
                             />
                         </div>
 
-                        <div>
+                        <div className="flex items-start gap-3">
+                            <AlignLeft className="h-4 w-4 mt-2.5 text-muted-foreground shrink-0"/>
                             <Textarea
                                 placeholder="Description"
                                 value={description}
                                 onChange={(e) => setDescription(e.target.value)}
                                 rows={3}
+                                className="flex-1"
                             />
                         </div>
+
+                        {calendarOptions.length > 1 && (
+                            <div className="flex items-center gap-3">
+                                <Calendar className="h-4 w-4 text-muted-foreground shrink-0"/>
+                                <Select value={selectedCalKey} onValueChange={setSelectedCalKey}>
+                                    <SelectTrigger className="flex-1">
+                                        <SelectValue placeholder="Select calendar"/>
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {calendarOptions.map((cal) => (
+                                            <SelectItem key={`${cal.ownerId}:${cal.id}`} value={`${cal.ownerId}:${cal.id}`}>
+                                                <div className="flex items-center gap-2">
+                                                    <div className="h-3 w-3 rounded-full shrink-0"
+                                                         style={{backgroundColor: cal.color}}/>
+                                                    {cal.name}
+                                                </div>
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        )}
                     </div>
 
                     <DialogFooter>

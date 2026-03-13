@@ -1,4 +1,5 @@
-import {useEffect, useState} from 'react';
+import {useEffect, useMemo, useState} from 'react';
+import {Clock, MapPin, AlignLeft, Calendar} from 'lucide-react';
 import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle} from '@workspace/ui/components/dialog';
 import {Button} from '@workspace/ui/components/button';
 import {Input} from '@workspace/ui/components/input';
@@ -6,10 +7,17 @@ import {Textarea} from '@workspace/ui/components/textarea';
 import {Label} from '@workspace/ui/components/label';
 import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '@workspace/ui/components/select';
 import {Checkbox} from '@workspace/ui/components/checkbox';
-import {useCalendars, useCreateEvent} from '@workspace/lib/calendar';
+import {useCalendars, useSharedCalendars, useCreateEvent} from '@workspace/lib/calendar';
 import {useAuth} from '@workspace/lib/auth';
 import {RecurrencePicker} from './recurrence-picker';
 import {TimeSelect, roundToNext15Minutes, addMinutes} from './time-select';
+
+type CalendarOption = {
+    id: string;
+    name: string;
+    color: string;
+    ownerId: string;
+}
 
 type CreateEventDialogProps = {
     open: boolean;
@@ -33,12 +41,22 @@ export function CreateEventDialog({open, onOpenChange, defaultDate, defaultCalen
     const {user} = useAuth();
     const ownerId = user?.id || '';
     const {data: calendars = []} = useCalendars(ownerId);
-    const createEvent = useCreateEvent(ownerId);
+    const {data: sharedCalendars = []} = useSharedCalendars(ownerId);
+
+    const calendarOptions = useMemo(() => {
+        const options: CalendarOption[] = calendars.map(c => ({id: c.id, name: c.name, color: c.color, ownerId}));
+        for (const sc of sharedCalendars) {
+            if (sc.permission === 'write') {
+                options.push({id: sc.calendarId, name: sc.calendarName, color: sc.color || sc.calendarColor, ownerId: sc.ownerUserId});
+            }
+        }
+        return options;
+    }, [calendars, sharedCalendars, ownerId]);
 
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
     const [location, setLocation] = useState('');
-    const [calendarId, setCalendarId] = useState('');
+    const [selectedCalKey, setSelectedCalKey] = useState('');
     const [allDay, setAllDay] = useState(false);
     const [startDate, setStartDate] = useState('');
     const [endDate, setEndDate] = useState('');
@@ -46,6 +64,9 @@ export function CreateEventDialog({open, onOpenChange, defaultDate, defaultCalen
     const [endTime, setEndTime] = useState('09:30');
     const [rruleString, setRruleString] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
+
+    const selectedCal = calendarOptions.find(c => `${c.ownerId}:${c.id}` === selectedCalKey);
+    const createEvent = useCreateEvent(selectedCal?.ownerId || ownerId);
 
     useEffect(() => {
         if (open) {
@@ -58,7 +79,10 @@ export function CreateEventDialog({open, onOpenChange, defaultDate, defaultCalen
             setTitle('');
             setDescription('');
             setLocation('');
-            setCalendarId(defaultCalendarId || (calendars.length > 0 ? calendars[0].id : ''));
+            const defaultCal = defaultCalendarId
+                ? calendarOptions.find(c => c.id === defaultCalendarId)
+                : calendarOptions[0];
+            setSelectedCalKey(defaultCal ? `${defaultCal.ownerId}:${defaultCal.id}` : '');
             setAllDay(false);
             setStartDate(dateStr);
             setEndDate(dateStr);
@@ -66,7 +90,7 @@ export function CreateEventDialog({open, onOpenChange, defaultDate, defaultCalen
             setEndTime(end);
             setRruleString(null);
         }
-    }, [open, defaultDate, defaultCalendarId, calendars]);
+    }, [open, defaultDate, defaultCalendarId, calendarOptions]);
 
     const handleStartTimeChange = (newStart: string) => {
         setStartTime(newStart);
@@ -74,7 +98,7 @@ export function CreateEventDialog({open, onOpenChange, defaultDate, defaultCalen
     };
 
     const handleSubmit = async () => {
-        if (!title.trim() || !calendarId) return;
+        if (!title.trim() || !selectedCal) return;
 
         setIsLoading(true);
         try {
@@ -95,7 +119,7 @@ export function CreateEventDialog({open, onOpenChange, defaultDate, defaultCalen
             }
 
             await createEvent.mutateAsync({
-                calendarId,
+                calendarId: selectedCal.id,
                 title: title.trim(),
                 startTime: startTimestamp,
                 endTime: endTimestamp,
@@ -130,81 +154,88 @@ export function CreateEventDialog({open, onOpenChange, defaultDate, defaultCalen
                         />
                     </div>
 
-                    <div className="space-y-3">
-                        {allDay ? (
-                            <div className="flex items-center gap-2">
-                                <Input type="date" value={startDate}
-                                       onChange={(e) => setStartDate(e.target.value)} className="flex-1 h-8 text-sm"/>
-                                <span className="text-muted-foreground text-sm">to</span>
-                                <Input type="date" value={endDate}
-                                       onChange={(e) => setEndDate(e.target.value)} className="flex-1 h-8 text-sm"/>
-                            </div>
-                        ) : (
-                            <div className="flex items-center gap-2">
-                                <Input type="date" value={startDate}
-                                       onChange={(e) => {
-                                           setStartDate(e.target.value);
-                                           setEndDate(e.target.value);
-                                       }}
-                                       className="h-8 text-sm"/>
-                                <TimeSelect value={startTime} onChange={handleStartTimeChange}/>
-                                <span className="text-muted-foreground text-sm">–</span>
-                                <TimeSelect value={endTime} onChange={setEndTime} referenceTime={startTime}/>
-                            </div>
-                        )}
+                    <div className="flex items-start gap-3">
+                        <Clock className="h-4 w-4 mt-2 text-muted-foreground shrink-0"/>
+                        <div className="flex-1 space-y-3">
+                            {allDay ? (
+                                <div className="flex items-center gap-2">
+                                    <Input type="date" value={startDate}
+                                           onChange={(e) => setStartDate(e.target.value)} className="flex-1 h-8 text-sm"/>
+                                    <span className="text-muted-foreground text-sm">to</span>
+                                    <Input type="date" value={endDate}
+                                           onChange={(e) => setEndDate(e.target.value)} className="flex-1 h-8 text-sm"/>
+                                </div>
+                            ) : (
+                                <div className="flex items-center gap-2">
+                                    <Input type="date" value={startDate}
+                                           onChange={(e) => {
+                                               setStartDate(e.target.value);
+                                               setEndDate(e.target.value);
+                                           }}
+                                           className="h-8 text-sm"/>
+                                    <TimeSelect value={startTime} onChange={handleStartTimeChange}/>
+                                    <span className="text-muted-foreground text-sm">–</span>
+                                    <TimeSelect value={endTime} onChange={setEndTime} referenceTime={startTime}/>
+                                </div>
+                            )}
 
-                        <div className="flex items-center gap-4">
-                            <div className="flex items-center gap-2">
-                                <Checkbox
-                                    id="all-day"
-                                    checked={allDay}
-                                    onCheckedChange={(checked) => {
-                                        const isAllDay = !!checked;
-                                        setAllDay(isAllDay);
-                                        if (!isAllDay) {
-                                            const now = roundToNext15Minutes(new Date());
-                                            setStartTime(toTimeString(now));
-                                            setEndTime(addMinutes(toTimeString(now), 30));
-                                        }
-                                    }}
+                            <div className="flex items-center gap-4">
+                                <div className="flex items-center gap-2">
+                                    <Checkbox
+                                        id="all-day"
+                                        checked={allDay}
+                                        onCheckedChange={(checked) => {
+                                            const isAllDay = !!checked;
+                                            setAllDay(isAllDay);
+                                            if (!isAllDay) {
+                                                const now = roundToNext15Minutes(new Date());
+                                                setStartTime(toTimeString(now));
+                                                setEndTime(addMinutes(toTimeString(now), 30));
+                                            }
+                                        }}
+                                    />
+                                    <Label htmlFor="all-day">All day</Label>
+                                </div>
+                                <RecurrencePicker
+                                    value={rruleString}
+                                    onChange={setRruleString}
+                                    startDate={new Date(startDate)}
                                 />
-                                <Label htmlFor="all-day">All day</Label>
                             </div>
-                            <RecurrencePicker
-                                value={rruleString}
-                                onChange={setRruleString}
-                                startDate={new Date(startDate)}
-                            />
                         </div>
                     </div>
 
-                    <div>
+                    <div className="flex items-start gap-3">
+                        <MapPin className="h-4 w-4 mt-2.5 text-muted-foreground shrink-0"/>
                         <Input
                             placeholder="Add location"
                             value={location}
                             onChange={(e) => setLocation(e.target.value)}
+                            className="flex-1"
                         />
                     </div>
 
-                    <div>
+                    <div className="flex items-start gap-3">
+                        <AlignLeft className="h-4 w-4 mt-2.5 text-muted-foreground shrink-0"/>
                         <Textarea
                             placeholder="Add description"
                             value={description}
                             onChange={(e) => setDescription(e.target.value)}
                             rows={3}
+                            className="flex-1"
                         />
                     </div>
 
-                    {calendars.length > 1 && (
+                    {calendarOptions.length > 1 && (
                         <div className="flex items-center gap-3">
-                            <Label className="w-20 shrink-0">Calendar</Label>
-                            <Select value={calendarId} onValueChange={setCalendarId}>
+                            <Calendar className="h-4 w-4 text-muted-foreground shrink-0"/>
+                            <Select value={selectedCalKey} onValueChange={setSelectedCalKey}>
                                 <SelectTrigger className="flex-1">
                                     <SelectValue placeholder="Select calendar"/>
                                 </SelectTrigger>
                                 <SelectContent>
-                                    {calendars.map((cal) => (
-                                        <SelectItem key={cal.id} value={cal.id}>
+                                    {calendarOptions.map((cal) => (
+                                        <SelectItem key={`${cal.ownerId}:${cal.id}`} value={`${cal.ownerId}:${cal.id}`}>
                                             <div className="flex items-center gap-2">
                                                 <div className="h-3 w-3 rounded-full shrink-0"
                                                      style={{backgroundColor: cal.color}}/>
