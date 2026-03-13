@@ -7,6 +7,7 @@ import {handleDriveSSEvent} from '@workspace/lib/drive';
 import {handleMailSSEvent} from '@workspace/lib/mail';
 import {handleContactsSSEvent} from '@workspace/lib/contacts';
 import {handleChatSSEvent} from '@workspace/lib/chat';
+import {handleCalendarSSEvent} from '@workspace/lib/calendar';
 
 type UseSSEOptions = {
     onNotification?: (event: SSEvent & SSEventNotification) => void;
@@ -27,6 +28,7 @@ export function useSSE(options: UseSSEOptions = {}) {
         handleMailSSEvent(event, queryClient);
         handleContactsSSEvent(event, queryClient);
         handleChatSSEvent(event, queryClient);
+        handleCalendarSSEvent(event, queryClient);
     }, [onNotification, queryClient]);
 
     useEffect(() => {

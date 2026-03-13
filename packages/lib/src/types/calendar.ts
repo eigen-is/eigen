@@ -66,6 +66,48 @@ export type FreeBusyBlock = {
     status: 'confirmed' | 'tentative'
 }
 
+export type CreateEventInput = {
+    calendarId: string
+    ownerId?: string
+    title: string
+    startTime: number
+    endTime: number
+    allDay: boolean
+    description?: string | null
+    location?: string | null
+    rrule?: string | null
+    parentEventId?: string | null
+    recurrenceDate?: string | null
+    status?: 'confirmed' | 'tentative' | 'cancelled'
+    data?: EventData | null
+}
+
+export type UpdateEventInput = {
+    id: string
+    title?: string
+    startTime?: number
+    endTime?: number
+    allDay?: boolean
+    description?: string | null
+    location?: string | null
+    rrule?: string | null
+    status?: 'confirmed' | 'tentative' | 'cancelled'
+    data?: EventData | null
+}
+
+export type UpdateCalendarInput = {
+    id: string
+    name?: string
+    color?: string
+    shares?: CalendarShare[] | null
+}
+
+export type UpdateSharedCalendarInput = {
+    id: string
+    color?: string | null
+    visible?: boolean
+}
+
 export type SharedCalendar = {
     id: string
     ownerUserId: string
