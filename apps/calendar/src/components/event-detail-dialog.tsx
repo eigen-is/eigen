@@ -208,7 +208,7 @@ export function EventDetailDialog({open, onOpenChange, event, calendar, sharedCa
                                 <div>
                                     <div className="text-sm text-muted-foreground">{calendarName}</div>
                                     {isShared && sharedCalendar && (
-                                        <div className="text-xs text-muted-foreground">Created by: <UserName userId={sharedCalendar.ownerUserId}/></div>
+                                        <div className="text-xs text-muted-foreground">Created by: <UserName userId={event.createByUserId}/></div>
                                     )}
                                 </div>
                             </div>
