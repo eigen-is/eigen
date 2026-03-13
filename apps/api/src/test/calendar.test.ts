@@ -382,6 +382,45 @@ describe('Calendar', () => {
             }
         });
 
+        test('cancel a single occurrence with ISO datetime recurrenceDate (FE format)', async () => {
+            const from = 1741737600;
+            const to = from + 28 * 86400;
+
+            const beforeRes = await authedRequest(ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events/${from}/${to}`);
+            const beforeEvents = await beforeRes.json() as any[];
+            const weeklySyncs = beforeEvents.filter((e: any) =>
+                e.title === 'Weekly Sync' && !e.parentEventId);
+            const target = weeklySyncs[0];
+
+            if (target) {
+                const isoDate = new Date(target.occurrenceDate).toISOString();
+
+                const cancelRes = await authedRequest(ctx.alice.user.sessionToken,
+                    `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`, {
+                        method: 'POST',
+                        headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({
+                            title: target.title,
+                            startTime: target.startTime,
+                            endTime: target.endTime,
+                            allDay: false,
+                            parentEventId: aliceRecurringEventId,
+                            recurrenceDate: isoDate,
+                            status: 'cancelled',
+                        }),
+                    });
+                expect(cancelRes.status).toBe(200);
+
+                const afterRes = await authedRequest(ctx.alice.user.sessionToken,
+                    `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events/${from}/${to}`);
+                const afterEvents = await afterRes.json() as any[];
+                const afterSyncs = afterEvents.filter((e: any) =>
+                    e.title === 'Weekly Sync' && e.occurrenceDate === target.occurrenceDate && !e.parentEventId);
+                expect(afterSyncs.length).toBe(0);
+            }
+        });
+
         test('modify a single occurrence', async () => {
             const from = 1741737600;
             const to = from + 28 * 86400;

@@ -351,10 +351,11 @@ export class Calendar {
 
             for (const exc of parentExceptions) {
                 if (exc.recurrenceDate) {
+                    const dateKey = exc.recurrenceDate.substring(0, 10);
                     if (exc.status === 'cancelled') {
-                        cancelledDates.add(exc.recurrenceDate);
+                        cancelledDates.add(dateKey);
                     } else {
-                        modifiedDates.set(exc.recurrenceDate, exc);
+                        modifiedDates.set(dateKey, exc);
                     }
                 }
             }
