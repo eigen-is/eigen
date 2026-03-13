@@ -10,6 +10,7 @@ import {rruleToText} from './recurrence-picker';
 import {EditEventDialog} from './edit-event-dialog';
 import {RecurringActionDialog} from './recurring-action-dialog';
 import type {RecurringAction} from './recurring-action-dialog';
+import {parseOccurrenceDate, occurrenceDateToString} from './calendar-utils';
 
 type EventDetailDialogProps = {
     open: boolean;
@@ -100,7 +101,7 @@ export function EventDetailDialog({open, onOpenChange, event, calendar}: EventDe
                         endTime: event.endTime,
                         allDay: Boolean(event.allDay),
                         parentEventId: event.id,
-                        recurrenceDate: event.occurrenceDate,
+                        recurrenceDate: occurrenceDateToString(event.occurrenceDate),
                         status: 'cancelled',
                     });
                 } else {
@@ -108,9 +109,10 @@ export function EventDetailDialog({open, onOpenChange, event, calendar}: EventDe
                 }
             } else if (action === 'this-and-following') {
                 const parentId = event.parentEventId || event.id;
-                const occDate = new Date(event.occurrenceDate + 'T00:00:00Z');
-                if (event.rrule) {
-                    const truncated = truncateRRule(event.rrule, occDate);
+                const occDate = parseOccurrenceDate(event.occurrenceDate);
+                const rrule = event.rrule || (isException && event.parentEventId ? null : null);
+                if (rrule) {
+                    const truncated = truncateRRule(rrule, occDate);
                     await updateEvent.mutateAsync({id: parentId, rrule: truncated});
                 }
             } else if (action === 'all') {

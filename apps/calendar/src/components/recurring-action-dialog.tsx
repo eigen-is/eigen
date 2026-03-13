@@ -38,7 +38,7 @@ export function RecurringActionDialog({open, onOpenChange, title, onConfirm}: Re
                     </div>
                     <div className="flex items-center gap-2">
                         <RadioGroupItem value="all" id="recurring-all"/>
-                        <Label htmlFor="recurring-all" className="cursor-pointer">All events</Label>
+                        <Label htmlFor="recurring-all" className="cursor-pointer">All events All events in series</Label>
                     </div>
                 </RadioGroup>
 

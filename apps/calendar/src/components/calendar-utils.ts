@@ -101,3 +101,17 @@ export function getCalendarColor(event: CalendarEventOccurrence, calendars: Cale
 }
 
 export const WEEKDAY_HEADERS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
+
+export function parseOccurrenceDate(value: unknown): Date {
+    if (value instanceof Date) return value;
+    const str = String(value);
+    if (str.length === 10) return new Date(str + 'T00:00:00Z');
+    return new Date(str);
+}
+
+export function occurrenceDateToString(value: unknown): string {
+    if (value instanceof Date) {
+        return `${value.getUTCFullYear()}-${String(value.getUTCMonth() + 1).padStart(2, '0')}-${String(value.getUTCDate()).padStart(2, '0')}`;
+    }
+    return String(value).substring(0, 10);
+}
