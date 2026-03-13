@@ -100,16 +100,16 @@ export function WeekView({currentDate, events, calendars, sharedCalendars, onDay
                                         return (
                                             <div
                                                 key={`${event.id}-${event.occurrenceDate}-${idx}`}
-                                                className="text-xs leading-tight flex items-start gap-1.5 py-0.5 px-0.5 cursor-pointer hover:bg-accent rounded"
+                                                className="text-sm leading-tight flex items-start gap-1.5 py-0.5 px-0.5 cursor-pointer hover:bg-accent rounded"
                                                 onClick={(e) => handleEventClick(event, e)}
                                                 title={event.title}
                                             >
-                                                <div className="h-2 w-2 rounded-full shrink-0 mt-0.5" style={{backgroundColor: color}}/>
+                                                <div className="h-2 w-2 rounded-full shrink-0 mt-1.5" style={{backgroundColor: color}}/>
                                                 <div className="min-w-0">
-                                                    <div className="text-muted-foreground text-[10px]">{formatEventTime(event)}</div>
+                                                    <div className="text-muted-foreground text-sm">{formatEventTime(event)}</div>
                                                     <div className="truncate font-medium">{event.title}</div>
                                                     {event.location && (
-                                                        <div className="text-muted-foreground text-[10px] truncate">{event.location}</div>
+                                                        <div className="text-muted-foreground text-sm truncate">{event.location}</div>
                                                     )}
                                                 </div>
                                             </div>
