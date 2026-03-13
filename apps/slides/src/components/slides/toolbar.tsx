@@ -11,7 +11,6 @@ import {
     Trash2,
     Type,
     Undo,
-    UserPlus,
     UserRoundPlus
 } from 'lucide-react';
 import {Button} from '@workspace/ui/components/button';
@@ -23,7 +22,7 @@ import {
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
 import {Separator} from '@workspace/ui/components/separator';
-import {TooltipButton} from '@workspace/ui';
+import {Toolbar as SharedToolbar, TooltipButton} from '@workspace/ui';
 import {DocumentModeButton} from '@workspace/ui/components/layout/toolbar/document-mode-button';
 import {RevisionHistory} from '@workspace/ui/components/layout/collab/revision-history';
 import * as Y from 'yjs';
@@ -89,8 +88,8 @@ export function Toolbar({
     }, [undoManager, canWrite]);
 
     return (
-        <div className="bg-white h-12 flex items-center justify-between px-4 border-b no-print">
-            <div className="flex items-center gap-1">
+        <SharedToolbar>
+            <div className="flex items-center">
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
                         <Button variant="ghost" title="File">File</Button>
@@ -156,7 +155,7 @@ export function Toolbar({
                 )}
             </div>
 
-            <div className="flex items-center gap-1">
+            <div className="flex items-center">
                 <TooltipButton
                     icon={Play}
                     tooltipText="Present"
@@ -165,7 +164,7 @@ export function Toolbar({
                 <RevisionHistory path={path} onRestore={onRestore}/>
                 {canWrite ? (
                     <TooltipButton
-                        icon={UserPlus}
+                        icon={UserRoundPlus}
                         tooltipText="Share"
                         onClick={onAccessDialogOpen}
                     />
@@ -198,6 +197,6 @@ export function Toolbar({
                     onOpenChange={setRenameDialogOpen}
                 />
             )}
-        </div>
+        </SharedToolbar>
     );
 }
