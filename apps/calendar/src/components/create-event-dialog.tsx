@@ -8,21 +8,13 @@ import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '@wo
 import {Checkbox} from '@workspace/ui/components/checkbox';
 import {useCalendars, useCreateEvent} from '@workspace/lib/calendar';
 import {RecurrencePicker} from './recurrence-picker';
+import {TimeSelect, roundToNext15Minutes, addMinutes} from './time-select';
 
 type CreateEventDialogProps = {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     defaultDate?: Date;
     defaultCalendarId?: string;
-}
-
-function toLocalDateTimeString(date: Date): string {
-    const y = date.getFullYear();
-    const m = String(date.getMonth() + 1).padStart(2, '0');
-    const d = String(date.getDate()).padStart(2, '0');
-    const h = String(date.getHours()).padStart(2, '0');
-    const min = String(date.getMinutes()).padStart(2, '0');
-    return `${y}-${m}-${d}T${h}:${min}`;
 }
 
 function toLocalDateString(date: Date): string {
@@ -32,50 +24,51 @@ function toLocalDateString(date: Date): string {
     return `${y}-${m}-${d}`;
 }
 
+function toTimeString(date: Date): string {
+    return `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`;
+}
+
 export function CreateEventDialog({open, onOpenChange, defaultDate, defaultCalendarId}: CreateEventDialogProps) {
     const {data: calendars = []} = useCalendars();
     const createEvent = useCreateEvent();
-
-    const now = defaultDate || new Date();
-    const startDefault = new Date(now);
-    startDefault.setMinutes(0, 0, 0);
-    startDefault.setHours(startDefault.getHours() + 1);
-    const endDefault = new Date(startDefault);
-    endDefault.setMinutes(30);
 
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
     const [location, setLocation] = useState('');
     const [calendarId, setCalendarId] = useState('');
     const [allDay, setAllDay] = useState(false);
-    const [startDate, setStartDate] = useState(toLocalDateString(startDefault));
-    const [startTime, setStartTime] = useState(toLocalDateTimeString(startDefault).split('T')[1]);
-    const [endDate, setEndDate] = useState(toLocalDateString(endDefault));
-    const [endTime, setEndTime] = useState(toLocalDateTimeString(endDefault).split('T')[1]);
+    const [startDate, setStartDate] = useState('');
+    const [endDate, setEndDate] = useState('');
+    const [startTime, setStartTime] = useState('09:00');
+    const [endTime, setEndTime] = useState('09:30');
     const [rruleString, setRruleString] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
 
     useEffect(() => {
         if (open) {
-            const d = defaultDate || new Date();
-            const s = new Date(d);
-            s.setMinutes(0, 0, 0);
-            s.setHours(s.getHours() + 1);
-            const e = new Date(s);
-            e.setMinutes(30);
+            const now = defaultDate || new Date();
+            const rounded = roundToNext15Minutes(now);
+            const dateStr = toLocalDateString(rounded);
+            const start = toTimeString(rounded);
+            const end = addMinutes(start, 30);
 
             setTitle('');
             setDescription('');
             setLocation('');
             setCalendarId(defaultCalendarId || (calendars.length > 0 ? calendars[0].id : ''));
             setAllDay(false);
-            setStartDate(toLocalDateString(s));
-            setStartTime(toLocalDateTimeString(s).split('T')[1]);
-            setEndDate(toLocalDateString(e));
-            setEndTime(toLocalDateTimeString(e).split('T')[1]);
+            setStartDate(dateStr);
+            setEndDate(dateStr);
+            setStartTime(start);
+            setEndTime(end);
             setRruleString(null);
         }
     }, [open, defaultDate, defaultCalendarId, calendars]);
+
+    const handleStartTimeChange = (newStart: string) => {
+        setStartTime(newStart);
+        setEndTime(addMinutes(newStart, 30));
+    };
 
     const handleSubmit = async () => {
         if (!title.trim() || !calendarId) return;
@@ -156,47 +149,45 @@ export function CreateEventDialog({open, onOpenChange, defaultDate, defaultCalen
                         </div>
                     )}
 
-                    <div className="space-y-2">
-                        <div className="flex items-center gap-2">
-                            <Checkbox
-                                id="all-day"
-                                checked={allDay}
-                                onCheckedChange={(checked) => setAllDay(!!checked)}
-                            />
-                            <Label htmlFor="all-day">All day</Label>
-                        </div>
-
+                    <div className="space-y-3">
                         {allDay ? (
                             <div className="flex items-center gap-2">
                                 <Input type="date" value={startDate}
                                        onChange={(e) => setStartDate(e.target.value)} className="flex-1"/>
-                                <span className="text-muted-foreground">—</span>
+                                <span className="text-muted-foreground text-sm">to</span>
                                 <Input type="date" value={endDate}
                                        onChange={(e) => setEndDate(e.target.value)} className="flex-1"/>
                             </div>
                         ) : (
-                            <div className="space-y-2">
-                                <div className="flex items-center gap-2">
-                                    <Input type="date" value={startDate}
-                                           onChange={(e) => setStartDate(e.target.value)} className="flex-1"/>
-                                    <Input type="time" value={startTime}
-                                           onChange={(e) => setStartTime(e.target.value)} className="w-28"/>
-                                </div>
-                                <div className="flex items-center gap-2">
-                                    <Input type="date" value={endDate}
-                                           onChange={(e) => setEndDate(e.target.value)} className="flex-1"/>
-                                    <Input type="time" value={endTime}
-                                           onChange={(e) => setEndTime(e.target.value)} className="w-28"/>
-                                </div>
+                            <div className="flex items-center gap-2 flex-wrap">
+                                <Input type="date" value={startDate}
+                                       onChange={(e) => {
+                                           setStartDate(e.target.value);
+                                           setEndDate(e.target.value);
+                                       }}
+                                       className="w-[160px]"/>
+                                <TimeSelect value={startTime} onChange={handleStartTimeChange}/>
+                                <span className="text-muted-foreground">–</span>
+                                <TimeSelect value={endTime} onChange={setEndTime} referenceTime={startTime}/>
                             </div>
                         )}
-                    </div>
 
-                    <RecurrencePicker
-                        value={rruleString}
-                        onChange={setRruleString}
-                        startDate={new Date(startDate)}
-                    />
+                        <div className="flex items-center gap-4">
+                            <div className="flex items-center gap-2">
+                                <Checkbox
+                                    id="all-day"
+                                    checked={allDay}
+                                    onCheckedChange={(checked) => setAllDay(!!checked)}
+                                />
+                                <Label htmlFor="all-day">All day</Label>
+                            </div>
+                            <RecurrencePicker
+                                value={rruleString}
+                                onChange={setRruleString}
+                                startDate={new Date(startDate)}
+                            />
+                        </div>
+                    </div>
 
                     <div>
                         <Input
