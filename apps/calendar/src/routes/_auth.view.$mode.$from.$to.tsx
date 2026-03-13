@@ -1,7 +1,7 @@
 import {createFileRoute, useNavigate} from '@tanstack/react-router'
 import {useCallback, useMemo, useState} from 'react';
 import {Column, ColumnLayout} from "@workspace/ui/components/layout";
-import {useCalendars, useEvents, useSharedCalendars} from '@workspace/lib/calendar';
+import {useCalendars, useEvents, useSharedCalendars, useAllSharedCalendarEvents} from '@workspace/lib/calendar';
 import {CalendarToolbar} from '../components/calendar-toolbar';
 import {MonthView} from '../components/month-view';
 import {WeekView} from '../components/week-view';
@@ -26,7 +26,7 @@ function CalendarView() {
     const [createEventDate, setCreateEventDate] = useState<Date | undefined>();
 
     const {data: calendars = []} = useCalendars();
-    useSharedCalendars();
+    const {data: sharedCalendars = []} = useSharedCalendars();
 
     const currentDate = useMemo(() => {
         const midTs = (from + to) / 2;
@@ -38,14 +38,16 @@ function CalendarView() {
     }, [from, to, viewMode]);
 
     const {data: ownEvents = [], isLoading} = useEvents(from, to);
+    const {data: sharedEvents = []} = useAllSharedCalendarEvents(sharedCalendars, from, to);
 
     const visibleCalendarIds = useMemo(() => {
         return new Set(calendars.filter(c => c.visible).map(c => c.id));
     }, [calendars]);
 
     const allEvents = useMemo(() => {
-        return ownEvents.filter(e => visibleCalendarIds.has(e.calendarId));
-    }, [ownEvents, visibleCalendarIds]);
+        const filtered = ownEvents.filter(e => visibleCalendarIds.has(e.calendarId));
+        return [...filtered, ...sharedEvents];
+    }, [ownEvents, visibleCalendarIds, sharedEvents]);
 
     const navigateToRange = useCallback((newMode: ViewMode, newFrom: number, newTo: number) => {
         navigate({
@@ -118,6 +120,7 @@ function CalendarView() {
                         currentDate={currentDate}
                         events={allEvents}
                         calendars={calendars}
+                        sharedCalendars={sharedCalendars}
                         onDayClick={handleDayClick}
                     />
                 ) : (
@@ -125,6 +128,7 @@ function CalendarView() {
                         currentDate={currentDate}
                         events={allEvents}
                         calendars={calendars}
+                        sharedCalendars={sharedCalendars}
                         onDayClick={handleDayClick}
                     />
                 )}

@@ -191,6 +191,19 @@ export const calendarRouter = new Elysia({name: "calendar"})
         return {success: true};
     }, {auth: true})
 
+    .get("/calendar/:ownerId/calendars/:calId/access", async ({params, user}) => {
+        if (params.ownerId === user.id) {
+            const cal = await resolveCalendar(user, user.id);
+            const calendar = cal.getCalendarById(params.calId);
+            if (!calendar) throw new ApiError(404, 'Calendar not found');
+            return {ownerUserId: user.id, shares: calendar.shares || []};
+        }
+        const {calendar} = await resolveCalendarForSharedAccess(user, params.ownerId, params.calId);
+        const calData = calendar.getCalendarById(params.calId);
+        if (!calData) throw new ApiError(404, 'Calendar not found');
+        return {ownerUserId: params.ownerId, shares: calData.shares || []};
+    }, {auth: true})
+
     // --- Shared calendars ---
     .get("/calendar/:ownerId/shared", async ({user}) => {
         const cal = await resolveCalendar(user, user.id);

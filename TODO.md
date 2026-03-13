@@ -1,6 +1,5 @@
 # High Priority
 
-[] Calendar FE App
 [] Add organisation user and home.
 [] Stable config system for server, organisations, teams and users using stored json file in their homes.
 [] Store uploaded media files in slides/docs/chat by name vs pathId, so we can support copy of documents later on.
@@ -11,6 +10,7 @@
 
 # Med Priority
 
+[] At createdBy to calendar events
 [] Refactor and cleanup Calendar app
 [] Make sure Maildir on server follows exactly the imap folder structure. Monitor changes and update accordingly.
 [] POC: implement imap sync with maildir

@@ -1,4 +1,4 @@
-import type {CalendarEventOccurrence, CalendarItem} from '@workspace/lib/types/calendar';
+import type {CalendarEventOccurrence, CalendarItem, SharedCalendar} from '@workspace/lib/types/calendar';
 
 export type ViewMode = 'month' | 'week';
 
@@ -95,9 +95,15 @@ export function formatEventTime(event: CalendarEventOccurrence): string {
     return `${hour}:${String(m).padStart(2, '0')} ${ampm}`;
 }
 
-export function getCalendarColor(event: CalendarEventOccurrence, calendars: CalendarItem[]): string {
+export function getCalendarColor(event: CalendarEventOccurrence, calendars: CalendarItem[], sharedCalendars?: SharedCalendar[]): string {
+    if (event.data?.color) return event.data.color;
     const cal = calendars.find(c => c.id === event.calendarId);
-    return event.data?.color || cal?.color || '#4285f4';
+    if (cal) return cal.color;
+    if (sharedCalendars) {
+        const sc = sharedCalendars.find(s => s.calendarId === event.calendarId);
+        if (sc) return sc.color || sc.calendarColor;
+    }
+    return '#4285f4';
 }
 
 export const WEEKDAY_HEADERS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
