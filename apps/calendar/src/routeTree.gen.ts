@@ -12,7 +12,7 @@ import { Route as rootRouteImport } from './routes/__root'
 import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthRouteImport } from './routes/_auth'
 import { Route as IndexRouteImport } from './routes/index'
-import { Route as AuthViewRouteImport } from './routes/_auth.view'
+import { Route as AuthViewModeFromToRouteImport } from './routes/_auth.view.$mode.$from.$to'
 
 const LoginRoute = LoginRouteImport.update({
   id: '/login',
@@ -28,35 +28,35 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
-const AuthViewRoute = AuthViewRouteImport.update({
-  id: '/view',
-  path: '/view',
+const AuthViewModeFromToRoute = AuthViewModeFromToRouteImport.update({
+  id: '/view/$mode/$from/$to',
+  path: '/view/$mode/$from/$to',
   getParentRoute: () => AuthRoute,
 } as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
-  '/view': typeof AuthViewRoute
+  '/view/$mode/$from/$to': typeof AuthViewModeFromToRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
-  '/view': typeof AuthViewRoute
+  '/view/$mode/$from/$to': typeof AuthViewModeFromToRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/_auth': typeof AuthRouteWithChildren
   '/login': typeof LoginRoute
-  '/_auth/view': typeof AuthViewRoute
+  '/_auth/view/$mode/$from/$to': typeof AuthViewModeFromToRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/login' | '/view'
+  fullPaths: '/' | '/login' | '/view/$mode/$from/$to'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/login' | '/view'
-  id: '__root__' | '/' | '/_auth' | '/login' | '/_auth/view'
+  to: '/' | '/login' | '/view/$mode/$from/$to'
+  id: '__root__' | '/' | '/_auth' | '/login' | '/_auth/view/$mode/$from/$to'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -88,22 +88,22 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/_auth/view': {
-      id: '/_auth/view'
-      path: '/view'
-      fullPath: '/view'
-      preLoaderRoute: typeof AuthViewRouteImport
+    '/_auth/view/$mode/$from/$to': {
+      id: '/_auth/view/$mode/$from/$to'
+      path: '/view/$mode/$from/$to'
+      fullPath: '/view/$mode/$from/$to'
+      preLoaderRoute: typeof AuthViewModeFromToRouteImport
       parentRoute: typeof AuthRoute
     }
   }
 }
 
 interface AuthRouteChildren {
-  AuthViewRoute: typeof AuthViewRoute
+  AuthViewModeFromToRoute: typeof AuthViewModeFromToRoute
 }
 
 const AuthRouteChildren: AuthRouteChildren = {
-  AuthViewRoute: AuthViewRoute,
+  AuthViewModeFromToRoute: AuthViewModeFromToRoute,
 }
 
 const AuthRouteWithChildren = AuthRoute._addFileChildren(AuthRouteChildren)

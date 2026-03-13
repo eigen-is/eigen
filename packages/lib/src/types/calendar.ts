@@ -29,6 +29,7 @@ export type CalendarItem = {
     name: string
     color: string
     isDefault: boolean
+    visible: boolean
     shares: CalendarShare[] | null
     createdAt: number
     updatedAt: number
@@ -99,6 +100,7 @@ export type UpdateCalendarInput = {
     id: string
     name?: string
     color?: string
+    visible?: boolean
     shares?: CalendarShare[] | null
 }
 

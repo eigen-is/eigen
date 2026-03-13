@@ -3,7 +3,7 @@ import * as schema from './schema';
 
 export const CALENDAR_DB_CONFIG: DatabaseConfig<typeof schema> = {
     name: 'calendar',
-    currentVersion: 1,
+    currentVersion: 2,
     schema,
     migrations: [
         {
@@ -59,6 +59,12 @@ export const CALENDAR_DB_CONFIG: DatabaseConfig<typeof schema> = {
                     createdAt INTEGER DEFAULT (unixepoch()),
                     updatedAt INTEGER DEFAULT (unixepoch())
                 );
+            `)
+        },
+        {
+            version: 2,
+            up: (db) => db.exec(`
+                ALTER TABLE calendars ADD COLUMN visible INTEGER NOT NULL DEFAULT 1;
             `)
         }
     ]
