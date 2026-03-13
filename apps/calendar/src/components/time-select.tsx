@@ -89,7 +89,7 @@ export function TimeSelect({value, onChange, referenceTime, minTime}: TimeSelect
     }, [value]);
 
     useEffect(() => {
-        if (open && listRef.current) {
+        if (open) {
             // Use setTimeout to ensure the popover is fully rendered
             setTimeout(() => {
                 if (!listRef.current) return;
@@ -97,24 +97,24 @@ export function TimeSelect({value, onChange, referenceTime, minTime}: TimeSelect
                 const valueInMinutes = timeToMinutes(value);
                 if (valueInMinutes === -1) return; // Don't scroll if value is invalid
                 
-                // Always find the closest time slot, even if value is already in TIME_SLOTS
+                // Always find the closest time slot
                 const target = filteredTimeSlots.reduce((prev, curr) => {
                     const prevDiff = Math.abs(timeToMinutes(prev.time) - valueInMinutes);
                     const currDiff = Math.abs(timeToMinutes(curr.time) - valueInMinutes);
-                    return currDiff < prevDiff ? curr : prev;
+                    return prevDiff < currDiff ? prev : curr;
                 });
                 
-                const idx = filteredTimeSlots.indexOf(target);
+                const idx = filteredTimeSlots.findIndex(slot => slot.time === target.time);
                 
                 if (idx >= 0) {
                     const el = listRef.current.children[idx] as HTMLElement;
                     if (el) {
-                        el.scrollIntoView({block: 'center', behavior: 'smooth'});
+                        el.scrollIntoView({block: 'center'});
                     }
                 }
             }, 100);
         }
-    }, [open, value, filteredTimeSlots]);
+    }, [open, value]);
 
     const commitInput = () => {
         const trimmed = inputValue.trim();
