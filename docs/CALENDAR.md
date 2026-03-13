@@ -447,7 +447,7 @@ All-day event:
 
 ### Events Response (Range Query)
 
-`GET /calendar/:ownerId/events?from=1741737600&to=1742342400` returns a flat list with recurring events expanded
+`GET /calendar/:ownerId/events/1741737600/1742342400` returns a flat list with recurring events expanded
 into individual **occurrences** for the requested range:
 
 ```json
@@ -550,7 +550,7 @@ type SharedCalendar = {
 ```
 
 `GET /calendar/:ownerId/shared` returns the user's `SharedCalendar[]` list. The frontend uses `ownerUserId` +
-`calendarId` to fetch events: `GET /calendar/:ownerUserId/calendars/:calendarId/events?from=...&to=...`.
+`calendarId` to fetch events: `GET /calendar/:ownerUserId/calendars/:calendarId/events/:from/:to`.
 
 ## Backend Architecture
 
@@ -676,8 +676,8 @@ POST   /calendar/:ownerId/calendars                              → create cale
 PUT    /calendar/:ownerId/calendars/:id                          → update calendar (incl. shares)
 DELETE /calendar/:ownerId/calendars/:id                          → delete calendar
 
-GET    /calendar/:ownerId/events?from=...&to=...                 → all events in range (all own calendars)
-GET    /calendar/:ownerId/calendars/:calId/events?from=...&to=.. → events for one calendar in range
+GET    /calendar/:ownerId/events/:from/:to                       → all events in range (all own calendars)
+GET    /calendar/:ownerId/calendars/:calId/events/:from/:to       → events for one calendar in range
 POST   /calendar/:ownerId/calendars/:calId/events                → create event
 PUT    /calendar/:ownerId/events/:id                             → update event
 DELETE /calendar/:ownerId/events/:id                             → delete event
@@ -696,7 +696,7 @@ Note: shares are updated via `PUT /calendar/:ownerId/calendars/:id` (the shares 
 `DrivePath.acl`). No separate share routes needed. Team calendars don't use shares — access is implicit via team
 membership.
 
-The `GET /calendar/:ownerId/calendars/:calId/events` endpoint serves both own and shared calendars. When Bob requests
+The `GET /calendar/:ownerId/calendars/:calId/events/:from/:to` endpoint serves both own and shared calendars. When Bob requests
 events from Alice's calendar, the route handler calls `getHome(aliceId)`, checks `calendars.shares` for Bob's access
 (via `parseOwnerId` + `getMemberships`), and returns events. For `free-busy` permission, it strips titles/descriptions
 and returns only time blocks.
@@ -872,7 +872,7 @@ API tests live in `apps/api/src/test/calendar.test.ts` together with the rest of
 
 ### Range Queries
 
-- `GET /events?from=...&to=...` returns only events overlapping the range
+- `GET /events/:from/:to` returns only events overlapping the range
 - All-day events at range boundaries included correctly
 - Recurring event with no occurrences in range → not returned
 - Large range with many recurring events → returns all expanded occurrences

@@ -11,14 +11,17 @@
 
 # Med Priority
 
+[] Refactor and cleanup Calendar app
 [] Make sure Maildir on server follows exactly the imap folder structure. Monitor changes and update accordingly.
 [] POC: implement imap sync with maildir
 [] POC: implement CalDAV sync with calendar
 [] Implement import and export of common file formats (PDF, DOC, XLS, etc.)
+[] Add eigen|vector> similar to https://excalidraw.com/ . This drawing should be an easy to re-use component, so it can also be embedded in docs/slidees and maybe mail?
 
 ## Questions
 [] Where and how do we handle file formats queued / at different threads?
 
 # Low Priority
 
+[] Cleanup Fortune-sheet mess
 [] Fix everything

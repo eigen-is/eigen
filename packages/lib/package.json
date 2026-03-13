@@ -23,6 +23,7 @@
     "./media": "./src/core/media/index.ts",
     "./auth": "./src/core/auth/index.ts",
     "./home": "./src/core/home/index.ts",
+    "./calendar": "./src/core/calendar/index.ts",
     "./chat": "./src/core/chat/index.ts",
     "./clipboard": "./src/core/clipboard/index.ts",
     "./collab": "./src/core/collab/index.ts",

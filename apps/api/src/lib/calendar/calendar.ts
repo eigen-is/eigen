@@ -545,7 +545,10 @@ function expandRecurrence(event: CalendarEvent, rangeFrom: number, rangeTo: numb
 
     const eventDuration = event.endTime - event.startTime;
     const dtstart = new Date(event.startTime * 1000);
-    const rule = RRule.fromString(`DTSTART:${formatRRuleDate(dtstart)}\nRRULE:${event.rrule}`);
+    const rule = new RRule({
+        ...RRule.parseString(event.rrule),
+        dtstart,
+    });
 
     const rangeStart = new Date(rangeFrom * 1000);
     const rangeEnd = new Date(rangeTo * 1000);
@@ -562,15 +565,6 @@ function expandRecurrence(event: CalendarEvent, rangeFrom: number, rangeTo: numb
     });
 }
 
-function formatRRuleDate(date: Date): string {
-    const y = date.getUTCFullYear();
-    const m = String(date.getUTCMonth() + 1).padStart(2, '0');
-    const d = String(date.getUTCDate()).padStart(2, '0');
-    const h = String(date.getUTCHours()).padStart(2, '0');
-    const min = String(date.getUTCMinutes()).padStart(2, '0');
-    const s = String(date.getUTCSeconds()).padStart(2, '0');
-    return `${y}${m}${d}T${h}${min}${s}Z`;
-}
 
 function formatOccurrenceDate(date: Date): string {
     const y = date.getUTCFullYear();
