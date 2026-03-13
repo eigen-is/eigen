@@ -1,5 +1,5 @@
 import {useState} from 'react';
-import {Clock, MapPin, AlignLeft, Repeat, Trash2, Pencil} from 'lucide-react';
+import {Clock, MapPin, AlignLeft, Repeat, Trash2, Pencil, Calendar} from 'lucide-react';
 import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle} from '@workspace/ui/components/dialog';
 import {Button} from '@workspace/ui/components/button';
 import {DeleteDialog} from '@workspace/ui/components/layout/delete/delete-dialog';
@@ -203,11 +203,14 @@ export function EventDetailDialog({open, onOpenChange, event, calendar, sharedCa
                         )}
 
                         {calendarName && (
-                            <div className="pt-3 mt-3 border-t">
+                            <div className="pt-3 mt-3 border-t flex items-start gap-3 ">
+                                <Calendar className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0"/>
+                                <div>
                                     <div className="text-sm text-muted-foreground">{calendarName}</div>
                                     {isShared && sharedCalendar && (
                                         <div className="text-xs text-muted-foreground">Created by: <UserName userId={sharedCalendar.ownerUserId}/></div>
                                     )}
+                                </div>
                             </div>
                         )}
                     </div>
