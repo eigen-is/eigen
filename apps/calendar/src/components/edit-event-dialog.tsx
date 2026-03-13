@@ -5,9 +5,13 @@ import {Input} from '@workspace/ui/components/input';
 import {Textarea} from '@workspace/ui/components/textarea';
 import {Label} from '@workspace/ui/components/label';
 import {Checkbox} from '@workspace/ui/components/checkbox';
-import {useUpdateEvent} from '@workspace/lib/calendar';
+import {useUpdateEvent, useCreateEvent} from '@workspace/lib/calendar';
 import type {CalendarEventOccurrence} from '@workspace/lib/types/calendar';
+import {RRule} from 'rrule';
 import {RecurrencePicker} from './recurrence-picker';
+import {TimeSelect, addMinutes} from './time-select';
+import {RecurringActionDialog} from './recurring-action-dialog';
+import type {RecurringAction} from './recurring-action-dialog';
 
 type EditEventDialogProps = {
     open: boolean;
@@ -28,8 +32,20 @@ function toLocalTimeString(date: Date): string {
     return `${h}:${min}`;
 }
 
+function truncateRRule(rruleStr: string, beforeDate: Date): string {
+    const options = RRule.parseString(rruleStr);
+    const until = new Date(beforeDate);
+    until.setUTCDate(until.getUTCDate() - 1);
+    until.setUTCHours(23, 59, 59, 0);
+    options.until = until;
+    delete options.count;
+    const result = new RRule(options).toString();
+    return result.replace(/^RRULE:/, '');
+}
+
 export function EditEventDialog({open, onOpenChange, event}: EditEventDialogProps) {
     const updateEvent = useUpdateEvent();
+    const createEvent = useCreateEvent();
 
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
@@ -41,6 +57,7 @@ export function EditEventDialog({open, onOpenChange, event}: EditEventDialogProp
     const [endTime, setEndTime] = useState('');
     const [rruleString, setRruleString] = useState<string | null>(null);
     const [isLoading, setIsLoading] = useState(false);
+    const [showRecurringDialog, setShowRecurringDialog] = useState(false);
 
     useEffect(() => {
         if (event && open) {
@@ -70,29 +87,41 @@ export function EditEventDialog({open, onOpenChange, event}: EditEventDialogProp
 
     if (!event) return null;
 
-    const handleSubmit = async () => {
-        if (!title.trim()) return;
+    const isRecurring = !!event.rrule;
 
+    const buildTimestamps = () => {
+        let startTimestamp: number;
+        let endTimestamp: number;
+
+        if (allDay) {
+            const sd = new Date(startDate + 'T00:00:00Z');
+            const ed = new Date(endDate + 'T00:00:00Z');
+            ed.setUTCDate(ed.getUTCDate() + 1);
+            startTimestamp = Math.floor(sd.getTime() / 1000);
+            endTimestamp = Math.floor(ed.getTime() / 1000);
+        } else {
+            const sd = new Date(`${startDate}T${startTime}`);
+            const ed = new Date(`${endDate}T${endTime}`);
+            startTimestamp = Math.floor(sd.getTime() / 1000);
+            endTimestamp = Math.floor(ed.getTime() / 1000);
+        }
+        return {startTimestamp, endTimestamp};
+    };
+
+    const handleSaveClick = () => {
+        if (!title.trim()) return;
+        if (isRecurring) {
+            setShowRecurringDialog(true);
+        } else {
+            doSave('all');
+        }
+    };
+
+    const doSave = async (action: RecurringAction) => {
         setIsLoading(true);
         try {
-            let startTimestamp: number;
-            let endTimestamp: number;
-
-            if (allDay) {
-                const sd = new Date(startDate + 'T00:00:00Z');
-                const ed = new Date(endDate + 'T00:00:00Z');
-                ed.setUTCDate(ed.getUTCDate() + 1);
-                startTimestamp = Math.floor(sd.getTime() / 1000);
-                endTimestamp = Math.floor(ed.getTime() / 1000);
-            } else {
-                const sd = new Date(`${startDate}T${startTime}`);
-                const ed = new Date(`${endDate}T${endTime}`);
-                startTimestamp = Math.floor(sd.getTime() / 1000);
-                endTimestamp = Math.floor(ed.getTime() / 1000);
-            }
-
-            await updateEvent.mutateAsync({
-                id: event.id,
+            const {startTimestamp, endTimestamp} = buildTimestamps();
+            const updates = {
                 title: title.trim(),
                 startTime: startTimestamp,
                 endTime: endTimestamp,
@@ -100,7 +129,34 @@ export function EditEventDialog({open, onOpenChange, event}: EditEventDialogProp
                 description: description.trim() || null,
                 location: location.trim() || null,
                 rrule: rruleString,
-            });
+            };
+
+            if (action === 'all') {
+                const targetId = event.parentEventId || event.id;
+                await updateEvent.mutateAsync({id: targetId, ...updates});
+            } else if (action === 'this') {
+                await createEvent.mutateAsync({
+                    calendarId: event.calendarId,
+                    ...updates,
+                    allDay: Boolean(allDay),
+                    rrule: null,
+                    parentEventId: event.parentEventId || event.id,
+                    recurrenceDate: event.occurrenceDate,
+                });
+            } else if (action === 'this-and-following') {
+                const parentId = event.parentEventId || event.id;
+                const occDate = new Date(event.occurrenceDate + 'T00:00:00Z');
+                if (event.rrule) {
+                    const truncated = truncateRRule(event.rrule, occDate);
+                    await updateEvent.mutateAsync({id: parentId, rrule: truncated});
+                }
+                await createEvent.mutateAsync({
+                    calendarId: event.calendarId,
+                    ...updates,
+                    allDay: Boolean(allDay),
+                });
+            }
+
             onOpenChange(false);
         } catch (error) {
             console.error('Error updating event:', error);
@@ -109,93 +165,105 @@ export function EditEventDialog({open, onOpenChange, event}: EditEventDialogProp
         }
     };
 
+    const handleStartTimeChange = (newStart: string) => {
+        setStartTime(newStart);
+        setEndTime(addMinutes(newStart, 30));
+    };
+
     return (
-        <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-[500px]">
-                <DialogHeader>
-                    <DialogTitle>Edit Event</DialogTitle>
-                </DialogHeader>
+        <>
+            <Dialog open={open && !showRecurringDialog} onOpenChange={onOpenChange}>
+                <DialogContent className="sm:max-w-[500px]">
+                    <DialogHeader>
+                        <DialogTitle>Edit Event</DialogTitle>
+                    </DialogHeader>
 
-                <div className="space-y-4">
-                    <div>
-                        <Input
-                            placeholder="Event title"
-                            value={title}
-                            onChange={(e) => setTitle(e.target.value)}
-                            autoFocus
-                            className="text-lg border-0 border-b rounded-none px-0 focus-visible:ring-0 focus-visible:border-primary"
-                        />
-                    </div>
-
-                    <div className="space-y-2">
-                        <div className="flex items-center gap-2">
-                            <Checkbox
-                                id="edit-all-day"
-                                checked={allDay}
-                                onCheckedChange={(checked) => setAllDay(!!checked)}
+                    <div className="space-y-4">
+                        <div>
+                            <Input
+                                placeholder="Event title"
+                                value={title}
+                                onChange={(e) => setTitle(e.target.value)}
+                                autoFocus
+                                className="text-lg border-0 border-b rounded-none px-0 focus-visible:ring-0 focus-visible:border-primary"
                             />
-                            <Label htmlFor="edit-all-day">All day</Label>
                         </div>
 
-                        {allDay ? (
-                            <div className="flex items-center gap-2">
-                                <Input type="date" value={startDate}
-                                       onChange={(e) => setStartDate(e.target.value)} className="flex-1"/>
-                                <span className="text-muted-foreground">—</span>
-                                <Input type="date" value={endDate}
-                                       onChange={(e) => setEndDate(e.target.value)} className="flex-1"/>
-                            </div>
-                        ) : (
-                            <div className="space-y-2">
+                        <div className="space-y-3">
+                            {allDay ? (
                                 <div className="flex items-center gap-2">
                                     <Input type="date" value={startDate}
                                            onChange={(e) => setStartDate(e.target.value)} className="flex-1"/>
-                                    <Input type="time" value={startTime}
-                                           onChange={(e) => setStartTime(e.target.value)} className="w-28"/>
-                                </div>
-                                <div className="flex items-center gap-2">
+                                    <span className="text-muted-foreground text-sm">to</span>
                                     <Input type="date" value={endDate}
                                            onChange={(e) => setEndDate(e.target.value)} className="flex-1"/>
-                                    <Input type="time" value={endTime}
-                                           onChange={(e) => setEndTime(e.target.value)} className="w-28"/>
                                 </div>
+                            ) : (
+                                <div className="flex items-center gap-2 flex-wrap">
+                                    <Input type="date" value={startDate}
+                                           onChange={(e) => {
+                                               setStartDate(e.target.value);
+                                               setEndDate(e.target.value);
+                                           }}
+                                           className="w-[160px]"/>
+                                    <TimeSelect value={startTime} onChange={handleStartTimeChange}/>
+                                    <span className="text-muted-foreground">–</span>
+                                    <TimeSelect value={endTime} onChange={setEndTime} referenceTime={startTime}/>
+                                </div>
+                            )}
+
+                            <div className="flex items-center gap-4">
+                                <div className="flex items-center gap-2">
+                                    <Checkbox
+                                        id="edit-all-day"
+                                        checked={allDay}
+                                        onCheckedChange={(checked) => setAllDay(!!checked)}
+                                    />
+                                    <Label htmlFor="edit-all-day">All day</Label>
+                                </div>
+                                <RecurrencePicker
+                                    value={rruleString}
+                                    onChange={setRruleString}
+                                    startDate={new Date(startDate)}
+                                />
                             </div>
-                        )}
+                        </div>
+
+                        <div>
+                            <Input
+                                placeholder="Location"
+                                value={location}
+                                onChange={(e) => setLocation(e.target.value)}
+                            />
+                        </div>
+
+                        <div>
+                            <Textarea
+                                placeholder="Description"
+                                value={description}
+                                onChange={(e) => setDescription(e.target.value)}
+                                rows={3}
+                            />
+                        </div>
                     </div>
 
-                    <RecurrencePicker
-                        value={rruleString}
-                        onChange={setRruleString}
-                        startDate={new Date(startDate)}
-                    />
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isLoading}>
+                            Cancel
+                        </Button>
+                        <Button onClick={handleSaveClick} disabled={isLoading || !title.trim()}>
+                            {isLoading ? 'Saving...' : 'Save'}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
 
-                    <div>
-                        <Input
-                            placeholder="Location"
-                            value={location}
-                            onChange={(e) => setLocation(e.target.value)}
-                        />
-                    </div>
-
-                    <div>
-                        <Textarea
-                            placeholder="Description"
-                            value={description}
-                            onChange={(e) => setDescription(e.target.value)}
-                            rows={3}
-                        />
-                    </div>
-                </div>
-
-                <DialogFooter>
-                    <Button variant="outline" onClick={() => onOpenChange(false)} disabled={isLoading}>
-                        Cancel
-                    </Button>
-                    <Button onClick={handleSubmit} disabled={isLoading || !title.trim()}>
-                        {isLoading ? 'Saving...' : 'Save'}
-                    </Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
+            <RecurringActionDialog
+                open={showRecurringDialog}
+                onOpenChange={setShowRecurringDialog}
+                title="Edit recurring event"
+                onConfirm={doSave}
+            />
+        </>
     );
 }
