@@ -144,10 +144,10 @@ export const EditorToolbar = ({editor, path, canWrite, onAccessDialogOpen, onDel
 
     return (
         <Toolbar>
-            <div className="flex items-center gap-0.5">
+            <div className="flex items-center">
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" size="sm" className="h-7 px-2 text-xs">File</Button>
+                        <Button variant="ghost">File</Button>
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="start">
                         <DropdownMenuItem onClick={() => rootFolder && setCreateDocOpen(true)}>
@@ -181,7 +181,7 @@ export const EditorToolbar = ({editor, path, canWrite, onAccessDialogOpen, onDel
                     <>
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="sm" className="h-7 px-2 text-xs">Edit</Button>
+                                <Button variant="ghost" >Edit</Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="start">
                                 <DropdownMenuItem onClick={() => editor.chain().focus().undo().run()}
@@ -197,7 +197,7 @@ export const EditorToolbar = ({editor, path, canWrite, onAccessDialogOpen, onDel
 
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="sm" className="h-7 px-2 text-xs">Format</Button>
+                                <Button variant="ghost" >Format</Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="start">
                                 <DropdownMenuSub>
@@ -268,7 +268,7 @@ export const EditorToolbar = ({editor, path, canWrite, onAccessDialogOpen, onDel
 
                         <DropdownMenu>
                             <DropdownMenuTrigger asChild>
-                                <Button variant="ghost" size="sm" className="h-7 px-2 text-xs">Insert</Button>
+                                <Button variant="ghost" >Insert</Button>
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="start">
                                 <DropdownMenuItem onClick={handleLinkOperation}>
@@ -323,7 +323,7 @@ export const EditorToolbar = ({editor, path, canWrite, onAccessDialogOpen, onDel
                     {/* Heading / paragraph selector */}
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" size="sm" className="h-8 px-2 text-xs gap-1 min-w-[90px]"
+                            <Button variant="ghost" 
                                     onMouseDown={(e) => e.preventDefault()}>
                                 {activeHeadingLabel}
                                 <ChevronDown className="h-3 w-3" />

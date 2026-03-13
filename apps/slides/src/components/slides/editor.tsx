@@ -19,6 +19,7 @@ import {
 } from '@workspace/lib/clipboard';
 import type {EigenClipboardData, EigenClipboardItem} from '@workspace/lib/types/clipboard';
 import * as Y from 'yjs';
+import { Column, ColumnLayout } from '@workspace/ui/index';
 
 function buildClipboardItem(obj: SlideObject): EigenClipboardItem {
     const rect = {x: obj.x, y: obj.y, w: obj.w, h: obj.h, rotation: obj.rotation};
@@ -444,7 +445,8 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
     }
 
     return (
-        <div className="flex flex-col h-full w-full">
+        <ColumnLayout mobileColumn="editor">
+            <Column id={"doc-editor"} width={"w-full"} className="flex-1 h-full" toolbar={
             <Toolbar
                 path={path}
                 canWrite={canWrite}
@@ -455,8 +457,8 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
                 onAddImage={() => imageInputRef.current?.click()}
                 onAddSlide={() => addSlide()}
                 onPresent={handlePresent}
-            />
-            <div className="flex-1 flex overflow-hidden">
+            />}>
+            <div className="flex-1 flex overflow-hidden h-full">
                 <SlidePanel
                     deck={deck}
                     activeSlideId={activeSlideId}
@@ -523,6 +525,7 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
                 className="hidden"
                 onChange={handleImageSelect}
             />
-        </div>
+        </Column>
+        </ColumnLayout>
     );
 }

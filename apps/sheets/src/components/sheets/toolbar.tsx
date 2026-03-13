@@ -4,7 +4,6 @@ import {
     Folder,
     Pencil,
     Trash2,
-    UserPlus,
     UserRoundPlus,
 } from 'lucide-react';
 import {Button} from '@workspace/ui/components/button';
@@ -45,7 +44,7 @@ export function ToolbarLeftItems({path, onAccessDialogOpen, canWrite}: ToolbarIt
         <>
             <DropdownMenu>
                 <DropdownMenuTrigger asChild>
-                    <Button variant="ghost" size="sm" className="h-7 px-2 text-xs">File</Button>
+                    <Button variant="ghost">File</Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start">
                     <DropdownMenuItem onClick={() => rootFolder && setCreateSheetsOpen(true)}>
@@ -106,7 +105,7 @@ export function ToolbarRightItems({path, canWrite, onAccessDialogOpen, onRestore
             <RevisionHistory path={path} onRestore={onRestore}/>
             {canWrite ? (
                 <TooltipButton
-                    icon={UserPlus}
+                    icon={UserRoundPlus}
                     tooltipText="Share"
                     onClick={onAccessDialogOpen}
                 />

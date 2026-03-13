@@ -15,9 +15,10 @@ type ColumnProps = {
     toolbar?: ReactNode;
     onBack?: () => void;
     children: ReactNode;
+    className?: string;
 }
 
-function Column({id, width, toolbar, onBack, children}: ColumnProps) {
+function Column({id, width, toolbar, onBack, children, className}: ColumnProps) {
     const {isMobile} = useLayout();
     const {mobileColumn} = useContext(ColumnContext);
 
@@ -30,7 +31,7 @@ function Column({id, width, toolbar, onBack, children}: ColumnProps) {
             : {width, flexShrink: 0};
 
     return (
-        <div className="h-full flex flex-col overflow-hidden" style={style}>
+        <div className={`h-full flex flex-col overflow-hidden ${className || ''}`} style={style}>
             {toolbar && (
                 <div className="h-12 flex items-center px-4 border-b shrink-0 border-r">
                     {isMobile && onBack && (
