@@ -928,12 +928,10 @@ export function Toolbar({
                         </>
                     )}
                     {settings.toolbarItems
-                        .filter((n) => !["undo", "redo", "format-painter", "clear-format"].includes(n))
+                        .filter((n) => !["undo", "redo"].includes(n))
                         .map((name, i) => getToolbarItem(name, i))}
                 </div>
                 <div className="flex items-center">
-                    {getToolbarItem("format-painter", -3)}
-                    {getToolbarItem("clear-format", -4)}
                     {rightItems}
                 </div>
             </SharedToolbar>
