@@ -2,12 +2,14 @@ import {useState} from 'react';
 import {Clock, MapPin, AlignLeft, Repeat, Trash2, Pencil} from 'lucide-react';
 import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle} from '@workspace/ui/components/dialog';
 import {Button} from '@workspace/ui/components/button';
-import {DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger} from '@workspace/ui/components/dropdown-menu';
 import {DeleteDialog} from '@workspace/ui/components/layout/delete/delete-dialog';
-import {useDeleteEvent, useCreateEvent} from '@workspace/lib/calendar';
+import {useDeleteEvent, useCreateEvent, useUpdateEvent} from '@workspace/lib/calendar';
 import type {CalendarEventOccurrence, CalendarItem} from '@workspace/lib/types/calendar';
+import {RRule} from 'rrule';
 import {rruleToText} from './recurrence-picker';
 import {EditEventDialog} from './edit-event-dialog';
+import {RecurringActionDialog} from './recurring-action-dialog';
+import type {RecurringAction} from './recurring-action-dialog';
 
 type EventDetailDialogProps = {
     open: boolean;
@@ -62,11 +64,24 @@ function formatTimeRange(event: CalendarEventOccurrence): string {
     return `${startStr} · ${startTime} – ${endTime}`;
 }
 
+function truncateRRule(rruleStr: string, beforeDate: Date): string {
+    const options = RRule.parseString(rruleStr);
+    const until = new Date(beforeDate);
+    until.setUTCDate(until.getUTCDate() - 1);
+    until.setUTCHours(23, 59, 59, 0);
+    options.until = until;
+    delete options.count;
+    const result = new RRule(options).toString();
+    return result.replace(/^RRULE:/, '');
+}
+
 export function EventDetailDialog({open, onOpenChange, event, calendar}: EventDetailDialogProps) {
     const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+    const [showRecurringDeleteDialog, setShowRecurringDeleteDialog] = useState(false);
     const [editOpen, setEditOpen] = useState(false);
     const deleteEvent = useDeleteEvent();
     const createEvent = useCreateEvent();
+    const updateEvent = useUpdateEvent();
 
     if (!event) return null;
 
@@ -74,43 +89,59 @@ export function EventDetailDialog({open, onOpenChange, event, calendar}: EventDe
     const isException = !!event.parentEventId;
     const color = calendar?.color || '#4285f4';
 
-    const handleDeleteSingle = async () => {
+    const handleDelete = async (action: RecurringAction) => {
         try {
-            if (isRecurring && !isException) {
-                await createEvent.mutateAsync({
-                    calendarId: event.calendarId,
-                    title: event.title,
-                    startTime: event.startTime,
-                    endTime: event.endTime,
-                    allDay: Boolean(event.allDay),
-                    parentEventId: event.id,
-                    recurrenceDate: event.occurrenceDate,
-                    status: 'cancelled',
-                });
-            } else {
-                await deleteEvent.mutateAsync(event.id);
+            if (action === 'this') {
+                if (isRecurring && !isException) {
+                    await createEvent.mutateAsync({
+                        calendarId: event.calendarId,
+                        title: event.title,
+                        startTime: event.startTime,
+                        endTime: event.endTime,
+                        allDay: Boolean(event.allDay),
+                        parentEventId: event.id,
+                        recurrenceDate: event.occurrenceDate,
+                        status: 'cancelled',
+                    });
+                } else {
+                    await deleteEvent.mutateAsync(event.id);
+                }
+            } else if (action === 'this-and-following') {
+                const parentId = event.parentEventId || event.id;
+                const occDate = new Date(event.occurrenceDate + 'T00:00:00Z');
+                if (event.rrule) {
+                    const truncated = truncateRRule(event.rrule, occDate);
+                    await updateEvent.mutateAsync({id: parentId, rrule: truncated});
+                }
+            } else if (action === 'all') {
+                const targetId = event.parentEventId || event.id;
+                await deleteEvent.mutateAsync(targetId);
             }
         } finally {
-            setShowDeleteDialog(false);
+            setShowRecurringDeleteDialog(false);
             onOpenChange(false);
         }
     };
 
-    const handleDeleteAll = async () => {
-        if (isException && event.parentEventId) {
-            await deleteEvent.mutateAsync(event.parentEventId);
-        } else {
-            await deleteEvent.mutateAsync(event.id);
-        }
+    const handleNonRecurringDelete = async () => {
+        await deleteEvent.mutateAsync(event.id);
         setShowDeleteDialog(false);
         onOpenChange(false);
+    };
+
+    const handleDeleteClick = () => {
+        if (isRecurring) {
+            setShowRecurringDeleteDialog(true);
+        } else {
+            setShowDeleteDialog(true);
+        }
     };
 
     const recurrenceText = event.rrule ? rruleToText(event.rrule) : null;
 
     return (
         <>
-            <Dialog open={open && !showDeleteDialog && !editOpen} onOpenChange={onOpenChange}>
+            <Dialog open={open && !showDeleteDialog && !showRecurringDeleteDialog && !editOpen} onOpenChange={onOpenChange}>
                 <DialogContent className="sm:max-w-[450px]">
                     <DialogHeader>
                         <div className="flex items-start gap-3">
@@ -159,27 +190,9 @@ export function EventDetailDialog({open, onOpenChange, event, calendar}: EventDe
                             <Button variant="ghost" size="icon" onClick={() => setEditOpen(true)}>
                                 <Pencil className="h-4 w-4"/>
                             </Button>
-                            {isRecurring ? (
-                                <DropdownMenu>
-                                    <DropdownMenuTrigger asChild>
-                                        <Button variant="ghost" size="icon">
-                                            <Trash2 className="h-4 w-4"/>
-                                        </Button>
-                                    </DropdownMenuTrigger>
-                                    <DropdownMenuContent>
-                                        <DropdownMenuItem onClick={handleDeleteSingle}>
-                                            Delete this event
-                                        </DropdownMenuItem>
-                                        <DropdownMenuItem onClick={() => setShowDeleteDialog(true)}>
-                                            Delete all events in series
-                                        </DropdownMenuItem>
-                                    </DropdownMenuContent>
-                                </DropdownMenu>
-                            ) : (
-                                <Button variant="ghost" size="icon" onClick={() => setShowDeleteDialog(true)}>
-                                    <Trash2 className="h-4 w-4"/>
-                                </Button>
-                            )}
+                            <Button variant="ghost" size="icon" onClick={handleDeleteClick}>
+                                <Trash2 className="h-4 w-4"/>
+                            </Button>
                         </div>
                         <Button variant="outline" onClick={() => onOpenChange(false)}>
                             Close
@@ -194,12 +207,19 @@ export function EventDetailDialog({open, onOpenChange, event, calendar}: EventDe
                 title="Delete Event"
                 description="Are you sure you want to delete this event?"
                 itemName={event.title}
-                onDelete={isRecurring && !isException ? handleDeleteAll : handleDeleteSingle}
+                onDelete={handleNonRecurringDelete}
+            />
+
+            <RecurringActionDialog
+                open={showRecurringDeleteDialog}
+                onOpenChange={setShowRecurringDeleteDialog}
+                title="Delete recurring event"
+                onConfirm={handleDelete}
             />
 
             <EditEventDialog
                 open={editOpen}
-                onOpenChange={(o) => {
+                onOpenChange={(o: boolean) => {
                     setEditOpen(o);
                     if (!o) onOpenChange(false);
                 }}
