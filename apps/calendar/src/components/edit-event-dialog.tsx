@@ -12,6 +12,7 @@ import {RecurrencePicker} from './recurrence-picker';
 import {TimeSelect, addMinutes} from './time-select';
 import {RecurringActionDialog} from './recurring-action-dialog';
 import type {RecurringAction} from './recurring-action-dialog';
+import {parseOccurrenceDate, occurrenceDateToString} from './calendar-utils';
 
 type EditEventDialogProps = {
     open: boolean;
@@ -141,11 +142,11 @@ export function EditEventDialog({open, onOpenChange, event}: EditEventDialogProp
                     allDay: Boolean(allDay),
                     rrule: null,
                     parentEventId: event.parentEventId || event.id,
-                    recurrenceDate: event.occurrenceDate,
+                    recurrenceDate: occurrenceDateToString(event.occurrenceDate),
                 });
             } else if (action === 'this-and-following') {
                 const parentId = event.parentEventId || event.id;
-                const occDate = new Date(event.occurrenceDate + 'T00:00:00Z');
+                const occDate = parseOccurrenceDate(event.occurrenceDate);
                 if (event.rrule) {
                     const truncated = truncateRRule(event.rrule, occDate);
                     await updateEvent.mutateAsync({id: parentId, rrule: truncated});
@@ -193,21 +194,21 @@ export function EditEventDialog({open, onOpenChange, event}: EditEventDialogProp
                             {allDay ? (
                                 <div className="flex items-center gap-2">
                                     <Input type="date" value={startDate}
-                                           onChange={(e) => setStartDate(e.target.value)} className="flex-1"/>
+                                           onChange={(e) => setStartDate(e.target.value)} className="flex-1 h-8 text-sm"/>
                                     <span className="text-muted-foreground text-sm">to</span>
                                     <Input type="date" value={endDate}
-                                           onChange={(e) => setEndDate(e.target.value)} className="flex-1"/>
+                                           onChange={(e) => setEndDate(e.target.value)} className="flex-1 h-8 text-sm"/>
                                 </div>
                             ) : (
-                                <div className="flex items-center gap-2 flex-wrap">
+                                <div className="flex items-center gap-2">
                                     <Input type="date" value={startDate}
                                            onChange={(e) => {
                                                setStartDate(e.target.value);
                                                setEndDate(e.target.value);
                                            }}
-                                           className="w-[160px]"/>
+                                           className="h-8 text-sm"/>
                                     <TimeSelect value={startTime} onChange={handleStartTimeChange}/>
-                                    <span className="text-muted-foreground">–</span>
+                                    <span className="text-muted-foreground text-sm">–</span>
                                     <TimeSelect value={endTime} onChange={setEndTime} referenceTime={startTime}/>
                                 </div>
                             )}

@@ -127,47 +127,25 @@ export function CreateEventDialog({open, onOpenChange, defaultDate, defaultCalen
                         />
                     </div>
 
-                    {calendars.length > 1 && (
-                        <div className="flex items-center gap-3">
-                            <Label className="w-20 shrink-0">Calendar</Label>
-                            <Select value={calendarId} onValueChange={setCalendarId}>
-                                <SelectTrigger className="flex-1">
-                                    <SelectValue placeholder="Select calendar"/>
-                                </SelectTrigger>
-                                <SelectContent>
-                                    {calendars.map((cal) => (
-                                        <SelectItem key={cal.id} value={cal.id}>
-                                            <div className="flex items-center gap-2">
-                                                <div className="h-3 w-3 rounded-full shrink-0"
-                                                     style={{backgroundColor: cal.color}}/>
-                                                {cal.name}
-                                            </div>
-                                        </SelectItem>
-                                    ))}
-                                </SelectContent>
-                            </Select>
-                        </div>
-                    )}
-
                     <div className="space-y-3">
                         {allDay ? (
                             <div className="flex items-center gap-2">
                                 <Input type="date" value={startDate}
-                                       onChange={(e) => setStartDate(e.target.value)} className="flex-1"/>
+                                       onChange={(e) => setStartDate(e.target.value)} className="flex-1 h-8 text-sm"/>
                                 <span className="text-muted-foreground text-sm">to</span>
                                 <Input type="date" value={endDate}
-                                       onChange={(e) => setEndDate(e.target.value)} className="flex-1"/>
+                                       onChange={(e) => setEndDate(e.target.value)} className="flex-1 h-8 text-sm"/>
                             </div>
                         ) : (
-                            <div className="flex items-center gap-2 flex-wrap">
+                            <div className="flex items-center gap-2">
                                 <Input type="date" value={startDate}
                                        onChange={(e) => {
                                            setStartDate(e.target.value);
                                            setEndDate(e.target.value);
                                        }}
-                                       className="w-[160px]"/>
+                                       className="h-8 text-sm"/>
                                 <TimeSelect value={startTime} onChange={handleStartTimeChange}/>
-                                <span className="text-muted-foreground">–</span>
+                                <span className="text-muted-foreground text-sm">–</span>
                                 <TimeSelect value={endTime} onChange={setEndTime} referenceTime={startTime}/>
                             </div>
                         )}
@@ -205,6 +183,28 @@ export function CreateEventDialog({open, onOpenChange, defaultDate, defaultCalen
                             rows={3}
                         />
                     </div>
+
+                    {calendars.length > 1 && (
+                        <div className="flex items-center gap-3">
+                            <Label className="w-20 shrink-0">Calendar</Label>
+                            <Select value={calendarId} onValueChange={setCalendarId}>
+                                <SelectTrigger className="flex-1">
+                                    <SelectValue placeholder="Select calendar"/>
+                                </SelectTrigger>
+                                <SelectContent>
+                                    {calendars.map((cal) => (
+                                        <SelectItem key={cal.id} value={cal.id}>
+                                            <div className="flex items-center gap-2">
+                                                <div className="h-3 w-3 rounded-full shrink-0"
+                                                     style={{backgroundColor: cal.color}}/>
+                                                {cal.name}
+                                            </div>
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    )}
                 </div>
 
                 <DialogFooter>

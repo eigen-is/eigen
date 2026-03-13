@@ -1,6 +1,6 @@
 import {useRef, useEffect, useState} from 'react';
 import {Popover, PopoverContent, PopoverTrigger} from '@workspace/ui/components/popover';
-import {Button} from '@workspace/ui/components/button';
+import {Input} from '@workspace/ui/components/input';
 import {cn} from '@workspace/ui/lib/utils';
 
 function generateTimeSlots(): string[] {
@@ -30,6 +30,10 @@ function formatDuration(startMinutes: number, endMinutes: number): string {
     return hours === 1 ? `(1 hr ${mins} mins)` : `(${hours} hrs ${mins} mins)`;
 }
 
+function isValidTime(str: string): boolean {
+    return /^([01]\d|2[0-3]):[0-5]\d$/.test(str);
+}
+
 type TimeSelectProps = {
     value: string;
     onChange: (value: string) => void;
@@ -38,12 +42,21 @@ type TimeSelectProps = {
 
 export function TimeSelect({value, onChange, referenceTime}: TimeSelectProps) {
     const [open, setOpen] = useState(false);
+    const [inputValue, setInputValue] = useState(value);
     const listRef = useRef<HTMLDivElement>(null);
+    const inputRef = useRef<HTMLInputElement>(null);
     const refMinutes = referenceTime ? timeToMinutes(referenceTime) : null;
 
     useEffect(() => {
+        setInputValue(value);
+    }, [value]);
+
+    useEffect(() => {
         if (open && listRef.current) {
-            const idx = TIME_SLOTS.indexOf(value);
+            const target = TIME_SLOTS.includes(value) ? value : TIME_SLOTS.reduce((prev, curr) =>
+                Math.abs(timeToMinutes(curr) - timeToMinutes(value)) < Math.abs(timeToMinutes(prev) - timeToMinutes(value)) ? curr : prev
+            );
+            const idx = TIME_SLOTS.indexOf(target);
             if (idx >= 0) {
                 const el = listRef.current.children[idx] as HTMLElement;
                 el?.scrollIntoView({block: 'center'});
@@ -51,19 +64,36 @@ export function TimeSelect({value, onChange, referenceTime}: TimeSelectProps) {
         }
     }, [open, value]);
 
+    const commitInput = () => {
+        const trimmed = inputValue.trim();
+        if (isValidTime(trimmed)) {
+            onChange(trimmed);
+        } else {
+            setInputValue(value);
+        }
+    };
+
     return (
         <Popover open={open} onOpenChange={setOpen}>
             <PopoverTrigger asChild>
-                <Button variant="outline" size="sm" className="w-[140px] justify-start font-normal tabular-nums">
-                    {value}
-                    {refMinutes != null && (
-                        <span className="text-muted-foreground ml-1 text-xs">
-                            {formatDuration(refMinutes, timeToMinutes(value))}
-                        </span>
-                    )}
-                </Button>
+                <div className="relative">
+                    <Input
+                        ref={inputRef}
+                        value={inputValue}
+                        onChange={(e) => setInputValue(e.target.value)}
+                        onBlur={commitInput}
+                        onKeyDown={(e) => {
+                            if (e.key === 'Enter') {
+                                commitInput();
+                                setOpen(false);
+                            }
+                        }}
+                        onClick={() => setOpen(true)}
+                        className="w-[70px] h-8 text-sm tabular-nums px-2 text-center"
+                    />
+                </div>
             </PopoverTrigger>
-            <PopoverContent className="w-[200px] p-0" align="start">
+            <PopoverContent className="w-[180px] p-0" align="start">
                 <div ref={listRef} className="max-h-[240px] overflow-y-auto p-1">
                     {TIME_SLOTS.map((slot) => (
                         <button
@@ -75,12 +105,13 @@ export function TimeSelect({value, onChange, referenceTime}: TimeSelectProps) {
                             )}
                             onClick={() => {
                                 onChange(slot);
+                                setInputValue(slot);
                                 setOpen(false);
                             }}
                         >
                             {slot}
                             {refMinutes != null && (
-                                <span className="text-muted-foreground ml-2">
+                                <span className="text-muted-foreground ml-2 text-xs">
                                     {formatDuration(refMinutes, timeToMinutes(slot))}
                                 </span>
                             )}
