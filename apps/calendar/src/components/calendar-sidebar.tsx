@@ -5,7 +5,7 @@ import {SidebarSection} from '@workspace/ui/components/layout/sidebar/sidebar-se
 import {Separator} from '@workspace/ui/components/separator';
 import {AppLogo} from '@workspace/ui/components/layout/app/app-logo';
 import {EigenLoader, StorageUsage, TooltipButton} from '@workspace/ui';
-import {useCalendars, useSharedCalendars} from '@workspace/lib/calendar';
+import {useCalendars, useSharedCalendars, useUpdateCalendar, useUpdateSharedCalendar} from '@workspace/lib/calendar';
 import type {CalendarItem, SharedCalendar} from '@workspace/lib/types/calendar';
 import {CalendarConfigDialog} from './calendar-config-dialog';
 import {SharedCalendarConfigDialog} from './shared-calendar-config-dialog';
@@ -16,11 +16,6 @@ type CalendarSidebarProps = {
     condensed?: boolean;
     isMobile?: boolean;
     onClose?: () => void;
-    onCreateEvent?: () => void;
-    visibleCalendarIds: Set<string>;
-    onToggleCalendarVisibility: (calendarId: string) => void;
-    visibleSharedCalendarIds: Set<string>;
-    onToggleSharedCalendarVisibility: (sharedCalendarId: string) => void;
 }
 
 function CalendarCheckbox({color, checked, onChange}: {color: string; checked: boolean; onChange: () => void}) {
@@ -47,14 +42,11 @@ export function CalendarSidebar({
     condensed = false,
     isMobile = false,
     onClose,
-    onCreateEvent,
-    visibleCalendarIds,
-    onToggleCalendarVisibility,
-    visibleSharedCalendarIds,
-    onToggleSharedCalendarVisibility,
 }: CalendarSidebarProps) {
     const {data: calendars = [], isLoading: calendarsLoading} = useCalendars();
     const {data: sharedCalendars = [], isLoading: sharedLoading} = useSharedCalendars();
+    const updateCalendar = useUpdateCalendar();
+    const updateSharedCalendar = useUpdateSharedCalendar();
 
     const [configCalendar, setConfigCalendar] = useState<CalendarItem | null>(null);
     const [configDialogOpen, setConfigDialogOpen] = useState(false);
@@ -132,8 +124,8 @@ export function CalendarSidebar({
                                 >
                                     <CalendarCheckbox
                                         color={cal.color}
-                                        checked={visibleCalendarIds.has(cal.id)}
-                                        onChange={() => onToggleCalendarVisibility(cal.id)}
+                                        checked={cal.visible}
+                                        onChange={() => updateCalendar.mutate({id: cal.id, visible: !cal.visible})}
                                     />
                                     {!condensed && (
                                         <>
@@ -180,8 +172,8 @@ export function CalendarSidebar({
                                         >
                                             <CalendarCheckbox
                                                 color={sc.color || sc.calendarColor}
-                                                checked={visibleSharedCalendarIds.has(sc.id)}
-                                                onChange={() => onToggleSharedCalendarVisibility(sc.id)}
+                                                checked={sc.visible}
+                                                onChange={() => updateSharedCalendar.mutate({id: sc.id, visible: !sc.visible})}
                                             />
                                             {!condensed && (
                                                 <>

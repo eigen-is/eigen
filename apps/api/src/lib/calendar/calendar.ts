@@ -79,6 +79,7 @@ function dbCalendarToCalendarItem(row: typeof schema.calendars.$inferSelect): Ca
         name: row.name,
         color: row.color,
         isDefault: row.isDefault,
+        visible: row.visible,
         shares: row.shares ?? null,
         createdAt: row.createdAt as number,
         updatedAt: row.updatedAt as number,
@@ -141,6 +142,7 @@ export class Calendar {
     public async updateCalendar(id: string, input: {
         name?: string;
         color?: string;
+        visible?: boolean;
         shares?: CalendarShare[] | null;
     }): Promise<CalendarItem> {
         const existing = this.getCalendarById(id);
@@ -151,6 +153,7 @@ export class Calendar {
         this.db.update(schema.calendars).set({
             name: input.name !== undefined ? input.name.trim() : existing.name,
             color: input.color !== undefined ? input.color : existing.color,
+            visible: input.visible !== undefined ? input.visible : existing.visible,
             shares: input.shares !== undefined ? input.shares : existing.shares,
             updatedAt: sql`unixepoch()`,
         }).where(eq(schema.calendars.id, id)).run();

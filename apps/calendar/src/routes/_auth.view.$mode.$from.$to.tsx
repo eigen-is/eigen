@@ -1,4 +1,4 @@
-import {createFileRoute} from '@tanstack/react-router'
+import {createFileRoute, useNavigate} from '@tanstack/react-router'
 import {useCallback, useMemo, useState} from 'react';
 import {Column, ColumnLayout} from "@workspace/ui/components/layout";
 import {useCalendars, useEvents, useSharedCalendars} from '@workspace/lib/calendar';
@@ -8,60 +8,83 @@ import {WeekView} from '../components/week-view';
 import {CreateEventDialog} from '../components/create-event-dialog';
 import {getMonthRange, getWeekRange} from '../components/calendar-utils';
 import type {ViewMode} from '../components/calendar-utils';
-import type {CalendarEventOccurrence} from '@workspace/lib/types/calendar';
 import {EigenLoader} from '@workspace/ui';
 
-export const Route = createFileRoute('/_auth/view')({
+export const Route = createFileRoute('/_auth/view/$mode/$from/$to')({
     component: CalendarView,
 })
 
 function CalendarView() {
-    const [currentDate, setCurrentDate] = useState(new Date());
-    const [viewMode, setViewMode] = useState<ViewMode>('month');
+    const {mode, from: fromStr, to: toStr} = Route.useParams();
+    const navigate = useNavigate();
+
+    const viewMode = (mode === 'week' ? 'week' : 'month') as ViewMode;
+    const from = Number(fromStr);
+    const to = Number(toStr);
+
     const [createEventOpen, setCreateEventOpen] = useState(false);
     const [createEventDate, setCreateEventDate] = useState<Date | undefined>();
 
     const {data: calendars = []} = useCalendars();
     useSharedCalendars();
 
-    const range = useMemo(() => {
-        return viewMode === 'month'
-            ? getMonthRange(currentDate)
-            : getWeekRange(currentDate);
-    }, [currentDate, viewMode]);
+    const currentDate = useMemo(() => {
+        const midTs = (from + to) / 2;
+        const mid = new Date(midTs * 1000);
+        if (viewMode === 'month') {
+            return new Date(mid.getFullYear(), mid.getMonth(), 1);
+        }
+        return mid;
+    }, [from, to, viewMode]);
 
-    const {data: ownEvents = [], isLoading} = useEvents(range.from, range.to);
+    const {data: ownEvents = [], isLoading} = useEvents(from, to);
+
+    const visibleCalendarIds = useMemo(() => {
+        return new Set(calendars.filter(c => c.visible).map(c => c.id));
+    }, [calendars]);
 
     const allEvents = useMemo(() => {
-        const events: CalendarEventOccurrence[] = [...ownEvents];
-        return events;
-    }, [ownEvents]);
+        return ownEvents.filter(e => visibleCalendarIds.has(e.calendarId));
+    }, [ownEvents, visibleCalendarIds]);
 
-    const handleToday = useCallback(() => setCurrentDate(new Date()), []);
+    const navigateToRange = useCallback((newMode: ViewMode, newFrom: number, newTo: number) => {
+        navigate({
+            to: '/view/$mode/$from/$to',
+            params: {mode: newMode, from: String(newFrom), to: String(newTo)},
+        });
+    }, [navigate]);
+
+    const handleToday = useCallback(() => {
+        const range = viewMode === 'month' ? getMonthRange(new Date()) : getWeekRange(new Date());
+        navigateToRange(viewMode, range.from, range.to);
+    }, [viewMode, navigateToRange]);
 
     const handlePrev = useCallback(() => {
-        setCurrentDate(prev => {
-            const d = new Date(prev);
-            if (viewMode === 'month') {
-                d.setMonth(d.getMonth() - 1);
-            } else {
-                d.setDate(d.getDate() - 7);
-            }
-            return d;
-        });
-    }, [viewMode]);
+        const d = new Date(currentDate);
+        if (viewMode === 'month') {
+            d.setMonth(d.getMonth() - 1);
+        } else {
+            d.setDate(d.getDate() - 7);
+        }
+        const range = viewMode === 'month' ? getMonthRange(d) : getWeekRange(d);
+        navigateToRange(viewMode, range.from, range.to);
+    }, [currentDate, viewMode, navigateToRange]);
 
     const handleNext = useCallback(() => {
-        setCurrentDate(prev => {
-            const d = new Date(prev);
-            if (viewMode === 'month') {
-                d.setMonth(d.getMonth() + 1);
-            } else {
-                d.setDate(d.getDate() + 7);
-            }
-            return d;
-        });
-    }, [viewMode]);
+        const d = new Date(currentDate);
+        if (viewMode === 'month') {
+            d.setMonth(d.getMonth() + 1);
+        } else {
+            d.setDate(d.getDate() + 7);
+        }
+        const range = viewMode === 'month' ? getMonthRange(d) : getWeekRange(d);
+        navigateToRange(viewMode, range.from, range.to);
+    }, [currentDate, viewMode, navigateToRange]);
+
+    const handleViewModeChange = useCallback((newMode: ViewMode) => {
+        const range = newMode === 'month' ? getMonthRange(currentDate) : getWeekRange(currentDate);
+        navigateToRange(newMode, range.from, range.to);
+    }, [currentDate, navigateToRange]);
 
     const handleDayClick = useCallback((date: Date) => {
         setCreateEventDate(date);
@@ -79,7 +102,7 @@ function CalendarView() {
                     <CalendarToolbar
                         currentDate={currentDate}
                         viewMode={viewMode}
-                        onViewModeChange={setViewMode}
+                        onViewModeChange={handleViewModeChange}
                         onToday={handleToday}
                         onPrev={handlePrev}
                         onNext={handleNext}
