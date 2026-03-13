@@ -702,6 +702,90 @@ describe('Calendar', () => {
             expect(event.title).toBe('Bob Event');
         });
 
+        test('Bob can update event on shared calendar with write permission', async () => {
+            const eventsRes = await authedRequest(ctx.bob.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${sharedCalendarId}/events/1741737600/1741824000`);
+            const events = await eventsRes.json() as any[];
+            const bobEvent = events.find((e: any) => e.title === 'Bob Event');
+            expect(bobEvent).toBeDefined();
+
+            const updateRes = await authedRequest(ctx.bob.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/events/${bobEvent.id}`, {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({title: 'Bob Event Updated'}),
+                });
+            expect(updateRes.status).toBe(200);
+            const updated = await updateRes.json() as any;
+            expect(updated.title).toBe('Bob Event Updated');
+        });
+
+        test('Bob can delete event on shared calendar with write permission', async () => {
+            const eventsRes = await authedRequest(ctx.bob.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${sharedCalendarId}/events/1741737600/1741824000`);
+            const events = await eventsRes.json() as any[];
+            const bobEvent = events.find((e: any) => e.title === 'Bob Event Updated');
+            expect(bobEvent).toBeDefined();
+
+            const deleteRes = await authedRequest(ctx.bob.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/events/${bobEvent.id}`, {
+                    method: 'DELETE',
+                });
+            expect(deleteRes.status).toBe(200);
+        });
+
+        test('read-only user cannot update or delete shared events', async () => {
+            const shareRes = await authedRequest(ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${sharedCalendarId}`, {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        shares: [
+                            {targetId: ctx.bob.user.email, permission: 'write'},
+                            {targetId: ctx.charlie.user.email, permission: 'read'},
+                        ],
+                    }),
+                });
+            expect(shareRes.status).toBe(200);
+
+            const eventsRes = await authedRequest(ctx.charlie.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${sharedCalendarId}/events/1741737600/1741824000`);
+            const events = await eventsRes.json() as any[];
+            expect(events.length).toBeGreaterThan(0);
+            const eventId = events[0].id;
+
+            const updateRes = await authedRequest(ctx.charlie.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/events/${eventId}`, {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({title: 'Hacked'}),
+                });
+            expect(updateRes.status).toBe(403);
+
+            const deleteRes = await authedRequest(ctx.charlie.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/events/${eventId}`, {
+                    method: 'DELETE',
+                });
+            expect(deleteRes.status).toBe(403);
+        });
+
+        test('created event has createByUserId set', async () => {
+            const createRes = await authedRequest(ctx.bob.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${sharedCalendarId}/events`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        title: 'Bob Created Event',
+                        startTime: 1741780800,
+                        endTime: 1741784400,
+                        allDay: false,
+                    }),
+                });
+            expect(createRes.status).toBe(200);
+            const event = await createRes.json() as any;
+            expect(event.createByUserId).toBe(ctx.bob.user.id);
+        });
+
         test('free-busy permission returns only time blocks', async () => {
             const shareRes = await authedRequest(ctx.alice.user.sessionToken,
                 `/calendar/${ctx.alice.user.id}/calendars/${sharedCalendarId}`, {

@@ -18,6 +18,7 @@ type EditEventDialogProps = {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     event: CalendarEventOccurrence | null;
+    ownerUserId?: string;
 }
 
 function toLocalDateString(date: Date): string {
@@ -44,7 +45,7 @@ function truncateRRule(rruleStr: string, beforeDate: Date): string {
     return result.replace(/^RRULE:/, '');
 }
 
-export function EditEventDialog({open, onOpenChange, event}: EditEventDialogProps) {
+export function EditEventDialog({open, onOpenChange, event, ownerUserId}: EditEventDialogProps) {
     const updateEvent = useUpdateEvent();
     const createEvent = useCreateEvent();
 
@@ -134,10 +135,11 @@ export function EditEventDialog({open, onOpenChange, event}: EditEventDialogProp
 
             if (action === 'all') {
                 const targetId = event.parentEventId || event.id;
-                await updateEvent.mutateAsync({id: targetId, ...updates});
+                await updateEvent.mutateAsync({id: targetId, ownerId: ownerUserId, ...updates});
             } else if (action === 'this') {
                 await createEvent.mutateAsync({
                     calendarId: event.calendarId,
+                    ownerId: ownerUserId,
                     ...updates,
                     allDay: Boolean(allDay),
                     rrule: null,
@@ -149,10 +151,11 @@ export function EditEventDialog({open, onOpenChange, event}: EditEventDialogProp
                 const occDate = parseOccurrenceDate(event.occurrenceDate);
                 if (event.rrule) {
                     const truncated = truncateRRule(event.rrule, occDate);
-                    await updateEvent.mutateAsync({id: parentId, rrule: truncated});
+                    await updateEvent.mutateAsync({id: parentId, ownerId: ownerUserId, rrule: truncated});
                 }
                 await createEvent.mutateAsync({
                     calendarId: event.calendarId,
+                    ownerId: ownerUserId,
                     ...updates,
                     allDay: Boolean(allDay),
                 });
