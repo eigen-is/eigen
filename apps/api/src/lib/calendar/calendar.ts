@@ -68,6 +68,7 @@ function dbEventToCalendarEvent(row: typeof schema.events.$inferSelect): Calenda
         status: row.status as CalendarEvent['status'],
         etag: row.etag,
         data: (row.data as EventData) ?? null,
+        createByUserId: row.createByUserId ?? null,
         createdAt: row.createdAt as number,
         updatedAt: row.updatedAt as number,
     };
@@ -190,6 +191,7 @@ export class Calendar {
         recurrenceDate?: string | null;
         status?: CalendarEvent['status'];
         data?: EventData | null;
+        createByUserId?: string | null;
     }): CalendarEvent {
         const cal = this.getCalendarById(calendarId);
         if (!cal) throw new ApiError(404, 'Calendar not found');
@@ -227,6 +229,7 @@ export class Calendar {
             status,
             etag,
             data: input.data ?? null,
+            createByUserId: input.createByUserId ?? null,
         }).run();
 
         this.incrementCtag(calendarId);

@@ -162,30 +162,50 @@ export const calendarRouter = new Elysia({name: "calendar"})
 
     .post("/calendar/:ownerId/calendars/:calId/events", async ({params, body, user}) => {
         const parsed = parseOwnerId(params.ownerId);
+        const eventBody = {...body, createByUserId: user.id};
 
         if (parsed.type === 'team') {
             const memberships = await getMemberships(user.id);
             if (!memberships.teamIds.includes(parsed.id)) throw new ApiError(403, 'Not a member of this team');
             const home = await getHome(params.ownerId);
-            return home.calendar.createEvent(params.calId, body);
+            return home.calendar.createEvent(params.calId, eventBody);
         }
 
         if (params.ownerId === user.id) {
             const cal = await resolveCalendar(user, user.id);
-            return cal.createEvent(params.calId, body);
+            return cal.createEvent(params.calId, eventBody);
         }
 
         const {calendar, permission} = await resolveCalendarForSharedAccess(user, params.ownerId, params.calId);
         if (permission !== 'write') throw new ApiError(403, 'Write permission required');
-        return calendar.createEvent(params.calId, body);
+        return calendar.createEvent(params.calId, eventBody);
     }, {body: CreateEventSchema, auth: true})
 
     .put("/calendar/:ownerId/events/:id", async ({params, body, user}) => {
+        if (params.ownerId !== user.id) {
+            const ownerHome = await getHome(params.ownerId);
+            const event = ownerHome.calendar.getEventById(params.id);
+            if (!event) throw new ApiError(404, 'Event not found');
+            const memberships = await getMemberships(user.id);
+            const permission = ownerHome.calendar.checkPermission(event.calendarId, user.email, memberships.teamIds);
+            if (permission !== 'write') throw new ApiError(403, 'Write permission required');
+            return ownerHome.calendar.updateEvent(params.id, body);
+        }
         const cal = await resolveCalendar(user, user.id);
         return cal.updateEvent(params.id, body);
     }, {body: UpdateEventSchema, auth: true})
 
     .delete("/calendar/:ownerId/events/:id", async ({params, user}) => {
+        if (params.ownerId !== user.id) {
+            const ownerHome = await getHome(params.ownerId);
+            const event = ownerHome.calendar.getEventById(params.id);
+            if (!event) throw new ApiError(404, 'Event not found');
+            const memberships = await getMemberships(user.id);
+            const permission = ownerHome.calendar.checkPermission(event.calendarId, user.email, memberships.teamIds);
+            if (permission !== 'write') throw new ApiError(403, 'Write permission required');
+            ownerHome.calendar.deleteEvent(params.id);
+            return {success: true};
+        }
         const cal = await resolveCalendar(user, user.id);
         cal.deleteEvent(params.id);
         return {success: true};

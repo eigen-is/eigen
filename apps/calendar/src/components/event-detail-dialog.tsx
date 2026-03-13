@@ -81,6 +81,8 @@ function truncateRRule(rruleStr: string, beforeDate: Date): string {
 export function EventDetailDialog({open, onOpenChange, event, calendar, sharedCalendar}: EventDetailDialogProps) {
     const [showDeleteDialog, setShowDeleteDialog] = useState(false);
     const [showRecurringDeleteDialog, setShowRecurringDeleteDialog] = useState(false);
+    const [showRecurringDeleteConfirm, setShowRecurringDeleteConfirm] = useState(false);
+    const [pendingDeleteAction, setPendingDeleteAction] = useState<RecurringAction | null>(null);
     const [editOpen, setEditOpen] = useState(false);
     const deleteEvent = useDeleteEvent();
     const createEvent = useCreateEvent();
@@ -90,9 +92,10 @@ export function EventDetailDialog({open, onOpenChange, event, calendar, sharedCa
 
     const isRecurring = !!event.rrule;
     const isException = !!event.parentEventId;
-    const color = calendar?.color || (sharedCalendar ? (sharedCalendar.color || sharedCalendar.calendarColor) : '#4285f4');
     const calendarName = calendar?.name || sharedCalendar?.calendarName || null;
     const isShared = !!sharedCalendar;
+    const ownerUserId = sharedCalendar?.ownerUserId;
+    const canEdit = !isShared || sharedCalendar?.permission === 'write';
 
     const handleDelete = async (action: RecurringAction) => {
         try {
@@ -100,6 +103,7 @@ export function EventDetailDialog({open, onOpenChange, event, calendar, sharedCa
                 if (isRecurring && !isException) {
                     await createEvent.mutateAsync({
                         calendarId: event.calendarId,
+                        ownerId: ownerUserId,
                         title: event.title,
                         startTime: event.startTime,
                         endTime: event.endTime,
@@ -109,7 +113,7 @@ export function EventDetailDialog({open, onOpenChange, event, calendar, sharedCa
                         status: 'cancelled',
                     });
                 } else {
-                    await deleteEvent.mutateAsync(event.id);
+                    await deleteEvent.mutateAsync(ownerUserId ? {id: event.id, ownerId: ownerUserId} : event.id);
                 }
             } else if (action === 'this-and-following') {
                 const parentId = event.parentEventId || event.id;
@@ -117,11 +121,11 @@ export function EventDetailDialog({open, onOpenChange, event, calendar, sharedCa
                 const rrule = event.rrule || (isException && event.parentEventId ? null : null);
                 if (rrule) {
                     const truncated = truncateRRule(rrule, occDate);
-                    await updateEvent.mutateAsync({id: parentId, rrule: truncated});
+                    await updateEvent.mutateAsync({id: parentId, ownerId: ownerUserId, rrule: truncated});
                 }
             } else if (action === 'all') {
                 const targetId = event.parentEventId || event.id;
-                await deleteEvent.mutateAsync(targetId);
+                await deleteEvent.mutateAsync(ownerUserId ? {id: targetId, ownerId: ownerUserId} : targetId);
             }
         } finally {
             setShowRecurringDeleteDialog(false);
@@ -130,7 +134,7 @@ export function EventDetailDialog({open, onOpenChange, event, calendar, sharedCa
     };
 
     const handleNonRecurringDelete = async () => {
-        await deleteEvent.mutateAsync(event.id);
+        await deleteEvent.mutateAsync(ownerUserId ? {id: event.id, ownerId: ownerUserId} : event.id);
         setShowDeleteDialog(false);
         onOpenChange(false);
     };
@@ -143,11 +147,25 @@ export function EventDetailDialog({open, onOpenChange, event, calendar, sharedCa
         }
     };
 
+    const handleRecurringDeleteAction = (action: RecurringAction) => {
+        setPendingDeleteAction(action);
+        setShowRecurringDeleteDialog(false);
+        setShowRecurringDeleteConfirm(true);
+    };
+
+    const handleRecurringDeleteConfirm = async () => {
+        if (pendingDeleteAction) {
+            await handleDelete(pendingDeleteAction);
+        }
+        setShowRecurringDeleteConfirm(false);
+        setPendingDeleteAction(null);
+    };
+
     const recurrenceText = event.rrule ? rruleToText(event.rrule) : null;
 
     return (
         <>
-            <Dialog open={open && !showDeleteDialog && !showRecurringDeleteDialog && !editOpen} onOpenChange={onOpenChange}>
+            <Dialog open={open && !showDeleteDialog && !showRecurringDeleteDialog && !showRecurringDeleteConfirm && !editOpen} onOpenChange={onOpenChange}>
                 <DialogContent className="sm:max-w-[450px]">
                     <DialogHeader>
                         {/* <div className="flex items-start gap-3"> */}
@@ -195,12 +213,16 @@ export function EventDetailDialog({open, onOpenChange, event, calendar, sharedCa
 
                     <DialogFooter className="flex justify-between">
                         <div className="flex gap-1">
-                            <Button variant="ghost" size="icon" onClick={() => setEditOpen(true)}>
-                                <Pencil className="h-4 w-4"/>
-                            </Button>
-                            <Button variant="ghost" size="icon" onClick={handleDeleteClick}>
-                                <Trash2 className="h-4 w-4"/>
-                            </Button>
+                            {canEdit && (
+                                <>
+                                    <Button variant="ghost" size="icon" onClick={() => setEditOpen(true)}>
+                                        <Pencil className="h-4 w-4"/>
+                                    </Button>
+                                    <Button variant="ghost" size="icon" onClick={handleDeleteClick}>
+                                        <Trash2 className="h-4 w-4"/>
+                                    </Button>
+                                </>
+                            )}
                         </div>
                         <Button variant="outline" onClick={() => onOpenChange(false)}>
                             Close
@@ -222,7 +244,19 @@ export function EventDetailDialog({open, onOpenChange, event, calendar, sharedCa
                 open={showRecurringDeleteDialog}
                 onOpenChange={setShowRecurringDeleteDialog}
                 title="Delete recurring event"
-                onConfirm={handleDelete}
+                onConfirm={handleRecurringDeleteAction}
+            />
+
+            <DeleteDialog
+                open={showRecurringDeleteConfirm}
+                onOpenChange={(o) => {
+                    setShowRecurringDeleteConfirm(o);
+                    if (!o) setPendingDeleteAction(null);
+                }}
+                title="Delete Event"
+                description="Are you sure you want to delete this event?"
+                itemName={event.title}
+                onDelete={handleRecurringDeleteConfirm}
             />
 
             <EditEventDialog
@@ -232,6 +266,7 @@ export function EventDetailDialog({open, onOpenChange, event, calendar, sharedCa
                     if (!o) onOpenChange(false);
                 }}
                 event={event}
+                ownerUserId={ownerUserId}
             />
         </>
     );

@@ -3,7 +3,7 @@ import * as schema from './schema';
 
 export const CALENDAR_DB_CONFIG: DatabaseConfig<typeof schema> = {
     name: 'calendar',
-    currentVersion: 2,
+    currentVersion: 1,
     schema,
     migrations: [
         {
@@ -16,6 +16,7 @@ export const CALENDAR_DB_CONFIG: DatabaseConfig<typeof schema> = {
                     isDefault INTEGER NOT NULL DEFAULT 0,
                     ctag INTEGER NOT NULL DEFAULT 0,
                     shares TEXT,
+                    visible INTEGER NOT NULL DEFAULT 1,
                     createdAt INTEGER DEFAULT (unixepoch()),
                     updatedAt INTEGER DEFAULT (unixepoch())
                 );
@@ -39,6 +40,7 @@ export const CALENDAR_DB_CONFIG: DatabaseConfig<typeof schema> = {
                     data TEXT,
                     createdAt INTEGER DEFAULT (unixepoch()),
                     updatedAt INTEGER DEFAULT (unixepoch()),
+                    createByUserId TEXT,
                     FOREIGN KEY (calendarId) REFERENCES calendars(id) ON DELETE CASCADE,
                     FOREIGN KEY (parentEventId) REFERENCES events(id) ON DELETE CASCADE
                 );
@@ -59,12 +61,6 @@ export const CALENDAR_DB_CONFIG: DatabaseConfig<typeof schema> = {
                     createdAt INTEGER DEFAULT (unixepoch()),
                     updatedAt INTEGER DEFAULT (unixepoch())
                 );
-            `)
-        },
-        {
-            version: 2,
-            up: (db) => db.exec(`
-                ALTER TABLE calendars ADD COLUMN visible INTEGER NOT NULL DEFAULT 1;
             `)
         }
     ]
