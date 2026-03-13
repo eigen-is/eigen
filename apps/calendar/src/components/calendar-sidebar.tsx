@@ -11,7 +11,6 @@ import {CalendarConfigDialog} from './calendar-config-dialog';
 import {SharedCalendarConfigDialog} from './shared-calendar-config-dialog';
 import {CreateEventDialog} from './create-event-dialog';
 import {cn} from '@workspace/ui/lib/utils';
-import {UserAvatar} from '@workspace/ui/components/layout/user-avatar';
 
 type CalendarSidebarProps = {
     condensed?: boolean;
@@ -178,7 +177,7 @@ export function CalendarSidebar({
                                             />
                                             {!condensed && (
                                                 <>
-                                                    <UserAvatar userId={sc.ownerUserId} size="sm" tooltip className="h-5 w-5 shrink-0"/>
+                                                    {/* <UserAvatar userId={sc.ownerUserId} size="sm" tooltip className="h-5 w-5 shrink-0"/> */}
                                                     <span className="text-sm truncate flex-1">{sc.calendarName}</span>
                                                     <div className="absolute right-2 opacity-0 group-hover:opacity-80 hover:opacity-100">
                                                         <TooltipButton
