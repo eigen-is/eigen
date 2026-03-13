@@ -458,6 +458,127 @@ describe('Calendar', () => {
         });
     });
 
+    describe('This and following operations', () => {
+        let thisFollowingEventId = '';
+
+        test('setup: create a daily recurring event for this-and-following tests', async () => {
+            const res = await authedRequest(ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        title: 'Daily Standup',
+                        startTime: 1741773600,
+                        endTime: 1741777200,
+                        allDay: false,
+                        rrule: 'FREQ=DAILY',
+                    }),
+                });
+            expect(res.status).toBe(200);
+            const event = await res.json() as any;
+            thisFollowingEventId = event.id;
+        });
+
+        test('delete this and following: truncate RRULE with UNTIL removes future occurrences', async () => {
+            const from = 1741737600;
+            const to = from + 14 * 86400;
+
+            const beforeRes = await authedRequest(ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events/${from}/${to}`);
+            const beforeEvents = await beforeRes.json() as any[];
+            const standups = beforeEvents.filter((e: any) => e.title === 'Daily Standup');
+            expect(standups.length).toBeGreaterThanOrEqual(10);
+
+            const cutoffOcc = standups[5];
+            const cutoffDate = new Date(cutoffOcc.occurrenceDate + 'T00:00:00Z');
+            const untilDate = new Date(cutoffDate);
+            untilDate.setUTCDate(untilDate.getUTCDate() - 1);
+            untilDate.setUTCHours(23, 59, 59, 0);
+            const untilStr = untilDate.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+
+            const truncatedRRule = `FREQ=DAILY;UNTIL=${untilStr}`;
+            const updateRes = await authedRequest(ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/events/${thisFollowingEventId}`, {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({rrule: truncatedRRule}),
+                });
+            expect(updateRes.status).toBe(200);
+
+            const afterRes = await authedRequest(ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events/${from}/${to}`);
+            const afterEvents = await afterRes.json() as any[];
+            const afterStandups = afterEvents.filter((e: any) => e.title === 'Daily Standup');
+            expect(afterStandups.length).toBe(5);
+            for (const s of afterStandups) {
+                expect(s.occurrenceDate < cutoffOcc.occurrenceDate).toBe(true);
+            }
+        });
+
+        test('edit this and following: truncate parent + create new series', async () => {
+            const res = await authedRequest(ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        title: 'Weekly Review',
+                        startTime: 1741773600,
+                        endTime: 1741777200,
+                        allDay: false,
+                        rrule: 'FREQ=WEEKLY;BYDAY=WE',
+                    }),
+                });
+            expect(res.status).toBe(200);
+            const parentEvent = await res.json() as any;
+
+            const from = 1741737600;
+            const to = from + 42 * 86400;
+            const beforeRes = await authedRequest(ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events/${from}/${to}`);
+            const beforeEvents = await beforeRes.json() as any[];
+            const reviews = beforeEvents.filter((e: any) => e.title === 'Weekly Review');
+            expect(reviews.length).toBeGreaterThanOrEqual(4);
+
+            const cutoffOcc = reviews[2];
+            const cutoffDate = new Date(cutoffOcc.occurrenceDate + 'T00:00:00Z');
+            const untilDate = new Date(cutoffDate);
+            untilDate.setUTCDate(untilDate.getUTCDate() - 1);
+            untilDate.setUTCHours(23, 59, 59, 0);
+            const untilStr = untilDate.toISOString().replace(/[-:]/g, '').replace(/\.\d{3}/, '');
+            const truncatedRRule = `FREQ=WEEKLY;BYDAY=WE;UNTIL=${untilStr}`;
+
+            const updateRes = await authedRequest(ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/events/${parentEvent.id}`, {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({rrule: truncatedRRule}),
+                });
+            expect(updateRes.status).toBe(200);
+
+            const newRes = await authedRequest(ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        title: 'Weekly Review (updated)',
+                        startTime: cutoffOcc.startTime + 3600,
+                        endTime: cutoffOcc.endTime + 3600,
+                        allDay: false,
+                        rrule: 'FREQ=WEEKLY;BYDAY=WE',
+                    }),
+                });
+            expect(newRes.status).toBe(200);
+
+            const afterRes = await authedRequest(ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events/${from}/${to}`);
+            const afterEvents = await afterRes.json() as any[];
+            const oldReviews = afterEvents.filter((e: any) => e.title === 'Weekly Review');
+            const newReviews = afterEvents.filter((e: any) => e.title === 'Weekly Review (updated)');
+            expect(oldReviews.length).toBe(2);
+            expect(newReviews.length).toBeGreaterThanOrEqual(3);
+        });
+    });
+
     describe('Range queries', () => {
         test('empty range returns empty array', async () => {
             const res = await authedRequest(ctx.alice.user.sessionToken,
