@@ -4,9 +4,11 @@ import {Button} from '@workspace/ui/components/button';
 import {Popover, PopoverContent, PopoverTrigger} from '@workspace/ui/components/popover';
 import {ColorPicker} from '@workspace/ui/components/layout/media/color-picker';
 import {DeleteDialog} from '@workspace/ui/components/layout/delete/delete-dialog';
-import {useUpdateSharedCalendar, useDeleteSharedCalendar} from '@workspace/lib/calendar';
+import {useUpdateSharedCalendar, useDeleteSharedCalendar, useCalendarAccess} from '@workspace/lib/calendar';
 import type {SharedCalendar} from '@workspace/lib/types/calendar';
 import {Label} from '@workspace/ui/components/label';
+import {UserItem} from '@workspace/ui/components/layout/user-item';
+import {Separator} from '@workspace/ui/components/separator';
 
 type SharedCalendarConfigDialogProps = {
     open: boolean;
@@ -22,6 +24,11 @@ export function SharedCalendarConfigDialog({open, onOpenChange, sharedCalendar}:
 
     const updateSharedCalendar = useUpdateSharedCalendar();
     const deleteSharedCalendar = useDeleteSharedCalendar();
+    const {data: accessData} = useCalendarAccess(
+        sharedCalendar?.ownerUserId || '',
+        sharedCalendar?.calendarId || '',
+        open && !!sharedCalendar,
+    );
 
     useEffect(() => {
         if (sharedCalendar && open) {
@@ -90,6 +97,22 @@ export function SharedCalendarConfigDialog({open, onOpenChange, sharedCalendar}:
                                     />
                                 </PopoverContent>
                             </Popover>
+                        </div>
+
+                        <Separator/>
+
+                        <div>
+                            <Label className="text-sm font-semibold">People with access</Label>
+                            <div className="mt-2 space-y-3">
+                                <UserItem userId={sharedCalendar.ownerUserId} label="Owner"/>
+                                {accessData?.shares?.map((share, i) => (
+                                    <UserItem
+                                        key={i}
+                                        email={share.targetId}
+                                        label={share.permission === 'write' ? 'Editor' : share.permission === 'read' ? 'Viewer' : share.permission}
+                                    />
+                                ))}
+                            </div>
                         </div>
                     </div>
 

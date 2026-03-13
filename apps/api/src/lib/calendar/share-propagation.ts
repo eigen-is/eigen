@@ -1,9 +1,44 @@
 import type {CalendarItem, CalendarShare} from '@workspace/lib/types/calendar';
+import type {SSEvent} from '@workspace/lib/types/sse';
 import {parseOwnerId} from '@workspace/lib/types';
 import {getUserByEmail} from '../user/';
 import {getHome} from '../home';
 import {getTeamMembers} from '../team';
 import type {Home} from '../home';
+
+export async function notifySharedCalendarUsers(
+    ownerHome: Home,
+    calendar: CalendarItem,
+    event: SSEvent,
+): Promise<void> {
+    const shares = calendar.shares;
+    if (!shares || shares.length === 0) return;
+
+    const userIds = new Set<string>();
+
+    for (const share of shares) {
+        const parsed = parseOwnerId(share.targetId);
+        if (parsed.type === 'user') {
+            const user = await getUserByEmail(share.targetId);
+            if (user) userIds.add(user.id);
+        } else if (parsed.type === 'team') {
+            // for teams, we really on staletime refresh at FE
+        //    const members = await getTeamMembers(parsed.id);
+        //    for (const member of members) userIds.add(member.user.id);
+        }
+    }
+
+    userIds.delete(ownerHome.user.id);
+
+    for (const userId of userIds) {
+        try {
+            const targetHome = await getHome(userId);
+            targetHome.notify(event);
+        } catch (error) {
+            console.error('Failed to notify shared calendar user:', error);
+        }
+    }
+}
 
 export async function propagateCalendarShare(
     ownerHome: Home,

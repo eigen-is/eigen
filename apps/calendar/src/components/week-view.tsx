@@ -1,5 +1,5 @@
 import {useMemo, useState} from 'react';
-import type {CalendarEventOccurrence, CalendarItem} from '@workspace/lib/types/calendar';
+import type {CalendarEventOccurrence, CalendarItem, SharedCalendar} from '@workspace/lib/types/calendar';
 import {
     getWeekRange,
     getDaysInRange,
@@ -16,10 +16,11 @@ type WeekViewProps = {
     currentDate: Date;
     events: CalendarEventOccurrence[];
     calendars: CalendarItem[];
+    sharedCalendars?: SharedCalendar[];
     onDayClick?: (date: Date) => void;
 }
 
-export function WeekView({currentDate, events, calendars, onDayClick}: WeekViewProps) {
+export function WeekView({currentDate, events, calendars, sharedCalendars, onDayClick}: WeekViewProps) {
     const [selectedEvent, setSelectedEvent] = useState<CalendarEventOccurrence | null>(null);
     const [detailOpen, setDetailOpen] = useState(false);
 
@@ -34,6 +35,10 @@ export function WeekView({currentDate, events, calendars, onDayClick}: WeekViewP
 
     const selectedCalendar = selectedEvent
         ? calendars.find(c => c.id === selectedEvent.calendarId) || null
+        : null;
+
+    const selectedSharedCalendar = selectedEvent && !selectedCalendar
+        ? sharedCalendars?.find(s => s.calendarId === selectedEvent.calendarId) || null
         : null;
 
     return (
@@ -72,7 +77,7 @@ export function WeekView({currentDate, events, calendars, onDayClick}: WeekViewP
                             >
                                 <div className="space-y-0.5">
                                     {allDayEvents.map((event, idx) => {
-                                        const color = getCalendarColor(event, calendars);
+                                        const color = getCalendarColor(event, calendars, sharedCalendars);
                                         return (
                                             <div
                                                 key={`${event.id}-${event.occurrenceDate}-${idx}`}
@@ -91,7 +96,7 @@ export function WeekView({currentDate, events, calendars, onDayClick}: WeekViewP
                                     )}
 
                                     {timedEvents.map((event, idx) => {
-                                        const color = getCalendarColor(event, calendars);
+                                        const color = getCalendarColor(event, calendars, sharedCalendars);
                                         return (
                                             <div
                                                 key={`${event.id}-${event.occurrenceDate}-${idx}`}
@@ -122,6 +127,7 @@ export function WeekView({currentDate, events, calendars, onDayClick}: WeekViewP
                 onOpenChange={setDetailOpen}
                 event={selectedEvent}
                 calendar={selectedCalendar}
+                sharedCalendar={selectedSharedCalendar}
             />
         </>
     );

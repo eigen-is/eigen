@@ -53,14 +53,19 @@ export function TimeSelect({value, onChange, referenceTime}: TimeSelectProps) {
 
     useEffect(() => {
         if (open && listRef.current) {
-            const target = TIME_SLOTS.includes(value) ? value : TIME_SLOTS.reduce((prev, curr) =>
-                Math.abs(timeToMinutes(curr) - timeToMinutes(value)) < Math.abs(timeToMinutes(prev) - timeToMinutes(value)) ? curr : prev
-            );
-            const idx = TIME_SLOTS.indexOf(target);
-            if (idx >= 0) {
-                const el = listRef.current.children[idx] as HTMLElement;
-                el?.scrollIntoView({block: 'center'});
-            }
+            requestAnimationFrame(() => {
+                if (!listRef.current) return;
+                const target = TIME_SLOTS.includes(value) ? value : TIME_SLOTS.reduce((prev, curr) =>
+                    Math.abs(timeToMinutes(curr) - timeToMinutes(value)) < Math.abs(timeToMinutes(prev) - timeToMinutes(value)) ? curr : prev
+                );
+                const idx = TIME_SLOTS.indexOf(target);
+                if (idx >= 0) {
+                    const el = listRef.current.children[idx] as HTMLElement;
+                    if (el) {
+                        el.scrollIntoView({block: 'center'});
+                    }
+                }
+            });
         }
     }, [open, value]);
 
@@ -93,8 +98,8 @@ export function TimeSelect({value, onChange, referenceTime}: TimeSelectProps) {
                     />
                 </div>
             </PopoverTrigger>
-            <PopoverContent className="w-[180px] p-0" align="start">
-                <div ref={listRef} className="max-h-[240px] overflow-y-auto p-1">
+            <PopoverContent className="w-[180px] p-0" align="start" onOpenAutoFocus={(e: Event) => e.preventDefault()}>
+                <div ref={listRef} className="max-h-[240px] overflow-y-auto p-1" tabIndex={-1}>
                     {TIME_SLOTS.map((slot) => (
                         <button
                             key={slot}

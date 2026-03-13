@@ -12,7 +12,7 @@ import type {ManagedDatabase} from '../core/';
 import {ApiError, PATHS} from '../core';
 import {SSEventType} from '@workspace/lib/types/sse';
 import {buildCalendarEvent, buildCalendarShareEvent} from './sse-events';
-import {propagateCalendarShare} from './share-propagation';
+import {propagateCalendarShare, notifySharedCalendarUsers} from './share-propagation';
 import {createHash} from 'crypto';
 
 export async function getCalendar(user: User) {
@@ -103,7 +103,7 @@ export class Calendar {
         if (existing.length === 0) {
             this.db.insert(schema.calendars).values({
                 id: uuidv4(),
-                name: 'Personal',
+                name: this.home.user.name || 'Personal',
                 color: '#4285f4',
                 isDefault: true,
                 ctag: 0,
@@ -230,7 +230,9 @@ export class Calendar {
         }).run();
 
         this.incrementCtag(calendarId);
-        this.home.notify(buildCalendarEvent(SSEventType.CALENDAR_EVENT_CREATED, {calendarId, eventId: id, title: input.title.trim()}));
+        const sseEvent = buildCalendarEvent(SSEventType.CALENDAR_EVENT_CREATED, {calendarId, eventId: id, title: input.title.trim()});
+        this.home.notify(sseEvent);
+        notifySharedCalendarUsers(this.home, cal, sseEvent).catch(() => {});
         return this.getEventById(id)!;
     }
 
@@ -281,7 +283,10 @@ export class Calendar {
         }).where(eq(schema.events.id, id)).run();
 
         this.incrementCtag(existing.calendarId);
-        this.home.notify(buildCalendarEvent(SSEventType.CALENDAR_EVENT_UPDATED, {calendarId: existing.calendarId, eventId: id, title}));
+        const sseEvent = buildCalendarEvent(SSEventType.CALENDAR_EVENT_UPDATED, {calendarId: existing.calendarId, eventId: id, title});
+        this.home.notify(sseEvent);
+        const cal = this.getCalendarById(existing.calendarId);
+        if (cal) notifySharedCalendarUsers(this.home, cal, sseEvent).catch(() => {});
         return this.getEventById(id)!;
     }
 
@@ -291,7 +296,10 @@ export class Calendar {
 
         this.db.delete(schema.events).where(eq(schema.events.id, id)).run();
         this.incrementCtag(existing.calendarId);
-        this.home.notify(buildCalendarEvent(SSEventType.CALENDAR_EVENT_DELETED, {calendarId: existing.calendarId, eventId: id, title: existing.title}));
+        const sseEvent = buildCalendarEvent(SSEventType.CALENDAR_EVENT_DELETED, {calendarId: existing.calendarId, eventId: id, title: existing.title});
+        this.home.notify(sseEvent);
+        const cal = this.getCalendarById(existing.calendarId);
+        if (cal) notifySharedCalendarUsers(this.home, cal, sseEvent).catch(() => {});
     }
 
     public getEventsInRange(from: number, to: number, calendarId?: string): CalendarEventOccurrence[] {
