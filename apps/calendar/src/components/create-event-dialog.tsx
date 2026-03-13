@@ -10,7 +10,7 @@ import {Checkbox} from '@workspace/ui/components/checkbox';
 import {useCalendars, useSharedCalendars, useCreateEvent} from '@workspace/lib/calendar';
 import {useAuth} from '@workspace/lib/auth';
 import {RecurrencePicker} from './recurrence-picker';
-import {TimeSelect, roundToNext15Minutes, addMinutes} from './time-select';
+import {TimeSelect, roundToNext15Minutes, addMinutes, timeToMinutes} from './time-select';
 
 type CalendarOption = {
     id: string;
@@ -99,7 +99,21 @@ export function CreateEventDialog({open, onOpenChange, defaultDate, defaultCalen
 
     const handleStartTimeChange = (newStart: string) => {
         setStartTime(newStart);
-        setEndTime(addMinutes(newStart, 30));
+        
+        // Calculate minimum end time (start + 15 minutes)
+        const minEnd = addMinutes(newStart, 15);
+        const currentEndMinutes = timeToMinutes(endTime);
+        const minEndMinutes = timeToMinutes(minEnd);
+        
+        // If current end time is before the new minimum, update it to minimum + 15 minutes
+        // Otherwise, keep the current end time if it's still valid
+        if (currentEndMinutes < minEndMinutes) {
+            setEndTime(addMinutes(newStart, 30));
+        }
+    };
+
+    const getMinEndTime = () => {
+        return addMinutes(startTime, 15);
     };
 
     const handleSubmit = async () => {
@@ -180,7 +194,7 @@ export function CreateEventDialog({open, onOpenChange, defaultDate, defaultCalen
                                            className="h-8 text-sm"/>
                                     <TimeSelect value={startTime} onChange={handleStartTimeChange}/>
                                     <span className="text-muted-foreground text-sm">–</span>
-                                    <TimeSelect value={endTime} onChange={setEndTime} referenceTime={startTime}/>
+                                    <TimeSelect value={endTime} onChange={setEndTime} referenceTime={startTime} minTime={getMinEndTime()}/>
                                 </div>
                             )}
 
