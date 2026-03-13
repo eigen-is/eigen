@@ -70,7 +70,6 @@ export type FreeBusyBlock = {
 
 export type CreateEventInput = {
     calendarId: string
-    ownerId?: string
     title: string
     startTime: number
     endTime: number
@@ -86,7 +85,6 @@ export type CreateEventInput = {
 
 export type UpdateEventInput = {
     id: string
-    ownerId?: string
     title?: string
     startTime?: number
     endTime?: number

@@ -6,10 +6,11 @@ import {Textarea} from '@workspace/ui/components/textarea';
 import {Label} from '@workspace/ui/components/label';
 import {Checkbox} from '@workspace/ui/components/checkbox';
 import {useUpdateEvent, useCreateEvent} from '@workspace/lib/calendar';
+import {useAuth} from '@workspace/lib/auth';
 import type {CalendarEventOccurrence} from '@workspace/lib/types/calendar';
 import {RRule} from 'rrule';
 import {RecurrencePicker} from './recurrence-picker';
-import {TimeSelect, addMinutes} from './time-select';
+import {TimeSelect, roundToNext15Minutes, addMinutes} from './time-select';
 import {RecurringActionDialog} from './recurring-action-dialog';
 import type {RecurringAction} from './recurring-action-dialog';
 import {parseOccurrenceDate, occurrenceDateToString} from './calendar-utils';
@@ -46,8 +47,10 @@ function truncateRRule(rruleStr: string, beforeDate: Date): string {
 }
 
 export function EditEventDialog({open, onOpenChange, event, ownerUserId}: EditEventDialogProps) {
-    const updateEvent = useUpdateEvent();
-    const createEvent = useCreateEvent();
+    const {user} = useAuth();
+    const eventOwnerId = ownerUserId || user?.id || '';
+    const updateEvent = useUpdateEvent(eventOwnerId);
+    const createEvent = useCreateEvent(eventOwnerId);
 
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
@@ -135,11 +138,10 @@ export function EditEventDialog({open, onOpenChange, event, ownerUserId}: EditEv
 
             if (action === 'all') {
                 const targetId = event.parentEventId || event.id;
-                await updateEvent.mutateAsync({id: targetId, ownerId: ownerUserId, ...updates});
+                await updateEvent.mutateAsync({id: targetId, ...updates});
             } else if (action === 'this') {
                 await createEvent.mutateAsync({
                     calendarId: event.calendarId,
-                    ownerId: ownerUserId,
                     ...updates,
                     allDay: Boolean(allDay),
                     rrule: null,
@@ -151,11 +153,10 @@ export function EditEventDialog({open, onOpenChange, event, ownerUserId}: EditEv
                 const occDate = parseOccurrenceDate(event.occurrenceDate);
                 if (event.rrule) {
                     const truncated = truncateRRule(event.rrule, occDate);
-                    await updateEvent.mutateAsync({id: parentId, ownerId: ownerUserId, rrule: truncated});
+                    await updateEvent.mutateAsync({id: parentId, rrule: truncated});
                 }
                 await createEvent.mutateAsync({
                     calendarId: event.calendarId,
-                    ownerId: ownerUserId,
                     ...updates,
                     allDay: Boolean(allDay),
                 });
@@ -221,7 +222,15 @@ export function EditEventDialog({open, onOpenChange, event, ownerUserId}: EditEv
                                     <Checkbox
                                         id="edit-all-day"
                                         checked={allDay}
-                                        onCheckedChange={(checked) => setAllDay(!!checked)}
+                                        onCheckedChange={(checked) => {
+                                            const isAllDay = !!checked;
+                                            setAllDay(isAllDay);
+                                            if (!isAllDay) {
+                                                const now = roundToNext15Minutes(new Date());
+                                                setStartTime(toLocalTimeString(now));
+                                                setEndTime(addMinutes(toLocalTimeString(now), 30));
+                                            }
+                                        }}
                                     />
                                     <Label htmlFor="edit-all-day">All day</Label>
                                 </div>

@@ -11,6 +11,7 @@ import {ColorPicker} from '@workspace/ui/components/layout/media/color-picker';
 import {DeleteDialog} from '@workspace/ui/components/layout/delete/delete-dialog';
 import {Separator} from '@workspace/ui/components/separator';
 import {useCreateCalendar, useUpdateCalendar, useDeleteCalendar} from '@workspace/lib/calendar';
+import {useAuth} from '@workspace/lib/auth';
 import type {CalendarItem, CalendarShare} from '@workspace/lib/types/calendar';
 import {CalendarShareEditor} from './calendar-share-editor';
 
@@ -28,15 +29,17 @@ type CalendarConfigDialogProps = {
 }
 
 export function CalendarConfigDialog({open, onOpenChange, calendar}: CalendarConfigDialogProps) {
+    const {user} = useAuth();
+    const ownerId = user?.id || '';
     const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
     const [colorPickerOpen, setColorPickerOpen] = useState(false);
     const [isLoading, setIsLoading] = useState(false);
     const [shares, setShares] = useState<CalendarShare[] | null>(null);
 
     const isEditMode = !!calendar;
-    const createCalendar = useCreateCalendar();
-    const updateCalendar = useUpdateCalendar();
-    const deleteCalendar = useDeleteCalendar();
+    const createCalendar = useCreateCalendar(ownerId);
+    const updateCalendar = useUpdateCalendar(ownerId);
+    const deleteCalendar = useDeleteCalendar(ownerId);
 
     const form = useForm<CalendarFormValues>({
         resolver: zodResolver(calendarFormSchema),

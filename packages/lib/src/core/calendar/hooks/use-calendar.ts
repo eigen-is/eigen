@@ -2,7 +2,6 @@ import {type QueryClient, useMutation, useQuery, useQueries, useQueryClient} fro
 import {calendarApi} from '@workspace/lib/api.ts';
 import type {CalendarItem, CalendarEventOccurrence, SharedCalendar, CreateEventInput, UpdateEventInput, UpdateCalendarInput, UpdateSharedCalendarInput} from '@workspace/lib/types/calendar';
 import {invalidateHomeSize} from '../../home';
-import {useAuth} from '@workspace/lib/auth';
 
 export const calendarKeys = {
     all: ['calendar'] as const,
@@ -10,17 +9,13 @@ export const calendarKeys = {
     calendarList: () => [...calendarKeys.calendars(), 'list'] as const,
     events: () => [...calendarKeys.all, 'events'] as const,
     eventRange: (from: number, to: number) => [...calendarKeys.events(), {from, to}] as const,
-    calendarEvents: (calendarId: string, from: number, to: number) => [...calendarKeys.events(), calendarId, {from, to}] as const,
+    calendarEvents: (ownerId: string, calendarId: string, from: number, to: number) => [...calendarKeys.events(), ownerId, calendarId, {from, to}] as const,
     sharedCalendars: () => [...calendarKeys.all, 'shared'] as const,
-    sharedEvents: (ownerUserId: string, calendarId: string, from: number, to: number) => [...calendarKeys.events(), 'shared', ownerUserId, calendarId, {from, to}] as const,
 };
 
 // --- Calendar CRUD ---
 
-export function useCalendars() {
-    const {user} = useAuth();
-    const ownerId = user?.id || '';
-
+export function useCalendars(ownerId: string) {
     return useQuery({
         queryKey: calendarKeys.calendarList(),
         queryFn: async () => {
@@ -32,10 +27,8 @@ export function useCalendars() {
     });
 }
 
-export function useCreateCalendar() {
+export function useCreateCalendar(ownerId: string) {
     const queryClient = useQueryClient();
-    const {user} = useAuth();
-    const ownerId = user?.id || '';
 
     return useMutation({
         mutationFn: async (data: {name: string; color: string}) => {
@@ -47,10 +40,8 @@ export function useCreateCalendar() {
     });
 }
 
-export function useUpdateCalendar() {
+export function useUpdateCalendar(ownerId: string) {
     const queryClient = useQueryClient();
-    const {user} = useAuth();
-    const ownerId = user?.id || '';
 
     return useMutation({
         mutationFn: async ({id, ...data}: UpdateCalendarInput) => {
@@ -62,10 +53,8 @@ export function useUpdateCalendar() {
     });
 }
 
-export function useDeleteCalendar() {
+export function useDeleteCalendar(ownerId: string) {
     const queryClient = useQueryClient();
-    const {user} = useAuth();
-    const ownerId = user?.id || '';
 
     return useMutation({
         mutationFn: async (id: string) => {
@@ -79,10 +68,7 @@ export function useDeleteCalendar() {
 
 // --- Event CRUD ---
 
-export function useEvents(from: number, to: number, enabled = true) {
-    const {user} = useAuth();
-    const ownerId = user?.id || '';
-
+export function useEvents(ownerId: string, from: number, to: number, enabled = true) {
     return useQuery({
         queryKey: calendarKeys.eventRange(from, to),
         queryFn: async () => {
@@ -94,30 +80,24 @@ export function useEvents(from: number, to: number, enabled = true) {
     });
 }
 
-export function useSharedCalendarEvents(ownerUserId: string, calendarId: string, from: number, to: number, enabled = true) {
-    const {user} = useAuth();
-    const ownerId = user?.id || '';
-
+export function useCalendarEvents(ownerId: string, calendarId: string, from: number, to: number, enabled = true) {
     return useQuery({
-        queryKey: calendarKeys.sharedEvents(ownerUserId, calendarId, from, to),
+        queryKey: calendarKeys.calendarEvents(ownerId, calendarId, from, to),
         queryFn: async () => {
-            const response = await (calendarApi({ownerId: ownerUserId}).calendars as any)({calId: calendarId}).events({from: String(from)})({to: String(to)}).get();
+            const response = await (calendarApi({ownerId}).calendars as any)({calId: calendarId}).events({from: String(from)})({to: String(to)}).get();
             return (response.data || []) as CalendarEventOccurrence[];
         },
         staleTime: 2 * 60 * 1000,
-        enabled: !!ownerId && enabled && !!ownerUserId && !!calendarId && from > 0 && to > 0,
+        enabled: !!ownerId && enabled && !!calendarId && from > 0 && to > 0,
     });
 }
 
-export function useCreateEvent() {
+export function useCreateEvent(ownerId: string) {
     const queryClient = useQueryClient();
-    const {user} = useAuth();
-    const defaultOwnerId = user?.id || '';
 
     return useMutation({
-        mutationFn: async ({calendarId, ownerId, ...eventData}: CreateEventInput) => {
-            const targetOwnerId = ownerId || defaultOwnerId;
-            const response = await (calendarApi({ownerId: targetOwnerId}).calendars as any)({calId: calendarId}).events.post(eventData as any);
+        mutationFn: async ({calendarId, ...eventData}: CreateEventInput) => {
+            const response = await (calendarApi({ownerId}).calendars as any)({calId: calendarId}).events.post(eventData as any);
             if (response.error) throw new Error(String(response.error));
             return response.data;
         },
@@ -125,15 +105,12 @@ export function useCreateEvent() {
     });
 }
 
-export function useUpdateEvent() {
+export function useUpdateEvent(ownerId: string) {
     const queryClient = useQueryClient();
-    const {user} = useAuth();
-    const defaultOwnerId = user?.id || '';
 
     return useMutation({
-        mutationFn: async ({id, ownerId, ...data}: UpdateEventInput) => {
-            const targetOwnerId = ownerId || defaultOwnerId;
-            const response = await (calendarApi({ownerId: targetOwnerId}).events as any)({id}).put(data as any);
+        mutationFn: async ({id, ...data}: UpdateEventInput) => {
+            const response = await (calendarApi({ownerId}).events as any)({id}).put(data as any);
             if (response.error) throw new Error(String(response.error));
             return response.data;
         },
@@ -141,15 +118,11 @@ export function useUpdateEvent() {
     });
 }
 
-export function useDeleteEvent() {
+export function useDeleteEvent(ownerId: string) {
     const queryClient = useQueryClient();
-    const {user} = useAuth();
-    const defaultOwnerId = user?.id || '';
 
     return useMutation({
-        mutationFn: async (input: string | {id: string; ownerId: string}) => {
-            const id = typeof input === 'string' ? input : input.id;
-            const ownerId = typeof input === 'string' ? defaultOwnerId : (input.ownerId || defaultOwnerId);
+        mutationFn: async (id: string) => {
             const response = await (calendarApi({ownerId}).events as any)({id}).delete();
             if (response.error) throw new Error(String(response.error));
             return response.data;
@@ -158,36 +131,30 @@ export function useDeleteEvent() {
     });
 }
 
-export function useCalendarAccess(ownerUserId: string, calendarId: string, enabled = true) {
-    const {user} = useAuth();
-    const ownerId = user?.id || '';
-
+export function useCalendarAccess(ownerId: string, calendarId: string, enabled = true) {
     return useQuery({
-        queryKey: [...calendarKeys.all, 'access', ownerUserId, calendarId],
+        queryKey: [...calendarKeys.all, 'access', ownerId, calendarId],
         queryFn: async () => {
-            const response = await (calendarApi({ownerId: ownerUserId}).calendars as any)({calId: calendarId}).access.get();
+            const response = await (calendarApi({ownerId}).calendars as any)({calId: calendarId}).access.get();
             return response.data as {ownerUserId: string; shares: Array<{targetId: string; permission: string}>};
         },
         staleTime: 5 * 60 * 1000,
-        enabled: !!ownerId && !!ownerUserId && !!calendarId && enabled,
+        enabled: !!ownerId && !!calendarId && enabled,
     });
 }
 
 export function useAllSharedCalendarEvents(sharedCalendars: SharedCalendar[], from: number, to: number) {
-    const {user} = useAuth();
-    const ownerId = user?.id || '';
-
     const visibleShared = sharedCalendars.filter(sc => sc.visible && sc.permission !== 'free-busy');
 
     const results = useQueries({
         queries: visibleShared.map(sc => ({
-            queryKey: calendarKeys.sharedEvents(sc.ownerUserId, sc.calendarId, from, to),
+            queryKey: calendarKeys.calendarEvents(sc.ownerUserId, sc.calendarId, from, to),
             queryFn: async () => {
                 const response = await (calendarApi({ownerId: sc.ownerUserId}).calendars as any)({calId: sc.calendarId}).events({from: String(from)})({to: String(to)}).get();
                 return (response.data || []) as CalendarEventOccurrence[];
             },
             staleTime: 2 * 60 * 1000,
-            enabled: !!ownerId && from > 0 && to > 0,
+            enabled: from > 0 && to > 0,
         })),
     });
 
@@ -199,10 +166,7 @@ export function useAllSharedCalendarEvents(sharedCalendars: SharedCalendar[], fr
 
 // --- Shared calendars ---
 
-export function useSharedCalendars() {
-    const {user} = useAuth();
-    const ownerId = user?.id || '';
-
+export function useSharedCalendars(ownerId: string) {
     return useQuery({
         queryKey: calendarKeys.sharedCalendars(),
         queryFn: async () => {
@@ -214,10 +178,8 @@ export function useSharedCalendars() {
     });
 }
 
-export function useUpdateSharedCalendar() {
+export function useUpdateSharedCalendar(ownerId: string) {
     const queryClient = useQueryClient();
-    const {user} = useAuth();
-    const ownerId = user?.id || '';
 
     return useMutation({
         mutationFn: async ({id, ...data}: UpdateSharedCalendarInput) => {
@@ -229,10 +191,8 @@ export function useUpdateSharedCalendar() {
     });
 }
 
-export function useDeleteSharedCalendar() {
+export function useDeleteSharedCalendar(ownerId: string) {
     const queryClient = useQueryClient();
-    const {user} = useAuth();
-    const ownerId = user?.id || '';
 
     return useMutation({
         mutationFn: async (id: string) => {

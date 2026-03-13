@@ -7,6 +7,7 @@ import {Label} from '@workspace/ui/components/label';
 import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '@workspace/ui/components/select';
 import {Checkbox} from '@workspace/ui/components/checkbox';
 import {useCalendars, useCreateEvent} from '@workspace/lib/calendar';
+import {useAuth} from '@workspace/lib/auth';
 import {RecurrencePicker} from './recurrence-picker';
 import {TimeSelect, roundToNext15Minutes, addMinutes} from './time-select';
 
@@ -29,8 +30,10 @@ function toTimeString(date: Date): string {
 }
 
 export function CreateEventDialog({open, onOpenChange, defaultDate, defaultCalendarId}: CreateEventDialogProps) {
-    const {data: calendars = []} = useCalendars();
-    const createEvent = useCreateEvent();
+    const {user} = useAuth();
+    const ownerId = user?.id || '';
+    const {data: calendars = []} = useCalendars(ownerId);
+    const createEvent = useCreateEvent(ownerId);
 
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
@@ -155,7 +158,15 @@ export function CreateEventDialog({open, onOpenChange, defaultDate, defaultCalen
                                 <Checkbox
                                     id="all-day"
                                     checked={allDay}
-                                    onCheckedChange={(checked) => setAllDay(!!checked)}
+                                    onCheckedChange={(checked) => {
+                                        const isAllDay = !!checked;
+                                        setAllDay(isAllDay);
+                                        if (!isAllDay) {
+                                            const now = roundToNext15Minutes(new Date());
+                                            setStartTime(toTimeString(now));
+                                            setEndTime(addMinutes(toTimeString(now), 30));
+                                        }
+                                    }}
                                 />
                                 <Label htmlFor="all-day">All day</Label>
                             </div>
