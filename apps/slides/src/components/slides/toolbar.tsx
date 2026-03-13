@@ -121,7 +121,6 @@ export function Toolbar({
 
                 {canWrite && (
                     <>
-                        <Separator orientation="vertical" className="h-4"/>
                         <TooltipButton
                             icon={Undo}
                             tooltipText={`Undo (${formatForDisplay('Mod+Z')})`}
@@ -134,7 +133,15 @@ export function Toolbar({
                             onClick={() => undoManager?.redo?.()}
                             disabled={!canRedo}
                         />
-                        <Separator orientation="vertical" className="h-4"/>
+</>)}
+</div>
+            <div className="flex items-center">
+                {canWrite && (<>
+                        <TooltipButton
+                            icon={Plus}
+                            tooltipText="Add slide"
+                            onClick={onAddSlide}
+                        />
                         <TooltipButton
                             icon={Type}
                             tooltipText="Add text"
@@ -145,22 +152,15 @@ export function Toolbar({
                             tooltipText="Add image"
                             onClick={onAddImage}
                         />
-                        <Separator orientation="vertical" className="h-4"/>
-                        <TooltipButton
-                            icon={Plus}
-                            tooltipText="Add slide"
-                            onClick={onAddSlide}
-                        />
                     </>
                 )}
-            </div>
-
-            <div className="flex items-center">
                 <TooltipButton
                     icon={Play}
                     tooltipText="Present"
                     onClick={onPresent}
                 />
+            </div>
+            <div className="flex items-center">
                 <RevisionHistory path={path} onRestore={onRestore}/>
                 {canWrite ? (
                     <TooltipButton
