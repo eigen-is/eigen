@@ -5,6 +5,7 @@ import {Popover, PopoverContent, PopoverTrigger} from '@workspace/ui/components/
 import {ColorPicker} from '@workspace/ui/components/layout/media/color-picker';
 import {DeleteDialog} from '@workspace/ui/components/layout/delete/delete-dialog';
 import {useUpdateSharedCalendar, useDeleteSharedCalendar, useCalendarAccess} from '@workspace/lib/calendar';
+import {useAuth} from '@workspace/lib/auth';
 import type {SharedCalendar} from '@workspace/lib/types/calendar';
 import {Label} from '@workspace/ui/components/label';
 import {UserItem} from '@workspace/ui/components/layout/user-item';
@@ -17,13 +18,15 @@ type SharedCalendarConfigDialogProps = {
 }
 
 export function SharedCalendarConfigDialog({open, onOpenChange, sharedCalendar}: SharedCalendarConfigDialogProps) {
+    const {user} = useAuth();
+    const ownerId = user?.id || '';
     const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
     const [colorPickerOpen, setColorPickerOpen] = useState(false);
     const [color, setColor] = useState<string>('');
     const [isLoading, setIsLoading] = useState(false);
 
-    const updateSharedCalendar = useUpdateSharedCalendar();
-    const deleteSharedCalendar = useDeleteSharedCalendar();
+    const updateSharedCalendar = useUpdateSharedCalendar(ownerId);
+    const deleteSharedCalendar = useDeleteSharedCalendar(ownerId);
     const {data: accessData} = useCalendarAccess(
         sharedCalendar?.ownerUserId || '',
         sharedCalendar?.calendarId || '',
