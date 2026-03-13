@@ -7,6 +7,7 @@ export const calendars = sqliteTable('calendars', {
     name: text('name').notNull(),
     color: text('color').notNull(),
     isDefault: integer('isDefault', {mode: 'boolean'}).notNull().default(false),
+    visible: integer('visible', {mode: 'boolean'}).notNull().default(true),
     ctag: integer('ctag').notNull().default(0),
     shares: text('shares', {mode: 'json'}).$type<CalendarShare[] | null>(),
     createdAt: integer('createdAt').default(sql`(unixepoch())`),

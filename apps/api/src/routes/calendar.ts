@@ -20,6 +20,7 @@ const CreateCalendarSchema = t.Object({
 const UpdateCalendarSchema = t.Object({
     name: t.Optional(t.String()),
     color: t.Optional(t.String()),
+    visible: t.Optional(t.Boolean()),
     shares: t.Optional(t.Nullable(t.Array(CalendarShareSchema))),
 });
 

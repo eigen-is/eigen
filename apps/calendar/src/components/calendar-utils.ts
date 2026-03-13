@@ -64,9 +64,12 @@ export function isToday(date: Date): boolean {
 }
 
 export function getEventsForDay(events: CalendarEventOccurrence[], day: Date): CalendarEventOccurrence[] {
-    const dayStr = toISODateString(day);
     return events.filter(e => {
-        if (e.allDay) return e.occurrenceDate === dayStr;
+        if (e.allDay) {
+            const dayUtcMs = Date.UTC(day.getFullYear(), day.getMonth(), day.getDate());
+            const dayEndUtcMs = dayUtcMs + 86400000;
+            return (e.startTime * 1000) < dayEndUtcMs && (e.endTime * 1000) > dayUtcMs;
+        }
         const start = new Date(e.startTime * 1000);
         return start.getFullYear() === day.getFullYear() &&
             start.getMonth() === day.getMonth() &&

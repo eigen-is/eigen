@@ -75,22 +75,25 @@ export function EventDetailDialog({open, onOpenChange, event, calendar}: EventDe
     const color = calendar?.color || '#4285f4';
 
     const handleDeleteSingle = async () => {
-        if (isRecurring && !isException) {
-            await createEvent.mutateAsync({
-                calendarId: event.calendarId,
-                title: event.title,
-                startTime: event.startTime,
-                endTime: event.endTime,
-                allDay: event.allDay,
-                parentEventId: event.id,
-                recurrenceDate: event.occurrenceDate,
-                status: 'cancelled',
-            });
-        } else {
-            await deleteEvent.mutateAsync(event.id);
+        try {
+            if (isRecurring && !isException) {
+                await createEvent.mutateAsync({
+                    calendarId: event.calendarId,
+                    title: event.title,
+                    startTime: event.startTime,
+                    endTime: event.endTime,
+                    allDay: Boolean(event.allDay),
+                    parentEventId: event.id,
+                    recurrenceDate: event.occurrenceDate,
+                    status: 'cancelled',
+                });
+            } else {
+                await deleteEvent.mutateAsync(event.id);
+            }
+        } finally {
+            setShowDeleteDialog(false);
+            onOpenChange(false);
         }
-        setShowDeleteDialog(false);
-        onOpenChange(false);
     };
 
     const handleDeleteAll = async () => {
