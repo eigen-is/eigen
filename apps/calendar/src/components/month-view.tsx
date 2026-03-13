@@ -97,7 +97,7 @@ export function MonthView({currentDate, events, calendars, sharedCalendars, onDa
                                                     return (
                                                         <div
                                                             key={`${event.id}-${event.occurrenceDate}-${idx}`}
-                                                            className="text-[10px] leading-tight px-1 py-0.5 rounded text-white truncate cursor-pointer hover:opacity-80"
+                                                            className="text-xs leading-tight px-1 py-0.5 rounded text-white truncate cursor-pointer hover:opacity-80"
                                                             style={{backgroundColor: color}}
                                                             onClick={(e) => handleEventClick(event, e)}
                                                             title={event.title}
@@ -109,7 +109,7 @@ export function MonthView({currentDate, events, calendars, sharedCalendars, onDa
                                                 return (
                                                     <div
                                                         key={`${event.id}-${event.occurrenceDate}-${idx}`}
-                                                        className="text-[10px] leading-tight flex items-center gap-1 truncate cursor-pointer hover:bg-accent rounded px-0.5"
+                                                        className="text-xs leading-tight flex items-center gap-1 truncate cursor-pointer hover:bg-accent rounded px-0.5"
                                                         onClick={(e) => handleEventClick(event, e)}
                                                         title={event.title}
                                                     >
@@ -120,7 +120,7 @@ export function MonthView({currentDate, events, calendars, sharedCalendars, onDa
                                                 );
                                             })}
                                             {moreCount > 0 && (
-                                                <div className="text-[10px] text-muted-foreground font-medium px-0.5">
+                                                <div className="text-xs text-muted-foreground font-medium px-0.5">
                                                     {moreCount} more
                                                 </div>
                                             )}
