@@ -273,6 +273,9 @@
 }
 
 @media screen {
+    button {
+        cursor: pointer;
+    }
     body .printable {
         display: none;
     }
