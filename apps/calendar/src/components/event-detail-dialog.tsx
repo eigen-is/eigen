@@ -4,19 +4,21 @@ import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle} from '@w
 import {Button} from '@workspace/ui/components/button';
 import {DeleteDialog} from '@workspace/ui/components/layout/delete/delete-dialog';
 import {useDeleteEvent, useCreateEvent, useUpdateEvent} from '@workspace/lib/calendar';
-import type {CalendarEventOccurrence, CalendarItem} from '@workspace/lib/types/calendar';
+import type {CalendarEventOccurrence, CalendarItem, SharedCalendar} from '@workspace/lib/types/calendar';
 import {RRule} from 'rrule';
 import {rruleToText} from './recurrence-picker';
 import {EditEventDialog} from './edit-event-dialog';
 import {RecurringActionDialog} from './recurring-action-dialog';
 import type {RecurringAction} from './recurring-action-dialog';
 import {parseOccurrenceDate, occurrenceDateToString} from './calendar-utils';
+import {UserItem} from '@workspace/ui/components/layout/user-item';
 
 type EventDetailDialogProps = {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     event: CalendarEventOccurrence | null;
     calendar?: CalendarItem | null;
+    sharedCalendar?: SharedCalendar | null;
 }
 
 function formatTime(timestamp: number, allDay: boolean): string {
@@ -76,7 +78,7 @@ function truncateRRule(rruleStr: string, beforeDate: Date): string {
     return result.replace(/^RRULE:/, '');
 }
 
-export function EventDetailDialog({open, onOpenChange, event, calendar}: EventDetailDialogProps) {
+export function EventDetailDialog({open, onOpenChange, event, calendar, sharedCalendar}: EventDetailDialogProps) {
     const [showDeleteDialog, setShowDeleteDialog] = useState(false);
     const [showRecurringDeleteDialog, setShowRecurringDeleteDialog] = useState(false);
     const [editOpen, setEditOpen] = useState(false);
@@ -88,7 +90,9 @@ export function EventDetailDialog({open, onOpenChange, event, calendar}: EventDe
 
     const isRecurring = !!event.rrule;
     const isException = !!event.parentEventId;
-    const color = calendar?.color || '#4285f4';
+    const color = calendar?.color || (sharedCalendar ? (sharedCalendar.color || sharedCalendar.calendarColor) : '#4285f4');
+    const calendarName = calendar?.name || sharedCalendar?.calendarName || null;
+    const isShared = !!sharedCalendar;
 
     const handleDelete = async (action: RecurringAction) => {
         try {
@@ -179,10 +183,15 @@ export function EventDetailDialog({open, onOpenChange, event, calendar}: EventDe
                             </div>
                         )}
 
-                        {calendar && (
-                            <div className="flex items-center gap-2 text-sm text-muted-foreground pt-2 border-t">
-                                <div className="h-3 w-3 rounded-full" style={{backgroundColor: color}}/>
-                                <span>{calendar.name}</span>
+                        {calendarName && (
+                            <div className="pt-2 border-t space-y-2">
+                                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                                    <div className="h-3 w-3 rounded-full" style={{backgroundColor: color}}/>
+                                    <span>{calendarName}</span>
+                                </div>
+                                {isShared && sharedCalendar && (
+                                    <UserItem userId={sharedCalendar.ownerUserId} label="Owner" className="text-sm"/>
+                                )}
                             </div>
                         )}
                     </div>

@@ -1,5 +1,5 @@
 import {useMemo, useState} from 'react';
-import type {CalendarEventOccurrence, CalendarItem} from '@workspace/lib/types/calendar';
+import type {CalendarEventOccurrence, CalendarItem, SharedCalendar} from '@workspace/lib/types/calendar';
 import {
     getMonthRange,
     getDaysInRange,
@@ -16,12 +16,13 @@ type MonthViewProps = {
     currentDate: Date;
     events: CalendarEventOccurrence[];
     calendars: CalendarItem[];
+    sharedCalendars?: SharedCalendar[];
     onDayClick?: (date: Date) => void;
 }
 
 const MAX_VISIBLE_EVENTS = 4;
 
-export function MonthView({currentDate, events, calendars, onDayClick}: MonthViewProps) {
+export function MonthView({currentDate, events, calendars, sharedCalendars, onDayClick}: MonthViewProps) {
     const [selectedEvent, setSelectedEvent] = useState<CalendarEventOccurrence | null>(null);
     const [detailOpen, setDetailOpen] = useState(false);
 
@@ -42,6 +43,10 @@ export function MonthView({currentDate, events, calendars, onDayClick}: MonthVie
 
     const selectedCalendar = selectedEvent
         ? calendars.find(c => c.id === selectedEvent.calendarId) || null
+        : null;
+
+    const selectedSharedCalendar = selectedEvent && !selectedCalendar
+        ? sharedCalendars?.find(s => s.calendarId === selectedEvent.calendarId) || null
         : null;
 
     return (
@@ -87,7 +92,7 @@ export function MonthView({currentDate, events, calendars, onDayClick}: MonthVie
 
                                         <div className="space-y-0.5">
                                             {visibleEvents.map((event, idx) => {
-                                                const color = getCalendarColor(event, calendars);
+                                                const color = getCalendarColor(event, calendars, sharedCalendars);
                                                 if (event.allDay) {
                                                     return (
                                                         <div
@@ -133,6 +138,7 @@ export function MonthView({currentDate, events, calendars, onDayClick}: MonthVie
                 onOpenChange={setDetailOpen}
                 event={selectedEvent}
                 calendar={selectedCalendar}
+                sharedCalendar={selectedSharedCalendar}
             />
         </>
     );

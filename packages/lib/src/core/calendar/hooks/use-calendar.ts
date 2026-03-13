@@ -1,4 +1,4 @@
-import {type QueryClient, useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
+import {type QueryClient, useMutation, useQuery, useQueries, useQueryClient} from '@tanstack/react-query';
 import {calendarApi} from '@workspace/lib/api.ts';
 import type {CalendarItem, CalendarEventOccurrence, SharedCalendar, CreateEventInput, UpdateEventInput, UpdateCalendarInput, UpdateSharedCalendarInput} from '@workspace/lib/types/calendar';
 import {invalidateHomeSize} from '../../home';
@@ -153,6 +153,45 @@ export function useDeleteEvent() {
         },
         onSuccess: () => invalidateEventDeleted(queryClient),
     });
+}
+
+export function useCalendarAccess(ownerUserId: string, calendarId: string, enabled = true) {
+    const {user} = useAuth();
+    const ownerId = user?.id || '';
+
+    return useQuery({
+        queryKey: [...calendarKeys.all, 'access', ownerUserId, calendarId],
+        queryFn: async () => {
+            const response = await (calendarApi({ownerId: ownerUserId}).calendars as any)({calId: calendarId}).access.get();
+            return response.data as {ownerUserId: string; shares: Array<{targetId: string; permission: string}>};
+        },
+        staleTime: 5 * 60 * 1000,
+        enabled: !!ownerId && !!ownerUserId && !!calendarId && enabled,
+    });
+}
+
+export function useAllSharedCalendarEvents(sharedCalendars: SharedCalendar[], from: number, to: number) {
+    const {user} = useAuth();
+    const ownerId = user?.id || '';
+
+    const visibleShared = sharedCalendars.filter(sc => sc.visible && sc.permission !== 'free-busy');
+
+    const results = useQueries({
+        queries: visibleShared.map(sc => ({
+            queryKey: calendarKeys.sharedEvents(sc.ownerUserId, sc.calendarId, from, to),
+            queryFn: async () => {
+                const response = await (calendarApi({ownerId: sc.ownerUserId}).calendars as any)({calId: sc.calendarId}).events({from: String(from)})({to: String(to)}).get();
+                return (response.data || []) as CalendarEventOccurrence[];
+            },
+            staleTime: 2 * 60 * 1000,
+            enabled: !!ownerId && from > 0 && to > 0,
+        })),
+    });
+
+    const allEvents = results.flatMap(r => r.data || []);
+    const isLoading = results.some(r => r.isLoading);
+
+    return {data: allEvents, isLoading};
 }
 
 // --- Shared calendars ---
