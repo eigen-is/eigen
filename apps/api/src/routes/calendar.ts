@@ -240,7 +240,8 @@ export const calendarRouter = new Elysia({name: "calendar"})
                 const teamOwner = `team_${teamId}`;
                 const teamHome = await getHome(teamOwner);
                 for (const tc of teamHome.calendar.getCalendars()) {
-                    cal.ensureSharedEntry(teamOwner, tc.id, tc.name, tc.color, 'write');
+                    const permission = teamHome.calendar.checkPermission(tc.id, user.email, memberships.teamIds) || 'read';
+                    cal.ensureSharedEntry(teamOwner, tc.id, tc.name, tc.color, permission);
                 }
             } catch {}
         }

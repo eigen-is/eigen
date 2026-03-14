@@ -141,6 +141,66 @@ describe('Team Calendar Share (push to existing members)', () => {
         expect(calendars.length).toBeGreaterThanOrEqual(1);
     });
 
+    test('team calendar appears in shared list with read permission by default', async () => {
+        const sharedRes = await authedRequest(ctx.bob.user.sessionToken,
+            `/calendar/${ctx.bob.user.id}/shared`);
+        const shared = await sharedRes.json() as any[];
+        const teamCal = shared.find((s: any) => s.ownerUserId === `team_${teamId}`);
+        expect(teamCal).toBeDefined();
+        expect(teamCal.permission).toBe('read');
+    });
+
+    test('team calendar with write share grants write permission', async () => {
+        // Get the team's default calendar ID
+        const teamCalRes = await authedRequest(ctx.bob.user.sessionToken,
+            `/calendar/team_${teamId}/calendars`);
+        const teamCalendars = await teamCalRes.json() as any[];
+        const teamCalId = teamCalendars[0].id;
+
+        // Set shares on team calendar to grant write to the team
+        await authedRequest(ctx.bob.user.sessionToken,
+            `/calendar/team_${teamId}/calendars/${teamCalId}`, {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    shares: [{targetId: `team_${teamId}`, permission: 'write'}],
+                }),
+            });
+
+        // Bob fetches shared list — team calendar should now have write permission
+        const sharedRes = await authedRequest(ctx.bob.user.sessionToken,
+            `/calendar/${ctx.bob.user.id}/shared`);
+        const shared = await sharedRes.json() as any[];
+        const teamCal = shared.find((s: any) => s.ownerUserId === `team_${teamId}` && s.calendarId === teamCalId);
+        expect(teamCal).toBeDefined();
+        expect(teamCal.permission).toBe('write');
+    });
+
+    test('team calendar with write permission appears in create event options', async () => {
+        // The previous test set write permission on the team calendar.
+        // Verify Bob can create an event on it.
+        const teamCalRes = await authedRequest(ctx.bob.user.sessionToken,
+            `/calendar/team_${teamId}/calendars`);
+        const teamCalendars = await teamCalRes.json() as any[];
+        const teamCalId = teamCalendars[0].id;
+
+        const now = Math.floor(Date.now() / 1000);
+        const createRes = await authedRequest(ctx.bob.user.sessionToken,
+            `/calendar/team_${teamId}/calendars/${teamCalId}/events`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    title: 'Bob Team Event',
+                    startTime: now,
+                    endTime: now + 3600,
+                    allDay: false,
+                }),
+            });
+        expect(createRes.status).toBe(200);
+        const event = await createRes.json() as any;
+        expect(event.title).toBe('Bob Team Event');
+    });
+
     test('Alice creates event in shared calendar, Bob can read it via shared access', async () => {
         const now = Math.floor(Date.now() / 1000);
         const createRes = await authedRequest(ctx.alice.user.sessionToken,

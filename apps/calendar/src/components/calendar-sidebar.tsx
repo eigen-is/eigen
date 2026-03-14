@@ -254,15 +254,18 @@ export function CalendarSidebar({
                                 <EigenLoader/>
                             ) : (
                                 <div className="space-y-0.5">
-                                    {teamShared.map((sc) => (
-                                        <SharedCalendarItem
-                                            key={sc.id}
-                                            sc={{...sc, calendarName: getTeamName(sc.ownerUserId)}}
-                                            condensed={condensed}
-                                            onToggle={() => updateSharedCalendar.mutate({id: sc.id, visible: !sc.visible})}
-                                            onEdit={() => handleEditSharedCalendar(sc)}
-                                        />
-                                    ))}
+                                    {teamShared.map((sc) => {
+                                        const display = {...sc, calendarName: getTeamName(sc.ownerUserId)};
+                                        return (
+                                            <SharedCalendarItem
+                                                key={sc.id}
+                                                sc={display}
+                                                condensed={condensed}
+                                                onToggle={() => updateSharedCalendar.mutate({id: sc.id, visible: !sc.visible})}
+                                                onEdit={() => handleEditSharedCalendar(display)}
+                                            />
+                                        );
+                                    })}
                                 </div>
                             )}
                         </SidebarSection>
