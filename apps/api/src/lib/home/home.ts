@@ -1,7 +1,14 @@
 import type {User} from 'better-auth/types';
 import * as path from 'path';
 
-import {type DatabaseConfig, LocalFilesystem, ManagedDatabase, openLocalDatabase, type SchemaType} from '../core';
+import {
+    type DatabaseConfig,
+    type JsonStore,
+    LocalFilesystem,
+    ManagedDatabase,
+    openLocalDatabase,
+    type SchemaType
+} from '../core';
 import type {Contacts} from '../contacts/contacts';
 import type Maildir from '../mail/maildir';
 import type {Calendar} from '../calendar/calendar';
@@ -9,10 +16,14 @@ import type {SSEvent} from '@workspace/lib/types/sse';
 import {createAsyncSingleton} from '../../utils/singleton';
 import type {Drive} from '../drive';
 
+export type HomeSettings = Record<string, unknown>;
+
 export class Home {
     public user: User;
     public homeDir!: string;
     public fs!: LocalFilesystem;
+
+    public settings!: JsonStore<HomeSettings>;
 
     protected _drive!: Drive;
     protected _contacts!: Contacts;
@@ -49,6 +60,7 @@ export class Home {
         }
         this.initializationStarted = true;
 
+        await this.settings?.load();
         await this._drive?.init();
         await this._contacts?.init();
         await this._mail?.init();

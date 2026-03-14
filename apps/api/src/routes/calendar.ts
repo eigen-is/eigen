@@ -237,14 +237,14 @@ export const calendarRouter = new Elysia({name: "calendar"})
         const memberships = await getMemberships(user.id);
         if (!memberships.teamIds.includes(params.teamId)) throw new ApiError(403, 'Not a member of this team');
         const teamHome = await getHome(`team_${params.teamId}`) as TeamHome;
-        return await teamHome.getSettings();
+        return teamHome.settings.get();
     }, {auth: true})
 
     .put("/calendar/team/:teamId/settings", async ({params, body, user}) => {
         const memberships = await getMemberships(user.id);
         if (!memberships.teamIds.includes(params.teamId)) throw new ApiError(403, 'Not a member of this team');
         const teamHome = await getHome(`team_${params.teamId}`) as TeamHome;
-        return await teamHome.updateSettings(body);
+        return await teamHome.settings.set(body);
     }, {body: t.Object({calendarEnabled: t.Optional(t.Boolean())}), auth: true})
 
     // --- Shared calendars ---
