@@ -69,5 +69,5 @@ export function getSheetWithLatestCelldata(
     options: CommonOptions = {}
 ) {
     const sheet = getSheet(ctx, options);
-    return {...sheet, celldata: dataToCelldata(sheet.data)};
+    return {..._.cloneDeep(sheet), celldata: dataToCelldata(sheet.data)};
 }

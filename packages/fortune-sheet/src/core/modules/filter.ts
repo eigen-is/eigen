@@ -200,7 +200,7 @@ export function clearFilter(ctx: Context) {
     if (sheetIndex != null) {
         ctx.luckysheetfile[sheetIndex].filter = undefined;
         ctx.luckysheetfile[sheetIndex].filter_select = undefined;
-        ctx.luckysheetfile[sheetIndex].config = _.assign({}, ctx.config);
+        ctx.luckysheetfile[sheetIndex].config = _.cloneDeep(ctx.config);
     }
 }
 
@@ -265,15 +265,14 @@ export function createFilter(ctx: Context) {
         ]);
         ctx.luckysheet_select_save = filterSave;
 
-        ctx.luckysheet_shiftpositon = _.assign({}, last);
+        ctx.luckysheet_shiftpositon = _.cloneDeep(last);
         // luckysheetMoveEndCell("down", "range");
     } else if (last.row[1] - last.row[0] < 2) {
-        ctx.luckysheet_shiftpositon = _.assign({}, last);
+        ctx.luckysheet_shiftpositon = _.cloneDeep(last);
         // luckysheetMoveEndCell("down", "range");
     }
 
-    ctx.luckysheet_filter_save = _.assign(
-        {},
+    ctx.luckysheet_filter_save = _.cloneDeep(
         filterSave?.[0] || ctx.luckysheet_select_save?.[0]
     );
 
@@ -624,7 +623,7 @@ export function saveFilter(
         true
     );
 
-    const cfg = _.assign({}, ctx.config);
+    const cfg = _.cloneDeep(ctx.config);
     cfg.rowhidden = rowHiddenAll;
 
     // config

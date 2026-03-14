@@ -26,7 +26,7 @@ import React, {useCallback, useEffect, useImperativeHandle, useMemo, useRef, use
 import {applyPatches, enablePatches, Patch, produce, produceWithPatches,} from "immer";
 import _ from "lodash";
 import {Sheet} from "../Sheet";
-import WorkbookContext, {RefValues, SetContextOptions} from "../../context";
+import {RefValues, SetContextOptions, WorkbookContext} from "../../context";
 import {Toolbar} from "../Toolbar";
 import {FxEditor} from "../FxEditor";
 import {SheetTab} from "../SheetTab";
@@ -60,9 +60,9 @@ const triggerGroupValuesRefresh = (ctx: Context) => {
 
 const concatProducer = (...producers: ((ctx: Context) => void)[]) => {
     return (ctx: Context) => {
-        producers.forEach((producer) => {
+        for (const producer of producers) {
             producer(ctx);
-        });
+        }
     };
 };
 
@@ -76,7 +76,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
             scrollTop: 0,
             scrollListeners: scrollListeners.current,
             notifyScrollListeners: () => {
-                scrollListeners.current.forEach((fn) => fn());
+                for (const fn of scrollListeners.current) fn();
             },
         });
         const cellInput = useRef<HTMLDivElement>(null);
@@ -122,13 +122,13 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
         });
 
         const mergedSettings = useMemo(
-            () => _.assign(_.cloneDeep(defaultSettings), props) as Required<Settings>,
-            // props expect data, onChage, onOp
+            () => Object.assign(_.cloneDeep(defaultSettings), props) as Required<Settings>,
+            // props expects data, onChange, onOp
             // eslint-disable-next-line react-hooks/exhaustive-deps
-            [..._.values(props)]
+            [...Object.values(props)]
         );
 
-        // 计算选区的信息
+        // Calculate selection info
         useEffect(() => {
             const selection = context.luckysheet_select_save;
             const {lang} = props;
@@ -146,10 +146,10 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                 index: number
             ): CellMatrix | null => {
                 const {celldata, row, column} = newData;
-                const lastRow = _.maxBy<CellWithRowAndCol>(celldata, "r");
-                const lastCol = _.maxBy(celldata, "c");
-                let lastRowNum = (lastRow?.r ?? 0) + 1;
-                let lastColNum = (lastCol?.c ?? 0) + 1;
+                const lastRowR = celldata?.reduce((max, cell) => Math.max(max, cell.r), 0) ?? 0;
+                const lastColC = celldata?.reduce((max, cell) => Math.max(max, cell.c), 0) ?? 0;
+                let lastRowNum = lastRowR + 1;
+                let lastColNum = lastColC + 1;
                 if (row != null && column != null && row > 0 && column > 0) {
                     lastRowNum = Math.max(lastRowNum, row);
                     lastColNum = Math.max(lastColNum, column);
@@ -158,13 +158,13 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     lastColNum = Math.max(lastColNum, draftCtx.defaultcolumnNum);
                 }
                 if (lastRowNum && lastColNum) {
-                    const expandedData: SheetType["data"] = _.times(lastRowNum, () =>
-                        _.times(lastColNum, () => null)
+                    const expandedData: SheetType["data"] = Array.from({length: lastRowNum}, () =>
+                        Array.from({length: lastColNum}, () => null)
                     );
-                    celldata?.forEach((d) => {
+                    for (const d of celldata ?? []) {
                         // TODO setCellValue(draftCtx, d.r, d.c, expandedData, d.v);
                         expandedData[d.r][d.c] = d.v;
-                    });
+                    }
                     draftCtx.luckysheetfile[index].data = expandedData;
                     delete draftCtx.luckysheetfile[index].celldata;
                     return expandedData;
@@ -197,17 +197,14 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                 (undo) =>
                     undo.options?.deleteSheetOp ||
                     undo.options?.id === undefined ||
-                    _.indexOf(sheetsId, undo.options?.id) !== -1 ||
-                    _.indexOf(sheetDeletedByMe, undo.options?.id) !== -1
+                    sheetsId.indexOf(undo.options?.id) !== -1 ||
+                    sheetDeletedByMe.indexOf(undo.options?.id) !== -1
             );
             if (ctxBefore.luckysheetfile.length > ctx.luckysheetfile.length) {
                 const sheetDeleted = ctxBefore.luckysheetfile
                     .filter(
                         (oneSheet) =>
-                            _.indexOf(
-                                ctx.luckysheetfile.map((item) => item.id),
-                                oneSheet.id
-                            ) === -1
+                            ctx.luckysheetfile.map((item) => item.id).indexOf(oneSheet.id) === -1
                     )
                     .map((item) => getSheetIndex(ctxBefore, item.id as string));
                 const deletedIndex = sheetDeleted[0];
@@ -353,7 +350,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                                 (sheet?.order as number) >= (order as number) &&
                                 sheet.id !== history?.options?.deleteSheetOp?.id
                         );
-                        _.forEach(sheetsRight, (sheet) => {
+                        for (const sheet of sheetsRight) {
                             history.inversePatches.push({
                                 op: "replace",
                                 path: [
@@ -363,7 +360,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                                 ],
                                 value: (sheet?.order as number) + 1,
                             } as Patch);
-                        });
+                        }
                     }
                     const newContext = applyPatches(ctx_, history.inversePatches);
                     globalCache.current.redoList.push(history);
@@ -462,7 +459,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
         );
 
         useEffect(() => {
-            if (!_.isEmpty(context.luckysheetfile)) {
+            if (context.luckysheetfile.length > 0) {
                 onChange?.(context.luckysheetfile);
             }
         }, [context.luckysheetfile, onChange]);
@@ -473,13 +470,13 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     draftCtx.defaultcolumnNum = mergedSettings.column;
                     draftCtx.defaultrowNum = mergedSettings.row;
                     draftCtx.defaultFontSize = mergedSettings.defaultFontSize;
-                    if (_.isEmpty(draftCtx.luckysheetfile)) {
+                    if (draftCtx.luckysheetfile.length === 0) {
                         draftCtx.luckysheetfile = _.cloneDeep(originalData);
                         ensureSheetIndex(
                             draftCtx.luckysheetfile,
                             mergedSettings.generateSheetId
                         );
-                        draftCtx.luckysheetfile.forEach((newDatum) => {
+                        for (const newDatum of draftCtx.luckysheetfile) {
                             const index = getSheetIndex(draftCtx, newDatum.id!) as number;
                             const sheet = draftCtx.luckysheetfile?.[index];
                             if (sheet.data && sheet.data.length > 0) {
@@ -496,7 +493,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                                     cellMatrixData || undefined
                                 );
                             }
-                        });
+                        }
                     }
                     if (mergedSettings.devicePixelRatio > 0) {
                         draftCtx.devicePixelRatio = mergedSettings.devicePixelRatio;
@@ -505,7 +502,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     draftCtx.allowEdit = mergedSettings.allowEdit;
                     draftCtx.hooks = mergedSettings.hooks;
                     // draftCtx.fontList = mergedSettings.fontList;
-                    if (_.isEmpty(draftCtx.currentSheetId)) {
+                    if (!draftCtx.currentSheetId) {
                         initSheetIndex(draftCtx);
                     }
                     let sheetIdx = getSheetIndex(draftCtx, draftCtx.currentSheetId);
@@ -522,24 +519,24 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
 
                     let {data} = sheet;
                     // expand cell data
-                    if (_.isEmpty(data)) {
+                    if (!data || data.length === 0) {
                         const temp = initSheetData(draftCtx, sheet, sheetIdx);
-                        if (!_.isNull(temp)) {
+                        if (temp !== null) {
                             data = temp;
                         }
                     }
 
                     if (
-                        _.isEmpty(draftCtx.luckysheet_select_save) &&
-                        !_.isEmpty(sheet.luckysheet_select_save)
+                        (!draftCtx.luckysheet_select_save || draftCtx.luckysheet_select_save.length === 0) &&
+                        sheet.luckysheet_select_save && sheet.luckysheet_select_save.length > 0
                     ) {
                         draftCtx.luckysheet_select_save = sheet.luckysheet_select_save;
                     }
                     if (draftCtx.luckysheet_select_save?.length === 0) {
                         if (
                             data?.[0]?.[0]?.mc &&
-                            !_.isNil(data?.[0]?.[0]?.mc?.rs) &&
-                            !_.isNil(data?.[0]?.[0]?.mc?.cs)
+                            data?.[0]?.[0]?.mc?.rs != null &&
+                            data?.[0]?.[0]?.mc?.cs != null
                         ) {
                             draftCtx.luckysheet_select_save = [
                                 {
@@ -557,35 +554,35 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                         }
                     }
 
-                    draftCtx.config = _.isNil(sheet.config) ? {} : sheet.config;
+                    draftCtx.config = sheet.config ?? {};
                     draftCtx.insertedImgs = sheet.images;
                     draftCtx.currency = mergedSettings.currency || "€";
 
-                    draftCtx.zoomRatio = _.isNil(sheet.zoomRatio) ? 1 : sheet.zoomRatio;
+                    draftCtx.zoomRatio = sheet.zoomRatio ?? 1;
                     draftCtx.rowHeaderWidth =
                         mergedSettings.rowHeaderWidth * draftCtx.zoomRatio;
                     draftCtx.columnHeaderHeight =
                         mergedSettings.columnHeaderHeight * draftCtx.zoomRatio;
 
-                    if (!_.isNil(sheet.defaultRowHeight)) {
+                    if (sheet.defaultRowHeight != null) {
                         draftCtx.defaultrowlen = Number(sheet.defaultRowHeight);
                     } else {
                         draftCtx.defaultrowlen = mergedSettings.defaultRowHeight;
                     }
 
-                    if (!_.isNil(sheet.addRows)) {
+                    if (sheet.addRows != null) {
                         draftCtx.addDefaultRows = Number(sheet.addRows);
                     } else {
                         draftCtx.addDefaultRows = mergedSettings.addRows;
                     }
 
-                    if (!_.isNil(sheet.defaultColWidth)) {
+                    if (sheet.defaultColWidth != null) {
                         draftCtx.defaultcollen = Number(sheet.defaultColWidth);
                     } else {
                         draftCtx.defaultcollen = mergedSettings.defaultColWidth;
                     }
 
-                    if (!_.isNil(sheet.showGridLines)) {
+                    if (sheet.showGridLines != null) {
                         const {showGridLines} = sheet;
                         if (showGridLines === 0 || showGridLines === false) {
                             draftCtx.showGridLines = false;
@@ -595,12 +592,12 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     } else {
                         draftCtx.showGridLines = true;
                     }
-                    if (_.isNil(mergedSettings.lang)) {
+                    if (mergedSettings.lang == null) {
                         const lang =
-                            (navigator.languages && navigator.languages[0]) || // 兼容chromium内核浏览器
-                            navigator.language || // 兼容剩余浏览器
+                            navigator.languages?.[0] ||
+                            navigator.language ||
                             // @ts-ignore
-                            navigator.userLanguage; // 兼容IE浏览器
+                            navigator.userLanguage;
                         draftCtx.lang = lang;
                     }
                 },
@@ -874,7 +871,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                         <FilterMenu/>
                         <SheetTabContextMenu/>
                         {context.showSheetList && <SheetList/>}
-                        {!_.isEmpty(context.contextMenu) && (
+                        {context.contextMenu && Object.keys(context.contextMenu).length > 0 && (
                             <div
                                 onMouseDown={() => {
                                     setContextWithProduce((draftCtx) => {

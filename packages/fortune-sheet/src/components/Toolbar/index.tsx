@@ -28,7 +28,6 @@ import {
     toolbarItemSelectedFunc,
     updateFormat,
 } from "../../core";
-import _ from "lodash";
 import {
     DropdownMenuItem,
     DropdownMenuSeparator,
@@ -37,7 +36,7 @@ import {
     DropdownMenuSubTrigger,
 } from "@workspace/ui/components/dropdown-menu";
 import {Toolbar as SharedToolbar, TooltipButton} from "@workspace/ui";
-import WorkbookContext from "../../context";
+import {WorkbookContext} from "../../context";
 import {useDialog} from "../../hooks/useDialog";
 import {FormulaSearch} from "../FormulaSearch";
 import {SplitColumn} from "../SplitColumn";
@@ -141,7 +140,7 @@ export function Toolbar({
                 let currentFmt = defaultFormat[0].text;
                 if (cell) {
                     const curr = normalizedCellAttr(cell, "ct");
-                    const format = _.find(defaultFormat, (v) => v.value === curr?.fa);
+                    const format = defaultFormat.find((v) => v.value === curr?.fa);
                     if (curr?.fa != null) {
                         currentFmt =
                             format != null
@@ -213,7 +212,7 @@ export function Toolbar({
             if (name === "font") {
                 let current = fontarray[0];
                 if (cell?.ff != null) {
-                    current = _.isNumber(cell.ff) ? fontarray[cell.ff] : cell.ff;
+                    current = typeof cell.ff === "number" ? fontarray[cell.ff] : cell.ff;
                 }
                 return (
                     <ToolbarDropdown text={current} key={name} tooltip={tooltip}>
@@ -276,7 +275,7 @@ export function Toolbar({
                     {id: "align-right", text: align.right, value: 2},
                 ];
                 const currentId =
-                    _.find(items, (item) => `${item.value}` === `${cell?.ht}`)?.id ||
+                    items.find((item) => `${item.value}` === `${cell?.ht}`)?.id ??
                     "align-left";
                 return (
                     <ToolbarMenuButton
@@ -314,7 +313,7 @@ export function Toolbar({
                     {id: "align-bottom", text: align.bottom, value: 2},
                 ];
                 const currentId =
-                    _.find(items, (item) => `${item.value}` === `${cell?.vt}`)?.id ||
+                    items.find((item) => `${item.value}` === `${cell?.vt}`)?.id ??
                     "align-top";
                 return (
                     <ToolbarMenuButton
@@ -404,7 +403,7 @@ export function Toolbar({
                         tooltipText={tooltip}
                         onClick={() => {
                             if (contextRef.current.allowEdit === false) return;
-                            if (_.isUndefined(contextRef.current.luckysheet_select_save)) {
+                            if (contextRef.current.luckysheet_select_save == null) {
                                 showDialog(splitText.tipNoSelect, "ok");
                             } else {
                                 const currentColumn =
@@ -481,7 +480,7 @@ export function Toolbar({
                                             },
                                         ];
                                     } else {
-                                        range = _.assignIn([], ctx.luckysheet_select_save);
+                                        range = [...ctx.luckysheet_select_save];
                                     }
                                     if (value === "location") {
                                         showDialog(<LocationCondition/>);
@@ -519,7 +518,7 @@ export function Toolbar({
                                             showDialog(findAndReplace.locationTiplessTwoRow, "ok");
                                             return;
                                         }
-                                        range = _.assignIn([], ctx.luckysheet_select_save);
+                                        range = [...ctx.luckysheet_select_save];
                                         setContext((c) => {
                                             rangeArr = applyLocation(range, "locationRowSpan", undefined, c);
                                         });
@@ -533,7 +532,7 @@ export function Toolbar({
                                             showDialog(findAndReplace.locationTiplessTwoColumn, "ok");
                                             return;
                                         }
-                                        range = _.assignIn([], ctx.luckysheet_select_save);
+                                        range = [...ctx.luckysheet_select_save];
                                         setContext((c) => {
                                             rangeArr = applyLocation(range, "locationColumnSpan", undefined, c);
                                         });

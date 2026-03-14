@@ -28,12 +28,12 @@ import {
     showLinkCard,
 } from "../../core";
 import _ from "lodash";
-import WorkbookContext, {SetContextOptions} from "../../context";
-import ColumnHeader from "./ColumnHeader";
-import RowHeader from "./RowHeader";
-import InputBox from "./InputBox";
-import ScrollBar from "./ScrollBar";
-import SearchReplace from "../SearchReplace";
+import {SetContextOptions, WorkbookContext} from "../../context";
+import {ColumnHeader} from "./ColumnHeader";
+import {RowHeader} from "./RowHeader";
+import {InputBox} from "./InputBox";
+import {ScrollBar} from "./ScrollBar";
+import {SearchReplace} from "../SearchReplace";
 import {LinkEditCard} from "../LinkEidtCard";
 import {FilterOptions} from "../FilterOption";
 import {useAlert} from "../../hooks/useAlert";
@@ -41,10 +41,10 @@ import {ImgBoxs} from "../ImgBoxs";
 import {NotationBoxes} from "../NotationBoxes";
 import {RangeDialog} from "../DataVerification/RangeDialog";
 import {useDialog} from "../../hooks/useDialog";
-import {SVGIcon} from "../icon-map";
+import {ChevronDown} from "lucide-react";
 import {DropDownList} from "../DataVerification/DropdownList";
 
-const SheetOverlay: React.FC = () => {
+export const SheetOverlay: React.FC = () => {
     const {context, setContext, settings, refs} = useContext(WorkbookContext);
     const {info, rightclick} = locale(context);
     const {showDialog} = useDialog();
@@ -72,7 +72,8 @@ const SheetOverlay: React.FC = () => {
                     );
 
                     if (
-                        !_.isEmpty(draftCtx.luckysheet_select_save?.[0]) &&
+                        draftCtx.luckysheet_select_save?.[0] != null &&
+                        Object.keys(draftCtx.luckysheet_select_save[0]).length > 0 &&
                         refs.cellInput.current
                     ) {
                         setTimeout(() => {
@@ -333,7 +334,7 @@ const SheetOverlay: React.FC = () => {
     useEffect(() => {
         setContext((draftCtx) => {
             const sheetIndex = getSheetIndex(draftCtx, draftCtx.currentSheetId);
-            if (sheetIndex === undefined || sheetIndex === null) return;
+            if (sheetIndex == null) return;
 
             const currentSheet = draftCtx.luckysheetfile[sheetIndex];
 
@@ -344,7 +345,7 @@ const SheetOverlay: React.FC = () => {
         });
     }, [context.currentSheetId, setContext]);
 
-    // 提醒弹窗
+    // Warning dialog
     useEffect(() => {
         if (context.warnDialog) {
             setTimeout(() => {
@@ -393,16 +394,17 @@ const SheetOverlay: React.FC = () => {
             context.hoveredCommentBox ||
             context.editingCommentBox
         ) {
-            _.concat(
-                context.commentBoxes?.filter(
+            for (const box of [
+                ...(context.commentBoxes?.filter(
                     (v) => v.rc !== context.editingCommentBox?.rc
-                ),
-                [context.hoveredCommentBox, context.editingCommentBox]
-            ).forEach((box) => {
+                ) ?? []),
+                context.hoveredCommentBox,
+                context.editingCommentBox,
+            ]) {
                 if (box) {
                     drawArrow(box.rc, box.size);
                 }
-            });
+            }
         }
     }, [
         context.commentBoxes,
@@ -433,7 +435,7 @@ const SheetOverlay: React.FC = () => {
     }, [onKeyDownForZoom]);
 
     const rangeText = useMemo(() => {
-        const lastSelection = _.last(context.luckysheet_select_save);
+        const lastSelection = context.luckysheet_select_save?.at(-1);
         if (
             !(
                 lastSelection &&
@@ -560,7 +562,7 @@ const SheetOverlay: React.FC = () => {
                                 key={rangeIndex}
                                 id="fortune-formula-functionrange-highlight"
                                 className="fortune-selection-highlight fortune-formula-functionrange-highlight"
-                                style={_.omit(v, "backgroundColor")}
+                                style={(() => { const {backgroundColor: _, ...rest} = v; return rest; })()}
                             >
                                 {["top", "right", "bottom", "left"].map((d) => (
                                     <div
@@ -614,8 +616,8 @@ const SheetOverlay: React.FC = () => {
                         style={
                             (context.luckysheet_select_save?.length ?? 0) > 0
                                 ? (() => {
-                                    const selection = _.last(context.luckysheet_select_save)!;
-                                    return _.assign(
+                                    const selection = context.luckysheet_select_save!.at(-1)!;
+                                    return Object.assign(
                                         {
                                             left: selection.left,
                                             top: selection.top,
@@ -691,7 +693,7 @@ const SheetOverlay: React.FC = () => {
                                     key={index}
                                     id="luckysheet-cell-selected"
                                     className="luckysheet-cell-selected"
-                                    style={_.assign(
+                                    style={Object.assign(
                                         {
                                             left: selection.left_move,
                                             top: selection.top_move,
@@ -789,7 +791,7 @@ const SheetOverlay: React.FC = () => {
                                 maxWidth: width + 1,
                                 backgroundColor: color,
                             };
-                            _.set(usernameStyle, r === 0 ? "top" : "bottom", height);
+                            (usernameStyle as any)[r === 0 ? "top" : "bottom"] = height;
 
                             return (
                                 <div
@@ -834,7 +836,7 @@ const SheetOverlay: React.FC = () => {
                         tabIndex={0}
                         style={{display: "none"}}
                     >
-                        <SVGIcon name="combo-arrow" width={16}/>
+                        <ChevronDown width={16} height={16} aria-hidden="true"/>
                     </div>
                     {context.dataVerificationDropDownList && <DropDownList/>}
                     {/* <div
@@ -940,4 +942,3 @@ const SheetOverlay: React.FC = () => {
     );
 };
 
-export default SheetOverlay;

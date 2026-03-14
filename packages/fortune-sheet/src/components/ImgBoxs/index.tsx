@@ -1,6 +1,7 @@
 import {onImageMoveStart, onImageResizeStart} from "../../core";
 import {useContext, useMemo} from "react";
-import WorkbookContext from "../../context";
+import {WorkbookContext} from "../../context";
+import {Maximize2, Pencil, Trash2} from "lucide-react";
 
 export function ImgBoxs() {
     const {context, setContext, refs} = useContext(WorkbookContext);
@@ -66,28 +67,28 @@ export function ImgBoxs() {
                 className="luckysheet-modal-controll-btn luckysheet-modal-controll-crop"
                 role="button"
                 tabIndex={0}
-                aria-label="裁剪"
-                title="裁剪"
+                aria-label="Crop"
+                title="Crop"
             >
-              <i className="fa fa-pencil" aria-hidden="true"/>
+              <Pencil size={14} aria-hidden="true"/>
             </span>
                         <span
                             className="luckysheet-modal-controll-btn luckysheet-modal-controll-restore"
                             role="button"
                             tabIndex={0}
-                            aria-label="恢复原图"
-                            title="恢复原图"
+                            aria-label="Restore original"
+                            title="Restore original"
                         >
-              <i className="fa fa-window-maximize" aria-hidden="true"/>
+              <Maximize2 size={14} aria-hidden="true"/>
             </span>
                         <span
                             className="luckysheet-modal-controll-btn luckysheet-modal-controll-del"
                             role="button"
                             tabIndex={0}
-                            aria-label="删除"
-                            title="删除"
+                            aria-label="Delete"
+                            title="Delete"
                         >
-              <i className="fa fa-trash" aria-hidden="true"/>
+              <Trash2 size={14} aria-hidden="true"/>
             </span>
                     </div>
                 </div>
@@ -173,28 +174,28 @@ export function ImgBoxs() {
               className="luckysheet-modal-controll-btn luckysheet-modal-controll-crop"
               role="button"
               tabIndex={0}
-              aria-label="裁剪"
-              title="裁剪"
+              aria-label="Crop"
+              title="Crop"
           >
-            <i className="fa fa-pencil" aria-hidden="true"/>
+            <Pencil size={14} aria-hidden="true"/>
           </span>
                     <span
                         className="luckysheet-modal-controll-btn luckysheet-modal-controll-restore"
                         role="button"
                         tabIndex={0}
-                        aria-label="恢复原图"
-                        title="恢复原图"
+                        aria-label="Restore original"
+                        title="Restore original"
                     >
-            <i className="fa fa-window-maximize" aria-hidden="true"/>
+            <Maximize2 size={14} aria-hidden="true"/>
           </span>
                     <span
                         className="luckysheet-modal-controll-btn luckysheet-modal-controll-del"
                         role="button"
                         tabIndex={0}
-                        aria-label="删除"
-                        title="删除"
+                        aria-label="Delete"
+                        title="Delete"
                     >
-            <i className="fa fa-trash" aria-hidden="true"/>
+            <Trash2 size={14} aria-hidden="true"/>
           </span>
                 </div>
             </div>
@@ -202,5 +203,5 @@ export function ImgBoxs() {
             <div className="cell-date-picker"/>
         </div>
     );
-};
+}
 

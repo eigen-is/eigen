@@ -9,8 +9,8 @@ import {
     updateContextWithCanvas,
     updateContextWithSheetData,
 } from "../../core";
-import WorkbookContext from "../../context";
-import SheetOverlay from "../SheetOverlay";
+import {WorkbookContext} from "../../context";
+import {SheetOverlay} from "../SheetOverlay";
 
 // ---------------------------------------------------------------------------
 // Canvas drawing helpers

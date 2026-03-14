@@ -1,6 +1,6 @@
 import {useContext, useState} from "react";
 import {locale} from "../../core";
-import WorkbookContext from "../../context";
+import {WorkbookContext} from "../../context";
 import {ColorPicker} from "@workspace/ui/components/layout/media/color-picker";
 import {
     DropdownMenuItem,
@@ -102,5 +102,3 @@ export function CustomBorder({onPick}: Props) {
         </>
     );
 }
-
-export default CustomBorder;

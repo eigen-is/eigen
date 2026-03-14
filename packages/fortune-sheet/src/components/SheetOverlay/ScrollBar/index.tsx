@@ -1,12 +1,12 @@
 import React, {useCallback, useContext, useEffect} from "react";
-import WorkbookContext from "../../../context";
+import {WorkbookContext} from "../../../context";
 import "./index.css";
 
 type Props = {
     axis: "x" | "y";
 };
 
-const ScrollBar: React.FC<Props> = ({axis}) => {
+export const ScrollBar: React.FC<Props> = ({axis}) => {
     const {context, refs} = useContext(WorkbookContext);
     const {globalCache} = refs;
 
@@ -59,4 +59,3 @@ const ScrollBar: React.FC<Props> = ({axis}) => {
     );
 };
 
-export default ScrollBar;

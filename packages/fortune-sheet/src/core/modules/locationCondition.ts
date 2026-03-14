@@ -160,7 +160,7 @@ export function getSelectRange(ctx: Context) {
             {row: [0, flowdata.length - 1], column: [0, flowdata[0].length - 1]},
         ];
     } else {
-        range = _.assignIn([], ctx.luckysheet_select_save);
+        range = _.cloneDeep(ctx.luckysheet_select_save) ?? [];
     }
     return range;
 }

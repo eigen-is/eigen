@@ -8,7 +8,7 @@ import {Label} from "@workspace/ui/components/label";
 import {Popover, PopoverContent, PopoverTrigger} from "@workspace/ui/components/popover";
 import {ColorPicker} from "@workspace/ui/components/layout/media/color-picker";
 import {DialogFooter, DialogHeader, DialogTitle} from "@workspace/ui/components/dialog";
-import WorkbookContext from "../../context";
+import {WorkbookContext} from "../../context";
 import {useDialog} from "../../hooks/useDialog";
 
 export function ConditionRules({type}: { type: string }) {
@@ -71,7 +71,7 @@ export function ConditionRules({type}: { type: string }) {
                 ctx.conditionRules.betweenValue.value1 = rangeT;
             } else if (rangeDialogType === "conditionRulesbetween2") {
                 ctx.conditionRules.betweenValue.value2 = rangeT;
-            } else if (rangeDialogType.indexOf("conditionRules") >= 0) {
+            } else if (rangeDialogType.includes("conditionRules")) {
                 ctx.conditionRules.rulesValue = rangeT;
             } else if (rangeDialogType === "") {
                 ctx.conditionRules = {

@@ -1,6 +1,6 @@
 import {useCallback, useContext, useMemo, useState} from "react";
 import {cancelNormalSelected, locale, setCaretPosition,} from "../../core";
-import WorkbookContext from "../../context";
+import {WorkbookContext} from "../../context";
 import {Button} from "@workspace/ui/components/button";
 
 export function FormulaSearch({
@@ -40,18 +40,11 @@ export function FormulaSearch({
 
     const filteredFunctionList = useMemo(() => {
         if (searchText) {
-            const list = [];
             const text = searchText.toUpperCase();
-            for (let i = 0; i < functionlist.length; i += 1) {
-                if (/^[a-zA-Z]+$/.test(text)) {
-                    if (functionlist[i].n.indexOf(text) !== -1) {
-                        list.push(functionlist[i]);
-                    }
-                } else if (functionlist[i].a.indexOf(text) !== -1) {
-                    list.push(functionlist[i]);
-                }
-            }
-            return list;
+            const isAlpha = /^[a-zA-Z]+$/.test(text);
+            return functionlist.filter((fn) =>
+                isAlpha ? fn.n.includes(text) : fn.a.includes(text)
+            );
         }
         return functionlist.filter((v) => v.t === selectedType);
     }, [functionlist, selectedType, searchText]);
@@ -95,9 +88,8 @@ export function FormulaSearch({
                     filteredFunctionList[selectedFuncIndex].n.toUpperCase();
                 ctx.functionCandidates = [];
                 if (Object.keys(ctx.formulaCache.functionlistMap).length === 0) {
-                    for (let i = 0; i < functionlist.length; i += 1) {
-                        ctx.formulaCache.functionlistMap[functionlist[i].n] =
-                            functionlist[i];
+                    for (const fn of functionlist) {
+                        ctx.formulaCache.functionlistMap[fn.n] = fn;
                     }
                 }
                 _onCancel();

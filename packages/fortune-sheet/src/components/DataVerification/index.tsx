@@ -9,9 +9,9 @@ import {
     setCellValue,
 } from "../../core";
 import {useCallback, useContext, useEffect, useState} from "react";
-import WorkbookContext from "../../context";
+import {WorkbookContext} from "../../context";
 import {useDialog} from "../../hooks/useDialog";
-import {SVGIcon} from "../icon-map";
+import {Table} from "lucide-react";
 import {Button} from "@workspace/ui/components/button";
 
 export function DataVerification() {
@@ -161,7 +161,7 @@ export function DataVerification() {
             // Initialize values
             const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
             const ctxDataVerification =
-                ctx.luckysheetfile[index].dataVerification || {};
+                ctx.luckysheetfile[index].dataVerification ?? {};
             if (!ctx.luckysheet_select_save) return;
             const last =
                 ctx.luckysheet_select_save[ctx.luckysheet_select_save.length - 1];
@@ -247,7 +247,7 @@ export function DataVerification() {
                             }}
                             tabIndex={0}
                         >
-                            <SVGIcon name="tab" width={18}/>
+                            <Table width={18} height={18} aria-hidden="true"/>
                         </i>
                     </div>
                 </div>
@@ -326,7 +326,7 @@ export function DataVerification() {
                                     }
                                     tabIndex={0}
                                 >
-                                    <SVGIcon name="tab" width={18}/>
+                                    <Table width={18} height={18} aria-hidden="true"/>
                                 </i>
                             </div>
                             <div className="text-xs leading-6">

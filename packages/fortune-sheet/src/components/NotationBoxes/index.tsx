@@ -6,8 +6,8 @@ import {
     setEditingComment,
     showComments,
 } from "../../core";
-import ContentEditable from "../SheetOverlay/ContentEditable";
-import WorkbookContext from "../../context";
+import {ContentEditable} from "../SheetOverlay/ContentEditable";
+import {WorkbookContext} from "../../context";
 
 export function NotationBoxes() {
     const {context, setContext, refs} = useContext(WorkbookContext);
@@ -21,11 +21,9 @@ export function NotationBoxes() {
     useEffect(() => {
         if (flowdata) {
             const psShownCells: { r: number; c: number }[] = [];
-            for (let i = 0; i < flowdata.length; i += 1) {
-                for (let j = 0; j < flowdata[i].length; j += 1) {
-                    const cell = flowdata[i][j];
-                    if (!cell) continue;
-                    if (cell.ps?.isShow) {
+            for (const [i, row] of flowdata.entries()) {
+                for (const [j, cell] of row.entries()) {
+                    if (cell?.ps?.isShow) {
                         psShownCells.push({r: i, c: j});
                     }
                 }

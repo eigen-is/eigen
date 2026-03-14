@@ -1455,7 +1455,7 @@ function pasteHandlerOfCopyPaste(
 
     file.config = cfg;
     file.luckysheet_conditionformat_save = cdformat;
-    file.dataVerification = {...file.dataVerification, ...dataVerification};
+    file.dataVerification = _.cloneDeep({...file.dataVerification, ...dataVerification});
 
     // 若选区内包含超链接
     if (

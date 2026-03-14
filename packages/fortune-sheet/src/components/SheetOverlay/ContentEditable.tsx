@@ -1,5 +1,4 @@
 import React, {useCallback, useEffect, useRef} from "react";
-import _ from "lodash";
 
 type ContentEditableProps = Omit<
     React.HTMLAttributes<HTMLDivElement>,
@@ -13,10 +12,17 @@ type ContentEditableProps = Omit<
     allowEdit?: boolean;
 };
 
-const ContentEditable: React.FC<ContentEditableProps> = ({...props}) => {
+export const ContentEditable: React.FC<ContentEditableProps> = ({
+    innerRef,
+    onChange,
+    onBlur,
+    autoFocus,
+    allowEdit: allowEditProp,
+    initialContent,
+    ...restProps
+}) => {
     const lastHtml = useRef("");
     const root = useRef<HTMLDivElement | null>(null);
-    const {autoFocus, initialContent, onChange} = props;
 
     useEffect(() => {
         if (autoFocus) {
@@ -46,24 +52,13 @@ const ContentEditable: React.FC<ContentEditableProps> = ({...props}) => {
         [root, onChange]
     );
 
-    const {innerRef, onBlur} = props;
-    let {allowEdit} = props;
-    if (_.isNil(allowEdit)) allowEdit = true;
+    const allowEdit = allowEditProp ?? true;
 
     return (
         <div
             onDoubleClick={(e) => e.stopPropagation()}
             onClick={(e) => e.stopPropagation()}
-            {..._.omit(
-                props,
-                "innerRef",
-                "onChange",
-                "html",
-                "onBlur",
-                "autoFocus",
-                "allowEdit",
-                "initialContent"
-            )}
+            {...restProps}
             ref={(e) => {
                 root.current = e;
                 innerRef?.(e);
@@ -78,5 +73,3 @@ const ContentEditable: React.FC<ContentEditableProps> = ({...props}) => {
         />
     );
 };
-
-export default ContentEditable;
