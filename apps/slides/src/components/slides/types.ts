@@ -8,10 +8,6 @@ type BaseObject = {
     w: number;
     h: number;
     rotation: number;
-    shadowColor: string;
-    shadowBlur: number;
-    shadowOffsetX: number;
-    shadowOffsetY: number;
     borderColor: string;
     borderWidth: number;
     borderRadius: number;
@@ -68,13 +64,6 @@ export function percentToPx(val: number, axis: 'x' | 'y'): number {
     return (val / 100) * (axis === 'x' ? SLIDE_BASE_WIDTH : SLIDE_BASE_HEIGHT);
 }
 
-const DEFAULT_SHADOW = {
-    shadowColor: 'rgba(0,0,0,0)',
-    shadowBlur: 0,
-    shadowOffsetX: 0,
-    shadowOffsetY: 0,
-};
-
 export const BORDER_RADIUS_ROUND = 9999;
 
 const DEFAULT_BORDER = {
@@ -102,7 +91,6 @@ export const DEFAULT_TEXT_OBJECT: Omit<TextObject, 'id' | 'slideId'> = {
     lineHeight: 1.2,
     highlightColor: '',
     backgroundColor: '',
-    ...DEFAULT_SHADOW,
     ...DEFAULT_BORDER,
 };
 
@@ -114,7 +102,6 @@ export const DEFAULT_IMAGE_OBJECT: Omit<ImageObject, 'id' | 'slideId' | 'src'> =
     h: 756,
     rotation: 0,
     objectFit: 'contain',
-    ...DEFAULT_SHADOW,
     ...DEFAULT_BORDER,
 };
 
