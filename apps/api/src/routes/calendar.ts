@@ -1,7 +1,8 @@
 import {Elysia, t} from "elysia";
 import {betterAuth} from "./auth";
 import {getCalendar} from "../lib/calendar/calendar";
-import {getHome, type TeamHome} from "../lib/home";
+import type {TeamHome} from "../lib/home";
+import {getHome} from "../lib/home";
 import {getMemberships} from "../lib/user";
 import {parseOwnerId} from "@workspace/lib/types";
 import {ApiError} from "../lib/core";
@@ -251,19 +252,17 @@ export const calendarRouter = new Elysia({name: "calendar"})
         const cal = await resolveCalendar(user, user.id);
         const memberships = await getMemberships(user.id);
         for (const teamId of memberships.teamIds) {
+            const teamOwner = `team_${teamId}`;
             try {
-                const teamOwner = `team_${teamId}`;
-                const teamHome = await getHome(teamOwner) as TeamHome;
-                const teamCal = await teamHome.getCalendarIfEnabled();
-                if (!teamCal) {
-                    cal.removeSharedEntriesForOwner(teamOwner);
-                    continue;
-                }
+                const teamHome = await getHome(teamOwner);
+                const teamCal = teamHome.calendar;
                 for (const tc of teamCal.getCalendars()) {
                     const permission = teamCal.checkPermission(tc.id, user.email, memberships.teamIds) || 'read';
                     cal.ensureSharedEntry(teamOwner, tc.id, tc.name, tc.color, permission);
                 }
-            } catch {}
+            } catch {
+                cal.removeSharedEntriesForOwner(teamOwner);
+            }
         }
         return cal.getSharedCalendars();
     }, {auth: true})

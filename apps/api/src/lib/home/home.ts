@@ -1,24 +1,23 @@
 import type {User} from 'better-auth/types';
 import * as path from 'path';
 
-import {type DatabaseConfig, ManagedDatabase, openLocalDatabase, type SchemaType} from '../core';
-import {Contacts} from '../contacts/contacts';
-import Maildir from '../mail/maildir';
+import {type DatabaseConfig, LocalFilesystem, ManagedDatabase, openLocalDatabase, type SchemaType} from '../core';
+import type {Contacts} from '../contacts/contacts';
+import type Maildir from '../mail/maildir';
 import type {Calendar} from '../calendar/calendar';
 import type {SSEvent} from '@workspace/lib/types/sse';
 import {createAsyncSingleton} from '../../utils/singleton';
-import {Drive} from '../drive';
-import {LocalFilesystem} from "../core";
+import type {Drive} from '../drive';
 
 export class Home {
     public user: User;
     public homeDir!: string;
     public fs!: LocalFilesystem;
 
-    public drive!: Drive;
-    public contacts!: Contacts;
-    public mail!: Maildir;
-    public calendar!: Calendar;
+    protected _drive!: Drive;
+    protected _contacts!: Contacts;
+    protected _mail!: Maildir;
+    protected _calendar!: Calendar;
 
     protected initialized: boolean = false;
     protected initializationStarted: boolean = false;
@@ -34,6 +33,11 @@ export class Home {
         this.cleanUp = cleanUp || null;
     }
 
+    get drive(): Drive { return this._drive; }
+    get contacts(): Contacts { return this._contacts; }
+    get mail(): Maildir { return this._mail; }
+    get calendar(): Calendar { return this._calendar; }
+
     public async init() {
         if (this.initialized) {
             return this;
@@ -45,10 +49,10 @@ export class Home {
         }
         this.initializationStarted = true;
 
-        await this.drive?.init();
-        await this.contacts?.init();
-        await this.mail?.init();
-        await this.calendar?.init();
+        await this._drive?.init();
+        await this._contacts?.init();
+        await this._mail?.init();
+        await this._calendar?.init();
 
         this.initialized = true;
         for (const resolve of this.initWaiters) {
@@ -87,9 +91,9 @@ export class Home {
 
     public async size() {
         const [mail, contacts, drive] = await Promise.all([
-            this.mail?.size(),
-            this.contacts?.size(),
-            this.drive.size('default')
+            this._mail?.size(),
+            this._contacts?.size(),
+            this._drive.size('default')
         ]);
         const maxMB = 50;
         const max = maxMB * 1024 * 1024;
@@ -98,25 +102,25 @@ export class Home {
 
     protected async destruct() {
         try {
-            await this.drive.destruct();
+            await this._drive.destruct();
         } catch (error) {
             console.error('Failed to destruct drive:', error);
         }
 
         try {
-            await this.contacts?.destruct();
+            await this._contacts?.destruct();
         } catch (error) {
             console.error('Failed to destruct contacts:', error);
         }
 
         try {
-            await this.mail?.destruct();
+            await this._mail?.destruct();
         } catch (error) {
             console.error('Failed to destruct mail:', error);
         }
 
         try {
-            await this.calendar?.destruct();
+            await this._calendar?.destruct();
         } catch (error) {
             console.error('Failed to destruct calendar:', error);
         }

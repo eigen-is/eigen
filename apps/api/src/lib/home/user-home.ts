@@ -13,10 +13,10 @@ export class UserHome extends Home {
         this.user = user;
         this.homeDir = getUserHomePath(user.id);
         this.fs = new LocalFilesystem(this.homeDir);
-        
-        this.contacts = new Contacts(this);
-        this.mail = new Maildir(this);
-        this.drive = new Drive(this);
-        this.calendar = new Calendar(this);
+
+        this._contacts = new Contacts(this);
+        this._mail = new Maildir(this);
+        this._drive = new Drive(this);
+        this._calendar = new Calendar(this);
     }
 }
