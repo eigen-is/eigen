@@ -224,6 +224,13 @@ export const calendarRouter = new Elysia({name: "calendar"})
         return {ownerUserId: params.ownerId, shares: calData.shares || []};
     }, {auth: true})
 
+    // --- Pull shared-with-me from a specific owner ---
+    .get("/calendar/:ownerId/shared-with-me", async ({params, user}) => {
+        const ownerHome = await getHome(params.ownerId);
+        const memberships = await getMemberships(user.id);
+        return ownerHome.calendar.getSharedWith(user.email, memberships.teamIds);
+    }, {auth: true})
+
     // --- Shared calendars ---
     .get("/calendar/:ownerId/shared", async ({user}) => {
         const cal = await resolveCalendar(user, user.id);

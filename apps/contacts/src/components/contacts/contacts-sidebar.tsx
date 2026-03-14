@@ -1,4 +1,4 @@
-import {Clock, Star, UserPlus, Users, X} from 'lucide-react';
+import {Clock, Star, UserRoundPlus, UsersRound, X} from 'lucide-react';
 import {Link} from '@tanstack/react-router';
 import {Button} from "@workspace/ui/components/button";
 import {LabelManager} from '@workspace/ui/components/layout/labels/label-manager';
@@ -43,7 +43,7 @@ export function ContactsSidebar({condensed = false, onClose, isMobile = false, o
                 <Button variant="default" size={condensed ? "icon" : "default"} asChild
                         className={`${condensed ? 'w-10 p-0' : 'w-full justify-start gap-3'}`}>
                     <Link to="/new">
-                        <UserPlus className="h-4 w-4"/>
+                        <UserRoundPlus className="h-4 w-4"/>
                         {!condensed && <span>Create contact</span>}
                     </Link>
                 </Button>
@@ -52,7 +52,7 @@ export function ContactsSidebar({condensed = false, onClose, isMobile = false, o
             <div className="overflow-auto flex-1">
                 <SidebarSection condensed={condensed}>
                     <SidebarItem
-                        icon={<Users className="h-4 w-4"/>}
+                        icon={<UsersRound className="h-4 w-4"/>}
                         label="All contacts"
                         to="/$filterType/$filterId"
                         params={{filterType: 'book', filterId: 'all'}}

@@ -57,12 +57,6 @@ export default class Drive {
         this.sharedDb = await getSharedDatabase(this.home);
     }
 
-    private getMount(mountId: string): Mount {
-        const mount = this.mounts.get(mountId);
-        if (!mount) throw new ApiError(404, `Mount not found: ${mountId}`);
-        return mount;
-    }
-
     async addMount(config: MountConfig): Promise<void> {
         const mount = new Mount(
             this.owner.id,
@@ -317,25 +311,6 @@ export default class Drive {
         }
     }
 
-    private async closeCollabDocumentsRecursively(mountId: string, pathId: string): Promise<void> {
-        const mount = this.getMount(mountId);
-        const path = await mount.getPath(pathId);
-        if (!path) return;
-
-        if (isCollabType(path.type)) {
-            try {
-                await this.closeCollabDocument(mountId, pathId);
-            } catch (error) {
-                console.error(`Failed to close collab document ${pathId}:`, error);
-            }
-        } else if (isContainerType(path.type)) {
-            const children = await mount.listFolder(pathId);
-            for (const child of children) {
-                await this.closeCollabDocumentsRecursively(mountId, child.id);
-            }
-        }
-    }
-
     async deleteFile(mountId: string, pathId: string): Promise<void> {
         const mount = this.getMount(mountId);
         const file = await mount.getPath(pathId);
@@ -584,6 +559,17 @@ export default class Drive {
         }));
     }
 
+    async getSharedWith(user: User): Promise<DrivePath[]> {
+        const allShared = await this.getSharedPathsByMe();
+        const results: DrivePath[] = [];
+        for (const path of allShared) {
+            if (path.acl && await matchesACL(path.acl, user, 'read')) {
+                results.push(path);
+            }
+        }
+        return results;
+    }
+
     async getSharedPathsByMe(): Promise<DrivePath[]> {
         // Aggregate results from all mounts
         const allResults: DrivePath[] = [];
@@ -635,10 +621,6 @@ export default class Drive {
         }
     }
 
-    private emit(type: Parameters<typeof buildDriveEvent>[0], path: DrivePath, options?: Parameters<typeof buildDriveEvent>[2]): void {
-        this.home.notify(buildDriveEvent(type, path, options));
-    }
-
     async destruct(): Promise<void> {
         for (const [key, getter] of this.documents) {
             try {
@@ -649,5 +631,34 @@ export default class Drive {
             }
         }
         this.documents.clear();
+    }
+
+    private getMount(mountId: string): Mount {
+        const mount = this.mounts.get(mountId);
+        if (!mount) throw new ApiError(404, `Mount not found: ${mountId}`);
+        return mount;
+    }
+
+    private async closeCollabDocumentsRecursively(mountId: string, pathId: string): Promise<void> {
+        const mount = this.getMount(mountId);
+        const path = await mount.getPath(pathId);
+        if (!path) return;
+
+        if (isCollabType(path.type)) {
+            try {
+                await this.closeCollabDocument(mountId, pathId);
+            } catch (error) {
+                console.error(`Failed to close collab document ${pathId}:`, error);
+            }
+        } else if (isContainerType(path.type)) {
+            const children = await mount.listFolder(pathId);
+            for (const child of children) {
+                await this.closeCollabDocumentsRecursively(mountId, child.id);
+            }
+        }
+    }
+
+    private emit(type: Parameters<typeof buildDriveEvent>[0], path: DrivePath, options?: Parameters<typeof buildDriveEvent>[2]): void {
+        this.home.notify(buildDriveEvent(type, path, options));
     }
 }

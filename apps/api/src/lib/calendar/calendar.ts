@@ -1,6 +1,13 @@
-import type {CalendarEvent, CalendarItem, CalendarShare, EventData, CalendarEventOccurrence, SharedCalendar} from '@workspace/lib/types/calendar';
+import type {
+    CalendarEvent,
+    CalendarEventOccurrence,
+    CalendarItem,
+    CalendarShare,
+    EventData,
+    SharedCalendar
+} from '@workspace/lib/types/calendar';
 import type {BunSQLiteDatabase} from 'drizzle-orm/bun-sqlite';
-import {and, eq, gte, lte, sql, isNull} from 'drizzle-orm';
+import {and, eq, gte, isNull, lte, sql} from 'drizzle-orm';
 import {v4 as uuidv4} from 'uuid';
 import {RRule} from 'rrule';
 import type {Home} from '../home';
@@ -12,7 +19,7 @@ import type {ManagedDatabase} from '../core/';
 import {ApiError, PATHS} from '../core';
 import {SSEventType} from '@workspace/lib/types/sse';
 import {buildCalendarEvent, buildCalendarShareEvent} from './sse-events';
-import {propagateCalendarShare, notifySharedCalendarUsers} from './share-propagation';
+import {notifySharedCalendarUsers, propagateCalendarShare} from './share-propagation';
 import {createHash} from 'crypto';
 
 export async function getCalendar(user: User) {
@@ -156,7 +163,8 @@ export class Calendar {
             color: input.color !== undefined ? input.color : existing.color,
             visible: input.visible !== undefined ? input.visible : existing.visible,
             shares: input.shares !== undefined ? input.shares : existing.shares,
-            updatedAt: sql`unixepoch()`,
+            updatedAt: sql`unixepoch
+            ()`,
         }).where(eq(schema.calendars.id, id)).run();
 
         if (input.shares !== undefined) {
@@ -164,7 +172,10 @@ export class Calendar {
             await propagateCalendarShare(this.home, updated, oldShares);
         }
 
-        this.home.notify(buildCalendarEvent(SSEventType.CALENDAR_UPDATED, {calendarId: id, title: input.name ?? existing.name}));
+        this.home.notify(buildCalendarEvent(SSEventType.CALENDAR_UPDATED, {
+            calendarId: id,
+            title: input.name ?? existing.name
+        }));
         return this.getCalendarById(id)!;
     }
 
@@ -233,9 +244,14 @@ export class Calendar {
         }).run();
 
         this.incrementCtag(calendarId);
-        const sseEvent = buildCalendarEvent(SSEventType.CALENDAR_EVENT_CREATED, {calendarId, eventId: id, title: input.title.trim()});
+        const sseEvent = buildCalendarEvent(SSEventType.CALENDAR_EVENT_CREATED, {
+            calendarId,
+            eventId: id,
+            title: input.title.trim()
+        });
         this.home.notify(sseEvent);
-        notifySharedCalendarUsers(this.home, cal, sseEvent).catch(() => {});
+        notifySharedCalendarUsers(this.home, cal, sseEvent).catch(() => {
+        });
         return this.getEventById(id)!;
     }
 
@@ -269,7 +285,17 @@ export class Calendar {
 
         const rruleStr = input.rrule !== undefined ? (input.rrule ?? null) : (existing.rrule ?? null);
 
-        const etag = computeEtag({title, description, location, startTime, endTime, allDay, rrule: rruleStr, status, data});
+        const etag = computeEtag({
+            title,
+            description,
+            location,
+            startTime,
+            endTime,
+            allDay,
+            rrule: rruleStr,
+            status,
+            data
+        });
 
         this.db.update(schema.events).set({
             title,
@@ -282,14 +308,20 @@ export class Calendar {
             status,
             etag,
             data,
-            updatedAt: sql`unixepoch()`,
+            updatedAt: sql`unixepoch
+            ()`,
         }).where(eq(schema.events.id, id)).run();
 
         this.incrementCtag(existing.calendarId);
-        const sseEvent = buildCalendarEvent(SSEventType.CALENDAR_EVENT_UPDATED, {calendarId: existing.calendarId, eventId: id, title});
+        const sseEvent = buildCalendarEvent(SSEventType.CALENDAR_EVENT_UPDATED, {
+            calendarId: existing.calendarId,
+            eventId: id,
+            title
+        });
         this.home.notify(sseEvent);
         const cal = this.getCalendarById(existing.calendarId);
-        if (cal) notifySharedCalendarUsers(this.home, cal, sseEvent).catch(() => {});
+        if (cal) notifySharedCalendarUsers(this.home, cal, sseEvent).catch(() => {
+        });
         return this.getEventById(id)!;
     }
 
@@ -299,10 +331,15 @@ export class Calendar {
 
         this.db.delete(schema.events).where(eq(schema.events.id, id)).run();
         this.incrementCtag(existing.calendarId);
-        const sseEvent = buildCalendarEvent(SSEventType.CALENDAR_EVENT_DELETED, {calendarId: existing.calendarId, eventId: id, title: existing.title});
+        const sseEvent = buildCalendarEvent(SSEventType.CALENDAR_EVENT_DELETED, {
+            calendarId: existing.calendarId,
+            eventId: id,
+            title: existing.title
+        });
         this.home.notify(sseEvent);
         const cal = this.getCalendarById(existing.calendarId);
-        if (cal) notifySharedCalendarUsers(this.home, cal, sseEvent).catch(() => {});
+        if (cal) notifySharedCalendarUsers(this.home, cal, sseEvent).catch(() => {
+        });
     }
 
     public getEventsInRange(from: number, to: number, calendarId?: string): CalendarEventOccurrence[] {
@@ -324,7 +361,8 @@ export class Calendar {
         const recurring = this.db.select().from(schema.events).where(
             and(
                 ...conditions,
-                sql`${schema.events.rrule} IS NOT NULL`,
+                sql`${schema.events.rrule}
+                IS NOT NULL`,
                 isNull(schema.events.parentEventId),
             )
         ).all();
@@ -332,7 +370,8 @@ export class Calendar {
         const exceptions = this.db.select().from(schema.events).where(
             and(
                 ...conditions,
-                sql`${schema.events.parentEventId} IS NOT NULL`,
+                sql`${schema.events.parentEventId}
+                IS NOT NULL`,
             )
         ).all();
 
@@ -418,7 +457,8 @@ export class Calendar {
         this.db.update(schema.sharedCalendars).set({
             color: input.color !== undefined ? input.color : existing.color,
             visible: input.visible !== undefined ? input.visible : existing.visible,
-            updatedAt: sql`unixepoch()`,
+            updatedAt: sql`unixepoch
+            ()`,
         }).where(eq(schema.sharedCalendars.id, id)).run();
 
         const updated = this.db.select().from(schema.sharedCalendars).where(eq(schema.sharedCalendars.id, id)).get()!;
@@ -453,7 +493,8 @@ export class Calendar {
                 calendarName,
                 calendarColor,
                 permission,
-                updatedAt: sql`unixepoch()`,
+                updatedAt: sql`unixepoch
+                ()`,
             }).where(eq(schema.sharedCalendars.id, existing.id)).run();
         } else {
             this.db.insert(schema.sharedCalendars).values({
@@ -493,24 +534,34 @@ export class Calendar {
         }
     }
 
-    public pushSharesTo(targetUser: User): void {
+    public getSharedWith(userEmail: string, teamIds: string[]): {
+        calendarId: string;
+        name: string;
+        color: string;
+        permission: CalendarShare['permission']
+    }[] {
         const calendars = this.getCalendars();
+        const results: {
+            calendarId: string;
+            name: string;
+            color: string;
+            permission: CalendarShare['permission']
+        }[] = [];
+
         for (const cal of calendars) {
             if (!cal.shares) continue;
-            for (const share of cal.shares) {
-                if (share.targetId.toLowerCase() === targetUser.email.toLowerCase()) {
-                    getHome(targetUser.id).then(targetHome => {
-                        targetHome.calendar.receiveShare(
-                            this.home.user.id,
-                            cal.id,
-                            cal.name,
-                            cal.color,
-                            share.permission,
-                        );
-                    });
-                }
+            const permission = this.checkPermission(cal.id, userEmail, teamIds);
+            if (permission) {
+                results.push({
+                    calendarId: cal.id,
+                    name: cal.name,
+                    color: cal.color,
+                    permission,
+                });
             }
         }
+
+        return results;
     }
 
     public checkPermission(calendarId: string, userEmail: string, teamIds: string[]): CalendarShare['permission'] | null {
@@ -541,17 +592,21 @@ export class Calendar {
 
     // --- Internal ---
 
-    private incrementCtag(calendarId: string): void {
-        this.db.update(schema.calendars)
-            .set({ctag: sql`${schema.calendars.ctag} + 1`, updatedAt: sql`unixepoch()`})
-            .where(eq(schema.calendars.id, calendarId))
-            .run();
-    }
-
     async destruct(): Promise<void> {
         if (this.managedDb) {
             await this.managedDb.close();
         }
+    }
+
+    private incrementCtag(calendarId: string): void {
+        this.db.update(schema.calendars)
+            .set({
+                ctag: sql`${schema.calendars.ctag}
+                + 1`, updatedAt: sql`unixepoch
+                ()`
+            })
+            .where(eq(schema.calendars.id, calendarId))
+            .run();
     }
 }
 
