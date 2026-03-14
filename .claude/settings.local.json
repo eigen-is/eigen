@@ -11,7 +11,9 @@
       "Bash(cd:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(git status:*)"
+      "Bash(git status:*)",
+      "Bash(sqlite3:*)",
+      "Bash(curl:*)"
     ]
   }
 }

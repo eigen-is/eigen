@@ -60,6 +60,8 @@ bun run check          # typecheck + test
 - **`type` over `interface`** — except when methods are needed
 - **Never use `useQuery`/`useMutation` directly in apps** — all data hooks live in
   `packages/lib/src/core/[domain]/hooks/`
+- **Keep docs up to date** — when a task is fully completed, update relevant docs in `docs/` and this file if the
+  change affects architecture patterns, file locations, or critical rules
 
 ## Architecture Patterns
 
