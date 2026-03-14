@@ -208,11 +208,11 @@ describe('Team Calendar Share (push to existing members)', () => {
             `/calendar/team/${teamId}/settings`, {
                 method: 'PUT',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({calendarEnabled: false}),
+                body: JSON.stringify({enabled: false}),
             });
         expect(settingsRes.status).toBe(200);
         const settingsData = await settingsRes.json() as any;
-        expect(settingsData.calendarEnabled).toBe(false);
+        expect(settingsData.enabled).toBe(false);
 
         // Bob's shared list should no longer include the team calendar
         const sharedRes = await authedRequest(ctx.bob.user.sessionToken,
@@ -226,7 +226,7 @@ describe('Team Calendar Share (push to existing members)', () => {
             `/calendar/team/${teamId}/settings`, {
                 method: 'PUT',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({calendarEnabled: true}),
+                body: JSON.stringify({enabled: true}),
             });
 
         // Should reappear
