@@ -1,5 +1,6 @@
 import {memo} from 'react';
-import {SlideItem, SlideObject, SLIDE_ASPECT_RATIO, pxToPercent, BORDER_RADIUS_ROUND} from './types';
+import {SLIDE_ASPECT_RATIO, SlideItem, SlideObject} from './types';
+import {getObjectPositionStyle} from './slide-object';
 import {cn} from '@workspace/ui/lib/utils';
 
 type SlideThumbnailProps = {
@@ -10,7 +11,13 @@ type SlideThumbnailProps = {
     onClick: () => void;
 }
 
-export const SlideThumbnail = memo(function SlideThumbnail({slide, objects, index, isActive, onClick}: SlideThumbnailProps) {
+export const SlideThumbnail = memo(function SlideThumbnail({
+                                                               slide,
+                                                               objects,
+                                                               index,
+                                                               isActive,
+                                                               onClick
+                                                           }: SlideThumbnailProps) {
     return (
         <button
             onClick={onClick}
@@ -31,7 +38,11 @@ export const SlideThumbnail = memo(function SlideThumbnail({slide, objects, inde
             >
                 <div className="w-full h-full relative" style={{
                     backgroundColor: slide.backgroundColor,
-                    ...(slide.backgroundImage ? {backgroundImage: `url(${slide.backgroundImage})`, backgroundSize: 'cover', backgroundPosition: 'center'} : {}),
+                    ...(slide.backgroundImage ? {
+                        backgroundImage: `url(${slide.backgroundImage})`,
+                        backgroundSize: 'cover',
+                        backgroundPosition: 'center'
+                    } : {}),
                 }}>
                     {objects.map((obj) => (
                         <ThumbnailObject key={obj.id} obj={obj} bgColor={slide.backgroundColor}/>
@@ -42,22 +53,13 @@ export const SlideThumbnail = memo(function SlideThumbnail({slide, objects, inde
     );
 });
 
-const ThumbnailObject = memo(function ThumbnailObject({obj, bgColor}: {obj: SlideObject; bgColor: string}) {
+const ThumbnailObject = memo(function ThumbnailObject({obj, bgColor}: { obj: SlideObject; bgColor: string }) {
     const isDark = isDarkColor(bgColor);
 
+    const posStyle = getObjectPositionStyle(obj);
     return (
-        <div
-            className="absolute overflow-hidden"
-            style={{
-                left: `${pxToPercent(obj.x, 'x')}%`,
-                top: `${pxToPercent(obj.y, 'y')}%`,
-                width: `${pxToPercent(obj.w, 'x')}%`,
-                height: `${pxToPercent(obj.h, 'y')}%`,
-                transform: obj.rotation ? `rotate(${obj.rotation}deg)` : undefined,
-                ...(obj.borderWidth && obj.borderColor ? {border: `${obj.borderWidth * 0.1}px solid ${obj.borderColor}`} : {}),
-                ...(obj.borderRadius ? {borderRadius: obj.borderRadius >= BORDER_RADIUS_ROUND ? '50%' : `${obj.borderRadius * 0.1}px`, overflow: 'hidden' as const} : {}),
-            }}
-        >
+        <div className="absolute overflow-hidden" style={posStyle}>
+
             {obj.type === 'text' && (
                 <div
                     className="w-full h-full flex items-center"

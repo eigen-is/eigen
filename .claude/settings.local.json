@@ -5,7 +5,9 @@
       "Bash(sort -k1,2)",
       "Bash(wc:*)",
       "Bash(grep:*)",
-      "Bash(git checkout:*)"
+      "Bash(git checkout:*)",
+      "Bash(bun run:*)",
+      "Bash(bun:*)"
     ]
   }
 }
