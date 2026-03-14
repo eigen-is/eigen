@@ -71,8 +71,12 @@ Push-based propagation — when shares change, `share-propagation.ts` resolves t
 `shared_calendars`. See [SHARE-PROPAGATION.md](SHARE-PROPAGATION.md).
 
 **Team calendars**: Auto-synced into the user's `shared_calendars` table (with `ownerUserId = 'team_{teamId}'`) when
-`GET /calendar/:ownerId/shared` is called. Displayed in a separate "Team Calendars" section in the sidebar, using the
-same `SharedCalendar` infrastructure for visibility/color prefs.
+`GET /calendar/:ownerId/shared` is called. Can be disabled via `settings.json` in the team home dir
+(`calendarEnabled: false`). Default member permission is `read`. To grant `write` or `free-busy`, set shares on the
+team's default calendar: `{targetId: 'team_{teamId}', permission: 'write'}`. Permission is resolved via
+`checkPermission()` and synced on every fetch. When disabled, entries are removed from members' `shared_calendars`.
+Displayed in a separate "Team Calendars" section in the sidebar, using the same `SharedCalendar` infrastructure for
+visibility/color prefs. Managed in the People app team detail page.
 
 ## Recurrence
 
@@ -101,10 +105,12 @@ GET    /calendar/:ownerId/calendars/:calId/events/:from/:to
 POST   /calendar/:ownerId/calendars/:calId/events
 PUT    /calendar/:ownerId/events/:id
 DELETE /calendar/:ownerId/events/:id
-GET    /calendar/:ownerId/shared                  (shared-with-me list)
+GET    /calendar/:ownerId/shared                  (shared-with-me list, auto-syncs team calendars)
 PUT    /calendar/:ownerId/shared/:id              (local prefs)
 DELETE /calendar/:ownerId/shared/:id
 GET    /calendar/:ownerId/shared-with-me          (pull: what has owner shared with me?)
+GET    /calendar/team/:teamId/settings            (team calendar settings)
+PUT    /calendar/team/:teamId/settings            (update: {calendarEnabled})
 ```
 
 Events endpoint returns `CalendarEventOccurrence[]` — expanded occurrences with `occurrenceDate` field. Free-busy
