@@ -237,7 +237,7 @@ export async function completeSetup(input: SetupInput): Promise<SetupResult> {
             setupCompletedAt: new Date().toISOString()
         };
 
-        saveServerConfig(serverConfig);
+        await saveServerConfig(serverConfig);
 
         return {
             success: true,
