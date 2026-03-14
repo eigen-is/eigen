@@ -3,6 +3,7 @@ import {parseOwnerId} from '@workspace/lib/types';
 import {getUserByEmail} from '../user/';
 import {getHome} from '../home';
 import {getTeamMembers} from "../team";
+import {addRegistryEntry} from '../share';
 
 export async function propagateACLChange(path: DrivePath, oldACL: DriveACL[] | null, newACL: DriveACL[] | null): Promise<void> {
     const ids = new Set<string>();
@@ -13,9 +14,11 @@ export async function propagateACLChange(path: DrivePath, oldACL: DriveACL[] | n
             const user = await getUserByEmail(acl.id);
             if (user) {
                 ids.add(user.id);
+            } else {
+                await addRegistryEntry(path.ownerId, acl.id);
             }
         } else if (parsed.type === 'team') {
-            // get all members of team
+            await addRegistryEntry(path.ownerId, `team_${parsed.id}`);
             const team = await getTeamMembers(parsed.id);
             for (const member of team) {
                 ids.add(member.user.id);

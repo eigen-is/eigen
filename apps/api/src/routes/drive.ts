@@ -1,6 +1,7 @@
 import {Elysia, t} from "elysia";
 import {betterAuth} from "./auth";
 import {getSharedDrive} from "../lib/drive";
+import {getHome} from "../lib/home";
 
 export const driveRouter = new Elysia({name: "drive"})
     .use(betterAuth)
@@ -21,6 +22,10 @@ export const driveRouter = new Elysia({name: "drive"})
     .get("/drive/:ownerId/shared/with-me", async ({params, user}) => {
         const drive = await getSharedDrive(params.ownerId, user);
         return await drive.getSharedPathsWithMe();
+    }, {auth: true})
+    .get("/drive/:ownerId/shared-with-me", async ({params, user}) => {
+        const ownerHome = await getHome(params.ownerId);
+        return await ownerHome.drive.getSharedWith(user);
     }, {auth: true})
     // Folder operations
     .get("/drive/:ownerId/:mountId/folder/:pathId", async ({params, user}) => {

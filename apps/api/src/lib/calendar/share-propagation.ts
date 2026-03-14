@@ -2,9 +2,10 @@ import type {CalendarItem, CalendarShare} from '@workspace/lib/types/calendar';
 import type {SSEvent} from '@workspace/lib/types/sse';
 import {parseOwnerId} from '@workspace/lib/types';
 import {getUserByEmail} from '../user/';
+import type {Home} from '../home';
 import {getHome} from '../home';
 import {getTeamMembers} from '../team';
-import type {Home} from '../home';
+import {addRegistryEntry} from '../share';
 
 export async function notifySharedCalendarUsers(
     ownerHome: Home,
@@ -23,8 +24,8 @@ export async function notifySharedCalendarUsers(
             if (user) userIds.add(user.id);
         } else if (parsed.type === 'team') {
             // for teams, we really on staletime refresh at FE
-        //    const members = await getTeamMembers(parsed.id);
-        //    for (const member of members) userIds.add(member.user.id);
+            //    const members = await getTeamMembers(parsed.id);
+            //    for (const member of members) userIds.add(member.user.id);
         }
     }
 
@@ -56,8 +57,11 @@ export async function propagateCalendarShare(
             const user = await getUserByEmail(share.targetId);
             if (user) {
                 userIds.add(user.id);
+            } else {
+                await addRegistryEntry(ownerHome.user.id, share.targetId);
             }
         } else if (parsed.type === 'team') {
+            await addRegistryEntry(ownerHome.user.id, `team_${parsed.id}`);
             const members = await getTeamMembers(parsed.id);
             for (const member of members) {
                 userIds.add(member.user.id);
