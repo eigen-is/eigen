@@ -24,7 +24,9 @@ export function getSyntheticTeamUser(ownerId: string): User {
 }
 
 export type TeamSettings = {
-    calendarEnabled?: boolean;
+    calendar?: {
+        enabled?: boolean;
+    };
 };
 
 export class TeamHome extends Home {
@@ -39,13 +41,13 @@ export class TeamHome extends Home {
         this.homeDir = getTeamDataPath(parsed.id);
         this.fs = new LocalFilesystem(this.homeDir);
 
-        this.settings = new JsonStore<TeamSettings>(this.fs, 'settings.json', {calendarEnabled: true});
+        this.settings = new JsonStore<TeamSettings>(this.fs, 'settings.json', {calendar: {enabled: true}});
         this._drive = new Drive(this);
         this._calendar = new Calendar(this);
     }
 
     override get calendar(): Calendar {
-        if (this.settings.get().calendarEnabled === false) {
+        if (this.settings.get().calendar?.enabled === false) {
             throw new ApiError(404, 'Team calendar is disabled');
         }
         return this._calendar;
