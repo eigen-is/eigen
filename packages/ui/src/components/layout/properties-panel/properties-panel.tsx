@@ -10,7 +10,7 @@ type PropertiesPanelProps = {
 export function PropertiesPanel({children, className}: PropertiesPanelProps) {
     return (
         <div className={cn('w-64 border-l bg-background shrink-0 h-full flex flex-col overflow-hidden', className)}>
-            <ScrollArea className="flex-1">
+            <ScrollArea className="flex-1 h-full">
                 {children}
             </ScrollArea>
         </div>
