@@ -539,10 +539,11 @@ export class Calendar {
         ).get();
 
         if (existing) {
-            if (existing.calendarName !== calendarName || existing.calendarColor !== calendarColor) {
+            if (existing.calendarName !== calendarName || existing.calendarColor !== calendarColor || existing.permission !== permission) {
                 this.db.update(schema.sharedCalendars).set({
                     calendarName,
                     calendarColor,
+                    permission,
                     updatedAt: sql`unixepoch()`,
                 }).where(eq(schema.sharedCalendars.id, existing.id)).run();
             }
