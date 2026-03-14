@@ -1,197 +1,92 @@
 # Database Architecture
 
-This document describes the database architecture for the Eigen API server.
-
-## Overview
-
-The application uses SQLite databases managed through Drizzle ORM. Databases are organized into two categories:
-
-1. **Server-level databases** - Global databases for auth and config
-2. **User-level databases** - Per-user databases managed through `Home` and `Mount`
+> **TLDR**: SQLite via Drizzle ORM. Each domain has its own `db-config.ts` with schema + versioned migrations.
+`ManagedDatabase` handles versioning, WAL mode, auto-sync, and dirty tracking. Databases are singletons per path.
+> Server-level DBs in `data/server/`, user-level in `data/home/{userId}/`.
 
 ## Database Inventory
 
-| Database | Path | Manager | Purpose |
-|----------|------|---------|---------|
-| **Auth** | `{server}/users3.db` | `auth.ts` (direct) | User authentication (better-auth) |
-| **Config** | `{server}/config.db` | `config.ts` (direct) | System configuration |
-| **Mount Metadata** | `{home}/mounts/{id}/metadata.db` | `Mount` | Drive file/folder structure |
-| **Shared Paths** | `{home}/mounts/shared.db` | `Home.getLocalDatabase()` | Files shared with user |
-| **Contacts** | `{home}/eigen.contacts/contacts.db` | `Home.getLocalDatabase()` | User contacts |
-| **Mail** | `{home}/eigen.mail/mail.db` | `Home.getLocalDatabase()` | Email metadata |
-| **Collab Docs** | Mount storage backend (key: `{dataDbPathId}`) | `Mount.openDatabase()` | YJS document updates |
-| **Chat Rooms** | Mount storage backend (key: `{dataDbPathId}`) | `Mount.openDatabase()` | Chat messages and read state |
+| Database       | Path                                   | Purpose                                                       |
+|----------------|----------------------------------------|---------------------------------------------------------------|
+| Auth           | `{server}/users3.db`                   | User auth (better-auth managed)                               |
+| Eigen          | `{server}/eigen.db`                    | Share registry ([SHARE-PROPAGATION.md](SHARE-PROPAGATION.md)) |
+| Mount metadata | `{home}/mounts/{id}/metadata.db`       | Drive file/folder structure                                   |
+| Shared paths   | `{home}/mounts/shared.db`              | Files shared with this user                                   |
+| Contacts       | `{home}/eigen.contacts/contacts.db`    | Contact data                                                  |
+| Mail           | `{home}/eigen.mail/mail.db`            | Email metadata                                                |
+| Calendar       | `{home}/eigen.calendar/calendar.db`    | Calendars, events, shared calendars                           |
+| Collab docs    | Via storage backend (`{dataDbPathId}`) | Yjs snapshots + updates                                       |
+| Chat rooms     | Via storage backend (`{dataDbPathId}`) | Messages + read state                                         |
 
-## Core Components
+## ManagedDatabase
 
-### ManagedDatabase (`src/lib/core/managed-database.ts`)
+**File**: `apps/api/src/lib/core/managed-database.ts`
 
-The central class for database management with:
+Core database wrapper providing:
 
-- **Versioned migrations** - Incremental schema changes tracked in `__schema_version` table
-- **WAL mode** - SQLite Write-Ahead Logging for safety
-- **Dirty tracking** - Mark databases as dirty after writes for sync
-- **Auto-sync** - Periodic sync for remote storage (configurable interval)
-- **Sync callbacks** - `onOpen`, `onSync`, `onClose` hooks for remote storage
+- **Versioned migrations** via `__schema_version` table
+- **WAL mode** for concurrent reads
+- **Dirty tracking** — marks DB dirty after writes for sync
+- **Auto-sync** — periodic sync at configurable interval
+- **Sync callbacks** — `onOpen`, `onSync`, `onClose` for remote storage
 
 ```typescript
 type DatabaseConfig<S> = {
-    name: string;           // For logging
-    currentVersion: number; // Target schema version
-    schema: S;              // Drizzle schema
-    migrations: Migration[]; // Version-ordered migrations
-};
-
-type SyncCallbacks = {
-    onOpen?: () => Promise<void>;   // Download from remote
-    onSync?: () => Promise<void>;   // Upload to remote
-    onClose?: () => Promise<void>;  // Cleanup temp files
+    name: string;
+    currentVersion: number;
+    schema: S;
+    migrations: Migration[];
 };
 ```
 
-### DatabaseConfig Files
+### Lifecycle
 
-Each domain has a `db-config.ts` defining its schema and migrations:
+1. `open(autoSyncMs)` — opens DB, runs pending migrations, starts sync timer
+2. `sync()` — runs `onSync` callback + WAL checkpoint
+3. `close()` — flushes, closes, cleans up WAL/SHM files
 
-- `src/lib/collab/db-config.ts` - COLLAB_DB_CONFIG
-- `src/lib/chat/db-config.ts` - CHAT_ROOM_DB_CONFIG
-- `src/lib/contacts/db-config.ts` - CONTACTS_DB_CONFIG
-- `src/lib/mail/db-config.ts` - MAIL_DB_CONFIG
-- `src/lib/drive/db-config.ts` - SHARED_DB_CONFIG
-- `src/lib/mount/db-config.ts` - MOUNT_DB_CONFIG
+### Pragmas
 
-## Database Access Patterns
+`journal_mode=WAL`, `foreign_keys=ON`, `busy_timeout=5000`
 
-### Local-Only Databases (Contacts, Mail, Shared)
+## Domain Config Files
 
-Opened via `Home.getLocalDatabase()`:
+Each domain defines its schema and migrations in `db-config.ts`:
 
-```typescript
-const managedDb = await home.getLocalDatabase(CONTACTS_DB_CONFIG, 'eigen.contacts/contacts.db');
-const db = managedDb.db; // Drizzle instance
-```
+| Config                | File                                     |
+|-----------------------|------------------------------------------|
+| `MOUNT_DB_CONFIG`     | `apps/api/src/lib/mount/db-config.ts`    |
+| `SHARED_DB_CONFIG`    | `apps/api/src/lib/drive/db-config.ts`    |
+| `CONTACTS_DB_CONFIG`  | `apps/api/src/lib/contacts/db-config.ts` |
+| `MAIL_DB_CONFIG`      | `apps/api/src/lib/mail/db-config.ts`     |
+| `COLLAB_DB_CONFIG`    | `apps/api/src/lib/collab/db-config.ts`   |
+| `CHAT_ROOM_DB_CONFIG` | `apps/api/src/lib/chat/db-config.ts`     |
+| `CALENDAR_DB_CONFIG`  | `apps/api/src/lib/calendar/db-config.ts` |
 
-- Databases are singletons per path (opened once, reused)
-- No remote sync needed
-- Closed automatically on Home destruction
+## Access Patterns
 
-### Mount Metadata Database
+### Local databases (Contacts, Mail, Calendar, Shared)
 
-The mount metadata database is opened via `ManagedDatabase` using `MOUNT_DB_CONFIG`.
+Opened via `Home.getLocalDatabase(config, path)`. Singletons per path — opened once, reused. No remote sync.
 
-- The file lives at `{home}/mounts/{id}/metadata.db`
-- Schema is versioned via `__schema_version` like other user databases
+### Mount-based databases (Collab, Chat)
 
-### Mount-Based Databases (Collab Documents & Chats)
-
-Eigendocs, Stickies, Slides, Sheets, and Chats are represented as folders. When a collab document or chat is opened, the system ensures there is a `data.db` file under that folder and uses that file's `pathId` as the storage key for the SQLite database.
+Collab documents and chats are Drive folders containing a `data.db` file. The `data.db`'s `pathId` is used as the
+storage key:
 
 ```
-test.eigendoc/          (pathId: abc123, mimeType: application/eigendoc)
-└── data.db             (pathId: xyz789, mimeType: application/x-sqlite3)
-
-my-room.eigenchat/      (pathId: def456, mimeType: application/eigenchat)
-└── data.db             (pathId: uvw012, mimeType: application/x-sqlite3)
+test.eigendoc/          (pathId: abc123)
+└── data.db             (pathId: xyz789, stored via storage backend)
 ```
 
-Key points:
+For remote storage (S3): `Mount.openDatabase()` downloads to temp, syncs periodically, uploads on close.
 
-- The database is stored using the `data.db` file's `pathId` (not the folder's)
-- For **local-key** mounts: `data.db` bytes are stored on disk under `{home}/mounts/{id}/data/{dataDbPathId}`
-- For **s3** mounts: `data.db` bytes are stored in the S3 backend under a key derived from `{dataDbPathId}` (with an optional prefix)
+### Singleton pattern
 
-### Storage Type Detection
+Both `Home` and `Mount` use `createAsyncSingleton()` (`apps/api/src/utils/singleton.ts`) to ensure each database opens
+only once.
 
-```typescript
-// In Mount class
-get isRemote(): boolean {
-    return this.config.storageType !== 'local-key';
-}
-```
+## Schema Tables
 
-For remote-capable storage backends (for example `s3`), `Mount.openDatabase()` uses a local temp file and sync callbacks:
-- `onOpen`: Download from remote storage to temp
-- `onSync`: Upload temp file to remote storage
-- `onClose`: Cleanup temp file
-
-## Singleton Pattern
-
-Both `Home` and `Mount` use the singleton pattern for database management:
-
-```typescript
-// Map of path -> singleton factory
-private managedDatabases: Map<string, () => Promise<ManagedDatabase<any>>> = new Map();
-
-// Get or create database
-if (!this.managedDatabases.has(key)) {
-    this.managedDatabases.set(key, createAsyncSingleton(factory));
-}
-return this.managedDatabases.get(key)!();
-```
-
-This ensures:
-- Each database is opened only once
-- Concurrent access returns the same instance
-- Proper cleanup on destruction
-
-## Migration System
-
-Migrations are versioned and run automatically on database open:
-
-```typescript
-const CONTACTS_DB_CONFIG: DatabaseConfig<typeof schema> = {
-    name: 'contacts',
-    currentVersion: 1,
-    schema,
-    migrations: [
-        {
-            version: 1,
-            up: (db) => db.exec(`
-                CREATE TABLE IF NOT EXISTS contacts (...);
-                CREATE TABLE IF NOT EXISTS labels (...);
-                CREATE TABLE IF NOT EXISTS contacts_to_labels (...);
-            `)
-        }
-        // Future migrations: version 2, 3, etc.
-    ]
-};
-```
-
-The `__schema_version` table tracks the current version. Only pending migrations run.
-
-## Considerations
-
-### Why Local-Only for Contacts/Mail?
-
-Contacts and Mail are stored locally only (not synced to remote storage) because:
-- They are user-specific and don't need cross-device sync via file storage
-- Email sync happens through IMAP, not file sync
-- Simpler architecture without remote storage complexity
-
-### Why ManagedDatabase Instead of Direct Drizzle?
-
-- **Consistent patterns** - All user databases use the same interface
-- **Versioning** - Built-in migration support
-- **Remote readiness** - Easy to add remote sync later
-- **Dirty tracking** - Know when to sync without diffing
-
-### Storage Key Construction
-
-For mount-based databases, the `pathId` (UUID) from metadata.db is used as the storage key. This provides:
-- Stable keys that survive file renames
-- Unique keys per document
-- Direct mapping to the drive structure
-
-## File Structure
-
-```
-src/lib/core/
-├── managed-database.ts   # ManagedDatabase class, openLocalDatabase helper
-├── constants.ts          # Default labels, paths
-└── index.ts              # Exports
-
-src/lib/{domain}/
-├── schema.ts             # Drizzle schema definitions
-├── db-config.ts          # DatabaseConfig with migrations
-└── {domain}.ts           # Business logic using ManagedDatabase
-```
+See [STORAGE.md](STORAGE.md) for mount metadata/shared schemas. See [CHAT.md](CHAT.md), [CALENDAR.md](CALENDAR.md) for
+domain-specific schemas.

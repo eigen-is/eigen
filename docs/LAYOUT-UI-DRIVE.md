@@ -1,89 +1,39 @@
 # Drive UI Components
 
-Google Drive-like file management components for Eigen apps. Built with TypeScript, Tailwind CSS, and shadcn/ui.
+> **TLDR**: `DriveLayout` orchestrates file management UI (list + detail + dialogs). Used by Drive, Docs, Stickies apps.
+> All components in `packages/ui/src/components/layout/drive/`.
 
 ## Architecture
 
 ```
 DriveLayout (orchestrator)
-├── DriveList (toolbar + breadcrumb + drag-drop overlay)
-│   └── DriveTable (table rows, keyboard nav, context menu)
-├── DriveDetail (file preview panel)
+├── DriveList (toolbar + breadcrumb + external drop zone)
+│   └── DriveTable (rows, keyboard nav, internal drag-drop, context menu)
+├── DriveDetail (file preview, metadata, access list)
 └── Dialogs (create, delete, rename, share, upload)
 ```
 
-## Hooks
+## Components
 
-### `useDriveDialogs`
-
-Manages state for all 7 dialogs (create folder, create doc, create stickies, delete, rename, share, upload).
-
-```tsx
-const dialogs = useDriveDialogs();
-dialogs.createFolder.openDialog();
-dialogs.delete.openDialog(path);
-```
-
-## Key Components
-
-### `DriveLayout`
-
-Main entry point. Handles dialogs, actions, and layout (mobile/desktop).
-
-```tsx
-<DriveLayout
-  ownerId={userId}
-  mountId={mountId}
-  folderContents={items}
-  isLoading={loading}
-  onRowSelect={handleSelect}
-  onRowActivate={handleOpen}
-  onBackToList={goBack}
-  allowCreateFolder
-  allowDelete
-  allowShare
-  allowUpload
-/>
-```
-
-### `DriveList`
-
-File browser with toolbar, breadcrumb, and external file drop zone.
-
-### `DriveTable`
-
-Table with sorting, keyboard navigation, context menu, and internal drag-drop for moving items.
-
-### `DriveDetail`
-
-File/folder details: metadata, preview (images, video, audio), and access list.
-
-### Dialogs
-
-- `DriveCreateFolder`, `DriveCreateDoc`, `DriveCreateStickies`, `DriveCreateChat`, `DriveCreateSlides`, `DriveCreateSheets`
-- `DriveDeleteItem`, `DriveRenameItem`
-- `DriveAccessDialog` (sharing/ACL)
-- `DriveUploadFiles`
-
-## File Index
-
-**Components:**
-
-- `drive-layout.tsx` - Main orchestrator
-- `drive-list.tsx` - File list with toolbar
-- `drive-table.tsx` - Table with keyboard/drag-drop
-- `drive-detail.tsx` - File preview panel
-- `drive-create-*.tsx` - Creation dialogs
-- `drive-delete-item.tsx` - Delete confirmation
-- `drive-rename-item.tsx` - Rename dialog
-- `drive-access-*.tsx` - Sharing/ACL components
-- `drive-upload-files.tsx` - Upload dialog
-
-**Hooks:**
-
-- `use-drive-dialogs.ts` - Dialog state management
-
-**Helpers:**
-
-- `file-icon-helper.tsx` - File type icons
-- `file-upload.tsx` - Upload utilities
+| Component             | File                         | Description                                           |
+|-----------------------|------------------------------|-------------------------------------------------------|
+| `DriveLayout`         | `drive-layout.tsx`           | Main entry point with dialogs + actions               |
+| `DriveList`           | `drive-list.tsx`             | File browser with toolbar + breadcrumb                |
+| `DriveTable`          | `drive-table.tsx`            | Table with sorting, keyboard, drag-drop, context menu |
+| `DriveDetail`         | `drive-detail.tsx`           | Metadata, preview (image/video/audio), access list    |
+| `DriveCreateFolder`   | `drive-create-folder.tsx`    | Create folder dialog                                  |
+| `DriveCreateDoc`      | `drive-create-doc.tsx`       | Create document dialog                                |
+| `DriveCreateStickies` | `drive-create-stickies.tsx`  | Create stickies board dialog                          |
+| `DriveCreateChat`     | `drive-create-chat.tsx`      | Create chat dialog                                    |
+| `DriveCreateSlides`   | `drive-create-slides.tsx`    | Create slides dialog                                  |
+| `DriveCreateSheets`   | `drive-create-sheets.tsx`    | Create sheets dialog                                  |
+| `DriveDeleteItem`     | `drive-delete-item.tsx`      | Delete confirmation                                   |
+| `DriveRenameItem`     | `drive-rename-item.tsx`      | Rename dialog                                         |
+| `DriveAccessDialog`   | `drive-access-dialog.tsx`    | Share/ACL management                                  |
+| `DriveAccessListEdit` | `drive-access-list-edit.tsx` | Editable access list                                  |
+| `DriveAccessList`     | `drive-access-list.tsx`      | Read-only access list                                 |
+| `DriveShareSummary`   | `drive-share-summary.tsx`    | Sharing status badge                                  |
+| `DriveUploadFiles`    | `drive-upload-files.tsx`     | Upload with drag-drop                                 |
+| `FilePreview`         | `file-preview.tsx`           | Lightbox for images/videos/PDFs                       |
+| `fileIconHelper`      | `file-icon-helper.tsx`       | MIME type → Lucide icon                               |
+| `useDriveDialogs`     | `use-drive-dialogs.ts`       | Dialog state for all 7+ dialogs                       |

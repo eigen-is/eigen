@@ -1,8 +1,13 @@
 # Chat Membership vs ACL
 
+> **TLDR**: Design discussion. Chat ACL = membership (no separate members table). Advantages: zero duplication,
+> inherited access, consistent model. Limitations: no chat-specific roles, no "leave room". Recommendation: keep coupled
+> for now. If needed later, add lightweight `chat_members` table inside chat's `data.db`.
+
 ## Current State
 
-Chat rooms in Eigen are `.eigenchat` files in Drive. The users who can participate in a chat are **exactly the users with ACL access** to that chat file. There is no separate "members" concept — ACL *is* membership.
+Chat rooms in Eigen are `.eigenchat` files in Drive. The users who can participate in a chat are **exactly the users
+with ACL access** to that chat file. There is no separate "members" concept — ACL *is* membership.
 
 - Granting `read` access → user can view messages.
 - Granting `write` access → user can post messages.
