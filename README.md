@@ -142,7 +142,7 @@ docker-compose restart
 
 ## Documentation
 
-- [LLM Context](LLM.md) - Project context and architecture for LLMs
+- [Claude/LLM Context](CLAUDE.md) - Project context and architecture for LLMs
 - [Contributing Guide](docs/CONTRIBUTING.md) - Development conventions and architecture patterns
 - [Database Architecture](docs/DATABASE.md) - SQLite databases, migrations, and access patterns
 - [Storage & Mount System](docs/STORAGE.md) - Storage backends and file management

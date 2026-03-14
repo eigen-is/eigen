@@ -1,98 +1,38 @@
 # Contributing to Eigen
 
-This guide covers development conventions, architecture patterns, and best practices for contributing to Eigen.
-
-## Overview
-
-Eigen is a self-hosted Google Workspace alternative built with modern web technologies. This document helps new contributors understand the codebase structure and development patterns.
-
-## Technology Stack
-
-| Layer | Technology |
-|-------|------------|
-| Runtime | Bun |
-| Backend | Elysia + Drizzle ORM |
-| Frontend | React + TypeScript |
-| Data | TanStack Query |
-| Routing | TanStack Router |
-| Styling | Tailwind CSS + shadcn/ui |
-| Auth | better-auth |
-
-## Project Structure
-
-```
-/apps
-  /api          # Backend API server
-  /calendar     # Calendar app
-  /chat         # Chat app
-  /contacts     # Contacts app
-  /docs         # Document editor
-  /drive        # File storage
-  /index        # Landing page
-  /mail         # Email client
-  /people       # Organization and team management
-  /setup        # Initial setup wizard
-  /sheets       # Spreadsheet editor
-  /slides       # Presentation editor
-  /space        # Team workspace
-  /stickies     # Kanban board
-
-/packages
-  /lib          # Shared business logic
-  /ui           # Reusable UI components (shadcn/ui)
-```
+> **TLDR**: Monorepo with Bun + Elysia + React 19 + TanStack. Types go in `packages/lib/src/types/`. Hooks go in
+`packages/lib/src/core/[domain]/hooks/`. Routes go in `apps/api/src/routes/`. Use `type` not `interface`. English
+> everywhere. No JSDoc. Run `bun run typecheck && bun run test` after changes. No migrations needed — data is throwaway
+> during dev.
 
 ## Code Style
 
-- Use **English** for all code and text
-- Prefer simple, clean implementations
-- Use shadcn defaults for UI components
-- Naming conventions:
-  - **Routes**: domain-based (`mail`, `drive`, `contacts`)
-  - **Functions**: camelCase
-  - **Components**: PascalCase
+- **Language**: English everywhere (code, comments, docs)
+- **Types**: Always `type` over `interface` (except when methods needed)
+- **Naming**: `camelCase` functions, `PascalCase` components, domain-based routes
+- **Comments**: Minimal. Code should be self-documenting. No JSDoc
+- **Imports**: Use `@workspace/lib/[domain]` and `@workspace/ui/components/...` — avoid deep relative paths
+
+## Architecture Quick Reference
+
+| Layer         | Location                                         | Pattern                                                    |
+|---------------|--------------------------------------------------|------------------------------------------------------------|
+| API routes    | `apps/api/src/routes/[domain].ts`                | Elysia router, `{auth: true}` for protected                |
+| Domain logic  | `apps/api/src/lib/[domain]/[domain].ts`          | Class owned by Home singleton                              |
+| DB schemas    | `apps/api/src/lib/[domain]/schema.ts`            | Drizzle ORM + `db-config.ts` for migrations                |
+| Shared types  | `packages/lib/src/types/[domain].ts`             | Shared between FE/BE                                       |
+| Data hooks    | `packages/lib/src/core/[domain]/hooks/`          | TanStack Query — **never** use `useQuery` directly in apps |
+| SSE handlers  | `packages/lib/src/core/[domain]/sse-handlers.ts` | Cache invalidation on events                               |
+| SSE builders  | `apps/api/src/lib/[domain]/sse-events.ts`        | Build SSEvent payloads                                     |
+| Frontend apps | `apps/[name]/src/routes/`                        | TanStack Router, file-based                                |
+| Shared UI     | `packages/ui/src/components/`                    | shadcn/ui defaults                                         |
+| Validation    | `packages/lib/src/validation/`                   | Shared FE/BE validation                                    |
+
+See: [DATABASE.md](DATABASE.md), [SSE.md](SSE.md), [LAYOUT.md](LAYOUT.md), [ACL.md](ACL.md), [STORAGE.md](STORAGE.md)
 
 ## Key Patterns
 
-### Types & Interfaces
-
-- Always use `type` instead of `interface` (except when methods are involved)
-- Define types in `packages/lib/src/types/[domain].ts`
-- Import from `@workspace/lib/types/[domain]` or `@workspace/lib/types`
-- Check existing types before creating new ones
-
-### API Routes
-
-Routes are grouped by domain in `/apps/api/src/routes/`:
-
-```typescript
-// Example: /apps/api/src/routes/drive.ts
-export const driveRouter = new Elysia({name: "drive"})
-    .use(betterAuth)
-    .get("/drive/root/:ownerId", async ({params, user}) => {
-        // ...
-    }, {auth: true})  // Protected route
-```
-
-All protected routes include `{auth: true}`.
-
-### Hooks
-
-Place hooks in `packages/lib/src/core/[domain]/hooks/use-[name].ts`:
-
-```typescript
-// packages/core/src/core/drive/hooks/use-drive.ts
-export function useFolderContent(ownerId: string, pathId: string) {
-    return useQuery({
-        queryKey: driveKeys.folder(pathId),
-        queryFn: async () => { /* ... */ }
-    });
-}
-```
-
 ### Query Keys
-
-Define query keys as objects with consistent structure:
 
 ```typescript
 export const driveKeys = {
@@ -102,141 +42,39 @@ export const driveKeys = {
 };
 ```
 
-Export invalidation functions alongside hooks for reuse.
+Export invalidation functions alongside hooks for reuse in SSE handlers and mutation callbacks.
 
-### Module Exports
-
-Each domain module has an `index.ts` that re-exports its public API:
+### API Client (Eden Treaty)
 
 ```typescript
-// packages/core/src/core/drive/index.ts
-export * from './hooks';
-export * from './sse-handlers';
+import { driveApi } from '@workspace/lib/api';
+const response = await driveApi({ ownerId })({ mountId }).folder({ pathId }).get();
 ```
 
-Import from `@workspace/lib/[domain]`, not deep paths.
+Type-safe — types flow from Elysia route definitions. See `packages/lib/src/core/api.ts`.
 
-## API Client
+### Eigen File Types
 
-Use the Treaty client from `packages/lib/src/core/api.ts`:
-
-```typescript
-import {driveApi, mailApi, contactsApi} from '@workspace/core/api';
-
-// Type-safe API calls
-const response = await driveApi.folder({ownerId})({pathId}).get();
-```
-
-## Real-Time Updates (SSE)
-
-Server-Sent Events handle real-time cache invalidation across tabs/devices.
-
-### SSE Handlers (Frontend)
-
-Location: `packages/lib/src/core/[domain]/sse-handlers.ts`
-
-```typescript
-export function handleDriveSSEvent(event: SSEvent, queryClient: QueryClient): boolean {
-    switch (event.type) {
-        case SSEventType.DRIVE_FILE_CREATED:
-            invalidateItemCreated(queryClient, path.parentId, path.mimeType);
-            return true;
-        // ...
-    }
-}
-```
-
-### SSE Event Builders (Backend)
-
-Location: `apps/api/src/lib/[domain]/sse-events.ts`
-
-```typescript
-export function buildDriveEvent(type: DriveEventType, path: DrivePath): SSEvent {
-    return {
-        type,
-        title: template.title,
-        body: template.body(path),
-        path,
-    };
-}
-```
-
-### Invalidation Pattern
-
-Create dedicated invalidate functions and call them from both:
-1. **SSE handlers** - for cross-tab sync
-2. **Mutation `onSuccess` callbacks** - for immediate updates
-
-## File Types
-
-| Type | MIME Type | Extension |
-|------|-----------|-----------|
-| Document | `application/eigendoc` | `.eigendoc` |
-| Stickies | `application/eigenstickies` | `.eigenstickies` |
-| Chat | `application/eigenchat` | `.eigenchat` |
-| Slides | `application/eigenslides` | `.eigenslides` |
-| Sheets | `application/eigensheets` | `.eigensheets` |
+| Type     | MIME                        | Extension        | Storage                       |
+|----------|-----------------------------|------------------|-------------------------------|
+| Document | `application/eigendoc`      | `.eigendoc`      | Dir with `data.db` (Yjs)      |
+| Stickies | `application/eigenstickies` | `.eigenstickies` | Dir with `data.db` (Yjs)      |
+| Chat     | `application/eigenchat`     | `.eigenchat`     | Dir with `data.db` + `media/` |
+| Slides   | `application/eigenslides`   | `.eigenslides`   | Dir with `data.db` (Yjs)      |
+| Sheets   | `application/eigensheets`   | `.eigensheets`   | Dir with `data.db` (Yjs)      |
 
 URL params use hyphens (`application-eigendoc`), database uses slashes.
 
-## State Management
-
-- **Server state**: TanStack Query
-- **Local UI state**: React state hooks
-- Use appropriate caching strategies (`staleTime`, `gcTime`)
-
-## Development Workflow
+## Development
 
 ```bash
-# Run all applications
-bun run serve
-
-# Run specific app with API server
-bun serve:drive
-bun serve:mail
-# etc.
-
-# Run TypeScript type check across all packages and apps
-bun run typecheck
+bun run serve          # All apps + API
+bun serve:mail         # Single app + API
+bun run typecheck      # Type check all packages
+bun run test           # Run API tests
+bun run check          # typecheck + test
 ```
 
-- Run `bun run typecheck` to verify type safety across the entire monorepo
-- Update types when changing database schemas
-- Invalidate queries when mutating data
-- Create custom hooks for reusable data fetching
-
-## Backend Architecture
-
-### Overview
-
-Each user has a **Home** singleton (`apps/api/src/lib/home/home.ts`) that manages:
-- Database connections (one SQLite DB per file/purpose)
-- SSE event broadcasting via `notify()`
-- Domain class instances (Drive, Mail, Contacts)
-
-### Domain Classes
-
-Business logic lives in `apps/api/src/lib/[domain]/[domain].ts`:
-
-| Class | Location | Storage |
-|-------|----------|---------|
-| `Drive` | `lib/drive/drive.ts` | Mount system with metadata DB + file storage |
-| `Mail` | `lib/mail/maildir.ts` | Maildir + SQLite for metadata |
-| `Contacts` | `lib/contacts/contacts.ts` | SQLite + avatars directory |
-
-### Storage Backends
-
-Three pluggable backends in `apps/api/src/lib/storage/`:
-
-- **LocalFilesystem** - Full filesystem operations (used by Mail, Contacts)
-- **LocalKeyStorage** - Flat UUID-based file storage (used by Drive mounts)
-- **S3Storage** - S3-compatible object storage (ready for use)
-
-For detailed storage architecture, see `docs/STORAGE.md`.
-
-## Documentation
-
-Keep code self-documenting:
-- Avoid JSDoc-style comments
-- Only comment complex business logic
-- Use clear, descriptive variable and function names
+- **Never run package install commands** — ask the user
+- **No migrations needed** — data is throwaway during dev. Prefer clean schemas over compatibility
+- See [TESTING.md](TESTING.md) for test patterns, [DOCKER.md](DOCKER.md) for deployment

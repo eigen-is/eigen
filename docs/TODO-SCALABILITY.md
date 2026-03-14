@@ -1,5 +1,8 @@
 # Scalable Document Collaboration System
 
+> **TLDR**: Future design — multi-server scaling with consistent user routing, Redis service registry, and per-user
+> SQLite isolation. Nginx load balancer → API Gateway → API servers with WebSocket + Yjs. Not yet implemented.
+
 A cost-effective, scalable architecture for document collaboration with end-to-end encryption, user-specific storage,
 and real-time collaboration.
 
@@ -131,6 +134,7 @@ Real-time collaborative editing engine running in-memory on API servers.
 ## Deployment Strategy
 
 ### Docker Composition
+
 ```
 docker-compose.yml
 ├── nginx/

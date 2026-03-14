@@ -1,77 +1,45 @@
 # Testing
 
-API integration tests for the Eigen backend using Bun's test runner.
+> **TLDR**: API integration tests using Bun test runner + real Elysia app via `app.handle()` + Eden Treaty. No HTTP
+> server needed. Temp data dir per run. Test users: Alice, Bob. Run: `bun run test`. Tests in `apps/api/src/test/`.
 
-## Running Tests
+## Running
 
 ```bash
-bun run check          # typecheck + test
-bun run test           # tests only
-bun run typecheck      # typecheck only
+bun run check      # typecheck + test
+bun run test       # tests only
+bun run typecheck  # typecheck only
 ```
 
 ## Architecture
 
-Tests call the real Elysia app via `app.handle()` and Eden Treaty — **no HTTP server needed**.
-
 ```
-Test File → Eden Treaty / authedRequest() → app.handle() → Real business logic → Isolated temp data dir
+Test → Eden Treaty / authedRequest() → app.handle() → Real business logic → Temp data dir
 ```
 
-### Data Isolation
-
-`EIGEN_DATA_ROOT` env var in `apps/api/src/lib/config/paths.ts` points to a temp directory (`data/test-<timestamp>`). Each test run gets a fresh directory, cleaned up in `afterAll`.
-
-### Test Users
-
-| User | Email | Purpose |
-|------|-------|---------|
-| Alice | `alice@test.eigen.is` | Primary — owns files, creates content |
-| Bob | `bob@test.eigen.is` | Secondary — tests sharing, ACL, isolation |
-
-Users are created via `auth.api.signUpEmail()` (falls back to `signInEmail()` if already exists). Session tokens are extracted from `set-cookie` headers.
+- **Data isolation**: `EIGEN_DATA_ROOT` points to `data/test-<timestamp>`, cleaned up in `afterAll`
+- **Test users**: Alice (`alice@test.eigen.is`), Bob (`bob@test.eigen.is`)
+- **Concurrency**: `--concurrency 1` (shared SQLite via Home singleton)
+- **Setup**: `apps/api/src/test/setup.ts` creates temp dir, runs setup, creates users
 
 ## Test Files
 
-| File                | Tests                                                                                                                                    |
-|---------------------|------------------------------------------------------------------------------------------------------------------------------------------|
-| `auth.test.ts`      | Health check, root route, auth required, Alice/Bob access                                                                                |
-| `drive.test.ts`     | Mounts, folders (CRUD), files (upload/download/rename/move/delete), image upload, sharing & ACL, docs, stickies, breadcrumb, permissions |
-| `home.test.ts`      | Size structure, used=sum, Bob isolation                                                                                                  |
-| `contacts.test.ts`  | Contact CRUD, labels CRUD, cross-user isolation, me endpoint                                                                             |
-| `mail.test.ts`      | Mailbox listing, create mailbox, Bob isolation                                                                                           |
-| `chat.test.ts`      | Chat creation, messages, whisper visibility, slash commands, read-only ACL, backend validation                                           |
-| `collab.test.ts`    | Collaborative document (Yjs) operations, database handling, storage                                                                      |
-| `integration.test.ts`| End-to-end integration tests                                                                                                            |
-| `mount.test.ts`     | Mount operations, metadata database, storage typing                                                                                      |
-| `storage.test.ts`   | Local key storage, path operations, file creation/deletion                                                                               |
-| `org.test.ts`       | Org creation, teams, admin roles, members                                                                                                |
-| `org-drive.test.ts` | Team drives, team ACL on personal drives, redundant ACL filtering                                                                        |
-| `sse.test.ts`       | SSE endpoint, connection management, SSE ACL events                                                                                      |
-| `public.test.ts`    | Public user info, waitlist endpoints                                                                                                     |
-| `setup.test.ts`     | Initial setup wizard, configuration saving                                                                                               |
+| File                | Tests                                                |
+|---------------------|------------------------------------------------------|
+| `auth.test.ts`      | Health, auth required, user access                   |
+| `drive.test.ts`     | Mounts, folders, files, sharing, ACL, docs, stickies |
+| `home.test.ts`      | Size, isolation                                      |
+| `contacts.test.ts`  | CRUD, labels, isolation                              |
+| `mail.test.ts`      | Mailboxes, isolation                                 |
+| `chat.test.ts`      | Messages, whispers, commands, read-only ACL          |
+| `collab.test.ts`    | Yjs operations, storage                              |
+| `calendar.test.ts`  | Calendars, events, recurrence, sharing               |
+| `org.test.ts`       | Org, teams, roles                                    |
+| `org-drive.test.ts` | Team drives, team ACL                                |
+| `sse.test.ts`       | SSE endpoint, events                                 |
+| `setup.test.ts`     | Setup wizard                                         |
 
-## Key Implementation Details
+## Key Details
 
-- **Concurrency**: Tests run with `--concurrency 1` because test files share SQLite connections via the `Home`
-  singleton.
-- **Drive routes**: Use `authedRequest()` helper with raw `app.handle()` for mount-specific routes (avoids Treaty's
-  strict string literal typing for dynamic `:mountId` params).
-- **Treaty**: Used for routes with static path segments (mounts list, home size, shared-with-me).
-- **Contacts**: `addContact`/`addLabel` return plain UUID strings, not JSON objects.
-- **Contacts init**: Auto-seeds the user themselves as a contact + default labels on first access.
-
-## Scripts
-
-### Root `package.json`
-
-```json
-"test": "bun --filter '@apps/api' test",
-"check": "bun run typecheck && bun run test"
-```
-
-### `apps/api/package.json`
-
-```json
-"test": "bun test --preload ./src/test/preload.ts --concurrency 1 ./src/test/"
-```
+- **Treaty**: Used for static path routes. `authedRequest()` for dynamic `:mountId` params
+- **Contacts**: `addContact`/`addLabel` return plain UUID strings. Auto-seeds user as contact on first access
