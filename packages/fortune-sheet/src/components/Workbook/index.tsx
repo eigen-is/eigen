@@ -102,10 +102,10 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
         );
 
         const [context, setContext] = useState(defaultContext(refs));
-        const {formula, info} = locale(context);
+        const {info} = locale(context);
 
 
-        const [calInfo, setCalInfo] = useState<{
+        const [, setCalInfo] = useState<{
             numberC: number;
             count: number;
             sum: string;
