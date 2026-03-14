@@ -1,15 +1,56 @@
-import {useMemo, useState} from 'react';
+import {useEffect, useMemo, useState} from 'react';
 import {Input} from '@workspace/ui/components/input';
 import {Button} from '@workspace/ui/components/button';
-import {Trash2, Check, Pencil, Plus, UserPlus, X} from 'lucide-react';
+import {Label} from '@workspace/ui/components/label';
+import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '@workspace/ui/components/select';
+import {Switch} from '@workspace/ui/components/switch';
+import {Separator} from '@workspace/ui/components/separator';
+import {Check, Pencil, Plus, Trash2, UserPlus, X} from 'lucide-react';
 import {Dialog, DialogContent, DialogHeader, DialogTitle} from '@workspace/ui/components/dialog';
 import {DeleteDialog} from '@workspace/ui/components/layout/delete/delete-dialog';
 import {TooltipButton} from '@workspace/ui/components/layout/toolbar/tooltip-button.tsx';
 import {UserItem} from '@workspace/ui/components/layout/user-item';
-import {useRemoveTeam, useUpdateTeam, useTeamMembers, useAddTeamMember, useRemoveTeamMember, usePeopleMembers} from '@workspace/lib/people';
+import {
+    useAddTeamMember,
+    usePeopleMembers,
+    useRemoveTeam,
+    useRemoveTeamMember,
+    useTeamMembers,
+    useUpdateTeam
+} from '@workspace/lib/people';
+import {useCalendars, useUpdateCalendar} from '@workspace/lib/calendar';
+import {teamOwnerId} from '@workspace/lib/types';
 import {useNavigate} from '@tanstack/react-router';
 import {toast} from 'sonner';
 import type {OrgMember, OrgTeam} from '@workspace/lib/types/people';
+import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
+import {api} from '@workspace/lib/api';
+
+function useTeamSettings(teamId: string) {
+    return useQuery({
+        queryKey: ['team-settings', teamId],
+        queryFn: async () => {
+            const res = await (api.calendar as any).team({teamId}).settings.get();
+            return (res.data || {}) as {calendarEnabled?: boolean};
+        },
+        staleTime: 5 * 60 * 1000,
+    });
+}
+
+function useUpdateTeamSettings(teamId: string) {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async (body: {calendarEnabled?: boolean}) => {
+            const res = await (api.calendar as any).team({teamId}).settings.put(body);
+            if (res.error) throw new Error(String(res.error));
+            return res.data;
+        },
+        onSuccess: () => {
+            queryClient.invalidateQueries({queryKey: ['team-settings', teamId]});
+            queryClient.invalidateQueries({queryKey: ['calendar', 'shared']});
+        },
+    });
+}
 
 interface TeamDetailToolbarProps {
     team: OrgTeam;
@@ -61,11 +102,6 @@ function AddMemberDialog({open, onOpenChange, availableMembers, onAdd}: {
         );
     }, [availableMembers, search]);
 
-    const handleSelect = (userId: string) => {
-        onAdd(userId);
-        setSearch('');
-    };
-
     return (
         <Dialog open={open} onOpenChange={(v) => {
             onOpenChange(v);
@@ -91,7 +127,10 @@ function AddMemberDialog({open, onOpenChange, availableMembers, onAdd}: {
                             <div
                                 key={m.userId}
                                 className="flex items-center gap-3 px-2 py-2 rounded-md cursor-pointer hover:bg-accent"
-                                onClick={() => handleSelect(m.userId)}
+                                onClick={() => {
+                                    onAdd(m.userId);
+                                    setSearch('');
+                                }}
                             >
                                 <UserItem
                                     name={m.name}
@@ -125,8 +164,30 @@ export function TeamDetail({team, organizationId}: TeamDetailProps) {
     const addMember = useAddTeamMember();
     const removeMember = useRemoveTeamMember();
 
+    // Calendar settings
+    const ownerId = teamOwnerId(team.id);
+    const {data: calendars = []} = useCalendars(ownerId);
+    const updateCalendar = useUpdateCalendar(ownerId);
+    const {data: settings} = useTeamSettings(team.id);
+    const updateSettings = useUpdateTeamSettings(team.id);
+
+    const defaultCal = calendars.find(c => c.isDefault);
+    const teamTarget = `team_${team.id}`;
+    const calendarEnabled = settings?.calendarEnabled !== false;
+
+    const calendarPermission = useMemo(() => {
+        if (!defaultCal?.shares) return 'read';
+        const share = defaultCal.shares.find(s => s.targetId === teamTarget);
+        return share?.permission || 'read';
+    }, [defaultCal, teamTarget]);
+
     const teamMemberUserIds = new Set(teamMembers.map((m: {userId: string}) => m.userId));
     const availableMembers = allMembers.filter(m => !teamMemberUserIds.has(m.userId));
+
+    useEffect(() => {
+        setEditName(team.name);
+        setIsEditing(false);
+    }, [team.id, team.name]);
 
     const handleSaveName = async () => {
         if (!editName.trim() || editName.trim() === team.name) {
@@ -140,6 +201,28 @@ export function TeamDetail({team, organizationId}: TeamDetailProps) {
             setIsEditing(false);
         } catch (error) {
             toast.error(error instanceof Error ? error.message : 'Failed to update team name');
+        }
+    };
+
+    const handleCalendarEnabledChange = async (enabled: boolean) => {
+        try {
+            await updateSettings.mutateAsync({calendarEnabled: enabled});
+            toast.success(enabled ? 'Team calendar enabled' : 'Team calendar disabled');
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : 'Failed to update settings');
+        }
+    };
+
+    const handlePermissionChange = async (value: string) => {
+        if (!defaultCal) return;
+        const shares = value === 'read'
+            ? null
+            : [{targetId: teamTarget, permission: value as 'free-busy' | 'write'}];
+        try {
+            await updateCalendar.mutateAsync({id: defaultCal.id, shares});
+            toast.success('Calendar permission updated');
+        } catch (error) {
+            toast.error(error instanceof Error ? error.message : 'Failed to update permission');
         }
     };
 
@@ -201,11 +284,30 @@ export function TeamDetail({team, organizationId}: TeamDetailProps) {
                 )}
             </div>
 
-            <div>
-                <p className="text-sm text-muted-foreground">
-                    Created {team.createdAt.toLocaleDateString()}
-                </p>
+            <div className="space-y-4">
+                <div className="flex items-center justify-between">
+                    <Label>Calendar</Label>
+                    <Switch checked={calendarEnabled} onCheckedChange={handleCalendarEnabledChange}/>
+                </div>
+
+                {calendarEnabled && defaultCal && (
+                    <div className="flex items-center justify-between">
+                        <Label>Member access</Label>
+                        <Select value={calendarPermission} onValueChange={handlePermissionChange}>
+                            <SelectTrigger className="w-32">
+                                <SelectValue/>
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="free-busy">Free/Busy</SelectItem>
+                                <SelectItem value="read">Read</SelectItem>
+                                <SelectItem value="write">Write</SelectItem>
+                            </SelectContent>
+                        </Select>
+                    </div>
+                )}
             </div>
+
+            <Separator/>
 
             <div className="space-y-3">
                 <div className="flex items-center justify-between">

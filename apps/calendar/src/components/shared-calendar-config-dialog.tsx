@@ -1,11 +1,19 @@
 import {useEffect, useState} from 'react';
-import {Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle} from '@workspace/ui/components/dialog';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle
+} from '@workspace/ui/components/dialog';
 import {Button} from '@workspace/ui/components/button';
 import {Popover, PopoverContent, PopoverTrigger} from '@workspace/ui/components/popover';
 import {ColorPicker} from '@workspace/ui/components/layout/media/color-picker';
 import {DeleteDialog} from '@workspace/ui/components/layout/delete/delete-dialog';
-import {useUpdateSharedCalendar, useDeleteSharedCalendar, useCalendarAccess} from '@workspace/lib/calendar';
+import {useCalendarAccess, useDeleteSharedCalendar, useUpdateSharedCalendar} from '@workspace/lib/calendar';
 import {useAuth} from '@workspace/lib/auth';
+import {parseOwnerId} from '@workspace/lib/types';
 import type {SharedCalendar} from '@workspace/lib/types/calendar';
 import {Label} from '@workspace/ui/components/label';
 import {UserItem} from '@workspace/ui/components/layout/user-item';
@@ -40,6 +48,8 @@ export function SharedCalendarConfigDialog({open, onOpenChange, sharedCalendar}:
     }, [sharedCalendar, open]);
 
     if (!sharedCalendar) return null;
+
+    const isTeamCalendar = parseOwnerId(sharedCalendar.ownerUserId).type === 'team';
 
     const handleSave = async () => {
         try {
@@ -102,33 +112,39 @@ export function SharedCalendarConfigDialog({open, onOpenChange, sharedCalendar}:
                             </Popover>
                         </div>
 
-                        <Separator/>
+                        {!isTeamCalendar && (
+                            <>
+                                <Separator/>
 
-                        <div>
-                            <Label className="text-sm font-semibold">People with access</Label>
-                            <div className="mt-2 space-y-3">
-                                <UserItem userId={sharedCalendar.ownerUserId} label="Owner"/>
-                                {accessData?.shares?.map((share, i) => (
-                                    <UserItem
-                                        key={i}
-                                        email={share.targetId}
-                                        label={share.permission === 'write' ? 'Editor' : share.permission === 'read' ? 'Viewer' : share.permission}
-                                    />
-                                ))}
-                            </div>
-                        </div>
+                                <div>
+                                    <Label className="text-sm font-semibold">People with access</Label>
+                                    <div className="mt-2 space-y-3">
+                                        <UserItem userId={sharedCalendar.ownerUserId} label="Owner"/>
+                                        {accessData?.shares?.map((share, i) => (
+                                            <UserItem
+                                                key={i}
+                                                email={share.targetId}
+                                                label={share.permission === 'write' ? 'Editor' : share.permission === 'read' ? 'Viewer' : share.permission}
+                                            />
+                                        ))}
+                                    </div>
+                                </div>
+                            </>
+                        )}
                     </div>
 
                     <DialogFooter className="flex justify-end">
-                        <Button
-                            type="button"
-                            variant="destructive"
-                            onClick={() => setShowDeleteConfirmation(true)}
-                            disabled={isLoading}
-                            className="mr-auto"
-                        >
-                            Remove
-                        </Button>
+                        {!isTeamCalendar && (
+                            <Button
+                                type="button"
+                                variant="destructive"
+                                onClick={() => setShowDeleteConfirmation(true)}
+                                disabled={isLoading}
+                                className="mr-auto"
+                            >
+                                Remove
+                            </Button>
+                        )}
                         <Button type="button" variant="outline" onClick={() => onOpenChange(false)}
                                 className="mr-2" disabled={isLoading}>
                             Cancel

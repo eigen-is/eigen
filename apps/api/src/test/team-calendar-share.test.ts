@@ -201,6 +201,57 @@ describe('Team Calendar Share (push to existing members)', () => {
         expect(event.title).toBe('Bob Team Event');
     });
 
+    test('disabled team calendar is removed from shared list', async () => {
+        // Disable the team calendar
+        // Use Bob (who is a team member) to update settings
+        const settingsRes = await authedRequest(ctx.bob.user.sessionToken,
+            `/calendar/team/${teamId}/settings`, {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({calendarEnabled: false}),
+            });
+        expect(settingsRes.status).toBe(200);
+        const settingsData = await settingsRes.json() as any;
+        expect(settingsData.calendarEnabled).toBe(false);
+
+        // Bob's shared list should no longer include the team calendar
+        const sharedRes = await authedRequest(ctx.bob.user.sessionToken,
+            `/calendar/${ctx.bob.user.id}/shared`);
+        const shared = await sharedRes.json() as any[];
+        const teamCal = shared.find((s: any) => s.ownerUserId === `team_${teamId}`);
+        expect(teamCal).toBeUndefined();
+
+        // Re-enable
+        await authedRequest(ctx.bob.user.sessionToken,
+            `/calendar/team/${teamId}/settings`, {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({calendarEnabled: true}),
+            });
+
+        // Should reappear
+        const sharedRes2 = await authedRequest(ctx.bob.user.sessionToken,
+            `/calendar/${ctx.bob.user.id}/shared`);
+        const shared2 = await sharedRes2.json() as any[];
+        const teamCal2 = shared2.find((s: any) => s.ownerUserId === `team_${teamId}`);
+        expect(teamCal2).toBeDefined();
+    });
+
+    test('team settings require team membership', async () => {
+        // Create a team Charlie is not in
+        const team3Res = await authedRequest(ctx.alice.user.sessionToken,
+            '/auth/organization/create-team', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({name: 'Settings Team', organizationId: orgId}),
+            });
+        const team3 = await team3Res.json() as any;
+
+        const res = await authedRequest(ctx.charlie.user.sessionToken,
+            `/calendar/team/${team3.id}/settings`);
+        expect(res.status).toBe(403);
+    });
+
     test('Alice creates event in shared calendar, Bob can read it via shared access', async () => {
         const now = Math.floor(Date.now() / 1000);
         const createRes = await authedRequest(ctx.alice.user.sessionToken,
