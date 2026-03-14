@@ -11,11 +11,10 @@ import {
     selectTitlesMap,
     selectTitlesRange,
 } from "../../core";
-import _ from "lodash";
 import React, {useCallback, useContext, useEffect, useMemo, useRef, useState,} from "react";
-import WorkbookContext from "../../context";
+import {WorkbookContext} from "../../context";
 
-const RowHeader: React.FC = () => {
+export const RowHeader: React.FC = () => {
     const {context, setContext, settings, refs} = useContext(WorkbookContext);
     const rowChangeSizeRef = useRef<HTMLDivElement>(null);
     const containerRef = useRef<HTMLDivElement>(null);
@@ -175,7 +174,7 @@ const RowHeader: React.FC = () => {
             const r2 = rowTitleRange[i][rowTitleRange[i].length - 1];
             const row = rowLocationByIndex(r2, context.visibledatarow)[1];
             const row_pre = rowLocationByIndex(r1, context.visibledatarow)[0];
-            if (_.isNumber(row_pre) && _.isNumber(row)) {
+            if (typeof row_pre === "number" && typeof row === "number") {
                 selects.push({row, row_pre, r1, r2});
             }
         }
@@ -231,7 +230,7 @@ const RowHeader: React.FC = () => {
             {!context.luckysheet_rows_change_size && hoverLocation.row_index >= 0 ? (
                 <div
                     className="fortune-row-header-hover"
-                    style={_.assign(
+                    style={Object.assign(
                         {
                             top: hoverLocation.row_pre,
                             height: hoverLocation.row - hoverLocation.row_pre - 1,
@@ -250,7 +249,7 @@ const RowHeader: React.FC = () => {
                 <div
                     className="fortune-row-header-selected"
                     key={i}
-                    style={_.assign(
+                    style={Object.assign(
                         {
                             top: row_pre,
                             height: row - row_pre - 1,
@@ -276,4 +275,3 @@ const RowHeader: React.FC = () => {
     );
 };
 
-export default RowHeader;

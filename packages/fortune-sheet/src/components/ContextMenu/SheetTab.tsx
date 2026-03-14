@@ -1,10 +1,10 @@
 import {api, deleteSheet, locale} from "../../core";
 import React, {useCallback, useContext, useLayoutEffect, useRef, useState,} from "react";
-import WorkbookContext from "../../context";
+import {WorkbookContext} from "../../context";
 import {useAlert} from "../../hooks/useAlert";
 import {useOutsideClick} from "../../hooks/useOutsideClick";
 import {ChangeColor} from "../ChangeColor";
-import {SVGIcon} from "../icon-map";
+import {ChevronRight} from "lucide-react";
 import {Divider} from "./Divider";
 import "./index.css";
 import {Menu} from "./Menu";
@@ -40,15 +40,15 @@ export function SheetTabContextMenu() {
             if (!sheet) return;
             setContext((ctx) => {
                 let currentOrder = -1;
-                ctx.luckysheetfile
+                const sorted = ctx.luckysheetfile
                     .slice()
-                    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0))
-                    .forEach((_sheet, i) => {
-                        _sheet.order = i;
-                        if (_sheet.id === sheet.id) {
-                            currentOrder = i;
-                        }
-                    });
+                    .sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
+                for (const [i, _sheet] of sorted.entries()) {
+                    _sheet.order = i;
+                    if (_sheet.id === sheet.id) {
+                        currentOrder = i;
+                    }
+                }
                 api.setSheetOrder(ctx, {[sheet.id!]: currentOrder + delta});
             });
         },
@@ -216,7 +216,7 @@ export function SheetTabContextMenu() {
                         >
                             {sheetconfig.changeColor}
                             <span className="change-color-triangle">
-                <SVGIcon name="rightArrow" width={18}/>
+                <ChevronRight width={18} height={18} aria-hidden="true"/>
               </span>
                             {isShowChangeColor && context.allowEdit && (
                                 <ChangeColor triggerParentUpdate={updateShowInputColor}/>

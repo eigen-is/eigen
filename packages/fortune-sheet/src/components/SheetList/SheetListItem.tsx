@@ -1,8 +1,8 @@
 import {cancelActiveImgItem, cancelNormalSelected, Sheet,} from "../../core";
 import {useContext, useEffect, useRef} from "react";
-import WorkbookContext from "../../context";
+import {WorkbookContext} from "../../context";
 import {SheetHiddenButton} from "./SheetHiddenButton";
-import {SVGIcon} from "../icon-map";
+import {Check} from "lucide-react";
 
 type Props = {
     sheet: Sheet;
@@ -56,11 +56,11 @@ export function SheetListItem({sheet, isDropPlaceholder}: Props) {
         >
       <span className="w-5 inline-block ml-[15px]">
         {sheet.id === context.currentSheetId && (
-            <SVGIcon
-                name="check"
+            <Check
                 width={16}
                 height={16}
                 style={{lineHeight: 30, verticalAlign: "middle"}}
+                aria-hidden="true"
             />
         )}
       </span>

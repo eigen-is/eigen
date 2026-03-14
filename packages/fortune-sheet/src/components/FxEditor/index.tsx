@@ -16,11 +16,11 @@ import {
     valueShowEs,
 } from "../../core";
 import {useCallback, useContext, useEffect, useMemo, useRef, useState,} from "react";
-import WorkbookContext from "../../context";
-import {SVGIcon} from "../icon-map";
-import ContentEditable from "../SheetOverlay/ContentEditable";
-import FormulaSearch from "../SheetOverlay/FormulaSearch";
-import FormulaHint from "../SheetOverlay/FormulaHint";
+import {WorkbookContext} from "../../context";
+import {FunctionSquare} from "lucide-react";
+import {ContentEditable} from "../SheetOverlay/ContentEditable";
+import {FormulaSearch} from "../SheetOverlay/FormulaSearch";
+import {FormulaHint} from "../SheetOverlay/FormulaHint";
 import {NameBox} from "./NameBox";
 import {usePrevious} from "../../hooks/usePrevious";
 
@@ -291,7 +291,7 @@ export function FxEditor() {
             <div className="flex flex-row h-7 border-b border-border">
                 <NameBox/>
                 <div className="flex items-center  pl-2 pr-2">
-                    <SVGIcon name="fx" width={18} height={18}/>
+                    <FunctionSquare width={18} height={18} aria-hidden="true"/>
                 </div>
                 <div ref={inputContainerRef}
                      className="overflow-visible p-0 flex-1 flex items-center relative border-l border-border">

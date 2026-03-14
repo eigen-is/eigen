@@ -1,6 +1,6 @@
 import {useContext, useEffect, useState} from "react";
 import {Context, getSheetIndex, locale} from "../../core";
-import WorkbookContext from "../../context";
+import {WorkbookContext} from "../../context";
 import {ColorPicker} from "@workspace/ui/components/layout/media/color-picker";
 
 type ChangeColorProps = {

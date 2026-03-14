@@ -1,17 +1,17 @@
 import {Context, getSheetIndex, indexToColumnChar, locale, sortSelection,} from "../../core";
 import React, {ChangeEvent, useCallback, useContext, useEffect, useState,} from "react";
-import WorkbookContext from "../../context";
+import {WorkbookContext} from "../../context";
 import {useDialog} from "../../hooks/useDialog";
 import {Button} from "@workspace/ui/components/button";
 
 type RadioChangeEvent = React.ChangeEvent<HTMLInputElement>;
 
 export function CustomSort() {
-    const [rangeColChar, setRangeColChar] = useState<String[]>([]);
+    const [rangeColChar, setRangeColChar] = useState<string[]>([]);
     const [ascOrDesc, setAscOrDesc] = useState(true);
     const {context, setContext} = useContext(WorkbookContext);
     const [selectedValue, setSelectedValue] = useState<string>("0");
-    const [isTitleChange, setIstitleChange] = useState(false);
+    const [isTitleChange, setIsTitleChange] = useState(false);
     const {sort} = locale(context);
     const {hideDialog} = useDialog();
 
@@ -35,7 +35,7 @@ export function CustomSort() {
     const handleTitleChange = useCallback(
         (e: React.ChangeEvent<HTMLInputElement>) => {
             const value = e.target.checked;
-            setIstitleChange(value);
+            setIsTitleChange(value);
         },
         []
     );

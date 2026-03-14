@@ -1,7 +1,7 @@
 /* eslint-disable jsx-a11y/control-has-associated-label */
 import {getDataArr, getFlowdata, getRegStr, locale, updateMoreCell,} from "../../core";
 import {useCallback, useContext, useEffect, useRef, useState,} from "react";
-import WorkbookContext from "../../context";
+import {WorkbookContext} from "../../context";
 import {useDialog} from "../../hooks/useDialog";
 import {Button} from "@workspace/ui/components/button";
 

@@ -1,5 +1,5 @@
 import {useCallback, useContext, useRef} from "react";
-import WorkbookContext from "../../context";
+import {WorkbookContext} from "../../context";
 import {useOutsideClick} from "../../hooks/useOutsideClick";
 import {SheetListItem} from "./SheetListItem";
 
@@ -27,5 +27,5 @@ export function SheetList() {
                 })}
         </div>
     );
-};
+}
 

@@ -14,7 +14,11 @@
       "Bash(git status:*)",
       "Bash(sqlite3:*)",
       "Bash(curl:*)",
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(git:*)",
+      "Bash(bunx tsc:*)",
+      "Bash(pkill:*)",
+      "Bash(cat:*)"
     ]
   }
 }

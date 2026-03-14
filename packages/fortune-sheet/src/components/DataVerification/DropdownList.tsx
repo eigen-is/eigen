@@ -1,8 +1,8 @@
 import {getCellValue, getDropdownList, getFlowdata, getSheetIndex, mergeBorder, setDropcownValue,} from "../../core";
 import {useCallback, useContext, useEffect, useRef, useState,} from "react";
-import WorkbookContext from "../../context";
+import {WorkbookContext} from "../../context";
 import {useOutsideClick} from "../../hooks/useOutsideClick";
-import {SVGIcon} from "../icon-map";
+import {Check} from "lucide-react";
 
 
 export function DropDownList() {
@@ -42,7 +42,7 @@ export function DropDownList() {
         const {dataVerification} = context.luckysheetfile[index];
         const item = dataVerification[`${rowIndex}_${colIndex}`];
         const dropdownList = getDropdownList(context, item.value1);
-        // Initialize multi-select dropdown
+        // Pre-select current cell value in the dropdown
         const cellValue = getCellValue(rowIndex, colIndex, d);
 
         if (cellValue) {
@@ -110,12 +110,12 @@ export function DropDownList() {
                     }}
                     tabIndex={0}
                 >
-                    <SVGIcon
-                        name="check"
+                    <Check
                         width={12}
+                        height={12}
                         style={{
                             verticalAlign: "middle",
-                            display: isMul && selected.indexOf(v) >= 0 ? "inline" : "none",
+                            display: isMul && selected.includes(v) ? "inline" : "none",
                         }}
                     />
                     {v}

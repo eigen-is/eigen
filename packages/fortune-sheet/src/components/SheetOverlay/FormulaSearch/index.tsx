@@ -1,12 +1,11 @@
-import _ from "lodash";
 import React, {useContext} from "react";
-import WorkbookContext from "../../../context";
+import {WorkbookContext} from "../../../context";
 
-const FormulaSearch: React.FC<React.HTMLAttributes<HTMLDivElement>> = (
+export const FormulaSearch: React.FC<React.HTMLAttributes<HTMLDivElement>> = (
     props
 ) => {
     const {context} = useContext(WorkbookContext);
-    if (_.isEmpty(context.functionCandidates)) return null;
+    if (context.functionCandidates.length === 0) return null;
 
     return (
         <div
@@ -30,4 +29,3 @@ const FormulaSearch: React.FC<React.HTMLAttributes<HTMLDivElement>> = (
     );
 };
 
-export default FormulaSearch;

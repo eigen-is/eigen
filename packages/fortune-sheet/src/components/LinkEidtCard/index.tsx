@@ -12,8 +12,9 @@ import {
     saveHyperlink,
 } from "../../core";
 import "./index.css";
-import WorkbookContext from "../../context";
-import {SVGIcon} from "../icon-map";
+import {WorkbookContext} from "../../context";
+import type {LucideIcon} from "lucide-react";
+import {Copy, Grid3x3, Pencil, Unlink, X} from "lucide-react";
 import {Button} from "@workspace/ui/components/button";
 
 export function LinkEditCard({
@@ -96,9 +97,9 @@ export function LinkEditCard({
     );
 
     const renderToolbarButton = useCallback(
-        (iconId: string, onClick: () => void) => (
+        (Icon: LucideIcon, onClick: () => void) => (
             <div className="fortune-toolbar-button" onClick={onClick} tabIndex={0}>
-                <SVGIcon name={iconId} style={{width: 18, height: 18}}/>
+                <Icon width={18} height={18} aria-hidden="true"/>
             </div>
         ),
         []
@@ -170,12 +171,12 @@ export function LinkEditCard({
                 {context.allowEdit === true && <div className="divider"/>}
                 {context.allowEdit === true &&
                     linkType === "webpage" &&
-                    renderToolbarButton("copy", () => {
+                    renderToolbarButton(Copy, () => {
                         navigator.clipboard.writeText(originAddress);
                         hideLinkCard();
                     })}
                 {context.allowEdit === true &&
-                    renderToolbarButton("pencil", () =>
+                    renderToolbarButton(Pencil, () =>
                         setContext((draftCtx) => {
                             if (draftCtx.linkCard != null && draftCtx.allowEdit) {
                                 draftCtx.linkCard.isEditing = true;
@@ -184,7 +185,7 @@ export function LinkEditCard({
                     )}
                 {context.allowEdit === true && <div className="divider"/>}
                 {context.allowEdit === true &&
-                    renderToolbarButton("unlink", () =>
+                    renderToolbarButton(Unlink, () =>
                         setContext((draftCtx) => {
                             if (refs.globalCache.linkCard) refs.globalCache.linkCard.mouseEnter = false;
                             removeHyperlink(draftCtx, r, c);
@@ -210,7 +211,7 @@ export function LinkEditCard({
                 onClick={() => setRangeModalVisible(false)}
                 tabIndex={0}
             >
-                <SVGIcon name="close"/>
+                <X aria-hidden="true"/>
             </div>
             <div className="modal-title">{insertLink.selectCellRange}</div>
             <input
@@ -315,7 +316,7 @@ export function LinkEditCard({
                             onClick={() => setRangeModalVisible(true)}
                             tabIndex={0}
                         >
-                            <SVGIcon name="border-all"/>
+                            <Grid3x3 aria-hidden="true"/>
                         </div>
                         {tooltip}
                     </>

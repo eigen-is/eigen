@@ -19,13 +19,13 @@ import {
 } from "../../core";
 import React, {useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState,} from "react";
 import _ from "lodash";
-import WorkbookContext from "../../context";
-import ContentEditable from "./ContentEditable";
-import FormulaSearch from "./FormulaSearch";
-import FormulaHint from "./FormulaHint";
+import {WorkbookContext} from "../../context";
+import {ContentEditable} from "./ContentEditable";
+import {FormulaSearch} from "./FormulaSearch";
+import {FormulaHint} from "./FormulaHint";
 import {usePrevious} from "../../hooks/usePrevious";
 
-const InputBox: React.FC = () => {
+export const InputBox: React.FC = () => {
     const {context, setContext, refs} = useContext(WorkbookContext);
     const inputRef = useRef<HTMLDivElement>(null);
     const lastKeyDownEventRef = useRef<KeyboardEvent>(null);
@@ -61,7 +61,7 @@ const InputBox: React.FC = () => {
         if (!context.allowEdit) {
             setContext((ctx) => {
                 const flowdata = getFlowdata(ctx);
-                if (!_.isNil(flowdata) && ctx.forceFormulaRef) {
+                if (flowdata != null && ctx.forceFormulaRef) {
                     const value = getCellValue(row_index, col_index, flowdata, "f");
                     createRangeHightlight(ctx, value);
                 }
@@ -76,7 +76,7 @@ const InputBox: React.FC = () => {
                 _.isEqual(prevCellUpdate, context.luckysheetCellUpdate) &&
                 prevSheetId === context.currentSheetId
             ) {
-                // data change by a collabrative update should not trigger this effect
+                // data change by a collaborative update should not trigger this effect
                 return;
             }
             const flowdata = getFlowdata(context);
@@ -117,14 +117,14 @@ const InputBox: React.FC = () => {
     ]);
 
     useEffect(() => {
-        if (_.isEmpty(context.luckysheetCellUpdate)) {
+        if (context.luckysheetCellUpdate.length === 0) {
             if (inputRef.current) {
                 inputRef.current.innerHTML = "";
             }
         }
     }, [context.luckysheetCellUpdate]);
 
-    // 当选中行列是处于隐藏状态的话则不允许编辑
+    // Disallow editing when the selected row/column is hidden
     useEffect(() => {
         setIsHidenRC(isShowHidenCR(context));
         // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -231,7 +231,7 @@ const InputBox: React.FC = () => {
             } else if (e.key === "Enter" && context.luckysheetCellUpdate.length > 0) {
                 if (e.altKey || e.metaKey) {
                     // originally `enterKeyControll`
-                    document.execCommand("insertHTML", false, "\n "); // 换行符后面的空白符是为了强制让他换行，在下一步的delete中会删掉
+                    document.execCommand("insertHTML", false, "\n "); // Trailing space forces a line break; removed by the subsequent delete
                     document.execCommand("delete", false);
                     e.stopPropagation();
                 } else selectActiveFormula(e);
@@ -381,7 +381,7 @@ const InputBox: React.FC = () => {
 
     const onPaste = useCallback(
         (e: React.ClipboardEvent<HTMLDivElement>) => {
-            if (_.isEmpty(context.luckysheetCellUpdate)) {
+            if (context.luckysheetCellUpdate.length === 0) {
                 e.preventDefault();
             }
         },
@@ -405,7 +405,7 @@ const InputBox: React.FC = () => {
                     ? {
                         left: firstSelection.left,
                         top: firstSelection.top,
-                        zIndex: _.isEmpty(context.luckysheetCellUpdate) ? -1 : 19,
+                        zIndex: context.luckysheetCellUpdate.length === 0 ? -1 : 19,
                         display: "block",
                     }
                     : {left: -10000, top: -10000, display: "block"}
@@ -463,4 +463,3 @@ const InputBox: React.FC = () => {
     );
 };
 
-export default InputBox;

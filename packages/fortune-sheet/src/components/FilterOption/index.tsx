@@ -5,7 +5,7 @@ import {
     getSheetIndex,
 } from "../../core";
 import {useCallback, useContext, useEffect} from "react";
-import WorkbookContext from "../../context";
+import {WorkbookContext} from "../../context";
 import {SVGIcon} from "../icon-map";
 
 export function FilterOptions({
@@ -91,8 +91,8 @@ export function FilterOptions({
         frozenColumns = 0;
         frozenRows = 0;
     } else {
-        frozenColumns = frozen?.range?.column_focus || -1;
-        frozenRows = frozen?.range?.row_focus || -1;
+        frozenColumns = frozen?.range?.column_focus ?? -1;
+        frozenRows = frozen?.range?.row_focus ?? -1;
     }
 
     return filterOptions == null ? (

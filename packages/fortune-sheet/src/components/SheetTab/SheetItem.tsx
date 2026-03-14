@@ -1,16 +1,15 @@
-import {cancelActiveImgItem, cancelNormalSelected, editSheetName, locale, Sheet,} from "../../core";
-import _ from "lodash";
+import {cancelActiveImgItem, cancelNormalSelected, editSheetName, locale, type Sheet,} from "../../core";
+import {ChevronDown} from "lucide-react";
 import React, {useCallback, useContext, useEffect, useRef, useState,} from "react";
-import WorkbookContext from "../../context";
+import {WorkbookContext} from "../../context";
 import {useAlert} from "../../hooks/useAlert";
-import {SVGIcon} from "../icon-map";
 
 type Props = {
     sheet: Sheet;
     isDropPlaceholder?: boolean;
 };
 
-const SheetItem: React.FC<Props> = ({sheet, isDropPlaceholder}) => {
+export const SheetItem: React.FC<Props> = ({sheet, isDropPlaceholder}) => {
     const {context, setContext, refs} = useContext(WorkbookContext);
     const [editing, setEditing] = useState(false);
     const containerRef = useRef<HTMLDivElement>(null);
@@ -41,7 +40,7 @@ const SheetItem: React.FC<Props> = ({sheet, isDropPlaceholder}) => {
     useEffect(() => {
         if (!editable.current) return;
         if (editing) {
-            // select all when enter editing mode
+            // Select all when entering editing mode
             if (window.getSelection) {
                 const range = document.createRange();
                 range.selectNodeContents(editable.current);
@@ -62,7 +61,7 @@ const SheetItem: React.FC<Props> = ({sheet, isDropPlaceholder}) => {
             }
         }
 
-        // store the current text
+        // Store the current text
         editable.current.dataset.oldText = editable.current.innerText;
     }, [editing]);
 
@@ -101,7 +100,7 @@ const SheetItem: React.FC<Props> = ({sheet, isDropPlaceholder}) => {
                 const droppingId = sheet.id;
                 let draggingSheet: Sheet | undefined;
                 let droppingSheet: Sheet | undefined;
-                _.sortBy(draftCtx.luckysheetfile, ["order"]).forEach((f, i) => {
+                [...draftCtx.luckysheetfile].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).forEach((f, i) => {
                     f.order = i;
                     if (f.id === draggingId) {
                         draggingSheet = f;
@@ -111,8 +110,8 @@ const SheetItem: React.FC<Props> = ({sheet, isDropPlaceholder}) => {
                 });
                 if (draggingSheet && droppingSheet) {
                     draggingSheet.order = droppingSheet.order! - 0.1;
-                    // re-order all sheets
-                    _.sortBy(draftCtx.luckysheetfile, ["order"]).forEach((f, i) => {
+                    // Re-order all sheets
+                    [...draftCtx.luckysheetfile].sort((a, b) => (a.order ?? 0) - (b.order ?? 0)).forEach((f, i) => {
                         f.order = i;
                     });
                 } else if (draggingSheet && isDropPlaceholder) {
@@ -170,7 +169,7 @@ const SheetItem: React.FC<Props> = ({sheet, isDropPlaceholder}) => {
                     };
                     draftCtx.dataVerificationDropDownList = false;
                     draftCtx.currentSheetId = sheet.id!;
-                    draftCtx.zoomRatio = sheet.zoomRatio || 1;
+                    draftCtx.zoomRatio = sheet.zoomRatio ?? 1;
                     cancelActiveImgItem(draftCtx, refs.globalCache);
                     cancelNormalSelected(draftCtx);
                 });
@@ -181,7 +180,7 @@ const SheetItem: React.FC<Props> = ({sheet, isDropPlaceholder}) => {
                 const rect = refs.workbookContainer.current!.getBoundingClientRect();
                 const {pageX, pageY} = e;
                 setContext((ctx) => {
-                    // 右击的时候先进行跳转
+                    // Switch to this sheet on right-click
                     ctx.dataVerificationDropDownList = false;
                     ctx.currentSheetId = sheet.id!;
                     ctx.zoomRatio = sheet.zoomRatio || 1;
@@ -220,7 +219,7 @@ const SheetItem: React.FC<Props> = ({sheet, isDropPlaceholder}) => {
                     const rect = refs.workbookContainer.current!.getBoundingClientRect();
                     const {pageX, pageY} = e;
                     setContext((ctx) => {
-                        // 右击的时候先进行跳转
+                        // Switch to this sheet and show context menu
                         ctx.currentSheetId = sheet.id!;
                         ctx.sheetTabContextMenu = {
                             x: pageX - rect.left - window.scrollX,
@@ -233,7 +232,7 @@ const SheetItem: React.FC<Props> = ({sheet, isDropPlaceholder}) => {
                 tabIndex={0}
                 aria-label={info.sheetOptions}
             >
-        <SVGIcon name="downArrow" width={12} style={{color: svgColor}}/>
+        <ChevronDown width={12} height={12} style={{color: svgColor}} aria-hidden="true"/>
       </span>
             {!!sheet.color && (
                 <div
@@ -245,4 +244,3 @@ const SheetItem: React.FC<Props> = ({sheet, isDropPlaceholder}) => {
     );
 };
 
-export default SheetItem;
