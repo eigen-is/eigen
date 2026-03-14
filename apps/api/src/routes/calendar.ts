@@ -97,23 +97,23 @@ export const calendarRouter = new Elysia({name: "calendar"})
     .use(betterAuth)
 
     // --- Calendars ---
-    .get("/calendar/:ownerId/calendars", async ({user}) => {
-        const cal = await resolveCalendar(user, user.id);
+    .get("/calendar/:ownerId/calendars", async ({params, user}) => {
+        const cal = await resolveCalendar(user, params.ownerId);
         return cal.getCalendars();
     }, {auth: true})
 
-    .post("/calendar/:ownerId/calendars", async ({body, user}) => {
-        const cal = await resolveCalendar(user, user.id);
+    .post("/calendar/:ownerId/calendars", async ({params, body, user}) => {
+        const cal = await resolveCalendar(user, params.ownerId);
         return cal.createCalendar(body);
     }, {body: CreateCalendarSchema, auth: true})
 
     .put("/calendar/:ownerId/calendars/:id", async ({params, body, user}) => {
-        const cal = await resolveCalendar(user, user.id);
+        const cal = await resolveCalendar(user, params.ownerId);
         return await cal.updateCalendar(params.id, body);
     }, {body: UpdateCalendarSchema, auth: true})
 
     .delete("/calendar/:ownerId/calendars/:id", async ({params, user}) => {
-        const cal = await resolveCalendar(user, user.id);
+        const cal = await resolveCalendar(user, params.ownerId);
         cal.deleteCalendar(params.id);
         return {success: true};
     }, {auth: true})
@@ -123,7 +123,7 @@ export const calendarRouter = new Elysia({name: "calendar"})
         const from = Number(params.from);
         const to = Number(params.to);
         if (!from || !to) throw new ApiError(400, 'Invalid from/to parameters');
-        const cal = await resolveCalendar(user, user.id);
+        const cal = await resolveCalendar(user, params.ownerId);
         return cal.getEventsInRange(from, to);
     }, {auth: true})
 
@@ -234,6 +234,16 @@ export const calendarRouter = new Elysia({name: "calendar"})
     // --- Shared calendars ---
     .get("/calendar/:ownerId/shared", async ({user}) => {
         const cal = await resolveCalendar(user, user.id);
+        const memberships = await getMemberships(user.id);
+        for (const teamId of memberships.teamIds) {
+            try {
+                const teamOwner = `team_${teamId}`;
+                const teamHome = await getHome(teamOwner);
+                for (const tc of teamHome.calendar.getCalendars()) {
+                    cal.ensureSharedEntry(teamOwner, tc.id, tc.name, tc.color, 'write');
+                }
+            } catch {}
+        }
         return cal.getSharedCalendars();
     }, {auth: true})
 

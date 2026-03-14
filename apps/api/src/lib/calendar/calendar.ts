@@ -530,6 +530,35 @@ export class Calendar {
         }
     }
 
+    public ensureSharedEntry(ownerUserId: string, calendarId: string, calendarName: string, calendarColor: string, permission: CalendarShare['permission']): void {
+        const existing = this.db.select().from(schema.sharedCalendars).where(
+            and(
+                eq(schema.sharedCalendars.ownerUserId, ownerUserId),
+                eq(schema.sharedCalendars.calendarId, calendarId),
+            )
+        ).get();
+
+        if (existing) {
+            if (existing.calendarName !== calendarName || existing.calendarColor !== calendarColor) {
+                this.db.update(schema.sharedCalendars).set({
+                    calendarName,
+                    calendarColor,
+                    updatedAt: sql`unixepoch()`,
+                }).where(eq(schema.sharedCalendars.id, existing.id)).run();
+            }
+        } else {
+            this.db.insert(schema.sharedCalendars).values({
+                id: uuidv4(),
+                ownerUserId,
+                calendarId,
+                calendarName,
+                calendarColor,
+                permission,
+                visible: true,
+            }).run();
+        }
+    }
+
     public getSharedWith(userEmail: string, teamIds: string[]): {
         calendarId: string;
         name: string;

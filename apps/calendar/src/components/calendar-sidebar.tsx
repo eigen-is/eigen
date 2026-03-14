@@ -1,4 +1,4 @@
-import {useState} from 'react';
+import {useMemo, useState} from 'react';
 import {CalendarPlus, Check, Pencil, Plus, X} from 'lucide-react';
 import {Button} from '@workspace/ui/components/button';
 import {SidebarSection} from '@workspace/ui/components/layout/sidebar/sidebar-section';
@@ -8,6 +8,9 @@ import {EigenLoader, StorageUsage, TooltipButton} from '@workspace/ui';
 import {useCalendars, useSharedCalendars, useUpdateCalendar, useUpdateSharedCalendar} from '@workspace/lib/calendar';
 import {useAuth} from '@workspace/lib/auth';
 import type {CalendarItem, SharedCalendar} from '@workspace/lib/types/calendar';
+import {usePublicConfig} from '@workspace/lib/public';
+import {usePeopleTeams} from '@workspace/lib/people';
+import {parseOwnerId} from '@workspace/lib/types';
 import {CalendarConfigDialog} from './calendar-config-dialog';
 import {SharedCalendarConfigDialog} from './shared-calendar-config-dialog';
 import {CreateEventDialog} from './create-event-dialog';
@@ -39,6 +42,41 @@ function CalendarCheckbox({color, checked, onChange}: {color: string; checked: b
     );
 }
 
+function SharedCalendarItem({sc, condensed, onToggle, onEdit}: {
+    sc: SharedCalendar; condensed: boolean;
+    onToggle: () => void; onEdit: () => void;
+    label?: string;
+}) {
+    return (
+        <div
+            className={cn(
+                'flex items-center gap-2 px-3 py-1.5 rounded-md group relative',
+                !condensed && 'pr-8 hover:bg-accent'
+            )}
+        >
+            <CalendarCheckbox
+                color={sc.color || sc.calendarColor}
+                checked={sc.visible}
+                onChange={onToggle}
+            />
+            {!condensed && (
+                <>
+                    <span className="text-sm truncate flex-1">{sc.calendarName}</span>
+                    <div className="absolute right-2 opacity-0 group-hover:opacity-80 hover:opacity-100">
+                        <TooltipButton
+                            icon={Pencil}
+                            tooltipText="Edit calendar"
+                            variant="ghost"
+                            size="icon"
+                            onClick={onEdit}
+                        />
+                    </div>
+                </>
+            )}
+        </div>
+    );
+}
+
 export function CalendarSidebar({
     condensed = false,
     isMobile = false,
@@ -48,6 +86,8 @@ export function CalendarSidebar({
     const ownerId = user?.id || '';
     const {data: calendars = [], isLoading: calendarsLoading} = useCalendars(ownerId);
     const {data: sharedCalendars = [], isLoading: sharedLoading} = useSharedCalendars(ownerId);
+    const {data: config} = usePublicConfig();
+    const {data: teams} = usePeopleTeams(config?.orgId);
     const updateCalendar = useUpdateCalendar(ownerId);
     const updateSharedCalendar = useUpdateSharedCalendar(ownerId);
 
@@ -58,6 +98,25 @@ export function CalendarSidebar({
     const [configSharedCalendar, setConfigSharedCalendar] = useState<SharedCalendar | null>(null);
     const [sharedConfigDialogOpen, setSharedConfigDialogOpen] = useState(false);
     const [createEventOpen, setCreateEventOpen] = useState(false);
+
+    const {personalShared, teamShared} = useMemo(() => {
+        const personal: SharedCalendar[] = [];
+        const team: SharedCalendar[] = [];
+        for (const sc of sharedCalendars) {
+            const parsed = parseOwnerId(sc.ownerUserId);
+            if (parsed.type === 'team') {
+                team.push(sc);
+            } else {
+                personal.push(sc);
+            }
+        }
+        return {personalShared: personal, teamShared: team};
+    }, [sharedCalendars]);
+
+    const getTeamName = (ownerUserId: string) => {
+        const parsed = parseOwnerId(ownerUserId);
+        return teams?.find(t => t.id === parsed.id)?.name || ownerUserId;
+    };
 
     const handleEditCalendar = (cal: CalendarItem) => {
         setConfigCalendar(cal);
@@ -150,7 +209,7 @@ export function CalendarSidebar({
                     )}
                 </SidebarSection>
 
-                {sharedCalendars.length > 0 && (
+                {personalShared.length > 0 && (
                     <>
                         <Separator/>
                         <SidebarSection condensed={condensed}>
@@ -165,35 +224,44 @@ export function CalendarSidebar({
                                 <EigenLoader/>
                             ) : (
                                 <div className="space-y-0.5">
-                                    {sharedCalendars.map((sc) => (
-                                        <div
+                                    {personalShared.map((sc) => (
+                                        <SharedCalendarItem
                                             key={sc.id}
-                                            className={cn(
-                                                'flex items-center gap-2 px-3 py-1.5 rounded-md group relative',
-                                                !condensed && 'pr-8 hover:bg-accent'
-                                            )}
-                                        >
-                                            <CalendarCheckbox
-                                                color={sc.color || sc.calendarColor}
-                                                checked={sc.visible}
-                                                onChange={() => updateSharedCalendar.mutate({id: sc.id, visible: !sc.visible})}
-                                            />
-                                            {!condensed && (
-                                                <>
-                                                    {/* <UserAvatar userId={sc.ownerUserId} size="sm" tooltip className="h-5 w-5 shrink-0"/> */}
-                                                    <span className="text-sm truncate flex-1">{sc.calendarName}</span>
-                                                    <div className="absolute right-2 opacity-0 group-hover:opacity-80 hover:opacity-100">
-                                                        <TooltipButton
-                                                            icon={Pencil}
-                                                            tooltipText="Edit shared calendar"
-                                                            variant="ghost"
-                                                            size="icon"
-                                                            onClick={() => handleEditSharedCalendar(sc)}
-                                                        />
-                                                    </div>
-                                                </>
-                                            )}
-                                        </div>
+                                            sc={sc}
+                                            condensed={condensed}
+                                            onToggle={() => updateSharedCalendar.mutate({id: sc.id, visible: !sc.visible})}
+                                            onEdit={() => handleEditSharedCalendar(sc)}
+                                        />
+                                    ))}
+                                </div>
+                            )}
+                        </SidebarSection>
+                    </>
+                )}
+
+                {teamShared.length > 0 && (
+                    <>
+                        <Separator/>
+                        <SidebarSection condensed={condensed}>
+                            <div className={cn(
+                                'flex items-center mb-1',
+                                condensed ? 'justify-center' : 'justify-between'
+                            )}>
+                                {!condensed && <h3 className="text-sm font-semibold text-foreground px-3 select-none">Team Calendars</h3>}
+                            </div>
+
+                            {sharedLoading ? (
+                                <EigenLoader/>
+                            ) : (
+                                <div className="space-y-0.5">
+                                    {teamShared.map((sc) => (
+                                        <SharedCalendarItem
+                                            key={sc.id}
+                                            sc={{...sc, calendarName: getTeamName(sc.ownerUserId)}}
+                                            condensed={condensed}
+                                            onToggle={() => updateSharedCalendar.mutate({id: sc.id, visible: !sc.visible})}
+                                            onEdit={() => handleEditSharedCalendar(sc)}
+                                        />
                                     ))}
                                 </div>
                             )}
