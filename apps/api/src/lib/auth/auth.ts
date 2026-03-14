@@ -17,6 +17,7 @@ import {
 } from '../../../auth-schema.ts';
 import type {User} from "better-auth/types";
 import {ApiError} from "../core";
+import {reconcileSharesForNewTeamMember, reconcileSharesForNewUser} from "../share";
 
 export const trustedOrigins = [
     "http://localhost",
@@ -57,6 +58,7 @@ export const auth = betterAuth({
             create: {
                 after: async (user) => {
                     await authAddUserToDefaultOrg(user);
+                    await reconcileSharesForNewUser(user);
                 },
             },
         },
@@ -78,6 +80,14 @@ export const auth = betterAuth({
             teams: {
                 enabled: true,
             },
+            organizationHooks: {
+                afterAddTeamMember: async ({teamMember}) => {
+                    await reconcileSharesForNewTeamMember(
+                        teamMember.userId,
+                        teamMember.teamId,
+                    );
+                },
+            },
         }),
     ],
     trustedOrigins,
@@ -90,7 +100,7 @@ export const auth = betterAuth({
 export async function authAddUserToDefaultOrg(user: User): Promise<void> {
     const db = getAuthDrizzleDb();
     const org = await db.select().from(organizationScheme).get();
-    
+
     if (!org) return;
 
     try {
