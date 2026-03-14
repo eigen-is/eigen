@@ -1,7 +1,7 @@
 import {Elysia, t} from "elysia";
 import {betterAuth} from "./auth";
 import {getCalendar} from "../lib/calendar/calendar";
-import {getHome} from "../lib/home";
+import {getHome, type TeamHome} from "../lib/home";
 import {getMemberships} from "../lib/user";
 import {parseOwnerId} from "@workspace/lib/types";
 import {ApiError} from "../lib/core";
@@ -231,6 +231,21 @@ export const calendarRouter = new Elysia({name: "calendar"})
         return ownerHome.calendar.getSharedWith(user.email, memberships.teamIds);
     }, {auth: true})
 
+    // --- Team settings ---
+    .get("/calendar/team/:teamId/settings", async ({params, user}) => {
+        const memberships = await getMemberships(user.id);
+        if (!memberships.teamIds.includes(params.teamId)) throw new ApiError(403, 'Not a member of this team');
+        const teamHome = await getHome(`team_${params.teamId}`) as TeamHome;
+        return await teamHome.getSettings();
+    }, {auth: true})
+
+    .put("/calendar/team/:teamId/settings", async ({params, body, user}) => {
+        const memberships = await getMemberships(user.id);
+        if (!memberships.teamIds.includes(params.teamId)) throw new ApiError(403, 'Not a member of this team');
+        const teamHome = await getHome(`team_${params.teamId}`) as TeamHome;
+        return await teamHome.updateSettings(body);
+    }, {body: t.Object({calendarEnabled: t.Optional(t.Boolean())}), auth: true})
+
     // --- Shared calendars ---
     .get("/calendar/:ownerId/shared", async ({user}) => {
         const cal = await resolveCalendar(user, user.id);
@@ -238,9 +253,14 @@ export const calendarRouter = new Elysia({name: "calendar"})
         for (const teamId of memberships.teamIds) {
             try {
                 const teamOwner = `team_${teamId}`;
-                const teamHome = await getHome(teamOwner);
-                for (const tc of teamHome.calendar.getCalendars()) {
-                    const permission = teamHome.calendar.checkPermission(tc.id, user.email, memberships.teamIds) || 'read';
+                const teamHome = await getHome(teamOwner) as TeamHome;
+                const teamCal = await teamHome.getCalendarIfEnabled();
+                if (!teamCal) {
+                    cal.removeSharedEntriesForOwner(teamOwner);
+                    continue;
+                }
+                for (const tc of teamCal.getCalendars()) {
+                    const permission = teamCal.checkPermission(tc.id, user.email, memberships.teamIds) || 'read';
                     cal.ensureSharedEntry(teamOwner, tc.id, tc.name, tc.color, permission);
                 }
             } catch {}

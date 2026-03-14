@@ -560,6 +560,12 @@ export class Calendar {
         }
     }
 
+    public removeSharedEntriesForOwner(ownerUserId: string): void {
+        this.db.delete(schema.sharedCalendars)
+            .where(eq(schema.sharedCalendars.ownerUserId, ownerUserId))
+            .run();
+    }
+
     public getSharedWith(userEmail: string, teamIds: string[]): {
         calendarId: string;
         name: string;

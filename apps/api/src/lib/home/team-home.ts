@@ -4,7 +4,7 @@ import {getTeamDataPath} from '../config/paths';
 import {Home} from './home';
 import {parseOwnerId} from "@workspace/lib/types";
 import {ApiError, LocalFilesystem} from "../core";
-import { Drive } from '../drive';
+import {Drive} from '../drive';
 import {Calendar} from '../calendar/calendar';
 
 export function getSyntheticTeamUser(ownerId: string): User {
@@ -23,6 +23,10 @@ export function getSyntheticTeamUser(ownerId: string): User {
     };
 }
 
+export type TeamSettings = {
+    calendarEnabled?: boolean;
+};
+
 export class TeamHome extends Home {
     public teamId: string;
 
@@ -36,5 +40,25 @@ export class TeamHome extends Home {
 
         this.drive = new Drive(this);
         this.calendar = new Calendar(this);
+    }
+
+    async getSettings(): Promise<TeamSettings> {
+        try {
+            const file = this.fs.file('settings.json');
+            if (await file.exists()) return await file.json() as TeamSettings;
+        } catch {}
+        return {};
+    }
+
+    async updateSettings(update: Partial<TeamSettings>): Promise<TeamSettings> {
+        const settings = {...await this.getSettings(), ...update};
+        await this.fs.file('settings.json').write(JSON.stringify(settings));
+        return settings;
+    }
+
+    async getCalendarIfEnabled(): Promise<Calendar | null> {
+        const settings = await this.getSettings();
+        if (settings.calendarEnabled === false) return null;
+        return this.calendar;
     }
 }

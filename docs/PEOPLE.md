@@ -7,7 +7,8 @@
 
 - **Members**: List, invite, change role, remove org members
 - **Teams**: List, create, rename, delete teams
-- **Team Detail**: List/add/remove team members, change team roles
+- **Team Detail**: List/add/remove team members, toggle team calendar on/off, set calendar member access
+  (free-busy/read/write)
 
 ## Access
 
@@ -15,4 +16,5 @@ Route guard checks: authenticated + org role `admin` or `owner`. Visible via "Pe
 
 ## API
 
-All via `authClient.organization.*` (better-auth client). No custom backend routes needed.
+Org/team management via `authClient.organization.*` (better-auth client). Team calendar settings via
+`GET/PUT /calendar/team/:teamId/settings` (stored in `data/team/{teamId}/settings.json`).
