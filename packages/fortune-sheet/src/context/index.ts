@@ -70,4 +70,4 @@ const WorkbookContext = React.createContext<{
     },
 });
 
-export default WorkbookContext;
+export { WorkbookContext };

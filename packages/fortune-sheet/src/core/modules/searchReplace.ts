@@ -140,7 +140,7 @@ export function searchNext(
             },
         ];
     } else {
-        range = _.assign([], ctx.luckysheet_select_save);
+        range = _.cloneDeep(ctx.luckysheet_select_save) ?? [];
     }
 
     const searchIndexArr = getSearchIndexArr(
@@ -268,7 +268,7 @@ export function searchAll(
             },
         ];
     } else {
-        range = _.assign([], ctx.luckysheet_select_save);
+        range = _.cloneDeep(ctx.luckysheet_select_save) ?? [];
     }
 
     const searchIndexArr = getSearchIndexArr(
@@ -410,7 +410,7 @@ export function replace(
             },
         ];
     } else {
-        range = _.assign([], ctx.luckysheet_select_save);
+        range = _.cloneDeep(ctx.luckysheet_select_save) ?? [];
     }
 
     const searchIndexArr = getSearchIndexArr(
@@ -529,7 +529,7 @@ export function replaceAll(
             },
         ];
     } else {
-        range = _.assign([], ctx.luckysheet_select_save);
+        range = _.cloneDeep(ctx.luckysheet_select_save) ?? [];
     }
 
     const searchIndexArr = getSearchIndexArr(

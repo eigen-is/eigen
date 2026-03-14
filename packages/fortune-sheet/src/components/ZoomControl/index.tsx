@@ -1,7 +1,7 @@
 import {useCallback, useContext, useRef, useState} from "react";
 import {Context, getSheetIndex, locale, MAX_ZOOM_RATIO, MIN_ZOOM_RATIO,} from "../../core";
-import WorkbookContext from "../../context";
-import {SVGIcon} from "../icon-map";
+import {WorkbookContext} from "../../context";
+import {Minus, Plus} from "lucide-react";
 import {useOutsideClick} from "../../hooks/useOutsideClick";
 
 const presets = [
@@ -90,7 +90,7 @@ export function ZoomControl() {
                 tabIndex={0}
                 role="button"
             >
-                <SVGIcon name="minus" width={16} height={16}/>
+                <Minus width={16} height={16} aria-hidden="true"/>
             </div>
             <div className="relative flex justify-center w-12 text-xs cursor-pointer">
                 <div
@@ -130,7 +130,7 @@ export function ZoomControl() {
                 tabIndex={0}
                 role="button"
             >
-                <SVGIcon name="plus" width={16} height={16}/>
+                <Plus width={16} height={16} aria-hidden="true"/>
             </div>
         </aside>
     );

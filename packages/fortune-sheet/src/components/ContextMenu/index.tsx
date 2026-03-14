@@ -17,9 +17,8 @@ import {
     showSelected,
     sortSelection,
 } from "../../core";
-import _ from "lodash";
 import React, {useCallback, useContext, useLayoutEffect, useRef} from "react";
-import WorkbookContext, {SetContextOptions} from "../../context";
+import {SetContextOptions, WorkbookContext} from "../../context";
 import {useAlert} from "../../hooks/useAlert";
 import {useDialog} from "../../hooks/useDialog";
 import {Divider} from "./Divider";
@@ -136,7 +135,7 @@ export const ContextMenu: React.FC = () => {
                             }}
                         >
                             <>
-                                {_.startsWith(context.lang ?? "", "zh") && (
+                                {(context.lang ?? "").startsWith("zh") && (
                                     <>
                                         {rightclick.to}
                                         <span className={`luckysheet-cols-rows-shift-${dir}`}>
@@ -157,7 +156,7 @@ export const ContextMenu: React.FC = () => {
                                 <span className="luckysheet-cols-rows-shift-word luckysheet-mousedown-cancel">
                     {`${rightclick.column}  `}
                   </span>
-                                {!_.startsWith(context.lang ?? "", "zh") && (
+                                {!(context.lang ?? "").startsWith("zh") && (
                                     <span className={`luckysheet-cols-rows-shift-${dir}`}>
                       {(rightclick as any)[dir]}
                     </span>
@@ -206,7 +205,7 @@ export const ContextMenu: React.FC = () => {
                             }}
                         >
                             <>
-                                {_.startsWith(context.lang ?? "", "zh") && (
+                                {(context.lang ?? "").startsWith("zh") && (
                                     <>
                                         {rightclick.to}
                                         <span className={`luckysheet-cols-rows-shift-${dir}`}>
@@ -227,7 +226,7 @@ export const ContextMenu: React.FC = () => {
                                 <span className="luckysheet-cols-rows-shift-word luckysheet-mousedown-cancel">
                     {`${rightclick.row}  `}
                   </span>
-                                {!_.startsWith(context.lang ?? "", "zh") && (
+                                {!(context.lang ?? "").startsWith("zh") && (
                                     <span className={`luckysheet-cols-rows-shift-${dir}`}>
                       {(rightclick as any)[dir]}
                     </span>
@@ -409,7 +408,7 @@ export const ContextMenu: React.FC = () => {
                             const targetRowHeight = container.querySelector("input")?.value;
                             setContext((draftCtx) => {
                                 if (
-                                    _.isUndefined(targetRowHeight) ||
+                                    targetRowHeight === undefined ||
                                     targetRowHeight === "" ||
                                     parseInt(targetRowHeight, 10) <= 0 ||
                                     parseInt(targetRowHeight, 10) > 545
@@ -420,7 +419,7 @@ export const ContextMenu: React.FC = () => {
                                 }
                                 const numRowHeight = parseInt(targetRowHeight, 10);
                                 const rowHeightList: Record<string, number> = {};
-                                _.forEach(draftCtx.luckysheet_select_save, (section) => {
+                                for (const section of draftCtx.luckysheet_select_save ?? []) {
                                     for (
                                         let rowNum = section.row[0];
                                         rowNum <= section.row[1];
@@ -428,7 +427,7 @@ export const ContextMenu: React.FC = () => {
                                     ) {
                                         rowHeightList[rowNum] = numRowHeight;
                                     }
-                                });
+                                }
                                 api.setRowHeight(draftCtx, rowHeightList, {}, true);
                                 draftCtx.contextMenu = {};
                             });
@@ -470,7 +469,7 @@ export const ContextMenu: React.FC = () => {
                             const targetColWidth = container.querySelector("input")?.value;
                             setContext((draftCtx) => {
                                 if (
-                                    _.isUndefined(targetColWidth) ||
+                                    targetColWidth === undefined ||
                                     targetColWidth === "" ||
                                     parseInt(targetColWidth, 10) <= 0 ||
                                     parseInt(targetColWidth, 10) > 2038
@@ -481,7 +480,7 @@ export const ContextMenu: React.FC = () => {
                                 }
                                 const numColWidth = parseInt(targetColWidth, 10);
                                 const colWidthList: Record<string, number> = {};
-                                _.forEach(draftCtx.luckysheet_select_save, (section) => {
+                                for (const section of draftCtx.luckysheet_select_save ?? []) {
                                     for (
                                         let colNum = section.column[0];
                                         colNum <= section.column[1];
@@ -489,7 +488,7 @@ export const ContextMenu: React.FC = () => {
                                     ) {
                                         colWidthList[colNum] = numColWidth;
                                     }
-                                });
+                                }
                                 api.setColumnWidth(draftCtx, colWidthList, {}, true);
                                 draftCtx.contextMenu = {};
                             });
@@ -689,7 +688,7 @@ export const ContextMenu: React.FC = () => {
         }
     }, [contextMenu.x, contextMenu.y, refs.workbookContainer, setContext]);
 
-    if (_.isEmpty(context.contextMenu)) return null;
+    if (Object.keys(context.contextMenu).length === 0) return null;
 
     return (
         <div

@@ -9,7 +9,7 @@ import {
     SearchResult,
 } from "../../core";
 import {useCallback, useContext, useState} from "react";
-import WorkbookContext from "../../context";
+import {WorkbookContext} from "../../context";
 import {useAlert} from "../../hooks/useAlert";
 import {useDialog} from "../../hooks/useDialog";
 import {Button} from "@workspace/ui/components/button";
@@ -19,7 +19,7 @@ import {Label} from "@workspace/ui/components/label";
 import {Tabs, TabsContent, TabsList, TabsTrigger,} from "@workspace/ui/components/tabs";
 import {DialogFooter, DialogHeader, DialogTitle,} from "@workspace/ui/components/dialog";
 
-export default function SearchReplace() {
+export function SearchReplace() {
     const {context, setContext} = useContext(WorkbookContext);
     const {findAndReplace, button} = locale(context);
     const [searchText, setSearchText] = useState("");

@@ -1,11 +1,9 @@
-import _ from "lodash";
+import {ChevronsLeft, ChevronsRight, LayoutGrid, Plus} from "lucide-react";
 import React, {useCallback, useContext, useEffect, useRef, useState,} from "react";
 import {addSheet, locale, updateCell} from "../../core";
-// @ts-ignore
-import WorkbookContext from "../../context";
-import {SVGIcon} from "../icon-map";
+import {WorkbookContext} from "../../context";
 import "./index.css";
-import SheetItem from "./SheetItem";
+import {SheetItem} from "./SheetItem";
 import {ZoomControl} from "../ZoomControl";
 
 export const SheetTab: React.FC = () => {
@@ -20,17 +18,14 @@ export const SheetTab: React.FC = () => {
     const scrollDelta = 150;
 
     const scrollBy = useCallback((amount: number) => {
-        if (
-            tabContainerRef.current == null ||
-            tabContainerRef.current.scrollLeft == null
-        ) {
-            return;
-        }
-        const {scrollLeft} = tabContainerRef.current;
+        const container = tabContainerRef.current;
+        if (container?.scrollLeft == null) return;
+
+        const {scrollLeft} = container;
         if (scrollLeft + amount <= 0) setIsShowBoundary(true);
         else if (scrollLeft > 0) setIsShowBoundary(false);
 
-        tabContainerRef.current?.scrollBy({
+        container.scrollBy({
             left: amount,
             behavior: "smooth",
         });
@@ -39,7 +34,7 @@ export const SheetTab: React.FC = () => {
     useEffect(() => {
         const tabCurrent = tabContainerRef.current;
         if (!tabCurrent) return;
-        setIsShowScrollBtn(tabCurrent!.scrollWidth - 2 > tabCurrent!.clientWidth);
+        setIsShowScrollBtn(tabCurrent.scrollWidth - 2 > tabCurrent.clientWidth);
     }, [context.luckysheetfile]);
 
     const onAddSheetClick = useCallback(
@@ -60,7 +55,9 @@ export const SheetTab: React.FC = () => {
                     {addSheetOp: true}
                 );
                 const tabCurrent = tabContainerRef.current;
-                setIsShowScrollBtn(tabCurrent!.scrollWidth > tabCurrent!.clientWidth);
+                if (tabCurrent) {
+                    setIsShowScrollBtn(tabCurrent.scrollWidth > tabCurrent.clientWidth);
+                }
             }),
         [refs.cellInput, setContext, settings]
     );
@@ -80,7 +77,7 @@ export const SheetTab: React.FC = () => {
                         aria-label={info.newSheet}
                         role="button"
                     >
-                        <SVGIcon name="plus" width={16} height={16}/>
+                        <Plus width={16} height={16} aria-hidden="true"/>
                     </div>
                 )}
                 {context.allowEdit && (
@@ -92,14 +89,12 @@ export const SheetTab: React.FC = () => {
                             onMouseDown={(e) => {
                                 e.stopPropagation();
                                 setContext((ctx) => {
-                                    ctx.showSheetList = _.isUndefined(ctx.showSheetList)
-                                        ? true
-                                        : !ctx.showSheetList;
+                                    ctx.showSheetList = !(ctx.showSheetList ?? false);
                                     ctx.sheetTabContextMenu = {};
                                 });
                             }}
                         >
-                            <SVGIcon name="all-sheets" width={16} height={16}/>
+                            <LayoutGrid width={16} height={16} aria-hidden="true"/>
                         </div>
                     </div>
                 )}
@@ -119,7 +114,7 @@ export const SheetTab: React.FC = () => {
                         id="fortune-sheettab-container-c"
                         ref={tabContainerRef}
                     >
-                        {_.sortBy(context.luckysheetfile, (s) => Number(s.order)).map(
+                        {[...context.luckysheetfile].sort((a, b) => Number(a.order) - Number(b.order)).map(
                             (sheet) => {
                                 return <SheetItem key={sheet.id} sheet={sheet}/>;
                             }
@@ -143,7 +138,7 @@ export const SheetTab: React.FC = () => {
                         }}
                         tabIndex={0}
                     >
-                        <SVGIcon name="arrow-doubleleft" width={12} height={12}/>
+                        <ChevronsLeft width={12} height={12} aria-hidden="true"/>
                     </div>
                 )}
                 {isShowScrollBtn && (
@@ -156,7 +151,7 @@ export const SheetTab: React.FC = () => {
                         }}
                         tabIndex={0}
                     >
-                        <SVGIcon name="arrow-doubleright" width={12} height={12}/>
+                        <ChevronsRight width={12} height={12} aria-hidden="true"/>
                     </div>
                 )}
             </div>

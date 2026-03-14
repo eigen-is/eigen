@@ -2,7 +2,7 @@ import {getRangetxt, locale} from "../../core";
 
 import {useCallback, useContext, useEffect, useState} from "react";
 import {DataVerification} from ".";
-import WorkbookContext from "../../context";
+import {WorkbookContext} from "../../context";
 import {useDialog} from "../../hooks/useDialog";
 import {ConditionRules} from "../ConditionFormat/ConditionRules";
 import {Button} from "@workspace/ui/components/button";
@@ -22,11 +22,11 @@ export function RangeDialog() {
         });
         if (!context.rangeDialog) return;
         const rangeDialogType = context.rangeDialog.type;
-        if (rangeDialogType.indexOf("between") >= 0) {
+        if (rangeDialogType.includes("between")) {
             showDialog(<ConditionRules type="between"/>);
             return;
         }
-        if (rangeDialogType.indexOf("conditionRules") >= 0) {
+        if (rangeDialogType.includes("conditionRules")) {
             const rulesType = rangeDialogType.substring(
                 "conditionRules".length,
                 rangeDialogType.length
@@ -97,4 +97,4 @@ export function RangeDialog() {
             </div>
         </div>
     );
-};
+}

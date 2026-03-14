@@ -69,7 +69,7 @@ export function generateAPIs(
                                     specialOp.value
                                 );
                             }
-                            // 添加addSheet完后，给sheet初始化data
+                            // After adding a sheet, initialize its data
                             const fileIndex = getSheetIndex(
                                 ctx_,
                                 specialOp.value.id
@@ -83,16 +83,15 @@ export function generateAPIs(
                     if (ops[0]?.path?.[0] === "filter_select")
                         ctx_.luckysheet_filter_save = ops[0].value;
                     else if (ops[0]?.path?.[0] === "hide") {
-                        //  hide sheet
+                        // Hide sheet
                         if (ctx_.currentSheetId === ops[0].id) {
                             const shownSheets = ctx_.luckysheetfile.filter(
                                 (sheet) =>
-                                    (_.isUndefined(sheet.hide) || sheet?.hide !== 1) &&
+                                    (sheet.hide === undefined || sheet.hide !== 1) &&
                                     sheet.id !== ops[0].id
                             );
-                            ctx_.currentSheetId = _.sortBy(
-                                shownSheets,
-                                (sheet) => sheet.order
+                            ctx_.currentSheetId = [...shownSheets].sort(
+                                (a, b) => (a.order ?? 0) - (b.order ?? 0)
                             )[0].id as string;
                         }
                     }
@@ -297,11 +296,12 @@ export function generateAPIs(
 
         addPresences: (newPresences: Presence[]) => {
             setContext((draftCtx) => {
-                draftCtx.presences = _.differenceBy(
-                    draftCtx.presences || [],
-                    newPresences,
-                    (v) => (v.userId == null ? v.username : v.userId)
-                ).concat(newPresences);
+                const presenceKey = (v: { username: string; userId?: string }) =>
+                    v.userId == null ? v.username : v.userId;
+                const newKeys = new Set(newPresences.map(presenceKey));
+                draftCtx.presences = (draftCtx.presences || [])
+                    .filter((v) => !newKeys.has(presenceKey(v)))
+                    .concat(newPresences);
             });
         },
 
@@ -313,8 +313,11 @@ export function generateAPIs(
         ) => {
             setContext((draftCtx) => {
                 if (draftCtx.presences != null) {
-                    draftCtx.presences = _.differenceBy(draftCtx.presences, arr, (v) =>
-                        v.userId == null ? v.username : v.userId
+                    const presenceKey = (v: { username: string; userId?: string }) =>
+                        v.userId == null ? v.username : v.userId;
+                    const removeKeys = new Set(arr.map(presenceKey));
+                    draftCtx.presences = draftCtx.presences.filter(
+                        (v) => !removeKeys.has(presenceKey(v))
                     );
                 }
             });
@@ -343,14 +346,14 @@ export function generateAPIs(
 
         batchCallApis: (apiCalls: ApiCall[]) => {
             setContext((draftCtx) => {
-                apiCalls.forEach((apiCall) => {
+                for (const apiCall of apiCalls) {
                     const {name, args} = apiCall;
                     if (typeof (api as any)[name] === "function") {
                         (api as any)[name](draftCtx, ...args);
                     } else {
                         console.warn(`API ${name} does not exist`);
                     }
-                });
+                }
             });
         },
     };

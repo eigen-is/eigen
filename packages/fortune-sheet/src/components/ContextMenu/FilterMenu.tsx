@@ -13,13 +13,14 @@ import {
 } from "../../core";
 import React, {useCallback, useContext, useEffect, useLayoutEffect, useMemo, useRef, useState,} from "react";
 import produce from "immer";
-import WorkbookContext from "../../context";
+import {WorkbookContext} from "../../context";
 import {Divider} from "./Divider";
 import {Menu} from "./Menu";
 import {SVGIcon} from "../icon-map";
 import {useAlert} from "../../hooks/useAlert";
 import {useOutsideClick} from "../../hooks/useOutsideClick";
 import {Button} from "@workspace/ui/components/button";
+import {ArrowUpDown} from "lucide-react";
 
 const SelectItem: React.FC<{
     item: FilterValue;
@@ -215,8 +216,7 @@ export const FilterMenu: React.FC = () => {
         () =>
             _.debounce((text: string) => {
                 setShowValues(
-                    _.filter(
-                        data.flattenValues,
+                    data.flattenValues.filter(
                         (v) => v.toLowerCase().indexOf(text.toLowerCase()) > -1
                     )
                 );
@@ -231,15 +231,15 @@ export const FilterMenu: React.FC = () => {
     }, []);
 
     const clearAll = useCallback(() => {
-        setDatesUncheck(_.keys(data.dateRowMap));
-        setValuesUncheck(_.keys(data.valueRowMap));
+        setDatesUncheck(Object.keys(data.dateRowMap));
+        setValuesUncheck(Object.keys(data.valueRowMap));
         hiddenRows.current = data.visibleRows;
     }, [data.dateRowMap, data.valueRowMap, data.visibleRows]);
 
     const inverseSelect = useCallback(() => {
-        setDatesUncheck(produce((draft) => _.xor(draft, _.keys(data.dateRowMap))));
+        setDatesUncheck(produce((draft) => _.xor(draft, Object.keys(data.dateRowMap))));
         setValuesUncheck(
-            produce((draft) => _.xor(draft, _.keys(data.valueRowMap)))
+            produce((draft) => _.xor(draft, Object.keys(data.valueRowMap)))
         );
         hiddenRows.current = _.xor(hiddenRows.current, data.visibleRows);
     }, [data.dateRowMap, data.valueRowMap, data.visibleRows]);
@@ -248,8 +248,8 @@ export const FilterMenu: React.FC = () => {
         (key: string, color: string, checked: boolean) => {
             setFilterColors(
                 produce((draft) => {
-                    const colorData = _.find(_.get(draft, key), (v) => v.color === color);
-                    colorData.checked = checked;
+                    const colorData = (draft as any)[key]?.find((v: FilterColor) => v.color === color);
+                    if (colorData) colorData.checked = checked;
                 })
             );
         },
@@ -367,11 +367,12 @@ export const FilterMenu: React.FC = () => {
             return;
         }
         setContext((draftCtx) => {
+            if (!draftCtx.filterContextMenu) return;
             if (hasOverflow) {
-                _.set(draftCtx, "filterContextMenu.x", left);
-                _.set(draftCtx, "filterContextMenu.y", top);
+                draftCtx.filterContextMenu.x = left;
+                draftCtx.filterContextMenu.y = top;
             }
-            _.set(draftCtx, "filterContextMenu.listBoxMaxHeight", containerH);
+            draftCtx.filterContextMenu.listBoxMaxHeight = containerH;
         });
     }, [filterContextMenu, refs.workbookContainer, setContext]);
 
@@ -501,7 +502,7 @@ export const FilterMenu: React.FC = () => {
                       {filter.filiterInputNone}
                     </span>
                                         <div className="luckysheet-mousedown-cancel">
-                                            <i className="fa fa-sort" aria-hidden="true"/>
+                                            <ArrowUpDown size={14}/>
                                         </div>
                                     </div>
                                     {/* <div className="luckysheet-\${menuid}-selected-input">
@@ -594,8 +595,7 @@ export const FilterMenu: React.FC = () => {
                                             onExpand={onExpand}
                                             initialExpand={initialExpand}
                                             isChecked={(key: string) =>
-                                                _.find(
-                                                    datesUncheck,
+                                                datesUncheck.find(
                                                     (v: string) => v.match(key) != null
                                                 ) == null
                                             }
@@ -615,8 +615,7 @@ export const FilterMenu: React.FC = () => {
                                             isItemVisible={(item) => {
                                                 return showValues.length === data.flattenValues.length
                                                     ? true
-                                                    : _.findIndex(
-                                                    showValues,
+                                                    : showValues.findIndex(
                                                     (v) => v.match(item.key) != null
                                                 ) > -1;
                                             }}
@@ -626,7 +625,7 @@ export const FilterMenu: React.FC = () => {
                                                 key={v.key}
                                                 item={v}
                                                 isChecked={(key: string) =>
-                                                    !_.includes(valuesUncheck, key)
+                                                    !valuesUncheck.includes(key)
                                                 }
                                                 onChange={(item: FilterValue, checked: boolean) => {
                                                     const rows = hiddenRows.current;
@@ -646,7 +645,7 @@ export const FilterMenu: React.FC = () => {
                                                 isItemVisible={(item) => {
                                                     return showValues.length === data.flattenValues.length
                                                         ? true
-                                                        : _.includes(showValues, item.text);
+                                                        : showValues.includes(item.text);
                                                 }}
                                             />
                                         ))}
@@ -664,8 +663,7 @@ export const FilterMenu: React.FC = () => {
                         onClick={() => {
                             if (col == null) return;
                             setContext((draftCtx) => {
-                                const rowHidden = _.reduce(
-                                    hiddenRows.current,
+                                const rowHidden = hiddenRows.current.reduce(
                                     (pre, curr) => {
                                         pre[curr] = 0;
                                         return pre;
@@ -753,13 +751,10 @@ export const FilterMenu: React.FC = () => {
                                 onClick={() => {
                                     if (col == null) return;
                                     setContext((draftCtx) => {
-                                        const rowHidden = _.reduce(
-                                            _(filterColors)
-                                                .values()
-                                                .flatten()
-                                                .map((v) => (v.checked ? [] : v.rows))
-                                                .flatten()
-                                                .valueOf(),
+                                        const uncheckedRows = Object.values(filterColors)
+                                            .flat()
+                                            .flatMap((v) => (v.checked ? [] : v.rows));
+                                        const rowHidden = uncheckedRows.reduce(
                                             (pre, curr) => {
                                                 pre[curr] = 0;
                                                 return pre;
@@ -768,7 +763,7 @@ export const FilterMenu: React.FC = () => {
                                         );
                                         saveFilter(
                                             draftCtx,
-                                            !_.isEmpty(rowHidden),
+                                            Object.keys(rowHidden).length > 0,
                                             rowHidden,
                                             {},
                                             startRow,

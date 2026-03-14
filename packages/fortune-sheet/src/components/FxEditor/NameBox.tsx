@@ -1,6 +1,6 @@
 import {useContext, useMemo} from "react";
 import {getRangetxt} from "../../core";
-import WorkbookContext from "../../context";
+import {WorkbookContext} from "../../context";
 
 export function NameBox() {
     const {context} = useContext(WorkbookContext);
@@ -36,5 +36,5 @@ export function NameBox() {
             </div>
         </div>
     );
-};
+}
 

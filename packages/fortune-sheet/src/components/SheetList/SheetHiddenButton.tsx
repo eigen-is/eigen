@@ -1,7 +1,7 @@
 import {api, Sheet} from "../../core";
 import {CSSProperties, useCallback, useContext} from "react";
-import {SVGIcon} from "../icon-map";
-import WorkbookContext from "../../context";
+import {EyeOff} from "lucide-react";
+import {WorkbookContext} from "../../context";
 
 type Props = {
     style?: CSSProperties;
@@ -28,19 +28,17 @@ export function SheetHiddenButton({style, sheet}: Props) {
             tabIndex={0}
             className="mr-[15px] inline-flex absolute right-0 justify-end hover:bg-muted"
         >
-            {sheet?.hide === 1 ? (
-                <SVGIcon
-                    name="hidden"
+            {sheet?.hide === 1 && (
+                <EyeOff
                     width={16}
                     height={16}
                     style={{
                         marginTop: "7px",
                     }}
+                    aria-hidden="true"
                 />
-            ) : (
-                ""
             )}
         </div>
     );
-};
+}
 

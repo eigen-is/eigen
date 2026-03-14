@@ -541,7 +541,7 @@ export function onCellsMoveEnd(
     ctx.luckysheet_select_save = normalizeSelection(ctx, [last]);
     const sheetIndex = getSheetIndex(ctx, ctx.currentSheetId);
     if (sheetIndex != null) {
-        ctx.luckysheetfile[sheetIndex].config = _.assign({}, cfg);
+        ctx.luckysheetfile[sheetIndex].config = _.cloneDeep(cfg);
     }
 
     // const allParam = {

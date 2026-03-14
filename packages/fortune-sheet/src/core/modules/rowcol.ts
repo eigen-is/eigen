@@ -17,13 +17,13 @@ const refreshLocalMergeData = (merge_new: Record<string, any>, file: Sheet) => {
         for (let i = r; i < r + rs; i += 1) {
             for (let j = c; j < c + cs; j += 1) {
                 if (file?.data?.[i]?.[j]) {
-                    file.data[i][j] = {...file.data[i][j], mc: {r, c}};
+                    file.data[i][j] = _.assign(_.cloneDeep(file.data[i][j]), {mc: {r, c}});
                 }
             }
         }
 
         if (file?.data?.[r]?.[c]) {
-            file.data[r][c] = {...file.data[r][c], mc: {r, c, rs, cs}};
+            file.data[r][c] = _.assign(_.cloneDeep(file.data[r][c]), {mc: {r, c, rs, cs}});
         }
     });
 };
@@ -720,10 +720,10 @@ export function insertRowCol(
             const cell = curRow[c];
             let templateCell = null;
             if (cell?.mc && (direction === "rightbottom" || index !== cell.mc.r)) {
-                if (cell.mc.rs) {
-                    cell.mc.rs += count;
+                templateCell = _.cloneDeep(cell);
+                if (templateCell.mc!.rs) {
+                    templateCell.mc!.rs! += count;
                 }
-                templateCell = {...cell};
                 if (!d?.[index + 1]?.[c]?.mc) {
                     templateCell.mc = undefined;
                 }
@@ -954,10 +954,10 @@ export function insertRowCol(
             const cell = curd[r][index];
             let templateCell = null;
             if (cell?.mc && (direction === "rightbottom" || index !== cell.mc.c)) {
-                if (cell.mc.cs) {
-                    cell.mc.cs += count;
+                templateCell = _.cloneDeep(cell);
+                if (templateCell.mc!.cs) {
+                    templateCell.mc!.cs! += count;
                 }
-                templateCell = {...cell};
                 if (!curd?.[r]?.[index + 1]?.mc) {
                     templateCell.mc = undefined;
                 }
@@ -1068,7 +1068,7 @@ export function insertRowCol(
             const row = d[r];
             const template = col[r];
             const newCells = Array.from({length: count}, () =>
-                template ? {...template} : null
+                template ? _.cloneDeep(template) : null
             );
 
             if (direction === "lefttop") {

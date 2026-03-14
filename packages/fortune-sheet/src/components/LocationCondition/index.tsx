@@ -1,7 +1,7 @@
 import {applyLocation, getFlowdata, getOptionValue, getSelectRange, locale,} from "../../core";
 import produce from "immer";
 import {useCallback, useContext, useState} from "react";
-import WorkbookContext from "../../context";
+import {WorkbookContext} from "../../context";
 import {useDialog} from "../../hooks/useDialog";
 import {Button} from "@workspace/ui/components/button";
 

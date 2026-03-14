@@ -1,11 +1,10 @@
 import {useCallback, useContext, useMemo, useState} from "react";
 import {cancelNormalSelected, getSheetIndex, locale, update,} from "../../core";
-import _ from "lodash";
 import {Button} from "@workspace/ui/components/button";
 import {Input} from "@workspace/ui/components/input";
 import {Label} from "@workspace/ui/components/label";
 import {cn} from "@workspace/ui/lib/utils";
-import WorkbookContext from "../../context";
+import {WorkbookContext} from "../../context";
 import {useDialog} from "../../hooks/useDialog";
 
 export function FormatSearch({
@@ -40,7 +39,7 @@ export function FormatSearch({
         () => toolbarFormatAll[type],
         [toolbarFormatAll, type]
     );
-    const tips = _.get(format, type);
+    const tips = (format as any)[type];
 
     const onConfirm = useCallback(() => {
         if (decimalPlace < 0 || decimalPlace > 9) {
@@ -50,14 +49,14 @@ export function FormatSearch({
         }
         setContext((ctx) => {
             const index = getSheetIndex(ctx, ctx.currentSheetId);
-            if (_.isNil(index)) return;
+            if (index == null) return;
             const selectedFormatVal = toolbarFormat[selectedFormatIndex].value;
 
             let selectedFormatPos: string;
             if ("pos" in toolbarFormat[selectedFormatIndex])
                 selectedFormatPos = toolbarFormat[selectedFormatIndex].pos || "before";
 
-            _.forEach(ctx.luckysheet_select_save, (selection) => {
+            for (const selection of ctx.luckysheet_select_save ?? []) {
                 for (let r = selection.row[0]; r <= selection.row[1]; r += 1) {
                     for (let c = selection.column[0]; c <= selection.column[1]; c += 1) {
                         if (
@@ -84,7 +83,7 @@ export function FormatSearch({
                         }
                     }
                 }
-            });
+            }
             _onCancel();
         });
     }, [

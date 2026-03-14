@@ -13,12 +13,11 @@ import {
     selectTitlesMap,
     selectTitlesRange,
 } from "../../core";
-import _ from "lodash";
 import React, {useCallback, useContext, useEffect, useMemo, useRef, useState,} from "react";
-import WorkbookContext from "../../context";
-import {SVGIcon} from "../icon-map";
+import {WorkbookContext} from "../../context";
+import {CircleChevronDown} from "lucide-react";
 
-const ColumnHeader: React.FC = () => {
+export const ColumnHeader: React.FC = () => {
     const {context, setContext, settings, refs} = useContext(WorkbookContext);
     const containerRef = useRef<HTMLDivElement>(null);
     const colChangeSizeRef = useRef<HTMLDivElement>(null);
@@ -78,7 +77,7 @@ const ColumnHeader: React.FC = () => {
                 setHoverInFreeze(inVerticalFreeze);
             }
             const flowdata = getFlowdata(context);
-            if (!_.isNil(flowdata))
+            if (flowdata != null)
                 allowEditRef.current =
                     isAllowEdit(context) &&
                     isAllowEdit(context, [
@@ -170,7 +169,7 @@ const ColumnHeader: React.FC = () => {
 
     useEffect(() => {
         const s = context.luckysheet_select_save;
-        if (_.isNil(s)) return;
+        if (s == null) return;
 
         let columnTitleMap = {};
         for (let i = 0; i < s.length; i += 1) {
@@ -186,7 +185,7 @@ const ColumnHeader: React.FC = () => {
             const c2 = columnTitleRange[j][columnTitleRange[j].length - 1];
             const col = colLocationByIndex(c2, context.visibledatacolumn)[1];
             const col_pre = colLocationByIndex(c1, context.visibledatacolumn)[0];
-            if (_.isNumber(col) && _.isNumber(col_pre)) {
+            if (typeof col === "number" && typeof col_pre === "number") {
                 selects.push({col, col_pre, c1, c2});
             }
         }
@@ -243,7 +242,7 @@ const ColumnHeader: React.FC = () => {
             {!context.luckysheet_cols_change_size && hoverLocation.col_index >= 0 ? (
                 <div
                     className="fortune-col-header-hover"
-                    style={_.assign(
+                    style={Object.assign(
                         {
                             left: hoverLocation.col_pre,
                             width: hoverLocation.col - hoverLocation.col_pre - 1,
@@ -271,7 +270,7 @@ const ColumnHeader: React.FC = () => {
                             }}
                             tabIndex={0}
                         >
-              <SVGIcon name="headDownArrow" width={12}/>
+              <CircleChevronDown width={12} height={12} aria-hidden="true"/>
             </span>
                     )}
                 </div>
@@ -280,7 +279,7 @@ const ColumnHeader: React.FC = () => {
                 <div
                     className="fortune-col-header-selected"
                     key={i}
-                    style={_.assign(
+                    style={Object.assign(
                         {
                             left: col_pre,
                             width: col - col_pre - 1,
@@ -310,4 +309,3 @@ const ColumnHeader: React.FC = () => {
     );
 };
 
-export default ColumnHeader;

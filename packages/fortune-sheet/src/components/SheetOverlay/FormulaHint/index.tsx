@@ -1,8 +1,9 @@
 import {locale} from "../../../core";
 import React, {useContext} from "react";
-import WorkbookContext from "../../../context";
+import {WorkbookContext} from "../../../context";
+import {ChevronUp, X} from "lucide-react";
 
-const FormulaHint: React.FC<React.HTMLAttributes<HTMLDivElement>> = (props) => {
+export const FormulaHint: React.FC<React.HTMLAttributes<HTMLDivElement>> = (props) => {
     const {context} = useContext(WorkbookContext);
     const {formulaMore} = locale(context);
     if (!context.functionHint) return null;
@@ -18,12 +19,12 @@ const FormulaHint: React.FC<React.HTMLAttributes<HTMLDivElement>> = (props) => {
         >
             <div
                 className="absolute top-0 right-1.5 text-base cursor-pointer text-muted-foreground hover:text-foreground"
-                title="关闭">
-                <i className="fa fa-times" aria-hidden="true"/>
+                title="Close">
+                <X size={14} aria-hidden="true"/>
             </div>
             <div className="absolute top-0 right-6 text-base cursor-pointer text-muted-foreground hover:text-foreground"
-                 title="收起">
-                <i className="fa fa-angle-up" aria-hidden="true"/>
+                 title="Collapse">
+                <ChevronUp size={14} aria-hidden="true"/>
             </div>
             <div className="block border-y border-[#ebebeb] bg-[#f5f5f5] px-2.5 py-0.5 text-sm">
                 <div className="w-[250px] break-words">
@@ -118,4 +119,3 @@ const FormulaHint: React.FC<React.HTMLAttributes<HTMLDivElement>> = (props) => {
     );
 };
 
-export default FormulaHint;
