@@ -2,7 +2,7 @@
 
 > **TLDR**: Push-based sharing for Drive and Calendar. On share: resolve targets → write to recipient's DB. If target
 > doesn't exist: write to share registry (`data/server/eigen.db`). On account/team join: pull from registry to reconcile
-> missed shares. Team calendars use direct access (no propagation).
+> missed shares. Team's own calendars are auto-synced into `shared_calendars` on fetch.
 
 ## Model
 
@@ -40,7 +40,7 @@ PK: `(fromUserId, targetIdentifier)`. No share data — just the pair. Pull rout
 ## Reconciliation Triggers
 
 - **Account created**: `databaseHooks.user.create.after` in `apps/api/src/lib/auth/auth.ts`
-- **Team member added**: Hook on team member creation
+- **Team member added**: `organizationHooks.afterAddTeamMember` on the `organization()` plugin in `apps/api/src/lib/auth/auth.ts`
 
 ## Pull Routes
 
@@ -56,10 +56,12 @@ complete in milliseconds with Bun + SQLite. Non-issue for typical deployments.
 
 ## Files
 
-| File                                             | Purpose                        |
-|--------------------------------------------------|--------------------------------|
-| `apps/api/src/lib/share/schema.ts`               | Share registry table           |
-| `apps/api/src/lib/share/db.ts`                   | `getEigenDb()` server-level DB |
-| `apps/api/src/lib/share/propagation.ts`          | Shared propagation logic       |
-| `apps/api/src/lib/calendar/share-propagation.ts` | Calendar-specific propagation  |
-| `apps/api/src/lib/drive/acl-propagation.ts`      | Drive-specific propagation     |
+| File                                             | Purpose                                    |
+|--------------------------------------------------|--------------------------------------------|
+| `apps/api/src/lib/share/schema.ts`               | Share registry Drizzle schema              |
+| `apps/api/src/lib/share/db-config.ts`            | DatabaseConfig + migration                 |
+| `apps/api/src/lib/share/db.ts`                   | `getEigenDb()` server-level DB singleton   |
+| `apps/api/src/lib/share/registry.ts`             | Registry CRUD operations                   |
+| `apps/api/src/lib/share/reconciliation.ts`       | Pull logic for new users/team members      |
+| `apps/api/src/lib/calendar/share-propagation.ts` | Calendar-specific propagation + registry   |
+| `apps/api/src/lib/drive/acl-propagation.ts`      | Drive-specific propagation + registry      |

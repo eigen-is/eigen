@@ -70,7 +70,9 @@ Follows the Contacts/Mail pattern — per-user Home directory, not Drive.
 Push-based propagation — when shares change, `share-propagation.ts` resolves targets and writes to recipient's
 `shared_calendars`. See [SHARE-PROPAGATION.md](SHARE-PROPAGATION.md).
 
-**Team calendars**: Direct access via team membership — no propagation needed.
+**Team calendars**: Auto-synced into the user's `shared_calendars` table (with `ownerUserId = 'team_{teamId}'`) when
+`GET /calendar/:ownerId/shared` is called. Displayed in a separate "Team Calendars" section in the sidebar, using the
+same `SharedCalendar` infrastructure for visibility/color prefs.
 
 ## Recurrence
 
@@ -102,6 +104,7 @@ DELETE /calendar/:ownerId/events/:id
 GET    /calendar/:ownerId/shared                  (shared-with-me list)
 PUT    /calendar/:ownerId/shared/:id              (local prefs)
 DELETE /calendar/:ownerId/shared/:id
+GET    /calendar/:ownerId/shared-with-me          (pull: what has owner shared with me?)
 ```
 
 Events endpoint returns `CalendarEventOccurrence[]` — expanded occurrences with `occurrenceDate` field. Free-busy
