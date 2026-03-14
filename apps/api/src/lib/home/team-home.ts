@@ -29,6 +29,7 @@ export type TeamSettings = {
 
 export class TeamHome extends Home {
     public teamId: string;
+    private settings: TeamSettings = {};
 
     constructor(syntheticUser: User, cleanUp?: () => void) {
         super(syntheticUser, cleanUp);
@@ -38,27 +39,38 @@ export class TeamHome extends Home {
         this.homeDir = getTeamDataPath(parsed.id);
         this.fs = new LocalFilesystem(this.homeDir);
 
-        this.drive = new Drive(this);
-        this.calendar = new Calendar(this);
+        this._drive = new Drive(this);
+        this._calendar = new Calendar(this);
+    }
+
+    public override async init() {
+        await this.loadSettings();
+        return super.init();
+    }
+
+    override get calendar(): Calendar {
+        if (this.settings.calendarEnabled === false) {
+            throw new ApiError(404, 'Team calendar is disabled');
+        }
+        return this._calendar;
     }
 
     async getSettings(): Promise<TeamSettings> {
-        try {
-            const file = this.fs.file('settings.json');
-            if (await file.exists()) return await file.json() as TeamSettings;
-        } catch {}
-        return {};
+        return this.settings;
     }
 
     async updateSettings(update: Partial<TeamSettings>): Promise<TeamSettings> {
-        const settings = {...await this.getSettings(), ...update};
-        await this.fs.file('settings.json').write(JSON.stringify(settings));
-        return settings;
+        this.settings = {...this.settings, ...update};
+        await this.fs.file('settings.json').write(JSON.stringify(this.settings));
+        return this.settings;
     }
 
-    async getCalendarIfEnabled(): Promise<Calendar | null> {
-        const settings = await this.getSettings();
-        if (settings.calendarEnabled === false) return null;
-        return this.calendar;
+    private async loadSettings(): Promise<void> {
+        try {
+            const file = this.fs.file('settings.json');
+            if (await file.exists()) {
+                this.settings = await file.json() as TeamSettings;
+            }
+        } catch {}
     }
 }
