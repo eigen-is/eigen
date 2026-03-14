@@ -1,41 +1,21 @@
-# Public API & Avatar Resolution
+# Public API & Avatars
+
+> **TLDR**: Public endpoints at `/p/` for user info and avatars (no auth required). Avatar URL:
+`{API_HOST}/p/avatar/{email}?fallback=digidoodle` — HTTP-cacheable, no client resolution needed.
+
+## Endpoints
+
+```
+GET /p/user/:emailOrId     → { name, email, avatar }
+GET /p/avatar/:emailOrId   → image binary (Cache-Control: 86400s) or fallback SVG
+POST /p/waitlist           → waitlist signup
+```
 
 ## Avatar Resolution
 
-`packages/lib/src/core/media/hooks/avatar.ts` resolves names and emails for avatars, while the actual image loading
-relies on a public gravatar-like service.
+Components use `UserAvatar` (`packages/ui/src/components/layout/user-avatar.tsx`) which resolves via
+`packages/lib/src/core/media/hooks/avatar.ts`.
 
-### Components
+Direct loading: `<img src="{API_HOST}/p/avatar/{email}?fallback=digidoodle" />`
 
-| Component            | File                                               | How it resolves avatars                            |
-|----------------------|----------------------------------------------------|----------------------------------------------------|
-| `UserAvatar`         | `packages/ui/.../user-avatar.tsx`                  | Resolves `userId`, `email`, and teams via hooks |
-| `UserItem`           | `packages/ui/.../user-item.tsx`                    | Uses `UserAvatar` and resolves display names via hooks |
-| `ContactAutosuggest` | `packages/ui/.../contacts/contact-autosuggest.tsx` | Uses `useContactSuggestions`                       |
-
-## Public Endpoints (`/p/`)
-
-The public endpoints are in a dedicated namespace (`/p/`) separate from the authenticated Space app (`/space/`).
-
-```
-GET /p/user/:emailOrId       → { name, email, avatar }
-GET /p/avatar/:emailOrId     → image binary with fallback
-POST /p/waitlist             → waitlist signup
-```
-
-### Direct Avatar Loading
-
-The system uses a direct avatar image endpoint keyed by email, simplifying the client significantly.
-
-```
-<img src={API_HOST}/p/avatar/{email}?fallback=digidoodle>
-```
-
-The `/p/avatar/:emailOrId` endpoint:
-
-1. Resolves email/ID → user.
-2. If user has an avatar → serves image with `Cache-Control: public, max-age=86400`.
-3. If no avatar → returns a generated fallback SVG.
-4. Non-eigen emails → 404.
-
-This one-URL approach avoids client-side resolution logic, is HTTP-cacheable, and works without authentication.
+**Route**: `apps/api/src/routes/public.ts`

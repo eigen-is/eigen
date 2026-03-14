@@ -1,120 +1,67 @@
-# ACL System — Architecture & Design
+# ACL System
 
-Eigen uses an **additive ACL inheritance model**. Permissions flow down the folder tree. You can only grant more access
-on child items, never revoke inherited access.
+> **TLDR**: Additive ACL inheritance — permissions flow down the folder tree. `canRead`/`canWrite` check local ACL, then
+> recurse to parents. No deny mechanism. Supports user emails and `team_` prefixed group IDs. Visibility: `private`,
+`public-read`, `public-write`. Core logic in `apps/api/src/lib/drive/acl.ts`.
 
 ## Types
 
 ```typescript
-export type DriveACL = {
-    id: string;      // User email or team_ID / org_ID
-    read: boolean;
-    write: boolean;
-}
-
-export type DriveVisibility = 'private' | 'public-read' | 'public-write';
-
-export type DrivePath = {
-    // ... other fields
-    acl: DriveACL[] | null
-    visibility: DriveVisibility
-}
+type DriveACL = { id: string; read: boolean; write: boolean }  // id = email or team_{id}
+type DriveVisibility = 'private' | 'public-read' | 'public-write'
 ```
 
-- **`acl`**: Access control entries. The `id` field stores either the user's email address or a prefixed group ID (like
-  `team_xyz`).
-- **`visibility`**: Link-level access, independent of user ACLs.
+Defined in `packages/lib/src/types/drive.ts`.
 
-## Core Logic (`apps/api/src/lib/drive/acl.ts`)
+## Core Logic
 
-### `canRead(path, user, getPath)`
-1. Owner → `true`
-2. Team membership → `true` if path is owned by a team the user belongs to
-3. `visibility` is `public-read` or `public-write` → `true`
-4. User found in local `acl` with `read: true` (matching email or team membership) → `true`
-5. **Always check parent** (recurse) → `true` if any ancestor grants access
-6. Default → `false`
+**File**: `apps/api/src/lib/drive/acl.ts`
 
-### `canWrite(path, user, getPath)`
+### canRead(path, user, getPath)
 
-Follows the same pattern as `canRead`, checking `write` and `public-write`.
+1. Owner → true
+2. Team member (path owned by user's team) → true
+3. Visibility `public-read` or `public-write` → true
+4. User in local `acl` with `read: true` (by email or team membership) → true
+5. **Recurse to parent** → true if any ancestor grants access
+6. Default → false
 
-### `matchesACL(entry, user)`
+### canWrite — same pattern, checks `write` and `public-write`
 
-Resolves an ACL entry against a user using `parseOwnerId(entry.id)`:
+### matchesACL(entry, user)
 
-- Type `user`: Matches if entry ID matches user's email.
-- Type `team`/`org`: Matches if user is a member of the group.
+Uses `parseOwnerId(entry.id)`: user type matches email, team/org type checks membership via `getMemberships()`.
 
-### `filterRedundantACL(acl, path, getPath)`
+### filterRedundantACL
 
-Auto-strips ACL entries that are redundant on save:
-- Entry already granted by an ancestor's ACL (same or broader permissions)
-- Group ACL on a path already owned by that group
+Strips entries already granted by ancestors or by ownership.
 
-### Key Design Decisions
+## Key Rules
 
-- **Purely additive**: A read-only ACL entry on a child folder does **not** downgrade inherited write access from a
-  parent.
-- **No explicit denies**: There is no `{read: false}` deny mechanism.
-- **External emails**: Any valid email address can be added to ACLs.
-- **Group ACL**: Combined with user ACL (additive).
-
-## Inheritance Behavior
-
-### Scenario: Read in A, Write in B (child of A)
-```
-A (Bob: read)  →  B (Bob: write)  →  C (no ACL)  →  file.txt
-```
-
-- Bob can **read** A, but **not write**.
-- Bob can **read and write** B, C, and file.txt.
-
-### Scenario: Remove Bob from A
-
-- Bob **loses** read access to A.
-- Bob **keeps** write access to B and everything below (direct ACL on B).
-
-### Scenario: Add read-only on C (child of B)
-```
-A (Bob: read)  →  B (Bob: write)  →  C (Bob: read-only)
-```
-
-- Bob can still **write** to C. The read-only entry does not override the inherited write from B.
+- **Purely additive**: Read-only on child does NOT downgrade inherited write from parent
+- **No deny**: No `{read: false}` mechanism
+- **External emails**: Any valid email can be in ACLs
+- **Team ACL**: Additive with user ACL
 
 ## Visibility
 
-`visibility` replaces the old `public` flag:
-
-| Value | Effect |
-|-------|--------|
-| `private` | Only named users + owner |
-| `public-read` | Anyone can read |
+| Value          | Effect                    |
+|----------------|---------------------------|
+| `private`      | Only named users + owner  |
+| `public-read`  | Anyone can read           |
 | `public-write` | Anyone can read and write |
-
-## Share Dialog UI
-
-The share dialog (`drive-access-list-edit.tsx`) distinguishes between:
-
-- **Direct access**: Users/teams explicitly in this path's ACL. Editable.
-- **Inherited access**: Users/teams from ancestor ACLs. Shown greyed out. Not editable here.
-- **Team entries**: Shown natively via `UserPublicItem` handling.
-
-The **Share column** in file listings shows avatars for both direct and inherited users.
 
 ## ACL Propagation
 
-When ACLs change, `acl-propagation.ts` updates each affected user's `shared.db` (shared-with-me database).
+When ACLs change, `apps/api/src/lib/drive/acl-propagation.ts` updates each affected user's `shared.db`.
 
 ## Files
 
-| File                                                                 | Purpose                                                                   |
-|----------------------------------------------------------------------|---------------------------------------------------------------------------|
-| `packages/lib/src/types/drive.ts`                                    | `DriveACL`, `DriveVisibility`, `DrivePath` types                          |
-| `apps/api/src/lib/drive/acl.ts`                                      | `canRead`, `canWrite`, `matchesACL`, `normalizeACL`, `filterRedundantACL` |
-| `apps/api/src/lib/drive/drive.ts`                                    | `updateACL()`                                                             |
-| `apps/api/src/lib/drive/acl-propagation.ts`                          | Propagate changes to shared DBs                                           |
-| `apps/api/src/routes/drive.ts`                                       | PUT `/drive/:ownerId/:mountId/path/:pathId/acl`                           |
-| `packages/lib/src/core/drive/hooks/use-drive.ts`                     | `useUpdateACL` hook                                                       |
-| `packages/ui/src/components/layout/drive/drive-access-list-edit.tsx` | Share dialog UI                                                           |
-| `packages/ui/src/components/layout/drive/drive-share-summary.tsx`    | Share column UI                                                           |
+| File                                                                 | Purpose                                                   |
+|----------------------------------------------------------------------|-----------------------------------------------------------|
+| `packages/lib/src/types/drive.ts`                                    | `DriveACL`, `DriveVisibility` types                       |
+| `apps/api/src/lib/drive/acl.ts`                                      | `canRead`, `canWrite`, `matchesACL`, `filterRedundantACL` |
+| `apps/api/src/lib/drive/acl-propagation.ts`                          | Propagate to shared DBs                                   |
+| `packages/ui/src/components/layout/drive/drive-access-list-edit.tsx` | Share dialog UI                                           |
+
+See: [ORGANISATIONS-AND-TEAMS.md](ORGANISATIONS-AND-TEAMS.md) for team ACL details

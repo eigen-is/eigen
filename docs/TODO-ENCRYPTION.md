@@ -1,5 +1,8 @@
 # Secure File Sharing System with End-to-End Encryption
 
+> **TLDR**: Future design — E2E encryption with hybrid crypto (RSA user keys + AES-256-GCM per-file). Key hierarchy:
+> password → user key pair → directory keys → file keys. Not yet implemented.
+
 This repository contains a secure file sharing system similar to Google Drive, with robust end-to-end encryption to
 protect content and metadata.
 
@@ -16,21 +19,22 @@ The system implements a hybrid cryptographic approach:
 ## Cryptographic Design
 
 ### Key Hierarchy
+
 ```
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
 │  User Password  │────>│  User Key Pair  │────>│ Directory Keys  │
 └─────────────────┘     └─────────────────┘     └─────────────────┘
-                                                         │
-                                                         ▼
-                                                ┌─────────────────┐
-                                                │ File Keys (AES) │
-                                                └─────────────────┘
-                                                         │
-                                                         ▼
-                                                ┌─────────────────┐
-                                                │ File Content &  │
-                                                │ Metadata        │
-                                                └─────────────────┘
+                                                        │
+                                                        ▼
+                                               ┌─────────────────┐
+                                               │ File Keys (AES) │
+                                               └─────────────────┘
+                                                        │
+                                                        ▼
+                                               ┌─────────────────┐
+                                               │ File Content &  │
+                                               │ Metadata        │
+                                               └─────────────────┘
 ```
 
 ### Authentication & Key Generation
@@ -88,6 +92,7 @@ CREATE TABLE encrypted_file_metadata (file_id VARCHAR, user_id INTEGER, encrypte
 ## Code Examples
 
 ### File Encryption
+
 ```typescript
 function encryptFile(fileData: Buffer, fileKey: Buffer = crypto.randomBytes(32)) {
   const iv = crypto.randomBytes(12);
@@ -104,6 +109,7 @@ function encryptFileKey(fileKey: Buffer, publicKey: string) {
 ```
 
 ### Directory Sharing
+
 ```typescript
 async function shareDirectory(directoryId: string, ownerId: number, targetUserId: number, ownerPrivateKey: string) {
   const ownerDirKey = await getEncryptedDirectoryKey(directoryId, ownerId);

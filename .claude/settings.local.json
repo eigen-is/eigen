@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(ls:*)",
+      "Bash(sort -k1,2)",
+      "Bash(wc:*)",
+      "Bash(grep:*)",
+      "Bash(git checkout:*)"
+    ]
+  }
+}

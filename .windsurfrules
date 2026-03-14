@@ -1,6 +1,6 @@
 # Eigen Project Rules
 
-- Read LLM.md for project context and architecture
+- Read CLAUDE.md for project context and architecture
 
 ## Development Environment
 - **Never run package install commands** - always ask the user

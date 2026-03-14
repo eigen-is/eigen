@@ -1,10 +1,14 @@
 # Implement External Guest User Access
 
+> **TLDR**: Implementation plan for external guest access via Email OTP. Guests get stateless GuestHome (no disk
+> persistence). Access shared resources via direct links. Not yet implemented.
+
 Enable external users (guests) to authenticate via Email OTP and access shared resources via direct links.
 
 ## 1. Authentication & Role Enforcement
 
-- **Goal**: Allow public sign-up via OTP (for guests) but force `role: 'guest'`. Allow public sign-up via Password (for normal users) *only if* allowed by config.
+- **Goal**: Allow public sign-up via OTP (for guests) but force `role: 'guest'`. Allow public sign-up via Password (for
+  normal users) *only if* allowed by config.
 - **Action**:
     - Create custom endpoints in `apps/api/src/routes/guest-auth.ts`:
         - `POST /guest-auth/request-otp` - Validate ACL access, generate/send OTP
@@ -35,13 +39,14 @@ Enable external users (guests) to authenticate via Email OTP and access shared r
 - **Action**:
     - Create `apps/api/src/lib/drive/guest-drive.ts`.
     - `mounts`: Empty.
-  - `getSharedPathsWithMe()`: Returns `[]`.
+    - `getSharedPathsWithMe()`: Returns `[]`.
 
 ## 4. API & Auth Flow
 
 - **Access Pattern**:
     - Guest clicks link: `https://eigen.is/drive/s/user_alice/default/file-uuid?email=bob@gmail.com`
-    - Frontend (`_auth` guard) redirects to `/login?redirect=...&email=bob@gmail.com&ownerId=user_alice&mountId=default&pathId=file-uuid`.
+    - Frontend (`_auth` guard) redirects to
+      `/login?redirect=...&email=bob@gmail.com&ownerId=user_alice&mountId=default&pathId=file-uuid`.
 - **Frontend Implementation**:
     - Update `loginSearchSchema` to accept `email`, `ownerId`, `mountId`, `pathId`.
     - Add `mode` state to `loginpage.tsx`: `'password'` vs `'guest-otp'`.
@@ -99,7 +104,7 @@ export const guestAuthRouter = new Elysia({ prefix: '/guest-auth' })
         // ... parse ownerId, get drive, check ACL ...
         const hasAccess = await drive.canRead(mountId, pathId, { id: 'guest-check', email } as User);
         if (!hasAccess) throw new ApiError(403, 'No access');
-        
+
         let user = await getUserByEmail(email);
         if (!user) {
             // Create the guest user directly via DB
