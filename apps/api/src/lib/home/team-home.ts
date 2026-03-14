@@ -3,7 +3,7 @@ import type {User} from 'better-auth/types';
 import {getTeamDataPath} from '../config/paths';
 import {Home} from './home';
 import {parseOwnerId} from "@workspace/lib/types";
-import {ApiError, LocalFilesystem} from "../core";
+import {ApiError, JsonStore, LocalFilesystem} from "../core";
 import {Drive} from '../drive';
 import {Calendar} from '../calendar/calendar';
 
@@ -29,7 +29,7 @@ export type TeamSettings = {
 
 export class TeamHome extends Home {
     public teamId: string;
-    private settings: TeamSettings = {};
+    declare public settings: JsonStore<TeamSettings>;
 
     constructor(syntheticUser: User, cleanUp?: () => void) {
         super(syntheticUser, cleanUp);
@@ -39,38 +39,15 @@ export class TeamHome extends Home {
         this.homeDir = getTeamDataPath(parsed.id);
         this.fs = new LocalFilesystem(this.homeDir);
 
+        this.settings = new JsonStore<TeamSettings>(this.fs, 'settings.json', {calendarEnabled: true});
         this._drive = new Drive(this);
         this._calendar = new Calendar(this);
     }
 
-    public override async init() {
-        await this.loadSettings();
-        return super.init();
-    }
-
     override get calendar(): Calendar {
-        if (this.settings.calendarEnabled === false) {
+        if (this.settings.get().calendarEnabled === false) {
             throw new ApiError(404, 'Team calendar is disabled');
         }
         return this._calendar;
-    }
-
-    async getSettings(): Promise<TeamSettings> {
-        return this.settings;
-    }
-
-    async updateSettings(update: Partial<TeamSettings>): Promise<TeamSettings> {
-        this.settings = {...this.settings, ...update};
-        await this.fs.file('settings.json').write(JSON.stringify(this.settings));
-        return this.settings;
-    }
-
-    private async loadSettings(): Promise<void> {
-        try {
-            const file = this.fs.file('settings.json');
-            if (await file.exists()) {
-                this.settings = await file.json() as TeamSettings;
-            }
-        } catch {}
     }
 }

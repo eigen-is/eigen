@@ -1,5 +1,5 @@
-import {existsSync, readFileSync, renameSync, writeFileSync} from 'fs';
 import {getServerDataPath} from './paths';
+import {type DeepPartial, JsonStore, LocalFilesystem} from '../core';
 
 export type S3Config = {
     bucket: string;
@@ -21,32 +21,40 @@ export type ServerConfig = {
     setupCompletedAt?: string;
 };
 
-const CONFIG_FILENAME = 'config.json';
+const serverFs = new LocalFilesystem(getServerDataPath());
+const store = new JsonStore<ServerConfig>(serverFs, 'config.json', {
+    domain: 'localhost',
+    orgName: '',
+    orgId: '',
+    storage: {type: 'local-id'},
+    setupCompleted: false,
+});
 
-function getConfigPath(): string {
-    return getServerDataPath(CONFIG_FILENAME);
-}
+let loaded = false;
 
-export function getServerConfig(): ServerConfig | null {
-    const path = getConfigPath();
-    if (!existsSync(path)) return null;
-    try {
-        return JSON.parse(readFileSync(path, 'utf-8'));
-    } catch {
-        return null;
+async function ensureLoaded() {
+    if (!loaded) {
+        await store.load();
+        loaded = true;
     }
 }
 
-export function saveServerConfig(config: ServerConfig): void {
-    const path = getConfigPath();
-    const tempPath = path + '.tmp';
-    writeFileSync(tempPath, JSON.stringify(config, null, 2));
-    renameSync(tempPath, path);
+export function getServerConfig(): ServerConfig | null {
+    const data = store.get();
+    if (!data.setupCompleted) return null;
+    return data;
+}
+
+export async function saveServerConfig(config: ServerConfig): Promise<void> {
+    await store.set(config);
+}
+
+export async function updateServerConfig(update: DeepPartial<ServerConfig>): Promise<void> {
+    await store.set(update);
 }
 
 export function isSetupCompleted(): boolean {
-    const config = getServerConfig();
-    return config?.setupCompleted ?? false;
+    return store.get().setupCompleted;
 }
 
 export function isSetupRequired(): boolean {
@@ -54,25 +62,25 @@ export function isSetupRequired(): boolean {
 }
 
 export function getStorageType(): ServerConfig['storage']['type'] {
-    const config = getServerConfig();
-    return config?.storage.type ?? 'local-id';
+    return store.get().storage.type;
 }
 
 export function getS3Config(): S3Config | undefined {
-    const config = getServerConfig();
-    return config?.storage.s3;
+    return store.get().storage.s3;
 }
 
 export function getDomain(): string {
-    const config = getServerConfig();
-    return config?.domain ?? 'localhost';
+    return store.get().domain || 'localhost';
 }
 
 export async function getPublicConfig() {
-    const config = getServerConfig();
+    const config = store.get();
     return {
-        domain: config?.domain,
-        orgName: config?.orgName,
-        orgId: config?.orgId,
+        domain: config.domain,
+        orgName: config.orgName,
+        orgId: config.orgId,
     };
 }
+
+// Load on import
+await ensureLoaded();
