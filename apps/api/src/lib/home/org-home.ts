@@ -2,24 +2,34 @@ import type {User} from 'better-auth/types';
 
 import {getOrgDataPath} from '../config/paths';
 import {Home} from './home';
-import {orgOwnerId} from "@workspace/lib/types";
-import {LocalFilesystem} from "../core";
+import {parseOwnerId} from "@workspace/lib/types";
+import {ApiError, LocalFilesystem} from "../core";
+
+export function getSyntheticOrgUser(ownerId: string): User {
+    const parsed = parseOwnerId(ownerId);
+    if (!parsed || parsed.type !== 'org') {
+        throw new ApiError(400, 'Invalid orgId format');
+    }
+
+    return {
+        id: ownerId,
+        name: ownerId,
+        email: '',
+        emailVerified: false,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+    };
+}
 
 export class OrgHome extends Home {
-    public teamId: string;
+    public orgId: string;
 
-    constructor(teamId: string) {
-        const syntheticUser: User = {
-            id: orgOwnerId(teamId),
-            name: orgOwnerId(teamId),
-            email: '',
-            emailVerified: false,
-            createdAt: new Date(),
-            updatedAt: new Date(),
-        };
-        super(syntheticUser);
-        this.teamId = teamId;
-        this.homeDir = getOrgDataPath(teamId);
+    constructor(syntheticUser: User, cleanUp?: () => void) {
+        super(syntheticUser, cleanUp);
+
+        const parsed = parseOwnerId(syntheticUser.id);
+        this.orgId = parsed.id;
+        this.homeDir = getOrgDataPath(parsed.id);
         this.fs = new LocalFilesystem(this.homeDir);
     }
 }
