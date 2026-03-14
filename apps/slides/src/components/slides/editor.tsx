@@ -4,9 +4,10 @@ import {useDeck} from './hooks/use-deck';
 import {useSlideDnd} from './hooks/use-slide-dnd';
 import {SlidePanel} from './slide-panel';
 import {SlideCanvas} from './slide-canvas';
-import {SlidePropertiesPanel, SlideBackgroundPanel} from './slide-properties-panel';
+import {SlideBackgroundPanel, SlidePropertiesPanel} from './slide-properties-panel';
 import {Toolbar} from './toolbar';
-import {DEFAULT_IMAGE_OBJECT, DEFAULT_TEXT_OBJECT, type ImageObject, SlideObject, pxToPercent} from './types';
+import {DEFAULT_IMAGE_OBJECT, DEFAULT_TEXT_OBJECT, type ImageObject, SlideObject} from './types';
+import {ReadOnlySlideObject} from './slide-object';
 import type {DrivePath} from '@workspace/lib/types/drive';
 import {getDriveEmbedUrl} from '@workspace/lib/api';
 import {useUploadFile} from '@workspace/lib/drive';
@@ -19,21 +20,24 @@ import {
 } from '@workspace/lib/clipboard';
 import type {EigenClipboardData, EigenClipboardItem} from '@workspace/lib/types/clipboard';
 import * as Y from 'yjs';
-import { Column, ColumnLayout } from '@workspace/ui/index';
+import {Column, ColumnLayout} from '@workspace/ui/index';
 
 function buildClipboardItem(obj: SlideObject): EigenClipboardItem {
     const rect = {x: obj.x, y: obj.y, w: obj.w, h: obj.h, rotation: obj.rotation};
-    const shadow = {shadowColor: obj.shadowColor, shadowBlur: obj.shadowBlur, shadowOffsetX: obj.shadowOffsetX, shadowOffsetY: obj.shadowOffsetY};
     const border = {borderColor: obj.borderColor, borderWidth: obj.borderWidth, borderRadius: obj.borderRadius};
     if (obj.type === 'image') {
-        return {type: 'image', src: obj.src, sourcePath: obj.sourcePath, meta: {...rect, ...shadow, ...border, objectFit: obj.objectFit}};
+        return {
+            type: 'image',
+            src: obj.src,
+            sourcePath: obj.sourcePath,
+            meta: {...rect, ...border, objectFit: obj.objectFit}
+        };
     }
     return {
         type: 'text',
         text: obj.text,
         meta: {
             ...rect,
-            ...shadow,
             ...border,
             fontSize: obj.fontSize,
             fontWeight: obj.fontWeight,
@@ -110,9 +114,18 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
     const hasSelection = selectedObjectIds.length > 0;
     const isEditing = editingObjectId !== null;
 
-    useHotkey('Mod+Z', (e) => { e.preventDefault(); undoManager?.undo(); }, {enabled: canWrite && !!undoManager});
-    useHotkey('Mod+Y', (e) => { e.preventDefault(); undoManager?.redo(); }, {enabled: canWrite && !!undoManager});
-    useHotkey('Mod+Shift+Z', (e) => { e.preventDefault(); undoManager?.redo(); }, {enabled: canWrite && !!undoManager});
+    useHotkey('Mod+Z', (e) => {
+        e.preventDefault();
+        undoManager?.undo();
+    }, {enabled: canWrite && !!undoManager});
+    useHotkey('Mod+Y', (e) => {
+        e.preventDefault();
+        undoManager?.redo();
+    }, {enabled: canWrite && !!undoManager});
+    useHotkey('Mod+Shift+Z', (e) => {
+        e.preventDefault();
+        undoManager?.redo();
+    }, {enabled: canWrite && !!undoManager});
     useHotkey('Delete', () => {
         if (hasSelection && canWrite) {
             deleteObjects(selectedObjectIds);
@@ -193,7 +206,7 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
                         const overrides: Record<string, unknown> = {};
                         if (m.x != null) overrides.x = m.x;
                         if (m.y != null) overrides.y = m.y;
-                        for (const k of ['w', 'h', 'rotation', 'shadowColor', 'shadowBlur', 'shadowOffsetX', 'shadowOffsetY', 'fontSize', 'fontWeight', 'fontStyle', 'textDecoration', 'textAlign', 'verticalAlign', 'color', 'letterSpacing', 'lineHeight', 'highlightColor', 'backgroundColor'] as const) {
+                        for (const k of ['w', 'h', 'rotation', 'borderColor', 'borderWidth', 'borderRadius', 'fontSize', 'fontWeight', 'fontStyle', 'textDecoration', 'textAlign', 'verticalAlign', 'color', 'letterSpacing', 'lineHeight', 'highlightColor', 'backgroundColor'] as const) {
                             if (m[k] != null) overrides[k] = m[k];
                         }
                         addObject(activeSlideId, {
@@ -204,7 +217,7 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
                         const overrides: Record<string, unknown> = {};
                         if (m.x != null) overrides.x = m.x;
                         if (m.y != null) overrides.y = m.y;
-                        for (const k of ['w', 'h', 'rotation', 'shadowColor', 'shadowBlur', 'shadowOffsetX', 'shadowOffsetY', 'objectFit'] as const) {
+                        for (const k of ['w', 'h', 'rotation', 'borderColor', 'borderWidth', 'borderRadius', 'objectFit'] as const) {
                             if (m[k] != null) overrides[k] = m[k];
                         }
                         const imageProps = {...DEFAULT_IMAGE_OBJECT, ...overrides};
@@ -297,7 +310,10 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
         handleImageFile(file);
     }, [handleImageFile]);
 
-    const handleBackgroundImageUpload = useCallback(async (file: File): Promise<{src: string; sourcePath: DrivePath} | null> => {
+    const handleBackgroundImageUpload = useCallback(async (file: File): Promise<{
+        src: string;
+        sourcePath: DrivePath
+    } | null> => {
         if (!mediaFolderId || !file.type.startsWith('image/')) return null;
         try {
             const result = await uploadFile.mutateAsync({parentId: mediaFolderId, file});
@@ -383,62 +399,16 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
                         maxWidth: '100vw',
                         maxHeight: '100vh',
                         backgroundColor: activeSlide.backgroundColor,
-                        ...(activeSlide.backgroundImage ? {backgroundImage: `url(${activeSlide.backgroundImage})`, backgroundSize: 'cover', backgroundPosition: 'center'} : {}),
+                        ...(activeSlide.backgroundImage ? {
+                            backgroundImage: `url(${activeSlide.backgroundImage})`,
+                            backgroundSize: 'cover',
+                            backgroundPosition: 'center'
+                        } : {}),
                     }}
                 >
-                    {activeObjects.map((obj) => {
-                        const shadow = (obj.shadowBlur || obj.shadowOffsetX || obj.shadowOffsetY) && obj.shadowColor && obj.shadowColor !== 'rgba(0,0,0,0)'
-                            ? `${obj.shadowOffsetX}px ${obj.shadowOffsetY}px ${obj.shadowBlur}px ${obj.shadowColor}` : undefined;
-                        const vAlign = obj.type === 'text' ? (obj.verticalAlign || 'top') : undefined;
-                        return (
-                        <div
-                            key={obj.id}
-                            className="absolute"
-                            style={{
-                                left: `${pxToPercent(obj.x, 'x')}%`,
-                                top: `${pxToPercent(obj.y, 'y')}%`,
-                                width: `${pxToPercent(obj.w, 'x')}%`,
-                                height: `${pxToPercent(obj.h, 'y')}%`,
-                                transform: obj.rotation ? `rotate(${obj.rotation}deg)` : undefined,
-                                transformOrigin: 'center center',
-                                backgroundColor: obj.type === 'text' && obj.backgroundColor ? obj.backgroundColor : undefined,
-                                ...(obj.type === 'image' && shadow ? {boxShadow: shadow} : {}),
-                            }}
-                        >
-                            {obj.type === 'text' && (
-                                <div
-                                    className="w-full h-full flex"
-                                    style={{
-                                        alignItems: vAlign === 'center' ? 'center' : vAlign === 'bottom' ? 'flex-end' : 'flex-start',
-                                    }}
-                                >
-                                    <p
-                                        className="whitespace-pre-wrap break-words w-full"
-                                        style={{
-                                            fontSize: `${obj.fontSize / 1080 * 100}vh`,
-                                            fontWeight: obj.fontWeight,
-                                            fontStyle: obj.fontStyle,
-                                            textDecoration: obj.textDecoration !== 'none' ? obj.textDecoration : undefined,
-                                            textAlign: obj.textAlign,
-                                            color: obj.color,
-                                            lineHeight: obj.lineHeight || 1.2,
-                                            letterSpacing: obj.letterSpacing ? `${obj.letterSpacing}px` : undefined,
-                                            textShadow: shadow,
-                                        }}
-                                    >
-                                        {obj.highlightColor
-                                            ? <span style={{backgroundColor: obj.highlightColor, boxDecorationBreak: 'clone', WebkitBoxDecorationBreak: 'clone'}}>{obj.text}</span>
-                                            : obj.text
-                                        }
-                                    </p>
-                                </div>
-                            )}
-                            {obj.type === 'image' && (
-                                <img src={obj.src} className="w-full h-full" style={{objectFit: obj.objectFit}} draggable={false} alt=""/>
-                            )}
-                        </div>
-                        );
-                    })}
+                    {activeObjects.map((obj) => (
+                        <ReadOnlySlideObject key={obj.id} obj={obj}/>
+                    ))}
                 </div>
             </div>
         );
@@ -447,85 +417,89 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
     return (
         <ColumnLayout mobileColumn="editor">
             <Column id={"doc-editor"} width={"w-full"} className="flex-1 h-full" toolbar={
-            <Toolbar
-                path={path}
-                canWrite={canWrite}
-                undoManager={undoManager}
-                onAccessDialogOpen={onAccessDialogOpen}
-                onRestore={handleRestore}
-                onAddText={handleAddText}
-                onAddImage={() => imageInputRef.current?.click()}
-                onAddSlide={() => addSlide()}
-                onPresent={handlePresent}
-            />}>
-            <div className="flex-1 flex overflow-hidden h-full">
-                <SlidePanel
-                    deck={deck}
-                    activeSlideId={activeSlideId}
-                    onSelectSlide={(id) => { setActiveSlideId(id); setSelectedObjectIds([]); }}
-                    onDragStart={handleDragStart}
-                    onDragEnd={handleDragEnd}
-                    dragActiveId={dragState.activeId}
-                    onDeleteSlide={canWrite ? deleteSlide : undefined}
-                    onDuplicateSlide={canWrite ? duplicateSlide : undefined}
-                />
-                {activeSlide ? (
-                    <div className="flex-1 flex overflow-hidden">
-                        <div className="flex-1 flex flex-col overflow-hidden">
-                            <SlideCanvas
-                                slide={activeSlide}
-                                objects={activeObjects}
-                                selectedObjectIds={selectedObjectIds}
-                                editingObjectId={editingObjectId}
-                                onSelectObject={handleSelectObject}
-                                onStartEditing={handleStartEditing}
-                                onStopEditing={handleStopEditing}
-                                onUpdateObject={updateObject}
-                                onDropImage={canWrite ? handleDropImage : undefined}
-                                onCopyObject={handleCopyObject}
-                                onDeleteObject={canWrite ? handleDeleteObject : undefined}
-                                onMoveUp={canWrite ? moveObjectUp : undefined}
-                                onMoveDown={canWrite ? moveObjectDown : undefined}
-                                onMoveToFront={canWrite ? moveObjectToFront : undefined}
-                                onMoveToBack={canWrite ? moveObjectToBack : undefined}
-                                canWrite={canWrite}
-                            />
-                            <div className="h-8 bg-muted border-t flex items-center justify-between px-4 text-xs text-muted-foreground">
-                                <span>Slide {deck.slideOrder.indexOf(activeSlideId!) + 1} of {deck.slideOrder.length}</span>
+                <Toolbar
+                    path={path}
+                    canWrite={canWrite}
+                    undoManager={undoManager}
+                    onAccessDialogOpen={onAccessDialogOpen}
+                    onRestore={handleRestore}
+                    onAddText={handleAddText}
+                    onAddImage={() => imageInputRef.current?.click()}
+                    onAddSlide={() => addSlide()}
+                    onPresent={handlePresent}
+                />}>
+                <div className="flex-1 flex overflow-hidden h-full">
+                    <SlidePanel
+                        deck={deck}
+                        activeSlideId={activeSlideId}
+                        onSelectSlide={(id) => {
+                            setActiveSlideId(id);
+                            setSelectedObjectIds([]);
+                        }}
+                        onDragStart={handleDragStart}
+                        onDragEnd={handleDragEnd}
+                        dragActiveId={dragState.activeId}
+                        onDeleteSlide={canWrite ? deleteSlide : undefined}
+                        onDuplicateSlide={canWrite ? duplicateSlide : undefined}
+                    />
+                    {activeSlide ? (
+                        <div className="flex-1 flex overflow-hidden">
+                            <div className="flex-1 flex flex-col overflow-hidden">
+                                <SlideCanvas
+                                    slide={activeSlide}
+                                    objects={activeObjects}
+                                    selectedObjectIds={selectedObjectIds}
+                                    editingObjectId={editingObjectId}
+                                    onSelectObject={handleSelectObject}
+                                    onStartEditing={handleStartEditing}
+                                    onStopEditing={handleStopEditing}
+                                    onUpdateObject={updateObject}
+                                    onDropImage={canWrite ? handleDropImage : undefined}
+                                    onCopyObject={handleCopyObject}
+                                    onDeleteObject={canWrite ? handleDeleteObject : undefined}
+                                    onMoveUp={canWrite ? moveObjectUp : undefined}
+                                    onMoveDown={canWrite ? moveObjectDown : undefined}
+                                    onMoveToFront={canWrite ? moveObjectToFront : undefined}
+                                    onMoveToBack={canWrite ? moveObjectToBack : undefined}
+                                    canWrite={canWrite}
+                                />
+                                <div
+                                    className="h-8 bg-muted border-t flex items-center justify-between px-4 text-xs text-muted-foreground">
+                                    <span>Slide {deck.slideOrder.indexOf(activeSlideId!) + 1} of {deck.slideOrder.length}</span>
+                                </div>
                             </div>
+                            {selectedObjects.length > 0 && canWrite ? (
+                                <SlidePropertiesPanel
+                                    objects={selectedObjects}
+                                    onUpdate={updateObjects}
+                                    onDelete={handleDeleteSelectedObjects}
+                                />
+                            ) : canWrite && activeSlideId ? (
+                                <SlideBackgroundPanel
+                                    currentBackground={activeSlide.backgroundColor}
+                                    currentBackgroundImage={activeSlide.backgroundImage}
+                                    currentBackgroundImageSourcePath={activeSlide.backgroundImageSourcePath}
+                                    onUpdateBackground={(color: string, applyTo: 'this' | 'this-and-following' | 'all') => updateSlideBackground(activeSlideId!, color, applyTo)}
+                                    onUpdateBackgroundImage={(url: string, sourcePath: DrivePath | undefined, applyTo: 'this' | 'this-and-following' | 'all') => updateSlideBackgroundImage(activeSlideId!, url, sourcePath, applyTo)}
+                                    onUploadImage={handleBackgroundImageUpload}
+                                />
+                            ) : null}
                         </div>
-                        {selectedObjects.length > 0 && canWrite ? (
-                            <SlidePropertiesPanel
-                                objects={selectedObjects}
-                                onUpdate={updateObjects}
-                                onDelete={handleDeleteSelectedObjects}
-                            />
-                        ) : canWrite && activeSlideId ? (
-                            <SlideBackgroundPanel
-                                currentBackground={activeSlide.backgroundColor}
-                                currentBackgroundImage={activeSlide.backgroundImage}
-                                currentBackgroundImageSourcePath={activeSlide.backgroundImageSourcePath}
-                                onUpdateBackground={(color: string, applyTo: 'this' | 'this-and-following' | 'all') => updateSlideBackground(activeSlideId!, color, applyTo)}
-                                onUpdateBackgroundImage={(url: string, sourcePath: DrivePath | undefined, applyTo: 'this' | 'this-and-following' | 'all') => updateSlideBackgroundImage(activeSlideId!, url, sourcePath, applyTo)}
-                                onUploadImage={handleBackgroundImageUpload}
-                            />
-                        ) : null}
-                    </div>
-                ) : (
-                    <div className="flex-1 flex items-center justify-center text-muted-foreground">
-                        No slides yet
-                    </div>
-                )}
-            </div>
+                    ) : (
+                        <div className="flex-1 flex items-center justify-center text-muted-foreground">
+                            No slides yet
+                        </div>
+                    )}
+                </div>
 
-            <input
-                ref={imageInputRef}
-                type="file"
-                accept="image/*"
-                className="hidden"
-                onChange={handleImageSelect}
-            />
-        </Column>
+                <input
+                    ref={imageInputRef}
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    onChange={handleImageSelect}
+                />
+            </Column>
         </ColumnLayout>
     );
 }

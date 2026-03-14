@@ -1,13 +1,6 @@
 import {memo, useEffect, useRef} from 'react';
-import {
-    ArrowDownToLine,
-    ArrowUpToLine,
-    ChevronDown,
-    ChevronUp,
-    Copy,
-    Trash2,
-} from 'lucide-react';
-import {SlideObject, pxToPercent, BORDER_RADIUS_ROUND} from './types';
+import {ArrowDownToLine, ArrowUpToLine, ChevronDown, ChevronUp, Copy, Trash2,} from 'lucide-react';
+import {BORDER_RADIUS_ROUND, pxToPercent, SlideObject} from './types';
 import {
     ContextMenu,
     ContextMenuContent,
@@ -15,6 +8,68 @@ import {
     ContextMenuSeparator,
     ContextMenuTrigger,
 } from '@workspace/ui/components/context-menu';
+
+export function getObjectPositionStyle(obj: SlideObject): React.CSSProperties {
+    return {
+        left: `${pxToPercent(obj.x, 'x')}%`,
+        top: `${pxToPercent(obj.y, 'y')}%`,
+        width: `${pxToPercent(obj.w, 'x')}%`,
+        height: `${pxToPercent(obj.h, 'y')}%`,
+        transform: obj.rotation ? `rotate(${obj.rotation}deg)` : undefined,
+        transformOrigin: 'center center',
+        backgroundColor: obj.type === 'text' && obj.backgroundColor ? obj.backgroundColor : undefined,
+        ...(obj.borderWidth && obj.borderColor ? {border: `${obj.borderWidth}px solid ${obj.borderColor}`} : {}),
+        ...(obj.borderRadius ? {
+            borderRadius: obj.borderRadius >= BORDER_RADIUS_ROUND ? '50%' : `${obj.borderRadius}px`,
+            overflow: 'hidden' as const
+        } : {}),
+    };
+}
+
+export function getTextStyle(obj: SlideObject & { type: 'text' }): React.CSSProperties {
+    return {
+        fontSize: `${obj.fontSize / 1080 * 100}vh`,
+        fontWeight: obj.fontWeight,
+        fontStyle: obj.fontStyle,
+        textDecoration: obj.textDecoration !== 'none' ? obj.textDecoration : undefined,
+        textAlign: obj.textAlign as React.CSSProperties['textAlign'],
+        color: obj.color,
+        lineHeight: obj.lineHeight || 1.2,
+        letterSpacing: obj.letterSpacing ? `${obj.letterSpacing}px` : undefined,
+    };
+}
+
+export function getVerticalAlignStyle(verticalAlign: string | undefined): React.CSSProperties {
+    return {
+        alignItems: verticalAlign === 'center' ? 'center' : verticalAlign === 'bottom' ? 'flex-end' : 'flex-start',
+    };
+}
+
+export function ReadOnlySlideObject({obj}: { obj: SlideObject }) {
+    const vAlign = obj.type === 'text' ? (obj.verticalAlign || 'top') : undefined;
+    return (
+        <div className="absolute" style={getObjectPositionStyle(obj)}>
+            {obj.type === 'text' && (
+                <div className="w-full h-full flex" style={getVerticalAlignStyle(vAlign)}>
+                    <p className="whitespace-pre-wrap break-words w-full" style={getTextStyle(obj)}>
+                        {obj.highlightColor
+                            ? <span style={{
+                                backgroundColor: obj.highlightColor,
+                                boxDecorationBreak: 'clone',
+                                WebkitBoxDecorationBreak: 'clone'
+                            }}>{obj.text}</span>
+                            : obj.text
+                        }
+                    </p>
+                </div>
+            )}
+            {obj.type === 'image' && (
+                <img src={obj.src} className="w-full h-full" style={{objectFit: obj.objectFit}} draggable={false}
+                     alt=""/>
+            )}
+        </div>
+    );
+}
 
 type SlideObjectViewProps = {
     obj: SlideObject;
@@ -63,7 +118,7 @@ export const SlideObjectView = memo(function SlideObjectView({
                                                                  onMoveDown,
                                                                  onMoveToFront,
                                                                  onMoveToBack,
-}: SlideObjectViewProps) {
+                                                             }: SlideObjectViewProps) {
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
     useEffect(() => {
@@ -90,51 +145,28 @@ export const SlideObjectView = memo(function SlideObjectView({
         }
     };
 
-    const shadowStr = buildShadowString(obj);
-
-    const textStyle = obj.type === 'text' ? {
-        fontSize: `${obj.fontSize / 1080 * 100}vh`,
-        fontWeight: obj.fontWeight,
-        fontStyle: obj.fontStyle,
-        textDecoration: obj.textDecoration !== 'none' ? obj.textDecoration : undefined,
-        textAlign: obj.textAlign as React.CSSProperties['textAlign'],
-        color: obj.color,
-        lineHeight: obj.lineHeight || 1.2,
-        letterSpacing: obj.letterSpacing ? `${obj.letterSpacing}px` : undefined,
-        textShadow: shadowStr,
-    } : undefined;
-
+    const textStyle = obj.type === 'text' ? getTextStyle(obj) : undefined;
     const verticalAlign = obj.type === 'text' ? (obj.verticalAlign || 'top') : undefined;
 
     const objectDiv = (
         <div
             className={`absolute ${selected ? 'ring-2 ring-blue-500' : obj.type === 'text' ? 'border border-dashed border-gray-300' : ''} ${editable && !editing ? 'cursor-move' : 'cursor-default'}`}
-            style={{
-                left: `${pxToPercent(obj.x, 'x')}%`,
-                top: `${pxToPercent(obj.y, 'y')}%`,
-                width: `${pxToPercent(obj.w, 'x')}%`,
-                height: `${pxToPercent(obj.h, 'y')}%`,
-                transform: obj.rotation ? `rotate(${obj.rotation}deg)` : undefined,
-                transformOrigin: 'center center',
-                backgroundColor: obj.type === 'text' && obj.backgroundColor ? obj.backgroundColor : undefined,
-                ...(obj.type === 'image' && shadowStr ? {boxShadow: shadowStr} : {}),
-                ...(obj.borderWidth && obj.borderColor ? {border: `${obj.borderWidth}px solid ${obj.borderColor}`} : {}),
-                ...(obj.borderRadius ? {borderRadius: obj.borderRadius >= BORDER_RADIUS_ROUND ? '50%' : `${obj.borderRadius}px`, overflow: 'hidden'} : {}),
-            }}
+            style={getObjectPositionStyle(obj)}
             onMouseDown={handleMouseDown}
             onDoubleClick={handleDoubleClick}
         >
             {obj.type === 'text' && !editing && (
                 <div
                     className="w-full h-full flex overflow-hidden select-none pointer-events-none"
-                    style={{
-                        alignItems: verticalAlign === 'center' ? 'center' : verticalAlign === 'bottom' ? 'flex-end' : 'flex-start',
-                        justifyContent: obj.textAlign === 'center' ? 'center' : obj.textAlign === 'right' ? 'flex-end' : 'flex-start',
-                    }}
+                    style={getVerticalAlignStyle(verticalAlign)}
                 >
                     <p className="whitespace-pre-wrap break-words w-full" style={textStyle}>
                         {obj.highlightColor
-                            ? <span style={{backgroundColor: obj.highlightColor, boxDecorationBreak: 'clone', WebkitBoxDecorationBreak: 'clone'}}>{obj.text}</span>
+                            ? <span style={{
+                                backgroundColor: obj.highlightColor,
+                                boxDecorationBreak: 'clone',
+                                WebkitBoxDecorationBreak: 'clone'
+                            }}>{obj.text}</span>
                             : obj.text
                         }
                     </p>
@@ -142,7 +174,7 @@ export const SlideObjectView = memo(function SlideObjectView({
             )}
 
             {obj.type === 'text' && editing && (
-                <div className="w-full h-full flex overflow-hidden" style={{alignItems: verticalAlign === 'center' ? 'center' : verticalAlign === 'bottom' ? 'flex-end' : 'flex-start'}}>
+                <div className="w-full h-full flex overflow-hidden" style={getVerticalAlignStyle(verticalAlign)}>
                     <textarea
                         ref={textareaRef}
                         className="w-full resize-none bg-transparent border-none outline-none whitespace-pre-wrap break-words p-0"
@@ -215,9 +247,3 @@ export const SlideObjectView = memo(function SlideObjectView({
         </ContextMenu>
     );
 });
-
-function buildShadowString(obj: SlideObject): string | undefined {
-    if (!obj.shadowBlur && !obj.shadowOffsetX && !obj.shadowOffsetY) return undefined;
-    if (!obj.shadowColor || obj.shadowColor === 'rgba(0,0,0,0)') return undefined;
-    return `${obj.shadowOffsetX}px ${obj.shadowOffsetY}px ${obj.shadowBlur}px ${obj.shadowColor}`;
-}

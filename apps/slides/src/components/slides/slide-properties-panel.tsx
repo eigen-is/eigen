@@ -23,7 +23,7 @@ import {Popover, PopoverContent, PopoverTrigger} from '@workspace/ui/components/
 import {ColorPicker} from '@workspace/ui/components/layout/media/color-picker';
 import {usePreview} from '@workspace/ui/components/layout/preview-provider';
 import type {DrivePath} from '@workspace/lib/types/drive';
-import type {SlideObject, TextObject, ImageObject} from './types';
+import type {ImageObject, SlideObject, TextObject} from './types';
 import {BORDER_RADIUS_ROUND} from './types';
 
 const MIXED = 'mixed' as const;
@@ -62,11 +62,6 @@ export function SlidePropertiesPanel({objects, onUpdate, onDelete}: SlidePropert
     const h = getMergedValue(objects, o => Math.round(o.h));
     const rotation = getMergedValue(objects, o => o.rotation);
 
-    const shadowColor = getMergedValue(objects, o => o.shadowColor);
-    const shadowBlur = getMergedValue(objects, o => o.shadowBlur);
-    const shadowOffsetX = getMergedValue(objects, o => o.shadowOffsetX);
-    const shadowOffsetY = getMergedValue(objects, o => o.shadowOffsetY);
-
     return (
         <PropertiesPanel>
             <div className="px-3 py-2 border-b">
@@ -94,34 +89,27 @@ export function SlidePropertiesPanel({objects, onUpdate, onDelete}: SlidePropert
                     </PropertyRow>
                 </div>
                 <PropertyRow label="°">
-                    <MergedNumberInput value={rotation} onChange={v => handleUpdate({rotation: v})} step={1} min={-360} max={360}/>
+                    <MergedNumberInput value={rotation} onChange={v => handleUpdate({rotation: v})} step={1} min={-360}
+                                       max={360}/>
                 </PropertyRow>
             </PropertySection>
 
             {allText && (
                 <TextProperties
-                    objects={objects as (SlideObject & {type: 'text'})[]} 
+                    objects={objects as (SlideObject & { type: 'text' })[]}
                     onUpdate={handleUpdate}
                 />
             )}
 
             {allImage && (
                 <ImageProperties
-                    objects={objects as (SlideObject & {type: 'image'})[]} 
+                    objects={objects as (SlideObject & { type: 'image' })[]}
                     onUpdate={handleUpdate}
                 />
             )}
 
             <BorderProperties
                 objects={objects}
-                onUpdate={handleUpdate}
-            />
-
-            <ShadowProperties
-                shadowColor={shadowColor}
-                shadowBlur={shadowBlur}
-                shadowOffsetX={shadowOffsetX}
-                shadowOffsetY={shadowOffsetY}
                 onUpdate={handleUpdate}
             />
 
@@ -166,7 +154,8 @@ function TextProperties({objects, onUpdate}: {
         <>
             <PropertySection title="Text">
                 <PropertyRow label="Size">
-                    <MergedNumberInput value={fontSize} onChange={v => onUpdate({fontSize: v})} min={12} max={200} step={1}/>
+                    <MergedNumberInput value={fontSize} onChange={v => onUpdate({fontSize: v})} min={12} max={200}
+                                       step={1}/>
                 </PropertyRow>
 
                 <div className="flex items-center gap-1 pt-1">
@@ -262,25 +251,36 @@ function TextProperties({objects, onUpdate}: {
             <PropertySection title="Spacing">
                 <div className="grid grid-cols-2 gap-2">
                     <PropertyRow label="Letter">
-                        <MergedNumberInput value={letterSpacing} onChange={v => onUpdate({letterSpacing: v})} step={0.5} min={-10} max={50}/>
+                        <MergedNumberInput value={letterSpacing} onChange={v => onUpdate({letterSpacing: v})} step={0.5}
+                                           min={-10} max={50}/>
                     </PropertyRow>
                     <PropertyRow label="Line">
-                        <MergedNumberInput value={lineHeight} onChange={v => onUpdate({lineHeight: v})} step={0.1} min={0.5} max={5}/>
+                        <MergedNumberInput value={lineHeight} onChange={v => onUpdate({lineHeight: v})} step={0.1}
+                                           min={0.5} max={5}/>
                     </PropertyRow>
                 </div>
             </PropertySection>
 
             <PropertySection title="Color">
                 <ColorRow label="Text" value={color} onOpen={setColorOpen} open={colorOpen}
-                    onChange={(c) => { onUpdate({color: c || '#000000'}); setColorOpen(false); }}
+                          onChange={(c) => {
+                              onUpdate({color: c || '#000000'});
+                              setColorOpen(false);
+                          }}
                 />
                 <ColorRow label="Highlight" value={highlightColor} onOpen={setHighlightOpen} open={highlightOpen}
-                    onChange={(c) => { onUpdate({highlightColor: c}); setHighlightOpen(false); }}
-                    showReset
+                          onChange={(c) => {
+                              onUpdate({highlightColor: c});
+                              setHighlightOpen(false);
+                          }}
+                          showReset
                 />
                 <ColorRow label="Fill" value={backgroundColor} onOpen={setBgOpen} open={bgOpen}
-                    onChange={(c) => { onUpdate({backgroundColor: c}); setBgOpen(false); }}
-                    showReset
+                          onChange={(c) => {
+                              onUpdate({backgroundColor: c});
+                              setBgOpen(false);
+                          }}
+                          showReset
                 />
             </PropertySection>
         </>
@@ -339,11 +339,15 @@ function BorderProperties({objects, onUpdate}: {
     return (
         <PropertySection title="Border">
             <ColorRow label="Color" value={borderColor} onOpen={setColorOpen} open={colorOpen}
-                onChange={(c) => { onUpdate({borderColor: c}); setColorOpen(false); }}
-                showReset
+                      onChange={(c) => {
+                          onUpdate({borderColor: c});
+                          setColorOpen(false);
+                      }}
+                      showReset
             />
             <PropertyRow label="Width">
-                <MergedNumberInput value={borderWidth} onChange={v => onUpdate({borderWidth: v})} step={1} min={0} max={20}/>
+                <MergedNumberInput value={borderWidth} onChange={v => onUpdate({borderWidth: v})} step={1} min={0}
+                                   max={20}/>
             </PropertyRow>
             <div className="grid grid-cols-2 gap-2">
                 <PropertyRow label="Radius">
@@ -362,36 +366,6 @@ function BorderProperties({objects, onUpdate}: {
                     >
                         50%
                     </Toggle>
-                </PropertyRow>
-            </div>
-        </PropertySection>
-    );
-}
-
-function ShadowProperties({shadowColor, shadowBlur, shadowOffsetX, shadowOffsetY, onUpdate}: {
-    shadowColor: MergedValue<string>;
-    shadowBlur: MergedValue<number>;
-    shadowOffsetX: MergedValue<number>;
-    shadowOffsetY: MergedValue<number>;
-    onUpdate: (updates: Partial<SlideObject>) => void;
-}) {
-    const [colorOpen, setColorOpen] = useState(false);
-
-    return (
-        <PropertySection title="Shadow">
-            <ColorRow label="Color" value={shadowColor} onOpen={setColorOpen} open={colorOpen}
-                onChange={(c) => { onUpdate({shadowColor: c || 'rgba(0,0,0,0)'}); setColorOpen(false); }}
-                showReset
-            />
-            <PropertyRow label="Blur">
-                <MergedNumberInput value={shadowBlur} onChange={v => onUpdate({shadowBlur: v})} step={1} min={0} max={100}/>
-            </PropertyRow>
-            <div className="grid grid-cols-2 gap-2">
-                <PropertyRow label="X">
-                    <MergedNumberInput value={shadowOffsetX} onChange={v => onUpdate({shadowOffsetX: v})} step={1} min={-50} max={50}/>
-                </PropertyRow>
-                <PropertyRow label="Y">
-                    <MergedNumberInput value={shadowOffsetY} onChange={v => onUpdate({shadowOffsetY: v})} step={1} min={-50} max={50}/>
                 </PropertyRow>
             </div>
         </PropertySection>
@@ -417,8 +391,10 @@ function ColorRow({label, value, open, onOpen, onChange, showReset}: {
                         className="h-5 w-5 rounded border border-border shrink-0"
                         style={{backgroundColor: displayColor}}
                     >
-                        {mixed && <span className="text-xs text-muted-foreground flex items-center justify-center h-full">—</span>}
-                        {!mixed && !value && <span className="text-xs text-muted-foreground flex items-center justify-center h-full">∅</span>}
+                        {mixed && <span
+                            className="text-xs text-muted-foreground flex items-center justify-center h-full">—</span>}
+                        {!mixed && !value && <span
+                            className="text-xs text-muted-foreground flex items-center justify-center h-full">∅</span>}
                     </div>
                     <span className="text-xs flex-1 text-left">{label}</span>
                     {!mixed && value && <span className="text-xs text-muted-foreground">{value}</span>}
@@ -443,10 +419,17 @@ type SlideBackgroundPanelProps = {
     currentBackgroundImageSourcePath?: DrivePath;
     onUpdateBackground: (color: string, applyTo: ApplyTo) => void;
     onUpdateBackgroundImage: (url: string, sourcePath: DrivePath | undefined, applyTo: ApplyTo) => void;
-    onUploadImage: (file: File) => Promise<{src: string; sourcePath: DrivePath} | null>;
+    onUploadImage: (file: File) => Promise<{ src: string; sourcePath: DrivePath } | null>;
 }
 
-export function SlideBackgroundPanel({currentBackground, currentBackgroundImage, currentBackgroundImageSourcePath, onUpdateBackground, onUpdateBackgroundImage, onUploadImage}: SlideBackgroundPanelProps) {
+export function SlideBackgroundPanel({
+                                         currentBackground,
+                                         currentBackgroundImage,
+                                         currentBackgroundImageSourcePath,
+                                         onUpdateBackground,
+                                         onUpdateBackgroundImage,
+                                         onUploadImage
+                                     }: SlideBackgroundPanelProps) {
     const [colorOpen, setColorOpen] = useState(false);
     const [applyTo, setApplyTo] = useState<ApplyTo>('this');
     const bgImageInputRef = useRef<HTMLInputElement>(null);
@@ -490,7 +473,10 @@ export function SlideBackgroundPanel({currentBackground, currentBackgroundImage,
                     <PopoverContent side="left" align="start" className="w-auto">
                         <ColorPicker
                             value={currentBackground}
-                            onChange={(c) => { onUpdateBackground(c || '#ffffff', 'this'); setColorOpen(false); }}
+                            onChange={(c) => {
+                                onUpdateBackground(c || '#ffffff', 'this');
+                                setColorOpen(false);
+                            }}
                             showReset={false}
                         />
                     </PopoverContent>
@@ -502,7 +488,9 @@ export function SlideBackgroundPanel({currentBackground, currentBackgroundImage,
                     <div className="space-y-2">
                         <div
                             className="rounded border overflow-hidden cursor-pointer"
-                            onClick={() => { if (currentBackgroundImageSourcePath) openPreview(currentBackgroundImageSourcePath); }}
+                            onClick={() => {
+                                if (currentBackgroundImageSourcePath) openPreview(currentBackgroundImageSourcePath);
+                            }}
                         >
                             <img src={currentBackgroundImage} alt="" className="w-full h-20 object-cover"/>
                         </div>
