@@ -21,7 +21,6 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
-import {Separator} from '@workspace/ui/components/separator';
 import {Toolbar as SharedToolbar, TooltipButton} from '@workspace/ui';
 import {DocumentModeButton} from '@workspace/ui/components/layout/toolbar/document-mode-button';
 import {RevisionHistory} from '@workspace/ui/components/layout/collab/revision-history';
