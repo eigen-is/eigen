@@ -1,3 +1,5 @@
+import { EIGEN_ACCENT_COLORS_SHUFFLED } from '@workspace/lib/constants';
+
 export const PATHS = {
     DRIVE: {
         ROOT: 'mounts',
@@ -32,8 +34,8 @@ export const PATHS = {
 export const STANDARD_MAILBOXES = ['', 'Sent', 'Drafts', 'Trash', 'Spam', 'Archive'] as const;
 
 export const DEFAULT_LABELS = [
-    {name: 'Family', color: '#f87171'},
-    {name: 'Friends', color: '#60a5fa'},
-    {name: 'Work', color: '#4ade80'},
-    {name: 'Important', color: '#facc15'}
+    {name: 'Family', color: EIGEN_ACCENT_COLORS_SHUFFLED[0].color},
+    {name: 'Friends', color: EIGEN_ACCENT_COLORS_SHUFFLED[1].color},
+    {name: 'Work', color: EIGEN_ACCENT_COLORS_SHUFFLED[2].color},
+    {name: 'Important', color: EIGEN_ACCENT_COLORS_SHUFFLED[3].color}
 ] as const;
