@@ -11,8 +11,8 @@ function goldenRatioShuffle<T>(arr: T[]): T[] {
 }
 
 export type EigenColor = {
-    name: string;
-    color: string; // hex value
+    label: string;
+    value: string; // hex value
 }
 
 export const EIGEN_COLOR_STEPS = [50, 100, 200, 300, 400, 500, 600, 700, 800, 900, 950] as const;
@@ -58,8 +58,8 @@ export const EIGEN_COLORS_MAP = [
   ]
 ] as const;
 
-const ACCENT_COLOR_ROW = 5;
+export const EIGEN_ACCENT_COLOR_ROW = 5;
 
-export const EIGEN_COLORS = EIGEN_COLORS_MAP.map((col, i) => col.map((hex, s) => ({name: `${EIGEN_COLOR_NAMES[i]}-${EIGEN_COLOR_STEPS[s]}`, color: hex}))) as EigenColor[][];
-export const EIGEN_ACCENT_COLORS = EIGEN_COLORS.map(col => col[ACCENT_COLOR_ROW]) as EigenColor[];
+export const EIGEN_COLORS = EIGEN_COLORS_MAP.map((col, i) => col.map((hex, s) => ({label: `${EIGEN_COLOR_NAMES[i]}-${EIGEN_COLOR_STEPS[s]}`, value: hex}))) as EigenColor[][];
+export const EIGEN_ACCENT_COLORS = EIGEN_COLORS.map(col => col[EIGEN_ACCENT_COLOR_ROW]) as EigenColor[];
 export const EIGEN_ACCENT_COLORS_SHUFFLED = goldenRatioShuffle(EIGEN_ACCENT_COLORS);
