@@ -163,8 +163,7 @@ export class Calendar {
             color: input.color !== undefined ? input.color : existing.color,
             visible: input.visible !== undefined ? input.visible : existing.visible,
             shares: input.shares !== undefined ? input.shares : existing.shares,
-            updatedAt: sql`unixepoch
-            ()`,
+            updatedAt: sql`unixepoch()`,
         }).where(eq(schema.calendars.id, id)).run();
 
         if (input.shares !== undefined) {
@@ -308,8 +307,7 @@ export class Calendar {
             status,
             etag,
             data,
-            updatedAt: sql`unixepoch
-            ()`,
+            updatedAt: sql`unixepoch()`,
         }).where(eq(schema.events.id, id)).run();
 
         this.incrementCtag(existing.calendarId);
@@ -457,8 +455,7 @@ export class Calendar {
         this.db.update(schema.sharedCalendars).set({
             color: input.color !== undefined ? input.color : existing.color,
             visible: input.visible !== undefined ? input.visible : existing.visible,
-            updatedAt: sql`unixepoch
-            ()`,
+            updatedAt: sql`unixepoch()`,
         }).where(eq(schema.sharedCalendars.id, id)).run();
 
         const updated = this.db.select().from(schema.sharedCalendars).where(eq(schema.sharedCalendars.id, id)).get()!;
@@ -493,8 +490,7 @@ export class Calendar {
                 calendarName,
                 calendarColor,
                 permission,
-                updatedAt: sql`unixepoch
-                ()`,
+                updatedAt: sql`unixepoch()`,
             }).where(eq(schema.sharedCalendars.id, existing.id)).run();
         } else {
             this.db.insert(schema.sharedCalendars).values({
@@ -602,8 +598,7 @@ export class Calendar {
         this.db.update(schema.calendars)
             .set({
                 ctag: sql`${schema.calendars.ctag}
-                + 1`, updatedAt: sql`unixepoch
-                ()`
+                + 1`, updatedAt: sql`unixepoch()`
             })
             .where(eq(schema.calendars.id, calendarId))
             .run();
