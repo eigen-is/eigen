@@ -98,22 +98,21 @@ export function CardSettingsDialog({isOpen, onClose, cardId, cardTitle, cardDesc
                                 <ColorPicker value={color} onChange={setColor} colors={STICKY_COLORS} columns={8}/>
                             </div>
                         </div>
-                        <DialogFooter className="sm:justify-between">
+                        <DialogFooter>
                             <Button
                                 type="button"
                                 variant="destructive"
+                                className="mr-auto"
                                 onClick={() => setIsDeleteDialogOpen(true)}
                             >
                                 Delete Card
                             </Button>
-                            <div className="flex gap-2">
-                                <Button type="button" variant="outline" onClick={onClose}>
-                                    Cancel
-                                </Button>
-                                <Button type="submit" disabled={!title.trim()}>
-                                    Save Changes
-                                </Button>
-                            </div>
+                            <Button type="button" variant="outline" onClick={onClose}>
+                                Cancel
+                            </Button>
+                            <Button type="submit" disabled={!title.trim()}>
+                                Save Changes
+                            </Button>
                         </DialogFooter>
                     </form>
                 </DialogContent>

@@ -15,7 +15,7 @@ export const FormulaHint: React.FC<React.HTMLAttributes<HTMLDivElement>> = (prop
         <div
             {...props}
             id="luckysheet-formula-help-c"
-            className="absolute border border-black/20 shadow-md text-xs text-[#535353] bg-white z-[1003] w-[300px]"
+            className="absolute border border-black/20 shadow-md text-xs text-[#535353] bg-background z-[1003] w-[300px]"
         >
             <div
                 className="absolute top-0 right-1.5 text-base cursor-pointer text-muted-foreground hover:text-foreground"
