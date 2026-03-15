@@ -217,6 +217,16 @@ export class Mount {
         return folderId;
     }
 
+    private async computeHash(data: Buffer | Uint8Array | ArrayBuffer | BunFile): Promise<string> {
+        const hasher = new Bun.CryptoHasher('sha256');
+        if (data instanceof Blob) {
+            hasher.update(new Uint8Array(await data.arrayBuffer()));
+        } else {
+            hasher.update(data instanceof ArrayBuffer ? new Uint8Array(data) : data);
+        }
+        return hasher.digest('hex');
+    }
+
     async createFile(
         parentId: string,
         name: string,
@@ -228,6 +238,7 @@ export class Mount {
         await this.assertUniqueName(parentId, name);
         const fileId = randomUUID();
         const fileValue = this.isPathBased ? name : buildStorageKey(fileId, name);
+        const hash = data !== undefined ? await this.computeHash(data) : null;
 
         await this.db.insert(paths).values({
             id: fileId,
@@ -238,6 +249,7 @@ export class Mount {
             ownerId: this.ownerId,
             mimeType,
             size,
+            hash,
             acl: null,
             createdAt: new Date(),
             updatedAt: new Date()
@@ -401,7 +413,8 @@ export class Mount {
             size = data.size;
         }
 
-        await this.updatePath(pathId, {size});
+        const hash = await this.computeHash(data);
+        await this.updatePath(pathId, {size, hash});
         return written;
     }
 
@@ -645,6 +658,7 @@ export class Mount {
             ownerId: row.ownerId,
             mimeType: row.mimeType,
             size: row.size ?? 0,
+            hash: row.hash ?? null,
             thumbnail: row.thumbnail,
             acl: row.acl,
             visibility: (row.visibility ?? 'private') as DriveVisibility,

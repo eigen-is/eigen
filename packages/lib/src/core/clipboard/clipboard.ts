@@ -29,8 +29,11 @@ export function readEigenClipboard(clipboardData: DataTransfer): EigenClipboardD
     return null;
 }
 
-export function writeEigenClipboard(e: ClipboardEvent, data: EigenClipboardData, plainText?: string) {
+export function writeEigenClipboard(e: ClipboardEvent, data: EigenClipboardData, plainText?: string, html?: string) {
     e.clipboardData?.setData(EIGEN_CLIPBOARD_MIME, JSON.stringify(data));
+    const encoded = encodeURIComponent(JSON.stringify(data));
+    const marker = `<span data-eigen-clipboard="${encoded}"></span>`;
+    e.clipboardData?.setData('text/html', html ? marker + html : marker);
     if (plainText) {
         e.clipboardData?.setData('text/plain', plainText);
     }
