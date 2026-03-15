@@ -105,48 +105,6 @@ describe('Mount (local-key storage)', () => {
         expect(Buffer.from(content!).toString()).toBe('file content');
     });
 
-    test('createFile computes SHA-256 hash', async () => {
-        const data = Buffer.from('hash me');
-        const fileId = await mount.createFile(rootId, 'hashed.txt', 'text/plain', data.length, data);
-        const file = await mount.getPath(fileId);
-        const expected = new Bun.CryptoHasher('sha256').update(data).digest('hex');
-        expect(file!.hash).toBe(expected);
-    });
-
-    test('createFile without data has null hash', async () => {
-        const fileId = await mount.createFile(rootId, 'nohash.txt', 'text/plain', 0, undefined);
-        const file = await mount.getPath(fileId);
-        expect(file!.hash).toBeNull();
-    });
-
-    test('writeFile updates hash', async () => {
-        const fileId = await mount.createFile(rootId, 'writehash.txt', 'text/plain', 0, undefined);
-        expect((await mount.getPath(fileId))!.hash).toBeNull();
-
-        const data = Buffer.from('new content');
-        await mount.writeFile(fileId, data);
-        const file = await mount.getPath(fileId);
-        const expected = new Bun.CryptoHasher('sha256').update(data).digest('hex');
-        expect(file!.hash).toBe(expected);
-    });
-
-    test('identical content produces identical hash', async () => {
-        const data = Buffer.from('same content');
-        const id1 = await mount.createFile(rootId, 'dup1.txt', 'text/plain', data.length, data);
-        const id2 = await mount.createFile(rootId, 'dup2.txt', 'text/plain', data.length, data);
-        const file1 = await mount.getPath(id1);
-        const file2 = await mount.getPath(id2);
-        expect(file1!.hash).toBe(file2!.hash);
-    });
-
-    test('different content produces different hash', async () => {
-        const id1 = await mount.createFile(rootId, 'diff1.txt', 'text/plain', 1, Buffer.from('a'));
-        const id2 = await mount.createFile(rootId, 'diff2.txt', 'text/plain', 1, Buffer.from('b'));
-        const file1 = await mount.getPath(id1);
-        const file2 = await mount.getPath(id2);
-        expect(file1!.hash).not.toBe(file2!.hash);
-    });
-
     test('duplicate name throws 409', async () => {
         await mount.createFolder(rootId, 'UniqueFolder');
         expect(mount.createFolder(rootId, 'UniqueFolder')).rejects.toThrow();

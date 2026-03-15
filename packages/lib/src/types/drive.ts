@@ -81,7 +81,6 @@ export type DrivePath = {
     labels?: string[];
     mimeType: string;
     size: number;
-    hash: string | null;
     thumbnail: string | null;
     acl: DriveACL[] | null;
     visibility: DriveVisibility;
