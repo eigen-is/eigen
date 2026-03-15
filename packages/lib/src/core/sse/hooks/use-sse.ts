@@ -8,6 +8,8 @@ import {handleMailSSEvent} from '@workspace/lib/mail';
 import {handleContactsSSEvent} from '@workspace/lib/contacts';
 import {handleChatSSEvent} from '@workspace/lib/chat';
 import {handleCalendarSSEvent} from '@workspace/lib/calendar';
+import {handleSpaceSSEvent} from '@workspace/lib/space';
+import {handleTeamSSEvent} from '@workspace/lib/team';
 
 type UseSSEOptions = {
     onNotification?: (event: SSEvent & SSEventNotification) => void;
@@ -29,6 +31,8 @@ export function useSSE(options: UseSSEOptions = {}) {
         handleContactsSSEvent(event, queryClient);
         handleChatSSEvent(event, queryClient);
         handleCalendarSSEvent(event, queryClient);
+        handleSpaceSSEvent(event, queryClient);
+        handleTeamSSEvent(event, queryClient);
     }, [onNotification, queryClient]);
 
     useEffect(() => {

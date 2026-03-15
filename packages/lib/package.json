@@ -33,6 +33,8 @@
     "./sse": "./src/core/sse/index.ts",
     "./stickies": "./src/core/stickies/index.ts",
     "./people": "./src/core/people/index.ts",
+    "./space": "./src/core/space/index.ts",
+    "./team": "./src/core/team/index.ts",
     "./date": "./src/core/date.ts",
     "./types": "./src/types/index.ts",
     "./types/drive": "./src/types/drive.ts",
