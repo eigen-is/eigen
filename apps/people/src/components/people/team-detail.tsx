@@ -80,7 +80,7 @@ function AddMemberDialog({open, onOpenChange, availableMembers, onAdd}: {
             onOpenChange(v);
             if (!v) setSearch('');
         }}>
-            <DialogContent className="max-w-sm">
+            <DialogContent size="sm">
                 <DialogHeader>
                     <DialogTitle>Add Member to Team</DialogTitle>
                 </DialogHeader>

@@ -30,7 +30,7 @@ export function NameBox() {
     return (
         <div className="w-[99px] border-r border-border text-sm flex items-center">
             <div
-                className="w-full text-center m-0 pl-2 pr-2 outline-none cursor-text whitespace-nowrap overflow-hidden bg-white break-words"
+                className="w-full text-center m-0 pl-2 pr-2 outline-none cursor-text whitespace-nowrap overflow-hidden bg-background break-words"
                 tabIndex={0} dir="ltr">
                 {rangeText}
             </div>
