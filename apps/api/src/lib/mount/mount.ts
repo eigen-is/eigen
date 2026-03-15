@@ -284,7 +284,7 @@ export class Mount {
         }
     }
 
-    async updatePath(pathId: string, updates: Partial<Omit<DrivePath, 'id' | 'ownerId' | 'createdAt'>>): Promise<void> {
+    async updatePath(pathId: string, updates: Partial<Omit<DrivePath, 'id' | 'ownerId' | 'createdAt'>> & {hash?: string | null}): Promise<void> {
         if (updates.name !== undefined) {
             validateName(updates.name);
         }
@@ -658,7 +658,6 @@ export class Mount {
             ownerId: row.ownerId,
             mimeType: row.mimeType,
             size: row.size ?? 0,
-            hash: row.hash ?? null,
             thumbnail: row.thumbnail,
             acl: row.acl,
             visibility: (row.visibility ?? 'private') as DriveVisibility,
