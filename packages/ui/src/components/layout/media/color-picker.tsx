@@ -189,6 +189,6 @@ function isLightColor(hex: string): boolean {
     return luminance > 0.5;
 }
 
-export {DEFAULT_COLORS};
+export {DEFAULT_COLORS, isLightColor};
 export type {ColorPickerProps};
 
