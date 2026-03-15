@@ -284,7 +284,7 @@ export class Mount {
         }
     }
 
-    async updatePath(pathId: string, updates: Partial<Omit<DrivePath, 'id' | 'ownerId' | 'createdAt'>> & {hash?: string | null}): Promise<void> {
+    async updatePath(pathId: string, updates: Partial<Omit<DrivePath, 'id' | 'ownerId' | 'createdAt'>>): Promise<void> {
         if (updates.name !== undefined) {
             validateName(updates.name);
         }
@@ -414,7 +414,9 @@ export class Mount {
         }
 
         const hash = await this.computeHash(data);
-        await this.updatePath(pathId, {size, hash});
+        await this.db.update(paths)
+            .set({size, hash, updatedAt: new Date()})
+            .where(eq(paths.id, pathId));
         return written;
     }
 
