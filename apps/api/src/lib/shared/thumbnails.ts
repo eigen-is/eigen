@@ -43,17 +43,15 @@ export async function generateThumbnail(
     const opts = {...DEFAULT_OPTIONS, ...options};
 
     try {
-        let inputBuffer: Buffer;
+        let image: sharp.Sharp;
 
         if (typeof source === 'string') {
-            inputBuffer = Buffer.from(await Bun.file(source).arrayBuffer());
+            image = sharp(source);
         } else if (Buffer.isBuffer(source)) {
-            inputBuffer = source;
+            image = sharp(source);
         } else {
-            inputBuffer = Buffer.from(await source.arrayBuffer());
+            image = sharp(Buffer.from(await source.arrayBuffer()));
         }
-
-        const image = sharp(inputBuffer);
         const metadata = await image.metadata();
 
         if (!metadata.width || !metadata.height) {
