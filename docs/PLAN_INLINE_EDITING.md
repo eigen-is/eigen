@@ -3,6 +3,153 @@
 Step-by-step implementation plan derived from PROPOSAL_INLINE_EDITING.md. Phase 1 only (markdown editing).
 Phase 2 (CodeMirror / plain text / code files) and Phase 3 (polish) are not covered here.
 
+---
+
+## Review (Code-Verified)
+
+Overall verdict: **solid plan, architecturally sound, will work.** The approach aligns well with existing patterns. Below
+are concrete issues found by cross-referencing the actual codebase, ranked by severity.
+
+### Issues to Fix
+
+#### 1. `getSharedDrive` signature is wrong (Step 1) — **will break**
+
+The plan says `getSharedDrive(ownerId, mountId, userId)` with three args. The actual signature in
+`apps/api/src/lib/drive/get-drive.ts` is `getSharedDrive(ownerId: string, user: User)` — two args, second is the full
+`User` object (not a userId string). There is no `mountId` parameter. All drive routes use it as:
+```typescript
+const drive = await getSharedDrive(params.ownerId, user);
+```
+Then call `drive.getPath(params.mountId, params.pathId)` etc. The editor router must follow this same pattern.
+
+#### 2. `mount.getPath()` / `mount.readFile()` — wrong access pattern (Step 1) — **will break**
+
+The plan says `mount.getPath(pathId)` and `mount.readFile(pathId)`. But the route doesn't have direct access to `Mount`.
+The Drive class is the facade. The correct calls are:
+- `drive.getPath(mountId, pathId)` → returns `DrivePath | null`
+- `drive.downloadFile(mountId, pathId)` → returns `ArrayBuffer | null` (calls `mount.readFile` internally)
+
+For writing, there's no `drive.writeFile()` method on the `Drive` class. You'd need to either:
+- **Option A**: Add a `writeFileContent(mountId, pathId, data)` method to `Drive` (and `SharedDrive` with write
+  permission check). This is the cleanest approach and follows existing patterns.
+- **Option B**: Expose mount via `drive.getMount()` — but `getMount` is private. Don't do this.
+
+The plan's `mount.writeFile(pathId, Buffer.from(fullContent, 'utf-8'))` call is correct at the Mount level (Mount does
+have `writeFile` that updates size/hash/updatedAt), but it needs to be wrapped in a Drive method with ACL checks.
+
+#### 3. `updatedAt` is a `Date`, not an ISO string (Steps 1, 3, 4) — **subtle bug**
+
+`DrivePath.updatedAt` is typed as `Date` in `packages/lib/src/types/drive.ts`. The plan repeatedly references
+`path.updatedAt.toISOString()`. When returned through Elysia's JSON serialization, dates become ISO strings
+automatically. But on the backend inside the route handler, `path.updatedAt` is a `Date` object, so `.toISOString()`
+works. Just be aware that the Treaty client on the frontend will receive it as a `string`, not a `Date`. The
+`expectedUpdatedAt` comparison in the PUT handler should compare strings consistently (both sides `.toISOString()`).
+This is fine as written, but worth noting.
+
+#### 4. Router registration is in `app.ts`, not `index.ts` (Step 1) — **wrong file reference**
+
+The plan says to modify `apps/api/src/index.ts`. The actual router registration happens in `apps/api/src/app.ts`.
+`index.ts` just calls `app.listen(8000)`. The new editor router must be added to `app.ts`.
+
+#### 5. `isInlineEditable` location is wrong (Step 2) — **poor placement**
+
+The plan puts `isInlineEditable` in `packages/lib/src/core/api.ts`. That file is specifically for Eden Treaty client
+setup and URL builders. A utility function about MIME type checking doesn't belong there. Better locations:
+- `packages/lib/src/types/drive.ts` (alongside `isFolderType`, `isDocumentType`, etc.) — **recommended**, it's the same
+  pattern
+- Or `packages/lib/src/core/editor/index.ts` if you want to keep it in the editor domain
+
+#### 6. `DriveLayout` `listOverride` approach is overly invasive (Step 9) — **will work but suboptimal**
+
+The plan proposes adding a `listOverride` prop to `DriveLayout`. Looking at the actual `DriveLayout` component, it's
+a 330-line component that manages dialogs (create folder, upload, delete, rename, share, etc.), drag-and-drop, and more.
+The `listOverride` would bypass all of that, which is actually fine for the editor case.
+
+However, the plan also says `MarkdownEditor` should render its own `<Column>`. This means the editor owns the Column
+directly, which is clean. But the `listOverride` prop would replace the entire first Column *including* all the dialog
+components that DriveLayout renders after the ColumnLayout. This means creating folders, uploading, etc. still work even
+during editing (the dialogs are outside the columns). This is probably fine — the user can't trigger those while editing.
+
+**Simpler alternative**: Instead of modifying `DriveLayout` at all, handle it at the route level: conditionally render
+either `<DriveLayout .../>` or `<NativeFileEditor .../>`. The route already controls what's rendered. This avoids
+touching shared UI code. The plan's `MarkdownEditor` already renders its own `<Column>` — just wrap it in a
+`<ColumnLayout>` at the `NativeFileEditor` level and you're done. No `DriveLayout` changes needed.
+
+#### 7. Shared/MIME routes don't have `pathId` in their route params (Step 14) — **needs different approach**
+
+The shared route (`_auth.shared.$to.tsx`) has `{to}` param (by-me/with-me), not `{ownerId, mountId, pathId}`. The MIME
+route has `{mimeType}`. Neither has the ownerId/mountId/pathId triple needed for the editor. The `DrivePath` object
+from the list does contain `ownerId` and `mountId` fields, so the editor can use those. But the `editingPath` state
+approach will work fine — the state holds the full `DrivePath` object. Just note that these routes use `useAuth()` to
+get `ownerId` and hardcode `DEFAULT_MOUNT_ID`, which differs from the fs route pattern.
+
+Also note: the shared route uses an older `FilePreview` pattern with local state instead of the `usePreview` hook used
+in the fs route. This is inconsistent but doesn't block the editor.
+
+#### 8. Tiptap packages not in `apps/drive` (Step 4) — **acknowledged but incomplete**
+
+The plan notes Tiptap may need to be added. Confirmed: `apps/drive/package.json` has zero Tiptap dependencies. The full
+list of packages needed for Phase 1 markdown editing (from what `apps/docs` uses):
+- `@tiptap/core`, `@tiptap/react`, `@tiptap/pm`, `@tiptap/starter-kit`
+- `@tiptap/extension-character-count`, `@tiptap/extension-code-block-lowlight`
+- `@tiptap/extension-image`, `@tiptap/extension-link`, `@tiptap/extension-table`
+- `@tiptap/extension-table-cell`, `@tiptap/extension-table-header`, `@tiptap/extension-table-row`
+- `@tiptap/extension-task-item`, `@tiptap/extension-task-list`, `@tiptap/extension-typography`
+- `lowlight`
+- `tiptap-markdown` (the key new package)
+
+That's ~16 packages. This is a significant addition to the drive app's bundle. Worth considering if the markdown editor
+component should be lazy-loaded.
+
+#### 9. Image path resolution (Step 11) — **more complex than described**
+
+The plan suggests scanning markdown for relative image paths and resolving to Drive embed URLs. But the Drive system
+uses UUID-based path IDs, not filesystem paths. A relative path like `./image.png` in a markdown file means "a sibling
+file named `image.png`". To resolve this, you need:
+1. Get the parent folder of the markdown file
+2. Find the sibling with name `image.png` via `drive.getChildByName(mountId, parentId, 'image.png')`
+3. Build the embed URL from the sibling's pathId
+
+On save, the reverse: scan for embed URLs, extract pathId, get the path's name, convert back to `./name`. This is
+doable but requires async resolution (multiple DB lookups) and the plan understates the complexity. Also, newly pasted
+images would need upload handling — the plan doesn't cover this.
+
+#### 10. Round-trip tests in wrong location (Step 12) — **minor**
+
+The plan puts tests in `apps/api/src/lib/editor/__tests__/`. But tiptap-markdown round-trip testing is a frontend
+concern (it tests browser-side Tiptap serialization). These tests should either:
+- Be in `apps/drive/src/__tests__/` — since that's where the editor lives
+- Or use a Node.js-compatible Tiptap setup (Tiptap can run in Node with `@tiptap/core` without DOM, but
+  `tiptap-markdown` may need it). Verify that `tiptap-markdown` works in Bun/Node before assuming backend tests work.
+
+### Things the Plan Gets Right
+
+- **Optimistic concurrency via `updatedAt`** — solid, simpler than ETags, and `Mount.writeFile` already bumps
+  `updatedAt` automatically
+- **Frontmatter extraction** — good call separating it; Tiptap would mangle YAML frontmatter
+- **`Mount.writeFile` updates size/hash/updatedAt** — confirmed, the plan's assumption is correct
+- **Column-based layout** — `MarkdownEditor` rendering its own `<Column>` with toolbar is clean and matches existing
+  patterns
+- **Implementation order** — starting with round-trip tests (Step 12 first) is exactly right; if tiptap-markdown
+  doesn't round-trip well, the whole WYSIWYG approach needs rethinking
+- **Eden Treaty API client** — the hook pattern in Step 3 matches existing drive hooks perfectly
+- **Phase separation** — keeping CodeMirror in Phase 2 is smart; markdown WYSIWYG is the harder problem
+
+### Suggestions
+
+- **Lazy load the editor**: The Tiptap bundle is large. Use `React.lazy()` + `Suspense` for `NativeFileEditor` so the
+  drive app doesn't pay the cost until a user actually opens a markdown file.
+- **Skip `DriveLayout` modification**: Render `NativeFileEditor` as an alternative to `DriveLayout` at the route level
+  instead of threading through `listOverride`. Cleaner, no shared component changes.
+- **Add `writeFileContent` to Drive class**: Wrap `mount.writeFile` with ACL checks. Add the corresponding method to
+  `SharedDrive` too. This follows the existing pattern where every mount operation goes through Drive.
+- **Consider `staleTime: 0` for editor content query**: Unlike folder listings (5min stale), editor content should
+  always be fresh when opened.
+- **SSE invalidation**: When a file is saved via the editor, emit a drive event so other tabs/users see the update.
+  The plan doesn't mention SSE for editor saves.
+
+---
+
 ## Dependencies
 
 Install before starting (ask user):
