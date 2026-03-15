@@ -1,5 +1,3 @@
-import type {DrivePath} from '@workspace/lib/types/drive';
-
 type BaseObject = {
     id: string;
     slideId: string;
@@ -31,9 +29,8 @@ export type TextObject = BaseObject & {
 
 export type ImageObject = BaseObject & {
     type: 'image';
-    src: string;
+    mediaName: string;
     objectFit: 'contain' | 'cover' | 'fill';
-    sourcePath?: DrivePath;
 }
 
 export type SlideObject = TextObject | ImageObject;
@@ -42,8 +39,7 @@ export type SlideItem = {
     id: string;
     objectIds: string[];
     backgroundColor: string;
-    backgroundImage: string;
-    backgroundImageSourcePath?: DrivePath;
+    backgroundMediaName: string;
 }
 
 export type DeckData = {
@@ -94,7 +90,7 @@ export const DEFAULT_TEXT_OBJECT: Omit<TextObject, 'id' | 'slideId'> = {
     ...DEFAULT_BORDER,
 };
 
-export const DEFAULT_IMAGE_OBJECT: Omit<ImageObject, 'id' | 'slideId' | 'src'> = {
+export const DEFAULT_IMAGE_OBJECT: Omit<ImageObject, 'id' | 'slideId' | 'mediaName'> = {
     type: 'image',
     x: 384,
     y: 162,

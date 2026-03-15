@@ -76,7 +76,7 @@ export function useChatRoom(ownerId: string, mountId: string, chatId: string) {
                 const uploaded = await Promise.all(
                     files.map(file => uploadFile.mutateAsync({parentId: mediaFolder.id, file}))
                 );
-                attachments = uploaded.filter(Boolean).map(u => (u as DrivePath).id);
+                attachments = uploaded.filter(Boolean).map(u => (u as DrivePath).name);
             }
         }
 
@@ -146,6 +146,8 @@ export function useChatRoom(ownerId: string, mountId: string, chatId: string) {
         );
     }, [messages, localMessages]);
 
+    const mediaFolderId = chatContents.find(item => item.name === 'media')?.id ?? null;
+
     return {
         messages: allMessages,
         isLoading,
@@ -155,6 +157,7 @@ export function useChatRoom(ownerId: string, mountId: string, chatId: string) {
         readOnly,
         disabled: postMessage.isPending || uploadFile.isPending,
         currentUserId: user?.id || '',
+        mediaFolderId,
         handleSendMessage,
     };
 }

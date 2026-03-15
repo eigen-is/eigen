@@ -2,6 +2,7 @@ import {memo} from 'react';
 import {SLIDE_ASPECT_RATIO, SlideItem, SlideObject} from './types';
 import {getObjectPositionStyle} from './slide-object';
 import {cn} from '@workspace/ui/lib/utils';
+import {useMediaResolver} from '@workspace/lib/drive';
 
 type SlideThumbnailProps = {
     slide: SlideItem;
@@ -18,6 +19,9 @@ export const SlideThumbnail = memo(function SlideThumbnail({
                                                                isActive,
                                                                onClick
                                                            }: SlideThumbnailProps) {
+    const {resolveMediaUrl} = useMediaResolver();
+    const bgUrl = slide.backgroundMediaName ? resolveMediaUrl(slide.backgroundMediaName) : null;
+
     return (
         <button
             onClick={onClick}
@@ -38,8 +42,8 @@ export const SlideThumbnail = memo(function SlideThumbnail({
             >
                 <div className="w-full h-full relative" style={{
                     backgroundColor: slide.backgroundColor,
-                    ...(slide.backgroundImage ? {
-                        backgroundImage: `url(${slide.backgroundImage})`,
+                    ...(bgUrl ? {
+                        backgroundImage: `url(${bgUrl})`,
                         backgroundSize: 'cover',
                         backgroundPosition: 'center'
                     } : {}),
@@ -54,6 +58,7 @@ export const SlideThumbnail = memo(function SlideThumbnail({
 });
 
 const ThumbnailObject = memo(function ThumbnailObject({obj, bgColor}: { obj: SlideObject; bgColor: string }) {
+    const {resolveMediaUrl} = useMediaResolver();
     const isDark = isDarkColor(bgColor);
 
     const posStyle = getObjectPositionStyle(obj);
@@ -83,7 +88,7 @@ const ThumbnailObject = memo(function ThumbnailObject({obj, bgColor}: { obj: Sli
             )}
             {obj.type === 'image' && (
                 <img
-                    src={obj.src}
+                    src={resolveMediaUrl(obj.mediaName) || ''}
                     className="w-full h-full"
                     style={{objectFit: obj.objectFit}}
                     draggable={false}

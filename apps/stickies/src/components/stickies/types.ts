@@ -5,7 +5,7 @@ export type CardItem = {
     color?: string;
     creator: string;
     createdAt: number;
-    chatId?: string;
+    chatName?: string;
 }
 
 export type ColumnItem = {

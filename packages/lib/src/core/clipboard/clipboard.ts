@@ -1,6 +1,6 @@
 import type {DrivePath} from '../../types/drive';
 import type {EigenClipboardData} from '../../types/clipboard';
-import {getDriveDownloadUrl, getDriveEmbedUrl} from '../api';
+import {getDriveDownloadUrl} from '../api';
 
 export const EIGEN_CLIPBOARD_MIME = 'application/eigen-clipboard';
 const HTML_MARKER = 'data-eigen-clipboard';
@@ -52,33 +52,33 @@ export async function writeEigenClipboardAsync(data: EigenClipboardData, plainTe
     await navigator.clipboard.write([new ClipboardItem(items)]);
 }
 
-export function needsReUpload(sourcePath: DrivePath | undefined, targetMediaFolderId: string | null): boolean {
-    if (!sourcePath || !targetMediaFolderId) return false;
-    return sourcePath.parentId !== targetMediaFolderId;
+export function needsReUpload(sourceParentId: string | null | undefined, targetMediaFolderId: string | null): boolean {
+    if (!sourceParentId || !targetMediaFolderId) return false;
+    return sourceParentId !== targetMediaFolderId;
 }
 
 export async function reUploadImage(
-    srcUrl: string,
+    sourcePathId: string,
+    sourceOwnerId: string,
+    sourceMountId: string,
     mediaFolderId: string,
     uploadFn: (args: {parentId: string; file: File}) => Promise<DrivePath | null>,
-    ownerId: string,
-    mountId: string,
-    sourcePath?: DrivePath,
-): Promise<{src: string; sourcePath: DrivePath} | null> {
+    targetOwnerId: string,
+    targetMountId: string,
+    fileName: string,
+): Promise<{mediaName: string; pathId: string; parentId: string} | null> {
     try {
-        const downloadUrl = sourcePath
-            ? getDriveDownloadUrl(sourcePath.ownerId, sourcePath.mountId, sourcePath.id)
-            : srcUrl;
+        const downloadUrl = getDriveDownloadUrl(sourceOwnerId, sourceMountId, sourcePathId);
         const response = await fetch(downloadUrl, {credentials: 'include'});
         if (!response.ok) return null;
         const blob = await response.blob();
-        const fileName = sourcePath?.name || 'image';
         const file = new File([blob], fileName, {type: blob.type || 'image/png'});
         const result = await uploadFn({parentId: mediaFolderId, file});
         if (result) {
             return {
-                src: getDriveEmbedUrl(ownerId, mountId, result.id, 'image'),
-                sourcePath: result,
+                mediaName: result.name,
+                pathId: result.id,
+                parentId: mediaFolderId,
             };
         }
     } catch (e) {
@@ -86,4 +86,3 @@ export async function reUploadImage(
     }
     return null;
 }
-

@@ -27,8 +27,8 @@ import {useAuth} from "@workspace/lib/auth";
 import {EditorToolbar} from "./editor-toolbar";
 import {Column, EigenLoader} from "@workspace/ui";
 import {DrivePath} from "@workspace/lib/types/drive";
-import {getCollabWebSocketUrl, getDriveEmbedUrl} from "@workspace/lib/api";
-import {useUploadFile} from "@workspace/lib/drive";
+import {getCollabWebSocketUrl} from "@workspace/lib/api";
+import {MediaResolverProvider, useMediaResolver, useUploadFile} from "@workspace/lib/drive";
 import {EIGEN_CLIPBOARD_MIME, needsReUpload, readEigenClipboard, reUploadImage,} from '@workspace/lib/clipboard';
 import type {EigenClipboardData, EigenClipboardImageItem} from '@workspace/lib/types/clipboard';
 import {CreateCommentDialog, ViewCommentDialog} from "./comment-dialog";
@@ -71,16 +71,18 @@ export const CollaborativeEditor = ({path, access, mediaFolderId, chatFolderId, 
     }
 
     return (
-        <TiptapEditor
-            path={path}
-            yDoc={yDoc}
-            provider={provider}
-            access={access}
-            mediaFolderId={mediaFolderId}
-            chatFolderId={chatFolderId}
-            onAccessDialogOpen={onAccessDialogOpen}
-            onDeleteDialogOpen={onDeleteDialogOpen}
-        />
+        <MediaResolverProvider ownerId={path.ownerId} mountId={path.mountId} mediaFolderId={mediaFolderId} chatFolderId={chatFolderId}>
+            <TiptapEditor
+                path={path}
+                yDoc={yDoc}
+                provider={provider}
+                access={access}
+                mediaFolderId={mediaFolderId}
+                chatFolderId={chatFolderId}
+                onAccessDialogOpen={onAccessDialogOpen}
+                onDeleteDialogOpen={onDeleteDialogOpen}
+            />
+        </MediaResolverProvider>
     );
 };
 
@@ -105,9 +107,10 @@ const TiptapEditor = ({
 }) => {
     const auth = useAuth();
     const uploadFile = useUploadFile(path.ownerId, path.mountId);
+    const {resolveMediaPath} = useMediaResolver();
     const [commentDialogOpen, setCommentDialogOpen] = useState(false);
     const [commentSelectedText, setCommentSelectedText] = useState('');
-    const [viewCommentChatId, setViewCommentChatId] = useState<string | null>(null);
+    const [viewCommentChatName, setViewCommentChatName] = useState<string | null>(null);
     const documentRef = useRef<HTMLDivElement>(null);
     const editorRef = useRef<ReturnType<typeof useEditor>>(null);
 
@@ -118,8 +121,8 @@ const TiptapEditor = ({
         return el.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
     }, []);
 
-    const handleCommentClick = useCallback((chatId: string) => {
-        setViewCommentChatId(chatId);
+    const handleCommentClick = useCallback((chatName: string) => {
+        setViewCommentChatName(chatName);
     }, []);
 
     const editor = useEditor({
@@ -244,7 +247,7 @@ const TiptapEditor = ({
                     if (imageItem) {
                         event.preventDefault();
                         const width = imageItem.meta?.width as number | undefined;
-                        handleEigenImagePaste(imageItem.src, imageItem.sourcePath, width);
+                        handleEigenImagePaste(imageItem, width);
                         return true;
                     }
                 }
@@ -268,21 +271,23 @@ const TiptapEditor = ({
 
         const result = await uploadFile.mutateAsync({parentId: mediaFolderId, file});
         if (result && editorRef.current) {
-            const src = getDriveEmbedUrl(path.ownerId, path.mountId, result.id, 'image');
-            editorRef.current.chain().focus().setResizableImage({src}).run();
+            editorRef.current.chain().focus().setResizableImage({mediaName: result.name}).run();
         }
     };
 
-    const handleEigenImagePaste = async (src: string, sourcePath?: DrivePath, width?: number) => {
-        if (needsReUpload(sourcePath, mediaFolderId) && mediaFolderId) {
-            const result = await reUploadImage(src, mediaFolderId, uploadFile.mutateAsync, path.ownerId, path.mountId);
+    const handleEigenImagePaste = async (item: EigenClipboardImageItem, width?: number) => {
+        if (needsReUpload(item.sourceParentId, mediaFolderId) && mediaFolderId) {
+            const result = await reUploadImage(
+                item.sourcePathId, item.sourceOwnerId, item.sourceMountId,
+                mediaFolderId, uploadFile.mutateAsync, path.ownerId, path.mountId, item.mediaName,
+            );
             if (result && editorRef.current) {
-                editorRef.current.chain().focus().setResizableImage({src: result.src, width}).run();
+                editorRef.current.chain().focus().setResizableImage({mediaName: result.mediaName, width}).run();
                 return;
             }
         }
         if (editorRef.current) {
-            editorRef.current.chain().focus().setResizableImage({src, width}).run();
+            editorRef.current.chain().focus().setResizableImage({mediaName: item.mediaName, width}).run();
         }
     };
 
@@ -295,9 +300,20 @@ const TiptapEditor = ({
 
             const items: EigenClipboardData['items'] = [];
             editor.state.doc.nodesBetween(from, to, (node) => {
-                if (node.type.name === 'resizableImage' && node.attrs.src) {
-                    const width = node.attrs.width ?? undefined;
-                    items.push({type: 'image', src: node.attrs.src, meta: {width}});
+                if (node.type.name === 'resizableImage' && node.attrs.mediaName) {
+                    const mediaPath = resolveMediaPath(node.attrs.mediaName);
+                    if (mediaPath) {
+                        const width = node.attrs.width ?? undefined;
+                        items.push({
+                            type: 'image',
+                            mediaName: node.attrs.mediaName,
+                            sourcePathId: mediaPath.id,
+                            sourceParentId: mediaPath.parentId,
+                            sourceOwnerId: mediaPath.ownerId,
+                            sourceMountId: mediaPath.mountId,
+                            meta: {width},
+                        });
+                    }
                 }
             });
 
@@ -313,7 +329,7 @@ const TiptapEditor = ({
         };
         document.addEventListener('copy', handleCopy);
         return () => document.removeEventListener('copy', handleCopy);
-    }, [editor]);
+    }, [editor, resolveMediaPath]);
 
     const handleAddComment = () => {
         if (!editor || !chatFolderId) return;
@@ -324,9 +340,9 @@ const TiptapEditor = ({
         setCommentDialogOpen(true);
     };
 
-    const handleCommentCreated = (chatId: string) => {
+    const handleCommentCreated = (chatName: string) => {
         if (!editor) return;
-        editor.chain().focus().setComment(chatId).run();
+        editor.chain().focus().setComment(chatName).run();
     };
 
     if (!editor) return null;
@@ -366,13 +382,13 @@ const TiptapEditor = ({
                 />
             )}
 
-            {viewCommentChatId && (
+            {viewCommentChatName && (
                 <ViewCommentDialog
-                    open={!!viewCommentChatId}
-                    onOpenChange={(open) => { if (!open) setViewCommentChatId(null); }}
+                    open={!!viewCommentChatName}
+                    onOpenChange={(open) => { if (!open) setViewCommentChatName(null); }}
                     ownerId={path.ownerId}
                     mountId={path.mountId}
-                    chatId={viewCommentChatId}
+                    chatName={viewCommentChatName}
                 />
             )}
         </>

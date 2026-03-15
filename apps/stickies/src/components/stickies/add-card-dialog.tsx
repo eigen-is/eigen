@@ -11,7 +11,7 @@ import {useAuth} from '@workspace/lib/auth';
 type AddCardDialogProps = {
     isOpen: boolean;
     onClose: () => void;
-    onAddCard: (card: Omit<CardItem, 'id' | 'createdAt' | 'chatId'>) => void | Promise<void>;
+    onAddCard: (card: Omit<CardItem, 'id' | 'createdAt' | 'chatName'>) => void | Promise<void>;
     columnId: string | null;
 }
 

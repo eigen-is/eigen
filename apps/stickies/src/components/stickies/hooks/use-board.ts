@@ -37,7 +37,7 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
         if (!folderId) return undefined;
         try {
             const result = await createChatRef.current.mutateAsync({parentId: folderId, fileName: `task-${Date.now()}`});
-            return (result as DrivePath)?.id;
+            return (result as DrivePath)?.name;
         } catch (e) {
             console.error('Failed to create chat for card:', e);
             return undefined;
@@ -48,7 +48,7 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
         const columnsMap = doc.getMap('columns');
         if (columnsMap.size > 0) return;
 
-        const chatId = await createCardChat();
+        const chatName = await createCardChat();
         const now = Date.now();
 
         doc.transact(() => {
@@ -62,7 +62,7 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
             taskYMap.set('description', WELCOME_CARD.description);
             taskYMap.set('creator', userEmail);
             taskYMap.set('createdAt', now);
-            if (chatId) taskYMap.set('chatId', chatId);
+            if (chatName) taskYMap.set('chatName', chatName);
             tasksMap.set(taskId, taskYMap);
 
             const columnIds: string[] = [];
@@ -117,7 +117,7 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
                     color: taskMap.get('color') || '',
                     creator: taskMap.get('creator') || '',
                     createdAt: taskMap.get('createdAt') || Date.now(),
-                    chatId: taskMap.get('chatId') || undefined,
+                    chatName: taskMap.get('chatName') || undefined,
                 };
             }
             for (const [columnId, columnMapValue] of columnsMap) {
@@ -157,9 +157,9 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
         setIsAddCardDialogOpen(true);
     };
 
-    const handleAddCard = async (cardData: Omit<CardItem, 'id' | 'createdAt' | 'chatId'>) => {
+    const handleAddCard = async (cardData: Omit<CardItem, 'id' | 'createdAt' | 'chatName'>) => {
         if (!selectedColumnId || !docRef.current) return;
-        const chatId = await createCardChat();
+        const chatName = await createCardChat();
         const doc = docRef.current;
         doc.transact(() => {
             const taskId = `task-${nanoid(10)}`;
@@ -173,7 +173,7 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
             if (cardData.color) newTaskMap.set('color', cardData.color);
             newTaskMap.set('creator', cardData.creator);
             newTaskMap.set('createdAt', now);
-            if (chatId) newTaskMap.set('chatId', chatId);
+            if (chatName) newTaskMap.set('chatName', chatName);
             tasksMap.set(taskId, newTaskMap);
             const columnMapValue = columnsMap.get(selectedColumnId);
             if (columnMapValue) {

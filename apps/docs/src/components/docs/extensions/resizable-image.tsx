@@ -1,15 +1,16 @@
-import {Node, mergeAttributes, type CommandProps} from '@tiptap/core';
-import {ReactNodeViewRenderer, NodeViewWrapper} from '@tiptap/react';
-import {useCallback, useRef, useState} from 'react';
+import {type CommandProps, mergeAttributes, Node} from '@tiptap/core';
 import type {NodeViewProps} from '@tiptap/react';
+import {NodeViewWrapper, ReactNodeViewRenderer} from '@tiptap/react';
+import {useCallback, useRef, useState} from 'react';
 import {AlignCenter, AlignLeft, AlignRight} from 'lucide-react';
 import {TooltipButton} from '@workspace/ui';
 import {ImageResizeHandles} from '@workspace/ui/components/layout/media/image-resize-handles';
+import {useMediaResolver} from '@workspace/lib/drive';
 
 declare module '@tiptap/core' {
     interface Commands<ReturnType> {
         resizableImage: {
-            setResizableImage: (options: {src: string; alt?: string; title?: string; width?: number}) => ReturnType;
+            setResizableImage: (options: {mediaName: string; alt?: string; title?: string; width?: number}) => ReturnType;
         };
     }
 }
@@ -19,9 +20,11 @@ function ResizableImageView({node, updateAttributes, selected, editor}: NodeView
     const wrapperRef = useRef<HTMLDivElement>(null);
     const [aspectRatio, setAspectRatio] = useState<number | null>(null);
 
+    const {resolveMediaUrl} = useMediaResolver();
+
     const width = node.attrs.width;
     const alignment = node.attrs.alignment || 'center';
-    const src = node.attrs.src;
+    const src = resolveMediaUrl(node.attrs.mediaName) || '';
     const alt = node.attrs.alt || '';
 
     const getMaxWidth = useCallback(() => {
@@ -118,7 +121,7 @@ export const ResizableImage = Node.create({
 
     addAttributes() {
         return {
-            src: {default: null},
+            mediaName: {default: null},
             alt: {default: null},
             title: {default: null},
             width: {
@@ -136,7 +139,7 @@ export const ResizableImage = Node.create({
     },
 
     parseHTML() {
-        return [{tag: 'img[src]'}];
+        return [{tag: 'img[data-media-name]'}];
     },
 
     renderHTML({HTMLAttributes}) {

@@ -1,6 +1,7 @@
 import {memo, useEffect, useRef} from 'react';
 import {ArrowDownToLine, ArrowUpToLine, ChevronDown, ChevronUp, Copy, Trash2,} from 'lucide-react';
 import {BORDER_RADIUS_ROUND, pxToPercent, SlideObject} from './types';
+import {useMediaResolver} from '@workspace/lib/drive';
 import {
     ContextMenu,
     ContextMenuContent,
@@ -46,6 +47,7 @@ export function getVerticalAlignStyle(verticalAlign: string | undefined): React.
 }
 
 export function ReadOnlySlideObject({obj}: { obj: SlideObject }) {
+    const {resolveMediaUrl} = useMediaResolver();
     const vAlign = obj.type === 'text' ? (obj.verticalAlign || 'top') : undefined;
     return (
         <div className="absolute" style={getObjectPositionStyle(obj)}>
@@ -64,7 +66,7 @@ export function ReadOnlySlideObject({obj}: { obj: SlideObject }) {
                 </div>
             )}
             {obj.type === 'image' && (
-                <img src={obj.src} className="w-full h-full" style={{objectFit: obj.objectFit}} draggable={false}
+                <img src={resolveMediaUrl(obj.mediaName) || ''} className="w-full h-full" style={{objectFit: obj.objectFit}} draggable={false}
                      alt=""/>
             )}
         </div>
@@ -119,6 +121,7 @@ export const SlideObjectView = memo(function SlideObjectView({
                                                                  onMoveToFront,
                                                                  onMoveToBack,
                                                              }: SlideObjectViewProps) {
+    const {resolveMediaUrl} = useMediaResolver();
     const textareaRef = useRef<HTMLTextAreaElement>(null);
 
     useEffect(() => {
@@ -194,7 +197,7 @@ export const SlideObjectView = memo(function SlideObjectView({
 
             {obj.type === 'image' && (
                 <img
-                    src={obj.src}
+                    src={resolveMediaUrl(obj.mediaName) || ''}
                     className="w-full h-full select-none pointer-events-none"
                     style={{objectFit: obj.objectFit}}
                     draggable={false}

@@ -14,6 +14,7 @@ import {useBoard} from './hooks/use-board';
 import {useDragAndDrop} from './hooks/use-drag-and-drop';
 import {Toolbar} from './toolbar';
 import type {DrivePath} from '@workspace/lib/types/drive';
+import {MediaResolverProvider} from '@workspace/lib/drive';
 import * as Y from 'yjs';
 
 function jsonToYType(value: unknown): unknown {
@@ -159,6 +160,7 @@ export function StickiesBoard({ownerId, path, canWrite, chatFolderId, onAccessDi
     };
 
     return (
+        <MediaResolverProvider ownerId={ownerId} mountId={path.mountId} mediaFolderId={null} chatFolderId={chatFolderId}>
         <div className="flex flex-col h-full w-full">
             <Toolbar path={path} canWrite={canWrite} undoManager={undoManager}
                      onAccessDialogOpen={onAccessDialogOpen} onRestore={handleRestore}
@@ -238,5 +240,6 @@ export function StickiesBoard({ownerId, path, canWrite, chatFolderId, onAccessDi
                 </div>
             </div>
         </div>
+        </MediaResolverProvider>
     );
 }

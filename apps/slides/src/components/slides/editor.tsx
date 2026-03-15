@@ -9,8 +9,7 @@ import {Toolbar} from './toolbar';
 import {DEFAULT_IMAGE_OBJECT, DEFAULT_TEXT_OBJECT, type ImageObject, SlideObject} from './types';
 import {ReadOnlySlideObject} from './slide-object';
 import type {DrivePath} from '@workspace/lib/types/drive';
-import {getDriveEmbedUrl} from '@workspace/lib/api';
-import {useUploadFile} from '@workspace/lib/drive';
+import {MediaResolverProvider, useMediaResolver, useUploadFile} from '@workspace/lib/drive';
 import {
     needsReUpload,
     readEigenClipboard,
@@ -22,15 +21,20 @@ import type {EigenClipboardData, EigenClipboardItem} from '@workspace/lib/types/
 import * as Y from 'yjs';
 import {Column, ColumnLayout} from '@workspace/ui/index';
 
-function buildClipboardItem(obj: SlideObject): EigenClipboardItem {
+function buildClipboardItem(obj: SlideObject, resolveMediaPath: (name: string) => DrivePath | undefined): EigenClipboardItem | null {
     const rect = {x: obj.x, y: obj.y, w: obj.w, h: obj.h, rotation: obj.rotation};
     const border = {borderColor: obj.borderColor, borderWidth: obj.borderWidth, borderRadius: obj.borderRadius};
     if (obj.type === 'image') {
+        const mediaPath = resolveMediaPath(obj.mediaName);
+        if (!mediaPath) return null;
         return {
             type: 'image',
-            src: obj.src,
-            sourcePath: obj.sourcePath,
-            meta: {...rect, ...border, objectFit: obj.objectFit}
+            mediaName: obj.mediaName,
+            sourcePathId: mediaPath.id,
+            sourceParentId: mediaPath.parentId,
+            sourceOwnerId: mediaPath.ownerId,
+            sourceMountId: mediaPath.mountId,
+            meta: {...rect, ...border, objectFit: obj.objectFit},
         };
     }
     return {
@@ -80,6 +84,14 @@ type SlideEditorProps = {
 }
 
 export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDialogOpen}: SlideEditorProps) {
+    return (
+        <MediaResolverProvider ownerId={ownerId} mountId={path.mountId} mediaFolderId={mediaFolderId} chatFolderId={null}>
+            <SlideEditorInner ownerId={ownerId} path={path} canWrite={canWrite} mediaFolderId={mediaFolderId} onAccessDialogOpen={onAccessDialogOpen}/>
+        </MediaResolverProvider>
+    );
+}
+
+function SlideEditorInner({ownerId, path, canWrite, mediaFolderId, onAccessDialogOpen}: SlideEditorProps) {
     const {
         deck,
         activeSlideId,
@@ -102,6 +114,7 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
         moveObjectToBack,
     } = useDeck(ownerId, path.mountId, path.id);
 
+    const {resolveMediaUrl, resolveMediaPath} = useMediaResolver();
     const {dragState, handleDragStart, handleDragEnd} = useSlideDnd({deck, yjsDoc});
 
     const [selectedObjectIds, setSelectedObjectIds] = useState<string[]>([]);
@@ -148,17 +161,15 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
         try {
             const result = await uploadFile.mutateAsync({parentId: mediaFolderId, file});
             if (result) {
-                const src = getDriveEmbedUrl(path.ownerId, path.mountId, result.id, 'image');
                 addObject(activeSlideId, {
                     ...DEFAULT_IMAGE_OBJECT,
-                    src,
-                    sourcePath: result,
+                    mediaName: result.name,
                 } as Omit<SlideObject, 'id' | 'slideId'>);
             }
         } catch (e) {
             console.error('Image upload failed:', e);
         }
-    }, [activeSlideId, mediaFolderId, uploadFile, path.ownerId, path.mountId, addObject]);
+    }, [activeSlideId, mediaFolderId, uploadFile, addObject]);
 
     const handleImageSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -166,17 +177,12 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
         e.target.value = '';
     }, [handleImageFile]);
 
-    const handleReUploadImage = useCallback(async (srcUrl: string, sourcePath?: DrivePath) => {
-        if (!mediaFolderId) return null;
-        return reUploadImage(srcUrl, mediaFolderId, uploadFile.mutateAsync, path.ownerId, path.mountId, sourcePath);
-    }, [mediaFolderId, uploadFile.mutateAsync, path.ownerId, path.mountId]);
-
     useEffect(() => {
         const handleCopy = (e: ClipboardEvent) => {
             const tag = (document.activeElement?.tagName ?? '').toLowerCase();
             if (tag === 'input' || tag === 'textarea' || (document.activeElement as HTMLElement)?.isContentEditable) return;
             if (selectedObjectIds.length === 0) return;
-            const items = selectedObjectIds.map(id => deck.objects[id]).filter(Boolean).map(buildClipboardItem);
+            const items = selectedObjectIds.map(id => deck.objects[id]).filter(Boolean).map(obj => buildClipboardItem(obj, resolveMediaPath)).filter(Boolean) as EigenClipboardItem[];
             if (items.length === 0) return;
             e.preventDefault();
             const data: EigenClipboardData = {version: 1, items};
@@ -221,19 +227,20 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
                             if (m[k] != null) overrides[k] = m[k];
                         }
                         const imageProps = {...DEFAULT_IMAGE_OBJECT, ...overrides};
-                        if (needsReUpload(item.sourcePath, mediaFolderId)) {
-                            handleReUploadImage(item.src, item.sourcePath).then((result) => {
+                        if (needsReUpload(item.sourceParentId, mediaFolderId) && mediaFolderId) {
+                            reUploadImage(
+                                item.sourcePathId, item.sourceOwnerId, item.sourceMountId,
+                                mediaFolderId, uploadFile.mutateAsync, ownerId, path.mountId, item.mediaName,
+                            ).then((result) => {
                                 addObject(activeSlideId, {
                                     ...imageProps,
-                                    src: result?.src ?? item.src,
-                                    sourcePath: result?.sourcePath ?? item.sourcePath,
+                                    mediaName: result?.mediaName ?? item.mediaName,
                                 } as Omit<ImageObject, 'id' | 'slideId'>);
                             });
                         } else {
                             addObject(activeSlideId, {
                                 ...imageProps,
-                                src: item.src,
-                                sourcePath: item.sourcePath,
+                                mediaName: item.mediaName,
                             } as Omit<ImageObject, 'id' | 'slideId'>);
                         }
                     }
@@ -256,7 +263,7 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
             document.removeEventListener('copy', handleCopy);
             document.removeEventListener('paste', handlePaste);
         };
-    }, [selectedObjectIds, deck.objects, activeSlideId, canWrite, addObject, handleImageFile, handleReUploadImage, mediaFolderId]);
+    }, [selectedObjectIds, deck.objects, activeSlideId, canWrite, addObject, handleImageFile, resolveMediaPath, mediaFolderId, uploadFile.mutateAsync, ownerId, path.mountId]);
 
     const handleAddText = useCallback(() => {
         if (!activeSlideId) return;
@@ -275,9 +282,11 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
     const handleCopyObject = useCallback((objId: string) => {
         const obj = deck.objects[objId];
         if (!obj) return;
-        const data: EigenClipboardData = {version: 1, items: [buildClipboardItem(obj)]};
+        const item = buildClipboardItem(obj, resolveMediaPath);
+        if (!item) return;
+        const data: EigenClipboardData = {version: 1, items: [item]};
         writeEigenClipboardAsync(data, obj.type === 'text' ? obj.text : undefined);
-    }, [deck.objects]);
+    }, [deck.objects, resolveMediaPath]);
 
     const handleDeleteObject = useCallback((objId: string) => {
         deleteObject(objId);
@@ -310,24 +319,16 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
         handleImageFile(file);
     }, [handleImageFile]);
 
-    const handleBackgroundImageUpload = useCallback(async (file: File): Promise<{
-        src: string;
-        sourcePath: DrivePath
-    } | null> => {
+    const handleBackgroundImageUpload = useCallback(async (file: File): Promise<string | null> => {
         if (!mediaFolderId || !file.type.startsWith('image/')) return null;
         try {
             const result = await uploadFile.mutateAsync({parentId: mediaFolderId, file});
-            if (result) {
-                return {
-                    src: getDriveEmbedUrl(path.ownerId, path.mountId, result.id, 'image'),
-                    sourcePath: result,
-                };
-            }
+            if (result) return result.name;
         } catch (e) {
             console.error('Background image upload failed:', e);
         }
         return null;
-    }, [mediaFolderId, uploadFile, path.ownerId, path.mountId]);
+    }, [mediaFolderId, uploadFile]);
 
     const handlePresent = useCallback(() => {
         const el = document.documentElement;
@@ -371,7 +372,10 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
         [selectedObjectIds, deck.objects]
     );
 
+    const backgroundImageUrl = activeSlide?.backgroundMediaName ? resolveMediaUrl(activeSlide.backgroundMediaName) : null;
+
     if (isPresenting && activeSlide) {
+        const bgUrl = activeSlide.backgroundMediaName ? resolveMediaUrl(activeSlide.backgroundMediaName) : null;
         return (
             <div
                 className="fixed inset-0 z-50 flex items-center justify-center bg-black cursor-none"
@@ -399,8 +403,8 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
                         maxWidth: '100vw',
                         maxHeight: '100vh',
                         backgroundColor: activeSlide.backgroundColor,
-                        ...(activeSlide.backgroundImage ? {
-                            backgroundImage: `url(${activeSlide.backgroundImage})`,
+                        ...(bgUrl ? {
+                            backgroundImage: `url(${bgUrl})`,
                             backgroundSize: 'cover',
                             backgroundPosition: 'center'
                         } : {}),
@@ -477,10 +481,10 @@ export function SlideEditor({ownerId, path, canWrite, mediaFolderId, onAccessDia
                             ) : canWrite && activeSlideId ? (
                                 <SlideBackgroundPanel
                                     currentBackground={activeSlide.backgroundColor}
-                                    currentBackgroundImage={activeSlide.backgroundImage}
-                                    currentBackgroundImageSourcePath={activeSlide.backgroundImageSourcePath}
+                                    currentBackgroundMediaName={activeSlide.backgroundMediaName}
+                                    currentBackgroundImageUrl={backgroundImageUrl}
                                     onUpdateBackground={(color: string, applyTo: 'this' | 'this-and-following' | 'all') => updateSlideBackground(activeSlideId!, color, applyTo)}
-                                    onUpdateBackgroundImage={(url: string, sourcePath: DrivePath | undefined, applyTo: 'this' | 'this-and-following' | 'all') => updateSlideBackgroundImage(activeSlideId!, url, sourcePath, applyTo)}
+                                    onUpdateBackgroundImage={(mediaName: string, applyTo: 'this' | 'this-and-following' | 'all') => updateSlideBackgroundImage(activeSlideId!, mediaName, applyTo)}
                                     onUploadImage={handleBackgroundImageUpload}
                                 />
                             ) : null}

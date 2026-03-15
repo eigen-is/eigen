@@ -40,7 +40,7 @@ my-document.eigendoc/
 | `authorEmail` | TEXT    | Display name                               |
 | `type`        | TEXT    | `message` / `emote` / `whisper` / `system` |
 | `content`     | TEXT    | Markdown                                   |
-| `attachments` | TEXT    | JSON array of pathIds                      |
+| `attachments` | TEXT    | JSON array of file names                   |
 | `whisperTo`   | TEXT    | User ID (whisper only)                     |
 | `replyTo`     | TEXT    | Message ID (threaded replies)              |
 | `editedAt`    | INTEGER | Null if not edited                         |
