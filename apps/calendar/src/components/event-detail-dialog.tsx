@@ -114,7 +114,7 @@ export function EventDetailDialog({open, onOpenChange, event, calendar, sharedCa
                         status: 'cancelled',
                     });
                 } else {
-                    await deleteEvent.mutateAsync(event.id);
+                    await deleteEvent.mutateAsync({id: event.id, calendarId: event.calendarId});
                 }
             } else if (action === 'this-and-following') {
                 const parentId = event.parentEventId || event.id;
@@ -122,11 +122,11 @@ export function EventDetailDialog({open, onOpenChange, event, calendar, sharedCa
                 const rrule = event.rrule || (isException && event.parentEventId ? null : null);
                 if (rrule) {
                     const truncated = truncateRRule(rrule, occDate);
-                    await updateEvent.mutateAsync({id: parentId, rrule: truncated});
+                    await updateEvent.mutateAsync({id: parentId, calendarId: event.calendarId, rrule: truncated});
                 }
             } else if (action === 'all') {
                 const targetId = event.parentEventId || event.id;
-                await deleteEvent.mutateAsync(targetId);
+                await deleteEvent.mutateAsync({id: targetId, calendarId: event.calendarId});
             }
         } finally {
             setShowRecurringDeleteDialog(false);
@@ -135,7 +135,7 @@ export function EventDetailDialog({open, onOpenChange, event, calendar, sharedCa
     };
 
     const handleNonRecurringDelete = async () => {
-        await deleteEvent.mutateAsync(event.id);
+        await deleteEvent.mutateAsync({id: event.id, calendarId: event.calendarId});
         setShowDeleteDialog(false);
         onOpenChange(false);
     };

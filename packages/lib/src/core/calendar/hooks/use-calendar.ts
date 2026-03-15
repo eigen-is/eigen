@@ -1,6 +1,14 @@
-import {type QueryClient, useMutation, useQuery, useQueries, useQueryClient} from '@tanstack/react-query';
+import {type QueryClient, useMutation, useQueries, useQuery, useQueryClient} from '@tanstack/react-query';
 import {calendarApi} from '@workspace/lib/api.ts';
-import type {CalendarItem, CalendarEventOccurrence, SharedCalendar, CreateEventInput, UpdateEventInput, UpdateCalendarInput, UpdateSharedCalendarInput} from '@workspace/lib/types/calendar';
+import type {
+    CalendarEventOccurrence,
+    CalendarItem,
+    CreateEventInput,
+    SharedCalendar,
+    UpdateCalendarInput,
+    UpdateEventInput,
+    UpdateSharedCalendarInput
+} from '@workspace/lib/types/calendar';
 import {invalidateHomeSize} from '../../home';
 
 export const calendarKeys = {
@@ -109,8 +117,8 @@ export function useUpdateEvent(ownerId: string) {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: async ({id, ...data}: UpdateEventInput) => {
-            const response = await (calendarApi({ownerId}).events as any)({id}).put(data as any);
+        mutationFn: async ({calendarId, id, ...data}: UpdateEventInput) => {
+            const response = await (calendarApi({ownerId}).calendars as any)({calId: calendarId}).events({id}).put(data as any);
             if (response.error) throw new Error(String(response.error));
             return response.data;
         },
@@ -122,8 +130,8 @@ export function useDeleteEvent(ownerId: string) {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: async (id: string) => {
-            const response = await (calendarApi({ownerId}).events as any)({id}).delete();
+        mutationFn: async ({calendarId, id}: Pick<UpdateEventInput, 'id' | 'calendarId'>) => {
+            const response = await (calendarApi({ownerId}).calendars as any)({calId: calendarId}).events({id}).delete();
             if (response.error) throw new Error(String(response.error));
             return response.data;
         },
