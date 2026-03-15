@@ -1,3 +1,4 @@
+import type {User} from 'better-auth/types';
 import {getHome} from '../home';
 import {getMemberships} from '../user';
 import {parseOwnerId, teamOwnerId} from '@workspace/lib/types';
@@ -5,14 +6,12 @@ import {ApiError} from '../core';
 import type {CalendarShare} from '@workspace/lib/types/calendar';
 import type {Calendar} from './calendar';
 
-type AuthUser = {id: string; email: string};
-
 type CalendarAccess = {
     calendar: Calendar;
     permission: CalendarShare['permission'];
 };
 
-export async function resolveCalendar(user: AuthUser, ownerId: string) {
+export async function resolveCalendar(user: User, ownerId: string) {
     const parsed = parseOwnerId(ownerId);
     if (parsed.type === 'team') {
         const memberships = await getMemberships(user.id);
@@ -24,7 +23,7 @@ export async function resolveCalendar(user: AuthUser, ownerId: string) {
     return home.calendar;
 }
 
-export async function resolveCalendarForEvents(user: AuthUser, ownerId: string, calendarId: string): Promise<CalendarAccess> {
+export async function resolveCalendarForEvents(user: User, ownerId: string, calendarId: string): Promise<CalendarAccess> {
     const parsed = parseOwnerId(ownerId);
 
     if (parsed.type === 'team') {
@@ -50,7 +49,7 @@ export async function resolveCalendarForEvents(user: AuthUser, ownerId: string, 
     return {calendar: ownerHome.calendar, permission};
 }
 
-export async function syncTeamCalendars(user: AuthUser) {
+export async function syncTeamCalendars(user: User) {
     const home = await getHome(user.id);
     const cal = home.calendar;
     const memberships = await getMemberships(user.id);
