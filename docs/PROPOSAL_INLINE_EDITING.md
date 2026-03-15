@@ -145,10 +145,13 @@ ColumnLayout
 └── Column id="detail" width="400px" ← file details (stays visible)
 ```
 
-**State management**: The route gains an `editingPath: DrivePath | null` state. When set, the "list" column renders
-`NativeFileEditor` instead of `DriveList`. The `editingPath` object includes `updatedAt` which is captured at the
-moment the file is opened and used as the initial concurrency token for saves. On mobile, the editor takes full width
-via the existing `mobileColumn` mechanism.
+**State management**: The route gains an `editingPath: DrivePath | null` state. When set, it passes a
+`listOverride` prop to `DriveLayout` — a `ReactNode` that replaces the entire "list" `<Column>`. The editor
+component (`NativeFileEditor` -> `MarkdownEditor`) renders the full `<Column id="list">` including its own
+`toolbar` prop, so the toolbar has natural access to the Tiptap editor instance. `DriveLayout` just checks
+`if (listOverride) render it, else render the default list column`. The `editingPath` object includes
+`updatedAt` which is captured at the moment the file is opened and used as the initial concurrency token for
+saves. On mobile, the editor takes full width via the existing `mobileColumn` mechanism.
 
 **New components in `apps/drive/src/components/editor/`:**
 
@@ -229,20 +232,21 @@ const onRowActivate = (path: DrivePath) => {
 };
 ```
 
-In the "list" column, render the editor or the file table based on `editingPath`:
+Pass `listOverride` to `DriveLayout`:
 
 ```typescript
-<Column id="list" width="flex">
-    {editingPath ? (
+<DriveLayout
+    {...existingProps}
+    listOverride={editingPath ? (
         <NativeFileEditor path={editingPath} onClose={() => setEditingPath(null)} />
-    ) : (
-        <DriveList ... />
-    )}
-</Column>
+    ) : undefined}
+/>
 ```
 
-The `onClose` callback (triggered by the back arrow in the editor toolbar) sets `editingPath` back to null, restoring
-the file table. The detail column remains visible with the edited file's metadata.
+`DriveLayout` renders `listOverride ?? <Column ...><DriveList /></Column>`. The `NativeFileEditor` /
+`MarkdownEditor` renders the full `<Column id="list">` including its `toolbar` prop, so the editor toolbar
+(with back arrow) replaces the drive list toolbar naturally. The `onClose` callback sets `editingPath` back
+to null, restoring the file table. The detail column remains visible with the edited file's metadata.
 
 The same `isInlineEditable` check needs to be applied in `_auth.shared.$to.tsx` and `_auth.mime.$mimeType.tsx` which
 have similar `onRowActivate` handlers.
