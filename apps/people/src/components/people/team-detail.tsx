@@ -19,38 +19,11 @@ import {
     useUpdateTeam
 } from '@workspace/lib/people';
 import {useCalendars, useUpdateCalendar} from '@workspace/lib/calendar';
+import {useTeamSettings, useUpdateTeamSettings} from '@workspace/lib/team';
 import {teamOwnerId} from '@workspace/lib/types';
 import {useNavigate} from '@tanstack/react-router';
 import {toast} from 'sonner';
 import type {OrgMember, OrgTeam} from '@workspace/lib/types/people';
-import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
-import {api} from '@workspace/lib/api';
-
-function useTeamSettings(teamId: string) {
-    return useQuery({
-        queryKey: ['team-settings', teamId],
-        queryFn: async () => {
-            const res = await (api as any).team({teamId}).settings.get();
-            return (res.data || {}) as {calendar?: {enabled?: boolean}};
-        },
-        staleTime: 5 * 60 * 1000,
-    });
-}
-
-function useUpdateTeamSettings(teamId: string) {
-    const queryClient = useQueryClient();
-    return useMutation({
-        mutationFn: async (body: {calendar?: {enabled?: boolean}}) => {
-            const res = await (api as any).team({teamId}).settings.put(body);
-            if (res.error) throw new Error(String(res.error));
-            return res.data;
-        },
-        onSuccess: () => {
-            queryClient.invalidateQueries({queryKey: ['team-settings', teamId]});
-            queryClient.invalidateQueries({queryKey: ['calendar', 'shared']});
-        },
-    });
-}
 
 interface TeamDetailToolbarProps {
     team: OrgTeam;

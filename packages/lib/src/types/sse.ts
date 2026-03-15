@@ -58,6 +58,10 @@ export const SSEventType = {
     CALENDAR_DELETED: 'calendar:calendar-deleted',
     CALENDAR_SHARED: 'calendar:shared',
     CALENDAR_UNSHARED: 'calendar:unshared',
+    // Space events
+    SPACE_SETTINGS_UPDATED: 'space:settings-updated',
+    // Team events
+    TEAM_SETTINGS_UPDATED: 'team:settings-updated',
     // Contact events
     CONTACT_CREATED: 'contacts:contact-created',
     CONTACT_UPDATED: 'contacts:contact-updated',
@@ -162,8 +166,18 @@ type SSEventChat = SSEventBase & SSEventNotification & {
     chat: SSEventChatData;
 };
 
+// Space/Team settings events (data-only, no toast)
+type SSEventSpace = SSEventBase & {
+    type: typeof SSEventType.SPACE_SETTINGS_UPDATED;
+};
+
+type SSEventTeam = SSEventBase & {
+    type: typeof SSEventType.TEAM_SETTINGS_UPDATED;
+    teamId: string;
+};
+
 // Union of all events
-export type SSEvent = SSEventDrive | SSEventMail | SSEventContacts | SSEventChat | SSEventCalendar;
+export type SSEvent = SSEventDrive | SSEventMail | SSEventContacts | SSEventChat | SSEventCalendar | SSEventSpace | SSEventTeam;
 
 // Type guard to check if event is a notification (has body, should show toast)
 export function isSSEventNotification(event: SSEvent): event is SSEvent & SSEventNotification {
@@ -171,4 +185,4 @@ export function isSSEventNotification(event: SSEvent): event is SSEvent & SSEven
 }
 
 // Export individual types for consumers
-export type {SSEventBase, SSEventDrive, SSEventMail, SSEventContacts, SSEventChat, SSEventCalendar};
+export type {SSEventBase, SSEventDrive, SSEventMail, SSEventContacts, SSEventChat, SSEventCalendar, SSEventSpace, SSEventTeam};
