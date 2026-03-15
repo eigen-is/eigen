@@ -1,9 +1,6 @@
 import {type QueryClient, useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {spaceApi} from '@workspace/lib/api';
-
-export type UserSettings = {
-    darkMode?: 'day' | 'night' | 'system';
-};
+import type {UserSettings} from '@workspace/lib/types/settings';
 
 export const spaceKeys = {
     all: ['space'] as const,

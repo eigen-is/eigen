@@ -14,4 +14,4 @@ export const spaceRouter = new Elysia({name: "space"})
     .put("/space/settings", async ({body, user}) => {
         const home = await getHome(user.id) as UserHome;
         return await home.settings.set(body);
-    }, {body: t.Object({darkMode: t.Optional(t.Union([t.Literal('day'), t.Literal('night'), t.Literal('system')]))}), auth: true})
+    }, {body: t.Object({theme: t.Optional(t.Union([t.Literal('light'), t.Literal('dark'), t.Literal('system')]))}), auth: true})

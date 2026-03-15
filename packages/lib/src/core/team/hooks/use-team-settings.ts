@@ -1,11 +1,6 @@
 import {type QueryClient, useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {teamApi} from '@workspace/lib/api';
-
-export type TeamSettings = {
-    calendar?: {
-        enabled?: boolean;
-    };
-};
+import type {TeamSettings} from '@workspace/lib/types/settings';
 
 export const teamKeys = {
     all: ['team'] as const,
