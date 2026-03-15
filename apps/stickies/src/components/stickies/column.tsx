@@ -70,7 +70,7 @@ export function Column({column, cards, isDropAnimating, onAddCard, onEditColumn,
 
             <div
                 className={`flex-grow overflow-y-auto overflow-x-hidden flex flex-col p-3 border ${
-                    isDropAnimating ? 'bg-blue-50/10' : 'bg-background'
+                    isDropAnimating ? 'bg-accent/10' : 'bg-background'
                 }`}
             >
                 {cards.length === 0 ? (

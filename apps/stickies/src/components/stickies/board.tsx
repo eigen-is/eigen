@@ -8,6 +8,7 @@ import {AddCardDialog} from './add-card-dialog';
 import {AddColumnDialog} from './add-column-dialog';
 import {ColumnSettingsDialog} from './column-settings-dialog';
 import {Card, CardContent} from '@workspace/ui/components/card';
+import {isLightColor} from '@workspace/ui/components/layout/media/color-picker';
 import {useIsMobile} from '@workspace/lib/media';
 import {useBoard} from './hooks/use-board';
 import {useDragAndDrop} from './hooks/use-drag-and-drop';
@@ -123,11 +124,14 @@ export function StickiesBoard({ownerId, path, canWrite, chatFolderId, onAccessDi
             const card = dragState.activeItem as CardItem;
             return (
                 <Card className={`${isMobile ? 'w-full p-0' : 'w-[260px] p-0'}`}
-                      style={{backgroundColor: card.color || undefined}}>
-                    <CardContent className="p-3 text-sm bg-blue-50">
+                      style={{
+                          backgroundColor: card.color || undefined,
+                          color: card.color ? (isLightColor(card.color) ? '#000' : '#fff') : undefined,
+                      }}>
+                    <CardContent className="p-3 text-sm bg-accent">
                         {card.title}
                         {card.description && (
-                            <p className="text-xs text-muted-foreground mt-1 truncate">{card.description}</p>
+                            <p className="text-xs mt-1 truncate" style={{opacity: 0.7}}>{card.description}</p>
                         )}
                     </CardContent>
                 </Card>
