@@ -158,7 +158,7 @@ describe('Calendar', () => {
 
         test('update event partially', async () => {
             const res = await authedRequest(ctx.alice.user.sessionToken,
-                `/calendar/${ctx.alice.user.id}/events/${aliceEventId}`, {
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events/${aliceEventId}`, {
                     method: 'PUT',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({title: 'Team Standup (updated)', location: 'Room B'}),
@@ -172,7 +172,7 @@ describe('Calendar', () => {
 
         test('etag changes on update', async () => {
             const res1 = await authedRequest(ctx.alice.user.sessionToken,
-                `/calendar/${ctx.alice.user.id}/events/${aliceEventId}`, {
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events/${aliceEventId}`, {
                     method: 'PUT',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({title: 'Team Standup v2'}),
@@ -181,7 +181,7 @@ describe('Calendar', () => {
             const etag1 = event1.etag;
 
             const res2 = await authedRequest(ctx.alice.user.sessionToken,
-                `/calendar/${ctx.alice.user.id}/events/${aliceEventId}`, {
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events/${aliceEventId}`, {
                     method: 'PUT',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({title: 'Team Standup v3'}),
@@ -205,7 +205,7 @@ describe('Calendar', () => {
             const created = await createRes.json() as any;
 
             const delRes = await authedRequest(ctx.alice.user.sessionToken,
-                `/calendar/${ctx.alice.user.id}/events/${created.id}`, {method: 'DELETE'});
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events/${created.id}`, {method: 'DELETE'});
             expect(delRes.status).toBe(200);
 
             const rangeRes = await authedRequest(ctx.alice.user.sessionToken,
@@ -498,7 +498,7 @@ describe('Calendar', () => {
 
             const truncatedRRule = `FREQ=DAILY;UNTIL=${untilStr}`;
             const updateRes = await authedRequest(ctx.alice.user.sessionToken,
-                `/calendar/${ctx.alice.user.id}/events/${thisFollowingEventId}`, {
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events/${thisFollowingEventId}`, {
                     method: 'PUT',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({rrule: truncatedRRule}),
@@ -548,7 +548,7 @@ describe('Calendar', () => {
             const truncatedRRule = `FREQ=WEEKLY;BYDAY=WE;UNTIL=${untilStr}`;
 
             const updateRes = await authedRequest(ctx.alice.user.sessionToken,
-                `/calendar/${ctx.alice.user.id}/events/${parentEvent.id}`, {
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events/${parentEvent.id}`, {
                     method: 'PUT',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({rrule: truncatedRRule}),
@@ -710,7 +710,7 @@ describe('Calendar', () => {
             expect(bobEvent).toBeDefined();
 
             const updateRes = await authedRequest(ctx.bob.user.sessionToken,
-                `/calendar/${ctx.alice.user.id}/events/${bobEvent.id}`, {
+                `/calendar/${ctx.alice.user.id}/calendars/${sharedCalendarId}/events/${bobEvent.id}`, {
                     method: 'PUT',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({title: 'Bob Event Updated'}),
@@ -728,7 +728,7 @@ describe('Calendar', () => {
             expect(bobEvent).toBeDefined();
 
             const deleteRes = await authedRequest(ctx.bob.user.sessionToken,
-                `/calendar/${ctx.alice.user.id}/events/${bobEvent.id}`, {
+                `/calendar/${ctx.alice.user.id}/calendars/${sharedCalendarId}/events/${bobEvent.id}`, {
                     method: 'DELETE',
                 });
             expect(deleteRes.status).toBe(200);
@@ -755,7 +755,7 @@ describe('Calendar', () => {
             const eventId = events[0].id;
 
             const updateRes = await authedRequest(ctx.charlie.user.sessionToken,
-                `/calendar/${ctx.alice.user.id}/events/${eventId}`, {
+                `/calendar/${ctx.alice.user.id}/calendars/${sharedCalendarId}/events/${eventId}`, {
                     method: 'PUT',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({title: 'Hacked'}),
@@ -763,7 +763,7 @@ describe('Calendar', () => {
             expect(updateRes.status).toBe(403);
 
             const deleteRes = await authedRequest(ctx.charlie.user.sessionToken,
-                `/calendar/${ctx.alice.user.id}/events/${eventId}`, {
+                `/calendar/${ctx.alice.user.id}/calendars/${sharedCalendarId}/events/${eventId}`, {
                     method: 'DELETE',
                 });
             expect(deleteRes.status).toBe(403);
