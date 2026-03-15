@@ -35,9 +35,11 @@ function ModalProvider({children}: { children?: React.ReactNode }) {
                     showCloseButton={false}
                     onPointerDownOutside={(e) => e.preventDefault()}
                     onInteractOutside={(e) => e.preventDefault()}
-                    className="w-auto max-w-[90vw] max-h-[75vh] overflow-y-auto p-0"
+                    className="w-auto min-w-[28rem] max-w-[90vw] p-0"
+                    style={{display: 'flex', flexDirection: 'column', maxHeight: '75vh', overflow: 'hidden'}}
                 >
                     <div
+                        className="flex flex-col min-h-0 flex-1"
                         onMouseDown={(e) => e.stopPropagation()}
                         onMouseMove={(e) => e.stopPropagation()}
                         onMouseUp={(e) => e.stopPropagation()}

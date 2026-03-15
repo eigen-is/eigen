@@ -2,6 +2,10 @@ import {useCallback, useContext, useMemo, useState} from "react";
 import {cancelNormalSelected, locale, setCaretPosition,} from "../../core";
 import {WorkbookContext} from "../../context";
 import {Button} from "@workspace/ui/components/button";
+import {DialogFooter, DialogHeader, DialogTitle} from "@workspace/ui/components/dialog";
+import {Input} from "@workspace/ui/components/input";
+import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from "@workspace/ui/components/select";
+import {Label} from "@workspace/ui/components/label";
 
 export function FormulaSearch({
                                   onCancel: _onCancel,
@@ -117,57 +121,61 @@ export function FormulaSearch({
     }, [_onCancel, cellInput, setContext]);
 
     return (
-        <div id="luckysheet-search-formula" className="text-xs">
-            <div className="mb-1.5 [&>div]:block [&>div]:mb-1.5">
-                <div>{formulaMore.findFunctionTitle}：</div>
-                <input
-                    className="w-full h-6 leading-6 border border-border px-2.5 text-xs box-border"
-                    id="searchFormulaListInput"
-                    placeholder={formulaMore.tipInputFunctionName}
-                    spellCheck="false"
-                    onChange={(e) => setSearchText(e.target.value)}
-                />
-            </div>
-            <div className="mb-1.5">
-                <span>{formulaMore.selectCategory}：</span>
-                <select
-                    id="formulaTypeSelect"
-                    onChange={(e) => {
-                        setSelectedType(parseInt(e.target.value, 10));
-                        setSelectedFuncIndex(0);
-                    }}
-                >
-                    {typeList.map((v) => (
-                        <option key={v.t} value={v.t}>
-                            {v.n}
-                        </option>
-                    ))}
-                </select>
-            </div>
-            <div className="[&>label]:block [&>label]:mb-1.5" style={{height: 200}}>
-                <div>{formulaMore.selectFunctionTitle}：</div>
-                <div className="w-[300px] h-[170px] border border-border overflow-y-auto">
-                    {filteredFunctionList.map((v, index) => (
-                        <div
-                            className={`p-1.5 border-b border-border cursor-pointer ${index === selectedFuncIndex ? "bg-primary text-primary-foreground" : ""}`}
-                            key={v.n}
-                            onClick={() => setSelectedFuncIndex(index)}
-                            tabIndex={0}
-                        >
-                            <div>{v.n}</div>
-                            <div>{v.a}</div>
-                        </div>
-                    ))}
+        <div className="flex flex-col min-h-0 flex-1 p-6 gap-4">
+            <DialogHeader>
+                <DialogTitle>{formulaMore.selectFunctionTitle}</DialogTitle>
+            </DialogHeader>
+            <div className="grid grid-cols-[1fr_auto] gap-3 shrink-0 items-end">
+                <div className="space-y-1.5">
+                    <Label htmlFor="searchFormulaListInput">{formulaMore.findFunctionTitle}</Label>
+                    <Input
+                        id="searchFormulaListInput"
+                        placeholder={formulaMore.tipInputFunctionName}
+                        spellCheck={false}
+                        onChange={(e) => setSearchText(e.target.value)}
+                    />
+                </div>
+                <div className="space-y-1.5">
+                    <Label>{formulaMore.selectCategory}</Label>
+                    <Select
+                        value={String(selectedType)}
+                        onValueChange={(v) => {
+                            setSelectedType(parseInt(v, 10));
+                            setSelectedFuncIndex(0);
+                        }}
+                    >
+                        <SelectTrigger className="w-[160px]">
+                            <SelectValue/>
+                        </SelectTrigger>
+                        <SelectContent>
+                            {typeList.map((v) => (
+                                <SelectItem key={v.t} value={String(v.t)}>{v.n}</SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
                 </div>
             </div>
-            <div className="flex gap-2 mt-3">
-                <Button size="sm" onClick={onConfirm}>
-                    {button.confirm}
-                </Button>
+            <div className="flex-1 min-h-0 border border-border rounded-md overflow-y-auto">
+                {filteredFunctionList.map((v, index) => (
+                    <div
+                        className={`px-3 py-2 cursor-pointer border-b border-border text-sm ${index === selectedFuncIndex ? "bg-primary text-primary-foreground" : "hover:bg-muted/50"}`}
+                        key={v.n}
+                        onClick={() => setSelectedFuncIndex(index)}
+                        tabIndex={0}
+                    >
+                        <div className="font-medium">{v.n}</div>
+                        <div className={`text-xs ${index === selectedFuncIndex ? "text-primary-foreground/70" : "text-muted-foreground"}`}>{v.a}</div>
+                    </div>
+                ))}
+            </div>
+            <DialogFooter>
                 <Button variant="outline" size="sm" onClick={onCancel}>
                     {button.cancel}
                 </Button>
-            </div>
+                <Button size="sm" onClick={onConfirm} disabled={filteredFunctionList.length === 0}>
+                    {button.confirm}
+                </Button>
+            </DialogFooter>
         </div>
     );
 }
