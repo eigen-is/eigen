@@ -11,8 +11,6 @@ import {and, eq, gte, isNull, lte, sql} from 'drizzle-orm';
 import {v4 as uuidv4} from 'uuid';
 import {RRule} from 'rrule';
 import type {Home} from '../home';
-import {getHome} from '../home';
-import type {User} from 'better-auth/types';
 import * as schema from './schema';
 import {CALENDAR_DB_CONFIG} from './db-config';
 import type {ManagedDatabase} from '../core/';
@@ -21,11 +19,6 @@ import {SSEventType} from '@workspace/lib/types/sse';
 import {buildCalendarEvent, buildCalendarShareEvent} from './sse-events';
 import {notifySharedCalendarUsers, propagateCalendarShare} from './share-propagation';
 import {createHash} from 'crypto';
-
-export async function getCalendar(user: User) {
-    const home = await getHome(user.id);
-    return home.calendar;
-}
 
 function getCalendarDatabase(home: Home): Promise<ManagedDatabase<typeof schema>> {
     return home.getLocalDatabase(CALENDAR_DB_CONFIG, PATHS.CALENDAR.DB);

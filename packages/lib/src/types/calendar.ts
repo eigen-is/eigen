@@ -84,6 +84,7 @@ export type CreateEventInput = {
 }
 
 export type UpdateEventInput = {
+    calendarId: string
     id: string
     title?: string
     startTime?: number

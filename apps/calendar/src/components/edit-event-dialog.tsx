@@ -176,7 +176,7 @@ export function EditEventDialog({open, onOpenChange, event, ownerUserId, calenda
             location: updates.location,
             rrule: updates.rrule,
         });
-        await deleteEventOnSource.mutateAsync(event.parentEventId || event.id);
+        await deleteEventOnSource.mutateAsync({id: event.parentEventId || event.id, calendarId: event.calendarId});
     };
 
     const doSave = async (action: RecurringAction) => {
@@ -197,7 +197,7 @@ export function EditEventDialog({open, onOpenChange, event, ownerUserId, calenda
                 await moveEvent(updates);
             } else if (action === 'all') {
                 const targetId = event.parentEventId || event.id;
-                await updateEvent.mutateAsync({id: targetId, ...updates});
+                await updateEvent.mutateAsync({id: targetId, calendarId: event.calendarId, ...updates});
             } else if (action === 'this') {
                 await createEvent.mutateAsync({
                     calendarId: event.calendarId,
@@ -212,7 +212,7 @@ export function EditEventDialog({open, onOpenChange, event, ownerUserId, calenda
                 const occDate = parseOccurrenceDate(event.occurrenceDate);
                 if (event.rrule) {
                     const truncated = truncateRRule(event.rrule, occDate);
-                    await updateEvent.mutateAsync({id: parentId, rrule: truncated});
+                    await updateEvent.mutateAsync({id: parentId, calendarId: event.calendarId, rrule: truncated});
                 }
                 await createEvent.mutateAsync({
                     calendarId: event.calendarId,
