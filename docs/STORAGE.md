@@ -75,7 +75,7 @@ Team data: `data/team/{teamId}/` (same structure, Drive + Calendar only).
 
 ## Key Types
 
-- `PathEntry` — file/folder metadata (id, name, type, parentId, acl, visibility, etc.)
+- `PathEntry` — file/folder metadata (id, name, type, parentId, acl, visibility, hash, etc.)
 - `ACLEntry` — access control (`{id, read, write}`)
 - `MountConfig` — mount settings (id, name, storageType, s3Config)
 

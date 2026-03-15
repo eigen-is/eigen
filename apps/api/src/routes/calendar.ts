@@ -232,6 +232,8 @@ export const calendarRouter = new Elysia({name: "calendar"})
     }, {auth: true})
 
     // --- Shared calendars ---
+    // Lazy-syncs team calendars into the user's shared_calendars table on each read,
+    // then returns all shared calendars (both team and individually shared).
     .get("/calendar/:ownerId/shared", async ({user}) => {
         const cal = await resolveCalendar(user, user.id);
         const memberships = await getMemberships(user.id);
