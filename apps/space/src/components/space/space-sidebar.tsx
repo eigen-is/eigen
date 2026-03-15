@@ -1,7 +1,6 @@
-import {BookUser, CircleUser, Download, KeySquare, LockKeyholeIcon, X} from 'lucide-react';
-import {Button} from "@workspace/ui/components/button";
+import {BookUser, CircleUser, Download, KeySquare, LockKeyholeIcon} from 'lucide-react';
 import {SidebarSection} from '@workspace/ui/components/layout/sidebar/sidebar-section';
-import {AppLogo} from '@workspace/ui/components/layout/app/app-logo.tsx';
+import {SidebarHeader} from '@workspace/ui/components/layout/sidebar/sidebar-header';
 import {SidebarItem, StorageUsage} from "@workspace/ui";
 import {Separator} from '@workspace/ui/components/separator';
 
@@ -21,16 +20,7 @@ export function SpaceSidebar({
 
     return (
         <div className="flex h-full min-h-[calc(100vh-3.5rem)] flex-col">
-            {isMobile && (
-                <div className="flex items-center h-12 bg-app px-4">
-                    <Button variant="ghost" size="icon" onClick={onClose}
-                            className="mr-2 text-white hover:bg-primary/20 hover:text-white">
-                        <X className="h-5 w-5"/>
-                        <span className="sr-only">Close menu</span>
-                    </Button>
-                    <AppLogo appName="space"/>
-                </div>
-            )}
+            {isMobile && <SidebarHeader appName="space" onClose={onClose}/>}
 
             <SidebarSection condensed={condensed}>
                 <SidebarItem

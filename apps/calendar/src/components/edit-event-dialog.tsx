@@ -1,5 +1,5 @@
 import {useEffect, useMemo, useState} from 'react';
-import {Clock, MapPin, AlignLeft, Calendar} from 'lucide-react';
+import {AlignLeft, Calendar, Clock, MapPin} from 'lucide-react';
 import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle} from '@workspace/ui/components/dialog';
 import {Button} from '@workspace/ui/components/button';
 import {Input} from '@workspace/ui/components/input';
@@ -7,15 +7,21 @@ import {Textarea} from '@workspace/ui/components/textarea';
 import {Label} from '@workspace/ui/components/label';
 import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '@workspace/ui/components/select';
 import {Checkbox} from '@workspace/ui/components/checkbox';
-import {useUpdateEvent, useCreateEvent, useDeleteEvent, useCalendars, useSharedCalendars} from '@workspace/lib/calendar';
+import {
+    useCalendars,
+    useCreateEvent,
+    useDeleteEvent,
+    useSharedCalendars,
+    useUpdateEvent
+} from '@workspace/lib/calendar';
 import {useAuth} from '@workspace/lib/auth';
 import type {CalendarEventOccurrence, CalendarItem, SharedCalendar} from '@workspace/lib/types/calendar';
 import {RRule} from 'rrule';
 import {RecurrencePicker} from './recurrence-picker';
-import {TimeSelect, roundToNext15Minutes, addMinutes} from './time-select';
-import {RecurringActionDialog} from './recurring-action-dialog';
+import {addMinutes, roundToNext15Minutes, TimeSelect} from './time-select';
 import type {RecurringAction} from './recurring-action-dialog';
-import {parseOccurrenceDate, occurrenceDateToString} from './calendar-utils';
+import {RecurringActionDialog} from './recurring-action-dialog';
+import {occurrenceDateToString, parseOccurrenceDate} from './calendar-utils';
 
 type CalendarOption = {
     id: string;
@@ -231,7 +237,7 @@ export function EditEventDialog({open, onOpenChange, event, ownerUserId, calenda
     return (
         <>
             <Dialog open={open && !showRecurringDialog} onOpenChange={onOpenChange}>
-                <DialogContent className="sm:max-w-[500px]">
+                <DialogContent size="md">
                     <DialogHeader>
                         <DialogTitle>Edit Event</DialogTitle>
                     </DialogHeader>

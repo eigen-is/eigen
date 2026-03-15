@@ -2,7 +2,14 @@ import {useEffect, useState} from 'react';
 import {z} from 'zod';
 import {useForm} from 'react-hook-form';
 import {zodResolver} from '@hookform/resolvers/zod';
-import {Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle} from '@workspace/ui/components/dialog';
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle
+} from '@workspace/ui/components/dialog';
 import {Form, FormControl, FormField, FormItem, FormLabel, FormMessage} from '@workspace/ui/components/form';
 import {Input} from '@workspace/ui/components/input';
 import {Button} from '@workspace/ui/components/button';
@@ -10,7 +17,7 @@ import {Popover, PopoverContent, PopoverTrigger} from '@workspace/ui/components/
 import {ColorPicker} from '@workspace/ui/components/layout/media/color-picker';
 import {DeleteDialog} from '@workspace/ui/components/layout/delete/delete-dialog';
 import {Separator} from '@workspace/ui/components/separator';
-import {useCreateCalendar, useUpdateCalendar, useDeleteCalendar} from '@workspace/lib/calendar';
+import {useCreateCalendar, useDeleteCalendar, useUpdateCalendar} from '@workspace/lib/calendar';
 import {useAuth} from '@workspace/lib/auth';
 import type {CalendarItem, CalendarShare} from '@workspace/lib/types/calendar';
 import {CalendarShareEditor} from './calendar-share-editor';
@@ -96,7 +103,7 @@ export function CalendarConfigDialog({open, onOpenChange, calendar}: CalendarCon
     return (
         <>
             <Dialog open={open && !showDeleteConfirmation} onOpenChange={onOpenChange}>
-                <DialogContent className="sm:max-w-[500px]">
+                <DialogContent size="md">
                     <DialogHeader>
                         <DialogTitle>{isEditMode ? 'Edit Calendar' : 'New Calendar'}</DialogTitle>
                         <DialogDescription>

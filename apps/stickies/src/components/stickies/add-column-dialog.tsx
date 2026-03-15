@@ -32,7 +32,7 @@ export function AddColumnDialog({isOpen, onClose, onAddColumn}: AddColumnDialogP
 
     return (
         <Dialog open={isOpen} onOpenChange={onClose}>
-            <DialogContent className="sm:max-w-[425px]">
+            <DialogContent size="sm">
                 <form onSubmit={handleSubmit}>
                     <DialogHeader>
                         <DialogTitle>Add Column</DialogTitle>

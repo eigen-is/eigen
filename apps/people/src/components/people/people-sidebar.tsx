@@ -1,10 +1,10 @@
-import {PlusIcon, Users, UsersRound, X} from 'lucide-react';
+import {PlusIcon, Users, UsersRound} from 'lucide-react';
 import {Button} from '@workspace/ui/components/button';
 import {Separator} from '@workspace/ui/components/separator';
 import {SidebarItem} from '@workspace/ui/components/layout/sidebar/sidebar-item';
 import {DroppableSidebarItem} from '@workspace/ui/components/layout/sidebar/droppable-sidebar-item';
 import {SidebarSection} from '@workspace/ui/components/layout/sidebar/sidebar-section';
-import {AppLogo} from '@workspace/ui/components/layout/app/app-logo.tsx';
+import {SidebarHeader} from '@workspace/ui/components/layout/sidebar/sidebar-header';
 import type {OrgTeam} from '@workspace/lib/types/people';
 import {teamOwnerId} from "@workspace/lib/types";
 import {UserAvatar} from "@workspace/ui/components/layout/user-avatar";
@@ -51,16 +51,7 @@ export function PeopleSidebar({
 
     return (
         <div className="h-full flex flex-col bg-background">
-            {isMobile && (
-                <div className="flex items-center h-12 bg-app px-4">
-                    <Button variant="ghost" size="icon" onClick={onClose}
-                            className="mr-2 text-white hover:bg-primary/20 hover:text-white">
-                        <X className="h-5 w-5"/>
-                        <span className="sr-only">Close menu</span>
-                    </Button>
-                    <AppLogo appName="people"/>
-                </div>
-            )}
+            {isMobile && <SidebarHeader appName="people" onClose={onClose}/>}
 
             <div className="overflow-auto flex-1 pt-2">
                 <SidebarSection condensed={condensed}>

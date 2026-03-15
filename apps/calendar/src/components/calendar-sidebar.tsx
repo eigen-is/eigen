@@ -1,9 +1,9 @@
 import {useMemo, useState} from 'react';
-import {CalendarPlus, Check, Pencil, Plus, X} from 'lucide-react';
+import {CalendarPlus, Check, Pencil, Plus} from 'lucide-react';
 import {Button} from '@workspace/ui/components/button';
 import {SidebarSection} from '@workspace/ui/components/layout/sidebar/sidebar-section';
+import {SidebarHeader} from '@workspace/ui/components/layout/sidebar/sidebar-header';
 import {Separator} from '@workspace/ui/components/separator';
-import {AppLogo} from '@workspace/ui/components/layout/app/app-logo';
 import {EigenLoader, StorageUsage, TooltipButton} from '@workspace/ui';
 import {useCalendars, useSharedCalendars, useUpdateCalendar, useUpdateSharedCalendar} from '@workspace/lib/calendar';
 import {useAuth} from '@workspace/lib/auth';
@@ -135,16 +135,7 @@ export function CalendarSidebar({
 
     return (
         <div className="h-full flex flex-col bg-background">
-            {isMobile && (
-                <div className="flex items-center h-12 bg-app px-4">
-                    <Button variant="ghost" size="icon" onClick={onClose}
-                            className="mr-2 text-white hover:bg-primary/20 hover:text-white">
-                        <X className="h-5 w-5"/>
-                        <span className="sr-only">Close menu</span>
-                    </Button>
-                    <AppLogo appName="calendar"/>
-                </div>
-            )}
+            {isMobile && <SidebarHeader appName="calendar" onClose={onClose}/>}
 
             <div className="px-3 py-2">
                 <Button

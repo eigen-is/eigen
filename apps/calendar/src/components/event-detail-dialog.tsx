@@ -1,18 +1,18 @@
 import {useState} from 'react';
-import {Clock, MapPin, AlignLeft, Repeat, Trash2, Pencil, Calendar} from 'lucide-react';
+import {AlignLeft, Calendar, Clock, MapPin, Pencil, Repeat, Trash2} from 'lucide-react';
 import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle} from '@workspace/ui/components/dialog';
 import {Button} from '@workspace/ui/components/button';
 import {DeleteDialog} from '@workspace/ui/components/layout/delete/delete-dialog';
-import {useDeleteEvent, useCreateEvent, useUpdateEvent} from '@workspace/lib/calendar';
+import {useCreateEvent, useDeleteEvent, useUpdateEvent} from '@workspace/lib/calendar';
 import {useAuth} from '@workspace/lib/auth';
 import type {CalendarEventOccurrence, CalendarItem, SharedCalendar} from '@workspace/lib/types/calendar';
 import {RRule} from 'rrule';
 import {rruleToText} from './recurrence-picker';
-import {RecurringActionDialog} from './recurring-action-dialog';
 import type {RecurringAction} from './recurring-action-dialog';
-import {parseOccurrenceDate, occurrenceDateToString} from './calendar-utils';
+import {RecurringActionDialog} from './recurring-action-dialog';
+import {occurrenceDateToString, parseOccurrenceDate} from './calendar-utils';
 import {UserName} from '@workspace/ui/components/layout/user-name';
-import { EditEventDialog } from './edit-event-dialog';
+import {EditEventDialog} from './edit-event-dialog';
 
 type EventDetailDialogProps = {
     open: boolean;
@@ -167,7 +167,7 @@ export function EventDetailDialog({open, onOpenChange, event, calendar, sharedCa
     return (
         <>
             <Dialog open={open && !showDeleteDialog && !showRecurringDeleteDialog && !showRecurringDeleteConfirm && !editOpen} onOpenChange={onOpenChange}>
-                <DialogContent className="sm:max-w-[450px]">
+                <DialogContent size="md">
                     <DialogHeader>
                         {/* <div className="flex items-start gap-3"> */}
                             {/* <div className="h-4 w-4 rounded-full mt-1 shrink-0" style={{backgroundColor: color}}/> */}

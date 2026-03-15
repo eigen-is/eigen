@@ -62,7 +62,7 @@ function HomeComponent() {
                                             </div>
                                             <div>
                                                 <h3 className={`font-medium ${app.className} text-sm md:text-base`}>{app.name}</h3>
-                                                <p className="text-xs text-gray-500 hidden md:block">{app.description}</p>
+                                                <p className="text-xs text-muted-foreground hidden md:block">{app.description}</p>
                                             </div>
                                         </div>
                                     </a>
@@ -74,7 +74,7 @@ function HomeComponent() {
             </div>
 
             {/* Footer with European initiative */}
-            <div className="text-center text-sm text-gray-500 border-t w-full bg-white">
+            <div className="text-center text-sm text-muted-foreground border-t w-full bg-background">
                 <div className="flex items-center justify-center m-2">
                     <Shovel className="w-5 h-5 mr-2 text-yellow-600" aria-hidden="true"/>
                     <span className="font-medium text-md">Under Construction</span>

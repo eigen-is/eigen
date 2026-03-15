@@ -17,7 +17,7 @@ export function MediaPreview({src, type, caption, onClose}: MediaPreviewProps) {
             style={{cursor: 'zoom-out'}}
         >
             <div
-                className="max-w-[90vw] max-h-[90vh] bg-white rounded-lg shadow-lg flex flex-col items-center justify-center p-4 animate-in zoom-in-95"
+                className="max-w-[90vw] max-h-[90vh] bg-background rounded-lg shadow-lg flex flex-col items-center justify-center p-4 animate-in zoom-in-95"
                 onClick={(e) => e.stopPropagation()}
             >
                 {type === 'image' && (
@@ -27,7 +27,7 @@ export function MediaPreview({src, type, caption, onClose}: MediaPreviewProps) {
                     <video src={src} controls autoPlay={true} className="max-w-full max-h-[80vh] rounded"/>
                 )}
                 {caption && (
-                    <p className="mt-4 text-sm text-gray-600 text-center max-w-2xl">{caption}</p>
+                    <p className="mt-4 text-sm text-muted-foreground text-center max-w-2xl">{caption}</p>
                 )}
             </div>
         </div>

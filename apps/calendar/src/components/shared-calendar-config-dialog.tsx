@@ -79,7 +79,7 @@ export function SharedCalendarConfigDialog({open, onOpenChange, sharedCalendar}:
     return (
         <>
             <Dialog open={open && !showDeleteConfirmation} onOpenChange={onOpenChange}>
-                <DialogContent className="sm:max-w-[400px]">
+                <DialogContent size="sm">
                     <DialogHeader>
                         <DialogTitle>Shared Calendar Settings</DialogTitle>
                         <DialogDescription>

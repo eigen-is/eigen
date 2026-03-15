@@ -97,7 +97,7 @@ export function LabelDialog({
     return (
         <>
             <Dialog open={open && !showDeleteConfirmation} onOpenChange={onOpenChange}>
-                <DialogContent className="sm:max-w-[425px]">
+                <DialogContent size="sm">
                     <DialogHeader>
                         <DialogTitle>{isEditMode ? "Edit Label" : "Add Label"}</DialogTitle>
                         <DialogDescription>

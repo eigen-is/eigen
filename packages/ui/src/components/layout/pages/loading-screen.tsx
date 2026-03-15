@@ -9,7 +9,7 @@ type LoadingScreenProps = {
 export function LoadingScreen({className}: LoadingScreenProps) {
     return (
         <>
-            <div className="fixed inset-0 flex items-center justify-center bg-white">
+            <div className="fixed inset-0 flex items-center justify-center bg-background">
                 <EigenLoader className={cn("text-muted-foreground", className)}/>
             </div>
         </>

@@ -143,7 +143,7 @@ export function DriveTable({
                             className={cn(
                                 "eigen-list-item",
                                 (activeItemId === currentPath.parentId || selectedIndex === 0) && "eigen-list-item-active",
-                                currentPath.parentId && selection.isSelected(currentPath.parentId) && "eigen-list-item-selected hover:bg-[hsl(210,100%,88%)]"
+                                currentPath.parentId && selection.isSelected(currentPath.parentId) && "eigen-list-item-selected"
                             )}
                             onClick={(e) => {
                                 const parentId = currentPath.parentId || '';
@@ -173,7 +173,7 @@ export function DriveTable({
                                 className={cn(
                                     "eigen-list-item",
                                     (activeItemId === item.id || selectedIndex === adjustedIndex) && "eigen-list-item-active",
-                                    selection.isSelected(item.id) && "eigen-list-item-selected hover:bg-[hsl(210,100%,88%)]",
+                                    selection.isSelected(item.id) && "eigen-list-item-selected",
                                     dragOverItemId === item.id && isValidFolderDrop(item) && "bg-accent"
                                 )}
                                 onClick={(e) => {
