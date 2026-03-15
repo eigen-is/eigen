@@ -20,12 +20,18 @@ import {
     DropdownMenuItem,
     DropdownMenuLabel,
     DropdownMenuSeparator,
-    DropdownMenuTrigger
+    DropdownMenuSub,
+    DropdownMenuSubContent,
+    DropdownMenuSubTrigger,
+    DropdownMenuTrigger,
+    DropdownMenuRadioGroup,
+    DropdownMenuRadioItem,
 } from "../../dropdown-menu.tsx";
 import {useAuth} from "@workspace/lib/auth/auth-context.tsx";
 import {Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,} from "../../dialog.tsx";
 import {apps} from "@workspace/lib/apps.ts";
 import {getSpacePasswordUrl, getSpaceProfileUrl} from "@workspace/lib/api.ts";
+import {useSpaceSettings, useUpdateSpaceSettings} from "@workspace/lib/space";
 import {UserItem} from "../user-item.tsx";
 import {AppLogo} from "./app-logo.tsx";
 import {UserAvatar} from "../user-avatar.tsx";
@@ -45,6 +51,8 @@ function UserDropdown({rootRoute}: { rootRoute: TopbarProps['rootRoute'] }) {
     const auth = useAuth();
     const {appName} = useLayout();
     const [logoutDialogOpen, setLogoutDialogOpen] = useState(false);
+    const {data: settings} = useSpaceSettings();
+    const updateSettings = useUpdateSpaceSettings();
 
     const handleLogout = () => {
         auth.logout().then(() => {
@@ -134,6 +142,19 @@ function UserDropdown({rootRoute}: { rootRoute: TopbarProps['rootRoute'] }) {
                             Settings
                         </a>
                     </DropdownMenuItem>
+                    <DropdownMenuSub>
+                        <DropdownMenuSubTrigger>Theme</DropdownMenuSubTrigger>
+                        <DropdownMenuSubContent>
+                            <DropdownMenuRadioGroup
+                                value={settings?.theme ?? 'light'}
+                                onValueChange={(v) => updateSettings.mutate({theme: v as 'light' | 'dark' | 'system'})}
+                            >
+                                <DropdownMenuRadioItem value="light">Light</DropdownMenuRadioItem>
+                                <DropdownMenuRadioItem value="dark">Dark</DropdownMenuRadioItem>
+                                <DropdownMenuRadioItem value="system">System</DropdownMenuRadioItem>
+                            </DropdownMenuRadioGroup>
+                        </DropdownMenuSubContent>
+                    </DropdownMenuSub>
                     <DropdownMenuSeparator/>
                     <DropdownMenuItem onClick={() => setLogoutDialogOpen(true)}>
                         <span className={`flex items-center w-full`}>

@@ -1,4 +1,5 @@
 {
+  "bypassPermissions": "bypassPermissions",
   "permissions": {
     "allow": [
       "Bash(ls:*)",
@@ -18,7 +19,9 @@
       "Bash(git:*)",
       "Bash(bunx tsc:*)",
       "Bash(pkill:*)",
-      "Bash(cat:*)"
+      "Bash(cat:*)",
+      "WebSearch",
+      "WebFetch(domain:ui.shadcn.com)"
     ]
   }
 }

@@ -47,6 +47,7 @@
     "./types/owner": "./src/types/owner.ts",
     "./types/people": "./src/types/people.ts",
     "./types/clipboard": "./src/types/clipboard.ts",
+    "./types/settings": "./src/types/settings.ts",
     "./constants": "./src/constants/index.ts"
   }
 }
