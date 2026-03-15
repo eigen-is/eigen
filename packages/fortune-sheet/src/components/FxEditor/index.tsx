@@ -299,7 +299,7 @@ export function FxEditor() {
                         innerRef={(e) => {
                             refs.fxInput.current = e;
                         }}
-                        className="flex-1 h-full overflow-y-auto pl-0.5 text-sm leading-[14px] m-0 outline-none cursor-text whitespace-pre-wrap break-words bg-white pt-[7px] box-border text-black text-left"
+                        className="flex-1 h-full overflow-y-auto pl-0.5 text-sm leading-[14px] m-0 outline-none cursor-text whitespace-pre-wrap break-words bg-background pt-[7px] box-border text-foreground text-left"
                         role="textbox"
                         id="luckysheet-functionbox-cell"
                         aria-label={info.currentCellInput}

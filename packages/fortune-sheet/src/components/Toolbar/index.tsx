@@ -905,7 +905,7 @@ export function Toolbar({
     // deps change (cell stays the same, focused row/col don't move), so React
     // reuses the cached JSX and skips reconciliation of 1100+ lines of toolbar.
     return useMemo(() => (
-        <div className="bg-white h-12 flex items-center justify-between px-4 border-b no-print">
+        <div className="bg-background h-12 flex items-center justify-between px-4 border-b no-print">
             <SharedToolbar>
                 <div className="flex items-center">
                     {leftItems}

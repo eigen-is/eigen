@@ -80,7 +80,7 @@ export function CreateCommentDialog({
                         className="min-h-[80px] resize-none"
                     />
                 </div>
-                <DialogFooter className="flex-col-reverse sm:flex-row sm:justify-end sm:space-x-2">
+                <DialogFooter>
                     <Button
                         variant="outline"
                         onClick={() => onOpenChange(false)}
@@ -119,7 +119,7 @@ export function ViewCommentDialog({
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-lg max-h-[80vh] flex flex-col p-0">
+            <DialogContent className="max-h-[80vh] flex flex-col p-0">
                 <DialogHeader className="px-6 pt-6 pb-4">
                     <DialogTitle>Comment</DialogTitle>
                 </DialogHeader>

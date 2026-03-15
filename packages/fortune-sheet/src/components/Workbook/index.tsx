@@ -828,7 +828,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
             <WorkbookContext.Provider value={providerValue}>
                 <ModalProvider>
                     <div
-                        className="flex flex-col w-full h-full m-0 p-0 font-[inherit] bg-white relative overflow-hidden"
+                        className="flex flex-col w-full h-full m-0 p-0 font-[inherit] bg-background relative overflow-hidden"
                         ref={workbookContainer}
                         onKeyDown={onKeyDown}
                     >

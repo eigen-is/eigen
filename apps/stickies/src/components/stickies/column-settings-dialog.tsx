@@ -77,22 +77,21 @@ export function ColumnSettingsDialog({isOpen, onClose, columnId, columnTitle, yj
                             />
                         </div>
                     </div>
-                    <DialogFooter className="sm:justify-between">
+                    <DialogFooter>
                         <Button
                             type="button"
                             variant="destructive"
+                            className="mr-auto"
                             onClick={() => setIsDeleteDialogOpen(true)}
                         >
                             Delete Column
                         </Button>
-                        <div className="flex gap-2">
-                            <Button type="button" variant="outline" onClick={onClose}>
-                                Cancel
-                            </Button>
-                            <Button type="submit" disabled={!title.trim()}>
-                                Save Changes
-                            </Button>
-                        </div>
+                        <Button type="button" variant="outline" onClick={onClose}>
+                            Cancel
+                        </Button>
+                        <Button type="submit" disabled={!title.trim()}>
+                            Save Changes
+                        </Button>
                     </DialogFooter>
                 </form>
             </DialogContent>
