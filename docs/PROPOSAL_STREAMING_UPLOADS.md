@@ -40,9 +40,8 @@ Mount already has a `tmp/` directory and helper methods for temp file management
 `storage.write()` already accepts `BunFile`, so passing a temp file handle is efficient without needing any new
 storage interface methods.
 
-`saveThumbnail()` already accepts `string` (file path) as source, but the underlying `generateThumbnail()` still
-reads the entire file into a Buffer before passing it to Sharp. This needs fixing to use `sharp(filePath)` directly
-when the source is a path.
+`saveThumbnail()` already accepts `string` (file path) as source. `generateThumbnail()` now passes file paths
+directly to `sharp(filePath)`, so Sharp streams from disk internally without buffering the entire image.
 
 ## Design
 
@@ -179,30 +178,10 @@ async uploadFileStreaming(mountId: string, parentId: string, request: Request): 
 }
 ```
 
-### 4. Fix generateThumbnail() for File Paths
+### 4. generateThumbnail() — Already Fixed
 
-The current `generateThumbnail()` in `thumbnails.ts` handles string paths by reading the entire file into a buffer:
-
-```typescript
-// Current (defeats the purpose of streaming)
-if (typeof source === 'string') {
-    inputBuffer = Buffer.from(await Bun.file(source).arrayBuffer());
-}
-```
-
-Fix to use Sharp's native file path support:
-
-```typescript
-// Fixed (Sharp streams from disk internally)
-if (typeof source === 'string') {
-    image = sharp(source);
-} else {
-    // ... existing buffer path ...
-    image = sharp(inputBuffer);
-}
-```
-
-No new function needed — `saveThumbnail()` already accepts string paths, just the inner implementation needs fixing.
+`generateThumbnail()` in `thumbnails.ts` now passes file paths directly to `sharp(filePath)` instead of buffering
+via `Bun.file(source).arrayBuffer()`. No new function needed — `saveThumbnail()` already accepts string paths.
 
 ## SharedDrive Wrapping
 
@@ -265,7 +244,7 @@ converted to buffers. No streaming needed — the current buffered approach is a
 | `apps/api/src/lib/drive/drive.ts` | `uploadFileStreaming()` method |
 | `apps/api/src/lib/drive/sharedDrive.ts` | Wrap `uploadFileStreaming()` with write permission |
 | `apps/api/src/lib/mount/mount.ts` | `createFileFromStorage()` method (insert row for already-stored file) |
-| `apps/api/src/lib/shared/thumbnails.ts` | Fix `generateThumbnail()` to use `sharp(filePath)` for string sources |
+| `apps/api/src/lib/shared/thumbnails.ts` | **Done** — `generateThumbnail()` now uses `sharp(filePath)` for string sources |
 | `packages/lib/src/core/drive/hooks/use-drive.ts` | Point upload hook at streaming endpoint |
 
 Note: no changes needed to `StorageBackend` interface — `storage.write()` already accepts `BunFile`, and
@@ -280,6 +259,6 @@ Note: no changes needed to `StorageBackend` interface — `storage.write()` alre
 | `@fastify/busboy` + Bun compat | Medium | Prototype early; fall back to manual boundary parsing for single-file case |
 | S3 files > 5GB | Medium | Initial limit of 5GB on S3 backends; S3 multipart upload as follow-up |
 | Unbounded upload size | High | **Must enforce size limit** in `streamToTemp()` — no Elysia `maxSize` on raw body |
-| Thumbnail OOM on very large images | Low | Already guarded by 12000x12000px limit in Sharp; fix to use `sharp(filePath)` avoids buffer copy |
+| Thumbnail OOM on very large images | Low | Already guarded by 12000x12000px limit in Sharp; `sharp(filePath)` already fixed to avoid buffer copy |
 | `fs.rename()` fails across filesystems | None | Temp dir is inside the mount dir (same filesystem) |
 | No concurrent upload limit | Medium | Consider a semaphore or per-user upload slot limit to prevent disk I/O saturation |
