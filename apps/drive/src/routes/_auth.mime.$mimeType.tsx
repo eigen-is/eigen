@@ -1,7 +1,7 @@
 import {createFileRoute, useNavigate} from '@tanstack/react-router';
 import {DEFAULT_MOUNT_ID, useMimeContent, usePathInfo} from '@workspace/lib/drive';
 import {DriveLayout} from "@workspace/ui/components/layout/drive/drive-layout";
-import {DrivePath, DriveSearchParams, isDocumentType, isFolderType} from "@workspace/lib/types/drive";
+import {DrivePath, DriveSearchParams, isDocumentType, isFolderType, isInlineEditable} from "@workspace/lib/types/drive";
 import {useAuth} from '@workspace/lib/auth';
 import {useLayout} from "@workspace/ui/components/layout/app/layout-context.tsx";
 import {useState} from "react";
@@ -27,25 +27,19 @@ function DriveRoute() {
     const {isMobile} = useLayout();
     const [preview, setPreview] = useState<{ url: string; mimeType: string } | null>(null);
 
-    // Fetch folder content and path information
     const {
         data: folderContents = [],
         isLoading: isFolderContentLoading,
         error: isFolderContentLoadingError
     } = useMimeContent(ownerId, mimeType);
 
-    // Handle row click to show path details
     const onRowSelect = (path: DrivePath) => {
-        // Handle preview behavior when using keyboard navigation
         const fileMimeType = path.mimeType || "";
         if (preview !== null) {
-            // If a preview is already open
             if (fileMimeType.startsWith("image/") || fileMimeType.startsWith("video/")) {
-                // Update the preview if new selection is also previewable
                 const url = getDriveEmbedUrl(path.ownerId, path.mountId, path.id, path.name);
                 setPreview({url, mimeType: fileMimeType});
             } else {
-                // Close the preview if the new selection isn't previewable
                 setPreview(null);
             }
         }
@@ -65,13 +59,11 @@ function DriveRoute() {
         const fileMimeType = path.mimeType || "";
 
         if (path.type === 'folder') {
-            navigate({
-                to: Route.fullPath,
-                params: {mimeType},
-                search: {pid: undefined}
-            });
+            navigate({to: Route.fullPath, params: {mimeType}, search: {pid: undefined}});
         } else if (isDocumentType(path.type)) {
             openDocument(path);
+        } else if (isInlineEditable(path.mimeType, path.name)) {
+            navigate({to: '/edit/$ownerId/$mountId/$pathId', params: {ownerId: path.ownerId, mountId: path.mountId, pathId: path.id}});
         } else if (fileMimeType.startsWith("image/") || fileMimeType.startsWith("video/")) {
             const url = getDriveEmbedUrl(path.ownerId, path.mountId, path.id, path.name);
             setPreview({url, mimeType: fileMimeType});
@@ -81,12 +73,8 @@ function DriveRoute() {
         }
     };
 
-    // Handle back navigation (mainly for mobile)
     const handleBackToList = () => {
-        navigate({
-            to: Route.fullPath,
-            params: {mimeType}
-        });
+        navigate({to: Route.fullPath, params: {mimeType}});
     };
 
     if (isFolderContentLoadingError) {
@@ -116,8 +104,7 @@ function DriveRoute() {
                 onRowSelect={onRowSelect}
                 onRowActivate={onRowActivate}
                 onBackToList={handleBackToList}
-                onAfterAction={() => {
-                }}
+                onAfterAction={() => {}}
                 allowDelete={true}
                 allowShare={true}
                 allowCreateFolder={false}

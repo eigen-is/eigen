@@ -16,6 +16,7 @@ import {setupRouter} from "./routes/setup";
 import {chatRouter} from "./routes/chat";
 import {calendarRouter} from "./routes/calendar";
 import {teamRouter} from "./routes/team";
+import {editorRouter} from "./routes/editor";
 
 export const app = new Elysia()
     .use(swagger())
@@ -38,6 +39,7 @@ export const app = new Elysia()
     .use(homeRouter)
     .use(collabRouter)
     .use(chatRouter)
+    .use(editorRouter)
     .use(sseRouter)
 
     .onError(({error, set}) => {

@@ -10,7 +10,7 @@ import {
 import {Button} from "@workspace/ui/components/button";
 import {EigenLoader, TooltipButton} from "@workspace/ui";
 import {DriveAccessList} from "@workspace/ui/components/layout/drive";
-import {type DrivePath} from "@workspace/lib/types/drive";
+import {type DrivePath, isInlineEditable} from "@workspace/lib/types/drive";
 import {formatFileSize} from "@workspace/ui/lib/formatFileSize";
 import {Table, TableBody, TableCell, TableRow} from "@workspace/ui/components/table";
 import {useLayout} from "../app/layout-context.tsx";
@@ -125,7 +125,7 @@ export function DriveDetail({
             <div className="p-4 flex-1 overflow-auto">
                 <h2 className="text-xl font-medium mb-2 flex items-center">
                     <span className="truncate overflow-hidden min-w-0 flex-1">{path.name}</span>
-                    {onItemOpen && path && path.type !== 'file' && (
+                    {onItemOpen && path && (path.type !== 'file' || isInlineEditable(path.mimeType, path.name)) && (
                         <TooltipButton
                             onClick={() => onItemOpen(path)}
                             tooltipText="Open"

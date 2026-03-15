@@ -3,7 +3,7 @@ import {EigenLoader} from "@workspace/ui";
 import {useFolderContent, usePathInfo} from '@workspace/lib/drive';
 import {useContext, useEffect} from "react";
 import {DriveLayout} from "@workspace/ui/components/layout/drive/drive-layout";
-import {DrivePath, DriveSearchParams, isDocumentType, isFolderType} from "@workspace/lib/types/drive";
+import {DrivePath, DriveSearchParams, isDocumentType, isFolderType, isInlineEditable} from "@workspace/lib/types/drive";
 import {useLayout} from "@workspace/ui/components/layout/app/layout-context.tsx";
 import {DriveContext} from "./__root";
 import {usePreview} from '@workspace/ui/components/layout/preview-provider';
@@ -83,6 +83,8 @@ function DriveRoute() {
             });
         } else if (isDocumentType(path.type)) {
             openDocument(path);
+        } else if (isInlineEditable(path.mimeType, path.name)) {
+            navigate({to: '/edit/$ownerId/$mountId/$pathId', params: {ownerId: path.ownerId, mountId: path.mountId, pathId: path.id}});
         } else if (canPreview(path)) {
             openPreview(path);
         } else {
@@ -130,30 +132,28 @@ function DriveRoute() {
     }
 
     return (
-        <>
-            <DriveLayout
-                ownerId={ownerId}
-                mountId={mountId}
-                pathId={pathId}
-                folderContents={folderContents}
-                isLoading={isFolderContentLoading}
-                error={isFolderContentLoadingError}
-                selectedPath={selectedPath}
-                currentPath={currentPath}
-                onRowSelect={onRowSelect}
-                onRowActivate={onRowActivate}
-                onBackToList={handleBackToList}
-                onAfterAction={handleAfterAction}
-                allowCreateFolder={true}
-                allowCreateDoc={true}
-                allowCreateStickies={true}
-                allowDelete={true}
-                allowShare={true}
-                allowUpload={true}
-                allowMove={true}
-                showBreadcrumb={true}
-                pid={pid}
-            />
-        </>
+        <DriveLayout
+            ownerId={ownerId}
+            mountId={mountId}
+            pathId={pathId}
+            folderContents={folderContents}
+            isLoading={isFolderContentLoading}
+            error={isFolderContentLoadingError}
+            selectedPath={selectedPath}
+            currentPath={currentPath}
+            onRowSelect={onRowSelect}
+            onRowActivate={onRowActivate}
+            onBackToList={handleBackToList}
+            onAfterAction={handleAfterAction}
+            allowCreateFolder={true}
+            allowCreateDoc={true}
+            allowCreateStickies={true}
+            allowDelete={true}
+            allowShare={true}
+            allowUpload={true}
+            allowMove={true}
+            showBreadcrumb={true}
+            pid={pid}
+        />
     );
 }
