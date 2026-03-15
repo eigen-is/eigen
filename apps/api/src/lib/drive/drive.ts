@@ -382,6 +382,22 @@ export default class Drive {
         return await mount.readFile(pathId);
     }
 
+    async writeFileContent(mountId: string, pathId: string, data: Buffer): Promise<DrivePath> {
+        const mount = this.getMount(mountId);
+        const path = await mount.getPath(pathId);
+        if (!path || path.type !== DRIVE_TYPE_FILE) {
+            throw new ApiError(404, 'File not found');
+        }
+        if (!(await this.canWrite(mountId, pathId, this.owner))) {
+            throw new ApiError(403, 'No write permission');
+        }
+        await mount.writeFile(pathId, data);
+        const updated = await mount.getPath(pathId);
+        if (!updated) throw new ApiError(500, 'Failed to get updated file');
+        this.emit(SSEventType.DRIVE_FILE_UPLOADED, updated);
+        return updated;
+    }
+
     async getThumbnail(mountId: string, fileName: string): Promise<ArrayBuffer | null> {
         const mount = this.getMount(mountId);
         const pathId = fileName.split('.')[0];

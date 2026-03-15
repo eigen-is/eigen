@@ -12,6 +12,7 @@
 | `Escape`             | Close preview / deselect | `FilePreview`, `ResizableMedia` |
 | `Delete`/`Backspace` | Delete selected media    | `ResizableMedia`                |
 | `Mod+Z` / `Mod+Y`    | Undo/Redo (Stickies)     | `StickiesToolbar`               |
+| `Mod+S`              | Save (Inline Editor)     | `MarkdownEditor`, `CodeEditor`  |
 
 ## Guidelines
 

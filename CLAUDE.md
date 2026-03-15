@@ -170,6 +170,7 @@ Detailed architecture docs in `docs/`:
 | [CLIPBOARD.md](docs/CLIPBOARD.md)                               | Inter-app copy-paste                            |
 | [MEDIA-REFERENCES.md](docs/MEDIA-REFERENCES.md)                 | Name-based media/chat references in eigendocs   |
 | [HOTKEYS.md](docs/HOTKEYS.md)                                   | Keyboard shortcuts                              |
+| [INLINE-EDITING.md](docs/INLINE-EDITING.md)                     | Inline text file editing in Drive               |
 | [PUBLIC-API.md](docs/PUBLIC-API.md)                             | Public endpoints, avatar resolution             |
 | [PEOPLE.md](docs/PEOPLE.md)                                     | Org/team management UI                          |
 | [TESTING.md](docs/TESTING.md)                                   | Test setup, patterns, test files                |
