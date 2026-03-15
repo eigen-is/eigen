@@ -471,9 +471,233 @@ These have similar `onRowActivate` handlers. Add the same `editingPath` state an
 - `apps/drive/src/routes/_auth.shared.$to.tsx`
 - `apps/drive/src/routes/_auth.mime.$mimeType.tsx`
 
-## Implementation Order
+---
 
-Recommended sequence to minimize risk and enable incremental testing:
+# Phase 2: CodeEditor + Source Mode Toggle
+
+Adds CodeMirror 6 for plain text and structured data files (`.txt`, `.json`, `.yaml`, `.csv`, `.xml`, `.html`),
+and a source mode toggle for markdown files.
+
+## Dependencies
+
+Install before starting (ask user):
+
+- `@codemirror/state`
+- `@codemirror/view`
+- `@codemirror/lang-json`
+- `@codemirror/lang-yaml`
+- `@codemirror/lang-xml`
+- `@codemirror/lang-markdown`
+- `@codemirror/lang-html`
+- `@codemirror/lang-css`
+
+All in `apps/drive`.
+
+## Step 15: Frontend — CodeEditor Component
+
+**Create `apps/drive/src/components/editor/code-editor.tsx`**
+
+CodeMirror 6 wrapper for plain text and syntax-highlighted editing.
+
+Props: `{ content: string, language: string | null, updatedAt: string, ownerId: string, mountId: string, pathId: string, onClose: () => void }`
+
+**Editor setup:**
+1. Create a CodeMirror `EditorView` in a `useEffect` / `useRef`:
+   ```typescript
+   const editorRef = useRef<HTMLDivElement>(null)
+   const viewRef = useRef<EditorView>()
+
+   useEffect(() => {
+       const state = EditorState.create({
+           doc: content,
+           extensions: [
+               basicSetup,          // line numbers, bracket matching, etc.
+               languageExtension,   // based on language prop
+               keymap.of([...defaultKeymap, { key: 'Mod-s', run: () => { save(); return true } }]),
+               EditorView.updateListener.of(update => {
+                   if (update.docChanged) setIsDirty(true)
+               }),
+           ],
+       })
+       viewRef.current = new EditorView({ state, parent: editorRef.current! })
+       return () => viewRef.current?.destroy()
+   }, [])  // only on mount
+   ```
+
+2. Language extension mapping:
+   ```typescript
+   function getLanguageExtension(language: string | null) {
+       switch (language) {
+           case 'json': return json()
+           case 'yaml': return yaml()
+           case 'xml': return xml()
+           case 'html': return html()
+           case 'css': return css()
+           case 'markdown': return markdown()
+           default: return []  // plain text — no syntax highlighting
+       }
+   }
+   ```
+
+**Save logic:**
+- Same pattern as MarkdownEditor: `useFileSave` hook with `expectedUpdatedAt`
+- Get content via `viewRef.current!.state.doc.toString()`
+- Debounced auto-save (5 seconds) + Cmd+S
+- No frontmatter handling (that's markdown-only)
+- Round-trip is lossless — raw text in, raw text out
+
+**Render:** Renders a `<Column>` with `CodeToolbar` as toolbar, CodeMirror container as content.
+
+```typescript
+<Column id="list" width="flex" toolbar={<CodeToolbar onClose={onClose} ... />}>
+    <div ref={editorRef} className="h-full overflow-auto" />
+</Column>
+```
+
+**Files to create:**
+- `apps/drive/src/components/editor/code-editor.tsx`
+
+## Step 16: Frontend — CodeToolbar
+
+**Create `apps/drive/src/components/editor/code-toolbar.tsx`**
+
+Simpler toolbar than MarkdownToolbar — no formatting buttons needed.
+
+**Layout:**
+```
+[← Back] | [FormatBadge] | [SaveIndicator]
+```
+
+Props: `{ onClose: () => void, saveState: 'saved' | 'saving' | 'unsaved' | 'conflict', formatLabel: string }`
+
+Reuses `FormatBadge` and `SaveIndicator` from Phase 1 (Steps 5-6).
+
+**Files to create:**
+- `apps/drive/src/components/editor/code-toolbar.tsx`
+
+## Step 17: Frontend — Wire CodeEditor into NativeFileEditor
+
+**Modify `apps/drive/src/components/editor/native-file-editor.tsx`**
+
+Add the `plaintext` and `code` cases to the dispatcher:
+
+```typescript
+switch (data.editMode) {
+    case 'markdown':
+        return <MarkdownEditor ... />
+    case 'plaintext':
+        return <CodeEditor content={data.content} language={null} ... />
+    case 'code':
+        return <CodeEditor content={data.content} language={getLanguage(path.name)} ... />
+    default:
+        return null
+}
+```
+
+Language detection by extension:
+```typescript
+function getLanguage(name: string): string | null {
+    if (name.endsWith('.json')) return 'json'
+    if (name.endsWith('.yaml') || name.endsWith('.yml')) return 'yaml'
+    if (name.endsWith('.xml')) return 'xml'
+    if (name.endsWith('.html') || name.endsWith('.htm')) return 'html'
+    if (name.endsWith('.css')) return 'css'
+    if (name.endsWith('.csv')) return null  // plain text, no highlighting
+    return null
+}
+```
+
+**Files to modify:**
+- `apps/drive/src/components/editor/native-file-editor.tsx`
+
+## Step 18: Frontend — Expand Drive Route to All Editable Types
+
+**Modify `apps/drive/src/routes/_auth.fs.$ownerId.$mountId.$pathId.tsx`**
+
+Remove the Phase 1 markdown-only gate. Use the full `isInlineEditable` check:
+
+```typescript
+// Phase 1 was:
+} else if (path.name.match(/\.(md|markdown)$/i)) {
+    setEditingPath(path)
+}
+
+// Phase 2:
+} else if (isInlineEditable(path.mimeType, path.name)) {
+    setEditingPath(path)
+}
+```
+
+Now `.txt`, `.json`, `.yaml`, `.csv`, `.xml`, `.html` files open inline in the CodeEditor.
+
+**Files to modify:**
+- `apps/drive/src/routes/_auth.fs.$ownerId.$mountId.$pathId.tsx`
+
+## Step 19: Frontend — Markdown Source Mode Toggle
+
+**Modify `apps/drive/src/components/editor/markdown-editor.tsx`**
+
+Add a toggle between WYSIWYG (Tiptap) and source mode (CodeMirror) within the same MarkdownEditor.
+
+**State:** `const [sourceMode, setSourceMode] = useState(false)`
+
+**Toggle logic:**
+- **WYSIWYG -> Source**: serialize via `editor.storage.markdown.getMarkdown()`, display the raw markdown string
+  in a CodeMirror instance with `@codemirror/lang-markdown` syntax highlighting
+- **Source -> WYSIWYG**: read CodeMirror content via `view.state.doc.toString()`, load into Tiptap via
+  `editor.commands.setContent(markdown)`
+
+Each toggle serializes/parses, so it is not instant for large documents. Accept this.
+
+**Render:**
+```typescript
+<Column id="list" width="flex" toolbar={<MarkdownToolbar editor={editor} sourceMode={sourceMode}
+    onToggleSource={() => setSourceMode(!sourceMode)} onClose={onClose} ... />}>
+    {sourceMode ? (
+        <div ref={codeMirrorRef} className="h-full overflow-auto" />
+    ) : (
+        <EditorContent editor={editor} />
+    )}
+</Column>
+```
+
+**Save in source mode:** Get content from CodeMirror (`view.state.doc.toString()`), send directly to
+PUT endpoint. No tiptap-markdown serialization involved — the user is editing raw markdown. This is
+lossless.
+
+**MarkdownToolbar changes:** Add a source mode toggle button (e.g., `<Code2 />` icon). When in source
+mode, hide the formatting buttons (bold, italic, etc.) since they don't apply to raw text. Show only:
+back arrow, source toggle, format badge, save indicator.
+
+**Files to modify:**
+- `apps/drive/src/components/editor/markdown-editor.tsx` (add CodeMirror, toggle state)
+- `apps/drive/src/components/editor/markdown-toolbar.tsx` (add source toggle button, conditional formatting buttons)
+
+## Step 20: Apply Phase 2 to Shared and MIME Routes
+
+Same as Step 14 but now covering all editable file types (not just markdown).
+
+If Step 14 was already done during Phase 1, no additional changes needed — the `isInlineEditable` check
+already covers all types, and `NativeFileEditor` dispatches to the right editor.
+
+**Files to verify:**
+- `apps/drive/src/routes/_auth.shared.$to.tsx`
+- `apps/drive/src/routes/_auth.mime.$mimeType.tsx`
+
+## Phase 2 Implementation Order
+
+1. **Step 15** (CodeEditor component) — core component, can be tested standalone
+2. **Step 16** (CodeToolbar)
+3. **Step 17** (wire into NativeFileEditor)
+4. **Step 18** (expand Drive route) — all text file types now open inline
+5. **Step 19** (markdown source toggle) — depends on CodeMirror being available
+6. **Step 20** (verify shared/MIME routes)
+
+---
+
+## Implementation Order (Both Phases)
+
+### Phase 1 — Markdown editing
 
 1. **Step 12** (round-trip tests) — validate tiptap-markdown viability FIRST. If this fails, everything else
    changes. This is the go/no-go gate.
@@ -486,14 +710,23 @@ Recommended sequence to minimize risk and enable incremental testing:
 8. **Step 6** (SaveIndicator, FormatBadge)
 9. **Step 7** (ConflictDialog)
 10. **Step 8** (NativeFileEditor dispatcher)
-11. **Step 9** (Drive route integration) — everything becomes testable end-to-end here
+11. **Step 9** (DriveLayout integration) — everything becomes testable end-to-end here
 12. **Step 10** (first-save normalization warning)
 13. **Step 11** (image path resolution)
 14. **Step 14** (shared/MIME routes)
 
+### Phase 2 — CodeEditor + source mode
+
+15. **Step 15** (CodeEditor component)
+16. **Step 16** (CodeToolbar)
+17. **Step 17** (wire into NativeFileEditor)
+18. **Step 18** (expand Drive route to all editable types)
+19. **Step 19** (markdown source mode toggle)
+20. **Step 20** (verify shared/MIME routes)
+
 ## File Summary
 
-### New files
+### Phase 1 — New files
 
 | File | Step |
 |---|---|
@@ -511,7 +744,7 @@ Recommended sequence to minimize risk and enable incremental testing:
 | `apps/api/src/lib/editor/__tests__/__fixtures__/*.md` | 12 |
 | `apps/api/src/lib/editor/__tests__/editor.test.ts` | 13 |
 
-### Modified files
+### Phase 1 — Modified files
 
 | File | Step |
 |---|---|
@@ -521,3 +754,19 @@ Recommended sequence to minimize risk and enable incremental testing:
 | `apps/drive/src/routes/_auth.fs.$ownerId.$mountId.$pathId.tsx` | 9 |
 | `apps/drive/src/routes/_auth.shared.$to.tsx` | 14 |
 | `apps/drive/src/routes/_auth.mime.$mimeType.tsx` | 14 |
+
+### Phase 2 — New files
+
+| File | Step |
+|---|---|
+| `apps/drive/src/components/editor/code-editor.tsx` | 15 |
+| `apps/drive/src/components/editor/code-toolbar.tsx` | 16 |
+
+### Phase 2 — Modified files
+
+| File | Step |
+|---|---|
+| `apps/drive/src/components/editor/native-file-editor.tsx` | 17 |
+| `apps/drive/src/routes/_auth.fs.$ownerId.$mountId.$pathId.tsx` | 18 |
+| `apps/drive/src/components/editor/markdown-editor.tsx` | 19 |
+| `apps/drive/src/components/editor/markdown-toolbar.tsx` | 19 |
