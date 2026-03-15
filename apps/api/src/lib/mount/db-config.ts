@@ -22,6 +22,7 @@ export const MOUNT_DB_CONFIG: DatabaseConfig<typeof schema> = {
                     acl TEXT,
                     visibility TEXT DEFAULT 'private',
                     details TEXT,
+                    hash TEXT,
                     createdAt INTEGER DEFAULT (unixepoch()),
                     updatedAt INTEGER DEFAULT (unixepoch()),
                     FOREIGN KEY (parentId) REFERENCES paths(id) ON DELETE CASCADE

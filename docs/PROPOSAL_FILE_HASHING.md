@@ -203,15 +203,16 @@ Update `getSharedPathsWithMe()` and `getMimeTypeContents()` shared-path mappings
 
 ## Phases
 
-### Phase 1: Schema + Upload Hashing (Do Now)
+### Phase 1: Schema + Upload Hashing (Done)
 
-The changes listed above. Estimate: 2-4 hours including tests.
+Implemented as a `hash` field (not `contentHash`) on the paths table. No `contentHashedAt` — unnecessary without Phase 2.
 
-- Add schema columns and migrations
-- Compute SHA-256 on `createFile()` and `writeFile()` for buffer data
-- Include `contentHash` in `toDrivePath()` and ACL propagation
-- Add `contentHash` to `DrivePath` type
-- No frontend changes needed
+- Added `hash TEXT` to mount schema and migration
+- `computeHash()` private method on Mount using `Bun.CryptoHasher('sha256')`, supports Buffer/Uint8Array/ArrayBuffer/BunFile
+- Hash computed in `createFile()` (included in initial insert) and `writeFile()` (included in updatePath)
+- `hash: string | null` added to `DrivePath` type and `toDrivePath()` mapping
+- Shared paths not updated (out of scope) — mapped as `hash: null`
+- Tests added: hash on create, null hash without data, hash on write, identical/different content hashing
 
 ### Phase 2: External Change Detection (Defer)
 

@@ -15,6 +15,7 @@ export const paths = sqliteTable('paths', {
     acl: text('acl', {mode: 'json'}).$type<DriveACL[] | null>(),
     visibility: text('visibility').$type<DriveVisibility>().default('private'),
     details: text('details', {mode: 'json'}).$type<DrivePathDetails>(),
+    hash: text('hash'),
     createdAt: integer('createdAt', {mode: 'timestamp'}).default(sql`(unixepoch())`),
     updatedAt: integer('updatedAt', {mode: 'timestamp'}).default(sql`(unixepoch())`),
 });
