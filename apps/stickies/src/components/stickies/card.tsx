@@ -4,6 +4,7 @@ import {CSS} from '@dnd-kit/utilities';
 import {CardItem} from './types';
 import {CardDialog} from './card-dialog';
 import {Card, CardContent} from '@workspace/ui/components/card';
+import {isLightColor} from '@workspace/ui/components/layout/media/color-picker';
 import * as Y from 'yjs';
 
 type CardProps = {
@@ -46,6 +47,7 @@ export function StickyCard({card, isMobile, yjsDoc, ownerId, mountId}: CardProps
                     transition,
                     zIndex: isDragging ? 10 : 0,
                     backgroundColor: card.color || undefined,
+                    color: card.color ? (isLightColor(card.color) ? '#000' : '#fff') : undefined,
                 }}
                 {...attributes}
                 {...listeners}
@@ -54,7 +56,7 @@ export function StickyCard({card, isMobile, yjsDoc, ownerId, mountId}: CardProps
                 <CardContent className={`p-3 text-sm ${isDragging ? 'bg-blue-50' : ''}`}>
                     {card.title}
                     {card.description && (
-                        <p className="text-xs text-muted-foreground mt-1 truncate">{card.description}</p>
+                        <p className="text-xs mt-1 truncate" style={{opacity: 0.7}}>{card.description}</p>
                     )}
                 </CardContent>
             </Card>
