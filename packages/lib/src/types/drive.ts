@@ -61,6 +61,43 @@ export function isDocumentType(type: DrivePathType) {
     return isCollabType(type) || isChatType(type);
 }
 
+const INLINE_EDITABLE_MIMES = new Set([
+    'text/markdown', 'text/plain', 'text/csv',
+    'application/json', 'text/yaml', 'application/x-yaml',
+    'text/xml', 'application/xml', 'text/html', 'text/css',
+    'text/javascript', 'application/javascript',
+    'text/typescript', 'application/typescript',
+    'text/x-python', 'text/x-rust', 'text/x-sql',
+    'text/x-shellscript', 'application/x-sh',
+    'text/x-toml', 'application/toml',
+]);
+
+const INLINE_EDITABLE_EXTENSIONS = new Set([
+    '.md', '.markdown', '.txt', '.csv', '.json',
+    '.yaml', '.yml', '.xml', '.html', '.htm', '.css',
+    '.js', '.jsx', '.mjs', '.cjs',
+    '.ts', '.tsx', '.mts', '.cts',
+    '.py', '.rs', '.go', '.rb', '.php',
+    '.java', '.c', '.cpp', '.h', '.hpp',
+    '.swift', '.kt', '.scala',
+    '.sql', '.graphql', '.gql',
+    '.sh', '.bash', '.zsh', '.fish',
+    '.conf', '.cfg', '.ini', '.toml',
+    '.env', '.env.local', '.env.example',
+    '.gitignore', '.dockerignore', '.editorconfig',
+    '.log', '.diff', '.patch',
+    '.svelte', '.vue', '.astro',
+    '.dockerfile',
+    '.r', '.lua', '.zig', '.dart',
+]);
+
+export function isInlineEditable(mimeType: string, name: string): boolean {
+    if (INLINE_EDITABLE_MIMES.has(mimeType)) return true;
+    const dot = name.lastIndexOf('.');
+    if (dot === -1) return false;
+    return INLINE_EDITABLE_EXTENSIONS.has(name.slice(dot).toLowerCase());
+}
+
 
 export type DrivePathDetails = {
     originalName?: string;

@@ -5,3 +5,237 @@
 .text-app {
     color: var(--app-drive-color);
 }
+
+/* ===== Tiptap Markdown Editor Styles ===== */
+
+.tiptap {
+    outline: none;
+    min-height: 100%;
+}
+
+.tiptap > * + * {
+    margin-top: 0.75em;
+}
+
+.tiptap h1 {
+    font-size: 2em;
+    font-weight: 700;
+    line-height: 1.2;
+    margin-top: 1.5em;
+    margin-bottom: 0.5em;
+}
+
+.tiptap h2 {
+    font-size: 1.5em;
+    font-weight: 600;
+    line-height: 1.3;
+    margin-top: 1.25em;
+    margin-bottom: 0.4em;
+}
+
+.tiptap h3 {
+    font-size: 1.25em;
+    font-weight: 600;
+    line-height: 1.4;
+    margin-top: 1em;
+    margin-bottom: 0.3em;
+}
+
+.tiptap h1:first-child,
+.tiptap h2:first-child,
+.tiptap h3:first-child {
+    margin-top: 0;
+}
+
+.tiptap p {
+    line-height: 1.7;
+    margin: 0;
+}
+
+.tiptap p + p {
+    margin-top: 0.5em;
+}
+
+.tiptap a {
+    color: #2563eb;
+    text-decoration: underline;
+    cursor: pointer;
+}
+
+.tiptap a:hover {
+    color: #1d4ed8;
+}
+
+.tiptap strong { font-weight: 700; }
+.tiptap em { font-style: italic; }
+.tiptap s { text-decoration: line-through; }
+
+.tiptap ul {
+    list-style-type: disc;
+    padding-left: 1.5em;
+    margin: 0.5em 0;
+}
+
+.tiptap ol {
+    list-style-type: decimal;
+    padding-left: 1.5em;
+    margin: 0.5em 0;
+}
+
+.tiptap li {
+    margin: 0.2em 0;
+    line-height: 1.7;
+}
+
+.tiptap li > p { margin: 0; }
+
+.tiptap ul ul, .tiptap ol ol,
+.tiptap ul ol, .tiptap ol ul {
+    margin: 0.2em 0;
+}
+
+.tiptap ul[data-type="taskList"] {
+    list-style: none;
+    padding-left: 0;
+}
+
+.tiptap ul[data-type="taskList"] li {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.5em;
+    margin: 0.3em 0;
+}
+
+.tiptap ul[data-type="taskList"] li > label {
+    display: flex;
+    align-items: center;
+    flex-shrink: 0;
+    margin-top: 0.3em;
+    user-select: none;
+}
+
+.tiptap ul[data-type="taskList"] li > label input[type="checkbox"] {
+    width: 1em;
+    height: 1em;
+    accent-color: #7c3aed;
+    cursor: pointer;
+}
+
+.tiptap ul[data-type="taskList"] li > div {
+    flex: 1;
+    min-width: 0;
+}
+
+.tiptap ul[data-type="taskList"] li[data-checked="true"] > div {
+    text-decoration: line-through;
+    color: #9ca3af;
+}
+
+.tiptap ul[data-type="taskList"] ul[data-type="taskList"] {
+    padding-left: 1.5em;
+}
+
+.tiptap blockquote {
+    border-left: 3px solid #d1d5db;
+    padding-left: 1em;
+    margin: 0.75em 0;
+    color: #6b7280;
+    font-style: italic;
+}
+
+.tiptap blockquote p { margin: 0; }
+
+.tiptap hr {
+    border: none;
+    border-top: 2px solid #e5e7eb;
+    margin: 1.5em 0;
+}
+
+.tiptap code {
+    background-color: #f3f4f6;
+    border-radius: 0.25em;
+    padding: 0.15em 0.35em;
+    font-size: 0.9em;
+    font-family: 'SF Mono', 'Fira Code', 'Fira Mono', 'Roboto Mono', monospace;
+    color: #dc2626;
+}
+
+.tiptap pre {
+    background-color: #1e1e2e;
+    border-radius: 0.5em;
+    padding: 1em 1.25em;
+    margin: 0.75em 0;
+    overflow-x: auto;
+    font-size: 0.875em;
+    line-height: 1.6;
+}
+
+.tiptap pre code {
+    background: none;
+    color: #cdd6f4;
+    padding: 0;
+    border-radius: 0;
+    font-size: inherit;
+}
+
+.tiptap pre .hljs-keyword { color: #cba6f7; }
+.tiptap pre .hljs-string { color: #a6e3a1; }
+.tiptap pre .hljs-number { color: #fab387; }
+.tiptap pre .hljs-comment { color: #6c7086; font-style: italic; }
+.tiptap pre .hljs-function { color: #89b4fa; }
+.tiptap pre .hljs-variable { color: #f38ba8; }
+.tiptap pre .hljs-type { color: #f9e2af; }
+.tiptap pre .hljs-built_in { color: #f2cdcd; }
+.tiptap pre .hljs-attr { color: #89dceb; }
+.tiptap pre .hljs-tag { color: #cba6f7; }
+.tiptap pre .hljs-name { color: #89b4fa; }
+.tiptap pre .hljs-selector-class { color: #a6e3a1; }
+.tiptap pre .hljs-selector-id { color: #fab387; }
+.tiptap pre .hljs-title { color: #89b4fa; }
+.tiptap pre .hljs-params { color: #cdd6f4; }
+.tiptap pre .hljs-literal { color: #fab387; }
+.tiptap pre .hljs-meta { color: #f5c2e7; }
+
+.tiptap table {
+    border-collapse: collapse;
+    width: 100%;
+    max-width: 100%;
+    margin: 0.75em 0;
+    overflow: hidden;
+}
+
+.tiptap table td,
+.tiptap table th {
+    border: 1px solid #d1d5db;
+    padding: 0.5em 0.75em;
+    min-width: 100px;
+    vertical-align: top;
+    position: relative;
+}
+
+.tiptap table th {
+    background-color: #f9fafb;
+    font-weight: 600;
+    text-align: left;
+}
+
+.tiptap table td > p,
+.tiptap table th > p { margin: 0; }
+
+.tiptap table .selectedCell { background-color: #dbeafe; }
+
+.tiptap .tableWrapper {
+    overflow-x: auto;
+    margin: 0.75em 0;
+}
+
+.tiptap img {
+    max-width: 100%;
+    height: auto;
+    display: block;
+    margin: 0.75em 0;
+}
+
+.tiptap ::selection {
+    background-color: #bfdbfe;
+}

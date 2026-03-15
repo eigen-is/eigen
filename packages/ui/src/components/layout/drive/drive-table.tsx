@@ -2,7 +2,7 @@ import React, {useCallback, useMemo, useRef, useState} from "react";
 import {Table, TableBody, TableCell, TableHead, TableHeader, TableRow} from "@workspace/ui/components/table";
 import {cn} from "@workspace/ui/lib/utils";
 import {formatDistanceToNow} from "date-fns";
-import {DEFAULT_MOUNT_ID, DrivePath, isDocumentType, isFolderType} from "@workspace/lib/types";
+import {DEFAULT_MOUNT_ID, DrivePath, isDocumentType, isFolderType, isInlineEditable} from "@workspace/lib/types";
 import {DriveShareSummary} from "./drive-share-summary";
 import {ArrowRight, ChevronLeft, Download, Pencil, Trash2, UserRoundPlus} from "lucide-react";
 import {DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator} from "@workspace/ui/components/dropdown-menu";
@@ -249,7 +249,7 @@ export function DriveTable({
                     }}
                     className="w-48"
                 >
-                    {isSingleSelect && contextMenu.item && contextMenu.item.type !== 'file' && onItemOpen && (
+                    {isSingleSelect && contextMenu.item && (contextMenu.item.type !== 'file' || isInlineEditable(contextMenu.item.mimeType, contextMenu.item.name)) && onItemOpen && (
                         <DropdownMenuItem
                             onClick={() => {
                                 onItemOpen?.(contextMenu.item!);

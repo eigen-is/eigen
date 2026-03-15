@@ -83,6 +83,10 @@ export default class SharedDrive extends Drive {
         return this.withReadPermission(mountId, pathId, () => this.sharedDrive.downloadFile(mountId, pathId));
     }
 
+    public async writeFileContent(mountId: string, pathId: string, data: Buffer) {
+        return this.withWritePermission(mountId, pathId, () => this.sharedDrive.writeFileContent(mountId, pathId, data));
+    }
+
     public async getThumbnail(mountId: string, fileName: string) {
         const pathId = fileName.split('.')[0];
         return this.withReadPermission(mountId, pathId, () => this.sharedDrive.getThumbnail(mountId, fileName));
