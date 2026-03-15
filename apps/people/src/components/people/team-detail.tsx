@@ -30,8 +30,8 @@ function useTeamSettings(teamId: string) {
     return useQuery({
         queryKey: ['team-settings', teamId],
         queryFn: async () => {
-            const res = await (api.calendar as any).team({teamId}).settings.get();
-            return (res.data || {}) as {enabled?: boolean};
+            const res = await (api as any).team({teamId}).settings.get();
+            return (res.data || {}) as {calendar?: {enabled?: boolean}};
         },
         staleTime: 5 * 60 * 1000,
     });
@@ -40,8 +40,8 @@ function useTeamSettings(teamId: string) {
 function useUpdateTeamSettings(teamId: string) {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: async (body: {enabled?: boolean}) => {
-            const res = await (api.calendar as any).team({teamId}).settings.put(body);
+        mutationFn: async (body: {calendar?: {enabled?: boolean}}) => {
+            const res = await (api as any).team({teamId}).settings.put(body);
             if (res.error) throw new Error(String(res.error));
             return res.data;
         },
@@ -173,7 +173,7 @@ export function TeamDetail({team, organizationId}: TeamDetailProps) {
 
     const defaultCal = calendars.find(c => c.isDefault);
     const teamTarget = `team_${team.id}`;
-    const calendarEnabled = settings?.enabled !== false;
+    const calendarEnabled = settings?.calendar?.enabled !== false;
 
     const calendarPermission = useMemo(() => {
         if (!defaultCal?.shares) return 'read';
@@ -206,7 +206,7 @@ export function TeamDetail({team, organizationId}: TeamDetailProps) {
 
     const handleCalendarEnabledChange = async (enabled: boolean) => {
         try {
-            await updateSettings.mutateAsync({enabled});
+            await updateSettings.mutateAsync({calendar: {enabled}});
             toast.success(enabled ? 'Team calendar enabled' : 'Team calendar disabled');
         } catch (error) {
             toast.error(error instanceof Error ? error.message : 'Failed to update settings');
