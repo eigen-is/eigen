@@ -2,14 +2,13 @@ import {useCallback, useEffect, useRef, useState} from 'react';
 import * as Y from 'yjs';
 import {WebsocketProvider} from 'y-websocket';
 import {DeckData, DEFAULT_TEXT_OBJECT, SlideObject} from '../types';
-import type {DrivePath} from '@workspace/lib/types/drive';
 import {nanoid} from 'nanoid';
 import {normalizeDeck} from '../normalize-deck';
 import {getCollabWebSocketUrl} from '@workspace/lib/api';
 
 type ApplyTo = 'this' | 'this-and-following' | 'all';
 
-const OBJECT_FIELDS = ['id', 'slideId', 'type', 'x', 'y', 'w', 'h', 'rotation', 'shadowColor', 'shadowBlur', 'shadowOffsetX', 'shadowOffsetY', 'borderColor', 'borderWidth', 'borderRadius', 'text', 'fontSize', 'fontWeight', 'fontStyle', 'textDecoration', 'textAlign', 'verticalAlign', 'color', 'letterSpacing', 'lineHeight', 'highlightColor', 'backgroundColor', 'src', 'objectFit', 'sourcePath'] as const;
+const OBJECT_FIELDS = ['id', 'slideId', 'type', 'x', 'y', 'w', 'h', 'rotation', 'shadowColor', 'shadowBlur', 'shadowOffsetX', 'shadowOffsetY', 'borderColor', 'borderWidth', 'borderRadius', 'text', 'fontSize', 'fontWeight', 'fontStyle', 'textDecoration', 'textAlign', 'verticalAlign', 'color', 'letterSpacing', 'lineHeight', 'highlightColor', 'backgroundColor', 'mediaName', 'objectFit'] as const;
 
 function yMapToObject(yMap: Y.Map<any>): Record<string, any> {
     const obj: Record<string, any> = {};
@@ -95,8 +94,7 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
                     id: slideId,
                     objectIds: objIds,
                     backgroundColor: slideMap.get('backgroundColor') || '#ffffff',
-                    backgroundImage: slideMap.get('backgroundImage') || '',
-                    backgroundImageSourcePath: slideMap.get('backgroundImageSourcePath') || undefined,
+                    backgroundMediaName: slideMap.get('backgroundMediaName') || '',
                 };
             }
             for (const [objId, objMapValue] of objectsMap) {
@@ -206,8 +204,7 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
             const slideYMap = new Y.Map();
             slideYMap.set('id', newSlideId);
             slideYMap.set('backgroundColor', slide.backgroundColor);
-            slideYMap.set('backgroundImage', slide.backgroundImage || '');
-            if (slide.backgroundImageSourcePath) slideYMap.set('backgroundImageSourcePath', slide.backgroundImageSourcePath);
+            slideYMap.set('backgroundMediaName', slide.backgroundMediaName || '');
             const objIdsArr = new Y.Array();
             objIdsArr.push(newObjIds);
             slideYMap.set('objectIds', objIdsArr);
@@ -242,7 +239,7 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
         });
     }, [getTargetSlideIds]);
 
-    const updateSlideBackgroundImage = useCallback((slideId: string, url: string, sourcePath: DrivePath | undefined, applyTo: ApplyTo = 'this') => {
+    const updateSlideBackgroundImage = useCallback((slideId: string, mediaName: string, applyTo: ApplyTo = 'this') => {
         const doc = docRef.current;
         if (!doc) return;
         const targetIds = getTargetSlideIds(slideId, applyTo);
@@ -251,12 +248,7 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
             for (const id of targetIds) {
                 const slideMap = slidesMap.get(id) as Y.Map<any> | undefined;
                 if (!slideMap) continue;
-                slideMap.set('backgroundImage', url);
-                if (sourcePath) {
-                    slideMap.set('backgroundImageSourcePath', sourcePath);
-                } else {
-                    slideMap.delete('backgroundImageSourcePath');
-                }
+                slideMap.set('backgroundMediaName', mediaName);
             }
         });
     }, [getTargetSlideIds]);

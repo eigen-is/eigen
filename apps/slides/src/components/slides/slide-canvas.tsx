@@ -1,6 +1,7 @@
 import {useCallback, useRef} from 'react';
-import {SLIDE_ASPECT_RATIO, SlideItem, SlideObject, pxToPercent} from './types';
+import {pxToPercent, SLIDE_ASPECT_RATIO, SlideItem, SlideObject} from './types';
 import {SlideObjectView} from './slide-object';
+import {useMediaResolver} from '@workspace/lib/drive';
 import {useObjectDrag} from './hooks/use-object-drag';
 import {useSnapTargets} from './hooks/use-snap-lines';
 
@@ -41,6 +42,8 @@ export function SlideCanvas({
                                 onMoveToBack,
                                 canWrite
                             }: SlideCanvasProps) {
+    const {resolveMediaUrl} = useMediaResolver();
+    const bgUrl = slide.backgroundMediaName ? resolveMediaUrl(slide.backgroundMediaName) : null;
     const canvasRef = useRef<HTMLDivElement>(null);
     const primarySelectedId = selectedObjectIds.length === 1 ? selectedObjectIds[0] : null;
     const {vSnaps, hSnaps} = useSnapTargets(objects, primarySelectedId);
@@ -96,7 +99,7 @@ export function SlideCanvas({
                     maxHeight: '100%',
                     maxWidth: '100%',
                     backgroundColor: slide.backgroundColor,
-                    ...(slide.backgroundImage ? {backgroundImage: `url(${slide.backgroundImage})`, backgroundSize: 'cover', backgroundPosition: 'center'} : {}),
+                    ...(bgUrl ? {backgroundImage: `url(${bgUrl})`, backgroundSize: 'cover', backgroundPosition: 'center'} : {}),
                 }}
                 onMouseDown={handleCanvasMouseDown}
                 onDrop={handleDrop}

@@ -49,6 +49,7 @@ function ChatView() {
                             currentUserId={chat.currentUserId}
                             ownerId={ownerId}
                             mountId={mountId}
+                            mediaFolderId={chat.mediaFolderId}
                         />
                         <ChatMessageInput
                             onSend={chat.handleSendMessage}

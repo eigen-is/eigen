@@ -8,7 +8,6 @@ export const chatKeys = {
     all: ['chat'] as const,
     messages: (ownerId: string, mountId: string, chatId: string) =>
         [...chatKeys.all, 'messages', ownerId, mountId, chatId] as const,
-    file: (pathId: string) => [...chatKeys.all, 'file', pathId] as const,
 };
 
 export function useChats(ownerId: string) {
@@ -52,18 +51,6 @@ export function usePostMessage(ownerId: string, mountId: string, chatId: string)
         onSuccess: () => {
             queryClient.invalidateQueries({queryKey: chatKeys.messages(ownerId, mountId, chatId)});
         },
-    });
-}
-
-export function useFileInfo(ownerId: string, mountId: string, pathId: string) {
-    return useQuery({
-        queryKey: chatKeys.file(pathId),
-        queryFn: async () => {
-            const res = await driveApi({ownerId})({mountId}).file({pathId}).get();
-            return res.data as DrivePath | null;
-        },
-        staleTime: 60_000,
-        enabled: !!pathId && !!ownerId && !!mountId,
     });
 }
 

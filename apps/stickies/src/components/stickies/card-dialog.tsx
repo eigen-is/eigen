@@ -7,6 +7,7 @@ import {TooltipButton} from '@workspace/ui/components/layout/toolbar/tooltip-but
 import {CardSettingsDialog} from './card-settings-dialog';
 import {ChatMessageInput, ChatMessageList} from '@workspace/ui';
 import {useChatRoom} from '@workspace/lib/chat';
+import {useMediaResolver} from '@workspace/lib/drive';
 import * as Y from 'yjs';
 
 type CardDialogProps = {
@@ -18,7 +19,16 @@ type CardDialogProps = {
     mountId: string;
 }
 
-function CardChat({ownerId, mountId, chatId}: {ownerId: string; mountId: string; chatId: string}) {
+function CardChat({ownerId, mountId, chatName}: {ownerId: string; mountId: string; chatName: string}) {
+    const {resolveChatId} = useMediaResolver();
+    const chatId = resolveChatId(chatName);
+
+    if (!chatId) return <div className="px-4 pb-4 text-sm text-muted-foreground">Chat not found.</div>;
+
+    return <CardChatInner ownerId={ownerId} mountId={mountId} chatId={chatId}/>;
+}
+
+function CardChatInner({ownerId, mountId, chatId}: {ownerId: string; mountId: string; chatId: string}) {
     const chat = useChatRoom(ownerId, mountId, chatId);
 
     return (
@@ -29,6 +39,7 @@ function CardChat({ownerId, mountId, chatId}: {ownerId: string; mountId: string;
                 currentUserId={chat.currentUserId}
                 ownerId={ownerId}
                 mountId={mountId}
+                mediaFolderId={chat.mediaFolderId}
                 emptyMessage=""
             />
             <ChatMessageInput
@@ -72,8 +83,8 @@ export function CardDialog({isOpen, onClose, card, yjsDoc, ownerId, mountId}: Ca
 
                     <Separator className="my-2"/>
 
-                    {card.chatId ? (
-                        <CardChat ownerId={ownerId} mountId={mountId} chatId={card.chatId}/>
+                    {card.chatName ? (
+                        <CardChat ownerId={ownerId} mountId={mountId} chatName={card.chatName}/>
                     ) : (
                         <div className="px-4 pb-4 text-sm text-muted-foreground">
                             No chat available for this card.

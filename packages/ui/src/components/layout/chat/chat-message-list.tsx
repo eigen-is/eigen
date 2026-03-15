@@ -5,7 +5,7 @@ import {cn} from "../../../lib/utils";
 import {usePublicUser} from "@workspace/lib/public";
 import {useContacts} from "@workspace/lib/contacts";
 import {Paperclip} from "lucide-react";
-import {useFileInfo} from "@workspace/lib/chat";
+import {useFolderContent} from "@workspace/lib/drive";
 import {getDriveDownloadUrl, getDriveThumbnailUrl, getMailComposeUrl} from "@workspace/lib/api";
 import {usePreview} from "../preview-provider";
 import {formatTime} from "@workspace/lib/date";
@@ -20,6 +20,7 @@ type ChatMessageListProps = {
     currentUserId: string;
     ownerId?: string;
     mountId?: string;
+    mediaFolderId?: string | null;
     className?: string;
     emptyMessage?: string;
 }
@@ -30,12 +31,13 @@ function isSameAuthorAndClose(prev: ChatMessage, curr: ChatMessage): boolean {
     return diff < 5 * 60 * 1000;
 }
 
-function AttachmentChip({pathId, ownerId, mountId}: { pathId: string; ownerId: string; mountId: string }) {
-    const {data: fileInfo} = useFileInfo(ownerId, mountId, pathId);
+function AttachmentChip({fileName, ownerId, mountId, mediaFolderId}: { fileName: string; ownerId: string; mountId: string; mediaFolderId: string }) {
+    const {data: mediaContents = []} = useFolderContent(ownerId, mountId, mediaFolderId);
+    const fileInfo = mediaContents.find(f => f.name === fileName);
     const {openPreview, canPreview} = usePreview();
 
-    const name = fileInfo?.details?.originalName || fileInfo?.name || pathId;
-    const downloadUrl = getDriveDownloadUrl(ownerId, mountId, pathId);
+    const name = fileInfo?.details?.originalName || fileInfo?.name || fileName;
+    const downloadUrl = fileInfo ? getDriveDownloadUrl(ownerId, mountId, fileInfo.id) : '#';
     const thumbnailUrl = fileInfo?.thumbnail ? getDriveThumbnailUrl(ownerId, mountId, fileInfo.thumbnail) : null;
     const isImage = fileInfo?.mimeType?.startsWith('image/');
     const previewable = fileInfo ? canPreview(fileInfo) : false;
@@ -126,6 +128,7 @@ export function ChatMessageList({
                                     isLoading,
                                     ownerId,
                                     mountId,
+                                    mediaFolderId,
                                     className,
                                     emptyMessage = 'No messages yet. Start the conversation!',
                                 }: ChatMessageListProps) {
@@ -273,10 +276,10 @@ export function ChatMessageList({
                                     className="text-sm text-foreground whitespace-pre-wrap break-words"
                                 />
                             )}
-                            {message.attachments && message.attachments.length > 0 && !isDeleted && ownerId && mountId && (
+                            {message.attachments && message.attachments.length > 0 && !isDeleted && ownerId && mountId && mediaFolderId && (
                                 <div className="flex flex-wrap gap-2 mt-1">
-                                    {message.attachments.map((id) => (
-                                        <AttachmentChip key={id} pathId={id} ownerId={ownerId} mountId={mountId}/>
+                                    {message.attachments.map((name) => (
+                                        <AttachmentChip key={name} fileName={name} ownerId={ownerId} mountId={mountId} mediaFolderId={mediaFolderId}/>
                                     ))}
                                 </div>
                             )}

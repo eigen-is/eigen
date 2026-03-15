@@ -18,15 +18,20 @@
 ```typescript
 type EigenClipboardItem =
     | { type: 'text'; text: string; meta?: Record<string, unknown> }
-    | { type: 'image'; src: string; sourcePath?: DrivePath; meta?: Record<string, unknown> };
+    | { type: 'image'; mediaName: string; sourcePathId: string; sourceParentId: string | null;
+        sourceOwnerId: string; sourceMountId: string; meta?: Record<string, unknown> };
 
 type EigenClipboardData = { version: 1; items: EigenClipboardItem[] }
 ```
 
+Image items carry the file **name** (for Yjs storage on paste) plus source identifiers (for re-upload detection and
+downloading). See [MEDIA-REFERENCES.md](MEDIA-REFERENCES.md) for the full name-based reference design.
+
 ## Cross-Document Media
 
-When pasting images between documents, `needsReUpload()` checks if source differs from target. `reUploadImage()` fetches
-and re-uploads to target's `media/` folder.
+When pasting images between documents, `needsReUpload()` compares `sourceParentId` to the target's `mediaFolderId`.
+If different, `reUploadImage()` downloads via the source pathId and uploads to the target's `media/` folder. The new
+file's **name** is stored in Yjs (may differ from original due to `getUniqueFileName()` conflict resolution).
 
 ## API
 

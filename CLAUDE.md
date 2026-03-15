@@ -168,6 +168,7 @@ Detailed architecture docs in `docs/`:
 | [SLIDES.md](docs/SLIDES.md)                                     | Presentation editor, percentage coordinates     |
 | [SHEETS.md](docs/SHEETS.md)                                     | Spreadsheet, op-based Yjs sync                  |
 | [CLIPBOARD.md](docs/CLIPBOARD.md)                               | Inter-app copy-paste                            |
+| [MEDIA-REFERENCES.md](docs/MEDIA-REFERENCES.md)                 | Name-based media/chat references in eigendocs   |
 | [HOTKEYS.md](docs/HOTKEYS.md)                                   | Keyboard shortcuts                              |
 | [PUBLIC-API.md](docs/PUBLIC-API.md)                             | Public endpoints, avatar resolution             |
 | [PEOPLE.md](docs/PEOPLE.md)                                     | Org/team management UI                          |
