@@ -11,6 +11,7 @@ import {SSEProvider} from "../sse-provider";
 import {TooltipProvider} from "@radix-ui/react-tooltip"
 import {HotkeysProvider, useHotkey} from "@tanstack/react-hotkeys"
 import {printDocument} from "../../../lib/printElement.ts"
+import {ThemeProvider} from "./theme-provider.tsx"
 
 interface EigenAppProps {
     children: React.ReactNode;
@@ -33,15 +34,17 @@ export function EigenApp({children}: EigenAppProps) {
             <TooltipProvider>
                 <QueryClientProvider client={queryClient}>
                     <AuthProvider>
-                        <SSEProvider>
-                            <UploadProvider>
-                                <PreviewProvider>
-                                    <GlobalHotkeys/>
-                                    {children}
-                                    <Toaster/>
-                                </PreviewProvider>
-                            </UploadProvider>
-                        </SSEProvider>
+                        <ThemeProvider>
+                            <SSEProvider>
+                                <UploadProvider>
+                                    <PreviewProvider>
+                                        <GlobalHotkeys/>
+                                        {children}
+                                        <Toaster/>
+                                    </PreviewProvider>
+                                </UploadProvider>
+                            </SSEProvider>
+                        </ThemeProvider>
                         <ReactQueryDevtools initialIsOpen={false}/>
                     </AuthProvider>
                 </QueryClientProvider>

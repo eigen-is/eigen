@@ -6,10 +6,7 @@ import Maildir from "../mail/maildir.ts";
 import {Drive} from "../drive";
 import {JsonStore, LocalFilesystem} from "../core";
 import {Calendar} from "../calendar/calendar";
-
-export type UserSettings = {
-    darkMode?: 'day' | 'night' | 'system';
-};
+import type {UserSettings} from "@workspace/lib/types/settings";
 
 export class UserHome extends Home {
     declare public settings: JsonStore<UserSettings>;

@@ -6,6 +6,7 @@ import {parseOwnerId} from "@workspace/lib/types";
 import {ApiError, JsonStore, LocalFilesystem} from "../core";
 import {Drive} from '../drive';
 import {Calendar} from '../calendar/calendar';
+import type {TeamSettings} from "@workspace/lib/types/settings";
 
 export function getSyntheticTeamUser(ownerId: string): User {
     const parsed = parseOwnerId(ownerId);
@@ -22,12 +23,6 @@ export function getSyntheticTeamUser(ownerId: string): User {
         updatedAt: new Date(),
     };
 }
-
-export type TeamSettings = {
-    calendar?: {
-        enabled?: boolean;
-    };
-};
 
 export class TeamHome extends Home {
     public teamId: string;
