@@ -7,7 +7,9 @@ import {Drive} from "../drive";
 import {JsonStore, LocalFilesystem} from "../core";
 import {Calendar} from "../calendar/calendar";
 
-export type UserSettings = Record<string, unknown>;
+export type UserSettings = {
+    darkMode?: 'day' | 'night' | 'system';
+};
 
 export class UserHome extends Home {
     declare public settings: JsonStore<UserSettings>;

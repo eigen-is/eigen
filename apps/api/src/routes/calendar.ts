@@ -1,10 +1,9 @@
 import {Elysia, t} from "elysia";
 import {betterAuth} from "./auth";
 import {getCalendar} from "../lib/calendar/calendar";
-import type {TeamHome} from "../lib/home";
 import {getHome} from "../lib/home";
 import {getMemberships} from "../lib/user";
-import {parseOwnerId} from "@workspace/lib/types";
+import {parseOwnerId, teamOwnerId} from "@workspace/lib/types";
 import {ApiError} from "../lib/core";
 import type {CalendarShare, FreeBusyBlock} from "@workspace/lib/types/calendar";
 
@@ -232,28 +231,12 @@ export const calendarRouter = new Elysia({name: "calendar"})
         return ownerHome.calendar.getSharedWith(user.email, memberships.teamIds);
     }, {auth: true})
 
-    // --- Team settings ---
-    .get("/calendar/team/:teamId/settings", async ({params, user}) => {
-        const memberships = await getMemberships(user.id);
-        if (!memberships.teamIds.includes(params.teamId)) throw new ApiError(403, 'Not a member of this team');
-        const teamHome = await getHome(`team_${params.teamId}`) as TeamHome;
-        return teamHome.settings.get().calendar || {};
-    }, {auth: true})
-
-    .put("/calendar/team/:teamId/settings", async ({params, body, user}) => {
-        const memberships = await getMemberships(user.id);
-        if (!memberships.teamIds.includes(params.teamId)) throw new ApiError(403, 'Not a member of this team');
-        const teamHome = await getHome(`team_${params.teamId}`) as TeamHome;
-        const updated = await teamHome.settings.set({calendar: body});
-        return updated.calendar || {};
-    }, {body: t.Object({enabled: t.Optional(t.Boolean())}), auth: true})
-
     // --- Shared calendars ---
     .get("/calendar/:ownerId/shared", async ({user}) => {
         const cal = await resolveCalendar(user, user.id);
         const memberships = await getMemberships(user.id);
         for (const teamId of memberships.teamIds) {
-            const teamOwner = `team_${teamId}`;
+            const teamOwner = teamOwnerId(teamId);
             try {
                 const teamHome = await getHome(teamOwner);
                 const teamCal = teamHome.calendar;
