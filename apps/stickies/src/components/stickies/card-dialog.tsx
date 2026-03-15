@@ -5,7 +5,7 @@ import {Separator} from '@workspace/ui/components/separator';
 import {Pencil} from 'lucide-react';
 import {TooltipButton} from '@workspace/ui/components/layout/toolbar/tooltip-button.tsx';
 import {CardSettingsDialog} from './card-settings-dialog';
-import {ChatMessageList, ChatMessageInput} from '@workspace/ui';
+import {ChatMessageInput, ChatMessageList} from '@workspace/ui';
 import {useChatRoom} from '@workspace/lib/chat';
 import * as Y from 'yjs';
 
@@ -51,7 +51,7 @@ export function CardDialog({isOpen, onClose, card, yjsDoc, ownerId, mountId}: Ca
     return (
         <>
             <Dialog open={isOpen} onOpenChange={(open: boolean) => !open && onClose()}>
-                <DialogContent className="sm:max-w-[500px] max-h-[70vh] flex flex-col p-0 gap-0">
+                <DialogContent size="md" className="max-h-[70vh] flex flex-col p-0 gap-0">
                     <DialogHeader className="flex flex-row items-center gap-2 px-4 pt-4 pb-2">
                         <DialogTitle className="flex-1">
                             {card.title}
@@ -65,7 +65,7 @@ export function CardDialog({isOpen, onClose, card, yjsDoc, ownerId, mountId}: Ca
                     </DialogHeader>
 
                     {card.description && (
-                        <div className="px-4 text-sm text-gray-700">
+                        <div className="px-4 text-sm text-foreground">
                             <p className="whitespace-pre-line">{card.description}</p>
                         </div>
                     )}

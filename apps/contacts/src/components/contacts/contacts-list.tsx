@@ -39,7 +39,7 @@ export function ContactsListToolbar({searchQuery, onSearchChange, onSortChange}:
                 value={searchQuery}
                 onChange={onSearchChange}
                 maxWidth="full"
-                inputClassName="h-8 bg-white"
+                inputClassName="h-8 bg-background"
             />
             <DropdownMenu>
                 <DropdownMenuTrigger asChild>
@@ -236,7 +236,7 @@ export function ContactsList({
                                 onEdit(contextMenu.item!);
                                 contextMenu.close();
                             }}>
-                                <Edit className="w-4 h-4 mr-2"/> Edit
+                                <Edit className="h-4 w-4 mr-2"/> Edit
                             </DropdownMenuItem>
                         )}
                         {onDelete && !hasMe && contextItems.length > 0 && (
@@ -244,7 +244,7 @@ export function ContactsList({
                                 onDelete(contextItems);
                                 contextMenu.close();
                             }}>
-                                <Trash2 className="w-4 h-4 mr-2"/>
+                                <Trash2 className="h-4 w-4 mr-2"/>
                                 {isSingleSelect ? 'Delete' : `Delete ${contextItems.length} contacts`}
                             </DropdownMenuItem>
                         )}

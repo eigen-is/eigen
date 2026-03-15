@@ -33,7 +33,7 @@ export function MembersListToolbar({
                 value={searchQuery}
                 onChange={onSearchChange}
                 maxWidth="full"
-                inputClassName="h-8 bg-white"
+                inputClassName="h-8 bg-background"
             />
             <Button variant="ghost" size="icon" className="h-8 w-8 shrink-0" onClick={() => onShowCreateDialog(true)}>
                 <Plus className="h-4 w-4"/>

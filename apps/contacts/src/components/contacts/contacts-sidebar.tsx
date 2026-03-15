@@ -1,13 +1,13 @@
-import {Clock, Star, UserRoundPlus, UsersRound, X} from 'lucide-react';
+import {Clock, Star, UserRoundPlus, UsersRound} from 'lucide-react';
 import {Link} from '@tanstack/react-router';
 import {Button} from "@workspace/ui/components/button";
 import {LabelManager} from '@workspace/ui/components/layout/labels/label-manager';
 import {SidebarItem} from '@workspace/ui/components/layout/sidebar/sidebar-item';
 import {SidebarSection} from '@workspace/ui/components/layout/sidebar/sidebar-section';
+import {SidebarHeader} from '@workspace/ui/components/layout/sidebar/sidebar-header';
 import {Separator} from '@workspace/ui/components/separator';
 import {type Label} from "@workspace/lib/types/label";
 import {useLabels} from '@workspace/lib/contacts';
-import {AppLogo} from '@workspace/ui/components/layout/app/app-logo.tsx';
 import {EigenLoader, StorageUsage} from "@workspace/ui";
 
 interface ContactsSidebarProps {
@@ -28,16 +28,7 @@ export function ContactsSidebar({condensed = false, onClose, isMobile = false, o
 
     return (
         <div className="h-full flex flex-col bg-background">
-            {isMobile && (
-                <div className="flex items-center h-12 bg-app px-4">
-                    <Button variant="ghost" size="icon" onClick={onClose}
-                            className="mr-2 text-white hover:bg-primary/20 hover:text-white">
-                        <X className="h-5 w-5"/>
-                        <span className="sr-only">Close menu</span>
-                    </Button>
-                    <AppLogo appName="contacts"/>
-                </div>
-            )}
+            {isMobile && <SidebarHeader appName="contacts" onClose={onClose}/>}
 
             <div className="px-3 py-2">
                 <Button variant="default" size={condensed ? "icon" : "default"} asChild

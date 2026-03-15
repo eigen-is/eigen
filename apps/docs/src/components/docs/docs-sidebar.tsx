@@ -1,7 +1,7 @@
-import {Download, FileText, Plus, UsersRound, X} from 'lucide-react';
+import {Download, FileText, Plus, UsersRound} from 'lucide-react';
 import {Button} from "@workspace/ui/components/button";
 import {SidebarSection} from '@workspace/ui/components/layout/sidebar/sidebar-section';
-import {AppLogo} from '@workspace/ui/components/layout/app/app-logo.tsx';
+import {SidebarHeader} from '@workspace/ui/components/layout/sidebar/sidebar-header';
 import {SidebarItem, StorageUsage} from "@workspace/ui";
 import {DrivePath} from "@workspace/lib/types/drive";
 import {useState} from 'react';
@@ -38,16 +38,7 @@ export function DocsSidebar({
 
     return (
         <div className="flex h-full min-h-[calc(100vh-3.5rem)] flex-col">
-            {isMobile && (
-                <div className="flex items-center h-12 bg-app px-4">
-                    <Button variant="ghost" size="icon" onClick={onClose}
-                            className="mr-2 text-white hover:bg-primary/20 hover:text-white">
-                        <X className="h-5 w-5"/>
-                        <span className="sr-only">Close menu</span>
-                    </Button>
-                    <AppLogo appName="docs"/>
-                </div>
-            )}
+            {isMobile && <SidebarHeader appName="docs" onClose={onClose}/>}
 
             <div className="px-3 py-2">
                 <Button

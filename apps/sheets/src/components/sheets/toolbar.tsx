@@ -1,11 +1,5 @@
 import {useState} from 'react';
-import {
-    FileText,
-    Folder,
-    Pencil,
-    Trash2,
-    UserRoundPlus,
-} from 'lucide-react';
+import {FileText, Folder, Pencil, Trash2, UserRoundPlus,} from 'lucide-react';
 import {Button} from '@workspace/ui/components/button';
 import {
     DropdownMenu,
@@ -48,23 +42,23 @@ export function ToolbarLeftItems({path, onAccessDialogOpen, canWrite}: ToolbarIt
                 </DropdownMenuTrigger>
                 <DropdownMenuContent align="start">
                     <DropdownMenuItem onClick={() => rootFolder && setCreateSheetsOpen(true)}>
-                        <FileText className="w-4 h-4 mr-2"/> New sheet
+                        <FileText className="h-4 w-4 mr-2"/> New sheet
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => navigate({to: `/`})}>
-                        <Folder className="w-4 h-4 mr-2"/> Open
+                        <Folder className="h-4 w-4 mr-2"/> Open
                     </DropdownMenuItem>
                     <DropdownMenuItem onClick={() => path && setRenameDialogOpen(true)}>
-                        <Pencil className="w-4 h-4 mr-2"/> Rename
+                        <Pencil className="h-4 w-4 mr-2"/> Rename
                     </DropdownMenuItem>
                     <DropdownMenuSeparator/>
                     <DropdownMenuItem onClick={onAccessDialogOpen}>
-                        <UserRoundPlus className="w-4 h-4 mr-2"/> Edit access
+                        <UserRoundPlus className="h-4 w-4 mr-2"/> Edit access
                     </DropdownMenuItem>
                     {canWrite && (
                         <>
                             <DropdownMenuSeparator/>
                             <DropdownMenuItem onClick={() => path && setDeleteDialogOpen(true)}>
-                                <Trash2 className="w-4 h-4 mr-2"/> Delete
+                                <Trash2 className="h-4 w-4 mr-2"/> Delete
                             </DropdownMenuItem>
                         </>
                     )}

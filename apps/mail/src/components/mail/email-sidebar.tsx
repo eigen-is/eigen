@@ -1,10 +1,9 @@
-import {AlertOctagon, AlertTriangle, Archive, File, Inbox, Send, Trash2, X} from 'lucide-react';
+import {AlertOctagon, AlertTriangle, Archive, File, Inbox, Send, Trash2} from 'lucide-react';
 import {MaildirMailbox} from "@workspace/lib/types/mail";
-import {Button} from "@workspace/ui/components/button";
 import {SidebarItem} from '@workspace/ui/components/layout/sidebar/sidebar-item';
 import {DroppableSidebarItem} from '@workspace/ui/components/layout/sidebar/droppable-sidebar-item';
 import {SidebarSection} from '@workspace/ui/components/layout/sidebar/sidebar-section';
-import {AppLogo} from '@workspace/ui/components/layout/app/app-logo.tsx';
+import {SidebarHeader} from '@workspace/ui/components/layout/sidebar/sidebar-header';
 import React, {useMemo} from 'react';
 import {EigenLoader, StorageUsage} from "@workspace/ui";
 import {EmailComposeButton} from "./email-compose-button";
@@ -149,16 +148,7 @@ export function EmailSidebar({
     return (
         <div className="flex h-full min-h-[calc(100vh-3.5rem)] flex-col">
 
-            {isMobile && (
-                <div className="flex items-center h-12 bg-app px-4">
-                    <Button variant="ghost" size="icon" onClick={onClose}
-                            className="mr-2 text-white hover:bg-primary/20 hover:text-white">
-                        <X className="h-5 w-5"/>
-                        <span className="sr-only">Close menu</span>
-                    </Button>
-                    <AppLogo appName="mail"/>
-                </div>
-            )}
+            {isMobile && <SidebarHeader appName="mail" onClose={onClose}/>}
 
             <div className="px-3 py-2">
                 <EmailComposeButton condensed={condensed}/>

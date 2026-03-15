@@ -1,8 +1,8 @@
-import {MessageSquare, Plus, X} from 'lucide-react';
+import {MessageSquare, Plus} from 'lucide-react';
 import {Button} from "@workspace/ui/components/button";
 import {SidebarSection} from '@workspace/ui/components/layout/sidebar/sidebar-section';
 import {SidebarItem} from '@workspace/ui/components/layout/sidebar/sidebar-item';
-import {AppLogo} from '@workspace/ui/components/layout/app/app-logo.tsx';
+import {SidebarHeader} from '@workspace/ui/components/layout/sidebar/sidebar-header';
 import {useChats, useCreateChat} from '@workspace/lib/chat';
 import {getChatRoomUrl} from "@workspace/lib/api";
 import {EigenLoader} from "@workspace/ui";
@@ -60,16 +60,7 @@ export function ChatSidebar({
 
     return (
         <div className="flex h-full min-h-[calc(100vh-3.5rem)] flex-col">
-            {isMobile && (
-                <div className="flex items-center h-12 bg-app px-4">
-                    <Button variant="ghost" size="icon" onClick={onClose}
-                            className="mr-2 text-white hover:bg-primary/20 hover:text-white">
-                        <X className="h-5 w-5"/>
-                        <span className="sr-only">Close menu</span>
-                    </Button>
-                    <AppLogo appName="chat"/>
-                </div>
-            )}
+            {isMobile && <SidebarHeader appName="chat" onClose={onClose}/>}
 
             <div className="px-3 py-2">
                 <Button

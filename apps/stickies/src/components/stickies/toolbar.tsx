@@ -63,7 +63,7 @@ export function Toolbar({canWrite, undoManager, onAccessDialogOpen, onRestore, o
     }, [undoManager, canWrite]);
 
     return (
-        <div className="bg-white h-12 flex items-center justify-between px-4 border-b no-print">
+        <div className="bg-background h-12 flex items-center justify-between px-4 border-b no-print">
             <div className="flex items-center gap-1">
                 <DropdownMenu>
                     <DropdownMenuTrigger asChild>
@@ -73,23 +73,23 @@ export function Toolbar({canWrite, undoManager, onAccessDialogOpen, onRestore, o
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="start">
                         <DropdownMenuItem onClick={() => rootFolder && setCreateStickiesOpen(true)}>
-                            <FileText className="w-4 h-4 mr-2"/> New stickies
+                            <FileText className="h-4 w-4 mr-2"/> New stickies
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => navigate({to: `/`})}>
-                            <Folder className="w-4 h-4 mr-2"/> Open
+                            <Folder className="h-4 w-4 mr-2"/> Open
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => path && setRenameDialogOpen(true)}>
-                            <Pencil className="w-4 h-4 mr-2"/> Rename
+                            <Pencil className="h-4 w-4 mr-2"/> Rename
                         </DropdownMenuItem>
                         <DropdownMenuSeparator/>
                         <DropdownMenuItem onClick={onAccessDialogOpen}>
-                            <UserRoundPlus className="w-4 h-4 mr-2"/> Edit access
+                            <UserRoundPlus className="h-4 w-4 mr-2"/> Edit access
                         </DropdownMenuItem>
                         {canWrite && (
                             <>
                                 <DropdownMenuSeparator/>
                                 <DropdownMenuItem onClick={() => path && setDeleteDialogOpen(true)}>
-                                    <Trash2 className="w-4 h-4 mr-2"/> Delete
+                                    <Trash2 className="h-4 w-4 mr-2"/> Delete
                                 </DropdownMenuItem>
                             </>
                         )}

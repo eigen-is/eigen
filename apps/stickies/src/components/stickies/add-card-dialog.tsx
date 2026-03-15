@@ -46,7 +46,7 @@ export function AddCardDialog({isOpen, onClose, onAddCard, columnId}: AddCardDia
 
     return (
         <Dialog open={isOpen} onOpenChange={onClose}>
-            <DialogContent className="sm:max-w-[425px]">
+            <DialogContent size="sm">
                 <form onSubmit={handleSubmit}>
                     <DialogHeader>
                         <DialogTitle>Add Sticky</DialogTitle>

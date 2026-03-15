@@ -18,7 +18,7 @@ export function RecurringActionDialog({open, onOpenChange, title, onConfirm}: Re
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-[360px]">
+            <DialogContent size="xs">
                 <DialogHeader>
                     <DialogTitle>{title}</DialogTitle>
                 </DialogHeader>

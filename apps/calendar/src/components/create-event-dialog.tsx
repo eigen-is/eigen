@@ -1,5 +1,5 @@
 import {useEffect, useMemo, useState} from 'react';
-import {Clock, MapPin, AlignLeft, Calendar} from 'lucide-react';
+import {AlignLeft, Calendar, Clock, MapPin} from 'lucide-react';
 import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle} from '@workspace/ui/components/dialog';
 import {Button} from '@workspace/ui/components/button';
 import {Input} from '@workspace/ui/components/input';
@@ -7,10 +7,10 @@ import {Textarea} from '@workspace/ui/components/textarea';
 import {Label} from '@workspace/ui/components/label';
 import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '@workspace/ui/components/select';
 import {Checkbox} from '@workspace/ui/components/checkbox';
-import {useCalendars, useSharedCalendars, useCreateEvent} from '@workspace/lib/calendar';
+import {useCalendars, useCreateEvent, useSharedCalendars} from '@workspace/lib/calendar';
 import {useAuth} from '@workspace/lib/auth';
 import {RecurrencePicker} from './recurrence-picker';
-import {TimeSelect, roundToNext15Minutes, addMinutes, timeToMinutes} from './time-select';
+import {addMinutes, roundToNext15Minutes, TimeSelect, timeToMinutes} from './time-select';
 
 type CalendarOption = {
     id: string;
@@ -157,7 +157,7 @@ export function CreateEventDialog({open, onOpenChange, defaultDate, defaultCalen
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
-            <DialogContent className="sm:max-w-[500px]">
+            <DialogContent size="md">
                 <DialogHeader>
                     <DialogTitle>New Event</DialogTitle>
                 </DialogHeader>
