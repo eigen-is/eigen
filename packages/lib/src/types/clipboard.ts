@@ -1,5 +1,3 @@
-import type {DrivePath} from './drive';
-
 export type EigenClipboardTextItem = {
     type: 'text';
     text: string;
@@ -8,8 +6,11 @@ export type EigenClipboardTextItem = {
 
 export type EigenClipboardImageItem = {
     type: 'image';
-    src: string;
-    sourcePath?: DrivePath;
+    mediaName: string;
+    sourcePathId: string;
+    sourceParentId: string | null;
+    sourceOwnerId: string;
+    sourceMountId: string;
     meta?: Record<string, unknown>;
 }
 
@@ -19,5 +20,3 @@ export type EigenClipboardData = {
     version: 1;
     items: EigenClipboardItem[];
 }
-
-

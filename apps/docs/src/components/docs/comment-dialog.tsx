@@ -5,6 +5,7 @@ import {Textarea} from "@workspace/ui/components/textarea";
 import {useChatRoom, useCreateChat} from "@workspace/lib/chat";
 import {ChatMessageInput, ChatMessageList} from "@workspace/ui";
 import type {DrivePath} from "@workspace/lib/types/drive";
+import {useMediaResolver} from "@workspace/lib/drive";
 
 type CreateCommentDialogProps = {
     open: boolean;
@@ -13,7 +14,7 @@ type CreateCommentDialogProps = {
     mountId: string;
     chatFolderId: string;
     selectedText: string;
-    onCommentCreated: (chatId: string) => void;
+    onCommentCreated: (chatName: string) => void;
 }
 
 export function CreateCommentDialog({
@@ -43,7 +44,7 @@ export function CreateCommentDialog({
                 await chatApi({ownerId})({mountId})({chatId: chatPath.id}).messages.post({
                     content: comment.trim(),
                 });
-                onCommentCreated(chatPath.id);
+                onCommentCreated(chatPath.name);
             }
         } finally {
             setIsSubmitting(false);
@@ -105,7 +106,7 @@ type ViewCommentDialogProps = {
     onOpenChange: (open: boolean) => void;
     ownerId: string;
     mountId: string;
-    chatId: string;
+    chatName: string;
 }
 
 export function ViewCommentDialog({
@@ -113,9 +114,11 @@ export function ViewCommentDialog({
                                       onOpenChange,
                                       ownerId,
                                       mountId,
-                                      chatId,
+                                      chatName,
                                   }: ViewCommentDialogProps) {
-    const chat = useChatRoom(ownerId, mountId, chatId);
+    const {resolveChatId} = useMediaResolver();
+    const chatId = resolveChatId(chatName);
+    const chat = useChatRoom(ownerId, mountId, chatId || '');
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -124,25 +127,32 @@ export function ViewCommentDialog({
                     <DialogTitle>Comment</DialogTitle>
                 </DialogHeader>
                 <div className="flex flex-col flex-1 min-h-0 overflow-hidden px-6">
-                    <ChatMessageList
-                        messages={chat.messages}
-                        isLoading={chat.isLoading}
-                        currentUserId={chat.currentUserId}
-                        ownerId={ownerId}
-                        mountId={mountId}
-                        emptyMessage=""
-                        className="flex-1"
-                    />
-                    <div className="mt-4 pb-6">
-                        <ChatMessageInput
-                            onSend={chat.handleSendMessage}
-                            disabled={chat.disabled}
-                            readOnly={chat.readOnly}
-                            placeholder="Reply..."
-                            roomMembers={chat.roomMembers}
-                            messageCount={chat.messages.length}
-                        />
-                    </div>
+                    {chatId ? (
+                        <>
+                            <ChatMessageList
+                                messages={chat.messages}
+                                isLoading={chat.isLoading}
+                                currentUserId={chat.currentUserId}
+                                ownerId={ownerId}
+                                mountId={mountId}
+                                mediaFolderId={chat.mediaFolderId}
+                                emptyMessage=""
+                                className="flex-1"
+                            />
+                            <div className="mt-4 pb-6">
+                                <ChatMessageInput
+                                    onSend={chat.handleSendMessage}
+                                    disabled={chat.disabled}
+                                    readOnly={chat.readOnly}
+                                    placeholder="Reply..."
+                                    roomMembers={chat.roomMembers}
+                                    messageCount={chat.messages.length}
+                                />
+                            </div>
+                        </>
+                    ) : (
+                        <p className="text-sm text-muted-foreground pb-6">Comment not found.</p>
+                    )}
                 </div>
             </DialogContent>
         </Dialog>

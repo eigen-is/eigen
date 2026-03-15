@@ -3,13 +3,13 @@ import {Plugin, PluginKey} from '@tiptap/pm/state';
 
 export type CommentMarkOptions = {
     HTMLAttributes: Record<string, unknown>;
-    onCommentClick?: (chatId: string) => void;
+    onCommentClick?: (chatName: string) => void;
 };
 
 declare module '@tiptap/core' {
     interface Commands<ReturnType> {
         commentMark: {
-            setComment: (chatId: string) => ReturnType;
+            setComment: (chatName: string) => ReturnType;
             unsetComment: () => ReturnType;
         };
     }
@@ -27,19 +27,19 @@ export const CommentMark = Mark.create<CommentMarkOptions>({
 
     addAttributes() {
         return {
-            chatId: {
+            chatName: {
                 default: null,
-                parseHTML: (element: HTMLElement) => element.getAttribute('data-chat-id'),
+                parseHTML: (element: HTMLElement) => element.getAttribute('data-chat-name'),
                 renderHTML: (attributes: Record<string, unknown>) => {
-                    if (!attributes.chatId) return {};
-                    return {'data-chat-id': attributes.chatId};
+                    if (!attributes.chatName) return {};
+                    return {'data-chat-name': attributes.chatName};
                 },
             },
         };
     },
 
     parseHTML() {
-        return [{tag: 'span[data-chat-id]'}];
+        return [{tag: 'span[data-chat-name]'}];
     },
 
     renderHTML({HTMLAttributes}) {
@@ -54,8 +54,8 @@ export const CommentMark = Mark.create<CommentMarkOptions>({
 
     addCommands() {
         return {
-            setComment: (chatId: string) => ({commands}) => {
-                return commands.setMark(this.name, {chatId});
+            setComment: (chatName: string) => ({commands}) => {
+                return commands.setMark(this.name, {chatName});
             },
             unsetComment: () => ({commands}) => {
                 return commands.unsetMark(this.name);
@@ -75,9 +75,9 @@ export const CommentMark = Mark.create<CommentMarkOptions>({
                         const target = event.target as HTMLElement;
                         const commentEl = target.closest('.comment-highlight');
                         if (commentEl) {
-                            const chatId = commentEl.getAttribute('data-chat-id');
-                            if (chatId) {
-                                onCommentClick(chatId);
+                            const chatName = commentEl.getAttribute('data-chat-name');
+                            if (chatName) {
+                                onCommentClick(chatName);
                                 return true;
                             }
                         }

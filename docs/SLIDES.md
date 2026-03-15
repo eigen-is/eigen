@@ -19,7 +19,7 @@ Y.Map            "objects"     → objectId → Y.Map { id, slideId, type, x, y,
 
 **Text**: `text`, `fontSize`, `fontWeight`, `fontStyle`, `textDecoration`, `textAlign`, `verticalAlign`, `color`,
 `letterSpacing`, `lineHeight`, `highlightColor`, `backgroundColor`
-**Image**: `src` (drive embed URL), `objectFit`, `sourcePath`
+**Image**: `mediaName` (file name, resolved at render time), `objectFit`
 **Common (BaseObject)**: `x`, `y`, `w`, `h`, `rotation`, `borderColor`, `borderWidth`, `borderRadius`
 
 ### Shared Rendering

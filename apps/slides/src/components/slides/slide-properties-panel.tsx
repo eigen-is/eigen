@@ -21,10 +21,9 @@ import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '@wo
 import {Toggle} from '@workspace/ui/components/toggle';
 import {Popover, PopoverContent, PopoverTrigger} from '@workspace/ui/components/popover';
 import {ColorPicker} from '@workspace/ui/components/layout/media/color-picker';
-import {usePreview} from '@workspace/ui/components/layout/preview-provider';
-import type {DrivePath} from '@workspace/lib/types/drive';
 import type {ImageObject, SlideObject, TextObject} from './types';
 import {BORDER_RADIUS_ROUND} from './types';
+import {useMediaResolver} from '@workspace/lib/drive';
 
 const MIXED = 'mixed' as const;
 type MergedValue<T> = T | typeof MIXED | undefined;
@@ -292,19 +291,13 @@ function ImageProperties({objects, onUpdate}: {
     onUpdate: (updates: Partial<SlideObject>) => void;
 }) {
     const objectFit = getMergedValue(objects, o => o.objectFit);
-    const {openPreview} = usePreview();
+    const {resolveMediaUrl} = useMediaResolver();
 
     return (
         <PropertySection title="Image">
             {objects.length === 1 && (
-                <div
-                    className="border rounded overflow-hidden mb-2 cursor-pointer"
-                    onClick={() => {
-                        const sp = objects[0].sourcePath;
-                        if (sp) openPreview(sp);
-                    }}
-                >
-                    <img src={objects[0].src} alt="" className="max-h-24 mx-auto object-contain"/>
+                <div className="border rounded overflow-hidden mb-2">
+                    <img src={resolveMediaUrl(objects[0].mediaName) || ''} alt="" className="max-h-24 mx-auto object-contain"/>
                 </div>
             )}
             <PropertyRow label="Fit">
@@ -415,17 +408,17 @@ type ApplyTo = 'this' | 'this-and-following' | 'all';
 
 type SlideBackgroundPanelProps = {
     currentBackground: string;
-    currentBackgroundImage: string;
-    currentBackgroundImageSourcePath?: DrivePath;
+    currentBackgroundMediaName: string;
+    currentBackgroundImageUrl: string | null;
     onUpdateBackground: (color: string, applyTo: ApplyTo) => void;
-    onUpdateBackgroundImage: (url: string, sourcePath: DrivePath | undefined, applyTo: ApplyTo) => void;
-    onUploadImage: (file: File) => Promise<{ src: string; sourcePath: DrivePath } | null>;
+    onUpdateBackgroundImage: (mediaName: string, applyTo: ApplyTo) => void;
+    onUploadImage: (file: File) => Promise<string | null>;
 }
 
 export function SlideBackgroundPanel({
                                          currentBackground,
-                                         currentBackgroundImage,
-                                         currentBackgroundImageSourcePath,
+                                         currentBackgroundMediaName,
+                                         currentBackgroundImageUrl,
                                          onUpdateBackground,
                                          onUpdateBackgroundImage,
                                          onUploadImage
@@ -433,24 +426,19 @@ export function SlideBackgroundPanel({
     const [colorOpen, setColorOpen] = useState(false);
     const [applyTo, setApplyTo] = useState<ApplyTo>('this');
     const bgImageInputRef = useRef<HTMLInputElement>(null);
-    const {openPreview} = usePreview();
 
     const handleImageSelect = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (!file) return;
-        const result = await onUploadImage(file);
-        if (result) onUpdateBackgroundImage(result.src, result.sourcePath, applyTo);
+        const mediaName = await onUploadImage(file);
+        if (mediaName) onUpdateBackgroundImage(mediaName, applyTo);
         e.target.value = '';
     }, [onUploadImage, onUpdateBackgroundImage, applyTo]);
 
     const handleApply = useCallback(() => {
         onUpdateBackground(currentBackground, applyTo);
-        if (currentBackgroundImage) {
-            onUpdateBackgroundImage(currentBackgroundImage, currentBackgroundImageSourcePath, applyTo);
-        } else {
-            onUpdateBackgroundImage('', undefined, applyTo);
-        }
-    }, [applyTo, currentBackground, currentBackgroundImage, currentBackgroundImageSourcePath, onUpdateBackground, onUpdateBackgroundImage]);
+        onUpdateBackgroundImage(currentBackgroundMediaName, applyTo);
+    }, [applyTo, currentBackground, currentBackgroundMediaName, onUpdateBackground, onUpdateBackgroundImage]);
 
     return (
         <PropertiesPanel>
@@ -484,21 +472,16 @@ export function SlideBackgroundPanel({
             </PropertySection>
 
             <PropertySection title="Background image">
-                {currentBackgroundImage ? (
+                {currentBackgroundImageUrl ? (
                     <div className="space-y-2">
-                        <div
-                            className="rounded border overflow-hidden cursor-pointer"
-                            onClick={() => {
-                                if (currentBackgroundImageSourcePath) openPreview(currentBackgroundImageSourcePath);
-                            }}
-                        >
-                            <img src={currentBackgroundImage} alt="" className="w-full h-20 object-cover"/>
+                        <div className="rounded border overflow-hidden">
+                            <img src={currentBackgroundImageUrl} alt="" className="w-full h-20 object-cover"/>
                         </div>
                         <Button
                             variant="outline"
                             size="sm"
                             className="w-full"
-                            onClick={() => onUpdateBackgroundImage('', undefined, 'this')}
+                            onClick={() => onUpdateBackgroundImage('', 'this')}
                         >
                             <Trash2 className="h-3.5 w-3.5 mr-1.5"/>
                             Remove image
