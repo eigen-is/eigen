@@ -29,12 +29,7 @@ import {Column, EigenLoader} from "@workspace/ui";
 import {DrivePath} from "@workspace/lib/types/drive";
 import {getCollabWebSocketUrl, getDriveEmbedUrl} from "@workspace/lib/api";
 import {useUploadFile} from "@workspace/lib/drive";
-import {
-    EIGEN_CLIPBOARD_MIME,
-    readEigenClipboard,
-    needsReUpload,
-    reUploadImage,
-} from '@workspace/lib/clipboard';
+import {EIGEN_CLIPBOARD_MIME, needsReUpload, readEigenClipboard, reUploadImage,} from '@workspace/lib/clipboard';
 import type {EigenClipboardData, EigenClipboardImageItem} from '@workspace/lib/types/clipboard';
 import {CreateCommentDialog, ViewCommentDialog} from "./comment-dialog";
 import {CommentMark} from "./extensions/comment-mark";
@@ -351,7 +346,7 @@ const TiptapEditor = ({
                 <div className="h-full w-full overflow-y-scroll bg-muted p-4">
                     <div
                         data-document="true"
-                        className="grid p-[2cm] bg-white rounded-lg shadow-sm shadow-transparent min-h-full w-[210mm] m-auto print:shadow-none"
+                        className="grid p-[2cm] bg-white text-black rounded-lg shadow-sm shadow-transparent min-h-full w-[210mm] m-auto print:shadow-none"
                         ref={documentRef}
                     >
                         <EditorContent editor={editor} className="h-full tiptap-wrapper"/>

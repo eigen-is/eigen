@@ -53,7 +53,7 @@ export function StickyCard({card, isMobile, yjsDoc, ownerId, mountId}: CardProps
                 {...listeners}
                 onClick={handleClick}
             >
-                <CardContent className={`p-3 text-sm ${isDragging ? 'bg-accent' : ''}`}>
+                <CardContent className={`p-3 text-sm ${isDragging && !card.color ? 'bg-accent' : ''}`}>
                     {card.title}
                     {card.description && (
                         <p className="text-xs mt-1 truncate" style={{opacity: 0.7}}>{card.description}</p>
