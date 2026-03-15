@@ -187,14 +187,13 @@ export function CodeEditor({content, updatedAt, ownerId, mountId, pathId, fileNa
 
     const getContent = useCallback(() => contentRef.current, []);
 
-    const {saveState, showConflict, setShowConflict, markDirty, scheduleSave, doSave, confirmClose} =
+    const {saveState, showConflict, setShowConflict, markDirty, doSave, confirmClose} =
         useEditorSave({ownerId, mountId, pathId, updatedAt, getContent});
 
     const handleChange = useCallback((value: string) => {
         contentRef.current = value;
         markDirty();
-        scheduleSave();
-    }, [markDirty, scheduleSave]);
+    }, [markDirty]);
 
     const handleDownload = () => {
         const blob = new Blob([contentRef.current], {type: 'text/plain'});

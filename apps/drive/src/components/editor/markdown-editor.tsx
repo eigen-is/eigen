@@ -94,7 +94,6 @@ export function MarkdownEditor({content, frontmatter, updatedAt, ownerId, mountI
         content,
         onUpdate: () => {
             markDirty();
-            scheduleSave();
         },
     });
 
@@ -108,7 +107,7 @@ export function MarkdownEditor({content, frontmatter, updatedAt, ownerId, mountI
 
     const getFrontmatter = useCallback(() => frontmatter ?? undefined, [frontmatter]);
 
-    const {saveState, showConflict, setShowConflict, markDirty, scheduleSave, doSave, confirmClose} =
+    const {saveState, showConflict, setShowConflict, markDirty, doSave, confirmClose} =
         useEditorSave({ownerId, mountId, pathId, updatedAt, getContent, getFrontmatter});
 
     const handleToggleSource = useCallback(() => {
@@ -154,7 +153,6 @@ export function MarkdownEditor({content, frontmatter, updatedAt, ownerId, mountI
                         onChange={(val) => {
                             setSourceContent(val);
                             markDirty();
-                            scheduleSave();
                         }}
                     />
                 ) : (

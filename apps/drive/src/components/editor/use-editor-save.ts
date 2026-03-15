@@ -18,7 +18,6 @@ export function useEditorSave({ownerId, mountId, pathId, updatedAt, getContent, 
     const [showConflict, setShowConflict] = useState(false);
     const updatedAtRef = useRef(updatedAt);
     const isDirtyRef = useRef(false);
-    const saveTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
     const fileSave = useFileSave(ownerId, mountId, pathId);
 
     const markDirty = useCallback(() => {
@@ -51,27 +50,11 @@ export function useEditorSave({ownerId, mountId, pathId, updatedAt, getContent, 
         }
     }, [fileSave, getContent, getFrontmatter]);
 
-    const scheduleSave = useCallback(() => {
-        if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-        saveTimerRef.current = setTimeout(() => doSave(), 5000);
-    }, [doSave]);
-
-    const saveNow = useCallback(() => {
-        if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-        doSave();
-    }, [doSave]);
-
     useHotkey('Mod+S', (e) => {
         e.preventDefault();
-        saveNow();
+        doSave();
     });
 
-    // Cleanup timer on unmount
-    useEffect(() => () => {
-        if (saveTimerRef.current) clearTimeout(saveTimerRef.current);
-    }, []);
-
-    // Warn on browser back / tab close when dirty
     useEffect(() => {
         const handler = (e: BeforeUnloadEvent) => {
             if (isDirtyRef.current) {
@@ -92,10 +75,7 @@ export function useEditorSave({ownerId, mountId, pathId, updatedAt, getContent, 
         saveState,
         showConflict,
         setShowConflict,
-        isDirtyRef,
         markDirty,
-        scheduleSave,
-        saveNow,
         doSave,
         confirmClose,
     };
