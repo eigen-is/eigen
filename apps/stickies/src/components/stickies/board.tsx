@@ -128,7 +128,7 @@ export function StickiesBoard({ownerId, path, canWrite, chatFolderId, onAccessDi
                           backgroundColor: card.color || undefined,
                           color: card.color ? (isLightColor(card.color) ? '#000' : '#fff') : undefined,
                       }}>
-                    <CardContent className="p-3 text-sm bg-accent">
+                    <CardContent className={`p-3 text-sm ${!card.color ? 'bg-accent' : ''}`}>
                         {card.title}
                         {card.description && (
                             <p className="text-xs mt-1 truncate" style={{opacity: 0.7}}>{card.description}</p>
