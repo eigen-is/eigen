@@ -70,7 +70,6 @@ export function DriveTable({
                 labels: [],
                 mimeType: 'folder',
                 size: 0,
-                hash: null,
                 thumbnail: null,
                 acl: null,
                 visibility: 'private',
