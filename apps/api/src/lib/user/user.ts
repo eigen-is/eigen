@@ -1,4 +1,4 @@
-import {user, member, teamMember} from '../../../auth-schema.ts';
+import {member, teamMember, user} from '../../../auth-schema.ts';
 import {eq} from "drizzle-orm";
 import type {User} from "better-auth/types";
 import {getAuthDrizzleDb} from "../auth/auth.ts";
@@ -36,4 +36,10 @@ export async function getMemberships(userId: string): Promise<Memberships> {
         orgIds: orgMembers.map(m => m.organizationId),
         teamIds: teamMembers.map(m => m.teamId),
     };
+}
+
+export async function getOrgRole(userId: string): Promise<string | null> {
+    const db = getAuthDrizzleDb();
+    const row = await db.select({role: member.role}).from(member).where(eq(member.userId, userId)).get();
+    return row?.role ?? null;
 }

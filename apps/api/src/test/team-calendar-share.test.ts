@@ -202,17 +202,16 @@ describe('Team Calendar Share (push to existing members)', () => {
     });
 
     test('disabled team calendar is removed from shared list', async () => {
-        // Disable the team calendar
-        // Use Bob (who is a team member) to update settings
-        const settingsRes = await authedRequest(ctx.bob.user.sessionToken,
-            `/calendar/team/${teamId}/settings`, {
+        // Disable the team calendar (Alice is org admin)
+        const settingsRes = await authedRequest(ctx.alice.user.sessionToken,
+            `/team/${teamId}/settings`, {
                 method: 'PUT',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({enabled: false}),
+                body: JSON.stringify({calendar: {enabled: false}}),
             });
         expect(settingsRes.status).toBe(200);
         const settingsData = await settingsRes.json() as any;
-        expect(settingsData.enabled).toBe(false);
+        expect(settingsData.calendar?.enabled).toBe(false);
 
         // Bob's shared list should no longer include the team calendar
         const sharedRes = await authedRequest(ctx.bob.user.sessionToken,
@@ -222,11 +221,11 @@ describe('Team Calendar Share (push to existing members)', () => {
         expect(teamCal).toBeUndefined();
 
         // Re-enable
-        await authedRequest(ctx.bob.user.sessionToken,
-            `/calendar/team/${teamId}/settings`, {
+        await authedRequest(ctx.alice.user.sessionToken,
+            `/team/${teamId}/settings`, {
                 method: 'PUT',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({enabled: true}),
+                body: JSON.stringify({calendar: {enabled: true}}),
             });
 
         // Should reappear
@@ -248,7 +247,7 @@ describe('Team Calendar Share (push to existing members)', () => {
         const team3 = await team3Res.json() as any;
 
         const res = await authedRequest(ctx.charlie.user.sessionToken,
-            `/calendar/team/${team3.id}/settings`);
+            `/team/${team3.id}/settings`);
         expect(res.status).toBe(403);
     });
 
