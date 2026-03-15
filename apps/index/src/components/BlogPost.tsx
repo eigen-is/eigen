@@ -15,7 +15,7 @@ export function BlogPost({post}: BlogPostProps) {
         <article className='blog-post'>
             <h1 className="text-4xl font-bold mb-2">{post.title}</h1>
 
-            <p className="text-sm text-gray-500 mb-6">{post.date}</p>
+            <p className="text-sm text-muted-foreground mb-6">{post.date}</p>
 
             <div className="blog-content">
                 <ReactMarkdown
@@ -43,13 +43,13 @@ export function BlogPost({post}: BlogPostProps) {
                         a: ({node, ...props}) => <a className="text-blue-600 hover:underline" {...props} />,
                         strong: ({node, ...props}) => <strong className="font-semibold" {...props} />,
                         blockquote: ({node, ...props}) => <blockquote
-                            className="border-l-4 border-gray-300 pl-4 italic my-4" {...props} />,
+                            className="border-l-4 border-border pl-4 italic my-4" {...props} />,
                         code: ({node, ...props}) => {
                             const {inline, ...codeProps} = props as typeof props & { inline?: boolean };
                             return inline
-                                ? <code className="bg-gray-200 px-1 py-0.5 rounded text-sm" {...codeProps} />
+                                ? <code className="bg-muted px-1 py-0.5 rounded text-sm" {...codeProps} />
                                 : <code
-                                    className="block bg-gray-200 p-4 rounded my-4 text-sm overflow-x-auto" {...codeProps} />;
+                                    className="block bg-muted p-4 rounded my-4 text-sm overflow-x-auto" {...codeProps} />;
                         },
                     }}
                 >

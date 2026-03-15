@@ -1,5 +1,6 @@
 import {useState} from 'react';
 import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle} from '@workspace/ui/components/dialog';
+import {DeleteDialog} from '@workspace/ui/components/layout/delete/delete-dialog';
 import {Button} from '@workspace/ui/components/button';
 import {Input} from '@workspace/ui/components/input';
 import {Label} from '@workspace/ui/components/label';
@@ -61,7 +62,7 @@ export function ColumnSettingsDialog({isOpen, onClose, columnId, columnTitle, yj
 
     return (
         <Dialog open={isOpen} onOpenChange={(open: boolean) => !open && onClose()}>
-            <DialogContent className="sm:max-w-md">
+            <DialogContent size="sm">
                 <DialogHeader>
                     <DialogTitle>Column Settings</DialogTitle>
                 </DialogHeader>
@@ -96,27 +97,13 @@ export function ColumnSettingsDialog({isOpen, onClose, columnId, columnTitle, yj
                 </form>
             </DialogContent>
 
-            <Dialog open={isDeleteDialogOpen} onOpenChange={setIsDeleteDialogOpen}>
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>Delete Column</DialogTitle>
-                    </DialogHeader>
-                    <div className="py-4">
-                        <p className="text-sm text-gray-500">
-                            This will permanently delete the column and all cards within it.
-                            This action cannot be undone.
-                        </p>
-                    </div>
-                    <DialogFooter>
-                        <Button variant="outline" onClick={() => setIsDeleteDialogOpen(false)}>
-                            Cancel
-                        </Button>
-                        <Button variant="destructive" onClick={handleDelete}>
-                            Delete
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+            <DeleteDialog
+                open={isDeleteDialogOpen}
+                onOpenChange={setIsDeleteDialogOpen}
+                title="Delete Column"
+                description="This will permanently delete the column and all cards within it. This action cannot be undone."
+                onDelete={handleDelete}
+            />
         </Dialog>
     );
 }

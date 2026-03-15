@@ -41,6 +41,8 @@
     --sidebar-accent-foreground: oklch(0.208 0.042 265.755);
     --sidebar-border: oklch(0.929 0.013 255.508);
     --sidebar-ring: oklch(0.704 0.04 256.788);
+    --selected: oklch(0.932 0.032 255);
+    --selected-hover: oklch(0.9 0.04 255);
 }
 
 .dark {
@@ -75,6 +77,8 @@
     --sidebar-accent-foreground: oklch(0.984 0.003 247.858);
     --sidebar-border: oklch(1 0 0 / 10%);
     --sidebar-ring: oklch(0.551 0.027 264.364);
+    --selected: oklch(0.35 0.06 255);
+    --selected-hover: oklch(0.4 0.07 255);
 }
 
 
@@ -115,6 +119,8 @@
     --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
     --color-sidebar-border: var(--sidebar-border);
     --color-sidebar-ring: var(--sidebar-ring);
+    --color-selected: var(--selected);
+    --color-selected-hover: var(--selected-hover);
     --animate-accordion-down: accordion-down 0.2s ease-out;
     --animate-accordion-up: accordion-up 0.2s ease-out;
 
@@ -166,56 +172,8 @@
         scroll-behavior: smooth;
     }
 
-    .text-teal-600 {
-        @apply text-teal-600;
-    }
-
-    .text-red-600 {
-        @apply text-red-600;
-    }
-
-    .text-sky-600 {
-        @apply text-sky-600;
-    }
-
-    .text-emerald-600 {
-        @apply text-emerald-600;
-    }
-
-    .text-blue-600 {
-        @apply text-blue-600;
-    }
-
-    .text-green-600 {
-        @apply text-green-600;
-    }
-
-    .text-yellow-600 {
-        @apply text-yellow-600;
-    }
-
-    .text-purple-600 {
-        @apply text-purple-600;
-    }
-
-    .text-slate-600 {
-        @apply text-slate-600;
-    }
-
-    .text-pink-600 {
-        @apply text-pink-600;
-    }
-
-    .text-lime-600 {
-        @apply text-lime-600;
-    }
-
-    .text-indigo-600 {
-        @apply text-indigo-600;
-    }
-
     .eigen-list-item {
-        @apply bg-white cursor-pointer select-none;
+        @apply bg-background cursor-pointer select-none;
     }
 
     .eigen-list-item:hover {
@@ -227,15 +185,15 @@
     }
 
     .eigen-list-item.eigen-list-item-selected {
-        background-color: hsl(210 100% 93%);
+        background-color: var(--color-selected);
     }
 
     .eigen-list-item.eigen-list-item-selected:hover {
-        background-color: hsl(210 100% 88%);
+        background-color: var(--color-selected-hover);
     }
 
     .eigen-list-item-selected.eigen-list-item-active {
-        background-color: hsl(210 100% 88%);
+        background-color: var(--color-selected-hover);
     }
 
     .eigen-list-item-unread {
@@ -246,7 +204,7 @@
         position: absolute;
         top: -9999px;
         padding: 4px 12px;
-        background: hsl(var(--primary));
+        background: var(--color-primary);
         color: white;
         border-radius: 9999px;
         font-size: 13px;

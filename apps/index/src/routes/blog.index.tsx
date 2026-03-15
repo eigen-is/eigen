@@ -39,7 +39,7 @@ function BlogOverviewComponent() {
     const otherPosts = allPosts.slice(1);
 
     return (
-        <div className="min-h-screen bg-gray-50">
+        <div className="min-h-screen bg-muted/50">
             <div className="container mx-auto px-4 py-8 max-w-3xl">
                 <div className="mb-8">
                     <Link to="/" className="text-blue-600 hover:text-blue-800 hover:underline">
@@ -52,7 +52,7 @@ function BlogOverviewComponent() {
                 )}
 
                 {otherPosts.length > 0 && (
-                    <div className="mt-16 pt-8 border-t border-gray-300">
+                    <div className="mt-16 pt-8 border-t border-border">
                         <h2 className="text-2xl font-bold mb-6">Other Posts</h2>
                         <div className="space-y-8">
                             {otherPosts.map(post => (
@@ -66,8 +66,8 @@ function BlogOverviewComponent() {
                                             {post.title}
                                         </Link>
                                     </h3>
-                                    <p className="text-sm text-gray-500 mb-2">{post.date}</p>
-                                    <p className="text-gray-700 leading-7">{post.summary}</p>
+                                    <p className="text-sm text-muted-foreground mb-2">{post.date}</p>
+                                    <p className="text-foreground leading-7">{post.summary}</p>
                                 </article>
                             ))}
                         </div>

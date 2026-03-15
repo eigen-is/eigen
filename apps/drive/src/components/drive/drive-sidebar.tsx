@@ -11,11 +11,10 @@ import {
     StickyNote,
     Upload as UploadIcon,
     UsersRound,
-    X
 } from 'lucide-react';
 import {Button} from "@workspace/ui/components/button";
 import {SidebarSection} from '@workspace/ui/components/layout/sidebar/sidebar-section';
-import {AppLogo} from '@workspace/ui/components/layout/app/app-logo.tsx';
+import {SidebarHeader} from '@workspace/ui/components/layout/sidebar/sidebar-header';
 import {SidebarItem, StorageUsage, UserAvatar} from "@workspace/ui";
 import {Separator} from '@workspace/ui/components/separator';
 import {DrivePath} from '@workspace/lib/types/drive';
@@ -128,16 +127,7 @@ export function DriveSidebar({
     return (
         <div className="flex h-full min-h-[calc(100vh-3.5rem)] flex-col">
             {/* Mobile header with close button */}
-            {isMobile && (
-                <div className="flex items-center h-12 bg-app px-4">
-                    <Button variant="ghost" size="icon" onClick={onClose}
-                            className="mr-2 text-white hover:bg-primary/20 hover:text-white">
-                        <X className="h-5 w-5"/>
-                        <span className="sr-only">Close menu</span>
-                    </Button>
-                    <AppLogo appName="drive"/>
-                </div>
-            )}
+            {isMobile && <SidebarHeader appName="drive" onClose={onClose}/>}
 
             {/* New button dropdown */}
             <div className="px-3 py-2">

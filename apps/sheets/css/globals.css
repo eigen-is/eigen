@@ -16,12 +16,12 @@
 }
 
 .fortune-toolbar {
-    border-bottom: 1px solid hsl(var(--border)) !important;
-    background: white !important;
+    border-bottom: 1px solid var(--color-border) !important;
+    background: var(--color-background) !important;
     padding: 2px 8px !important;
 }
 
 .fortune-fx-editor {
-    border-bottom: 1px solid hsl(var(--border)) !important;
-    background: white !important;
+    border-bottom: 1px solid var(--color-border) !important;
+    background: var(--color-background) !important;
 }

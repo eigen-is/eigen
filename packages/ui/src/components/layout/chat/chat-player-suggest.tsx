@@ -63,7 +63,7 @@ export function ChatPlayerSuggest({
             {items.map((suggestion, index) => (
                 <li
                     key={suggestion.id}
-                    className={`px-3 py-2 eigen-list-item cursor-pointer ${index === selectedIndex ? 'eigen-list-item-active bg-accent' : 'hover:bg-accent'}`}
+                    className={`px-3 py-2 eigen-list-item ${index === selectedIndex ? 'eigen-list-item-active' : ''}`}
                     onMouseDown={(e) => {
                         e.preventDefault();
                         onSelect(suggestion.email);

@@ -18,7 +18,7 @@ function MediaItem({src, type, caption, thumbnail, poster}: MediaItemProps) {
     return (
         <>
             <div className="group cursor-pointer" onClick={() => setIsPreviewOpen(true)}>
-                <div className="relative overflow-hidden rounded-lg bg-gray-100 aspect-video">
+                <div className="relative overflow-hidden rounded-lg bg-muted aspect-video">
                     {type === 'image' && (
                         <img
                             src={thumbnailSrc}
@@ -57,7 +57,7 @@ function MediaItem({src, type, caption, thumbnail, poster}: MediaItemProps) {
                     )}
                 </div>
                 {caption && (
-                    <p className="mt-2 text-sm text-gray-600 text-center">{caption}</p>
+                    <p className="mt-2 text-sm text-muted-foreground text-center">{caption}</p>
                 )}
             </div>
 

@@ -151,26 +151,26 @@ export const EditorToolbar = ({editor, path, canWrite, onAccessDialogOpen, onDel
                     </DropdownMenuTrigger>
                     <DropdownMenuContent align="start">
                         <DropdownMenuItem onClick={() => rootFolder && setCreateDocOpen(true)}>
-                            <FileText className="w-4 h-4 mr-2"/> New document
+                            <FileText className="h-4 w-4 mr-2"/> New document
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => navigate({to: `/`})}>
-                            <Folder className="w-4 h-4 mr-2"/> Open
+                            <Folder className="h-4 w-4 mr-2"/> Open
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={() => path && setRenameDialogOpen(true)}>
-                            <Pencil className="w-4 h-4 mr-2"/> Rename
+                            <Pencil className="h-4 w-4 mr-2"/> Rename
                         </DropdownMenuItem>
                         <DropdownMenuSeparator/>
                         <DropdownMenuItem onClick={onAccessDialogOpen}>
-                            <UserRoundPlus className="w-4 h-4 mr-2"/> Edit access
+                            <UserRoundPlus className="h-4 w-4 mr-2"/> Edit access
                         </DropdownMenuItem>
                         <DropdownMenuItem onClick={printDocument}>
-                            <Printer className="w-4 h-4 mr-2"/> Print
+                            <Printer className="h-4 w-4 mr-2"/> Print
                         </DropdownMenuItem>
                         {canWrite && (
                             <>
                                 <DropdownMenuSeparator/>
                                 <DropdownMenuItem onClick={() => path && onDeleteDialogOpen(true)}>
-                                    <Trash2 className="w-4 h-4 mr-2"/> Delete
+                                    <Trash2 className="h-4 w-4 mr-2"/> Delete
                                 </DropdownMenuItem>
                             </>
                         )}
@@ -186,11 +186,11 @@ export const EditorToolbar = ({editor, path, canWrite, onAccessDialogOpen, onDel
                             <DropdownMenuContent align="start">
                                 <DropdownMenuItem onClick={() => editor.chain().focus().undo().run()}
                                                   disabled={!editor.can().undo()}>
-                                    <Undo className="w-4 h-4 mr-2"/> Undo
+                                    <Undo className="h-4 w-4 mr-2"/> Undo
                                 </DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => editor.chain().focus().redo().run()}
                                                   disabled={!editor.can().redo()}>
-                                    <Redo className="w-4 h-4 mr-2"/> Redo
+                                    <Redo className="h-4 w-4 mr-2"/> Redo
                                 </DropdownMenuItem>
                             </DropdownMenuContent>
                         </DropdownMenu>
@@ -202,27 +202,27 @@ export const EditorToolbar = ({editor, path, canWrite, onAccessDialogOpen, onDel
                             <DropdownMenuContent align="start">
                                 <DropdownMenuSub>
                                     <DropdownMenuSubTrigger><Type
-                                        className="w-4 h-4 mr-2"/> Text</DropdownMenuSubTrigger>
+                                        className="h-4 w-4 mr-2"/> Text</DropdownMenuSubTrigger>
                                     <DropdownMenuSubContent>
                                         <DropdownMenuItem onClick={() => editor.chain().focus().toggleBold().run()}>
-                                            <Bold className="w-4 h-4 mr-2"/> Bold
+                                            <Bold className="h-4 w-4 mr-2"/> Bold
                                         </DropdownMenuItem>
                                         <DropdownMenuItem onClick={() => editor.chain().focus().toggleItalic().run()}>
-                                            <Italic className="w-4 h-4 mr-2"/> Italic
+                                            <Italic className="h-4 w-4 mr-2"/> Italic
                                         </DropdownMenuItem>
                                         <DropdownMenuItem
                                             onClick={() => editor.chain().focus().toggleUnderline().run()}>
-                                            <Underline className="w-4 h-4 mr-2"/> Underline
+                                            <Underline className="h-4 w-4 mr-2"/> Underline
                                         </DropdownMenuItem>
                                         <DropdownMenuItem onClick={() => editor.chain().focus().toggleStrike().run()}>
-                                            <Strikethrough className="w-4 h-4 mr-2"/> Strikethrough
+                                            <Strikethrough className="h-4 w-4 mr-2"/> Strikethrough
                                         </DropdownMenuItem>
                                     </DropdownMenuSubContent>
                                 </DropdownMenuSub>
                                 <DropdownMenuSeparator/>
                                 <DropdownMenuSub>
                                     <DropdownMenuSubTrigger><Heading2
-                                        className="w-4 h-4 mr-2"/> Heading</DropdownMenuSubTrigger>
+                                        className="h-4 w-4 mr-2"/> Heading</DropdownMenuSubTrigger>
                                     <DropdownMenuSubContent>
                                         <DropdownMenuItem onClick={() => editor.chain().focus().setParagraph().run()}>
                                             <Pilcrow className="mr-2 h-4 w-4"/> Normal text
@@ -244,24 +244,24 @@ export const EditorToolbar = ({editor, path, canWrite, onAccessDialogOpen, onDel
                                 <DropdownMenuSeparator/>
                                 <DropdownMenuSub>
                                     <DropdownMenuSubTrigger><List
-                                        className="w-4 h-4 mr-2"/> Lists</DropdownMenuSubTrigger>
+                                        className="h-4 w-4 mr-2"/> Lists</DropdownMenuSubTrigger>
                                     <DropdownMenuSubContent>
                                         <DropdownMenuItem
                                             onClick={() => editor.chain().focus().toggleBulletList().run()}>
-                                            <List className="w-4 h-4 mr-2"/> Bulleted
+                                            <List className="h-4 w-4 mr-2"/> Bulleted
                                         </DropdownMenuItem>
                                         <DropdownMenuItem
                                             onClick={() => editor.chain().focus().toggleOrderedList().run()}>
-                                            <ListOrdered className="w-4 h-4 mr-2"/> Numbered
+                                            <ListOrdered className="h-4 w-4 mr-2"/> Numbered
                                         </DropdownMenuItem>
                                         <DropdownMenuItem onClick={() => editor.chain().focus().toggleTaskList().run()}>
-                                            <CheckSquare className="w-4 h-4 mr-2"/> Checklist
+                                            <CheckSquare className="h-4 w-4 mr-2"/> Checklist
                                         </DropdownMenuItem>
                                     </DropdownMenuSubContent>
                                 </DropdownMenuSub>
                                 <DropdownMenuSeparator/>
                                 <DropdownMenuItem onClick={clearFormatting}>
-                                    <RemoveFormatting className="w-4 h-4 mr-2"/> Clear formatting
+                                    <RemoveFormatting className="h-4 w-4 mr-2"/> Clear formatting
                                 </DropdownMenuItem>
                             </DropdownMenuContent>
                         </DropdownMenu>
@@ -272,25 +272,25 @@ export const EditorToolbar = ({editor, path, canWrite, onAccessDialogOpen, onDel
                             </DropdownMenuTrigger>
                             <DropdownMenuContent align="start">
                                 <DropdownMenuItem onClick={handleLinkOperation}>
-                                    <Link className="w-4 h-4 mr-2"/> Link
+                                    <Link className="h-4 w-4 mr-2"/> Link
                                 </DropdownMenuItem>
                                 {onImageUpload && (
                                     <DropdownMenuItem onClick={() => imageInputRef.current?.click()}>
-                                        <ImagePlus className="w-4 h-4 mr-2"/> Image
+                                        <ImagePlus className="h-4 w-4 mr-2"/> Image
                                     </DropdownMenuItem>
                                 )}
                                 <DropdownMenuItem onClick={() => editor.chain().focus().setHorizontalRule().run()}>
-                                    <Minus className="w-4 h-4 mr-2"/> Horizontal rule
+                                    <Minus className="h-4 w-4 mr-2"/> Horizontal rule
                                 </DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => editor.chain().focus().insertTable({
                                     rows: 3,
                                     cols: 3,
                                     withHeaderRow: true
                                 }).run()}>
-                                    <Table className="w-4 h-4 mr-2"/> Table
+                                    <Table className="h-4 w-4 mr-2"/> Table
                                 </DropdownMenuItem>
                                 <DropdownMenuItem onClick={() => editor.chain().focus().toggleCodeBlock().run()}>
-                                    <CodeXml className="w-4 h-4 mr-2"/> Code block
+                                    <CodeXml className="h-4 w-4 mr-2"/> Code block
                                 </DropdownMenuItem>
                             </DropdownMenuContent>
                         </DropdownMenu>
@@ -682,7 +682,7 @@ export const EditorToolbar = ({editor, path, canWrite, onAccessDialogOpen, onDel
                 />
             )}
             <Dialog open={linkDialogOpen} onOpenChange={setLinkDialogOpen}>
-                <DialogContent className="sm:max-w-md">
+                <DialogContent size="sm">
                     <DialogHeader>
                         <DialogTitle>Add link</DialogTitle>
                     </DialogHeader>

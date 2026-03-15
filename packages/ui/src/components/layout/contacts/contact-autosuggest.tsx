@@ -149,7 +149,7 @@ export function ContactAutosuggest({
             {isOpen && displayedSuggestions.length > 0 && (
                 <ul
                     ref={suggestionsRef}
-                    className={`absolute z-10 w-full bg-white mt-1 border rounded-md shadow-lg overflow-y-auto max-h-60 ${suggestionsClassName}`}
+                    className={`absolute z-10 w-full bg-background mt-1 border rounded-md shadow-lg overflow-y-auto max-h-60 ${suggestionsClassName}`}
                     role="listbox"
                     tabIndex={-1}
                 >
@@ -176,7 +176,7 @@ export function ContactAutosuggest({
             )}
 
             {isOpen && isLoading && (
-                <div className="absolute z-10 w-full bg-white mt-1 border rounded-md shadow-lg p-3 text-center">
+                <div className="absolute z-10 w-full bg-background mt-1 border rounded-md shadow-lg p-3 text-center">
                     Loading...
                 </div>
             )}

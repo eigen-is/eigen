@@ -20,7 +20,7 @@ export function FilePreview({url, mimeType, onClose, open, aspectRatio}: FilePre
             style={{cursor: "zoom-out"}}
         >
             <div
-                className="max-w-[90vw] max-h-[90vh] bg-white rounded-lg shadow-lg flex items-center justify-center p-4 animate-in zoom-in-95"
+                className="max-w-[90vw] max-h-[90vh] bg-background rounded-lg shadow-lg flex items-center justify-center p-4 animate-in zoom-in-95"
                 onClick={(e) => e.stopPropagation()}
             >
                 {mimeType.startsWith("image/") && (
@@ -40,7 +40,7 @@ export function FilePreview({url, mimeType, onClose, open, aspectRatio}: FilePre
                     />
                 )}
                 {mimeType === "application/pdf" && (
-                    <iframe src={url} className="w-[80vw] h-[80vh] rounded bg-white"/>
+                    <iframe src={url} className="w-[80vw] h-[80vh] rounded bg-background"/>
                 )}
             </div>
         </div>
