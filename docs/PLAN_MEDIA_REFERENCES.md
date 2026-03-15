@@ -210,11 +210,32 @@ No new routes needed. Existing `GET /drive/:ownerId/:mountId/folder/:pathId` and
 
 ### 6. Clipboard (`packages/lib/src/core/clipboard/`)
 
-- `EigenClipboardData` items: carry `mediaName` instead of `src` URL
-- On paste into a different document: download from source URL, upload to target media folder, store new file's
-  `name` in Yjs (the name may differ if there's a conflict, handled by `getUniqueFileName()`)
-- `needsReUpload()` and `reUploadImage()`: adapt to work with names instead of pathIds
-- `sourcePath` field on clipboard items: no longer needed
+The clipboard is **transient** (not persisted in Yjs), so it should keep `pathId`-based references. The pathId is
+needed to (a) detect whether re-upload is required by comparing the source `parentId` to the target
+`mediaFolderId`, and (b) download the original file for re-uploading.
+
+**`packages/lib/src/types/clipboard.ts`**:
+- `EigenClipboardImageItem`: replace `src` + `sourcePath?: DrivePath` with `mediaName` + source identifiers:
+  ```typescript
+  type EigenClipboardImageItem = {
+      type: 'image';
+      mediaName: string;           // file name (stored in Yjs on paste)
+      sourcePathId: string;        // for downloading if re-upload needed
+      sourceParentId: string;      // for needsReUpload() comparison
+      sourceOwnerId: string;       // for constructing download URL
+      sourceMountId: string;       // for constructing download URL
+      meta?: Record<string, unknown>;
+  }
+  ```
+
+**`packages/lib/src/core/clipboard/clipboard.ts`**:
+- `needsReUpload()`: compare `item.sourceParentId !== targetMediaFolderId` (same logic, different field names)
+- `reUploadImage()`: download via `getDriveDownloadUrl(sourceOwnerId, sourceMountId, sourcePathId)`, upload to
+  target media folder, return the new file's **name** for Yjs storage
+- On copy: resolve `mediaName → pathId` from media folder contents to populate source fields
+- On paste into same document: just insert `mediaName` into Yjs (no re-upload)
+- On paste into different document: re-upload, then store the **new file's name** in Yjs (may differ from
+  original if there's a conflict, handled by `getUniqueFileName()`)
 
 ---
 
