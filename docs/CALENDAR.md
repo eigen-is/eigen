@@ -98,13 +98,14 @@ never convert to local time.
 ```
 GET    /calendar/:ownerId/calendars
 POST   /calendar/:ownerId/calendars
-PUT    /calendar/:ownerId/calendars/:id           (includes shares)
-DELETE /calendar/:ownerId/calendars/:id
+PUT    /calendar/:ownerId/calendars/:calId        (includes shares)
+DELETE /calendar/:ownerId/calendars/:calId
 GET    /calendar/:ownerId/events/:from/:to        (all calendars)
 GET    /calendar/:ownerId/calendars/:calId/events/:from/:to
 POST   /calendar/:ownerId/calendars/:calId/events
-PUT    /calendar/:ownerId/events/:id
-DELETE /calendar/:ownerId/events/:id
+PUT    /calendar/:ownerId/calendars/:calId/events/:id
+DELETE /calendar/:ownerId/calendars/:calId/events/:id
+GET    /calendar/:ownerId/calendars/:calId/access
 GET    /calendar/:ownerId/shared                  (shared-with-me list, auto-syncs team calendars)
 PUT    /calendar/:ownerId/shared/:id              (local prefs)
 DELETE /calendar/:ownerId/shared/:id
@@ -134,10 +135,11 @@ Defined in `packages/lib/src/types/calendar.ts`.
 | File                                             | Purpose                   |
 |--------------------------------------------------|---------------------------|
 | `apps/api/src/lib/calendar/calendar.ts`          | Calendar class            |
+| `apps/api/src/lib/calendar/get-calendar.ts`      | Access resolution (like Drive's `get-drive.ts`) |
 | `apps/api/src/lib/calendar/schema.ts`            | Drizzle schema            |
 | `apps/api/src/lib/calendar/db-config.ts`         | DB config + migrations    |
 | `apps/api/src/lib/calendar/share-propagation.ts` | Push shares to recipients |
 | `apps/api/src/lib/calendar/sse-events.ts`        | SSE builders              |
-| `apps/api/src/routes/calendar.ts`                | API routes                |
+| `apps/api/src/routes/calendar.ts`                | API routes (thin)         |
 | `packages/lib/src/types/calendar.ts`             | Shared types              |
 | `packages/lib/src/core/calendar/`                | FE hooks + SSE handlers   |
