@@ -4,12 +4,16 @@ import {
     FileText,
     HardDrive,
     LayoutDashboard,
+    LogOut,
     Mail,
     Menu,
     MessageSquare,
+    Palette,
     Presentation,
+    Settings,
     Sheet,
     StickyNote,
+    User,
     Users
 } from "lucide-react";
 import {useRouter} from "@tanstack/react-router";
@@ -19,13 +23,13 @@ import {
     DropdownMenuContent,
     DropdownMenuItem,
     DropdownMenuLabel,
+    DropdownMenuRadioGroup,
+    DropdownMenuRadioItem,
     DropdownMenuSeparator,
     DropdownMenuSub,
     DropdownMenuSubContent,
     DropdownMenuSubTrigger,
     DropdownMenuTrigger,
-    DropdownMenuRadioGroup,
-    DropdownMenuRadioItem,
 } from "../../dropdown-menu.tsx";
 import {useAuth} from "@workspace/lib/auth/auth-context.tsx";
 import {Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,} from "../../dialog.tsx";
@@ -110,40 +114,41 @@ function UserDropdown({rootRoute}: { rootRoute: TopbarProps['rootRoute'] }) {
                     {apps.map(app => {
                         const isActive = app.name.toLowerCase() === appName.toLowerCase();
                         return (
-                            <DropdownMenuItem key={app.name} className={isActive ? "bg-muted" : ""}>
-                                <a href={app.href}
-                                   className={`flex items-center w-full gap-2 ${isActive ? "font-medium" : ""}`}>
-                                    {app.icon === 'layout-dashboard' && <LayoutDashboard className="h-4 w-4"/>}
-                                    {app.icon === 'mail' && <Mail className="h-4 w-4"/>}
-                                    {app.icon === 'calendar' && <Calendar className="h-4 w-4"/>}
-                                    {app.icon === 'users' && <Users className="h-4 w-4"/>}
-                                    {app.icon === 'hard-drive' && <HardDrive className="h-4 w-4"/>}
-                                    {app.icon === 'file-text' && <FileText className="h-4 w-4"/>}
-                                    {app.icon === 'sticky-note' && <StickyNote className="h-4 w-4"/>}
-                                    {app.icon === 'message-square' && <MessageSquare className="h-4 w-4"/>}
-                                    {app.icon === 'presentation' && <Presentation className="h-4 w-4"/>}
-                                    {app.icon === 'sheet' && <Sheet className="h-4 w-4"/>}
-                                    <span
-                                        className={isActive ? "text-foreground font-medium" : "text-muted-foreground"}>{app.name}</span>
+                            <DropdownMenuItem key={app.name} asChild className={isActive ? "bg-muted font-medium" : ""}>
+                                <a href={app.href}>
+                                    {app.icon === 'layout-dashboard' && <LayoutDashboard/>}
+                                    {app.icon === 'mail' && <Mail/>}
+                                    {app.icon === 'calendar' && <Calendar/>}
+                                    {app.icon === 'users' && <Users/>}
+                                    {app.icon === 'hard-drive' && <HardDrive/>}
+                                    {app.icon === 'file-text' && <FileText/>}
+                                    {app.icon === 'sticky-note' && <StickyNote/>}
+                                    {app.icon === 'message-square' && <MessageSquare/>}
+                                    {app.icon === 'presentation' && <Presentation/>}
+                                    {app.icon === 'sheet' && <Sheet/>}
+                                    {app.name}
                                 </a>
                             </DropdownMenuItem>
                         );
                     })}
                     <DropdownMenuSeparator/>
-                    <DropdownMenuItem>
-                        <a href={getSpaceProfileUrl()}
-                           className={`flex items-center w-full`}>
+                    <DropdownMenuItem asChild>
+                        <a href={getSpaceProfileUrl()}>
+                            <User/>
                             Profile
                         </a>
                     </DropdownMenuItem>
-                    <DropdownMenuItem>
-                        <a href={getSpacePasswordUrl()}
-                           className={`flex items-center w-full`}>
+                    <DropdownMenuItem asChild>
+                        <a href={getSpacePasswordUrl()}>
+                            <Settings/>
                             Settings
                         </a>
                     </DropdownMenuItem>
                     <DropdownMenuSub>
-                        <DropdownMenuSubTrigger>Theme</DropdownMenuSubTrigger>
+                        <DropdownMenuSubTrigger>
+                            <Palette/>
+                            Theme
+                        </DropdownMenuSubTrigger>
                         <DropdownMenuSubContent>
                             <DropdownMenuRadioGroup
                                 value={settings?.theme ?? 'light'}
@@ -157,9 +162,8 @@ function UserDropdown({rootRoute}: { rootRoute: TopbarProps['rootRoute'] }) {
                     </DropdownMenuSub>
                     <DropdownMenuSeparator/>
                     <DropdownMenuItem onClick={() => setLogoutDialogOpen(true)}>
-                        <span className={`flex items-center w-full`}>
+                        <LogOut/>
                         Log out
-                            </span>
                     </DropdownMenuItem>
                 </DropdownMenuContent>
             </DropdownMenu>
