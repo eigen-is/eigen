@@ -1,4 +1,4 @@
-export const CODE_EXTENSIONS = new Set([
+const CODE_EXTENSIONS = new Set([
     '.json', '.yaml', '.yml', '.xml', '.html', '.htm', '.css', '.csv',
     '.js', '.jsx', '.mjs', '.cjs', '.ts', '.tsx', '.mts', '.cts',
     '.py', '.rs', '.go', '.rb', '.php', '.java', '.c', '.cpp', '.h', '.hpp',
@@ -9,7 +9,7 @@ export const CODE_EXTENSIONS = new Set([
     '.r', '.lua', '.zig', '.dart',
 ]);
 
-export const CODE_MIMES = [
+const CODE_MIMES = [
     'text/',
     'application/json',
     'application/javascript',
@@ -20,7 +20,7 @@ export const CODE_MIMES = [
     'application/toml',
 ];
 
-export const EXIFTOOL_EXTENSIONS = new Set([
+const EXIFTOOL_EXTENSIONS = new Set([
     '.cr2', '.cr3', '.nef', '.arw', '.dng', '.orf', '.rw2', '.raf', '.pef', '.srw', '.rwl',
     '.psd', '.psb', '.ai', '.heic', '.heif',
 ]);
