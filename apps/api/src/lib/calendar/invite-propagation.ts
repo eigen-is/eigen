@@ -108,9 +108,14 @@ export async function propagateRsvp(
     organizerEventId: string,
     attendeeEmail: string,
     newStatus: Attendee['status'],
+    recurrenceDate?: string,
 ): Promise<void> {
     const organizerHome = await getHome(organizerUserId);
-    organizerHome.calendar.updateAttendeeStatus(organizerEventId, attendeeEmail, newStatus);
+    if (recurrenceDate) {
+        organizerHome.calendar.rsvpForOccurrence(organizerEventId, attendeeEmail, newStatus, recurrenceDate);
+    } else {
+        organizerHome.calendar.updateAttendeeStatus(organizerEventId, attendeeEmail, newStatus);
+    }
     organizerHome.notify(buildCalendarEvent(SSEventType.CALENDAR_INVITE_RSVP, {
         calendarId: '', eventId: organizerEventId,
     }));

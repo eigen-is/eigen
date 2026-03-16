@@ -19,7 +19,7 @@ import {ApiError, PATHS} from '../core';
 import {SSEventType} from '@workspace/lib/types/sse';
 import {buildCalendarEvent, buildCalendarShareEvent} from './sse-events';
 import {notifySharedCalendarUsers, propagateCalendarShare} from './share-propagation';
-import {propagateCancellation, propagateDecline, propagateInvitation} from './invite-propagation';
+import {propagateCancellation, propagateDecline, propagateInvitation, propagateRsvp} from './invite-propagation';
 import {createHash} from 'crypto';
 
 type UserIdentity = { id: string; email: string; name?: string | null };
@@ -712,6 +712,10 @@ export class Calendar {
         const linked = this.findLinkedEvent(orgEventId, orgUserId);
         if (!linked) return;
 
+        // Don't extend rrule beyond what the attendee has locally — they may have
+        // truncated it via "delete this and following" and that intent should stick.
+        const rrule = constrainRRule(payload.rrule, linked.rrule, payload.startTime);
+
         const data: EventData = {
             ...linked.data,
             attendees: payload.attendees ?? linked.data?.attendees,
@@ -724,7 +728,7 @@ export class Calendar {
             startTime: payload.startTime,
             endTime: payload.endTime,
             allDay: payload.allDay,
-            rrule: payload.rrule,
+            rrule,
             status: payload.status,
             data,
         });
@@ -736,7 +740,7 @@ export class Calendar {
             startTime: payload.startTime,
             endTime: payload.endTime,
             allDay: payload.allDay,
-            rrule: payload.rrule,
+            rrule,
             status: payload.status,
             sequence: payload.sequence,
             etag,
@@ -795,6 +799,162 @@ export class Calendar {
             ));
     }
 
+    public rsvpForOccurrence(eventId: string, email: string, status: Attendee['status'], recurrenceDate: string): void {
+        const parent = this.getEventById(eventId);
+        if (!parent) throw new ApiError(404, 'Event not found');
+
+        const existing = this.db.select().from(schema.events).where(
+            and(
+                eq(schema.events.parentEventId, eventId),
+                eq(schema.events.recurrenceDate, recurrenceDate),
+            )
+        ).get();
+
+        if (existing) {
+            const data = (existing.data as EventData) ?? parent.data ?? {};
+            const attendees = (data.attendees || parent.data?.attendees || []).map(a =>
+                a.email.toLowerCase() === email.toLowerCase() ? {...a, status} : a
+            );
+            const updatedData: EventData = {...data, attendees};
+            const etag = computeEtag({
+                title: existing.title,
+                description: existing.description,
+                location: existing.location,
+                startTime: existing.startTime,
+                endTime: existing.endTime,
+                allDay: existing.allDay,
+                rrule: existing.rrule,
+                status: existing.status === 'cancelled' ? 'confirmed' : existing.status,
+                data: updatedData,
+            });
+
+            this.db.update(schema.events).set({
+                status: existing.status === 'cancelled' ? 'confirmed' : existing.status,
+                data: updatedData,
+                etag,
+                updatedAt: sql`unixepoch()`,
+            }).where(eq(schema.events.id, existing.id)).run();
+
+            this.incrementCtag(parent.calendarId);
+        } else {
+            const attendees = (parent.data?.attendees || []).map(a =>
+                a.email.toLowerCase() === email.toLowerCase() ? {...a, status} : a
+            );
+            const {startTime, endTime} = computeOccurrenceTimes(parent, recurrenceDate);
+
+            this.createEvent(parent.calendarId, {
+                title: parent.title,
+                description: parent.description,
+                location: parent.location,
+                startTime,
+                endTime,
+                allDay: parent.allDay,
+                parentEventId: eventId,
+                recurrenceDate,
+                data: {...parent.data, attendees},
+                createByUserId: parent.createByUserId,
+            });
+        }
+    }
+
+    public removeOccurrence(eventId: string, recurrenceDate: string): void {
+        const parent = this.getEventById(eventId);
+        if (!parent) throw new ApiError(404, 'Event not found');
+
+        const existing = this.db.select().from(schema.events).where(
+            and(
+                eq(schema.events.parentEventId, eventId),
+                eq(schema.events.recurrenceDate, recurrenceDate),
+            )
+        ).get();
+
+        if (existing) {
+            this.db.update(schema.events).set({
+                status: 'cancelled',
+                updatedAt: sql`unixepoch()`,
+            }).where(eq(schema.events.id, existing.id)).run();
+            this.incrementCtag(parent.calendarId);
+        } else {
+            const {startTime, endTime} = computeOccurrenceTimes(parent, recurrenceDate);
+            this.createEvent(parent.calendarId, {
+                title: parent.title,
+                startTime,
+                endTime,
+                allDay: parent.allDay,
+                parentEventId: eventId,
+                recurrenceDate,
+                status: 'cancelled',
+            });
+        }
+    }
+
+    public async rsvp(eventId: string, user: UserIdentity, input: {
+        status: Attendee['status'];
+        scope?: 'this' | 'this-and-following' | 'all';
+        recurrenceDate?: string;
+        remove?: boolean;
+    }): Promise<void> {
+        const event = this.getEventById(eventId);
+        if (!event) throw new ApiError(404, 'Event not found');
+        if (!event.data?.organizer) throw new ApiError(400, 'Not a linked event');
+
+        const isAttendee = event.data.attendees?.some(
+            a => a.email.toLowerCase() === user.email.toLowerCase()
+        );
+        if (!isAttendee) throw new ApiError(403, 'Not an attendee');
+
+        const scope = input.scope || 'all';
+        const organizerUserId = event.data.organizer.userId;
+        const organizerEventId = event.data.organizerEventId!;
+
+        if (scope === 'this' && input.recurrenceDate) {
+            if (input.remove) {
+                this.removeOccurrence(eventId, input.recurrenceDate);
+                propagateRsvp(organizerUserId, organizerEventId, user.email, 'declined', input.recurrenceDate).catch(console.error);
+            } else {
+                this.rsvpForOccurrence(eventId, user.email, input.status, input.recurrenceDate);
+                propagateRsvp(organizerUserId, organizerEventId, user.email, input.status, input.recurrenceDate).catch(console.error);
+            }
+        } else if (scope === 'this-and-following' && input.remove && input.recurrenceDate) {
+            this.removeThisAndFuture(eventId, input.recurrenceDate);
+            propagateRsvp(organizerUserId, organizerEventId, user.email, 'declined').catch(console.error);
+        } else if (input.remove) {
+            this.deleteEvent(eventId, user);
+        } else {
+            this.updateAttendeeStatus(eventId, user.email, input.status);
+            propagateRsvp(organizerUserId, organizerEventId, user.email, input.status).catch(console.error);
+        }
+    }
+
+    public removeThisAndFuture(eventId: string, recurrenceDate: string): void {
+        const event = this.getEventById(eventId);
+        if (!event) throw new ApiError(404, 'Event not found');
+        if (!event.rrule) throw new ApiError(400, 'Not a recurring event');
+
+        const occDate = new Date(recurrenceDate + 'T00:00:00Z');
+        const truncated = truncateRRule(event.rrule, occDate);
+
+        const etag = computeEtag({
+            title: event.title,
+            description: event.description,
+            location: event.location,
+            startTime: event.startTime,
+            endTime: event.endTime,
+            allDay: event.allDay,
+            rrule: truncated,
+            status: event.status,
+            data: event.data,
+        });
+
+        this.db.update(schema.events).set({
+            rrule: truncated,
+            etag,
+            updatedAt: sql`unixepoch()`,
+        }).where(eq(schema.events.id, eventId)).run();
+
+        this.incrementCtag(event.calendarId);
+    }
+
     // --- Internal ---
 
     async destruct(): Promise<void> {
@@ -845,4 +1005,55 @@ function formatOccurrenceDate(date: Date): string {
     const m = String(date.getUTCMonth() + 1).padStart(2, '0');
     const d = String(date.getUTCDate()).padStart(2, '0');
     return `${y}-${m}-${d}`;
+}
+
+function getRRuleEnd(rruleStr: string, dtstart: Date): Date | null {
+    const rule = new RRule({...RRule.parseString(rruleStr), dtstart});
+    const all = rule.all((_, i) => i < 10000);
+    return all.length > 0 ? all[all.length - 1] : null;
+}
+
+function constrainRRule(incoming: string | null, local: string | null, startTime: number): string | null {
+    if (!incoming || !local) return incoming;
+    const dtstart = new Date(startTime * 1000);
+    const localEnd = getRRuleEnd(local, dtstart);
+    if (!localEnd) return incoming;
+    const incomingEnd = getRRuleEnd(incoming, dtstart);
+    if (!incomingEnd || incomingEnd <= localEnd) return incoming;
+    // Organizer's rrule extends beyond attendee's local truncation — keep local end
+    return truncateRRule(incoming, new Date(localEnd.getTime() + 86400_000));
+}
+
+function truncateRRule(rruleStr: string, beforeDate: Date): string {
+    const options = RRule.parseString(rruleStr);
+    const until = new Date(beforeDate);
+    until.setUTCDate(until.getUTCDate() - 1);
+    until.setUTCHours(23, 59, 59, 0);
+    options.until = until;
+    delete options.count;
+    const result = new RRule(options).toString();
+    return result.replace(/^RRULE:/, '');
+}
+
+function computeOccurrenceTimes(parent: CalendarEvent, recurrenceDate: string): {startTime: number; endTime: number} {
+    const duration = parent.endTime - parent.startTime;
+    const dtstart = new Date(parent.startTime * 1000);
+    const occDate = new Date(recurrenceDate + 'T00:00:00Z');
+
+    if (parent.rrule) {
+        const rule = new RRule({...RRule.parseString(parent.rrule), dtstart});
+        const dayStart = new Date(occDate);
+        const dayEnd = new Date(occDate);
+        dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
+        const matches = rule.between(dayStart, dayEnd, true);
+        if (matches.length > 0) {
+            const startTime = Math.floor(matches[0].getTime() / 1000);
+            return {startTime, endTime: startTime + duration};
+        }
+    }
+
+    // Fallback: place dtstart's time-of-day onto the occurrence date
+    const startTime = Math.floor(occDate.getTime() / 1000) +
+        dtstart.getUTCHours() * 3600 + dtstart.getUTCMinutes() * 60 + dtstart.getUTCSeconds();
+    return {startTime, endTime: startTime + duration};
 }

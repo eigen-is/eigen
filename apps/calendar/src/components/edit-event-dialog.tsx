@@ -1,5 +1,5 @@
 import {useEffect, useMemo, useState} from 'react';
-import {AlignLeft, Calendar, Clock, MapPin, Users} from 'lucide-react';
+import {AlignLeft, Calendar, Clock, MapPin, UsersRound} from 'lucide-react';
 import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle} from '@workspace/ui/components/dialog';
 import {Button} from '@workspace/ui/components/button';
 import {Input} from '@workspace/ui/components/input';
@@ -312,7 +312,7 @@ export function EditEventDialog({open, onOpenChange, event, ownerUserId, calenda
 
                         {!isLinkedEvent && (
                             <div className="flex items-start gap-3">
-                                <Users className="h-4 w-4 mt-2.5 text-muted-foreground shrink-0"/>
+                                <UsersRound className="h-4 w-4 mt-2.5 text-muted-foreground shrink-0"/>
                                 <div className="flex-1">
                                     <AttendeeEditor
                                         attendees={attendees}
