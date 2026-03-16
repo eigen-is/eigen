@@ -42,6 +42,13 @@ PK: `(fromUserId, targetIdentifier)`. No share data — just the pair. Pull rout
 - **Account created**: `databaseHooks.user.create.after` in `apps/api/src/lib/auth/auth.ts`
 - **Team member added**: `organizationHooks.afterAddTeamMember` on the `organization()` plugin in `apps/api/src/lib/auth/auth.ts`
 
+## Reconciliation Actions
+
+On new user/team member, `reconcileSharesForNewUser()` runs:
+1. `pullCalendarShares()` — shared calendar entries
+2. `pullDriveShares()` — shared drive paths
+3. `pullPendingInvitations()` — calendar invites (creates linked event copies for pending attendees)
+
 ## Pull Routes
 
 ```

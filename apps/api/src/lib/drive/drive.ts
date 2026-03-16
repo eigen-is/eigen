@@ -16,6 +16,7 @@ import {
 } from '@workspace/lib/types';
 import {
     type DriveACL,
+    type DriveCollabType,
     type DrivePath,
     type DriveVisibility,
     isChatType,
@@ -38,6 +39,13 @@ import {buildDriveEvent} from './sse-events';
 import {getUniqueFileName} from './naming';
 
 export type {DrivePath, DriveACL} from '@workspace/lib/types/drive';
+
+const COLLAB_EXTENSIONS: Record<string, string> = {
+    doc: '.eigendoc',
+    stickies: '.eigenstickies',
+    slides: '.eigenslides',
+    sheets: '.eigensheets',
+};
 
 export default class Drive {
     private home: Home;
@@ -142,64 +150,20 @@ export default class Drive {
         return folder;
     }
 
-    async createDoc(mountId: string, parentId: string, docName: string): Promise<DrivePath> {
-        const mount = this.getMount(mountId);
-        if (!(await this.canWrite(mountId, parentId, this.owner))) {
-            throw new ApiError(403, 'No write permission');
-        }
-
-        const safeName = `${docName}.eigendoc`;
-        const pathId = await mount.createFolder(parentId, safeName, DRIVE_TYPE_DOC);
-        await CollabDocument.create(this, mountId, pathId);
-        const doc = await mount.getPath(pathId);
-        if (!doc) throw new ApiError(500, 'Failed to create doc');
-        this.emit(SSEventType.DRIVE_FILE_CREATED, doc);
-        return doc;
+    async createDoc(mountId: string, parentId: string, name: string): Promise<DrivePath> {
+        return this.createCollabDoc(mountId, parentId, name, DRIVE_TYPE_DOC);
     }
 
-    async createStickies(mountId: string, parentId: string, stickiesName: string): Promise<DrivePath> {
-        const mount = this.getMount(mountId);
-        if (!(await this.canWrite(mountId, parentId, this.owner))) {
-            throw new ApiError(403, 'No write permission');
-        }
-
-        const safeName = `${stickiesName}.eigenstickies`;
-        const pathId = await mount.createFolder(parentId, safeName, DRIVE_TYPE_STICKIES);
-        await CollabDocument.create(this, mountId, pathId);
-        const stickies = await mount.getPath(pathId);
-        if (!stickies) throw new ApiError(500, 'Failed to create stickies');
-        this.emit(SSEventType.DRIVE_FILE_CREATED, stickies);
-        return stickies;
+    async createStickies(mountId: string, parentId: string, name: string): Promise<DrivePath> {
+        return this.createCollabDoc(mountId, parentId, name, DRIVE_TYPE_STICKIES);
     }
 
-    async createSlides(mountId: string, parentId: string, slidesName: string): Promise<DrivePath> {
-        const mount = this.getMount(mountId);
-        if (!(await this.canWrite(mountId, parentId, this.owner))) {
-            throw new ApiError(403, 'No write permission');
-        }
-
-        const safeName = `${slidesName}.eigenslides`;
-        const pathId = await mount.createFolder(parentId, safeName, DRIVE_TYPE_SLIDES);
-        await CollabDocument.create(this, mountId, pathId);
-        const slides = await mount.getPath(pathId);
-        if (!slides) throw new ApiError(500, 'Failed to create slides');
-        this.emit(SSEventType.DRIVE_FILE_CREATED, slides);
-        return slides;
+    async createSlides(mountId: string, parentId: string, name: string): Promise<DrivePath> {
+        return this.createCollabDoc(mountId, parentId, name, DRIVE_TYPE_SLIDES);
     }
 
-    async createSheets(mountId: string, parentId: string, sheetsName: string): Promise<DrivePath> {
-        const mount = this.getMount(mountId);
-        if (!(await this.canWrite(mountId, parentId, this.owner))) {
-            throw new ApiError(403, 'No write permission');
-        }
-
-        const safeName = `${sheetsName}.eigensheets`;
-        const pathId = await mount.createFolder(parentId, safeName, DRIVE_TYPE_SHEETS);
-        await CollabDocument.create(this, mountId, pathId);
-        const sheets = await mount.getPath(pathId);
-        if (!sheets) throw new ApiError(500, 'Failed to create sheets');
-        this.emit(SSEventType.DRIVE_FILE_CREATED, sheets);
-        return sheets;
+    async createSheets(mountId: string, parentId: string, name: string): Promise<DrivePath> {
+        return this.createCollabDoc(mountId, parentId, name, DRIVE_TYPE_SHEETS);
     }
 
     async createChat(mountId: string, parentId: string, chatName: string): Promise<DrivePath> {
@@ -435,25 +399,8 @@ export default class Drive {
             .where(eq(sharedSchema.sharedPaths.mimeType, mimeType))
             .all();
 
-        const mapped = sharedResults.map(r => ({
-            id: r.id,
-            mountId: r.mountId,
-            name: r.name,
-            type: r.type as DrivePath['type'],
-            parentId: r.parentId,
-            ownerId: r.ownerId,
-            mimeType: r.mimeType,
-            size: r.size ?? 0,
-            thumbnail: r.thumbnail,
-            acl: r.acl as DriveACL[] | null,
-            visibility: (r.visibility ?? 'private') as DriveVisibility,
-            details: r.details ?? null,
-            createdAt: r.createdAt ?? new Date(),
-            updatedAt: r.updatedAt ?? new Date()
-        }));
-
         const seen = new Set(allResults.map(r => r.id));
-        const unique = mapped.filter(r => !seen.has(r.id));
+        const unique = sharedResults.map(r => this.sharedRowToDrivePath(r)).filter(r => !seen.has(r.id));
         return [...allResults, ...unique];
     }
 
@@ -572,22 +519,7 @@ export default class Drive {
 
     async getSharedPathsWithMe(): Promise<DrivePath[]> {
         const results = await this.sharedDb.select().from(sharedSchema.sharedPaths).all();
-        return results.map(r => ({
-            id: r.id,
-            mountId: r.mountId,
-            name: r.name,
-            type: r.type as DrivePath['type'],
-            parentId: r.parentId,
-            ownerId: r.ownerId,
-            mimeType: r.mimeType,
-            size: r.size ?? 0,
-            thumbnail: r.thumbnail,
-            acl: r.acl as DriveACL[] | null,
-            visibility: (r.visibility ?? 'private') as DriveVisibility,
-            details: r.details ?? null,
-            createdAt: r.createdAt ?? new Date(),
-            updatedAt: r.updatedAt ?? new Date()
-        }));
+        return results.map(r => this.sharedRowToDrivePath(r));
     }
 
     async getSharedWith(user: User): Promise<DrivePath[]> {
@@ -602,12 +534,9 @@ export default class Drive {
     }
 
     async getSharedPathsByMe(): Promise<DrivePath[]> {
-        // Aggregate results from all mounts
         const allResults: DrivePath[] = [];
         for (const mount of this.mounts.values()) {
-            const mountResults = await mount.getPathsByMimeType('');
-            const sharedPaths = mountResults.filter((p: DrivePath) => p.acl !== null && p.acl.length > 0);
-            allResults.push(...sharedPaths);
+            allResults.push(...await mount.getPathsWithACL());
         }
         return allResults;
     }
@@ -662,6 +591,40 @@ export default class Drive {
             }
         }
         this.documents.clear();
+    }
+
+    private async createCollabDoc(mountId: string, parentId: string, name: string, type: DriveCollabType): Promise<DrivePath> {
+        const mount = this.getMount(mountId);
+        if (!(await this.canWrite(mountId, parentId, this.owner))) {
+            throw new ApiError(403, 'No write permission');
+        }
+
+        const safeName = `${name}${COLLAB_EXTENSIONS[type]}`;
+        const pathId = await mount.createFolder(parentId, safeName, type);
+        await CollabDocument.create(this, mountId, pathId);
+        const created = await mount.getPath(pathId);
+        if (!created) throw new ApiError(500, `Failed to create ${type}`);
+        this.emit(SSEventType.DRIVE_FILE_CREATED, created);
+        return created;
+    }
+
+    private sharedRowToDrivePath(r: typeof sharedSchema.sharedPaths.$inferSelect): DrivePath {
+        return {
+            id: r.id,
+            mountId: r.mountId,
+            name: r.name,
+            type: r.type as DrivePath['type'],
+            parentId: r.parentId,
+            ownerId: r.ownerId,
+            mimeType: r.mimeType,
+            size: r.size ?? 0,
+            thumbnail: r.thumbnail,
+            acl: r.acl as DriveACL[] | null,
+            visibility: (r.visibility ?? 'private') as DriveVisibility,
+            details: r.details ?? null,
+            createdAt: r.createdAt ?? new Date(),
+            updatedAt: r.updatedAt ?? new Date()
+        };
     }
 
     private getMount(mountId: string): Mount {
