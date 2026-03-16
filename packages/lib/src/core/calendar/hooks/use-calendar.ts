@@ -212,6 +212,24 @@ export function useDeleteSharedCalendar(ownerId: string) {
     });
 }
 
+// --- RSVP ---
+
+export function useRsvp(ownerId: string) {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async ({calendarId, eventId, status}: {
+            calendarId: string; eventId: string;
+            status: 'accepted' | 'declined' | 'tentative';
+        }) => {
+            const response = await (calendarApi({ownerId}).calendars as any)
+                ({calId: calendarId}).events({id: eventId}).rsvp.put({status});
+            if (response.error) throw new Error(String(response.error));
+            return response.data;
+        },
+        onSuccess: () => invalidateEventUpdated(queryClient),
+    });
+}
+
 // --- SSE invalidation functions ---
 
 export function invalidateCalendarCreated(queryClient: QueryClient): void {

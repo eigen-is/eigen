@@ -1,15 +1,17 @@
 import {useMemo, useState} from 'react';
 import type {CalendarEventOccurrence, CalendarItem, SharedCalendar} from '@workspace/lib/types/calendar';
 import {
-    getMonthRange,
-    getDaysInRange,
-    getEventsForDay,
-    isToday,
     formatEventTime,
     getCalendarColor,
+    getDaysInRange,
+    getEventsForDay,
+    getInviteStatus,
+    getMonthRange,
+    isToday,
     WEEKDAY_HEADERS,
 } from './calendar-utils';
 import {cn} from '@workspace/ui/lib/utils';
+import {useAuth} from '@workspace/lib/auth';
 import {EventDetailDialog} from './event-detail-dialog';
 
 type MonthViewProps = {
@@ -23,6 +25,7 @@ type MonthViewProps = {
 const MAX_VISIBLE_EVENTS = 4;
 
 export function MonthView({currentDate, events, calendars, sharedCalendars, onDayClick}: MonthViewProps) {
+    const {user} = useAuth();
     const [selectedEvent, setSelectedEvent] = useState<CalendarEventOccurrence | null>(null);
     const [detailOpen, setDetailOpen] = useState(false);
 
@@ -93,12 +96,17 @@ export function MonthView({currentDate, events, calendars, sharedCalendars, onDa
                                         <div className="space-y-0.5">
                                             {visibleEvents.map((event, idx) => {
                                                 const color = getCalendarColor(event, calendars, sharedCalendars);
+                                                const inviteStatus = getInviteStatus(event, user?.email);
                                                 if (event.allDay) {
                                                     return (
                                                         <div
                                                             key={`${event.id}-${event.occurrenceDate}-${idx}`}
-                                                            className="text-xs leading-tight px-1 py-0.5 rounded text-white truncate cursor-pointer hover:opacity-80"
-                                                            style={{backgroundColor: color}}
+                                                            className={cn(
+                                                                "text-xs leading-tight px-1 py-0.5 rounded text-white truncate cursor-pointer hover:opacity-80",
+                                                                inviteStatus === 'pending' && 'border border-dashed border-current bg-transparent !text-foreground',
+                                                                inviteStatus === 'declined' && 'opacity-40',
+                                                            )}
+                                                            style={inviteStatus === 'pending' ? {borderColor: color, color} : {backgroundColor: color}}
                                                             onClick={(e) => handleEventClick(event, e)}
                                                             title={event.title}
                                                         >
@@ -109,11 +117,17 @@ export function MonthView({currentDate, events, calendars, sharedCalendars, onDa
                                                 return (
                                                     <div
                                                         key={`${event.id}-${event.occurrenceDate}-${idx}`}
-                                                        className="text-xs leading-tight flex items-center gap-1 truncate cursor-pointer hover:bg-accent rounded px-0.5"
+                                                        className={cn(
+                                                            "text-xs leading-tight flex items-center gap-1 truncate cursor-pointer hover:bg-accent rounded px-0.5",
+                                                            inviteStatus === 'declined' && 'opacity-40',
+                                                        )}
                                                         onClick={(e) => handleEventClick(event, e)}
                                                         title={event.title}
                                                     >
-                                                        <div className="h-1.5 w-1.5 rounded-full shrink-0" style={{backgroundColor: color}}/>
+                                                        <div className={cn(
+                                                            "h-1.5 w-1.5 rounded-full shrink-0",
+                                                            inviteStatus === 'pending' && 'ring-1 ring-current bg-transparent',
+                                                        )} style={{backgroundColor: inviteStatus === 'pending' ? 'transparent' : color, color}}/>
                                                         <span className="text-muted-foreground">{formatEventTime(event)}</span>
                                                         <span className="truncate">{event.title}</span>
                                                     </div>

@@ -31,6 +31,9 @@ export const events = sqliteTable('events', {
     status: text('status').notNull().default('confirmed'),
     etag: text('etag').notNull(),
     data: text('data', {mode: 'json'}).$type<EventData | null>(),
+    organizerEventId: text('organizerEventId'),
+    organizerUserId: text('organizerUserId'),
+    sequence: integer('sequence').notNull().default(0),
     createByUserId: text('createByUserId'),
     createdAt: integer('createdAt').default(sql`(unixepoch())`),
     updatedAt: integer('updatedAt').default(sql`(unixepoch())`),
@@ -38,6 +41,7 @@ export const events = sqliteTable('events', {
     calendarStartTime: index('idx_events_calendar_start').on(table.calendarId, table.startTime),
     calendarEndTime: index('idx_events_calendar_end').on(table.calendarId, table.endTime),
     parentEvent: index('idx_events_parent').on(table.parentEventId),
+    linkedEvent: index('idx_events_linked').on(table.organizerEventId, table.organizerUserId),
 }));
 
 export const sharedCalendars = sqliteTable('shared_calendars', {

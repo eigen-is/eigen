@@ -38,6 +38,9 @@ export const CALENDAR_DB_CONFIG: DatabaseConfig<typeof schema> = {
                     status TEXT NOT NULL DEFAULT 'confirmed',
                     etag TEXT NOT NULL,
                     data TEXT,
+                    organizerEventId TEXT,
+                    organizerUserId TEXT,
+                    sequence INTEGER NOT NULL DEFAULT 0,
                     createdAt INTEGER DEFAULT (unixepoch()),
                     updatedAt INTEGER DEFAULT (unixepoch()),
                     createByUserId TEXT,
@@ -48,6 +51,7 @@ export const CALENDAR_DB_CONFIG: DatabaseConfig<typeof schema> = {
                 CREATE INDEX IF NOT EXISTS idx_events_calendar_start ON events(calendarId, startTime);
                 CREATE INDEX IF NOT EXISTS idx_events_calendar_end ON events(calendarId, endTime);
                 CREATE INDEX IF NOT EXISTS idx_events_parent ON events(parentEventId);
+                CREATE INDEX IF NOT EXISTS idx_events_linked ON events(organizerEventId, organizerUserId);
 
                 CREATE TABLE IF NOT EXISTS shared_calendars (
                     id TEXT PRIMARY KEY,

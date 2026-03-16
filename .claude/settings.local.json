@@ -27,7 +27,8 @@
       "WebFetch(domain:www.rfc-editor.org)",
       "WebFetch(domain:en.wikipedia.org)",
       "WebFetch(domain:dovecot.org)",
-      "WebFetch(domain:www.hawaga.org.uk)"
+      "WebFetch(domain:www.hawaga.org.uk)",
+      "Bash(bun test:*)"
     ]
   },
   "bypassPermissions": "bypassPermissions"

@@ -5,6 +5,7 @@ export type Reminder = {
 
 export type Attendee = {
     email: string
+    name?: string
     status: 'pending' | 'accepted' | 'declined' | 'tentative'
     role: 'required' | 'optional'
 }
@@ -12,7 +13,7 @@ export type Attendee = {
 export type EventData = {
     reminders?: Reminder[]
     attendees?: Attendee[]
-    organizer?: { userId: string; email: string }
+    organizer?: { userId: string; email: string; name?: string }
     organizerEventId?: string
     url?: string
     notes?: string
@@ -50,6 +51,7 @@ export type CalendarEvent = {
     parentEventId: string | null
     recurrenceDate: string | null
     status: 'confirmed' | 'tentative' | 'cancelled'
+    sequence: number
     etag: string
     data: EventData | null
     createByUserId: string | null

@@ -58,6 +58,10 @@ export const SSEventType = {
     CALENDAR_DELETED: 'calendar:calendar-deleted',
     CALENDAR_SHARED: 'calendar:shared',
     CALENDAR_UNSHARED: 'calendar:unshared',
+    CALENDAR_INVITE_RECEIVED: 'calendar:invite-received',
+    CALENDAR_INVITE_UPDATED: 'calendar:invite-updated',
+    CALENDAR_INVITE_CANCELLED: 'calendar:invite-cancelled',
+    CALENDAR_INVITE_RSVP: 'calendar:invite-rsvp',
     // Space events
     SPACE_SETTINGS_UPDATED: 'space:settings-updated',
     // Team events
@@ -140,7 +144,11 @@ type SSEventCalendarNotification = SSEventBase & SSEventNotification & {
         | typeof SSEventType.CALENDAR_EVENT_DELETED
         | typeof SSEventType.CALENDAR_CREATED
         | typeof SSEventType.CALENDAR_UPDATED
-        | typeof SSEventType.CALENDAR_DELETED;
+        | typeof SSEventType.CALENDAR_DELETED
+        | typeof SSEventType.CALENDAR_INVITE_RECEIVED
+        | typeof SSEventType.CALENDAR_INVITE_UPDATED
+        | typeof SSEventType.CALENDAR_INVITE_CANCELLED
+        | typeof SSEventType.CALENDAR_INVITE_RSVP;
     calendar: SSEventCalendarData;
 };
 
