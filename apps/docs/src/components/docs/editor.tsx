@@ -202,6 +202,9 @@ const TiptapEditor = ({
             }),
         ],
         editorProps: {
+            attributes: {
+                class: 'eigen-prose',
+            },
             transformPastedHTML: (html: string) => {
                 const maxWidth = getEditorMaxWidth();
                 const doc = new DOMParser().parseFromString(html, 'text/html');

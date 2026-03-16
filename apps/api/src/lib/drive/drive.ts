@@ -26,7 +26,7 @@ import {ChatRoom} from '../chat';
 import {canRead, canWrite, filterRedundantACL, matchesACL, normalizeACL} from './acl';
 import {validateACLEntries} from '@workspace/lib/validation';
 import {extractImageDetails, getThumbnail, saveThumbnail} from '../shared/thumbnails';
-import {getScreenPreview} from '../preview/preview-cache';
+import {getScreenPreview, getTextPreviewData} from '../preview/preview-cache';
 import CollabDocument from '../collab/collabDocument';
 import {getSharedDatabase} from './shared';
 import * as sharedSchema from './sharedschema';
@@ -404,6 +404,13 @@ export default class Drive {
         const path = await mount.getPath(pathId);
         if (!path || path.type === 'folder') return null;
         return getScreenPreview(mount, path, embedUrl);
+    }
+
+    async getTextPreview(mountId: string, pathId: string) {
+        const mount = this.getMount(mountId);
+        const path = await mount.getPath(pathId);
+        if (!path || path.type === 'folder') return null;
+        return getTextPreviewData(mount, path);
     }
 
     async getThumbnail(mountId: string, fileName: string): Promise<ArrayBuffer | null> {

@@ -137,6 +137,15 @@ export const driveRouter = new Elysia({name: "drive"})
         set.headers['Content-Type'] = result.contentType;
         return result.data;
     }, {auth: true})
+    .get("/drive/:ownerId/:mountId/file/:pathId/text-preview", async ({params, user, set}) => {
+        const drive = await getSharedDrive(params.ownerId, user);
+        const result = await drive.getTextPreview(params.mountId, params.pathId);
+        if (!result) {
+            set.status = 404;
+            return {body: '', mode: 'plaintext'};
+        }
+        return result;
+    }, {auth: true})
     // Path operations (rename, move, acl, breadcrumb)
     .get("/drive/:ownerId/:mountId/path/:pathId", async ({params, user}) => {
         const drive = await getSharedDrive(params.ownerId, user);

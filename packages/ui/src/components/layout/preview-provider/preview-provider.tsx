@@ -21,7 +21,7 @@ type PreviewContextValue = {
 
 const PreviewContext = createContext<PreviewContextValue | undefined>(undefined)
 
-export type PreviewMode = 'image' | 'video' | 'audio' | 'pdf' | 'html' | 'fallback';
+export type PreviewMode = 'image' | 'video' | 'audio' | 'pdf' | 'text' | 'fallback';
 
 function getPreviewMode(path: DrivePath): PreviewMode {
     const mime = path.mimeType || "";
@@ -31,7 +31,7 @@ function getPreviewMode(path: DrivePath): PreviewMode {
     if (mime.startsWith("video/")) return 'video';
     if (mime.startsWith("audio/")) return 'audio';
     if (mime === "application/pdf") return 'pdf';
-    if (getTextPreviewMode(mime, path.name) !== null) return 'html';
+    if (getTextPreviewMode(mime, path.name) !== null) return 'text';
     return 'fallback';
 }
 
