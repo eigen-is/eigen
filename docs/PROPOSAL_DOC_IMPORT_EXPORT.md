@@ -248,7 +248,7 @@ Server-side pipeline:
 
 ### Server-Side Tiptap Extension Registry
 
-This is shared infrastructure that both export and the planned preview system (PROPOSAL_PREVIEWS.md) will use.
+This is shared infrastructure that both export and the preview system (see PREVIEWS.md) will use.
 Place it in `packages/lib` so both `apps/api` and `apps/docs` can import it.
 
 The server extension list must mirror the editor's extensions (minus Collaboration, CollaborationCursor,

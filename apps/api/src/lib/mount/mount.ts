@@ -616,6 +616,13 @@ export class Mount {
         return results.map(r => this.toDrivePath(r));
     }
 
+    async getPathsWithACL(): Promise<DrivePath[]> {
+        const results = await this.db.select().from(paths)
+            .where(sql`${paths.acl} IS NOT NULL AND json_array_length(${paths.acl}) > 0`)
+            .all();
+        return results.map(r => this.toDrivePath(r));
+    }
+
     async getBreadcrumb(pathId: string): Promise<DrivePath[]> {
         const crumbs: DrivePath[] = [];
         let current = await this.getPath(pathId);

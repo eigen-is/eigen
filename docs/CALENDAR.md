@@ -45,10 +45,14 @@ Follows the Contacts/Mail pattern — per-user Home directory, not Drive.
 | `parentEventId`  | TEXT FK | Recurrence exception parent                   |
 | `recurrenceDate` | TEXT    | ISO date of replaced occurrence               |
 | `status`         | TEXT    | `confirmed` / `tentative` / `cancelled`       |
-| `etag`           | TEXT    | Change hash (CalDAV-ready)                    |
-| `data`           | TEXT    | JSON: reminders, attendees, url, notes, color |
-| `createdAt`      | INTEGER | Timestamp                                     |
-| `updatedAt`      | INTEGER | Timestamp                                     |
+| `etag`             | TEXT    | Change hash (CalDAV-ready)                    |
+| `data`             | TEXT    | JSON: reminders, attendees, url, notes, color |
+| `organizerEventId` | TEXT   | Linked copy → organizer's event ID (nullable) |
+| `organizerUserId`  | TEXT   | Linked copy → organizer's user ID (nullable)  |
+| `sequence`         | INTEGER | CalDAV SEQUENCE — bumped on organizer updates |
+| `createByUserId`   | TEXT   | User who created the event                    |
+| `createdAt`        | INTEGER | Timestamp                                    |
+| `updatedAt`        | INTEGER | Timestamp                                    |
 
 ### shared_calendars (recipient-side)
 
@@ -78,6 +82,29 @@ team's default calendar: `{targetId: 'team_{teamId}', permission: 'write'}`. Per
 Displayed in a separate "Team Calendars" section in the sidebar, using the same `SharedCalendar` infrastructure for
 visibility/color prefs. Managed in the People app team detail page.
 
+## Invitations
+
+Organizer creates event with `data.attendees[]` → server writes a linked copy to each attendee's default calendar →
+attendees RSVP → status propagates back to organizer. All server-side, no email needed.
+
+**Linked events**: Regular events in the attendee's calendar with `organizerEventId`/`organizerUserId` columns set
+(indexed for fast lookup). Same `uid` as organizer's event (CalDAV requirement). Detection: `organizerEventId IS NOT NULL`.
+
+**Propagation** (`invite-propagation.ts`):
+- Create/update with attendees: diff old vs new → add/remove/update linked copies + SSE notifications
+- Delete by organizer: cancel all attendee copies
+- Delete by attendee: treated as decline (propagates `declined` status to organizer)
+- Self-invite prevention: organizer's email is skipped during propagation
+- Unknown email: added to share registry for reconciliation on signup
+
+**RSVP**: Attendee calls `PUT .../events/:id/rsvp` → updates own copy + propagates status to organizer's event via
+`updateAttendeeStatus()` (transactional read-modify-write).
+
+**Linked event guard**: Attendees can only change `data.reminders` and `data.color` on linked copies. Title, time,
+description, location, rrule changes are blocked by `updateEvent()`.
+
+**SSE events**: `calendar:invite-received`, `calendar:invite-updated`, `calendar:invite-cancelled`, `calendar:invite-rsvp`.
+
 ## Recurrence
 
 - RRULE strings stored/transmitted as-is (no conversion layer)
@@ -105,6 +132,7 @@ GET    /calendar/:ownerId/calendars/:calId/events/:from/:to
 POST   /calendar/:ownerId/calendars/:calId/events
 PUT    /calendar/:ownerId/calendars/:calId/events/:id
 DELETE /calendar/:ownerId/calendars/:calId/events/:id
+PUT    /calendar/:ownerId/calendars/:calId/events/:id/rsvp   (attendee RSVP)
 GET    /calendar/:ownerId/calendars/:calId/access
 GET    /calendar/:ownerId/shared                  (shared-with-me list, auto-syncs team calendars)
 PUT    /calendar/:ownerId/shared/:id              (local prefs)
@@ -122,10 +150,11 @@ permission returns time blocks only.
 ```typescript
 type CalendarShare = { targetId: string; permission: 'free-busy' | 'read' | 'write' }
 type CalendarItem = { id, name, color, isDefault, shares: CalendarShare[] | null, createdAt, updatedAt }
-type CalendarEvent = { id, calendarId, uid, title, description, location, startTime, endTime, allDay, rrule, parentEventId, recurrenceDate, status, etag, data, createdAt, updatedAt }
+type CalendarEvent = { id, calendarId, uid, title, description, location, startTime, endTime, allDay, rrule, parentEventId, recurrenceDate, status, sequence, etag, data, createdAt, updatedAt }
 type CalendarEventOccurrence = CalendarEvent & { occurrenceDate: string }
 type SharedCalendar = { id, ownerUserId, calendarId, calendarName, calendarColor, permission, color, visible, createdAt, updatedAt }
-type EventData = { reminders?: Reminder[], attendees?: Attendee[], url?, notes?, color? }
+type Attendee = { email, name?, status: 'pending'|'accepted'|'declined'|'tentative', role: 'required'|'optional' }
+type EventData = { reminders?: Reminder[], attendees?: Attendee[], organizer?: { userId, email, name? }, organizerEventId?, url?, notes?, color? }
 ```
 
 Defined in `packages/lib/src/types/calendar.ts`.
@@ -138,8 +167,9 @@ Defined in `packages/lib/src/types/calendar.ts`.
 | `apps/api/src/lib/calendar/get-calendar.ts`      | Access resolution (like Drive's `get-drive.ts`) |
 | `apps/api/src/lib/calendar/schema.ts`            | Drizzle schema            |
 | `apps/api/src/lib/calendar/db-config.ts`         | DB config + migrations    |
-| `apps/api/src/lib/calendar/share-propagation.ts` | Push shares to recipients |
-| `apps/api/src/lib/calendar/sse-events.ts`        | SSE builders              |
-| `apps/api/src/routes/calendar.ts`                | API routes (thin)         |
+| `apps/api/src/lib/calendar/share-propagation.ts`  | Push shares to recipients |
+| `apps/api/src/lib/calendar/invite-propagation.ts` | Push invites to attendees |
+| `apps/api/src/lib/calendar/sse-events.ts`         | SSE builders              |
+| `apps/api/src/routes/calendar.ts`                 | API routes (thin)         |
 | `packages/lib/src/types/calendar.ts`             | Shared types              |
 | `packages/lib/src/core/calendar/`                | FE hooks + SSE handlers   |

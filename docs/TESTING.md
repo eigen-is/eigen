@@ -18,7 +18,7 @@ Test → Eden Treaty / authedRequest() → app.handle() → Real business logic 
 ```
 
 - **Data isolation**: `EIGEN_DATA_ROOT` points to `data/test-<timestamp>`, cleaned up in `afterAll`
-- **Test users**: Alice (`alice@test.eigen.is`), Bob (`bob@test.eigen.is`)
+- **Test users**: Alice (`alice@test.eigen.is`), Bob (`bob@test.eigen.is`), Charlie (`charlie@test.eigen.is`)
 - **Concurrency**: `--concurrency 1` (shared SQLite via Home singleton)
 - **Setup**: `apps/api/src/test/setup.ts` creates temp dir, runs setup, creates users
 
@@ -33,7 +33,8 @@ Test → Eden Treaty / authedRequest() → app.handle() → Real business logic 
 | `mail.test.ts`      | Mailboxes, isolation                                 |
 | `chat.test.ts`      | Messages, whispers, commands, read-only ACL          |
 | `collab.test.ts`    | Yjs operations, storage                              |
-| `calendar.test.ts`  | Calendars, events, recurrence, sharing               |
+| `calendar.test.ts`           | Calendars, events, recurrence, sharing                             |
+| `calendar-invites.test.ts`  | Invite propagation, RSVP, cancellation, linked event guard         |
 | `org.test.ts`       | Org, teams, roles                                    |
 | `org-drive.test.ts` | Team drives, team ACL                                |
 | `sse.test.ts`       | SSE endpoint, events                                 |

@@ -171,11 +171,12 @@ Detailed architecture docs in `docs/`:
 | [MEDIA-REFERENCES.md](docs/MEDIA-REFERENCES.md)                 | Name-based media/chat references in eigendocs   |
 | [HOTKEYS.md](docs/HOTKEYS.md)                                   | Keyboard shortcuts                              |
 | [INLINE-EDITING.md](docs/INLINE-EDITING.md)                     | Inline text file editing in Drive               |
+| [PREVIEWS.md](docs/PREVIEWS.md)                                 | File preview system, text/image/video previews  |
 | [PUBLIC-API.md](docs/PUBLIC-API.md)                             | Public endpoints, avatar resolution             |
 | [PEOPLE.md](docs/PEOPLE.md)                                     | Org/team management UI                          |
 | [TESTING.md](docs/TESTING.md)                                   | Test setup, patterns, test files                |
 | [DOCKER.md](docs/DOCKER.md)                                     | Docker deployment                               |
-| [IMAP.md](docs/IMAP.md)                                         | IMAP/Dovecot Maildir compatibility plan         |
+| [IMAP.md](docs/PLAN_IMAP.md)                                         | IMAP/Dovecot Maildir compatibility plan         |
 
 ### Future/Planning Docs
 
