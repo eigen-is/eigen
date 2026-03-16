@@ -5,7 +5,6 @@ import {getMemberships} from "../lib/user";
 import {ApiError} from "../lib/core";
 import type {FreeBusyBlock} from "@workspace/lib/types/calendar";
 import {resolveCalendar, resolveCalendarForEvents, syncTeamCalendars} from "../lib/calendar/get-calendar";
-import {propagateRsvp} from "../lib/calendar/invite-propagation";
 
 const CalendarShareSchema = t.Object({
     targetId: t.String(),
@@ -148,30 +147,15 @@ export const calendarRouter = new Elysia({name: "calendar"})
     // --- RSVP ---
     .put("/calendar/:ownerId/calendars/:calId/events/:id/rsvp", async ({params, body, user}) => {
         if (params.ownerId !== user.id) throw new ApiError(403, 'Forbidden');
-
         const home = await getHome(user.id);
-        const event = home.calendar.getEventById(params.id);
-        if (!event) throw new ApiError(404, 'Event not found');
-        if (!event.data?.organizer) throw new ApiError(400, 'Not a linked event');
-
-        const isAttendee = event.data.attendees?.some(
-            a => a.email.toLowerCase() === user.email.toLowerCase()
-        );
-        if (!isAttendee) throw new ApiError(403, 'Not an attendee');
-
-        home.calendar.updateAttendeeStatus(params.id, user.email, body.status);
-
-        propagateRsvp(
-            event.data.organizer.userId,
-            event.data.organizerEventId!,
-            user.email,
-            body.status,
-        ).catch(console.error);
-
+        await home.calendar.rsvp(params.id, user, body);
         return {success: true};
     }, {
         body: t.Object({
             status: t.Union([t.Literal('accepted'), t.Literal('declined'), t.Literal('tentative')]),
+            scope: t.Optional(t.Union([t.Literal('this'), t.Literal('this-and-following'), t.Literal('all')])),
+            recurrenceDate: t.Optional(t.String()),
+            remove: t.Optional(t.Boolean()),
         }),
         auth: true,
     })

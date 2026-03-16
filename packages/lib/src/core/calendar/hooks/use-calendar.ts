@@ -217,12 +217,15 @@ export function useDeleteSharedCalendar(ownerId: string) {
 export function useRsvp(ownerId: string) {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: async ({calendarId, eventId, status}: {
+        mutationFn: async ({calendarId, eventId, status, scope, recurrenceDate, remove}: {
             calendarId: string; eventId: string;
             status: 'accepted' | 'declined' | 'tentative';
+            scope?: 'this' | 'this-and-following' | 'all';
+            recurrenceDate?: string;
+            remove?: boolean;
         }) => {
             const response = await (calendarApi({ownerId}).calendars as any)
-                ({calId: calendarId}).events({id: eventId}).rsvp.put({status});
+                ({calId: calendarId}).events({id: eventId}).rsvp.put({status, scope, recurrenceDate, remove});
             if (response.error) throw new Error(String(response.error));
             return response.data;
         },
