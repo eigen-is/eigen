@@ -92,6 +92,21 @@ function dbCalendarToCalendarItem(row: typeof schema.calendars.$inferSelect): Ca
     };
 }
 
+function dbRowToSharedCalendar(row: typeof schema.sharedCalendars.$inferSelect): SharedCalendar {
+    return {
+        id: row.id,
+        ownerUserId: row.ownerUserId,
+        calendarId: row.calendarId,
+        calendarName: row.calendarName,
+        calendarColor: row.calendarColor,
+        permission: row.permission as SharedCalendar['permission'],
+        color: row.color ?? null,
+        visible: row.visible,
+        createdAt: row.createdAt as number,
+        updatedAt: row.updatedAt as number,
+    };
+}
+
 export class Calendar {
     private managedDb!: ManagedDatabase<typeof schema>;
     private db!: BunSQLiteDatabase<typeof schema>;
@@ -444,19 +459,7 @@ export class Calendar {
     // --- Shared calendars ---
 
     public getSharedCalendars(): SharedCalendar[] {
-        const rows = this.db.select().from(schema.sharedCalendars).all();
-        return rows.map(row => ({
-            id: row.id,
-            ownerUserId: row.ownerUserId,
-            calendarId: row.calendarId,
-            calendarName: row.calendarName,
-            calendarColor: row.calendarColor,
-            permission: row.permission as SharedCalendar['permission'],
-            color: row.color ?? null,
-            visible: row.visible,
-            createdAt: row.createdAt as number,
-            updatedAt: row.updatedAt as number,
-        }));
+        return this.db.select().from(schema.sharedCalendars).all().map(dbRowToSharedCalendar);
     }
 
     public updateSharedCalendar(id: string, input: { color?: string | null; visible?: boolean }): SharedCalendar {
@@ -470,18 +473,7 @@ export class Calendar {
         }).where(eq(schema.sharedCalendars.id, id)).run();
 
         const updated = this.db.select().from(schema.sharedCalendars).where(eq(schema.sharedCalendars.id, id)).get()!;
-        return {
-            id: updated.id,
-            ownerUserId: updated.ownerUserId,
-            calendarId: updated.calendarId,
-            calendarName: updated.calendarName,
-            calendarColor: updated.calendarColor,
-            permission: updated.permission as SharedCalendar['permission'],
-            color: updated.color ?? null,
-            visible: updated.visible,
-            createdAt: updated.createdAt as number,
-            updatedAt: updated.updatedAt as number,
-        };
+        return dbRowToSharedCalendar(updated);
     }
 
     public deleteSharedCalendar(id: string): void {
