@@ -15,7 +15,7 @@ export function FilePreview({url, mimeType, onClose, open, aspectRatio}: FilePre
 
     return (
         <div
-            className="fixed inset-0 z-50 bg-black/80 flex items-center justify-center animate-in fade-in"
+            className="fixed inset-0 z-[100] bg-black/80 flex items-center justify-center animate-in fade-in"
             onClick={onClose}
             style={{cursor: "zoom-out"}}
         >
