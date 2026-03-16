@@ -105,8 +105,9 @@ export function PreviewProvider({children}: {children: React.ReactNode}) {
         const mode = getPreviewMode(preview.path);
 
         const {path} = preview;
-        const previewUrl = getDrivePreviewUrl(path.ownerId, path.mountId, path.id);
-        const embedUrl = getDriveEmbedUrl(path.ownerId, path.mountId, path.id, path.name);
+        const v = path.updatedAt instanceof Date ? path.updatedAt.getTime() : new Date(path.updatedAt).getTime();
+        const previewUrl = `${getDrivePreviewUrl(path.ownerId, path.mountId, path.id)}?v=${v}`;
+        const embedUrl = `${getDriveEmbedUrl(path.ownerId, path.mountId, path.id, path.name)}?v=${v}`;
         const downloadUrl = isFolderType(path.type) ? undefined : getDriveDownloadUrl(path.ownerId, path.mountId, path.id);
         const aspectRatio = path.details?.width && path.details?.height
             ? path.details.width / path.details.height

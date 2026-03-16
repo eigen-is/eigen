@@ -1,7 +1,9 @@
+import {useCallback, useMemo} from "react";
 import {DrivePath} from "@workspace/lib/types/drive";
 import {EigenLoader} from "@workspace/ui";
 import {DriveList, DriveListToolbar} from "./drive-list";
 import {DriveDetail, DriveDetailToolbar} from "./drive-detail";
+import {defaultDriveSort} from "./drive-table";
 import {DriveAccessDialog} from "./drive-access-dialog";
 import {DriveCreateDoc} from "./drive-create-doc";
 import {DriveCreateStickies} from "./drive-create-stickies";
@@ -43,7 +45,8 @@ export type DriveLayoutProps = {
     allowCreateSheets?: boolean;
     allowRename?: boolean;
     allowMove?: boolean;
-    onQuickLook?: (path: DrivePath) => void;
+    onQuickLook?: (path: DrivePath, sortedSiblings: DrivePath[]) => void;
+    sortFn?: (a: DrivePath, b: DrivePath) => number;
     pid?: string;
 }
 
@@ -72,6 +75,7 @@ export function DriveLayout({
                                 allowRename = true,
                                 allowMove = true,
                                 onQuickLook,
+                                sortFn = defaultDriveSort,
                                 pid = undefined,
                                 showBreadcrumb = false,
                             }: DriveLayoutProps) {
@@ -126,6 +130,12 @@ export function DriveLayout({
         }
     };
 
+    const sortedContents = useMemo(() => [...folderContents].sort(sortFn), [folderContents, sortFn]);
+
+    const wrappedQuickLook = useCallback((path: DrivePath) => {
+        onQuickLook?.(path, sortedContents);
+    }, [onQuickLook, sortedContents]);
+
     if (isLoading) {
         return (
             <div className="flex items-center justify-center h-full w-full">
@@ -161,7 +171,8 @@ export function DriveLayout({
         allowUpload,
         onRename: allowRename ? handleRenamePath : undefined,
         onMove: allowMove ? handleMovePath : undefined,
-        onQuickLook,
+        onQuickLook: onQuickLook ? wrappedQuickLook : undefined,
+        sortFn,
     };
 
     const listToolbar = (
