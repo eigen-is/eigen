@@ -50,7 +50,7 @@ export function AppShell({
                     </main>
                 </div>
             </div>
-            <TanStackRouterDevtools position="bottom-right"/>
+            <TanStackRouterDevtools position="bottom-left"/>
         </LayoutContext.Provider>
     );
 }
