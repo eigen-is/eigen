@@ -5,6 +5,7 @@ import {getMemberships} from "../lib/user";
 import {ApiError} from "../lib/core";
 import type {FreeBusyBlock} from "@workspace/lib/types/calendar";
 import {resolveCalendar, resolveCalendarForEvents, syncTeamCalendars} from "../lib/calendar/get-calendar";
+import {propagateRsvp} from "../lib/calendar/invite-propagation";
 
 const CalendarShareSchema = t.Object({
     targetId: t.String(),
@@ -28,8 +29,16 @@ const ReminderSchema = t.Object({
     minutes: t.Number(),
 });
 
+const AttendeeSchema = t.Object({
+    email: t.String(),
+    name: t.Optional(t.String()),
+    status: t.Union([t.Literal('pending'), t.Literal('accepted'), t.Literal('declined'), t.Literal('tentative')]),
+    role: t.Union([t.Literal('required'), t.Literal('optional')]),
+});
+
 const EventDataSchema = t.Object({
     reminders: t.Optional(t.Array(ReminderSchema)),
+    attendees: t.Optional(t.Array(AttendeeSchema)),
     url: t.Optional(t.String()),
     notes: t.Optional(t.String()),
     color: t.Optional(t.String()),
@@ -120,21 +129,52 @@ export const calendarRouter = new Elysia({name: "calendar"})
     .post("/calendar/:ownerId/calendars/:calId/events", async ({params, body, user}) => {
         const {calendar, permission} = await resolveCalendarForEvents(user, params.ownerId, params.calId);
         if (permission !== 'write') throw new ApiError(403, 'Write permission required');
-        return calendar.createEvent(params.calId, {...body, createByUserId: user.id});
+        return calendar.createEvent(params.calId, {...body, createByUserId: user.id}, user);
     }, {body: CreateEventSchema, auth: true})
 
     .put("/calendar/:ownerId/calendars/:calId/events/:id", async ({params, body, user}) => {
         const {calendar, permission} = await resolveCalendarForEvents(user, params.ownerId, params.calId);
         if (permission !== 'write') throw new ApiError(403, 'Write permission required');
-        return calendar.updateEvent(params.id, body);
+        return calendar.updateEvent(params.id, body, user);
     }, {body: UpdateEventSchema, auth: true})
 
     .delete("/calendar/:ownerId/calendars/:calId/events/:id", async ({params, user}) => {
         const {calendar, permission} = await resolveCalendarForEvents(user, params.ownerId, params.calId);
         if (permission !== 'write') throw new ApiError(403, 'Write permission required');
-        calendar.deleteEvent(params.id);
+        calendar.deleteEvent(params.id, user);
         return {success: true};
     }, {auth: true})
+
+    // --- RSVP ---
+    .put("/calendar/:ownerId/calendars/:calId/events/:id/rsvp", async ({params, body, user}) => {
+        if (params.ownerId !== user.id) throw new ApiError(403, 'Forbidden');
+
+        const home = await getHome(user.id);
+        const event = home.calendar.getEventById(params.id);
+        if (!event) throw new ApiError(404, 'Event not found');
+        if (!event.data?.organizer) throw new ApiError(400, 'Not a linked event');
+
+        const isAttendee = event.data.attendees?.some(
+            a => a.email.toLowerCase() === user.email.toLowerCase()
+        );
+        if (!isAttendee) throw new ApiError(403, 'Not an attendee');
+
+        home.calendar.updateAttendeeStatus(params.id, user.email, body.status);
+
+        propagateRsvp(
+            event.data.organizer.userId,
+            event.data.organizerEventId!,
+            user.email,
+            body.status,
+        ).catch(console.error);
+
+        return {success: true};
+    }, {
+        body: t.Object({
+            status: t.Union([t.Literal('accepted'), t.Literal('declined'), t.Literal('tentative')]),
+        }),
+        auth: true,
+    })
 
     .get("/calendar/:ownerId/calendars/:calId/access", async ({params, user}) => {
         const {calendar} = await resolveCalendarForEvents(user, params.ownerId, params.calId);

@@ -7,7 +7,11 @@ type CalendarEventType =
     | typeof SSEventType.CALENDAR_EVENT_DELETED
     | typeof SSEventType.CALENDAR_CREATED
     | typeof SSEventType.CALENDAR_UPDATED
-    | typeof SSEventType.CALENDAR_DELETED;
+    | typeof SSEventType.CALENDAR_DELETED
+    | typeof SSEventType.CALENDAR_INVITE_RECEIVED
+    | typeof SSEventType.CALENDAR_INVITE_UPDATED
+    | typeof SSEventType.CALENDAR_INVITE_CANCELLED
+    | typeof SSEventType.CALENDAR_INVITE_RSVP;
 
 type CalendarShareEventType =
     typeof SSEventType.CALENDAR_SHARED
@@ -37,6 +41,22 @@ const calendarTemplates: Record<CalendarEventType, { title: string; body: (d: SS
     [SSEventType.CALENDAR_DELETED]: {
         title: 'Calendar deleted',
         body: (d) => d.title ? `"${d.title}" deleted` : 'Calendar deleted',
+    },
+    [SSEventType.CALENDAR_INVITE_RECEIVED]: {
+        title: 'Event invitation',
+        body: (d) => d.title ? `You've been invited to "${d.title}"` : 'You have a new invitation',
+    },
+    [SSEventType.CALENDAR_INVITE_UPDATED]: {
+        title: 'Event updated',
+        body: (d) => d.title ? `"${d.title}" has been updated` : 'An event you attend was updated',
+    },
+    [SSEventType.CALENDAR_INVITE_CANCELLED]: {
+        title: 'Event cancelled',
+        body: (d) => d.title ? `"${d.title}" was cancelled` : 'An event was cancelled',
+    },
+    [SSEventType.CALENDAR_INVITE_RSVP]: {
+        title: 'RSVP received',
+        body: (d) => d.title ? `RSVP received for "${d.title}"` : 'An attendee responded',
     },
 };
 

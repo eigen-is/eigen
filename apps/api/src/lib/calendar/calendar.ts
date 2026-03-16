@@ -1,4 +1,5 @@
 import type {
+    Attendee,
     CalendarEvent,
     CalendarEventOccurrence,
     CalendarItem,
@@ -18,7 +19,10 @@ import {ApiError, PATHS} from '../core';
 import {SSEventType} from '@workspace/lib/types/sse';
 import {buildCalendarEvent, buildCalendarShareEvent} from './sse-events';
 import {notifySharedCalendarUsers, propagateCalendarShare} from './share-propagation';
+import {propagateCancellation, propagateDecline, propagateInvitation} from './invite-propagation';
 import {createHash} from 'crypto';
+
+type UserIdentity = { id: string; email: string; name?: string | null };
 
 function getCalendarDatabase(home: Home): Promise<ManagedDatabase<typeof schema>> {
     return home.getLocalDatabase(CALENDAR_DB_CONFIG, PATHS.CALENDAR.DB);
@@ -66,6 +70,7 @@ function dbEventToCalendarEvent(row: typeof schema.events.$inferSelect): Calenda
         parentEventId: row.parentEventId ?? null,
         recurrenceDate: row.recurrenceDate ?? null,
         status: row.status as CalendarEvent['status'],
+        sequence: row.sequence,
         etag: row.etag,
         data: (row.data as EventData) ?? null,
         createByUserId: row.createByUserId ?? null,
@@ -195,7 +200,7 @@ export class Calendar {
         status?: CalendarEvent['status'];
         data?: EventData | null;
         createByUserId?: string | null;
-    }): CalendarEvent {
+    }, user?: UserIdentity): CalendarEvent {
         const cal = this.getCalendarById(calendarId);
         if (!cal) throw new ApiError(404, 'Calendar not found');
 
@@ -236,15 +241,21 @@ export class Calendar {
         }).run();
 
         this.incrementCtag(calendarId);
+        const event = this.getEventById(id)!;
+
         const sseEvent = buildCalendarEvent(SSEventType.CALENDAR_EVENT_CREATED, {
             calendarId,
             eventId: id,
             title: input.title.trim()
         });
         this.home.notify(sseEvent);
-        notifySharedCalendarUsers(this.home, cal, sseEvent).catch(() => {
-        });
-        return this.getEventById(id)!;
+        notifySharedCalendarUsers(this.home, cal, sseEvent).catch(() => {});
+
+        if (user && event.data?.attendees?.length) {
+            propagateInvitation(this.home, event, user, [], event.data.attendees).catch(console.error);
+        }
+
+        return event;
     }
 
     public getEventById(id: string): CalendarEvent | null {
@@ -262,10 +273,21 @@ export class Calendar {
         rrule?: string | null;
         status?: CalendarEvent['status'];
         data?: EventData | null;
-    }): CalendarEvent {
+    }, user?: UserIdentity): CalendarEvent {
         const existing = this.getEventById(id);
         if (!existing) throw new ApiError(404, 'Event not found');
 
+        // Linked event guard: attendees can only change local fields (reminders, color)
+        if (existing.data?.organizer) {
+            const localData: EventData = {...existing.data};
+            if (input.data) {
+                localData.reminders = input.data.reminders ?? localData.reminders;
+                localData.color = input.data.color ?? localData.color;
+            }
+            input = {data: localData};
+        }
+
+        const oldAttendees = existing.data?.attendees || [];
         const title = input.title !== undefined ? input.title.trim() : existing.title;
         const description = input.description !== undefined ? input.description : existing.description;
         const location = input.location !== undefined ? input.location : existing.location;
@@ -278,59 +300,55 @@ export class Calendar {
         const rruleStr = input.rrule !== undefined ? (input.rrule ?? null) : (existing.rrule ?? null);
 
         const etag = computeEtag({
-            title,
-            description,
-            location,
-            startTime,
-            endTime,
-            allDay,
-            rrule: rruleStr,
-            status,
-            data
+            title, description, location, startTime, endTime, allDay,
+            rrule: rruleStr, status, data,
         });
 
         this.db.update(schema.events).set({
-            title,
-            description,
-            location,
-            startTime,
-            endTime,
-            allDay,
-            rrule: rruleStr,
-            status,
-            etag,
-            data,
+            title, description, location, startTime, endTime, allDay,
+            rrule: rruleStr, status, etag, data,
             updatedAt: sql`unixepoch()`,
         }).where(eq(schema.events.id, id)).run();
 
         this.incrementCtag(existing.calendarId);
+        const updated = this.getEventById(id)!;
+
         const sseEvent = buildCalendarEvent(SSEventType.CALENDAR_EVENT_UPDATED, {
-            calendarId: existing.calendarId,
-            eventId: id,
-            title
+            calendarId: existing.calendarId, eventId: id, title,
         });
         this.home.notify(sseEvent);
         const cal = this.getCalendarById(existing.calendarId);
-        if (cal) notifySharedCalendarUsers(this.home, cal, sseEvent).catch(() => {
-        });
-        return this.getEventById(id)!;
+        if (cal) notifySharedCalendarUsers(this.home, cal, sseEvent).catch(() => {});
+
+        if (user && updated.data?.attendees?.length) {
+            this.incrementSequence(id);
+            const withSequence = this.getEventById(id)!;
+            propagateInvitation(this.home, withSequence, user, oldAttendees, withSequence.data!.attendees!).catch(console.error);
+        }
+
+        return updated;
     }
 
-    public deleteEvent(id: string): void {
+    public deleteEvent(id: string, user?: UserIdentity): void {
         const existing = this.getEventById(id);
         if (!existing) throw new ApiError(404, 'Event not found');
+
+        if (user && existing.data?.organizer) {
+            // Attendee deleting linked copy = decline
+            propagateDecline(existing.data.organizer.userId, existing.data.organizerEventId!, user.email).catch(console.error);
+        } else if (existing.data?.attendees?.length) {
+            // Organizer deleting = cancel for all attendees
+            propagateCancellation(this.home, existing).catch(console.error);
+        }
 
         this.db.delete(schema.events).where(eq(schema.events.id, id)).run();
         this.incrementCtag(existing.calendarId);
         const sseEvent = buildCalendarEvent(SSEventType.CALENDAR_EVENT_DELETED, {
-            calendarId: existing.calendarId,
-            eventId: id,
-            title: existing.title
+            calendarId: existing.calendarId, eventId: id, title: existing.title,
         });
         this.home.notify(sseEvent);
         const cal = this.getCalendarById(existing.calendarId);
-        if (cal) notifySharedCalendarUsers(this.home, cal, sseEvent).catch(() => {
-        });
+        if (cal) notifySharedCalendarUsers(this.home, cal, sseEvent).catch(() => {});
     }
 
     public getEventsInRange(from: number, to: number, calendarId?: string): CalendarEventOccurrence[] {
@@ -613,6 +631,176 @@ export class Calendar {
         }
 
         return bestPermission;
+    }
+
+    // --- Invitations ---
+
+    public findLinkedEvent(orgEventId: string, orgUserId: string): CalendarEvent | null {
+        const row = this.db.select().from(schema.events).where(
+            and(
+                eq(schema.events.organizerEventId, orgEventId),
+                eq(schema.events.organizerUserId, orgUserId),
+            )
+        ).get();
+        return row ? dbEventToCalendarEvent(row) : null;
+    }
+
+    public receiveInvitation(payload: {
+        uid: string;
+        title: string;
+        description: string | null;
+        location: string | null;
+        startTime: number;
+        endTime: number;
+        allDay: boolean;
+        rrule: string | null;
+        status: CalendarEvent['status'];
+        sequence: number;
+        data: EventData;
+        createByUserId: string;
+        organizerEventId: string;
+        organizerUserId: string;
+    }): string {
+        const existing = this.findLinkedEvent(payload.organizerEventId, payload.organizerUserId);
+        if (existing) return existing.id;
+
+        const defaultCal = this.getCalendars().find(c => c.isDefault);
+        if (!defaultCal) throw new ApiError(500, 'No default calendar');
+
+        const id = uuidv4();
+        const etag = computeEtag({
+            title: payload.title,
+            description: payload.description,
+            location: payload.location,
+            startTime: payload.startTime,
+            endTime: payload.endTime,
+            allDay: payload.allDay,
+            rrule: payload.rrule,
+            status: payload.status,
+            data: payload.data,
+        });
+
+        this.db.insert(schema.events).values({
+            id,
+            calendarId: defaultCal.id,
+            uid: payload.uid,
+            uri: `${payload.uid}.ics`,
+            title: payload.title,
+            description: payload.description,
+            location: payload.location,
+            startTime: payload.startTime,
+            endTime: payload.endTime,
+            allDay: payload.allDay,
+            rrule: payload.rrule,
+            status: payload.status,
+            sequence: payload.sequence,
+            etag,
+            data: payload.data,
+            organizerEventId: payload.organizerEventId,
+            organizerUserId: payload.organizerUserId,
+            createByUserId: payload.createByUserId,
+        }).run();
+
+        this.incrementCtag(defaultCal.id);
+        return id;
+    }
+
+    public receiveInvitationUpdate(orgEventId: string, orgUserId: string, payload: {
+        title: string;
+        description: string | null;
+        location: string | null;
+        startTime: number;
+        endTime: number;
+        allDay: boolean;
+        rrule: string | null;
+        status: CalendarEvent['status'];
+        sequence: number;
+        attendees?: Attendee[];
+    }): void {
+        const linked = this.findLinkedEvent(orgEventId, orgUserId);
+        if (!linked) return;
+
+        const data: EventData = {
+            ...linked.data,
+            attendees: payload.attendees ?? linked.data?.attendees,
+        };
+
+        const etag = computeEtag({
+            title: payload.title,
+            description: payload.description,
+            location: payload.location,
+            startTime: payload.startTime,
+            endTime: payload.endTime,
+            allDay: payload.allDay,
+            rrule: payload.rrule,
+            status: payload.status,
+            data,
+        });
+
+        this.db.update(schema.events).set({
+            title: payload.title,
+            description: payload.description,
+            location: payload.location,
+            startTime: payload.startTime,
+            endTime: payload.endTime,
+            allDay: payload.allDay,
+            rrule: payload.rrule,
+            status: payload.status,
+            sequence: payload.sequence,
+            etag,
+            data,
+            updatedAt: sql`unixepoch()`,
+        }).where(eq(schema.events.id, linked.id)).run();
+
+        this.incrementCtag(linked.calendarId);
+    }
+
+    public removeInvitation(orgEventId: string, orgUserId: string): void {
+        const linked = this.findLinkedEvent(orgEventId, orgUserId);
+        if (!linked) return;
+
+        this.db.delete(schema.events).where(eq(schema.events.id, linked.id)).run();
+        this.incrementCtag(linked.calendarId);
+    }
+
+    public updateAttendeeStatus(eventId: string, email: string, status: Attendee['status']): void {
+        this.db.transaction((tx) => {
+            const row = tx.select().from(schema.events).where(eq(schema.events.id, eventId)).get();
+            if (!row) return;
+            const data = (row.data as EventData) ?? null;
+            if (!data?.attendees) return;
+
+            const attendees = data.attendees.map(a =>
+                a.email.toLowerCase() === email.toLowerCase() ? {...a, status} : a
+            );
+
+            tx.update(schema.events).set({
+                data: {...data, attendees},
+                updatedAt: sql`unixepoch()`,
+            }).where(eq(schema.events.id, eventId)).run();
+        });
+
+        const updated = this.getEventById(eventId);
+        if (updated) this.incrementCtag(updated.calendarId);
+    }
+
+    public incrementSequence(eventId: string): void {
+        this.db.update(schema.events).set({
+            sequence: sql`${schema.events.sequence} + 1`,
+            updatedAt: sql`unixepoch()`,
+        }).where(eq(schema.events.id, eventId)).run();
+    }
+
+    public getEventsWithAttendee(email: string): CalendarEvent[] {
+        const rows = this.db.select().from(schema.events).where(
+            isNull(schema.events.organizerEventId)
+        ).all();
+
+        return rows
+            .map(dbEventToCalendarEvent)
+            .filter(e => e.data?.attendees?.some(
+                a => a.email.toLowerCase() === email.toLowerCase()
+            ));
     }
 
     // --- Internal ---

@@ -1,5 +1,5 @@
 import {useEffect, useMemo, useState} from 'react';
-import {AlignLeft, Calendar, Clock, MapPin} from 'lucide-react';
+import {AlignLeft, Calendar, Clock, MapPin, Users} from 'lucide-react';
 import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle} from '@workspace/ui/components/dialog';
 import {Button} from '@workspace/ui/components/button';
 import {Input} from '@workspace/ui/components/input';
@@ -15,13 +15,14 @@ import {
     useUpdateEvent
 } from '@workspace/lib/calendar';
 import {useAuth} from '@workspace/lib/auth';
-import type {CalendarEventOccurrence, CalendarItem, SharedCalendar} from '@workspace/lib/types/calendar';
+import type {Attendee, CalendarEventOccurrence, CalendarItem, SharedCalendar} from '@workspace/lib/types/calendar';
 import {RRule} from 'rrule';
 import {RecurrencePicker} from './recurrence-picker';
 import {addMinutes, roundToNext15Minutes, TimeSelect} from './time-select';
 import type {RecurringAction} from './recurring-action-dialog';
 import {RecurringActionDialog} from './recurring-action-dialog';
 import {occurrenceDateToString, parseOccurrenceDate} from './calendar-utils';
+import {AttendeeEditor} from './attendee-editor';
 
 type CalendarOption = {
     id: string;
@@ -92,6 +93,7 @@ export function EditEventDialog({open, onOpenChange, event, ownerUserId, calenda
     const [endDate, setEndDate] = useState('');
     const [endTime, setEndTime] = useState('');
     const [rruleString, setRruleString] = useState<string | null>(null);
+    const [attendees, setAttendees] = useState<Attendee[]>([]);
     const [selectedCalKey, setSelectedCalKey] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [showRecurringDialog, setShowRecurringDialog] = useState(false);
@@ -110,6 +112,7 @@ export function EditEventDialog({open, onOpenChange, event, ownerUserId, calenda
             setLocation(event.location || '');
             setAllDay(event.allDay);
             setRruleString(event.rrule);
+            setAttendees(event.data?.attendees || []);
 
             const currentCal = calendarOptions.find(c => c.id === event.calendarId && c.ownerId === eventOwnerId);
             setSelectedCalKey(currentCal ? `${currentCal.ownerId}:${currentCal.id}` : calendarOptions[0] ? `${calendarOptions[0].ownerId}:${calendarOptions[0].id}` : '');
@@ -135,6 +138,7 @@ export function EditEventDialog({open, onOpenChange, event, ownerUserId, calenda
     if (!event) return null;
 
     const isRecurring = !!event.rrule;
+    const isLinkedEvent = !!event.data?.organizer;
 
     const buildTimestamps = () => {
         let startTimestamp: number;
@@ -183,6 +187,7 @@ export function EditEventDialog({open, onOpenChange, event, ownerUserId, calenda
         setIsLoading(true);
         try {
             const {startTimestamp, endTimestamp} = buildTimestamps();
+            const data = {...event.data, attendees: attendees.length > 0 ? attendees : undefined};
             const updates = {
                 title: title.trim(),
                 startTime: startTimestamp,
@@ -191,6 +196,7 @@ export function EditEventDialog({open, onOpenChange, event, ownerUserId, calenda
                 description: description.trim() || null,
                 location: location.trim() || null,
                 rrule: rruleString,
+                data: Object.values(data).some(v => v !== undefined) ? data : null,
             };
 
             if (calendarChanged) {
@@ -303,6 +309,19 @@ export function EditEventDialog({open, onOpenChange, event, ownerUserId, calenda
                                 </div>
                             </div>
                         </div>
+
+                        {!isLinkedEvent && (
+                            <div className="flex items-start gap-3">
+                                <Users className="h-4 w-4 mt-2.5 text-muted-foreground shrink-0"/>
+                                <div className="flex-1">
+                                    <AttendeeEditor
+                                        attendees={attendees}
+                                        onChange={setAttendees}
+                                        currentUserEmail={user?.email}
+                                    />
+                                </div>
+                            </div>
+                        )}
 
                         <div className="flex items-start gap-3">
                             <MapPin className="h-4 w-4 mt-2.5 text-muted-foreground shrink-0"/>

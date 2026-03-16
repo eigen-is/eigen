@@ -3,13 +3,13 @@ import type {SSEvent} from '@workspace/lib/types/sse';
 import {SSEventType} from '@workspace/lib/types/sse';
 import {
     invalidateCalendarCreated,
-    invalidateCalendarUpdated,
     invalidateCalendarDeleted,
-    invalidateEventCreated,
-    invalidateEventUpdated,
-    invalidateEventDeleted,
     invalidateCalendarShared,
     invalidateCalendarUnshared,
+    invalidateCalendarUpdated,
+    invalidateEventCreated,
+    invalidateEventDeleted,
+    invalidateEventUpdated,
 } from './hooks/use-calendar';
 
 export function handleCalendarSSEvent(event: SSEvent, queryClient: QueryClient): boolean {
@@ -46,6 +46,22 @@ export function handleCalendarSSEvent(event: SSEvent, queryClient: QueryClient):
 
         case SSEventType.CALENDAR_UNSHARED:
             invalidateCalendarUnshared(queryClient);
+            return true;
+
+        case SSEventType.CALENDAR_INVITE_RECEIVED:
+            invalidateEventCreated(queryClient);
+            return true;
+
+        case SSEventType.CALENDAR_INVITE_UPDATED:
+            invalidateEventUpdated(queryClient);
+            return true;
+
+        case SSEventType.CALENDAR_INVITE_CANCELLED:
+            invalidateEventDeleted(queryClient);
+            return true;
+
+        case SSEventType.CALENDAR_INVITE_RSVP:
+            invalidateEventUpdated(queryClient);
             return true;
 
         default:
