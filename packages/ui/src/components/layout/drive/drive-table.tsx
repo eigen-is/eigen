@@ -12,6 +12,12 @@ import {useKeyboardListNavigation} from "../../../hooks/use-keyboard-list-naviga
 import {useListSelection} from "../../../hooks/use-list-selection";
 import {useListDrag} from "../../../hooks/use-list-drag";
 
+export function defaultDriveSort(a: DrivePath, b: DrivePath): number {
+    if (a.type === 'folder' && b.type !== 'folder') return -1;
+    if (a.type !== 'folder' && b.type === 'folder') return 1;
+    return a.name.localeCompare(b.name, undefined, {sensitivity: 'base'});
+}
+
 export type DriveTableProps = {
     items: DrivePath[];
     currentPath?: DrivePath | null;
@@ -25,6 +31,7 @@ export type DriveTableProps = {
     onRename?: (item: DrivePath) => void;
     onMove?: (item: DrivePath, targetItemId: string) => void;
     onQuickLook?: (item: DrivePath) => void;
+    sortFn?: (a: DrivePath, b: DrivePath) => number;
     allowDelete?: boolean;
     allowDownload?: boolean;
 }
@@ -42,6 +49,7 @@ export function DriveTable({
                                onRename,
                                onMove,
                                onQuickLook,
+                               sortFn = defaultDriveSort,
                                allowDelete = false,
                            }: DriveTableProps) {
 
@@ -52,12 +60,8 @@ export function DriveTable({
     const hasParentItem = Boolean(currentPath?.parentId);
 
     const sortedItems = useMemo(() => {
-        return [...items].sort((a, b) => {
-            if (a.type === 'folder' && b.type !== 'folder') return -1;
-            if (a.type !== 'folder' && b.type === 'folder') return 1;
-            return a.name.localeCompare(b.name, undefined, {sensitivity: 'base'});
-        });
-    }, [items]);
+        return [...items].sort(sortFn);
+    }, [items, sortFn]);
 
     const allItems = useMemo(() => {
         const result = [...sortedItems];
