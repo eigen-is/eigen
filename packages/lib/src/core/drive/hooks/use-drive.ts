@@ -21,6 +21,8 @@ export const driveKeys = {
     read: (mountId: string, pathId: string) => [...driveKeys.permissions(), 'read', mountId, pathId] as const,
     write: (mountId: string, pathId: string) => [...driveKeys.permissions(), 'write', mountId, pathId] as const,
     shared: (to: 'by-me' | 'with-me') => [...driveKeys.all, 'shared', to] as const,
+    textPreviews: () => [...driveKeys.all, 'text-preview'] as const,
+    textPreview: (mountId: string, pathId: string) => [...driveKeys.textPreviews(), mountId, pathId] as const,
 };
 
 // GET MOUNTS
@@ -300,6 +302,20 @@ export function useSharedPaths(ownerId: string, to: 'by-me' | 'with-me') {
             }
         },
         enabled: !!ownerId,
+    });
+}
+
+// TEXT PREVIEW
+export function useTextPreview(ownerId: string, mountId: string, pathId: string, enabled: boolean) {
+    return useQuery({
+        queryKey: driveKeys.textPreview(mountId, pathId),
+        queryFn: async () => {
+            const response = await driveApi({ownerId})({mountId}).file({pathId})['text-preview'].get();
+            if (response.error) throw new Error(String(response.error));
+            return response.data as { body: string, mode: string } | null;
+        },
+        enabled: enabled && !!pathId && !!ownerId && !!mountId,
+        staleTime: 1000 * 60 * 5,
     });
 }
 

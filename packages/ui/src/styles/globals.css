@@ -1,4 +1,5 @@
 @import "tailwindcss";
+@import "./eigen-prose.css";
 
 @source "../../../apps/**/*.{ts,tsx}";
 @source "../../../components/**/*.{ts,tsx}";

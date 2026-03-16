@@ -1,7 +1,7 @@
 import {lazy, Suspense, useState} from "react";
 import {EigenLoader} from "@workspace/ui";
 import {editorKeys, useFileContent} from "@workspace/lib/editor";
-import {useCheckWritePermission} from "@workspace/lib/drive";
+import {useCheckWritePermission, useTextPreview} from "@workspace/lib/drive";
 import type {DrivePath} from "@workspace/lib/types/drive";
 import {useQueryClient} from "@tanstack/react-query";
 import {Column, ColumnLayout} from "@workspace/ui/components/layout/app/column-layout";
@@ -12,8 +12,6 @@ import {ViewToolbar} from "./editor-toolbar";
 
 const MarkdownEditor = lazy(() => import("./markdown-editor").then(m => ({default: m.MarkdownEditor})));
 const CodeEditor = lazy(() => import("./code-editor").then(m => ({default: m.CodeEditor})));
-const MarkdownViewer = lazy(() => import("./markdown-editor").then(m => ({default: m.MarkdownViewer})));
-const CodeViewer = lazy(() => import("./code-editor").then(m => ({default: m.CodeViewer})));
 
 type NativeFileEditorProps = {
     path: DrivePath;
@@ -28,6 +26,7 @@ export function NativeFileEditor({path, onClose}: NativeFileEditorProps) {
     const canWrite = writePermission?.canWrite ?? false;
     const queryClient = useQueryClient();
     const {isMobile} = useLayout();
+    const {data: preview} = useTextPreview(path.ownerId, path.mountId, path.id, !editing);
 
     const handleReload = () => {
         queryClient.invalidateQueries({queryKey: editorKeys.content(path.ownerId, path.mountId, path.id)});
@@ -50,7 +49,7 @@ export function NativeFileEditor({path, onClose}: NativeFileEditorProps) {
         document.body.removeChild(a);
     };
 
-    if (isLoading) {
+    if (isLoading && !preview) {
         return (
             <div className="flex items-center justify-center h-full w-full">
                 <EigenLoader/>
@@ -58,7 +57,7 @@ export function NativeFileEditor({path, onClose}: NativeFileEditorProps) {
         );
     }
 
-    if (error || !data) {
+    if (error || (!data && !preview)) {
         return (
             <div className="flex items-center justify-center h-full w-full">
                 <p className="text-muted-foreground">{error?.message || 'Failed to load file'}</p>
@@ -66,10 +65,39 @@ export function NativeFileEditor({path, onClose}: NativeFileEditorProps) {
         );
     }
 
-    const updatedAt = data.updatedAt instanceof Date ? data.updatedAt.toISOString() : String(data.updatedAt);
+    const detailColumn = !isMobile && (
+        <Column id="detail" width="400px"
+                toolbar={<DriveDetailToolbar path={path} onDownload={handleDownload} allowDelete={false}/>}>
+            <DriveDetail path={path} onDownload={handleDownload}/>
+        </Column>
+    );
+
+    if (!editing) {
+        const viewToolbar = <ViewToolbar path={path} canWrite={canWrite && !!data} onEdit={() => setEditing(true)} onClose={onClose}/>;
+        return (
+            <ColumnLayout>
+                <Column id="list" width="flex" toolbar={viewToolbar}>
+                    <div className="h-full overflow-auto">
+                        <div className="w-full px-12 py-6 max-w-[52rem] mx-auto">
+                            {preview?.body ? (
+                                <div className="eigen-prose" dangerouslySetInnerHTML={{__html: preview.body}}/>
+                            ) : (
+                                <div className="flex items-center justify-center h-full">
+                                    <EigenLoader/>
+                                </div>
+                            )}
+                        </div>
+                    </div>
+                </Column>
+                {detailColumn}
+            </ColumnLayout>
+        );
+    }
+
+    const updatedAt = data!.updatedAt instanceof Date ? data!.updatedAt.toISOString() : String(data!.updatedAt);
     const editorProps = {
         key: reloadKey,
-        content: data.content,
+        content: data!.content,
         updatedAt,
         ownerId: path.ownerId,
         mountId: path.mountId,
@@ -81,36 +109,11 @@ export function NativeFileEditor({path, onClose}: NativeFileEditorProps) {
         onReload: handleReload,
     };
 
-    const detailColumn = !isMobile && (
-        <Column id="detail" width="400px"
-                toolbar={<DriveDetailToolbar path={path} onDownload={handleDownload} allowDelete={false}/>}>
-            <DriveDetail path={path} onDownload={handleDownload}/>
-        </Column>
-    );
-
-    if (!editing) {
-        const viewToolbar = <ViewToolbar path={path} canWrite={canWrite} onEdit={() => setEditing(true)} onClose={onClose}/>;
-        return (
-            <ColumnLayout>
-                <Column id="list" width="flex" toolbar={viewToolbar}>
-                    <Suspense fallback={<div className="flex items-center justify-center h-full"><EigenLoader/></div>}>
-                        {data.editMode === 'markdown' ? (
-                            <MarkdownViewer key={reloadKey} content={data.content}/>
-                        ) : (
-                            <CodeViewer key={reloadKey} content={data.content} fileName={path.name}/>
-                        )}
-                    </Suspense>
-                </Column>
-                {detailColumn}
-            </ColumnLayout>
-        );
-    }
-
     return (
         <ColumnLayout>
             <Suspense fallback={<div className="flex items-center justify-center h-full w-full"><EigenLoader/></div>}>
-                {data.editMode === 'markdown' ? (
-                    <MarkdownEditor {...editorProps} frontmatter={data.frontmatter ?? null}/>
+                {data!.editMode === 'markdown' ? (
+                    <MarkdownEditor {...editorProps} frontmatter={data!.frontmatter ?? null}/>
                 ) : (
                     <CodeEditor {...editorProps}/>
                 )}

@@ -52,23 +52,6 @@ function useMarkdownExtensions(content: string) {
     ];
 }
 
-// Read-only markdown viewer
-export function MarkdownViewer({content}: {content: string}) {
-    const editor = useEditor({
-        extensions: useMarkdownExtensions(content),
-        content,
-        editable: false,
-    });
-
-    return (
-        <div className="h-full overflow-auto">
-            <div className="w-full px-12 py-6">
-                <EditorContent editor={editor}/>
-            </div>
-        </div>
-    );
-}
-
 // Full markdown editor with save logic
 type MarkdownEditorProps = {
     content: string;

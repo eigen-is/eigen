@@ -15,38 +15,36 @@ describe('Preview', () => {
         rootId = root.id;
     });
 
-    async function uploadAndPreview(name: string, content: string, mimeType: string) {
+    async function uploadAndTextPreview(name: string, content: string, mimeType: string) {
         const file = new File([content], name, {type: mimeType});
         const uploaded = await driveUpload(token, ownerId, mountId, rootId, file);
-        const res = await authedRequest(token, `/drive/${ownerId}/${mountId}/file/${uploaded.id}/preview`);
+        const res = await authedRequest(token, `/drive/${ownerId}/${mountId}/file/${uploaded.id}/text-preview`);
         return {res, uploaded};
     }
 
-    test('text file returns html preview', async () => {
-        const {res} = await uploadAndPreview('test.txt', 'Hello world', 'text/plain');
+    test('text file returns json body preview', async () => {
+        const {res} = await uploadAndTextPreview('test.txt', 'Hello world', 'text/plain');
         expect(res.status).toBe(200);
-        expect(res.headers.get('content-type')).toBe('text/html');
-        const html = await res.text();
-        expect(html).toContain('Hello world');
-        expect(html).toContain('<!DOCTYPE html>');
+        const data = await res.json();
+        expect(data.body).toContain('Hello world');
+        expect(data.mode).toBe('plaintext');
     });
 
-    test('markdown file returns rendered html', async () => {
-        const {res} = await uploadAndPreview('test.md', '# Title\n\nSome **bold** text', 'text/markdown');
+    test('markdown file returns rendered body', async () => {
+        const {res} = await uploadAndTextPreview('test.md', '# Title\n\nSome **bold** text', 'text/markdown');
         expect(res.status).toBe(200);
-        expect(res.headers.get('content-type')).toBe('text/html');
-        const html = await res.text();
-        expect(html).toContain('<h1>Title</h1>');
-        expect(html).toContain('<strong>bold</strong>');
+        const data = await res.json();
+        expect(data.body).toContain('<h1>Title</h1>');
+        expect(data.body).toContain('<strong>bold</strong>');
+        expect(data.mode).toBe('markdown');
     });
 
-    test('code file returns syntax highlighted html', async () => {
-        const {res} = await uploadAndPreview('test.json', '{"key": "value"}', 'application/json');
+    test('code file returns syntax highlighted body', async () => {
+        const {res} = await uploadAndTextPreview('test.json', '{"key": "value"}', 'application/json');
         expect(res.status).toBe(200);
-        expect(res.headers.get('content-type')).toBe('text/html');
-        const html = await res.text();
-        expect(html).toContain('<!DOCTYPE html>');
-        expect(html).toContain('key');
+        const data = await res.json();
+        expect(data.body).toContain('key');
+        expect(data.mode).toBe('code');
     });
 
     test('image file returns webp preview', async () => {
@@ -80,18 +78,25 @@ describe('Preview', () => {
         expect(res.status).toBe(404);
     });
 
+    test('text file preview returns 404 from image preview endpoint', async () => {
+        const file = new File(['Hello'], 'check.txt', {type: 'text/plain'});
+        const uploaded = await driveUpload(token, ownerId, mountId, rootId, file);
+        const res = await authedRequest(token, `/drive/${ownerId}/${mountId}/file/${uploaded.id}/preview`);
+        expect(res.status).toBe(404);
+    });
+
     test('nonexistent file returns 404', async () => {
         const res = await authedRequest(token, `/drive/${ownerId}/${mountId}/file/00000000-0000-0000-0000-000000000000/preview`);
         expect(res.status).toBe(404);
     });
 
-    test('preview caches result on second request', async () => {
-        const {res: first, uploaded} = await uploadAndPreview('cached.txt', 'Cache test', 'text/plain');
+    test('text preview caches result on second request', async () => {
+        const {res: first, uploaded} = await uploadAndTextPreview('cached.txt', 'Cache test', 'text/plain');
         expect(first.status).toBe(200);
 
-        const second = await authedRequest(token, `/drive/${ownerId}/${mountId}/file/${uploaded.id}/preview`);
+        const second = await authedRequest(token, `/drive/${ownerId}/${mountId}/file/${uploaded.id}/text-preview`);
         expect(second.status).toBe(200);
-        const html = await second.text();
-        expect(html).toContain('Cache test');
+        const data = await second.json();
+        expect(data.body).toContain('Cache test');
     });
 });

@@ -110,24 +110,7 @@ function cmBaseExtensions(language: string | null, isDark: boolean) {
     ];
 }
 
-// Read-only code viewer
-export function CodeViewer({content, fileName}: {content: string; fileName: string}) {
-    const containerRef = useRef<HTMLDivElement>(null);
-    const isDark = useDarkMode();
-    const language = getLanguageFromName(fileName);
 
-    useEffect(() => {
-        if (!containerRef.current) return;
-        const state = EditorState.create({
-            doc: content,
-            extensions: [...cmBaseExtensions(language, isDark), EditorState.readOnly.of(true)],
-        });
-        const view = new EditorView({state, parent: containerRef.current});
-        return () => view.destroy();
-    }, [isDark]);
-
-    return <div ref={containerRef} className="h-full overflow-hidden"/>;
-}
 
 export type CodeEditorViewHandle = {
     undo: () => void;
