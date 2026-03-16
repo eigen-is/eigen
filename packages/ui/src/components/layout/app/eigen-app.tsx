@@ -45,7 +45,7 @@ export function EigenApp({children}: EigenAppProps) {
                                 </UploadProvider>
                             </SSEProvider>
                         </ThemeProvider>
-                        <ReactQueryDevtools initialIsOpen={false}/>
+                        <ReactQueryDevtools initialIsOpen={false} buttonPosition="bottom-left"/>
                     </AuthProvider>
                 </QueryClientProvider>
             </TooltipProvider>

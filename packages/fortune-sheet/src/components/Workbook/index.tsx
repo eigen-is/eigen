@@ -102,10 +102,10 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
         );
 
         const [context, setContext] = useState(defaultContext(refs));
-        const {info} = locale(context);
+        const {info, formula} = locale(context);
 
 
-        const [, setCalInfo] = useState<{
+        const [calInfo, setCalInfo] = useState<{
             numberC: number;
             count: number;
             sum: string;
@@ -889,7 +889,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                                 className="absolute top-0 left-0 z-[1003] h-full w-full"
                             />
                         )}
-                        {/* <div className="flex justify-end items-center leading-[0] h-0">
+                        <div className="flex justify-end items-center leading-[0] h-0">
                             <div className="luckysheet-sheet-selection-calInfo">
                                 {!!calInfo.count && (
                                     <div style={{width: "60px"}}>
@@ -917,7 +917,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                                     </div>
                                 )}
                             </div>
-                        </div> */}
+                        </div>
                     </div>
                 </ModalProvider>
             </WorkbookContext.Provider>
