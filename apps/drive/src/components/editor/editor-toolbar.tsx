@@ -26,7 +26,7 @@ export function ViewToolbar({path, canWrite, onEdit, onClose}: ViewToolbarProps)
     return (
         <Toolbar>
             <div className="flex items-center gap-1 overflow-hidden">
-                <TooltipButton icon={ArrowLeft} tooltipText="Back to files" onClick={onClose}/>
+                {/*<TooltipButton icon={ArrowLeft} tooltipText="Back to files" onClick={onClose}/>*/}
                 <Breadcrumb className="overflow-hidden">
                     <BreadcrumbList>
                         {breadcrumbPaths.map((p, index) => (
