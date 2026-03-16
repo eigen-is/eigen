@@ -97,8 +97,22 @@ attendees RSVP → status propagates back to organizer. All server-side, no emai
 - Self-invite prevention: organizer's email is skipped during propagation
 - Unknown email: added to share registry for reconciliation on signup
 
-**RSVP**: Attendee calls `PUT .../events/:id/rsvp` → updates own copy + propagates status to organizer's event via
-`updateAttendeeStatus()` (transactional read-modify-write).
+**RSVP**: Attendee calls `PUT .../events/:id/rsvp` with `{status, scope?, recurrenceDate?, remove?}`.
+
+- `scope='all'` (default): updates attendee status on the linked event + propagates to organizer
+- `scope='this'` + `recurrenceDate`: creates a recurrence exception with per-occurrence attendee status + propagates
+  to organizer (who also gets an exception). With `remove: true`, creates a cancelled exception instead (hides
+  occurrence) and propagates decline
+- `scope='this-and-following'` + `recurrenceDate` + `remove: true`: truncates the linked event's rrule + propagates
+  series-wide decline
+- `remove: true` without scope: deletes the entire linked event (same as DELETE, propagates decline)
+
+All handled by `Calendar.rsvp()`. Per-occurrence data is stored as recurrence exceptions (`parentEventId` +
+`recurrenceDate`), reusing the existing expansion model — `getEventsInRange()` already substitutes exception data.
+
+**rrule constraint**: When an organizer updates a recurring invited event, `receiveInvitationUpdate()` ensures the
+incoming rrule does not extend beyond any local truncation the attendee made. This prevents "delete this and following"
+from being undone by an organizer edit.
 
 **Linked event guard**: Attendees can only change `data.reminders` and `data.color` on linked copies. Title, time,
 description, location, rrule changes are blocked by `updateEvent()`.

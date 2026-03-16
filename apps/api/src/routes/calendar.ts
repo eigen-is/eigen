@@ -148,7 +148,7 @@ export const calendarRouter = new Elysia({name: "calendar"})
     .put("/calendar/:ownerId/calendars/:calId/events/:id/rsvp", async ({params, body, user}) => {
         if (params.ownerId !== user.id) throw new ApiError(403, 'Forbidden');
         const home = await getHome(user.id);
-        await home.calendar.rsvp(params.id, user, body);
+        home.calendar.rsvp(params.id, user, body);
         return {success: true};
     }, {
         body: t.Object({

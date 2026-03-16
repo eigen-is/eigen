@@ -99,13 +99,13 @@ export function EventDetailDialog({open, onOpenChange, event, calendar, sharedCa
     const [showRecurringDeleteDialog, setShowRecurringDeleteDialog] = useState(false);
     const [showRecurringDeleteConfirm, setShowRecurringDeleteConfirm] = useState(false);
     const [pendingDeleteAction, setPendingDeleteAction] = useState<RecurringAction | null>(null);
+    const [showRsvpScopeDialog, setShowRsvpScopeDialog] = useState(false);
+    const [pendingRsvpStatus, setPendingRsvpStatus] = useState<'accepted' | 'declined' | 'tentative' | null>(null);
     const [editOpen, setEditOpen] = useState(false);
     const deleteEvent = useDeleteEvent(eventOwnerId);
     const createEvent = useCreateEvent(eventOwnerId);
     const updateEvent = useUpdateEvent(eventOwnerId);
     const rsvp = useRsvp(user?.id || '');
-    const [showRsvpScopeDialog, setShowRsvpScopeDialog] = useState(false);
-    const [pendingRsvpStatus, setPendingRsvpStatus] = useState<'accepted' | 'declined' | 'tentative' | null>(null);
 
     if (!event) return null;
 
@@ -147,7 +147,9 @@ export function EventDetailDialog({open, onOpenChange, event, calendar, sharedCa
                 }
             } else {
                 if (action === 'this') {
-                    if (isRecurring && !isException) {
+                    if (isException) {
+                        await updateEvent.mutateAsync({id: event.id, calendarId: event.calendarId, status: 'cancelled'});
+                    } else if (isRecurring) {
                         await createEvent.mutateAsync({
                             calendarId: event.calendarId,
                             title: event.title,

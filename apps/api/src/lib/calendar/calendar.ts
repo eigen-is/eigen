@@ -714,7 +714,7 @@ export class Calendar {
 
         // Don't extend rrule beyond what the attendee has locally — they may have
         // truncated it via "delete this and following" and that intent should stick.
-        const rrule = constrainRRule(payload.rrule, linked.rrule, payload.startTime);
+        const rrule = constrainRRule(payload.rrule, linked.rrule);
 
         const data: EventData = {
             ...linked.data,
@@ -803,12 +803,7 @@ export class Calendar {
         const parent = this.getEventById(eventId);
         if (!parent) throw new ApiError(404, 'Event not found');
 
-        const existing = this.db.select().from(schema.events).where(
-            and(
-                eq(schema.events.parentEventId, eventId),
-                eq(schema.events.recurrenceDate, recurrenceDate),
-            )
-        ).get();
+        const existing = this.getException(eventId, recurrenceDate);
 
         if (existing) {
             const data = (existing.data as EventData) ?? parent.data ?? {};
@@ -816,6 +811,7 @@ export class Calendar {
                 a.email.toLowerCase() === email.toLowerCase() ? {...a, status} : a
             );
             const updatedData: EventData = {...data, attendees};
+            const newStatus = existing.status === 'cancelled' ? 'confirmed' : existing.status;
             const etag = computeEtag({
                 title: existing.title,
                 description: existing.description,
@@ -824,12 +820,12 @@ export class Calendar {
                 endTime: existing.endTime,
                 allDay: existing.allDay,
                 rrule: existing.rrule,
-                status: existing.status === 'cancelled' ? 'confirmed' : existing.status,
+                status: newStatus,
                 data: updatedData,
             });
 
             this.db.update(schema.events).set({
-                status: existing.status === 'cancelled' ? 'confirmed' : existing.status,
+                status: newStatus,
                 data: updatedData,
                 etag,
                 updatedAt: sql`unixepoch()`,
@@ -861,12 +857,7 @@ export class Calendar {
         const parent = this.getEventById(eventId);
         if (!parent) throw new ApiError(404, 'Event not found');
 
-        const existing = this.db.select().from(schema.events).where(
-            and(
-                eq(schema.events.parentEventId, eventId),
-                eq(schema.events.recurrenceDate, recurrenceDate),
-            )
-        ).get();
+        const existing = this.getException(eventId, recurrenceDate);
 
         if (existing) {
             this.db.update(schema.events).set({
@@ -888,12 +879,12 @@ export class Calendar {
         }
     }
 
-    public async rsvp(eventId: string, user: UserIdentity, input: {
+    public rsvp(eventId: string, user: UserIdentity, input: {
         status: Attendee['status'];
         scope?: 'this' | 'this-and-following' | 'all';
         recurrenceDate?: string;
         remove?: boolean;
-    }): Promise<void> {
+    }): void {
         const event = this.getEventById(eventId);
         if (!event) throw new ApiError(404, 'Event not found');
         if (!event.data?.organizer) throw new ApiError(400, 'Not a linked event');
@@ -963,6 +954,15 @@ export class Calendar {
         }
     }
 
+    private getException(parentEventId: string, recurrenceDate: string) {
+        return this.db.select().from(schema.events).where(
+            and(
+                eq(schema.events.parentEventId, parentEventId),
+                eq(schema.events.recurrenceDate, recurrenceDate),
+            )
+        ).get();
+    }
+
     private incrementCtag(calendarId: string): void {
         this.db.update(schema.calendars)
             .set({
@@ -1007,21 +1007,13 @@ function formatOccurrenceDate(date: Date): string {
     return `${y}-${m}-${d}`;
 }
 
-function getRRuleEnd(rruleStr: string, dtstart: Date): Date | null {
-    const rule = new RRule({...RRule.parseString(rruleStr), dtstart});
-    const all = rule.all((_, i) => i < 10000);
-    return all.length > 0 ? all[all.length - 1] : null;
-}
-
-function constrainRRule(incoming: string | null, local: string | null, startTime: number): string | null {
+function constrainRRule(incoming: string | null, local: string | null): string | null {
     if (!incoming || !local) return incoming;
-    const dtstart = new Date(startTime * 1000);
-    const localEnd = getRRuleEnd(local, dtstart);
-    if (!localEnd) return incoming;
-    const incomingEnd = getRRuleEnd(incoming, dtstart);
-    if (!incomingEnd || incomingEnd <= localEnd) return incoming;
-    // Organizer's rrule extends beyond attendee's local truncation — keep local end
-    return truncateRRule(incoming, new Date(localEnd.getTime() + 86400_000));
+    const localUntil = RRule.parseString(local).until ?? null;
+    if (!localUntil) return incoming;
+    const incomingUntil = RRule.parseString(incoming).until ?? null;
+    if (incomingUntil && incomingUntil <= localUntil) return incoming;
+    return truncateRRule(incoming, new Date(localUntil.getTime() + 86400_000));
 }
 
 function truncateRRule(rruleStr: string, beforeDate: Date): string {
