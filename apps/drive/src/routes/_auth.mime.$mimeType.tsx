@@ -4,9 +4,8 @@ import {DriveLayout} from "@workspace/ui/components/layout/drive/drive-layout";
 import {DrivePath, DriveSearchParams, isDocumentType, isFolderType, isInlineEditable} from "@workspace/lib/types/drive";
 import {useAuth} from '@workspace/lib/auth';
 import {useLayout} from "@workspace/ui/components/layout/app/layout-context.tsx";
-import {useState} from "react";
-import {FilePreview} from '@workspace/ui/components/layout/drive/file-preview';
-import {getDriveDownloadUrl, getDriveEmbedUrl, openDocument} from "@workspace/lib/api";
+import {getDriveDownloadUrl, openDocument} from "@workspace/lib/api";
+import {usePreview} from '@workspace/ui/components/layout/preview-provider';
 
 export const Route = createFileRoute('/_auth/mime/$mimeType')({
     component: DriveRoute,
@@ -25,7 +24,7 @@ function DriveRoute() {
     const mountId = DEFAULT_MOUNT_ID;
     const {data: selectedPath = null} = usePathInfo(ownerId, mountId, pid);
     const {isMobile} = useLayout();
-    const [preview, setPreview] = useState<{ url: string; mimeType: string } | null>(null);
+    const {openPreview, updatePreview, closePreview, isPreviewOpen, canPreview} = usePreview();
 
     const {
         data: folderContents = [],
@@ -34,13 +33,11 @@ function DriveRoute() {
     } = useMimeContent(ownerId, mimeType);
 
     const onRowSelect = (path: DrivePath) => {
-        const fileMimeType = path.mimeType || "";
-        if (preview !== null) {
-            if (fileMimeType.startsWith("image/") || fileMimeType.startsWith("video/")) {
-                const url = getDriveEmbedUrl(path.ownerId, path.mountId, path.id, path.name);
-                setPreview({url, mimeType: fileMimeType});
+        if (isPreviewOpen) {
+            if (canPreview(path)) {
+                updatePreview(path);
             } else {
-                setPreview(null);
+                closePreview();
             }
         }
 
@@ -56,17 +53,14 @@ function DriveRoute() {
     };
 
     const onRowActivate = (path: DrivePath) => {
-        const fileMimeType = path.mimeType || "";
-
         if (path.type === 'folder') {
             navigate({to: Route.fullPath, params: {mimeType}, search: {pid: undefined}});
         } else if (isDocumentType(path.type)) {
             openDocument(path);
         } else if (isInlineEditable(path.mimeType, path.name)) {
             navigate({to: '/edit/$ownerId/$mountId/$pathId', params: {ownerId: path.ownerId, mountId: path.mountId, pathId: path.id}});
-        } else if (fileMimeType.startsWith("image/") || fileMimeType.startsWith("video/")) {
-            const url = getDriveEmbedUrl(path.ownerId, path.mountId, path.id, path.name);
-            setPreview({url, mimeType: fileMimeType});
+        } else if (canPreview(path)) {
+            openPreview(path);
         } else {
             const url = getDriveDownloadUrl(path.ownerId, path.mountId, path.id);
             window.open(url, "_blank");
@@ -87,12 +81,6 @@ function DriveRoute() {
 
     return (
         <>
-            <FilePreview
-                url={preview?.url || ''}
-                mimeType={preview?.mimeType || ''}
-                onClose={() => setPreview(null)}
-                open={preview !== null}
-            />
             <DriveLayout
                 pid={pid}
                 selectedPath={selectedPath}
