@@ -193,6 +193,7 @@ interface DriveListProps {
     allowUpload?: boolean;
     onRename?: (item: DrivePath) => void;
     onMove?: (item: DrivePath, targetItemId: string) => void;
+    onQuickLook?: (path: DrivePath) => void;
 }
 
 export function DriveList({
@@ -215,6 +216,7 @@ export function DriveList({
                               allowUpload = false,
                               onRename,
                               onMove,
+                              onQuickLook,
                           }: DriveListProps) {
     const [isDragging, setIsDragging] = useState(false);
     const dragCounter = useRef(0);
@@ -343,6 +345,7 @@ export function DriveList({
                 allowDelete={allowDelete}
                 onRename={onRename}
                 onMove={onMove}
+                onQuickLook={onQuickLook}
             />
 
             {items.length === 0 && (

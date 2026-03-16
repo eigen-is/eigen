@@ -74,6 +74,10 @@ function DriveRoute() {
         }
     };
 
+    const onQuickLook = (path: DrivePath) => {
+        openPreview(path, folderContents);
+    };
+
     const onRowActivate = (path: DrivePath) => {
         if (path.type === 'folder') {
             navigate({
@@ -86,7 +90,7 @@ function DriveRoute() {
         } else if (isInlineEditable(path.mimeType, path.name)) {
             navigate({to: '/edit/$ownerId/$mountId/$pathId', params: {ownerId: path.ownerId, mountId: path.mountId, pathId: path.id}});
         } else if (canPreview(path)) {
-            openPreview(path);
+            openPreview(path, folderContents);
         } else {
             const url = getDriveDownloadUrl(path.ownerId, path.mountId, path.id);
             window.open(url, "_blank");
@@ -152,6 +156,7 @@ function DriveRoute() {
             allowShare={true}
             allowUpload={true}
             allowMove={true}
+            onQuickLook={onQuickLook}
             showBreadcrumb={true}
             pid={pid}
         />

@@ -2,6 +2,7 @@ import type {BunFile} from 'bun';
 import sharp from 'sharp';
 import * as path from 'path';
 import * as fs from 'node:fs';
+import {cleanupExtract, extractEmbeddedPreview, isExiftoolSupported} from '../preview/exiftool-preview';
 
 export type ThumbnailOptions = {
     maxSize?: number;
@@ -88,11 +89,27 @@ export async function saveThumbnail(
     pathId: string,
     source: BunFile | Buffer | string,
     mimeType: string,
-    options?: ThumbnailOptions
+    options?: ThumbnailOptions & { fileName?: string }
 ): Promise<string | null> {
     const opts = {...DEFAULT_OPTIONS, ...options};
 
-    const thumbData = await generateThumbnail(source, mimeType, opts);
+    let thumbData = await generateThumbnail(source, mimeType, opts);
+
+    // If sharp can't handle it, try exiftool extraction for RAW/PSD/AI
+    if (!thumbData && opts.fileName && isExiftoolSupported(mimeType, opts.fileName)) {
+        try {
+            const sourcePath = typeof source === 'string' ? source : null;
+            if (sourcePath) {
+                const extractPath = await extractEmbeddedPreview(sourcePath, thumbsDir, `${pathId}-tmp`);
+                if (extractPath) {
+                    thumbData = await generateThumbnail(extractPath, 'image/jpeg', opts);
+                    await cleanupExtract(extractPath);
+                }
+            }
+        } catch {
+        }
+    }
+
     if (!thumbData) {
         return null;
     }
@@ -106,6 +123,8 @@ export async function saveThumbnail(
 
     return `${pathId}.${opts.format}`;
 }
+
+export {isExiftoolSupported} from '../preview/exiftool-preview';
 
 export async function extractImageDetails(
     source: Buffer,

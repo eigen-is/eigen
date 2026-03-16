@@ -24,6 +24,7 @@ export type DriveTableProps = {
     onDelete?: (items: DrivePath[]) => void;
     onRename?: (item: DrivePath) => void;
     onMove?: (item: DrivePath, targetItemId: string) => void;
+    onQuickLook?: (item: DrivePath) => void;
     allowDelete?: boolean;
     allowDownload?: boolean;
 }
@@ -40,6 +41,7 @@ export function DriveTable({
                                onDelete,
                                onRename,
                                onMove,
+                               onQuickLook,
                                allowDelete = false,
                            }: DriveTableProps) {
 
@@ -86,6 +88,12 @@ export function DriveTable({
         if (item) onItemClick?.(item);
     }, [allItems, onItemClick]);
 
+    const handleQuickLook = useCallback((id: string) => {
+        if (!onQuickLook) return;
+        const item = allItems.find(i => i.id === id);
+        if (item) onQuickLook(item);
+    }, [allItems, onQuickLook]);
+
     const selection = useListSelection({items: allItems, getId: (item) => item.id});
 
     const {selectedIndex, handleKeyDown} = useKeyboardListNavigation<DrivePath>({
@@ -93,6 +101,7 @@ export function DriveTable({
         activeId: activeItemId,
         getId: (item) => item.id,
         onSelect: handleItemSelect,
+        onQuickLook: onQuickLook ? handleQuickLook : undefined,
         containerRef: tableRef,
         itemSelector: 'tbody tr',
         shouldNotify: (_item, index) => (!hasParentItem || index > 0) && !!activeItemId,

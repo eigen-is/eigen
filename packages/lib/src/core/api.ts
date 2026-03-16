@@ -86,6 +86,7 @@ export const getDriveFileUploadUrl = (ownerId: string, mountId: string, pathId: 
 export const getDriveFilesUploadUrl = (ownerId: string, mountId: string, pathId: string) => `${API_HOST}/drive/${ownerId}/${mountId}/files/${pathId}`;
 export const getDriveDownloadUrl = (ownerId: string, mountId: string, pathId: string) => `${API_HOST}/drive/${ownerId}/${mountId}/file/${pathId}/download`;
 export const getDriveEmbedUrl = (ownerId: string, mountId: string, pathId: string, fileName: string) => `${API_HOST}/drive/${ownerId}/${mountId}/file/${pathId}/embed/${fileName}`;
+export const getDrivePreviewUrl = (ownerId: string, mountId: string, pathId: string) => `${API_HOST}/drive/${ownerId}/${mountId}/file/${pathId}/preview`;
 export const getDriveThumbnailUrl = (ownerId: string, mountId: string, fileName: string) => `${API_HOST}/drive/${ownerId}/${mountId}/thumb/${fileName}`;
 export const getCollabWebSocketUrl = (ownerId: string, mountId: string, pathId: string) => `${API_HOST.replace('http', 'ws')}/ws/collab/${ownerId}/${mountId}/${pathId}`;
 export const getInlineEditUrl = (ownerId: string, mountId: string, pathId: string) => getDriveAppUrl(`edit/${ownerId}/${mountId}/${pathId}`);

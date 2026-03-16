@@ -120,6 +120,23 @@ export const driveRouter = new Elysia({name: "drive"})
         set.headers['Expires'] = new Date(Date.now() + 86400000).toUTCString();
         return await drive.downloadFile(params.mountId, params.pathId);
     }, {auth: true})
+    .get("/drive/:ownerId/:mountId/file/:pathId/preview", async ({params, user, set}) => {
+        const drive = await getSharedDrive(params.ownerId, user);
+        const embedUrl = `/drive/${params.ownerId}/${params.mountId}/file/${params.pathId}/embed/preview`;
+        const result = await drive.getPreview(params.mountId, params.pathId, embedUrl);
+        if (!result) {
+            set.status = 404;
+            return 'No preview available';
+        }
+        if (result.type === 'redirect') {
+            set.redirect = result.url;
+            return;
+        }
+        set.headers['Cache-Control'] = 'public, max-age=86400';
+        set.headers['Expires'] = new Date(Date.now() + 86400000).toUTCString();
+        set.headers['Content-Type'] = result.contentType;
+        return result.data;
+    }, {auth: true})
     // Path operations (rename, move, acl, breadcrumb)
     .get("/drive/:ownerId/:mountId/path/:pathId", async ({params, user}) => {
         const drive = await getSharedDrive(params.ownerId, user);

@@ -26,6 +26,7 @@ import {ChatRoom} from '../chat';
 import {canRead, canWrite, filterRedundantACL, matchesACL, normalizeACL} from './acl';
 import {validateACLEntries} from '@workspace/lib/validation';
 import {extractImageDetails, getThumbnail, saveThumbnail} from '../shared/thumbnails';
+import {getScreenPreview} from '../preview/preview-cache';
 import CollabDocument from '../collab/collabDocument';
 import {getSharedDatabase} from './shared';
 import * as sharedSchema from './sharedschema';
@@ -396,6 +397,13 @@ export default class Drive {
         if (!updated) throw new ApiError(500, 'Failed to get updated file');
         this.emit(SSEventType.DRIVE_FILE_UPLOADED, updated);
         return updated;
+    }
+
+    async getPreview(mountId: string, pathId: string, embedUrl: string) {
+        const mount = this.getMount(mountId);
+        const path = await mount.getPath(pathId);
+        if (!path || path.type === 'folder') return null;
+        return getScreenPreview(mount, path, embedUrl);
     }
 
     async getThumbnail(mountId: string, fileName: string): Promise<ArrayBuffer | null> {
