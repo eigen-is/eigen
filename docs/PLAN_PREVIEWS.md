@@ -48,22 +48,23 @@ GET /drive/:ownerId/:mountId/file/:pathId/preview
 
 Response behaviour by file type:
 
-| Type                             | Response                           | Cache                                              |
-|----------------------------------|------------------------------------|----------------------------------------------------|
-| `image/*`                        | Screen-res WebP (max 2560px)       | `tmpDir/previews/{pathId}-{updatedAt}.screen.webp` |
-| `video/*`                        | 302 redirect to `/embed/:fileName` | —                                                  |
-| `audio/*`                        | 302 redirect to `/embed/:fileName` | —                                                  |
-| `application/pdf`                | 302 redirect to `/embed/:fileName` | —                                                  |
-| `text/markdown`, `.md`           | Full HTML document                 | `tmpDir/previews/{pathId}-{updatedAt}.html`        |
-| `text/*`, code extensions        | Full HTML document                 | `tmpDir/previews/{pathId}-{updatedAt}.html`        |
-| `application/eigendoc` (Phase 4) | Full HTML document                 | `tmpDir/previews/{pathId}-{updatedAt}.html`        |
-| everything else                  | 404                                | —                                                  |
+| Type                             | Response                            | Cache                                              |
+|----------------------------------|-------------------------------------|----------------------------------------------------|
+| `image/*`                        | Screen-res WebP (max 2560px)        | `tmpDir/previews/{pathId}-{updatedAt}.screen.webp` |
+| RAW / PSD / AI (exiftool)        | Screen-res WebP (extracted → sharp) | `tmpDir/previews/{pathId}-{updatedAt}.screen.webp` |
+| `video/*`                        | 302 redirect to `/embed/:fileName`  | —                                                  |
+| `audio/*`                        | 302 redirect to `/embed/:fileName`  | —                                                  |
+| `application/pdf`                | WebP thumbnail (first page)         | `tmpDir/previews/{pathId}-{updatedAt}.screen.webp` |
+| `text/markdown`, `.md`           | Full HTML document                  | `tmpDir/previews/{pathId}-{updatedAt}.html`        |
+| `text/*`, code extensions        | Full HTML document                  | `tmpDir/previews/{pathId}-{updatedAt}.html`        |
+| `application/eigendoc` (Phase 4) | Full HTML document                  | `tmpDir/previews/{pathId}-{updatedAt}.html`        |
+| everything else                  | 404                                 | —                                                  |
 
 ### Cache Strategy
 
 **Everything goes in `mount.tmpDir/previews/`** — both images and HTML. Uniform location, uniform cleanup.
 
-Cache key: `{pathId}-{updatedAt}.{ext}` where ext is `screen.webp` or `html`.
+Cache key: `{pathId}-{updatedAt}.{ext}` where ext is `screen.webp`, `html`, or `thumb.webp` (for non-image thumbnails).
 
 - `updatedAt` in the filename = auto-invalidation. If the source file is updated, `updatedAt` changes, new cache key,
   old file stays until cleanup.
@@ -77,6 +78,68 @@ Cache key: `{pathId}-{updatedAt}.{ext}` where ext is `screen.webp` or `html`.
 
 - Scan `tmpDir/previews/`, delete any file older than 7 days
 - No separate timer needed — Homes re-init frequently enough (timeout after 5 min idle)
+
+### Embedded Preview Extraction (`exiftool-vendored`)
+
+Many non-web-native file formats contain **embedded JPEG previews** in their metadata. ExifTool can extract these
+instantly — no rendering/rasterization needed. The extracted JPEG is then piped through sharp to produce WebP
+thumbnails and screen-res previews, exactly like regular images.
+
+**`exiftool-vendored`** provides three extraction methods:
+
+| Method                | What it extracts                              | Typical size      |
+|-----------------------|-----------------------------------------------|-------------------|
+| `extractThumbnail()`  | Small embedded JPEG (EXIF thumbnail)          | ~160×120          |
+| `extractPreview()`    | Larger embedded preview JPEG                  | ~1920px long edge |
+| `extractJpgFromRaw()` | Full-size embedded JPEG from RAW camera files | Original res      |
+
+**Formats with extractable embedded previews:**
+
+| Format family                  | Extensions                                                                             | Best method                                 |
+|--------------------------------|----------------------------------------------------------------------------------------|---------------------------------------------|
+| Camera RAW                     | `.cr2`, `.cr3`, `.nef`, `.arw`, `.dng`, `.orf`, `.rw2`, `.raf`, `.pef`, `.srw`, `.rwl` | `extractPreview()` or `extractJpgFromRaw()` |
+| Photoshop                      | `.psd`, `.psb`                                                                         | `extractPreview()`                          |
+| Adobe Illustrator              | `.ai`                                                                                  | `extractPreview()`                          |
+| HEIF (when sharp can't decode) | `.heic`, `.heif`                                                                       | `extractPreview()`                          |
+
+**Pipeline:** file on disk → `exiftool.extractPreview()` → tmp JPEG → `sharp` resize → WebP → cache.
+
+The extraction writes a temporary JPEG to `tmpDir/previews/{pathId}-extract.jpg`, which is deleted after sharp
+produces the final WebP. This temp file is small and short-lived.
+
+**What exiftool does NOT do:**
+
+- Does not render/rasterize PDFs — only reads metadata. PDF thumbnails need a separate approach.
+- Does not generate previews from scratch — only extracts already-embedded images.
+- Does not handle Office formats (DOCX, XLSX, PPTX).
+
+### PDF Thumbnail Generation
+
+PDFs do not contain extractable EXIF preview images. To generate a thumbnail of the first page we need a
+rasterization tool. Options (in order of preference for our stack):
+
+1. **`pdftocairo` (from poppler-utils)** — CLI tool, renders PDF page to PNG/SVG. Fast, no JS deps.
+   `pdftocairo -png -f 1 -l 1 -scale-to 2560 input.pdf output` then sharp → WebP.
+2. **`pdf-lib` + `pdfjs-dist` canvas** — pure JS, but heavy and slower. Avoid if possible.
+3. **`sharp` with libvips PDF support** — requires libvips compiled with poppler. Not guaranteed on all platforms.
+
+Recommendation: try `pdftocairo` first (check availability at server startup), fall back to iframe-only (current
+behaviour) if not installed. This keeps the PDF preview as a **nice-to-have thumbnail** without a hard dependency.
+
+### Thumbnail Generation for Non-Image Formats
+
+With exiftool-vendored and PDF rasterization, the `/thumb/:fileName` endpoint can serve thumbnails for many more
+formats than just `image/*`. The upload flow (`drive.uploadFile`) should attempt thumbnail generation for these
+new formats too:
+
+| Format            | Thumbnail source                           |
+|-------------------|--------------------------------------------|
+| `image/*`         | sharp directly (existing)                  |
+| RAW / PSD / AI    | exiftool extract → sharp → 512px WebP      |
+| `application/pdf` | pdftocairo first page → sharp → 512px WebP |
+| video (deferred)  | FFmpeg frame extraction (Phase 6)          |
+
+This means drive file list rows get thumbnail icons for PDFs, RAW photos, PSDs, etc. — much better UX.
 
 ### New URL Helpers
 
@@ -177,6 +240,7 @@ The server-side HTML generation is shared infrastructure:
 | Tiptap `generateHTML()` + `server-extensions.ts` | Phase 4 eigendoc preview              | Phase 2 eigendoc → HTML export              |
 | `apps/api/src/lib/preview/html-template.ts`      | Styled HTML wrapper for preview       | Styled HTML wrapper for HTML export         |
 | `mount.tmpDir/previews/` + `generateThumbnail()` | Screen-res image + HTML preview cache | —                                           |
+| `exiftool-vendored` embedded preview extraction  | RAW/PSD/AI preview + thumbnail        | —                                           |
 
 The single most important shared file: `apps/api/src/lib/preview/html-template.ts` — a function that wraps any HTML body in a full document with embedded CSS (prose typography, code highlighting, dark mode via `prefers-color-scheme`). Both preview and HTML export call this.
 
@@ -197,29 +261,32 @@ The single most important shared file: `apps/api/src/lib/preview/html-template.t
 
 **Keyboard:** Escape = close, ArrowLeft/ArrowRight = prev/next sibling.
 
-### Phase 2 — Screen-Res Image Preview + HTML Previews for Text/Code/Markdown
+### Phase 2 — Screen-Res Image Preview + HTML Previews + exiftool-vendored
 
-**Goal:** Images load at display resolution (not 35MB raw), text/code/markdown render as styled HTML.
+**Goal:** Images load at display resolution (not 35MB raw), text/code/markdown render as styled HTML. RAW/PSD/AI
+files get previews and thumbnails via exiftool-vendored embedded image extraction.
 
 #### API changes
 
-| File                                        | Change                                                                                                                                               |
-|---------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `apps/api/src/lib/preview/preview-cache.ts` | **New.** `getScreenPreview(mount, path)` → Buffer (image) or string (HTML). Fetches `DrivePath` for `updatedAt` (cache key), dispatches by mimeType. |
-| `apps/api/src/lib/preview/image-preview.ts` | **New.** Wraps `generateThumbnail()` with `maxSize: 2560`. Cache key: `{pathId}-{updatedAt}.screen.webp` in `previewsDir`.                           |
-| `apps/api/src/lib/preview/html-template.ts` | **New.** `wrapHtml(body: string, title: string): string` — full HTML doc with inline CSS (prose + code highlight + dark mode).                       |
-| `apps/api/src/lib/preview/text-preview.ts`  | **New.** `generateTextPreview(content, mimeType, fileName)` → HTML body. markdown-it for `.md`, lowlight for code, `<pre>` for plain text.           |
-| `apps/api/src/routes/drive.ts`              | Add `GET .../file/:pathId/preview` route. Auth-guarded. Calls `drive.getPreview()`.                                                                  |
-| `apps/api/src/lib/drive/drive.ts`           | Add `getPreview(mountId, pathId)` method (delegates to preview-cache)                                                                                |
-| `apps/api/src/lib/mount/mount.ts`           | Add `previewsDir` getter (`tmpDir/previews`), init dir + cleanup in `init()`                                                                         |
+| File                                           | Change                                                                                                                                                                               |
+|------------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `apps/api/src/lib/preview/preview-cache.ts`    | **New.** `getScreenPreview(mount, path)` → Buffer (image) or string (HTML). Fetches `DrivePath` for `updatedAt` (cache key), dispatches by mimeType.                                 |
+| `apps/api/src/lib/preview/image-preview.ts`    | **New.** Wraps `generateThumbnail()` with `maxSize: 2560`. Cache key: `{pathId}-{updatedAt}.screen.webp` in `previewsDir`.                                                           |
+| `apps/api/src/lib/preview/exiftool-preview.ts` | **New.** `extractEmbeddedPreview(filePath, tmpDir, pathId)` → extracted JPEG path or null. Tries `extractPreview()`, falls back to `extractJpgFromRaw()`, then `extractThumbnail()`. |
+| `apps/api/src/lib/preview/html-template.ts`    | **New.** `wrapHtml(body: string, title: string): string` — full HTML doc with inline CSS (prose + code highlight + dark mode).                                                       |
+| `apps/api/src/lib/preview/text-preview.ts`     | **New.** `generateTextPreview(content, mimeType, fileName)` → HTML body. markdown-it for `.md`, lowlight for code, `<pre>` for plain text.                                           |
+| `apps/api/src/routes/drive.ts`                 | Add `GET .../file/:pathId/preview` route. Auth-guarded. Calls `drive.getPreview()`.                                                                                                  |
+| `apps/api/src/lib/drive/drive.ts`              | Add `getPreview(mountId, pathId)` method (delegates to preview-cache)                                                                                                                |
+| `apps/api/src/lib/mount/mount.ts`              | Add `previewsDir` getter (`tmpDir/previews`), init dir + cleanup in `init()`                                                                                                         |
+| `apps/api/src/lib/shared/thumbnails.ts`        | Add `isExiftoolSupported(mimeType, fileName)` check. Extend `saveThumbnail` to try exiftool extraction when sharp can't handle the format directly.                                  |
 
 #### Frontend changes
 
-| File                                                                      | Change                                                                                                                                   |
-|---------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------|
-| `packages/ui/src/components/layout/drive/file-preview.tsx`                | Add `html` viewer: `<iframe src={previewUrl} sandbox="allow-same-origin allow-scripts" className="w-full h-full border-0">`              |
-| `packages/ui/src/components/layout/preview-provider/preview-provider.tsx` | Extend `canPreview()` to include text/code/markdown types (reuse extension list from `getEditMode()` in `apps/api/src/routes/editor.ts`) |
-| `packages/lib/src/core/drive/media-resolver.tsx`                          | Switch `resolveMediaUrl` from `getDriveEmbedUrl` to `getDrivePreviewUrl` — propagates to docs editor + slides viewer                     |
+| File                                                                      | Change                                                                                                                                                |
+|---------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `packages/ui/src/components/layout/drive/file-preview.tsx`                | Add `html` viewer: `<iframe src={previewUrl} sandbox="allow-same-origin allow-scripts" className="w-full h-full border-0">`                           |
+| `packages/ui/src/components/layout/preview-provider/preview-provider.tsx` | Extend `canPreview()` to include text/code/markdown + RAW/PSD/AI types (reuse extension list from `getEditMode()` in `apps/api/src/routes/editor.ts`) |
+| `packages/lib/src/core/drive/media-resolver.tsx`                          | Switch `resolveMediaUrl` from `getDriveEmbedUrl` to `getDrivePreviewUrl` — propagates to docs editor + slides viewer                                  |
 
 ---
 
@@ -250,7 +317,20 @@ eigendoc preview HTML generation is **identical** to eigendoc HTML export (PROPO
 
 ---
 
-### Phase 5 — Deferred
+### Phase 5 — PDF Thumbnails
+
+**Goal:** Generate WebP thumbnail of the first page of PDFs, for both `/preview` and `/thumb` endpoints.
+
+| File                                        | Change                                                                                            |
+|---------------------------------------------|---------------------------------------------------------------------------------------------------|
+| `apps/api/src/lib/preview/pdf-preview.ts`   | **New.** `generatePdfPreview(filePath, tmpDir, pathId)` → WebP buffer. Uses `pdftocairo` → sharp. |
+| `apps/api/src/lib/preview/preview-cache.ts` | Extend dispatch: PDF → `generatePdfPreview()` → screen-res WebP (instead of redirect to embed).   |
+| `apps/api/src/lib/shared/thumbnails.ts`     | Extend `saveThumbnail`: try PDF rasterization for `application/pdf`.                              |
+
+PDF preview in the overlay still offers an **iframe fallback** (via `/embed`) when `pdftocairo` is not installed.
+The thumbnail is a bonus — if generation fails, the drive file list shows the generic PDF icon as before.
+
+### Phase 6 — Deferred
 
 - Video thumbnail frames (FFmpeg dependency)
 - DOCX/XLSX/PPTX preview (requires mammoth + server-side XLSX parser)
@@ -273,15 +353,23 @@ eigendoc preview HTML generation is **identical** to eigendoc HTML export (PROPO
 | `apps/api/src/lib/drive/drive.ts`                                         | Add `getPreview(mountId, pathId)` method (delegates to preview-cache)                             |
 | `apps/api/src/lib/mount/mount.ts`                                         | Add `previewsDir` getter (`tmpDir/previews`), init dir + cleanup in `init()`                      |
 | `apps/drive/src/routes/_auth.fs.$ownerId.$mountId.$pathId.tsx`            | Pass `folderContents` as `siblings` to `openPreview()`                                            |
+| `apps/api/src/lib/shared/thumbnails.ts`                                   | Add `isExiftoolSupported()`, extend `saveThumbnail` for exiftool + PDF formats                    |
 
 ### New (Phase 2)
 
-| File | Purpose |
-|------|---------|
-| `apps/api/src/lib/preview/preview-cache.ts` | Orchestration: check cache, generate, serve |
-| `apps/api/src/lib/preview/image-preview.ts` | Screen-res WebP generation + cache check |
-| `apps/api/src/lib/preview/html-template.ts` | Styled HTML wrapper for preview |
-| `apps/api/src/lib/preview/text-preview.ts` | markdown-it + lowlight → HTML body |
+| File                                           | Purpose                                                                    |
+|------------------------------------------------|----------------------------------------------------------------------------|
+| `apps/api/src/lib/preview/preview-cache.ts`    | Orchestration: check cache, generate, serve                                |
+| `apps/api/src/lib/preview/image-preview.ts`    | Screen-res WebP generation + cache check                                   |
+| `apps/api/src/lib/preview/exiftool-preview.ts` | Extract embedded JPEG from RAW/PSD/AI via exiftool-vendored, pipe to sharp |
+| `apps/api/src/lib/preview/html-template.ts`    | Styled HTML wrapper for preview                                            |
+| `apps/api/src/lib/preview/text-preview.ts`     | markdown-it + lowlight → HTML body                                         |
+
+### New (Phase 5)
+
+| File                                      | Purpose                                                |
+|-------------------------------------------|--------------------------------------------------------|
+| `apps/api/src/lib/preview/pdf-preview.ts` | Rasterize PDF first page via pdftocairo → sharp → WebP |
 
 ### New (Phase 4)
 
