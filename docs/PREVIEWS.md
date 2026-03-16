@@ -97,3 +97,33 @@ Heavy editors (Tiptap for markdown, CodeMirror for code) are lazy-loaded only wh
 - Eigen native type previews (eigendoc, eigenslides, eigensheets, eigenstickies)
 - Video thumbnail frames (FFmpeg dependency)
 - DOCX/XLSX/PPTX preview
+
+
+---
+
+### Phase 3 — Audio + CSV
+
+**Goal:** Audio with native player. CSV as a scrollable table (generated server-side to keep the frontend clean).
+
+| File                                                       | Change                                                                                                                     |
+|------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------|
+| `apps/api/src/lib/preview/text-preview.ts`                 | Extend to handle `text/csv` — parse with a lightweight server-side CSV parser, render HTML table (max 500 rows × 50 cols). |
+| `apps/api/src/routes/drive.ts`                             | Add audio/CSV to preview endpoint dispatch                                                                                 |
+| `packages/ui/src/components/layout/drive/file-preview.tsx` | Add `audio` viewer: `<audio controls src={embedUrl} className="w-full">`                                                   |
+
+---
+
+### Phase 4 — Eigen Native Types (eigendoc, eigenslides, eigensheets, eigenstickies)
+
+**Goal:** Preview Eigen native files without opening them. Shares heavy infrastructure with import/export Phase 2.
+
+| Type | Server approach | Prerequisite |
+|------|----------------|--------------|
+| eigendoc | Load Y.Doc (same as `DbProvider.loadState()`), `yDocToProsemirrorJSON()`, `generateHTML(json, serverExtensions)`, cache as HTML | `packages/lib/src/core/docs/server-extensions.ts` from import/export Phase 2; `y-prosemirror` in API |
+| eigenslides | Load slides JSON, render each slide as styled HTML div | None |
+| eigensheets | Load sheet JSON, render as HTML table | None |
+| eigenstickies | Load stickies JSON, render simplified kanban columns as HTML | None |
+
+eigendoc preview HTML generation is **identical** to eigendoc HTML export (PROPOSAL_DOC_IMPORT_EXPORT.md Phase 2). Build export first, then the preview endpoint calls the same function and caches the result.
+
+---
