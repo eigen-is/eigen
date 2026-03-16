@@ -23,8 +23,22 @@ The preview overlay should be **as dumb as possible on the frontend**. Instead o
 This is the right approach because:
 - Preview works from **any app** (chat, calendar) without bundling editor deps
 - The **same HTML generation pipeline** serves both preview and export-to-HTML/DOCX/PDF (see PROPOSAL_DOC_IMPORT_EXPORT.md)
-- Tmp-dir caching means **subsequent opens are instant** (same infrastructure as existing `thumbsDir`)
+- Tmp-dir caching means **subsequent opens are instant** (same `tmpDir` infrastructure used by collab temp files)
 - The overlay component stays in `packages/ui` with no heavy dependencies
+
+### Route Structure
+
+Four routes handle all file delivery. Their semantics must be kept distinct:
+
+| Route                     | Content                                                                                                                | Use case                                                                                                             |
+|---------------------------|------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------|
+| `GET .../download`        | Original file, `Content-Disposition: attachment`                                                                       | User hits "Download"                                                                                                 |
+| `GET .../embed/:fileName` | Original file, `Content-Disposition: inline`                                                                           | Video/audio playback, PDF iframe, server-side export (Puppeteer needs original image quality for PDF/DOCX rendering) |
+| `GET .../preview`         | **Screen-res WebP** for images; **styled HTML** for text/code/markdown/eigendoc; redirect to embed for video/audio/PDF | All UI display contexts: preview overlay, docs editor images, slides viewer images                                   |
+| `GET .../thumb/:fileName` | 512px WebP (existing, unchanged)                                                                                       | Drive file list row icons                                                                                            |
+
+`getDriveEmbedUrl` is **not replaced** — it stays as the URL for video/audio players and as the image URL for
+server-side export. `getDrivePreviewUrl` is used for all client-side image display.
 
 ### New API Endpoint
 
@@ -34,46 +48,44 @@ GET /drive/:ownerId/:mountId/file/:pathId/preview
 
 Response behaviour by file type:
 
-| Type | Response | Cache location |
-|------|----------|---------------|
-| `image/*` | Screen-res WebP (max 2560px, Sharp resize) | `mount.thumbsDir/{pathId}.screen.webp` |
-| `video/*` | Redirect to embed URL (passthrough) | — |
-| `audio/*` | Redirect to embed URL (passthrough) | — |
-| `application/pdf` | Redirect to embed URL (passthrough) | — |
-| `text/markdown`, `.md` | Full HTML document (markdown-it → styled template) | `mount.tmpDir/previews/{pathId}-{updatedAt}.html` |
-| `text/*`, code extensions | Full HTML document (lowlight syntax-highlight → styled template) | `mount.tmpDir/previews/{pathId}-{updatedAt}.html` |
-| `application/eigendoc` (Phase 4) | Full HTML document (Y.Doc → Tiptap `generateHTML()` → styled template) | `mount.tmpDir/previews/{pathId}-{updatedAt}.html` |
-| everything else | 404 (fallback viewer shows download button) | — |
+| Type                             | Response                           | Cache                                              |
+|----------------------------------|------------------------------------|----------------------------------------------------|
+| `image/*`                        | Screen-res WebP (max 2560px)       | `tmpDir/previews/{pathId}-{updatedAt}.screen.webp` |
+| `video/*`                        | 302 redirect to `/embed/:fileName` | —                                                  |
+| `audio/*`                        | 302 redirect to `/embed/:fileName` | —                                                  |
+| `application/pdf`                | 302 redirect to `/embed/:fileName` | —                                                  |
+| `text/markdown`, `.md`           | Full HTML document                 | `tmpDir/previews/{pathId}-{updatedAt}.html`        |
+| `text/*`, code extensions        | Full HTML document                 | `tmpDir/previews/{pathId}-{updatedAt}.html`        |
+| `application/eigendoc` (Phase 4) | Full HTML document                 | `tmpDir/previews/{pathId}-{updatedAt}.html`        |
+| everything else                  | 404                                | —                                                  |
 
 ### Cache Strategy
 
-**Images** (`thumbsDir/{pathId}.screen.webp`):
-- Same directory as existing 512px thumbnails
-- Cache miss: generate with Sharp at `maxSize: 2560`, save, serve
-- Invalidation: check `{pathId}.screen.webp` file mtime vs source file `updatedAt`. If source is newer, regenerate.
-- Reuses existing `generateThumbnail()` from `apps/api/src/lib/shared/thumbnails.ts` with larger `maxSize`
+**Everything goes in `mount.tmpDir/previews/`** — both images and HTML. Uniform location, uniform cleanup.
 
-**HTML previews** (`tmpDir/previews/{pathId}-{updatedAt}.html`):
-- `updatedAt` encoded as epoch ms in filename — old revisions stay until cleanup
-- Cache miss: generate HTML, write file, serve
-- Cache hit: file with matching `{pathId}-{updatedAt}` exists → serve directly
-- Old revisions auto-expire via cleanup
+Cache key: `{pathId}-{updatedAt}.{ext}` where ext is `screen.webp` or `html`.
 
-**Cleanup** (run at mount init + every 24h):
-- Scan `tmpDir/previews/`
-- Delete any `.html` file older than 7 days
-- When regenerating an image preview, delete the old `{pathId}.screen.webp` before writing (handled by the preview route)
+- `updatedAt` in the filename = auto-invalidation. If the source file is updated, `updatedAt` changes, new cache key,
+  old file stays until cleanup.
+- Cache hit: file with exact `{pathId}-{updatedAt}.*` pattern exists → serve directly, no regeneration.
+- Cache miss: generate, write, serve.
+- **No mtime comparison needed** — the cache key carries its own validity.
 
-### New URL Helper
+`mount.thumbsDir` is unchanged: 512px thumbnails only.
 
-Add to `packages/lib/src/core/api.ts` alongside existing helpers:
+**Cleanup** (run once at `mount.init()`):
+
+- Scan `tmpDir/previews/`, delete any file older than 7 days
+- No separate timer needed — Homes re-init frequently enough (timeout after 5 min idle)
+
+### New URL Helpers
+
+Add to `packages/lib/src/core/api.ts`:
 
 ```typescript
 export const getDrivePreviewUrl = (ownerId: string, mountId: string, pathId: string) =>
     `${API_HOST}/drive/${ownerId}/${mountId}/file/${pathId}/preview`;
 ```
-
-The existing `getDriveEmbedUrl` stays for video/audio playback and image `src` in documents (where the original resolution is appropriate). `getDrivePreviewUrl` is used exclusively by the preview overlay.
 
 ### Frontend Overlay (simplified)
 
@@ -81,7 +93,7 @@ The existing `getDriveEmbedUrl` stays for video/audio playback and image `src` i
 PreviewOverlay (fixed, z-[100])
   PreviewHeader  — filename, ← → nav, close button
   PreviewContent — dispatch by previewMode
-    image:   <img src={previewUrl}>            (screen-res WebP from preview endpoint)
+    image:   <img src={previewUrl}>               ← screen-res WebP
     video:   <video src={embedUrl} controls>
     audio:   <audio src={embedUrl} controls>
     pdf:     <iframe src={embedUrl}>
@@ -90,7 +102,7 @@ PreviewOverlay (fixed, z-[100])
   PreviewFooter  — Open, Download buttons
 ```
 
-The `previewMode` is determined client-side from `DrivePath.mimeType` and `DrivePath.name` — no new API call needed to decide which viewer to show.
+`previewMode` is determined client-side from `DrivePath.mimeType` and `DrivePath.name` — no extra API call needed.
 
 ### PreviewProvider Changes
 
@@ -110,18 +122,61 @@ openPreview: (path: DrivePath, siblings?: DrivePath[]) => void
 
 ---
 
+## Impact on Other Apps
+
+The `/preview` endpoint and `getDrivePreviewUrl` touch several places outside the preview overlay.
+
+### `MediaResolver` (docs + slides editor, in-editor images)
+
+`packages/lib/src/core/drive/media-resolver.tsx` currently calls `getDriveEmbedUrl` for `resolveMediaUrl`. This means
+every image embedded in a doc or slide loads at **original resolution** — wasteful for screen display.
+
+**Fix (Phase 2):** Switch `resolveMediaUrl` to `getDrivePreviewUrl`. Server returns screen-res WebP. The Tiptap `<img>`
+node and slide image renderer both use `resolveMediaUrl`, so this change propagates everywhere automatically.
+
+**Server-side export is unaffected:** The export pipeline (Puppeteer for PDF, mammoth for DOCX) runs on the server and
+reads images directly from storage — it does not call `resolveMediaUrl`. Export-quality code paths must explicitly use
+original content via storage read or `/embed` URL when constructing HTML for Puppeteer.
+
+### Chat attachment display
+
+Chat message image attachments already use `getDriveEmbedUrl` (via `AttachmentChip` and inline message images). Switch
+to `getDrivePreviewUrl` in Phase 2. The chat app will automatically get WebP + screen-res images with no other changes.
+
+### Apps that are NOT affected
+
+- **File download** — always uses `/download`, no change
+- **Video/audio playback** — uses `/embed`, no change (browser media player needs original; WebP conversion would break)
+- **PDF display** — uses `/embed` iframe, no change
+- **Thumbnails in drive file list** — uses `/thumb/:fileName`, no change (512px thumbnails are separate)
+
+### Summary of URL usage by context
+
+| Context                           | URL                                          | Reason                      |
+|-----------------------------------|----------------------------------------------|-----------------------------|
+| Preview overlay — image           | `/preview`                                   | Screen-res WebP             |
+| Preview overlay — text/code/md    | `/preview`                                   | HTML response               |
+| Preview overlay — video/audio/PDF | `/embed`                                     | Native player/renderer      |
+| Docs editor — embedded images     | `/preview` → switch from `/embed` in Phase 2 | Screen-res display          |
+| Slides viewer — images            | `/preview` → switch from `/embed` in Phase 2 | Screen-res display          |
+| Chat — inline images              | `/preview` → switch from `/embed` in Phase 2 | Screen-res display          |
+| Server-side export (Puppeteer)    | Storage read or `/embed`                     | Original quality for print  |
+| Drive file list row               | `/thumb/:fileName`                           | 512px thumbnail             |
+| User downloads                    | `/download`                                  | Original, attachment header |
+
+---
+
 ## Alignment with Import/Export (PROPOSAL_DOC_IMPORT_EXPORT.md)
 
 The server-side HTML generation is shared infrastructure:
 
-| Piece | Preview uses it | Import/Export uses it |
-|---|---|---|
-| `markdown-it` → HTML | Phase 2 markdown preview | Phase 3 markdown import (HTML→PM JSON step) |
-| `lowlight` syntax highlight → HTML | Phase 2 code preview | Already planned as API dep for export |
-| Tiptap `generateHTML()` + `server-extensions.ts` | Phase 4 eigendoc preview | Phase 2 eigendoc → HTML export |
-| `apps/api/src/lib/preview/html-template.ts` | Styled HTML wrapper for preview | Styled HTML wrapper for HTML export |
-| `mount.thumbsDir` + `generateThumbnail()` | Screen-res image preview | — |
-| `mount.tmpDir/previews/` | HTML preview cache | — |
+| Piece                                            | Preview uses it                       | Import/Export uses it                       |
+|--------------------------------------------------|---------------------------------------|---------------------------------------------|
+| `markdown-it` → HTML                             | Phase 2 markdown preview              | Phase 3 markdown import (HTML→PM JSON step) |
+| `lowlight` syntax highlight → HTML               | Phase 2 code preview                  | Already planned as API dep for export       |
+| Tiptap `generateHTML()` + `server-extensions.ts` | Phase 4 eigendoc preview              | Phase 2 eigendoc → HTML export              |
+| `apps/api/src/lib/preview/html-template.ts`      | Styled HTML wrapper for preview       | Styled HTML wrapper for HTML export         |
+| `mount.tmpDir/previews/` + `generateThumbnail()` | Screen-res image + HTML preview cache | —                                           |
 
 The single most important shared file: `apps/api/src/lib/preview/html-template.ts` — a function that wraps any HTML body in a full document with embedded CSS (prose typography, code highlighting, dark mode via `prefers-color-scheme`). Both preview and HTML export call this.
 
@@ -133,12 +188,12 @@ The single most important shared file: `apps/api/src/lib/preview/html-template.t
 
 **Goal:** Better overlay chrome — header with filename, footer with Open/Download, left/right nav. No new content types yet.
 
-| File | Change |
-|------|--------|
-| `packages/lib/src/core/api.ts` | Add `getDrivePreviewUrl()` |
-| `packages/ui/.../preview-provider.tsx` | Store `DrivePath` + `siblings[]`, expose nav; pass `previewUrl` and `embedUrl` to overlay |
-| `packages/ui/.../file-preview.tsx` | Add `PreviewHeader` (name, ← →, ✕), `PreviewFooter` (Open, Download); keep existing image/video/PDF viewers |
-| `apps/drive/src/routes/_auth.fs.$ownerId.*` | Pass `folderContents` as `siblings` to `openPreview()` |
+| File                                                                      | Change                                                                                                      |
+|---------------------------------------------------------------------------|-------------------------------------------------------------------------------------------------------------|
+| `packages/lib/src/core/api.ts`                                            | Add `getDrivePreviewUrl()`                                                                                  |
+| `packages/ui/src/components/layout/preview-provider/preview-provider.tsx` | Store `DrivePath` + `siblings[]`, expose nav; pass `previewUrl` and `embedUrl` to overlay                   |
+| `packages/ui/src/components/layout/drive/file-preview.tsx`                | Add `PreviewHeader` (name, ← →, ✕), `PreviewFooter` (Open, Download); keep existing image/video/PDF viewers |
+| `apps/drive/src/routes/_auth.fs.$ownerId.$mountId.$pathId.tsx`            | Pass `folderContents` as `siblings` to `openPreview()`                                                      |
 
 **Keyboard:** Escape = close, ArrowLeft/ArrowRight = prev/next sibling.
 
@@ -148,23 +203,23 @@ The single most important shared file: `apps/api/src/lib/preview/html-template.t
 
 #### API changes
 
-| File | Change |
-|------|--------|
-| `apps/api/src/lib/preview/preview-cache.ts` | **New.** `getScreenPreview(mount, path)` → Buffer (image) or string (HTML). Handles both cache types. |
-| `apps/api/src/lib/preview/image-preview.ts` | **New.** Wraps `generateThumbnail()` with `maxSize: 2560`. Checks/updates `{pathId}.screen.webp` in thumbsDir. |
-| `apps/api/src/lib/preview/html-template.ts` | **New.** `wrapHtml(body: string, title: string): string` — full HTML doc with inline CSS (prose + code highlight + dark mode). |
-| `apps/api/src/lib/preview/text-preview.ts` | **New.** `generateTextPreview(content, mimeType, fileName)` → HTML body. markdown-it for `.md`, lowlight for code, `<pre>` for plain text. |
-| `apps/api/src/routes/drive.ts` | Add `GET .../file/:pathId/preview` route. Auth-guarded. Calls `preview-cache.ts`. |
-| `apps/api/src/lib/drive/drive.ts` | Add `getPreview(mountId, pathId)` method (delegates to preview-cache) |
-| `apps/api/src/lib/mount/mount.ts` | Add `previewsDir` getter (`tmpDir/previews`), init dir in `init()`, add cleanup method |
-| `apps/drive/src/routes/_auth.fs.$ownerId.$mountId.$pathId.tsx` | Pass `folderContents` as siblings to `openPreview()` |
+| File                                        | Change                                                                                                                                               |
+|---------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `apps/api/src/lib/preview/preview-cache.ts` | **New.** `getScreenPreview(mount, path)` → Buffer (image) or string (HTML). Fetches `DrivePath` for `updatedAt` (cache key), dispatches by mimeType. |
+| `apps/api/src/lib/preview/image-preview.ts` | **New.** Wraps `generateThumbnail()` with `maxSize: 2560`. Cache key: `{pathId}-{updatedAt}.screen.webp` in `previewsDir`.                           |
+| `apps/api/src/lib/preview/html-template.ts` | **New.** `wrapHtml(body: string, title: string): string` — full HTML doc with inline CSS (prose + code highlight + dark mode).                       |
+| `apps/api/src/lib/preview/text-preview.ts`  | **New.** `generateTextPreview(content, mimeType, fileName)` → HTML body. markdown-it for `.md`, lowlight for code, `<pre>` for plain text.           |
+| `apps/api/src/routes/drive.ts`              | Add `GET .../file/:pathId/preview` route. Auth-guarded. Calls `drive.getPreview()`.                                                                  |
+| `apps/api/src/lib/drive/drive.ts`           | Add `getPreview(mountId, pathId)` method (delegates to preview-cache)                                                                                |
+| `apps/api/src/lib/mount/mount.ts`           | Add `previewsDir` getter (`tmpDir/previews`), init dir + cleanup in `init()`                                                                         |
 
 #### Frontend changes
 
-| File | Change |
-|------|--------|
-| `packages/ui/.../file-preview.tsx` | Add `html` viewer: `<iframe src={previewUrl} sandbox="allow-same-origin allow-scripts" className="w-full h-full border-0">` |
-| `packages/ui/.../preview-provider.tsx` | Extend `canPreview()` to include text/code/markdown types |
+| File                                                                      | Change                                                                                                                                   |
+|---------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------------------------------------------|
+| `packages/ui/src/components/layout/drive/file-preview.tsx`                | Add `html` viewer: `<iframe src={previewUrl} sandbox="allow-same-origin allow-scripts" className="w-full h-full border-0">`              |
+| `packages/ui/src/components/layout/preview-provider/preview-provider.tsx` | Extend `canPreview()` to include text/code/markdown types (reuse extension list from `getEditMode()` in `apps/api/src/routes/editor.ts`) |
+| `packages/lib/src/core/drive/media-resolver.tsx`                          | Switch `resolveMediaUrl` from `getDriveEmbedUrl` to `getDrivePreviewUrl` — propagates to docs editor + slides viewer                     |
 
 ---
 
@@ -172,11 +227,11 @@ The single most important shared file: `apps/api/src/lib/preview/html-template.t
 
 **Goal:** Audio with native player. CSV as a scrollable table (generated server-side to keep the frontend clean).
 
-| File | Change |
-|------|--------|
-| `apps/api/src/lib/preview/text-preview.ts` | Extend to handle `text/csv` — parse with a lightweight server-side CSV parser, render HTML table (max 500 rows × 50 cols). |
-| `apps/api/src/routes/drive.ts` | Add audio/CSV to preview endpoint dispatch |
-| `packages/ui/.../file-preview.tsx` | Add `audio` viewer: `<audio controls src={embedUrl} className="w-full">` |
+| File                                                       | Change                                                                                                                     |
+|------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------|
+| `apps/api/src/lib/preview/text-preview.ts`                 | Extend to handle `text/csv` — parse with a lightweight server-side CSV parser, render HTML table (max 500 rows × 50 cols). |
+| `apps/api/src/routes/drive.ts`                             | Add audio/CSV to preview endpoint dispatch                                                                                 |
+| `packages/ui/src/components/layout/drive/file-preview.tsx` | Add `audio` viewer: `<audio controls src={embedUrl} className="w-full">`                                                   |
 
 ---
 
@@ -208,15 +263,16 @@ eigendoc preview HTML generation is **identical** to eigendoc HTML export (PROPO
 
 ### Existing (modified)
 
-| File | Change |
-|------|--------|
-| `packages/lib/src/core/api.ts` | Add `getDrivePreviewUrl()` |
-| `packages/ui/src/components/layout/preview-provider/preview-provider.tsx` | Store `DrivePath` + siblings, change `openPreview` signature, use `getDrivePreviewUrl` |
-| `packages/ui/src/components/layout/drive/file-preview.tsx` | Add header/footer/nav, add `html`+`audio` viewer cases |
-| `apps/api/src/routes/drive.ts` | Add `GET .../file/:pathId/preview` route |
-| `apps/api/src/lib/drive/drive.ts` | Add `getPreview(mountId, pathId)` method (delegates to preview-cache) |
-| `apps/api/src/lib/mount/mount.ts` | Add `previewsDir` getter (`tmpDir/previews`), init dir in `init()`, add cleanup method |
-| `apps/drive/src/routes/_auth.fs.$ownerId.$mountId.$pathId.tsx` | Pass `folderContents` as siblings to `openPreview()` |
+| File                                                                      | Change                                                                                            |
+|---------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------|
+| `packages/lib/src/core/api.ts`                                            | Add `getDrivePreviewUrl()`                                                                        |
+| `packages/ui/src/components/layout/preview-provider/preview-provider.tsx` | Store `DrivePath` + siblings, change `openPreview` signature, dispatch `previewUrl` vs `embedUrl` |
+| `packages/ui/src/components/layout/drive/file-preview.tsx`                | Add header/footer/nav, add `html`+`audio` viewer cases                                            |
+| `packages/lib/src/core/drive/media-resolver.tsx`                          | Switch `resolveMediaUrl` from `getDriveEmbedUrl` to `getDrivePreviewUrl`                          |
+| `apps/api/src/routes/drive.ts`                                            | Add `GET .../file/:pathId/preview` route                                                          |
+| `apps/api/src/lib/drive/drive.ts`                                         | Add `getPreview(mountId, pathId)` method (delegates to preview-cache)                             |
+| `apps/api/src/lib/mount/mount.ts`                                         | Add `previewsDir` getter (`tmpDir/previews`), init dir + cleanup in `init()`                      |
+| `apps/drive/src/routes/_auth.fs.$ownerId.$mountId.$pathId.tsx`            | Pass `folderContents` as `siblings` to `openPreview()`                                            |
 
 ### New (Phase 2)
 
