@@ -2,9 +2,13 @@ import {eq} from "drizzle-orm";
 import {team, teamMember, user} from "../../../auth-schema.ts";
 import {getAuthDrizzleDb} from "../auth/auth.ts";
 
-export async function getTeamExists(teamId: string) {
+export async function getTeam(teamId:string) {
     const db = getAuthDrizzleDb();
-    return await db.select({id: team.id}).from(team).where(eq(team.id, teamId)).get() !== undefined;
+    return await db.select({id: team.id, name: team.name}).from(team).where(eq(team.id, teamId)).get()
+}
+
+export async function getTeamExists(teamId: string) {
+    return getTeam(teamId) !== undefined;
 }
 
 export async function getTeamMembers(teamId: string) {
