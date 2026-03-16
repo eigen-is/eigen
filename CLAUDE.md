@@ -186,4 +186,5 @@ Detailed architecture docs in `docs/`:
 | [TODO-ENCRYPTION.md](docs/TODO-ENCRYPTION.md)         | E2E encryption design                    |
 | [TODO-SCALABILITY.md](docs/TODO-SCALABILITY.md)       | Multi-server scaling design              |
 | [TODO-GUEST-USERS.md](docs/TODO-GUEST-USERS.md)       | Guest user access plan                   |
+| [TODO-CALENDAR-TIMEZONE.md](docs/TODO-CALENDAR-TIMEZONE.md) | Timezone-aware recurrence expansion |
 | [FORTUNE-SHEETS-TODO.md](docs/FORTUNE-SHEETS-TODO.md) | Fortune-sheet refactoring audit          |
