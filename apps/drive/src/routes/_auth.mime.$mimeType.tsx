@@ -4,7 +4,7 @@ import {DriveLayout} from "@workspace/ui/components/layout/drive/drive-layout";
 import {DrivePath, DriveSearchParams, isDocumentType, isFolderType, isInlineEditable} from "@workspace/lib/types/drive";
 import {useAuth} from '@workspace/lib/auth';
 import {useLayout} from "@workspace/ui/components/layout/app/layout-context.tsx";
-import {getDriveDownloadUrl, openDocument} from "@workspace/lib/api";
+import {openDocument} from "@workspace/lib/api";
 import {usePreview} from '@workspace/ui/components/layout/preview-provider';
 
 export const Route = createFileRoute('/_auth/mime/$mimeType')({
@@ -24,7 +24,7 @@ function DriveRoute() {
     const mountId = DEFAULT_MOUNT_ID;
     const {data: selectedPath = null} = usePathInfo(ownerId, mountId, pid);
     const {isMobile} = useLayout();
-    const {openPreview, updatePreview, closePreview, isPreviewOpen, canPreview} = usePreview();
+    const {openPreview, updatePreview, isPreviewOpen} = usePreview();
 
     const {
         data: folderContents = [],
@@ -34,11 +34,7 @@ function DriveRoute() {
 
     const onRowSelect = (path: DrivePath) => {
         if (isPreviewOpen) {
-            if (canPreview(path)) {
-                updatePreview(path);
-            } else {
-                closePreview();
-            }
+            updatePreview(path);
         }
 
         if (isMobile && (isFolderType(path.type) || isDocumentType(path.type))) {
@@ -63,11 +59,8 @@ function DriveRoute() {
             openDocument(path);
         } else if (isInlineEditable(path.mimeType, path.name)) {
             navigate({to: '/edit/$ownerId/$mountId/$pathId', params: {ownerId: path.ownerId, mountId: path.mountId, pathId: path.id}});
-        } else if (canPreview(path)) {
-            openPreview(path);
         } else {
-            const url = getDriveDownloadUrl(path.ownerId, path.mountId, path.id);
-            window.open(url, "_blank");
+            openPreview(path);
         }
     };
 

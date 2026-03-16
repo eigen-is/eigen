@@ -34,16 +34,15 @@ function isSameAuthorAndClose(prev: ChatMessage, curr: ChatMessage): boolean {
 function AttachmentChip({fileName, ownerId, mountId, mediaFolderId}: { fileName: string; ownerId: string; mountId: string; mediaFolderId: string }) {
     const {data: mediaContents = []} = useFolderContent(ownerId, mountId, mediaFolderId);
     const fileInfo = mediaContents.find(f => f.name === fileName);
-    const {openPreview, canPreview} = usePreview();
+    const {openPreview} = usePreview();
 
     const name = fileInfo?.details?.originalName || fileInfo?.name || fileName;
     const downloadUrl = fileInfo ? getDriveDownloadUrl(ownerId, mountId, fileInfo.id) : '#';
     const thumbnailUrl = fileInfo?.thumbnail ? getDriveThumbnailUrl(ownerId, mountId, fileInfo.thumbnail) : null;
     const isImage = fileInfo?.mimeType?.startsWith('image/');
-    const previewable = fileInfo ? canPreview(fileInfo) : false;
 
     const handleClick = (e: React.MouseEvent) => {
-        if (previewable && fileInfo) {
+        if (fileInfo) {
             e.preventDefault();
             openPreview(fileInfo);
         }

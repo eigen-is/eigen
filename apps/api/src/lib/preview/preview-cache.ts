@@ -2,7 +2,7 @@ import * as path from 'path';
 import * as fs from 'node:fs';
 import type {Mount} from '../mount';
 import type {DrivePath} from '@workspace/lib/types/drive';
-import {getImagePreview} from './image-preview';
+import {getImagePreview, getScreenCacheKey} from './image-preview';
 import {cleanupExtract, extractEmbeddedPreview, isExiftoolSupported} from './exiftool-preview';
 import {generateTextPreview, isTextPreviewSupported} from './text-preview';
 import {generateThumbnail} from '../shared/thumbnails';
@@ -16,11 +16,6 @@ type PreviewResult =
 function getHtmlCacheKey(pathId: string, updatedAt: Date | string): string {
     const ts = updatedAt instanceof Date ? updatedAt.getTime() : new Date(updatedAt).getTime();
     return `${pathId}-${ts}.html`;
-}
-
-function getScreenCacheKey(pathId: string, updatedAt: Date | string): string {
-    const ts = updatedAt instanceof Date ? updatedAt.getTime() : new Date(updatedAt).getTime();
-    return `${pathId}-${ts}.screen.webp`;
 }
 
 export async function getScreenPreview(mount: Mount, drivePath: DrivePath, embedUrl: string): Promise<PreviewResult> {
