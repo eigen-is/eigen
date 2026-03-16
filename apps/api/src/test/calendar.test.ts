@@ -458,6 +458,72 @@ describe('Calendar', () => {
         });
     });
 
+    describe('Delete modified exception', () => {
+        test('cancelling a modified exception hides it instead of resurfacing original', async () => {
+            const from = 1741737600;
+            const to = from + 28 * 86400;
+
+            // Create a weekly recurring event
+            const createRes = await authedRequest(ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        title: 'Exception Delete Test',
+                        startTime: from + 3600,
+                        endTime: from + 7200,
+                        allDay: false,
+                        rrule: 'FREQ=WEEKLY;COUNT=4',
+                    }),
+                });
+            expect(createRes.status).toBe(200);
+            const parent = await createRes.json() as any;
+
+            // Get the first occurrence
+            const eventsRes = await authedRequest(ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events/${from}/${to}`);
+            const events = await eventsRes.json() as any[];
+            const firstOcc = events.find((e: any) => e.title === 'Exception Delete Test');
+            expect(firstOcc).toBeDefined();
+
+            // Modify the first occurrence (create exception)
+            const modRes = await authedRequest(ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        title: 'Exception Delete Test (modified)',
+                        startTime: firstOcc.startTime + 1800,
+                        endTime: firstOcc.endTime + 1800,
+                        allDay: false,
+                        parentEventId: parent.id,
+                        recurrenceDate: firstOcc.occurrenceDate,
+                    }),
+                });
+            expect(modRes.status).toBe(200);
+            const exception = await modRes.json() as any;
+
+            // Now cancel the exception (simulate "delete this" on a modified occurrence)
+            const cancelRes = await authedRequest(ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events/${exception.id}`, {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({status: 'cancelled'}),
+                });
+            expect(cancelRes.status).toBe(200);
+
+            // The occurrence should be gone — not resurfaced as the original
+            const afterRes = await authedRequest(ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events/${from}/${to}`);
+            const afterEvents = await afterRes.json() as any[];
+            const remaining = afterEvents.filter((e: any) =>
+                e.title === 'Exception Delete Test' || e.title === 'Exception Delete Test (modified)');
+            // Should have 3 occurrences (4 total - 1 cancelled), not 4
+            expect(remaining.length).toBe(3);
+            expect(remaining.find((e: any) => e.occurrenceDate === firstOcc.occurrenceDate)).toBeUndefined();
+        });
+    });
+
     describe('This and following operations', () => {
         let thisFollowingEventId = '';
 
