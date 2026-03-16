@@ -103,6 +103,14 @@ export default class SharedDrive extends Drive {
         return this.withReadPermission(mountId, pathId, () => this.sharedDrive.closeCollabDocument(mountId, pathId));
     }
 
+    public async getPreview(mountId: string, pathId: string, embedUrl: string) {
+        return this.withReadPermission(mountId, pathId, () => this.sharedDrive.getPreview(mountId, pathId, embedUrl));
+    }
+
+    public async getTextPreview(mountId: string, pathId: string) {
+        return this.withReadPermission(mountId, pathId, () => this.sharedDrive.getTextPreview(mountId, pathId));
+    }
+
     public async createFolder(mountId: string, parentId: string, folderName: string): Promise<DrivePath> {
         if (!(await this.canWrite(mountId, parentId, this.user))) {
             throw new ApiError(403, 'No write permission');
