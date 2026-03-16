@@ -2,32 +2,9 @@ import {Elysia, t} from "elysia";
 import {betterAuth} from "./auth";
 import {getSharedDrive} from "../lib/drive";
 import {ApiError} from "../lib/core/errors";
+import {getTextPreviewMode} from '@workspace/lib/constants';
 
 const MAX_FILE_SIZE = 5 * 1024 * 1024; // 5MB
-
-type EditMode = 'markdown' | 'plaintext' | 'code';
-
-function getEditMode(mimeType: string, name: string): EditMode | null {
-    const ext = name.slice(name.lastIndexOf('.')).toLowerCase();
-    if (mimeType === 'text/markdown' || ext === '.md' || ext === '.markdown') return 'markdown';
-    if (mimeType === 'text/plain' || ext === '.txt') return 'plaintext';
-    if (mimeType.startsWith('text/') || mimeType.startsWith('application/json') ||
-        mimeType.startsWith('application/javascript') || mimeType.startsWith('application/typescript') ||
-        mimeType.startsWith('application/xml') || mimeType.startsWith('application/x-yaml') ||
-        mimeType.startsWith('application/x-sh') || mimeType.startsWith('application/toml')) return 'code';
-    const codeExts = new Set([
-        '.json', '.yaml', '.yml', '.xml', '.html', '.htm', '.css', '.csv',
-        '.js', '.jsx', '.mjs', '.cjs', '.ts', '.tsx', '.mts', '.cts',
-        '.py', '.rs', '.go', '.rb', '.php', '.java', '.c', '.cpp', '.h', '.hpp',
-        '.swift', '.kt', '.scala', '.sql', '.graphql', '.gql',
-        '.sh', '.bash', '.zsh', '.fish', '.conf', '.cfg', '.ini', '.toml',
-        '.env', '.gitignore', '.dockerignore', '.editorconfig',
-        '.log', '.diff', '.patch', '.svelte', '.vue', '.astro', '.dockerfile',
-        '.r', '.lua', '.zig', '.dart',
-    ]);
-    if (codeExts.has(ext)) return 'code';
-    return null;
-}
 
 const FRONTMATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n([\s\S]*)$/;
 
@@ -50,7 +27,7 @@ export const editorRouter = new Elysia({name: "editor"})
         const path = await drive.getPath(params.mountId, params.pathId);
         if (!path || path.type !== 'file') throw new ApiError(404, 'File not found');
 
-        const editMode = getEditMode(path.mimeType, path.name);
+        const editMode = getTextPreviewMode(path.mimeType, path.name);
         if (!editMode) throw new ApiError(400, 'File type not supported for inline editing');
         if (path.size > MAX_FILE_SIZE) throw new ApiError(413, 'File too large for inline editing');
 

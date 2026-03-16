@@ -1,11 +1,4 @@
-export function wrapHtml(body: string, title: string): string {
-    return `<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>${escapeHtml(title)}</title>
-<style>
+
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
 :root {
@@ -96,19 +89,3 @@ pre code {
 .hljs-meta { color: var(--fg-muted); }
 .hljs-deletion { color: #e06c75; }
 .hljs-symbol, .hljs-bullet { color: #56b6c2; }
-
-</style>
-</head>
-<body>
-${body}
-</body>
-</html>`;
-}
-
-export function escapeHtml(text: string): string {
-    return text
-        .replace(/&/g, '&amp;')
-        .replace(/</g, '&lt;')
-        .replace(/>/g, '&gt;')
-        .replace(/"/g, '&quot;');
-}

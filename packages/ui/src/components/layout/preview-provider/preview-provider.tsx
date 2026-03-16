@@ -4,6 +4,7 @@ import React, {createContext, useCallback, useContext, useMemo, useState} from "
 import type {DrivePath} from "@workspace/lib/types/drive"
 import {isFolderType} from "@workspace/lib/types/drive"
 import {getDriveDownloadUrl, getDriveEmbedUrl, getDrivePreviewUrl} from "@workspace/lib/api"
+import {getTextPreviewMode, isExiftoolExtension} from "@workspace/lib/constants"
 import {FilePreview} from "../drive/file-preview"
 
 type PreviewState = {
@@ -16,54 +17,21 @@ type PreviewContextValue = {
     updatePreview: (path: DrivePath) => void;
     closePreview: () => void;
     isPreviewOpen: boolean;
-    canPreview: (path: DrivePath) => boolean;
 }
 
 const PreviewContext = createContext<PreviewContextValue | undefined>(undefined)
 
 export type PreviewMode = 'image' | 'video' | 'audio' | 'pdf' | 'html' | 'fallback';
 
-const CODE_EXTENSIONS = new Set([
-    '.json', '.yaml', '.yml', '.xml', '.html', '.htm', '.css', '.csv',
-    '.js', '.jsx', '.mjs', '.cjs', '.ts', '.tsx', '.mts', '.cts',
-    '.py', '.rs', '.go', '.rb', '.php', '.java', '.c', '.cpp', '.h', '.hpp',
-    '.swift', '.kt', '.scala', '.sql', '.graphql', '.gql',
-    '.sh', '.bash', '.zsh', '.fish', '.conf', '.cfg', '.ini', '.toml',
-    '.env', '.gitignore', '.dockerignore', '.editorconfig',
-    '.log', '.diff', '.patch', '.svelte', '.vue', '.astro', '.dockerfile',
-    '.r', '.lua', '.zig', '.dart',
-]);
-
-const EXIFTOOL_EXTENSIONS = new Set([
-    '.cr2', '.cr3', '.nef', '.arw', '.dng', '.orf', '.rw2', '.raf', '.pef', '.srw', '.rwl',
-    '.psd', '.psb', '.ai', '.heic', '.heif',
-]);
-
 function getPreviewMode(path: DrivePath): PreviewMode {
     const mime = path.mimeType || "";
-    const ext = path.name.slice(path.name.lastIndexOf('.')).toLowerCase();
 
-    // Standard images → always previewable via sharp
-    if (mime.startsWith("image/") && !EXIFTOOL_EXTENSIONS.has(ext)) return 'image';
-
-    // Exiftool formats → only if thumbnail exists (extraction may have failed)
-    if (EXIFTOOL_EXTENSIONS.has(ext)) {
-        return path.thumbnail ? 'image' : 'fallback';
-    }
-
+    if (mime.startsWith("image/") && !isExiftoolExtension(path.name)) return 'image';
+    if (isExiftoolExtension(path.name)) return path.thumbnail ? 'image' : 'fallback';
     if (mime.startsWith("video/")) return 'video';
     if (mime.startsWith("audio/")) return 'audio';
     if (mime === "application/pdf") return 'pdf';
-
-    // Text/code/markdown → html preview
-    if (mime === 'text/markdown' || ext === '.md' || ext === '.markdown') return 'html';
-    if (mime === 'text/plain' || ext === '.txt') return 'html';
-    if (mime.startsWith('text/') || mime.startsWith('application/json') ||
-        mime.startsWith('application/javascript') || mime.startsWith('application/typescript') ||
-        mime.startsWith('application/xml') || mime.startsWith('application/x-yaml') ||
-        mime.startsWith('application/x-sh') || mime.startsWith('application/toml')) return 'html';
-    if (CODE_EXTENSIONS.has(ext)) return 'html';
-
+    if (getTextPreviewMode(mime, path.name) !== null) return 'html';
     return 'fallback';
 }
 
@@ -83,10 +51,6 @@ export function PreviewProvider({children}: {children: React.ReactNode}) {
 
     const closePreview = useCallback(() => {
         setPreview(null)
-    }, [])
-
-    const canPreview = useCallback((_path: DrivePath) => {
-        return true;
     }, [])
 
     const navigatePreview = useCallback((direction: -1 | 1) => {
@@ -123,7 +87,6 @@ export function PreviewProvider({children}: {children: React.ReactNode}) {
             embedUrl,
             downloadUrl,
             fileName: path.name,
-            mimeType: path.mimeType,
             aspectRatio,
             hasPrev,
             hasNext,
@@ -132,7 +95,7 @@ export function PreviewProvider({children}: {children: React.ReactNode}) {
     }, [preview]);
 
     return (
-        <PreviewContext.Provider value={{openPreview, updatePreview, closePreview, isPreviewOpen: preview !== null, canPreview}}>
+        <PreviewContext.Provider value={{openPreview, updatePreview, closePreview, isPreviewOpen: preview !== null}}>
             {children}
             {previewProps && (
                 <FilePreview
