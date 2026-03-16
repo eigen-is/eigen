@@ -74,8 +74,8 @@ function DriveRoute() {
         }
     };
 
-    const onQuickLook = (path: DrivePath) => {
-        openPreview(path, folderContents);
+    const onQuickLook = (path: DrivePath, sortedSiblings: DrivePath[]) => {
+        openPreview(path, sortedSiblings);
     };
 
     const onRowActivate = (path: DrivePath) => {

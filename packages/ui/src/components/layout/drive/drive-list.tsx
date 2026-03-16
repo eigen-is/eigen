@@ -194,6 +194,7 @@ interface DriveListProps {
     onRename?: (item: DrivePath) => void;
     onMove?: (item: DrivePath, targetItemId: string) => void;
     onQuickLook?: (path: DrivePath) => void;
+    sortFn?: (a: DrivePath, b: DrivePath) => number;
 }
 
 export function DriveList({
@@ -217,6 +218,7 @@ export function DriveList({
                               onRename,
                               onMove,
                               onQuickLook,
+                              sortFn,
                           }: DriveListProps) {
     const [isDragging, setIsDragging] = useState(false);
     const dragCounter = useRef(0);
@@ -346,6 +348,7 @@ export function DriveList({
                 onRename={onRename}
                 onMove={onMove}
                 onQuickLook={onQuickLook}
+                sortFn={sortFn}
             />
 
             {items.length === 0 && (
