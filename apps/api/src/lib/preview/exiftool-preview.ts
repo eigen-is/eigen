@@ -1,6 +1,6 @@
 import * as path from 'path';
 import * as fs from 'node:fs';
-import {EXIFTOOL_EXTENSIONS} from '@workspace/lib/constants';
+import {isExiftoolExtension} from '@workspace/lib/constants';
 
 const EXIFTOOL_MIMES = new Set([
     'image/x-canon-cr2', 'image/x-canon-cr3', 'image/x-nikon-nef',
@@ -13,8 +13,7 @@ const EXIFTOOL_MIMES = new Set([
 
 export function isExiftoolSupported(mimeType: string, fileName: string): boolean {
     if (EXIFTOOL_MIMES.has(mimeType)) return true;
-    const ext = fileName.slice(fileName.lastIndexOf('.')).toLowerCase();
-    return EXIFTOOL_EXTENSIONS.has(ext);
+    return isExiftoolExtension(fileName);
 }
 
 export async function extractEmbeddedPreview(filePath: string, tmpDir: string, pathId: string): Promise<string | null> {
