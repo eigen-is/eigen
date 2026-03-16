@@ -12,7 +12,6 @@ interface FilePreviewProps {
     embedUrl: string;
     downloadUrl?: string;
     fileName: string;
-    mimeType: string;
     aspectRatio?: number;
     hasPrev: boolean;
     hasNext: boolean;

@@ -1,14 +1,6 @@
 import * as path from 'path';
 import * as fs from 'node:fs';
-
-const EXIFTOOL_EXTENSIONS = new Set([
-    // Camera RAW
-    '.cr2', '.cr3', '.nef', '.arw', '.dng', '.orf', '.rw2', '.raf', '.pef', '.srw', '.rwl',
-    // Photoshop / Illustrator
-    '.psd', '.psb', '.ai',
-    // HEIF (fallback when sharp can't decode)
-    '.heic', '.heif',
-]);
+import {EXIFTOOL_EXTENSIONS} from '@workspace/lib/constants';
 
 const EXIFTOOL_MIMES = new Set([
     'image/x-canon-cr2', 'image/x-canon-cr3', 'image/x-nikon-nef',
