@@ -5,18 +5,29 @@ import type {User} from "better-auth/types";
 import {parseOwnerId} from "@workspace/lib/types";
 import {validateEmailAddress} from "@workspace/lib/validation";
 import {ApiError} from "../core";
+import { getTeam } from "../team";
 
 export async function getUserByEmailOrId(emailOrId: string): Promise<User | null> {
     return (validateEmailAddress(emailOrId) ? getUserByEmail(emailOrId) : getUserById(emailOrId));
 }
 
 export async function getPublicInfo(emailOrId: string): Promise<PublicUser> {
-    const user = await getUserByEmailOrId(emailOrId);
-    if (user) return {
-        name: user.name,
-        email: user.email,
-        avatar: `p/avatar/${user.id}`
-    };
+    const parsed = parseOwnerId(emailOrId);
+    if (parsed.type === 'team') {
+        const team = await getTeam(parsed.id);
+        if (team) return {
+            name: team.name,
+            email: '',
+            avatar: `p/avatar/${emailOrId}`
+        };
+    } else {
+        const user = await getUserByEmailOrId(emailOrId);
+        if (user) return {
+            name: user.name,
+            email: user.email,
+            avatar: `p/avatar/${user.id}`
+        };
+    }
     throw new ApiError(404, 'User not found');
 }
 
