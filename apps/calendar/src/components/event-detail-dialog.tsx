@@ -111,6 +111,7 @@ export function EventDetailDialog({open, onOpenChange, event, calendar, sharedCa
 
     const isRecurring = !!event.rrule;
     const isException = !!event.parentEventId;
+    const isPartOfSeries = isRecurring || isException;
     const calendarName = calendar?.name || sharedCalendar?.calendarName || null;
     const isShared = !!sharedCalendar;
     const canEdit = !isShared || sharedCalendar?.permission === 'write';
@@ -122,7 +123,7 @@ export function EventDetailDialog({open, onOpenChange, event, calendar, sharedCa
 
     const handleDelete = async (action: RecurringAction) => {
         try {
-            if (isLinkedEvent && isRecurring) {
+            if (isLinkedEvent && isPartOfSeries) {
                 const eventId = event.parentEventId || event.id;
                 if (action === 'this') {
                     await rsvp.mutateAsync({
@@ -189,7 +190,7 @@ export function EventDetailDialog({open, onOpenChange, event, calendar, sharedCa
     };
 
     const handleDeleteClick = () => {
-        if (isRecurring) {
+        if (isPartOfSeries) {
             setShowRecurringDeleteDialog(true);
         } else {
             setShowDeleteDialog(true);
@@ -287,7 +288,7 @@ export function EventDetailDialog({open, onOpenChange, event, calendar, sharedCa
                                             size="sm"
                                             variant={myAttendeeStatus === status ? 'default' : 'outline'}
                                             onClick={() => {
-                                                if (isRecurring) {
+                                                if (isPartOfSeries) {
                                                     setPendingRsvpStatus(status);
                                                     setShowRsvpScopeDialog(true);
                                                 } else {
