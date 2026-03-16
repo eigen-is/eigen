@@ -147,6 +147,51 @@ describe('Team Drives', () => {
         const result = await writeRes.json() as any;
         expect(result.canWrite).toBe(false);
     });
+
+    test('text-preview works on team drive file', async () => {
+        const mountId = 'default';
+        const root = await driveGet(ctx.alice.user.sessionToken, teamOwner, mountId, 'root');
+        const file = new File(['Hello from team'], 'team-preview.txt', {type: 'text/plain'});
+        const uploaded = await driveUpload(ctx.alice.user.sessionToken, teamOwner, mountId, root.id, file);
+
+        const res = await authedRequest(ctx.alice.user.sessionToken,
+            `/drive/${teamOwner}/${mountId}/file/${uploaded.id}/text-preview`);
+        expect(res.status).toBe(200);
+        const data = await res.json() as any;
+        expect(data.body).toContain('Hello from team');
+        expect(data.mode).toBe('plaintext');
+    });
+
+    test('preview works on team drive image file', async () => {
+        const mountId = 'default';
+        const root = await driveGet(ctx.alice.user.sessionToken, teamOwner, mountId, 'root');
+        const pngBytes = new Uint8Array([
+            137,80,78,71,13,10,26,10,0,0,0,13,73,72,68,82,0,0,0,4,0,0,0,4,8,2,0,0,0,38,147,9,
+            41,0,0,0,9,112,72,89,115,0,0,3,232,0,0,3,232,1,181,123,82,107,0,0,0,17,73,68,65,84,
+            120,156,99,248,207,192,0,71,8,22,94,14,0,174,147,15,241,166,148,72,35,0,0,0,0,73,69,
+            78,68,174,66,96,130,
+        ]);
+        const file = new File([pngBytes], 'team-image.png', {type: 'image/png'});
+        const uploaded = await driveUpload(ctx.alice.user.sessionToken, teamOwner, mountId, root.id, file);
+
+        const res = await authedRequest(ctx.alice.user.sessionToken,
+            `/drive/${teamOwner}/${mountId}/file/${uploaded.id}/preview`);
+        expect(res.status).toBe(200);
+        expect(res.headers.get('content-type')).toBe('image/webp');
+    });
+
+    test('team member (bob) can access text-preview on team drive', async () => {
+        const mountId = 'default';
+        const root = await driveGet(ctx.alice.user.sessionToken, teamOwner, mountId, 'root');
+        const file = new File(['Bob can read this'], 'bob-preview.txt', {type: 'text/plain'});
+        const uploaded = await driveUpload(ctx.alice.user.sessionToken, teamOwner, mountId, root.id, file);
+
+        const res = await authedRequest(ctx.bob.user.sessionToken,
+            `/drive/${teamOwner}/${mountId}/file/${uploaded.id}/text-preview`);
+        expect(res.status).toBe(200);
+        const data = await res.json() as any;
+        expect(data.body).toContain('Bob can read this');
+    });
 });
 
 describe('Team ACL on personal drive', () => {
