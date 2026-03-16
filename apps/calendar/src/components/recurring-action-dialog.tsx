@@ -11,10 +11,18 @@ type RecurringActionDialogProps = {
     onOpenChange: (open: boolean) => void;
     title: string;
     onConfirm: (action: RecurringAction) => void;
+    options?: RecurringAction[];
 }
 
-export function RecurringActionDialog({open, onOpenChange, title, onConfirm}: RecurringActionDialogProps) {
-    const [selected, setSelected] = useState<RecurringAction>('this');
+const ACTION_LABELS: Record<RecurringAction, string> = {
+    'this': 'This event',
+    'this-and-following': 'This and following events',
+    'all': 'All events in series',
+};
+
+export function RecurringActionDialog({open, onOpenChange, title, onConfirm, options}: RecurringActionDialogProps) {
+    const availableOptions = options || (['this', 'this-and-following', 'all'] as RecurringAction[]);
+    const [selected, setSelected] = useState<RecurringAction>(availableOptions[0]);
 
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
@@ -28,18 +36,12 @@ export function RecurringActionDialog({open, onOpenChange, title, onConfirm}: Re
                     onValueChange={(v) => setSelected(v as RecurringAction)}
                     className="space-y-2"
                 >
-                    <div className="flex items-center gap-2">
-                        <RadioGroupItem value="this" id="recurring-this"/>
-                        <Label htmlFor="recurring-this" className="cursor-pointer">This event</Label>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <RadioGroupItem value="this-and-following" id="recurring-following"/>
-                        <Label htmlFor="recurring-following" className="cursor-pointer">This and following events</Label>
-                    </div>
-                    <div className="flex items-center gap-2">
-                        <RadioGroupItem value="all" id="recurring-all"/>
-                        <Label htmlFor="recurring-all" className="cursor-pointer">All events All events in series</Label>
-                    </div>
+                    {availableOptions.map(option => (
+                        <div key={option} className="flex items-center gap-2">
+                            <RadioGroupItem value={option} id={`recurring-${option}`}/>
+                            <Label htmlFor={`recurring-${option}`} className="cursor-pointer">{ACTION_LABELS[option]}</Label>
+                        </div>
+                    ))}
                 </RadioGroup>
 
                 <DialogFooter>

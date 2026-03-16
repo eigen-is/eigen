@@ -9,7 +9,7 @@ import {
     Pencil,
     Repeat,
     Trash2,
-    Users,
+    UsersRound,
     X as XIcon
 } from 'lucide-react';
 import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle} from '@workspace/ui/components/dialog';
@@ -104,6 +104,8 @@ export function EventDetailDialog({open, onOpenChange, event, calendar, sharedCa
     const createEvent = useCreateEvent(eventOwnerId);
     const updateEvent = useUpdateEvent(eventOwnerId);
     const rsvp = useRsvp(user?.id || '');
+    const [showRsvpScopeDialog, setShowRsvpScopeDialog] = useState(false);
+    const [pendingRsvpStatus, setPendingRsvpStatus] = useState<'accepted' | 'declined' | 'tentative' | null>(null);
 
     if (!event) return null;
 
@@ -120,32 +122,57 @@ export function EventDetailDialog({open, onOpenChange, event, calendar, sharedCa
 
     const handleDelete = async (action: RecurringAction) => {
         try {
-            if (action === 'this') {
-                if (isRecurring && !isException) {
-                    await createEvent.mutateAsync({
+            if (isLinkedEvent && isRecurring) {
+                const eventId = event.parentEventId || event.id;
+                if (action === 'this') {
+                    await rsvp.mutateAsync({
                         calendarId: event.calendarId,
-                        title: event.title,
-                        startTime: event.startTime,
-                        endTime: event.endTime,
-                        allDay: Boolean(event.allDay),
-                        parentEventId: event.id,
+                        eventId,
+                        status: 'declined',
+                        scope: 'this',
                         recurrenceDate: occurrenceDateToString(event.occurrenceDate),
-                        status: 'cancelled',
+                        remove: true,
+                    });
+                } else if (action === 'this-and-following') {
+                    await rsvp.mutateAsync({
+                        calendarId: event.calendarId,
+                        eventId,
+                        status: 'declined',
+                        scope: 'this-and-following',
+                        recurrenceDate: occurrenceDateToString(event.occurrenceDate),
+                        remove: true,
                     });
                 } else {
-                    await deleteEvent.mutateAsync({id: event.id, calendarId: event.calendarId});
+                    await deleteEvent.mutateAsync({id: eventId, calendarId: event.calendarId});
                 }
-            } else if (action === 'this-and-following') {
-                const parentId = event.parentEventId || event.id;
-                const occDate = parseOccurrenceDate(event.occurrenceDate);
-                const rrule = event.rrule || (isException && event.parentEventId ? null : null);
-                if (rrule) {
-                    const truncated = truncateRRule(rrule, occDate);
-                    await updateEvent.mutateAsync({id: parentId, calendarId: event.calendarId, rrule: truncated});
+            } else {
+                if (action === 'this') {
+                    if (isRecurring && !isException) {
+                        await createEvent.mutateAsync({
+                            calendarId: event.calendarId,
+                            title: event.title,
+                            startTime: event.startTime,
+                            endTime: event.endTime,
+                            allDay: Boolean(event.allDay),
+                            parentEventId: event.id,
+                            recurrenceDate: occurrenceDateToString(event.occurrenceDate),
+                            status: 'cancelled',
+                        });
+                    } else {
+                        await deleteEvent.mutateAsync({id: event.id, calendarId: event.calendarId});
+                    }
+                } else if (action === 'this-and-following') {
+                    const parentId = event.parentEventId || event.id;
+                    const occDate = parseOccurrenceDate(event.occurrenceDate);
+                    const rrule = event.rrule || (isException && event.parentEventId ? null : null);
+                    if (rrule) {
+                        const truncated = truncateRRule(rrule, occDate);
+                        await updateEvent.mutateAsync({id: parentId, calendarId: event.calendarId, rrule: truncated});
+                    }
+                } else if (action === 'all') {
+                    const targetId = event.parentEventId || event.id;
+                    await deleteEvent.mutateAsync({id: targetId, calendarId: event.calendarId});
                 }
-            } else if (action === 'all') {
-                const targetId = event.parentEventId || event.id;
-                await deleteEvent.mutateAsync({id: targetId, calendarId: event.calendarId});
             }
         } finally {
             setShowRecurringDeleteDialog(false);
@@ -183,9 +210,27 @@ export function EventDetailDialog({open, onOpenChange, event, calendar, sharedCa
 
     const recurrenceText = event.rrule ? rruleToText(event.rrule) : null;
 
+    const handleRsvpScopeConfirm = (action: RecurringAction) => {
+        if (!pendingRsvpStatus) return;
+        const eventId = event.parentEventId || event.id;
+        if (action === 'this') {
+            rsvp.mutate({
+                calendarId: event.calendarId,
+                eventId,
+                status: pendingRsvpStatus,
+                scope: 'this',
+                recurrenceDate: occurrenceDateToString(event.occurrenceDate),
+            });
+        } else {
+            rsvp.mutate({calendarId: event.calendarId, eventId, status: pendingRsvpStatus});
+        }
+        setPendingRsvpStatus(null);
+        onOpenChange(false);
+    };
+
     return (
         <>
-            <Dialog open={open && !showDeleteDialog && !showRecurringDeleteDialog && !showRecurringDeleteConfirm && !editOpen} onOpenChange={onOpenChange}>
+            <Dialog open={open && !showDeleteDialog && !showRecurringDeleteDialog && !showRecurringDeleteConfirm && !editOpen && !showRsvpScopeDialog} onOpenChange={onOpenChange}>
                 <DialogContent size="md">
                     <DialogHeader>
                         {/* <div className="flex items-start gap-3"> */}
@@ -223,7 +268,7 @@ export function EventDetailDialog({open, onOpenChange, event, calendar, sharedCa
 
                         {hasAttendees && (
                             <div className="flex items-start gap-3 text-sm">
-                                <Users className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0"/>
+                                <UsersRound className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0"/>
                                 <div className="flex-1">
                                     <AttendeeList attendees={event.data!.attendees!}/>
                                 </div>
@@ -240,8 +285,13 @@ export function EventDetailDialog({open, onOpenChange, event, calendar, sharedCa
                                             size="sm"
                                             variant={myAttendeeStatus === status ? 'default' : 'outline'}
                                             onClick={() => {
-                                                rsvp.mutate({calendarId: event.calendarId, eventId: event.id, status});
-                                                onOpenChange(false);
+                                                if (isRecurring) {
+                                                    setPendingRsvpStatus(status);
+                                                    setShowRsvpScopeDialog(true);
+                                                } else {
+                                                    rsvp.mutate({calendarId: event.calendarId, eventId: event.id, status});
+                                                    onOpenChange(false);
+                                                }
                                             }}
                                             className="gap-1"
                                         >
@@ -313,6 +363,14 @@ export function EventDetailDialog({open, onOpenChange, event, calendar, sharedCa
                 description="Are you sure you want to delete this event?"
                 itemName={event.title}
                 onDelete={handleRecurringDeleteConfirm}
+            />
+
+            <RecurringActionDialog
+                open={showRsvpScopeDialog}
+                onOpenChange={setShowRsvpScopeDialog}
+                title="RSVP for recurring event"
+                onConfirm={handleRsvpScopeConfirm}
+                options={['this', 'all']}
             />
 
             <EditEventDialog

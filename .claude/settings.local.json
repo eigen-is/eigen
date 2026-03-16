@@ -29,7 +29,8 @@
       "WebFetch(domain:dovecot.org)",
       "WebFetch(domain:www.hawaga.org.uk)",
       "Bash(bun test:*)",
-      "Bash(for method:*)"
+      "Bash(for method:*)",
+      "WebFetch(domain:icalendar.org)"
     ]
   },
   "bypassPermissions": "bypassPermissions"
