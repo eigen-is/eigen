@@ -27,35 +27,69 @@ Microsoft Outlook for internal users, minus the iMIP email layer (see "Future: E
 
 ## Data Model
 
-### Types (`packages/lib/src/types/calendar.ts` — no changes needed)
+### Types (`packages/lib/src/types/calendar.ts`)
 
-`Attendee`, `EventData` (with `attendees`, `organizer`, `organizerEventId` fields), `CalendarEvent` (has `calendarId`),
-`CreateEventInput`, `UpdateEventInput` — all already defined.
+Most types already defined. Two changes for CalDAV alignment:
 
-### Schema: add indexed columns (`apps/api/src/lib/calendar/schema.ts`)
+**Add `name` to `Attendee`** (maps to CalDAV `CN` parameter on `ATTENDEE`):
 
-Add two columns + index to the `events` table:
+```typescript
+export type Attendee = {
+    email: string
+    name?: string
+    status: 'pending' | 'accepted' | 'declined' | 'tentative'
+    role: 'required' | 'optional'
+}
+```
+
+**Add `name` to `organizer` in `EventData`** (maps to CalDAV `ORGANIZER;CN="..."`):
+
+```typescript
+organizer?: { userId: string; email: string; name?: string }
+```
+
+`CalendarEvent`, `CreateEventInput`, `UpdateEventInput` — no changes needed.
+
+### Schema: add columns (`apps/api/src/lib/calendar/schema.ts`)
+
+Add three columns + index to the `events` table:
 
 ```typescript
 organizerEventId: text('organizerEventId'),
-        organizerUserId
-:
-text('organizerUserId'),
+organizerUserId: text('organizerUserId'),
+sequence: integer('sequence').notNull().default(0),
 ```
 
 ```typescript
 linkedEvent: index('idx_events_linked').on(table.organizerEventId, table.organizerUserId),
 ```
 
-Set only on attendee linked copies (by `receiveInvitation()`). Organizer events leave them null. Indexed columns avoid
-full-table JSON scans on every update/delete/RSVP. The same values also live in `data` JSON for frontend display.
-Data is throwaway during dev — no migration needed.
+`organizerEventId`/`organizerUserId`: Set only on attendee linked copies (by `receiveInvitation()`). Organizer events
+leave them null. Indexed columns avoid full-table JSON scans on every update/delete/RSVP. The same values also live in
+`data` JSON for frontend display.
+
+`sequence`: CalDAV `SEQUENCE` property — tracks event revisions. Bumped on every organizer update that propagates to
+attendees. Attendees can detect stale updates by comparing sequence numbers.
+
+Also update `db-config.ts` migration v1 DDL to include the new columns + `sequence` column.
+Data is throwaway during dev — no separate migration needed.
+
+### Schema: `CalendarEvent` type gets `sequence`
+
+Add to `CalendarEvent` type in `packages/lib/src/types/calendar.ts`:
+
+```typescript
+sequence: number
+```
+
+Update `dbEventToCalendarEvent` in `calendar.ts` to map it.
 
 ### Route validation: add `attendees` only (`apps/api/src/routes/calendar.ts`)
 
 ```typescript
 const AttendeeSchema = t.Object({
     email: t.String(),
+    name: t.Optional(t.String()),
     status: t.Union([t.Literal('pending'), t.Literal('accepted'), t.Literal('declined'), t.Literal('tentative')]),
     role: t.Union([t.Literal('required'), t.Literal('optional')]),
 });
@@ -79,11 +113,13 @@ blocks them. They are server-only fields set exclusively by `receiveInvitation()
 
 **Attendee's linked copy:** Regular event in attendee's default calendar with:
 
+- Same `uid` as organizer's event (CalDAV requires all copies share the same UID for correlation)
 - Same title, description, location, times, rrule
-- `data.organizer = { userId, email }` + `data.organizerEventId` (for frontend display)
+- `data.organizer = { userId, email, name }` + `data.organizerEventId` (for frontend display)
 - `data.attendees` = snapshot at invite time (not live-updated by peer RSVPs — see Design Decisions)
 - `organizerEventId` + `organizerUserId` columns set (indexed server-side lookups)
 - `createByUserId` = organizer's user ID
+- `sequence` = organizer's event sequence at invite time
 
 **Detection:** Event is a linked copy if `organizerEventId` column is non-null.
 
@@ -119,6 +155,7 @@ exists (same `organizerEventId` + `organizerUserId`), returns existing ID.
 
 ```typescript
 receiveInvitation(payload: {
+  uid: string;
   title: string;
   description: string | null;
   location: string | null;
@@ -127,6 +164,7 @@ receiveInvitation(payload: {
   allDay: boolean;
   rrule: string | null;
   status: CalendarEvent['status'];
+  sequence: number;
   data: EventData;
   createByUserId: string;
   organizerEventId: string;
@@ -137,14 +175,25 @@ receiveInvitation(payload: {
 Find default calendar via `this.getCalendars().find(c => c.isDefault)`, check existing via `findLinkedEvent`,
 insert with `organizerEventId`/`organizerUserId` columns set.
 
+**Important implementation details:**
+- Use `payload.uid` as the event's `uid` (shared with organizer's event for CalDAV correlation), with `uri` = `{uid}.ics`
+- Compute `etag` via `computeEtag()` (same function used by `createEvent`)
+- Call `this.incrementCtag(defaultCalId)` after insert
+- Set `sequence` from payload
+
 ### `receiveInvitationUpdate(orgEventId: string, orgUserId: string, payload): void`
 
 Updates existing linked event. **Preserves** attendee's local `data.reminders` and `data.color`. Only updates:
-title, description, location, times, rrule, status, `data.attendees`.
+title, description, location, times, rrule, status, `data.attendees`, `sequence`.
+
+**Important implementation details:**
+- Recompute `etag` via `computeEtag()` with the merged data (including preserved local fields)
+- Call `this.incrementCtag(linkedEvent.calendarId)` after update
 
 ### `removeInvitation(orgEventId: string, orgUserId: string): void`
 
 Finds linked event via `findLinkedEvent`, deletes it. No-op if not found.
+Calls `this.incrementCtag(linkedEvent.calendarId)` after deletion.
 
 ### `updateAttendeeStatus(eventId: string, email: string, status: Attendee['status']): void`
 
@@ -177,6 +226,19 @@ void {
 
   const updated = this.getEventById(eventId);
   if(updated) this.incrementCtag(updated.calendarId);
+}
+```
+
+### `incrementSequence(eventId: string): void`
+
+Bumps the `sequence` column on an organizer event. Called from the update route when propagating changes to attendees.
+
+```typescript
+incrementSequence(eventId: string): void {
+  this.db.update(schema.events).set({
+    sequence: sql`${schema.events.sequence} + 1`,
+    updatedAt: sql`unixepoch()`,
+  }).where(eq(schema.events.id, eventId)).run();
 }
 ```
 
@@ -213,11 +275,12 @@ per-attendee try/catch for error isolation.
 ### `propagateInvitation(organizerHome, event, user, oldAttendees, newAttendees)`
 
 - `user` is the authenticated user from the route — provides `user.email` for `organizer.email`
-  (**never** use `home.user.email`, which is `''` for team calendars)
+  and `user.name` for `organizer.name` (**never** use `home.user.email`, which is `''` for team calendars)
+- Passes `event.uid` and `event.sequence` through to `receiveInvitation` payload (CalDAV shared UID)
 - Diffs old vs new attendees by email
 - **Added:** resolve email → userId, `receiveInvitation()`, emit `CALENDAR_INVITE_RECEIVED` SSE
 - **Removed:** resolve email → userId, `removeInvitation()`, emit `CALENDAR_INVITE_CANCELLED` SSE
-- **Existing:** `receiveInvitationUpdate()` to sync changes, emit `CALENDAR_INVITE_UPDATED` SSE
+- **Existing:** `receiveInvitationUpdate()` to sync changes (including bumped `sequence`), emit `CALENDAR_INVITE_UPDATED` SSE
 - **Unresolved:** `addRegistryEntry(organizerHome.user.id, email)` for future reconciliation
 - Self-invite prevention: skip attendee matching organizer's email
 
@@ -299,7 +362,11 @@ post("/calendar/:ownerId/calendars/:calId/events", async ({params, body, user}) 
 
 ### Update event (modify existing)
 
-Read old event before update, diff attendees. Only propagate if organizer copy (no `data.organizer`):
+Read old event before update, diff attendees. Only propagate if organizer copy (no `data.organizer`).
+
+**Linked event edit guard:** If the event is a linked copy (`organizerEventId` non-null), only allow changes to
+`data.reminders` and `data.color`. Block title/time/description/location/rrule changes — these are organizer-controlled
+and would desync from the organizer's copy.
 
 ```typescript
 .
@@ -308,14 +375,25 @@ put("/calendar/:ownerId/calendars/:calId/events/:id", async ({params, body, user
   if (permission !== 'write') throw new ApiError(403, 'Write permission required');
 
   const oldEvent = calendar.getEventById(params.id);
+
+  // Linked event guard: attendees can only change local fields (reminders, color)
+  if (oldEvent?.data?.organizer) {
+    const allowed = {data: body.data ? {reminders: body.data.reminders, color: body.data.color} : undefined};
+    const updated = calendar.updateEvent(params.id, {data: {...oldEvent.data, ...allowed.data}});
+    return updated;
+  }
+
   const updated = calendar.updateEvent(params.id, body);
 
-  if (!oldEvent?.data?.organizer && updated.data?.attendees?.length) {
+  if (updated.data?.attendees?.length) {
+    // Bump sequence for organizer events with attendees
+    calendar.incrementSequence(params.id);
+    const withSequence = calendar.getEventById(params.id)!;
     const organizerHome = await getHome(params.ownerId);
     propagateInvitation(
-            organizerHome, updated, user,
+            organizerHome, withSequence, user,
             oldEvent?.data?.attendees || [],
-            updated.data.attendees
+            withSequence.data!.attendees!
     ).catch(console.error);
   }
 
@@ -401,12 +479,14 @@ async function pullPendingInvitations(
   const events = ownerHome.calendar.getEventsWithAttendee(userEmail);
   for (const event of events) {
     targetHome.calendar.receiveInvitation({
+      uid: event.uid,
       title: event.title, description: event.description,
       location: event.location, startTime: event.startTime,
       endTime: event.endTime, allDay: event.allDay,
       rrule: event.rrule, status: event.status,
+      sequence: event.sequence,
       data: {
-        organizer: {userId: ownerHome.user.id, email: ownerHome.user.email},
+        organizer: {userId: ownerHome.user.id, email: ownerHome.user.email, name: ownerHome.user.name},
         organizerEventId: event.id,
         attendees: event.data?.attendees,
       },
@@ -449,6 +529,12 @@ Process organizers sequentially (not `Promise.all`) to avoid mass Home initializ
 Reuse `ContactAutosuggest` from `@workspace/ui/components/layout/contacts/contact-autosuggest` (already used in
 `calendar-share-editor.tsx`). Email input + autocomplete. Added attendees list with role toggle + remove button.
 On edit: show RSVP status badge per attendee. Wire into `data.attendees` on create/update mutation.
+
+**Data merging:** Current dialogs don't pass `data` at all. When adding attendees, build the `data` object by merging
+with existing fields. On edit, preserve `event.data` (reminders, url, notes, color) and only replace `attendees`:
+```typescript
+data: {...event?.data, attendees: selectedAttendees}
+```
 
 `CreateEventInput`/`UpdateEventInput` already include `data?: EventData | null` — no type changes needed.
 
@@ -498,27 +584,29 @@ Toasts come automatically from SSEProvider (`isSSEventNotification()` matches ev
 
 ## Implementation Steps
 
-### Step 1: Types + SSE infrastructure
+### Step 1: Types + schema + SSE infrastructure
 
-| File                                      | Change                                                    |
-|-------------------------------------------|-----------------------------------------------------------|
-| `apps/api/src/lib/calendar/schema.ts`     | Add `organizerEventId`, `organizerUserId` columns + index |
-| `apps/api/src/routes/calendar.ts`         | Add `AttendeeSchema` to `EventDataSchema`                 |
-| `packages/lib/src/types/sse.ts`           | Add 4 new SSE event type constants + extend type union    |
-| `apps/api/src/lib/calendar/sse-events.ts` | Add 4 template entries + extend `CalendarEventType` union |
+| File                                      | Change                                                                                            |
+|-------------------------------------------|---------------------------------------------------------------------------------------------------|
+| `packages/lib/src/types/calendar.ts`      | Add `name` to `Attendee`, `name` to `organizer` in `EventData`, `sequence` to `CalendarEvent`    |
+| `apps/api/src/lib/calendar/schema.ts`     | Add `organizerEventId`, `organizerUserId`, `sequence` columns + index                             |
+| `apps/api/src/lib/calendar/db-config.ts`  | Update v1 DDL to include new columns                                                              |
+| `apps/api/src/routes/calendar.ts`         | Add `AttendeeSchema` (with `name`) to `EventDataSchema`                                           |
+| `packages/lib/src/types/sse.ts`           | Add 4 new SSE event type constants + extend type union                                            |
+| `apps/api/src/lib/calendar/sse-events.ts` | Add 4 template entries + extend `CalendarEventType` union                                         |
 
 ### Step 2: Calendar class methods
 
-| File                                    | Change                                                                                                                                                 |
-|-----------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------|
-| `apps/api/src/lib/calendar/calendar.ts` | Add `findLinkedEvent()`, `receiveInvitation()`, `receiveInvitationUpdate()`, `removeInvitation()`, `updateAttendeeStatus()`, `getEventsWithAttendee()` |
+| File                                    | Change                                                                                                                                                                          |
+|-----------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `apps/api/src/lib/calendar/calendar.ts` | Add `findLinkedEvent()`, `receiveInvitation()`, `receiveInvitationUpdate()`, `removeInvitation()`, `updateAttendeeStatus()`, `incrementSequence()`, `getEventsWithAttendee()`, update `dbEventToCalendarEvent` |
 
 ### Step 3: Propagation + routes
 
 | File                                              | Change                                                                                               |
 |---------------------------------------------------|------------------------------------------------------------------------------------------------------|
 | `apps/api/src/lib/calendar/invite-propagation.ts` | **New.** `propagateInvitation()`, `propagateRsvp()`, `propagateCancellation()`, `propagateDecline()` |
-| `apps/api/src/routes/calendar.ts`                 | Wire propagation into create/update/delete handlers; add RSVP endpoint                               |
+| `apps/api/src/routes/calendar.ts`                 | Wire propagation into create/update/delete handlers; add linked event edit guard; add RSVP endpoint  |
 | `apps/api/src/lib/share/reconciliation.ts`        | Add `pullPendingInvitations()`, call from `reconcileSharesForNewUser()`                              |
 
 ### Step 4: Frontend — dialogs + hooks
@@ -558,9 +646,10 @@ Follow existing test patterns: `authedRequest()` + `getTestContext()` from `setu
 | **Attendee has no default calendar** | Impossible: `Calendar.init()` always creates one                                                                                                   |
 | **Organizer deletes account**        | Linked events orphaned. RSVP fails with 404 from `getHome()`. Acceptable during dev                                                                |
 | **Attendee removes linked copy**     | Treated as decline via `propagateDecline()`                                                                                                        |
-| **Calendar move**                    | Handled automatically: delete→create triggers cancel→reinvite. No special case                                                                     |
+| **Calendar move**                    | Handled automatically: delete→create triggers cancel→reinvite. Known limitation: attendees lose RSVP status                                          |
 | **Concurrent RSVPs**                 | `updateAttendeeStatus()` uses `db.transaction()` — serialized                                                                                      |
 | **Recurring + attendees**            | Linked copy is single recurring event. Occurrence exceptions propagated individually. Exception uses attendee's linked event ID as `parentEventId` |
+| **Attendee edits linked event**      | Update route blocks title/time/description/rrule changes on linked copies. Only `data.reminders` and `data.color` allowed                          |
 | **Shared-calendar attendee**         | Gets linked copy AND sees via sharing. Coexist; known UX gap, defer                                                                                |
 | **Many attendees**                   | O(n) `getHome()` calls. `Promise.allSettled()` with per-attendee try/catch. Fine for < 100 users                                                   |
 | **Attendee offline**                 | Linked event written to their SQLite directly. Visible on next load                                                                                |
@@ -576,9 +665,14 @@ Follow existing test patterns: `authedRequest()` + `getTestContext()` from `setu
 | **Always `user.email` for organizer, never `home.user.email`** | TeamHome has `email: ''`. Authenticated user always has real email. Pass `user` from route handler to propagation.                                                          |
 | **Snapshot `data.attendees` in linked copies**                 | Don't propagate peer RSVP updates to other attendees' copies. Avoids O(n²) fan-out. Each attendee sees their own status accurately; peer status is snapshot-at-invite-time. |
 | **`db.transaction()` for RSVP updates**                        | Prevents concurrent RSVPs from clobbering via read-modify-write race. SQLite serializes transactions.                                                                       |
-| **Calendar move = delete + create**                            | Existing edit dialog already does this. Delete → `propagateCancellation`, Create → `propagateInvitation`. No special case.                                                  |
+| **Calendar move = delete + create**                            | Existing edit dialog already does this. Delete → `propagateCancellation`, Create → `propagateInvitation`. Attendees lose RSVP — acceptable tradeoff for simplicity.         |
 | **Sequential reconciliation**                                  | Process organizers one-by-one in `pullPendingInvitations`, not `Promise.all`, to avoid mass Home initialization.                                                            |
 | **Shared-calendar + linked copy coexist**                      | Attendee who also has shared access sees the event twice. Known UX gap, defer to a later improvement.                                                                       |
+| **Shared `uid` across linked copies**                          | CalDAV requires all copies of the same event share the same UID. Pass organizer's `uid` to `receiveInvitation`. Without this, future CalDAV sync needs a remapping layer.   |
+| **`sequence` column for revision tracking**                    | CalDAV `SEQUENCE` property. Bumped on organizer updates. Attendees can detect stale updates. Added now to avoid a separate migration later.                                 |
+| **`name` on `Attendee` and `organizer`**                       | Maps to CalDAV `CN` parameter. Forward-compatible, no cost.                                                                                                                 |
+| **Linked event edit guard**                                    | Attendees can only change `data.reminders`/`data.color` on linked copies. Title/time/description are organizer-controlled to prevent desync.                                |
+| **`etag`/`ctag` in receive methods**                           | `receiveInvitation`/`Update`/`Remove` must compute `etag` and increment `ctag` — same as `createEvent`/`updateEvent`/`deleteEvent`. Required for CalDAV sync detection.      |
 
 ---
 
@@ -613,14 +707,16 @@ No code changes needed for guest support — the registry + reconciliation patte
 
 ### Modified — backend
 
-- `apps/api/src/lib/calendar/schema.ts` — add `organizerEventId`, `organizerUserId` columns + index
-- `apps/api/src/lib/calendar/calendar.ts` — add 6 new methods
-- `apps/api/src/routes/calendar.ts` — extend `EventDataSchema`, modify create/update/delete handlers, add RSVP endpoint
+- `apps/api/src/lib/calendar/schema.ts` — add `organizerEventId`, `organizerUserId`, `sequence` columns + index
+- `apps/api/src/lib/calendar/db-config.ts` — update v1 DDL to include new columns
+- `apps/api/src/lib/calendar/calendar.ts` — add 7 new methods (`findLinkedEvent`, `receiveInvitation`, `receiveInvitationUpdate`, `removeInvitation`, `updateAttendeeStatus`, `incrementSequence`, `getEventsWithAttendee`), update `dbEventToCalendarEvent` for `sequence`
+- `apps/api/src/routes/calendar.ts` — add `AttendeeSchema`, extend `EventDataSchema`, modify create/update/delete handlers (with linked event edit guard), add RSVP endpoint
 - `apps/api/src/lib/calendar/sse-events.ts` — add 4 templates, extend type union
 - `apps/api/src/lib/share/reconciliation.ts` — add `pullPendingInvitations()`
 
 ### Modified — shared types
 
+- `packages/lib/src/types/calendar.ts` — add `name` to `Attendee`, add `name` to `organizer` in `EventData`, add `sequence` to `CalendarEvent`
 - `packages/lib/src/types/sse.ts` — add 4 event types to `SSEventType` + type union
 
 ### Modified — frontend
@@ -632,6 +728,3 @@ No code changes needed for guest support — the registry + reconciliation patte
 - `apps/calendar/src/components/month-view.tsx` — visual indicators
 - `apps/calendar/src/components/week-view.tsx` — visual indicators
 
-### No changes needed
-
-- `packages/lib/src/types/calendar.ts` — types already defined
