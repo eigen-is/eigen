@@ -16,6 +16,22 @@ keeps `mail.db` in sync by scanning the Maildir for changes.
 4. **Fixed mailbox set.** Eigen exposes only the 6 standard mailboxes (INBOX, Sent, Drafts, Trash, Junk, Archive).
    Extra folders created via IMAP clients are tolerated on disk but not shown in Eigen's UI.
 
+## Code Architecture
+
+After the refactor, the mail backend is split into focused modules:
+
+| File | Class/Function | Responsibility |
+|------|---------------|----------------|
+| `maildir.ts` | `Maildir` | Orchestrator — public API, ties together store + DB + parsing + SSE |
+| `maildir-store.ts` | `MaildirStore` | Pure filesystem ops on Maildir structure (deliver, move, list, delete) |
+| `mail-parse.ts` | `parseEml()` | Parses `.eml` content string into `Email` object, sanitizes HTML |
+| `maildb.ts` | `MailDB` | Database operations on `mail.db` (CRUD for email metadata) |
+| `mailfile.ts` | `createEmlContent()` | Generates RFC 5322 `.eml` content from `EmlInput` |
+| `mailutils.ts` | Helpers | `createUniqueMessageId()`, `getMailIDfromFileName()`, `getStandardMailboxFlags()` |
+| `mail.ts` | Facade | Thin layer resolving `User` → `Maildir` instance, called by routes |
+
+Constants (`STANDARD_MAILBOXES`, `PATHS.MAIL`) live in `apps/api/src/lib/core/constants.ts`.
+
 ---
 
 ## 1. Filename Format
@@ -81,16 +97,14 @@ is stable even if Dovecot adds `,W=` (virtual size) or other extensions later:
 
 ```typescript
 function getMailIDfromFileName(fileName: string): string {
-    // Strip :2,FLAGS suffix
     const colonIndex = fileName.indexOf(':')
     const withoutFlags = colonIndex >= 0 ? fileName.substring(0, colonIndex) : fileName
-    // Strip ,S=size and ,W=vsize hints
     const commaIndex = withoutFlags.indexOf(',')
     return commaIndex >= 0 ? withoutFlags.substring(0, commaIndex) : withoutFlags
 }
 ```
 
-Add helpers to build and parse Maildir filenames:
+**File: `mailutils.ts`** — Add helpers to build and parse Maildir filenames:
 
 ```typescript
 const FLAG_MAP = { seen: 'S', replied: 'R', flagged: 'F', draft: 'D', trashed: 'T', forwarded: 'P' } as const
@@ -119,19 +133,17 @@ function parseFlagsFromFilename(fileName: string): { seen: boolean, replied: boo
 }
 ```
 
-Note: the regex uses `[A-Za-z]*` to capture both standard flags (uppercase) and Dovecot custom keywords (lowercase).
+The regex uses `[A-Za-z]*` to capture both standard flags (uppercase) and Dovecot custom keywords (lowercase).
 Eigen only interprets the uppercase flags but preserves the full flag string when rebuilding filenames to avoid
 stripping keywords Dovecot set.
 
-To preserve unknown flags during rename, add a helper that replaces only the known flags while keeping the rest:
+To preserve unknown flags during rename:
 
 ```typescript
 function rebuildFlagsSuffix(currentFilename: string, changes: Partial<Record<string, boolean>>): string {
     const match = currentFilename.match(/:2,([A-Za-z]*)/)
     const existing = match?.[1] || ''
-    // Keep lowercase (keyword) flags untouched
     const keywords = existing.replace(/[A-Z]/g, '')
-    // Build new standard flags
     const current = parseFlagsFromFilename(currentFilename)
     const merged = { ...current, ...changes }
     const standardFlags = Object.entries(FLAG_MAP)
@@ -174,25 +186,24 @@ emails table:
 The frontend can keep calling it "starred" in the UI — it maps to `\Flagged` in IMAP, which is what every mail
 client uses for stars/importance.
 
-#### Writing flags to disk (`maildir.ts`)
+#### Writing flags to disk
 
-When Eigen changes a flag (e.g. `messageSetRead`), rename the file to update the flag suffix. Use
-`rebuildFlagsSuffix()` to preserve any Dovecot keyword flags:
+When Eigen changes a flag (e.g. `messageSetRead`), `MaildirStore` renames the file. Use `rebuildFlagsSuffix()` to
+preserve any Dovecot keyword flags:
 
 ```typescript
+// In Maildir (orchestrator)
 async messageSetRead(messageId: string, read: boolean): Promise<void> {
-    const email = await this.db.getEmail(messageId)
+    const email = this.db.getEmail(messageId)
     if (!email) throw new ApiError(404, `Message '${messageId}' not found`)
 
-    const oldPath = this.getFullPathByFilename(email.mailbox, email.filename)
     const newFlagStr = rebuildFlagsSuffix(email.filename, { seen: read })
     const uniqueWithSize = email.filename.split(':')[0]
     const newFilename = `${uniqueWithSize}:2,${newFlagStr}`
-    const newPath = this.getFullPathByFilename(email.mailbox, newFilename)
 
-    await this.storage.rename(oldPath, newPath)
-    await this.db.setRead(messageId, read)
-    await this.db.setFilename(messageId, newFilename)
+    await this.store.renameInCur(email.mailbox, email.filename, newFilename)
+    this.db.setRead(messageId, read)
+    this.db.setFilename(messageId, newFilename)
     // ... emit SSE
 }
 ```
@@ -201,7 +212,7 @@ This rename is safe in practice. The theoretical risk — Dovecot scanning `cur/
 temporarily "losing" the message — is unlikely and self-correcting (Dovecot finds the file again on next scan and
 assigns a new UID). For a self-hosted single-user system this is acceptable.
 
-#### Reading flags from disk (sync — see section 7)
+#### Reading flags from disk (sync — see section 8)
 
 During Maildir sync, parse flags from every filename in `cur/` and update the DB if they differ.
 
@@ -239,13 +250,13 @@ Each subfolder contains `cur/`, `new/`, `tmp/`, and an empty `maildirfolder` mar
 
 ### Fix
 
-**File: `maildir.ts`** — `createMailboxes()`
-
-Change default mailbox names to capitalized, rename `Spam` → `Junk`:
+**File: `core/constants.ts`** — Update `STANDARD_MAILBOXES`:
 
 ```typescript
-const STANDARD_MAILBOXES = ['', 'Sent', 'Drafts', 'Trash', 'Junk', 'Archive'] as const
+export const STANDARD_MAILBOXES = ['', 'Sent', 'Drafts', 'Trash', 'Junk', 'Archive'] as const
 ```
+
+**File: `maildir-store.ts`** — `createStandardMailboxes()`
 
 Add `maildirfolder` marker file creation for each subfolder:
 
@@ -262,17 +273,16 @@ const subscriptions = STANDARD_MAILBOXES.filter(m => m !== '').join('\n') + '\n'
 await this.storage.file(this.storage.pathJoin(this.basePath, 'subscriptions')).write(subscriptions)
 ```
 
-**File: `maildir.ts`** — `sanitizeDirName()`
+**File: `maildir-store.ts`** — `mailboxDir()`
 
 Stop lowercasing mailbox names. The directory names should be case-preserving:
 
 ```typescript
-private sanitizeDirName(mailbox: string, sub: string = '') {
+mailboxDir(mailbox: string): string {
     if (mailbox === '' || mailbox === 'INBOX') {
-        return sub ? `${this.basePath}/${sub}` : this.basePath
+        return this.basePath
     }
-    const dirname = `${this.basePath}/.${mailbox.replace('/', '.')}`
-    return sub ? `${dirname}/${sub}` : dirname
+    return `${this.basePath}/.${mailbox.replace('/', '.')}`
 }
 ```
 
@@ -301,8 +311,8 @@ Dovecot without the ACL plugin (which adds significant complexity for little ben
   `mail.db` so it is not lost.
 - **Don't expose in UI**: `mailboxesList()` filters to the known 6 mailboxes only. Extra folders created via IMAP
   are invisible in Eigen but fully accessible through any IMAP client.
-- **No nested folder support**: Remove `processNestedMailboxes()` from the hot path. Eigen never creates nested
-  folders. If an IMAP client creates `.Projects.2024/`, the sync engine indexes its messages but the UI ignores it.
+- **No nested folder support**: Eigen never creates nested folders. If an IMAP client creates `.Projects.2024/`,
+  the sync engine indexes its messages but the UI ignores it.
 
 ### Dovecot Configuration
 
@@ -319,11 +329,11 @@ through IMAP — they just don't appear in Eigen.
 ```
 write message → Maildir/new/{id}.eml
 mailboxGet('') → move new/*.eml to cur/*.eml (same filename)
-parseMessage() → add to DB
+readAndParse() → add to DB
 ```
 
-Messages go directly to `new/` with `.eml` extension. On `mailboxGet()`, moved to `cur/` with the same filename
-(no `:2,` suffix added).
+Messages go directly to `new/` with `.eml` extension via `MaildirStore.deliver()`. On `mailboxGet()`,
+`MaildirStore.moveNewToCur()` moves to `cur/` with the same filename (no `:2,` suffix added).
 
 ### Standard
 
@@ -353,30 +363,32 @@ as a no-op, so it is safe even if Dovecot moved the file first.
 
 ### Fix
 
-**File: `maildir.ts`** — `mailboxDeliver()`
+**File: `maildir-store.ts`** — Add `deliverAtomic()` and update `moveNewToCur()`:
 
 ```typescript
-async mailboxDeliver(message: string, mailbox = '', notify = true): Promise<string> {
+async deliverAtomic(message: string, mailbox: string): Promise<string> {
     const uniqueId = createUniqueMessageId()
     const size = Buffer.byteLength(message, 'utf-8')
     const filename = `${uniqueId},S=${size}`
-
-    const mailboxPath = this.sanitizeDirName(mailbox)
+    const mailboxPath = this.mailboxDir(mailbox)
 
     // Write to tmp/ first (atomic delivery)
-    const tmpPath = this.storage.pathJoin(mailboxPath, 'tmp', filename)
+    const tmpPath = this.storage.pathJoin(mailboxPath, TMP, filename)
     await this.storage.file(tmpPath).write(message)
 
     // Atomic rename to new/ (safe even with Dovecot running)
-    const newPath = this.storage.pathJoin(mailboxPath, 'new', filename)
+    const newPath = this.storage.pathJoin(mailboxPath, NEW, filename)
     await this.storage.rename(tmpPath, newPath)
 
-    // Trigger sync (handles new/ → cur/ if Dovecot hasn't already)
-    await this.syncMailbox(mailbox)
-    // ... emit SSE
     return uniqueId
 }
+
+async moveNewToCur(mailbox: string): Promise<void> {
+    // ... same loop but appends :2, suffix and catches ENOENT
+}
 ```
+
+**File: `maildir.ts`** — `mailboxDeliver()` calls `store.deliverAtomic()` then `syncMailbox()`.
 
 ### Incoming Mail Transition
 
@@ -387,7 +399,7 @@ typically delivered by Dovecot's LDA or LMTP service. Both paths can coexist:
 - **Eigen's `/mail/deliver/:to`**: Still works — delivers via `tmp/` → `new/`. Useful for internal notifications,
   forwarding, or deployments without a full MTA.
 
-No code changes needed for the endpoint itself — only the delivery mechanism inside it (use `tmp/` → `new/`).
+No code changes needed for the endpoint itself — only the delivery mechanism inside `MaildirStore`.
 
 ---
 
@@ -395,7 +407,8 @@ No code changes needed for the endpoint itself — only the delivery mechanism i
 
 ### Current
 
-Drafts are written directly to `Maildir/.drafts/cur/{id}.eml`. The filename has no `:2,` suffix and no `D` flag.
+Drafts are written directly to `Maildir/.drafts/cur/{id}.eml` via `MaildirStore.writeToMailboxCur()`. The filename
+has no `:2,` suffix and no `D` flag.
 
 ### Standard
 
@@ -409,8 +422,8 @@ cur/{unique},S=1234:2,DS
 
 **File: `maildir.ts`** — `messageHandleDraft()`
 
-Use the shared `mailboxDeliver()` to write to the Drafts mailbox's `new/`. The sync engine moves it to `cur/` with
-`:2,` suffix. Then update flags to `DS` via a rename.
+Use `store.deliverAtomic()` to write to the Drafts mailbox's `new/`. The sync engine moves it to `cur/` with
+`:2,` suffix. Then rename to add `DS` flags.
 
 When updating an existing draft, delete the old file first, then deliver the new version. IMAP messages are
 immutable — never modify a file in place.
@@ -421,7 +434,8 @@ immutable — never modify a file in place.
 
 ### Current
 
-Move: renames `{source}/cur/{id}.eml` → `{target}/cur/{id}.eml`. Copy: reads and writes content.
+Move: `MaildirStore.moveMessage()` renames `{source}/cur/{id}.eml` → `{target}/cur/{id}.eml`.
+Copy: `MaildirStore.copyMessage()` reads content and writes to target.
 
 ### Standard
 
@@ -429,52 +443,24 @@ Move: renames `{source}/cur/{id}.eml` → `{target}/cur/{id}.eml`. Copy: reads a
   operation — no file content is read or copied. Dovecot assigns a new UID when it picks up the file from `new/`.
   In standalone mode, Eigen's sync moves it to `cur/` with `:2,` and the original flags restored.
 - **Copy**: Must generate a **new unique ID** (IMAP COPY creates a new message). Read the source file content and
-  deliver to target via `tmp/` → `new/`.
+  deliver to target via `store.deliverAtomic()`.
 
 ### Fix
 
-**File: `maildir.ts`** — `messageMove()`
+**File: `maildir-store.ts`** — Update `moveMessage()` to move to target `new/` (stripping flags):
 
 ```typescript
-async messageMove(messageId: string, targetMailbox: string): Promise<void> {
-    const email = await this.db.getEmail(messageId)
-    if (!email) throw new ApiError(404, `Message '${messageId}' not found`)
-
-    const sourcePath = this.getFullPathByFilename(email.mailbox, email.filename)
-    const sourceMailbox = email.mailbox
-
-    // Strip :2,FLAGS — target gets it as "new" (unseen)
-    const filenameWithoutFlags = email.filename.split(':')[0]
-    const targetPath = this.storage.pathJoin(
-        this.sanitizeDirName(targetMailbox), 'new', filenameWithoutFlags
-    )
-
-    await this.storage.rename(sourcePath, targetPath)
-    await this.db.deleteEmail(messageId)
-
-    // Sync target mailbox (moves new/ → cur/, re-parses, inserts into DB)
-    await this.syncMailbox(targetMailbox)
-
-    this.emit(SSEventType.MAIL_MOVED, {
-        messageId, mailbox: sourceMailbox,
-        toMailbox: targetMailbox, subject: email.subject,
-    })
+async moveMessage(fromMailbox: string, fromFilename: string, toMailbox: string): Promise<void> {
+    const srcPath = this.storage.pathJoin(this.mailboxDir(fromMailbox), CUR, fromFilename)
+    // Strip :2,FLAGS — target gets it as "new"
+    const filenameWithoutFlags = fromFilename.split(':')[0]
+    const dstPath = this.storage.pathJoin(this.mailboxDir(toMailbox), NEW, filenameWithoutFlags)
+    await this.storage.rename(srcPath, dstPath)
 }
 ```
 
-**File: `maildir.ts`** — `messageCopy()`
-
-```typescript
-async messageCopy(messageId: string, targetMailbox: string): Promise<void> {
-    const email = await this.db.getEmail(messageId)
-    if (!email) throw new ApiError(404, `Message '${messageId}' not found`)
-
-    const sourcePath = this.getFullPathByFilename(email.mailbox, email.filename)
-    const content = await this.storage.file(sourcePath).text()
-    // Deliver with a new unique ID
-    await this.mailboxDeliver(content, targetMailbox, false)
-}
-```
+**File: `maildir.ts`** — `messageMove()` calls `store.moveMessage()`, deletes from DB, then syncs target mailbox.
+`messageCopy()` reads content via `store.readMessage()` and delivers via `store.deliverAtomic()`.
 
 ---
 
@@ -493,8 +479,8 @@ Eigen's `mail.db` must stay in sync with these changes.
 
 ### Approach: Scan-Based Sync
 
-Add a `syncMailbox(mailbox)` method that replaces the current `mailboxGet()` sync logic. This method handles four
-cases:
+Add a `syncMailbox(mailbox)` method in `Maildir` (the orchestrator). It uses `MaildirStore` for disk access and
+`MailDB` for record updates. Handles four cases:
 
 #### a) Messages in `new/` (standalone mode only)
 
@@ -511,7 +497,7 @@ for file in new/:
 for file in cur/:
     id = getMailIDfromFileName(file)
     if not in DB:
-        parse message → insert into DB with flags from filename
+        parseEml() → insert into DB with flags from filename
 ```
 
 #### c) Flag changes (file in `cur/` with different filename than DB)
@@ -521,7 +507,7 @@ for file in cur/:
     id = getMailIDfromFileName(file)
     dbRecord = DB.get(id)
     if dbRecord and dbRecord.filename != file:
-        parse flags from new filename → update DB flags + filename
+        parseFlagsFromFilename() → update DB flags + filename
 ```
 
 #### d) Deleted messages (record in DB, file gone from `cur/`)
@@ -536,49 +522,31 @@ for record in dbRecords:
 ### Implementation
 
 ```typescript
+// In Maildir (orchestrator)
 async syncMailbox(mailbox: string): Promise<void> {
-    const mailboxPath = this.sanitizeDirName(mailbox)
-    const curPath = this.storage.pathJoin(mailboxPath, 'cur')
-    const newPath = this.storage.pathJoin(mailboxPath, 'new')
-
     // Phase 1: Move new/ → cur/ (standalone mode / fallback)
-    // Safe even with Dovecot: ENOENT means Dovecot already moved it
-    if (await this.storage.dirExists(newPath)) {
-        for (const fileName of await this.storage.readdir(newPath)) {
-            if (fileName.startsWith('.')) continue
-            try {
-                const curFilename = `${fileName}:2,`
-                await this.storage.rename(
-                    this.storage.pathJoin(newPath, fileName),
-                    this.storage.pathJoin(curPath, curFilename)
-                )
-            } catch (e: any) {
-                if (e.code !== 'ENOENT') throw e
-                // File already moved by Dovecot — skip
-            }
-        }
-    }
+    await this.store.moveNewToCur(mailbox)  // catches ENOENT internally
 
     // Phase 2: Scan cur/ — build disk state
     const diskFiles = new Map<string, string>()  // messageId → filename
-    if (await this.storage.dirExists(curPath)) {
-        for (const fileName of await this.storage.readdir(curPath)) {
-            if (fileName.startsWith('.')) continue
+    for (const fileName of await this.store.listCurFiles(mailbox)) {
+        if (!fileName.startsWith('.')) {
             diskFiles.set(getMailIDfromFileName(fileName), fileName)
         }
     }
 
-    const dbRecords = await this.db.getAllEmails(mailbox)
+    const dbRecords = this.db.getAllEmails(mailbox)
     const dbById = new Map(dbRecords.map(r => [r.id, r]))
 
     // New messages (on disk but not in DB)
     for (const [id, fileName] of diskFiles) {
         if (!dbById.has(id)) {
-            const parsed = await this.parseMessage(id, mailbox, fileName)
+            const {content, size} = await this.store.readMessage(mailbox, fileName)
+            const parsed = await parseEml(id, mailbox, content, size)
             if (parsed) {
                 applyFlagsFromFilename(parsed, fileName)
                 parsed.filename = fileName
-                await this.db.addEmail(parsed)
+                this.db.addEmail(parsed)
             }
         }
     }
@@ -588,14 +556,14 @@ async syncMailbox(mailbox: string): Promise<void> {
         const diskFilename = diskFiles.get(id)
         if (diskFilename && diskFilename !== record.filename) {
             const flags = parseFlagsFromFilename(diskFilename)
-            await this.db.updateFlags(id, flags, diskFilename)
+            this.db.updateFlags(id, flags, diskFilename)
         }
     }
 
     // Deleted messages (in DB but not on disk)
     for (const [id] of dbById) {
         if (!diskFiles.has(id)) {
-            await this.db.deleteEmail(id)
+            this.db.deleteEmail(id)
         }
     }
 }
@@ -603,24 +571,13 @@ async syncMailbox(mailbox: string): Promise<void> {
 
 ### Discovering Extra Mailboxes
 
-To detect folders created by IMAP clients, `syncAllMailboxes()` should scan the Maildir root for dot-prefixed
-directories beyond the standard 6:
+To detect folders created by IMAP clients, `syncAllMailboxes()` scans via `MaildirStore.listMailboxDirs()` which
+already returns all dot-prefixed directories:
 
 ```typescript
 async syncAllMailboxes(): Promise<void> {
-    // Always sync the standard set
-    for (const mailbox of STANDARD_MAILBOXES) {
+    for (const mailbox of await this.store.listMailboxDirs()) {
         await this.syncMailbox(mailbox)
-    }
-    // Discover and sync any extra folders (created via IMAP)
-    const entries = await this.storage.readdir(this.basePath, { withFileTypes: true })
-    for (const entry of entries) {
-        if (entry.isDirectory() && entry.name.startsWith('.')) {
-            const name = entry.name.substring(1) // strip leading dot
-            if (!STANDARD_MAILBOXES.includes(name) && !['cur','new','tmp'].includes(name)) {
-                await this.syncMailbox(name)
-            }
-        }
     }
 }
 ```
@@ -664,32 +621,40 @@ clients to re-download all messages (UIDs reset). Deleting `dovecot-keywords` lo
 
 ---
 
-## 10. `parseMessage()` Changes
+## 10. `readAndParse()` Changes
 
 ### Current
 
-`parseMessage(messageId, mailbox)` builds the file path as `{sanitizeDirName(mailbox)}/cur/{messageId}.eml`.
+`readAndParse()` in `Maildir` builds the filename as `{messageId}.eml` and calls `MaildirStore.readMessage()`.
 This assumes a fixed filename format.
 
 ### Fix
 
-`parseMessage()` must accept the actual filename (which includes `,S=` and `:2,FLAGS` suffixes) or look it up.
-Since the DB now stores the `filename` column, use that:
+`readAndParse()` must accept the actual filename (which includes `,S=` and `:2,FLAGS` suffixes) or look it up.
+Since the DB stores a `filename` column:
 
 ```typescript
-private async parseMessage(messageId: string, mailbox: string, filename?: string): Promise<Email | null> {
+private async readAndParse(messageId: string, mailbox: string, filename?: string): Promise<Email | null> {
     if (!filename) {
-        const record = await this.db.getEmail(messageId)
+        const record = this.db.getEmail(messageId)
         filename = record?.filename
     }
     if (!filename) {
-        // Scan cur/ to find it (first-time parse, not yet in DB)
-        filename = await this.findFileByUniqueId(messageId, mailbox)
+        filename = await this.store.findFileByUniqueId(messageId, mailbox)
     }
     if (!filename) return null
 
-    const filePath = `${this.sanitizeDirName(mailbox)}/cur/${filename}`
-    // ... parse as before
+    const {content, size} = await this.store.readMessage(mailbox, filename)
+    return parseEml(messageId, mailbox, content, size)
+}
+```
+
+`MaildirStore.findFileByUniqueId()` scans `cur/` looking for a file whose unique part matches:
+
+```typescript
+async findFileByUniqueId(uniqueId: string, mailbox: string): Promise<string | undefined> {
+    const files = await this.listCurFiles(mailbox)
+    return files.find(f => getMailIDfromFileName(f) === uniqueId)
 }
 ```
 
@@ -732,6 +697,10 @@ Since data is throwaway during dev, just replace the schema. No migration needed
 
 ## 12. Summary of Changes by File
 
+### `apps/api/src/lib/core/constants.ts`
+
+- Update `STANDARD_MAILBOXES`: `Spam` → `Junk`
+
 ### `apps/api/src/lib/mail/mailutils.ts`
 
 | Function | Change |
@@ -744,26 +713,32 @@ Since data is throwaway during dev, just replace the schema. No migration needed
 | **new** `rebuildFlagsSuffix()` | Update standard flags while preserving keyword flags |
 | **new** `applyFlagsFromFilename()` | Apply parsed flags to an EmailSummary |
 
+### `apps/api/src/lib/mail/maildir-store.ts`
+
+| Method | Change |
+|--------|--------|
+| `createStandardMailboxes()` | Add `maildirfolder` markers, write `subscriptions` file |
+| `mailboxDir()` | Stop lowercasing, case-preserving |
+| `deliver()` | Replace with `deliverAtomic()`: `tmp/` → `new/`, `,S=` size hint, no extension |
+| `moveNewToCur()` | Append `:2,` suffix, catch `ENOENT` for Dovecot coexistence |
+| `moveMessage()` | Move to target `new/` (strip flags) instead of target `cur/` |
+| **new** `findFileByUniqueId()` | Scan `cur/` to find file matching a message ID |
+| **new** `renameInCur()` | Rename file within same `cur/` directory (for flag updates) |
+
 ### `apps/api/src/lib/mail/maildir.ts`
 
 | Method | Change |
 |--------|--------|
-| `createMailboxes()` | Capitalize names, `Spam` → `Junk`, add `maildirfolder`, write `subscriptions` |
-| `sanitizeDirName()` | Stop lowercasing, handle INBOX as root |
-| `getFullPath()` | Use `filename` column instead of `{id}.eml` |
-| `mailboxDeliver()` | Write to `tmp/` first, `rename()` to `new/`, include `,S=`, accept target mailbox |
+| `mailboxDeliver()` | Call `store.deliverAtomic()`, then `syncMailbox()` |
 | `mailboxGet()` | Call `syncMailbox()` then return from DB |
 | `mailboxesList()` | Filter to `STANDARD_MAILBOXES` only |
-| `messageMove()` | Rename source `cur/` → target `new/` (strip flags), sync target |
-| `messageCopy()` | Read content, deliver to target with new unique ID |
-| `messageHandleDraft()` | Use `mailboxDeliver()` to Drafts, then set `DS` flags via rename |
-| `messageSetRead()` | Rename file to update `S` flag, preserve keyword flags |
-| `messageDelete()` | Delete file and DB record (no change) |
-| `parseMessage()` | Accept filename parameter, look up from DB/disk |
+| `messageMove()` | Call `store.moveMessage()` (to `new/`), delete from DB, sync target |
+| `messageCopy()` | Read content, deliver via `store.deliverAtomic()` |
+| `messageHandleDraft()` | Use `store.deliverAtomic()` to Drafts, then rename for `DS` flags |
+| `messageSetRead()` | Rename file via `store.renameInCur()`, preserve keyword flags |
+| `readAndParse()` | Accept filename parameter, look up from DB/disk |
 | **new** `syncMailbox()` | Full scan-based sync (new/ → cur/, new files, flag changes, deletions) |
-| **new** `syncAllMailboxes()` | Sync standard 6 + discover extra IMAP-created folders |
-| **new** `findFileByUniqueId()` | Scan `cur/` to find file matching a message ID |
-| **remove** `processNestedMailboxes()` | No longer needed (fixed mailbox set) |
+| **new** `syncAllMailboxes()` | Sync all mailboxes via `store.listMailboxDirs()` |
 
 ### `apps/api/src/lib/mail/maildb.ts`
 
@@ -773,16 +748,15 @@ Since data is throwaway during dev, just replace the schema. No migration needed
 | `moveEmail()` | Remove (moves go through delete + re-sync) |
 | **new** `updateFlags()` | Update flag columns + filename from sync |
 | **new** `setFilename()` | Update filename after flag-change rename |
-| `setRead()` | Keep (also updates filename via `messageSetRead`) |
 | `~ setStarred()` → `setFlagged()` | Rename to match IMAP semantics |
 
 ### `apps/api/src/lib/mail/schema.ts`
 
 Add `filename`, `isReplied`, rename `isStarred` → `isFlagged`, remove `_isParsed`.
 
-### `apps/api/src/lib/mail/mailfile.ts`
+### `apps/api/src/lib/mail/db-config.ts`
 
-No changes needed. EML content generation is independent of Maildir format.
+Update migration SQL to match new schema.
 
 ### `packages/lib/src/types/mail.ts`
 
@@ -848,17 +822,19 @@ The `~/Maildir` path maps to `data/home/{userId}/eigen.mail/Maildir` in Eigen's 
 ## 14. Implementation Order
 
 1. **Filename format** — `createUniqueMessageId()`, `getMailIDfromFileName()`, `buildMaildirFilename()`,
-   `parseFlagsFromFilename()`, `rebuildFlagsSuffix()`. Foundation for everything else.
-2. **Schema update** — Add `filename`, `isReplied`, rename `isStarred` → `isFlagged`, remove `_isParsed`.
-3. **Delivery flow** — `tmp/` → `new/` with `,S=` size hint, no extension, accept target mailbox.
-4. **Mailbox names** — Capitalize, `Spam` → `Junk`, add `maildirfolder` markers, write `subscriptions`.
-5. **`syncMailbox()`** — The core sync engine: `new/` → `cur/` (with ENOENT handling), new files, flag changes,
-   deletions.
-6. **Flag writes** — `messageSetRead()` renames file, preserves keyword flags.
-7. **Move/Copy** — Move via rename to target `new/` (no content read). Copy via `mailboxDeliver()`.
-8. **Draft handling** — Standard delivery to Drafts + `DS` flag rename.
-9. **Folder policy** — Filter `mailboxesList()` to standard 6, remove `processNestedMailboxes()`,
-   add `syncAllMailboxes()` for extra-folder discovery.
+   `parseFlagsFromFilename()`, `rebuildFlagsSuffix()` in `mailutils.ts`. Foundation for everything else.
+2. **Schema update** — Add `filename`, `isReplied`, rename `isStarred` → `isFlagged`, remove `_isParsed`
+   in `schema.ts` and `db-config.ts`.
+3. **Delivery flow** — `store.deliverAtomic()`: `tmp/` → `new/` with `,S=` size hint, no extension.
+4. **Mailbox names** — Update `STANDARD_MAILBOXES` in `core/constants.ts` (`Spam` → `Junk`), update
+   `mailboxDir()` to stop lowercasing, add `maildirfolder` markers, write `subscriptions`.
+5. **`syncMailbox()`** — The core sync engine in `Maildir`: `new/` → `cur/` (with ENOENT handling), new files,
+   flag changes, deletions.
+6. **Flag writes** — `messageSetRead()` renames file via `store.renameInCur()`, preserves keyword flags.
+7. **Move/Copy** — Move via `store.moveMessage()` to target `new/` (no content read). Copy via
+   `store.deliverAtomic()`.
+8. **Draft handling** — Standard delivery to Drafts via `store.deliverAtomic()` + `DS` flag rename.
+9. **Folder policy** — Filter `mailboxesList()` to standard 6, add `syncAllMailboxes()` for extra-folder discovery.
 10. **Frontend** — `isStarred` → `isFlagged`, `Spam` → `Junk`.
 11. **Remove `.attributes`** — No longer needed with Dovecot managing special-use.
 12. **Filesystem watcher** — Watch `cur/` and `new/` for real-time sync with debounce.
