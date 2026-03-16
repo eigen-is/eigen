@@ -106,6 +106,15 @@ export function getCalendarColor(event: CalendarEventOccurrence, calendars: Cale
     return '#4285f4';
 }
 
+export function getInviteStatus(event: CalendarEventOccurrence, userEmail?: string): 'pending' | 'declined' | null {
+    if (!event.data?.organizer || !userEmail) return null;
+    const attendee = event.data.attendees?.find(a => a.email.toLowerCase() === userEmail.toLowerCase());
+    if (!attendee) return null;
+    if (attendee.status === 'declined') return 'declined';
+    if (attendee.status === 'pending') return 'pending';
+    return null;
+}
+
 export const WEEKDAY_HEADERS = ['MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT', 'SUN'];
 
 export function parseOccurrenceDate(value: unknown): Date {

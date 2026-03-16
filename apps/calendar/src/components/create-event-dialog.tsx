@@ -1,5 +1,5 @@
 import {useEffect, useMemo, useState} from 'react';
-import {AlignLeft, Calendar, Clock, MapPin} from 'lucide-react';
+import {AlignLeft, Calendar, Clock, MapPin, Users} from 'lucide-react';
 import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle} from '@workspace/ui/components/dialog';
 import {Button} from '@workspace/ui/components/button';
 import {Input} from '@workspace/ui/components/input';
@@ -9,8 +9,10 @@ import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '@wo
 import {Checkbox} from '@workspace/ui/components/checkbox';
 import {useCalendars, useCreateEvent, useSharedCalendars} from '@workspace/lib/calendar';
 import {useAuth} from '@workspace/lib/auth';
+import type {Attendee} from '@workspace/lib/types/calendar';
 import {RecurrencePicker} from './recurrence-picker';
 import {addMinutes, roundToNext15Minutes, TimeSelect, timeToMinutes} from './time-select';
+import {AttendeeEditor} from './attendee-editor';
 
 type CalendarOption = {
     id: string;
@@ -63,6 +65,7 @@ export function CreateEventDialog({open, onOpenChange, defaultDate, defaultCalen
     const [startTime, setStartTime] = useState('09:00');
     const [endTime, setEndTime] = useState('09:30');
     const [rruleString, setRruleString] = useState<string | null>(null);
+    const [attendees, setAttendees] = useState<Attendee[]>([]);
     const [isLoading, setIsLoading] = useState(false);
 
     const selectedCal = calendarOptions.find(c => `${c.ownerId}:${c.id}` === selectedCalKey);
@@ -94,6 +97,7 @@ export function CreateEventDialog({open, onOpenChange, defaultDate, defaultCalen
             setStartTime(start);
             setEndTime(end);
             setRruleString(null);
+            setAttendees([]);
         }
     }, [open, defaultDate, defaultCalendarId, calendarOptions]);
 
@@ -146,6 +150,7 @@ export function CreateEventDialog({open, onOpenChange, defaultDate, defaultCalen
                 description: description.trim() || null,
                 location: location.trim() || null,
                 rrule: rruleString,
+                data: attendees.length > 0 ? {attendees} : undefined,
             });
             onOpenChange(false);
         } catch (error) {
@@ -221,6 +226,17 @@ export function CreateEventDialog({open, onOpenChange, defaultDate, defaultCalen
                                     startDate={new Date(startDate)}
                                 />
                             </div>
+                        </div>
+                    </div>
+
+                    <div className="flex items-start gap-3">
+                        <Users className="h-4 w-4 mt-2.5 text-muted-foreground shrink-0"/>
+                        <div className="flex-1">
+                            <AttendeeEditor
+                                attendees={attendees}
+                                onChange={setAttendees}
+                                currentUserEmail={user?.email}
+                            />
                         </div>
                     </div>
 

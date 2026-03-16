@@ -1,9 +1,21 @@
 import {useState} from 'react';
-import {AlignLeft, Calendar, Clock, MapPin, Pencil, Repeat, Trash2} from 'lucide-react';
+import {
+    AlignLeft,
+    Calendar,
+    Check,
+    Clock,
+    HelpCircle,
+    MapPin,
+    Pencil,
+    Repeat,
+    Trash2,
+    Users,
+    X as XIcon
+} from 'lucide-react';
 import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle} from '@workspace/ui/components/dialog';
 import {Button} from '@workspace/ui/components/button';
 import {DeleteDialog} from '@workspace/ui/components/layout/delete/delete-dialog';
-import {useCreateEvent, useDeleteEvent, useUpdateEvent} from '@workspace/lib/calendar';
+import {useCreateEvent, useDeleteEvent, useRsvp, useUpdateEvent} from '@workspace/lib/calendar';
 import {useAuth} from '@workspace/lib/auth';
 import type {CalendarEventOccurrence, CalendarItem, SharedCalendar} from '@workspace/lib/types/calendar';
 import {RRule} from 'rrule';
@@ -13,6 +25,7 @@ import {RecurringActionDialog} from './recurring-action-dialog';
 import {occurrenceDateToString, parseOccurrenceDate} from './calendar-utils';
 import {UserName} from '@workspace/ui/components/layout/user-name';
 import {EditEventDialog} from './edit-event-dialog';
+import {AttendeeList} from './attendee-editor';
 
 type EventDetailDialogProps = {
     open: boolean;
@@ -90,6 +103,7 @@ export function EventDetailDialog({open, onOpenChange, event, calendar, sharedCa
     const deleteEvent = useDeleteEvent(eventOwnerId);
     const createEvent = useCreateEvent(eventOwnerId);
     const updateEvent = useUpdateEvent(eventOwnerId);
+    const rsvp = useRsvp(user?.id || '');
 
     if (!event) return null;
 
@@ -98,6 +112,11 @@ export function EventDetailDialog({open, onOpenChange, event, calendar, sharedCa
     const calendarName = calendar?.name || sharedCalendar?.calendarName || null;
     const isShared = !!sharedCalendar;
     const canEdit = !isShared || sharedCalendar?.permission === 'write';
+    const isLinkedEvent = !!event.data?.organizer;
+    const myAttendeeStatus = event.data?.attendees?.find(
+        a => a.email.toLowerCase() === user?.email?.toLowerCase()
+    )?.status;
+    const hasAttendees = (event.data?.attendees?.length ?? 0) > 0;
 
     const handleDelete = async (action: RecurringAction) => {
         try {
@@ -199,6 +218,39 @@ export function EventDetailDialog({open, onOpenChange, event, calendar, sharedCa
                             <div className="flex items-start gap-3 text-sm">
                                 <AlignLeft className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0"/>
                                 <span className="whitespace-pre-wrap">{event.description}</span>
+                            </div>
+                        )}
+
+                        {hasAttendees && (
+                            <div className="flex items-start gap-3 text-sm">
+                                <Users className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0"/>
+                                <div className="flex-1">
+                                    <AttendeeList attendees={event.data!.attendees!}/>
+                                </div>
+                            </div>
+                        )}
+
+                        {isLinkedEvent && myAttendeeStatus && (
+                            <div className="pt-3 mt-3 border-t">
+                                <div className="text-sm font-medium mb-2">RSVP</div>
+                                <div className="flex gap-2">
+                                    {(['accepted', 'tentative', 'declined'] as const).map(status => (
+                                        <Button
+                                            key={status}
+                                            size="sm"
+                                            variant={myAttendeeStatus === status ? 'default' : 'outline'}
+                                            onClick={() => {
+                                                rsvp.mutate({calendarId: event.calendarId, eventId: event.id, status});
+                                                onOpenChange(false);
+                                            }}
+                                            className="gap-1"
+                                        >
+                                            {status === 'accepted' && <><Check className="h-3 w-3"/> Accept</>}
+                                            {status === 'tentative' && <><HelpCircle className="h-3 w-3"/> Maybe</>}
+                                            {status === 'declined' && <><XIcon className="h-3 w-3"/> Decline</>}
+                                        </Button>
+                                    ))}
+                                </div>
                             </div>
                         )}
 
