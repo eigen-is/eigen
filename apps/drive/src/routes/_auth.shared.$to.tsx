@@ -53,6 +53,10 @@ function DriveRoute() {
         }
     };
 
+    const onQuickLook = (path: DrivePath) => {
+        openPreview(path, folderContents ?? []);
+    };
+
     const onRowActivate = (path: DrivePath) => {
         if (path.type === 'folder') {
             navigate({
@@ -109,6 +113,7 @@ function DriveRoute() {
                 allowCreateStickies={false}
                 showBreadcrumb={false}
                 allowRename={to === 'by-me'}
+                onQuickLook={onQuickLook}
             />
         </>
     );

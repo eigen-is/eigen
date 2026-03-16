@@ -84,6 +84,18 @@ export class Mount {
         }
     }
 
+    get thumbsDir(): string {
+        return path.join(this.baseDir, 'thumbs');
+    }
+
+    get tmpDir(): string {
+        return path.join(this.baseDir, 'tmp');
+    }
+
+    get previewsDir(): string {
+        return path.join(this.tmpDir, 'previews');
+    }
+
     async init(): Promise<void> {
         if (!fs.existsSync(this.baseDir)) {
             fs.mkdirSync(this.baseDir, {recursive: true});
@@ -94,20 +106,28 @@ export class Mount {
         if (!fs.existsSync(this.thumbsDir)) {
             fs.mkdirSync(this.thumbsDir, {recursive: true});
         }
+        if (!fs.existsSync(this.previewsDir)) {
+            fs.mkdirSync(this.previewsDir, {recursive: true});
+        }
+
+        // Cleanup preview cache files older than 7 days
+        try {
+            const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
+            for (const entry of fs.readdirSync(this.previewsDir)) {
+                const filePath = path.join(this.previewsDir, entry);
+                const stat = fs.statSync(filePath);
+                if (stat.mtimeMs < cutoff) {
+                    fs.unlinkSync(filePath);
+                }
+            }
+        } catch {
+        }
 
         const dbPath = path.join('mounts', this.config.id, 'metadata.db');
         const managedDb = await this.getLocalDatabase(MOUNT_DB_CONFIG, dbPath);
         this.db = managedDb.db;
 
         await this.ensureRootFolder();
-    }
-
-    get tmpDir(): string {
-        return path.join(this.baseDir, 'tmp');
-    }
-
-    get thumbsDir(): string {
-        return path.join(this.baseDir, 'thumbs');
     }
 
     get dataDir(): string {

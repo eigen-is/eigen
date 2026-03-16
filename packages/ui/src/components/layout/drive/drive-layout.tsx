@@ -43,6 +43,7 @@ export type DriveLayoutProps = {
     allowCreateSheets?: boolean;
     allowRename?: boolean;
     allowMove?: boolean;
+    onQuickLook?: (path: DrivePath) => void;
     pid?: string;
 }
 
@@ -70,6 +71,7 @@ export function DriveLayout({
                                 allowUpload = true,
                                 allowRename = true,
                                 allowMove = true,
+                                onQuickLook,
                                 pid = undefined,
                                 showBreadcrumb = false,
                             }: DriveLayoutProps) {
@@ -159,6 +161,7 @@ export function DriveLayout({
         allowUpload,
         onRename: allowRename ? handleRenamePath : undefined,
         onMove: allowMove ? handleMovePath : undefined,
+        onQuickLook,
     };
 
     const listToolbar = (

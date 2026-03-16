@@ -6,6 +6,7 @@ type UseKeyboardListNavigationOptions<T> = {
     activeId?: string;
     getId: (item: T) => string;
     onSelect: (id: string) => void;
+    onQuickLook?: (id: string) => void;
     containerRef: RefObject<HTMLElement | null>;
     itemSelector?: string;
     onDelete?: (item: T) => void;
@@ -23,6 +24,7 @@ export function useKeyboardListNavigation<T>({
                                                  onDelete,
                                                  shouldNotify,
                                                  selection,
+                                                 onQuickLook,
                                              }: UseKeyboardListNavigationOptions<T>) {
     const [selectedIndex, setSelectedIndex] = useState(-1);
     const getIdRef = useRef(getId);
@@ -118,6 +120,15 @@ export function useKeyboardListNavigation<T>({
                 break;
 
             case ' ':
+                e.preventDefault();
+                if (selectedIndex >= 0 && selectedIndex < items.length) {
+                    const id = getId(items[selectedIndex]);
+                    if (onQuickLook) onQuickLook(id);
+                    else onSelect(id);
+                    scrollToRow(selectedIndex);
+                }
+                break;
+
             case 'Enter':
                 e.preventDefault();
                 if (selectedIndex >= 0 && selectedIndex < items.length) {

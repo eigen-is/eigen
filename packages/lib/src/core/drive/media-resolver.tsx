@@ -1,6 +1,6 @@
 import {createContext, type ReactNode, useContext, useMemo} from 'react';
 import {useFolderContent} from './hooks/use-drive';
-import {getDriveEmbedUrl} from '../api';
+import {getDrivePreviewUrl} from '../api';
 import type {DrivePath} from '../../types/drive';
 
 type MediaResolverValue = {
@@ -35,7 +35,7 @@ export function MediaResolverProvider({ownerId, mountId, mediaFolderId, chatFold
         resolveMediaUrl: (name: string) => {
             const file = mediaContents.find(f => f.name === name);
             if (!file) return null;
-            return getDriveEmbedUrl(ownerId, mountId, file.id, name);
+            return getDrivePreviewUrl(ownerId, mountId, file.id);
         },
         resolveMediaPath: (name: string) => mediaContents.find(f => f.name === name),
         resolveChatId: (name: string) => chatContents.find(f => f.name === name)?.id ?? null,
