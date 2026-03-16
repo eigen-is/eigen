@@ -1,5 +1,5 @@
-import {getTextPreviewMode} from '@workspace/lib/constants';
-import {escapeHtml, wrapHtml} from './html-template';
+import {getTextPreviewMode, type TextPreviewMode} from '@workspace/lib/constants';
+import DOMPurify from 'isomorphic-dompurify';
 
 const LANGUAGE_MAP: Record<string, string> = {
     '.js': 'javascript', '.jsx': 'javascript', '.mjs': 'javascript', '.cjs': 'javascript',
@@ -19,6 +19,14 @@ const LANGUAGE_MAP: Record<string, string> = {
     '.toml': 'ini', '.ini': 'ini', '.conf': 'ini', '.cfg': 'ini',
 };
 
+function escapeHtml(text: string): string {
+    return text
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+}
+
 function getLanguageFromFileName(fileName: string): string | undefined {
     const ext = fileName.slice(fileName.lastIndexOf('.')).toLowerCase();
     return LANGUAGE_MAP[ext];
@@ -28,14 +36,19 @@ export function isTextPreviewSupported(mimeType: string, fileName: string): bool
     return getTextPreviewMode(mimeType, fileName) !== null;
 }
 
-export async function generateTextPreview(content: string, mimeType: string, fileName: string): Promise<string> {
-    const mode = getTextPreviewMode(mimeType, fileName);
+export type TextPreviewResult = {
+    body: string;
+    mode: TextPreviewMode;
+};
+
+export async function generateTextPreview(content: string, mimeType: string, fileName: string): Promise<TextPreviewResult> {
+    const mode = getTextPreviewMode(mimeType, fileName)!;
 
     if (mode === 'markdown') {
         const MarkdownIt = (await import('markdown-it')).default;
         const md = new MarkdownIt({html: false, linkify: true, typographer: true});
-        const body = md.render(content);
-        return wrapHtml(body, fileName);
+        const body = DOMPurify.sanitize(md.render(content), {FORCE_BODY: true});
+        return {body, mode};
     }
 
     if (mode === 'code') {
@@ -53,17 +66,14 @@ export async function generateTextPreview(content: string, mimeType: string, fil
                 const tree = lowlight.highlightAuto(content);
                 highlighted = toHtml(tree);
             }
-            const body = `<pre><code>${highlighted}</code></pre>`;
-            return wrapHtml(body, fileName);
+            return {body: `<pre><code>${highlighted}</code></pre>`, mode};
         } catch {
-            const body = `<pre><code>${escapeHtml(content)}</code></pre>`;
-            return wrapHtml(body, fileName);
+            return {body: `<pre><code>${escapeHtml(content)}</code></pre>`, mode};
         }
     }
 
     // plaintext
-    const body = `<pre><code>${escapeHtml(content)}</code></pre>`;
-    return wrapHtml(body, fileName);
+    return {body: `<pre><code>${escapeHtml(content)}</code></pre>`, mode};
 }
 
 function toHtml(tree: {

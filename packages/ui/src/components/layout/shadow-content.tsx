@@ -64,7 +64,7 @@ export function ShadowContent({
       }
       a { color: #0066cc; }
       img { max-width: 100%; height: auto; }
-      
+
       /* Add prose-like styling for better readability */
       p, ul, ol, blockquote { margin-bottom: 1em; }
       h1, h2, h3, h4, h5, h6 { margin-top: 1.5em; margin-bottom: 0.5em; font-weight: 600; }

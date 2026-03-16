@@ -175,6 +175,7 @@ Detailed architecture docs in `docs/`:
 | [PEOPLE.md](docs/PEOPLE.md)                                     | Org/team management UI                          |
 | [TESTING.md](docs/TESTING.md)                                   | Test setup, patterns, test files                |
 | [DOCKER.md](docs/DOCKER.md)                                     | Docker deployment                               |
+| [IMAP.md](docs/IMAP.md)                                         | IMAP/Dovecot Maildir compatibility plan         |
 
 ### Future/Planning Docs
 

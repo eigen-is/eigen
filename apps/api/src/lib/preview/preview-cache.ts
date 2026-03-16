@@ -4,18 +4,17 @@ import type {Mount} from '../mount';
 import type {DrivePath} from '@workspace/lib/types/drive';
 import {getImagePreview, getScreenCacheKey} from './image-preview';
 import {cleanupExtract, extractEmbeddedPreview, isExiftoolSupported} from './exiftool-preview';
-import {generateTextPreview, isTextPreviewSupported} from './text-preview';
+import {generateTextPreview, isTextPreviewSupported, type TextPreviewResult} from './text-preview';
 import {generateThumbnail} from '../shared/thumbnails';
 
 type PreviewResult =
     | { type: 'image'; data: Buffer; contentType: 'image/webp' }
-    | { type: 'html'; data: string; contentType: 'text/html' }
     | { type: 'redirect'; url: string }
     | null;
 
-function getHtmlCacheKey(pathId: string, updatedAt: Date | string): string {
+function getTextCacheKey(pathId: string, updatedAt: Date | string): string {
     const ts = updatedAt instanceof Date ? updatedAt.getTime() : new Date(updatedAt).getTime();
-    return `${pathId}-${ts}.html`;
+    return `${pathId}-${ts}.json`;
 }
 
 export async function getScreenPreview(mount: Mount, drivePath: DrivePath, embedUrl: string): Promise<PreviewResult> {
@@ -26,7 +25,7 @@ export async function getScreenPreview(mount: Mount, drivePath: DrivePath, embed
         return {type: 'redirect', url: embedUrl};
     }
 
-    // PDF → redirect to embed (Phase 5 will add WebP thumbnail)
+    // PDF → redirect to embed
     if (mime === 'application/pdf') {
         return {type: 'redirect', url: embedUrl};
     }
@@ -45,12 +44,37 @@ export async function getScreenPreview(mount: Mount, drivePath: DrivePath, embed
         return null;
     }
 
-    // Text/code/markdown → HTML
-    if (isTextPreviewSupported(mime, drivePath.name)) {
-        return await getHtmlPreview(mount, drivePath);
+    return null;
+}
+
+export async function getTextPreviewData(mount: Mount, drivePath: DrivePath): Promise<TextPreviewResult | null> {
+    const mime = drivePath.mimeType || '';
+    if (!isTextPreviewSupported(mime, drivePath.name)) return null;
+
+    const cacheFile = path.join(mount.previewsDir, getTextCacheKey(drivePath.id, drivePath.updatedAt));
+
+    // Cache hit
+    if (fs.existsSync(cacheFile)) {
+        const cached = JSON.parse(await Bun.file(cacheFile).text());
+        return cached as TextPreviewResult;
     }
 
-    return null;
+    // Read file content
+    const fileData = await mount.readFile(drivePath.id);
+    if (!fileData) return null;
+
+    let content: string;
+    try {
+        content = new TextDecoder('utf-8', {fatal: true}).decode(fileData);
+    } catch {
+        return null;
+    }
+
+    const result = await generateTextPreview(content, mime, drivePath.name);
+
+    // Write to cache
+    await Bun.write(cacheFile, JSON.stringify(result));
+    return result;
 }
 
 async function getExiftoolPreview(mount: Mount, drivePath: DrivePath): Promise<Buffer | null> {
@@ -77,31 +101,4 @@ async function getExiftoolPreview(mount: Mount, drivePath: DrivePath): Promise<B
     } finally {
         await cleanupExtract(extractPath);
     }
-}
-
-async function getHtmlPreview(mount: Mount, drivePath: DrivePath): Promise<PreviewResult> {
-    const cacheFile = path.join(mount.previewsDir, getHtmlCacheKey(drivePath.id, drivePath.updatedAt));
-
-    // Cache hit
-    if (fs.existsSync(cacheFile)) {
-        const data = await Bun.file(cacheFile).text();
-        return {type: 'html', data, contentType: 'text/html'};
-    }
-
-    // Read file content
-    const fileData = await mount.readFile(drivePath.id);
-    if (!fileData) return null;
-
-    let content: string;
-    try {
-        content = new TextDecoder('utf-8', {fatal: true}).decode(fileData);
-    } catch {
-        return null;
-    }
-
-    const html = await generateTextPreview(content, drivePath.mimeType, drivePath.name);
-
-    // Write to cache
-    await Bun.write(cacheFile, html);
-    return {type: 'html', data: html, contentType: 'text/html'};
 }

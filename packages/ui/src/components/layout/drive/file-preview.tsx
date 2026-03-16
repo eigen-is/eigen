@@ -1,8 +1,9 @@
 import {useHotkey} from "@tanstack/react-hotkeys";
-import {ChevronLeft, ChevronRight, Download, ExternalLink, X} from "lucide-react";
+import {ChevronLeft, ChevronRight, Download, ExternalLink, Loader2, X} from "lucide-react";
 import type {DrivePath} from "@workspace/lib/types/drive";
 import {isDocumentType, isInlineEditable} from "@workspace/lib/types/drive";
 import {getDocumentUrl, getInlineEditUrl} from "@workspace/lib/api";
+import {useTextPreview} from "@workspace/lib/drive";
 import {getFileIcon} from "./file-icon-helper";
 import type {PreviewMode} from "../preview-provider/preview-provider";
 
@@ -106,12 +107,8 @@ export function FilePreview({
                             className="w-[80vw] h-[calc(100vh-7rem)] rounded bg-background"
                         />
                     )}
-                    {previewMode === 'html' && (
-                        <iframe
-                            src={previewUrl}
-                            sandbox="allow-same-origin"
-                            className="w-[80vw] h-[calc(100vh-7rem)] rounded bg-white"
-                        />
+                    {previewMode === 'text' && (
+                        <TextPreviewContent path={path}/>
                     )}
                     {previewMode === 'fallback' && (
                         <div className="flex flex-col items-center gap-4 text-white">
@@ -141,6 +138,32 @@ export function FilePreview({
                     </FooterButton>
                 )}
             </div>
+        </div>
+    );
+}
+
+function TextPreviewContent({path}: { path: DrivePath }) {
+    const {data, isLoading} = useTextPreview(path.ownerId, path.mountId, path.id, true);
+
+    if (isLoading) {
+        return (
+            <div className="flex items-center justify-center w-[80vw] h-[calc(100vh-7rem)]">
+                <Loader2 className="size-6 text-white animate-spin"/>
+            </div>
+        );
+    }
+
+    if (!data?.body) {
+        return (
+            <div className="flex items-center justify-center w-[80vw] h-[calc(100vh-7rem)] text-white text-sm text-muted-foreground">
+                No preview available
+            </div>
+        );
+    }
+
+    return (
+        <div className="w-[80vw] h-[calc(100vh-7rem)] overflow-auto rounded bg-white dark:bg-zinc-900">
+            <div className="eigen-prose p-8 max-w-[52rem] mx-auto" dangerouslySetInnerHTML={{__html: data.body}}/>
         </div>
     );
 }
