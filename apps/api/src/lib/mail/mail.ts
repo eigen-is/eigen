@@ -19,9 +19,9 @@ export async function mailboxGet(user: User, mailbox: string) {
     return await mail.mailboxGet(mailbox);
 }
 
-export async function mailboxCreate(user: User, mailbox: string, attributes: string[] = []) {
+export async function mailboxCreate(user: User, mailbox: string) {
     const mail = await getMailClient(user);
-    return await mail.mailboxCreate(mailbox, attributes);
+    return await mail.mailboxCreate(mailbox);
 }
 
 export async function mailboxExists(user: User, mailbox: string) {
@@ -106,6 +106,11 @@ export async function messageSend(user: User, mail: EmailDraft) {
 export async function messageSetRead(user: User, messageId: string, read: boolean) {
     const mail = await getMailClient(user);
     return await mail.messageSetRead(messageId, read);
+}
+
+export async function messageSetFlagged(user: User, messageId: string, flagged: boolean) {
+    const mail = await getMailClient(user);
+    return await mail.messageSetFlagged(messageId, flagged);
 }
 
 export async function messageGetAttachment(user: User, messageId: string, index: number) {

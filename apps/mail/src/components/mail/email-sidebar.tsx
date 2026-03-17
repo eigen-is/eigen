@@ -48,10 +48,10 @@ const defaultMailboxes = [
         isStandard: true
     },
     {
-        path: "Spam",
+        path: "Junk",
         name: "Spam",
         icon: <AlertTriangle className="h-4 w-4"/>,
-        href: "/box/spam",
+        href: "/box/junk",
         unread: 0,
         flags: ['\\HasNoChildren', '\\Junk'],
         isStandard: true
@@ -163,7 +163,7 @@ export function EmailSidebar({
                     </div>
                 ) : (
                     standardMailboxList.map((item) => {
-                        const folderId = item.path?.toLowerCase() === 'inbox' ? '' : (item.path?.toLowerCase() || '');
+                        const folderId = item.path === '' || item.path?.toLowerCase() === 'inbox' ? '' : (item.path || '');
                         if (onMoveToFolder) {
                             return (
                                 <DroppableSidebarItem

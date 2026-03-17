@@ -30,6 +30,7 @@ const notificationTemplates: Partial<Record<MailEventType, NotificationTemplate>
 const dataOnlyTitles: Partial<Record<MailEventType, string>> = {
     [SSEventType.MAIL_READ_CHANGED]: 'Read status changed',
     [SSEventType.MAIL_DRAFT_UPDATED]: 'Draft updated',
+    [SSEventType.MAIL_FLAGS_CHANGED]: 'Flags changed',
 };
 
 type MailEventOptions = {

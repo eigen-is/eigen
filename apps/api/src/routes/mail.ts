@@ -18,6 +18,7 @@ import {
     messageMoveToSpam,
     messageMoveToTrash,
     messageSend,
+    messageSetFlagged,
     messageSetRead
 } from "../lib/mail/mail";
 
@@ -28,11 +29,10 @@ export const mailRouter = new Elysia({name: "mail"})
     // All other routes use /:ownerId/ pattern
     .get("/mail/:ownerId/mailboxes", async ({user}) => await mailboxesList(user), {auth: true})
     .get("/mail/:ownerId/mailbox/*", async ({params, user}) => await mailboxGet(user, params['*']), {auth: true})
-    .post("/mail/:ownerId/mailbox", async ({body, user}) => await mailboxCreate(user, body.mailbox, body.attributes), {
+    .post("/mail/:ownerId/mailbox", async ({body, user}) => await mailboxCreate(user, body.mailbox), {
         auth: true,
         body: t.Object({
             mailbox: t.String(),
-            attributes: t.Optional(t.Array(t.String()))
         })
     })
     .get("/mail/:ownerId/mailbox-exists/*", async ({
@@ -110,6 +110,16 @@ export const mailRouter = new Elysia({name: "mail"})
         auth: true,
         body: t.Object({
             read: t.Boolean()
+        })
+    })
+    .put("/mail/:ownerId/message/:id/flagged", async ({
+                                                          params,
+                                                          body,
+                                                          user
+                                                      }) => await messageSetFlagged(user, params.id, body.flagged), {
+        auth: true,
+        body: t.Object({
+            flagged: t.Boolean()
         })
     })
     .get("/mail/:ownerId/message/:id/attachment/:index/:fileName", async ({params, user, set}) => {

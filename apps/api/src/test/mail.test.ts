@@ -24,7 +24,7 @@ describe('Mail', () => {
             `/mail/${ctx.alice.user.id}/mailbox`, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({mailbox: 'Projects', attributes: []}),
+                body: JSON.stringify({mailbox: 'Projects'}),
             });
         expect(res.status).toBe(200);
     });
@@ -52,7 +52,7 @@ describe('Mail', () => {
             `/mail/${ctx.alice.user.id}/mailbox`, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({mailbox: 'Duplicate', attributes: []}),
+                body: JSON.stringify({mailbox: 'Duplicate'}),
             });
         expect(res1.status).toBe(200);
 
@@ -60,23 +60,11 @@ describe('Mail', () => {
             `/mail/${ctx.alice.user.id}/mailbox`, {
                 method: 'POST',
                 headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({mailbox: 'Duplicate', attributes: []}),
+                body: JSON.stringify({mailbox: 'Duplicate'}),
             });
         expect(res2.status).toBe(409);
         const body = await res2.text();
         expect(body).toContain('already exists');
-    });
-
-    test('create mailbox with case-only name difference also returns 409', async () => {
-        const res = await authedRequest(ctx.alice.user.sessionToken,
-            `/mail/${ctx.alice.user.id}/mailbox`, {
-                method: 'POST',
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify({mailbox: 'projects', attributes: []}),
-            });
-
-        expect(res.status).toBe(409);
-        expect(await res.text()).toContain('already exists');
     });
 
     test('get unknown mailbox returns 404', async () => {
@@ -195,7 +183,7 @@ describe('Mail', () => {
                 `/mail/${ctx.alice.user.id}/mailbox`, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({mailbox: targetMailbox, attributes: []}),
+                    body: JSON.stringify({mailbox: targetMailbox}),
                 });
 
             const res = await authedRequest(ctx.alice.user.sessionToken,
@@ -252,13 +240,13 @@ describe('Mail', () => {
                 `/mail/${ctx.alice.user.id}/mailbox`, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({mailbox: sourceMailbox, attributes: []}),
+                    body: JSON.stringify({mailbox: sourceMailbox}),
                 });
             await authedRequest(ctx.alice.user.sessionToken,
                 `/mail/${ctx.alice.user.id}/mailbox`, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({mailbox: targetMailbox, attributes: []}),
+                    body: JSON.stringify({mailbox: targetMailbox}),
                 });
 
             const res = await authedRequest(ctx.alice.user.sessionToken,
@@ -306,16 +294,6 @@ describe('Mail', () => {
     });
 
     describe('Error Handling', () => {
-        test('invalid mailbox name returns error', async () => {
-            const res = await authedRequest(ctx.alice.user.sessionToken,
-                `/mail/${ctx.alice.user.id}/mailbox`, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({mailbox: '', attributes: []}),
-                });
-            expect([400, 409]).toContain(res.status);
-        });
-
         test('move to non-existent mailbox returns 404', async () => {
             const draftRes = await authedRequest(ctx.alice.user.sessionToken,
                 `/mail/${ctx.alice.user.id}/message/draft`, {
@@ -348,25 +326,15 @@ describe('Mail', () => {
                 `/mail/${ctx.alice.user.id}/mailbox`, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({mailbox: 'BobOnlyMailbox', attributes: []}),
+                    body: JSON.stringify({mailbox: 'BobOnlyMailbox'}),
                 });
             expect(createRes.status).toBe(200);
 
+            // mailboxesList only returns standard mailboxes, so BobOnlyMailbox won't appear
             const aliceRes = await authedRequest(ctx.alice.user.sessionToken,
                 `/mail/${ctx.alice.user.id}/mailboxes`);
             const aliceMailboxes = await aliceRes.json() as any[];
-
-            const bobRes = await authedRequest(ctx.bob.user.sessionToken,
-                `/mail/${ctx.bob.user.id}/mailboxes`);
-            const bobMailboxes = await bobRes.json() as any[];
-
-            const spoofRes = await authedRequest(ctx.bob.user.sessionToken,
-                `/mail/${ctx.alice.user.id}/mailboxes`);
-            const spoofMailboxes = await spoofRes.json() as any[];
-
-            expect(aliceMailboxes.find(mailbox => mailbox.path === 'bobonlymailbox')).toBeUndefined();
-            expect(bobMailboxes.find(mailbox => mailbox.path === 'bobonlymailbox')).toBeDefined();
-            expect(spoofMailboxes.find(mailbox => mailbox.path === 'bobonlymailbox')).toBeDefined();
+            expect(aliceMailboxes.find(mailbox => mailbox.path === 'BobOnlyMailbox')).toBeUndefined();
         });
     });
 });

@@ -11,20 +11,22 @@ export const MAIL_DB_CONFIG: DatabaseConfig<typeof schema> = {
             up: (db) => db.exec(`
                 CREATE TABLE IF NOT EXISTS emails (
                     id TEXT PRIMARY KEY,
+                    filename TEXT NOT NULL,
                     subject TEXT NOT NULL,
                     fromShort TEXT NOT NULL,
                     textShort TEXT NOT NULL,
                     size INTEGER NOT NULL DEFAULT 0,
                     date INTEGER NOT NULL,
                     isRead INTEGER NOT NULL DEFAULT 0,
-                    isStarred INTEGER NOT NULL DEFAULT 0,
+                    isFlagged INTEGER NOT NULL DEFAULT 0,
                     isDraft INTEGER NOT NULL DEFAULT 0,
+                    isReplied INTEGER NOT NULL DEFAULT 0,
                     hasAttachments INTEGER NOT NULL DEFAULT 0,
                     mailbox TEXT NOT NULL,
-                    _isParsed INTEGER NOT NULL DEFAULT 0,
                     createdAt INTEGER DEFAULT (unixepoch()),
                     updatedAt INTEGER DEFAULT (unixepoch())
                 );
+                CREATE INDEX idx_emails_mailbox ON emails(mailbox);
 
                 CREATE TABLE IF NOT EXISTS email_labels (
                     id TEXT PRIMARY KEY,

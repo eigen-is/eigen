@@ -39,14 +39,14 @@ export function EmailDetailToolbar({
     return (
         <Toolbar>
             <div className="flex items-center gap-1">
-                {email.mailbox !== 'archive' && (
+                {email.mailbox !== 'Archive' && (
                     <TooltipButton
                         icon={Archive}
                         tooltipText="Archive"
                         onClick={() => onArchive && onArchive(email.id)}
                     />
                 )}
-                {email.mailbox !== 'spam' && (
+                {email.mailbox !== 'Junk' && (
                     <TooltipButton
                         icon={AlertTriangle}
                         tooltipText="Report Spam"
