@@ -226,6 +226,11 @@ export function CreateEventDialog({open, onOpenChange, defaultDate, defaultCalen
                                     onChange={setRruleString}
                                     startDate={new Date(startDate)}
                                 />
+                                {!allDay && (
+                                    <span className="text-xs text-muted-foreground ml-auto">
+                                        {Intl.DateTimeFormat().resolvedOptions().timeZone.split('/').pop()?.replace(/_/g, ' ')}
+                                    </span>
+                                )}
                             </div>
                         </div>
                     </div>
