@@ -33,6 +33,7 @@ export const CALENDAR_DB_CONFIG: DatabaseConfig<typeof schema> = {
                     endTime INTEGER NOT NULL,
                     allDay INTEGER NOT NULL DEFAULT 0,
                     rrule TEXT,
+                    timezone TEXT,
                     parentEventId TEXT,
                     recurrenceDate TEXT,
                     status TEXT NOT NULL DEFAULT 'confirmed',

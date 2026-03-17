@@ -48,6 +48,7 @@ export type CalendarEvent = {
     endTime: number
     allDay: boolean
     rrule: string | null
+    timezone: string | null
     parentEventId: string | null
     recurrenceDate: string | null
     status: 'confirmed' | 'tentative' | 'cancelled'
@@ -79,6 +80,7 @@ export type CreateEventInput = {
     description?: string | null
     location?: string | null
     rrule?: string | null
+    timezone?: string | null
     parentEventId?: string | null
     recurrenceDate?: string | null
     status?: 'confirmed' | 'tentative' | 'cancelled'
@@ -95,6 +97,7 @@ export type UpdateEventInput = {
     description?: string | null
     location?: string | null
     rrule?: string | null
+    timezone?: string | null
     status?: 'confirmed' | 'tentative' | 'cancelled'
     data?: EventData | null
 }
