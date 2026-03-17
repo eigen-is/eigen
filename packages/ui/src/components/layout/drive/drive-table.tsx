@@ -2,7 +2,7 @@ import React, {useCallback, useMemo, useRef, useState} from "react";
 import {Table, TableBody, TableCell, TableHead, TableHeader, TableRow} from "@workspace/ui/components/table";
 import {cn} from "@workspace/ui/lib/utils";
 import {formatDistanceToNow} from "date-fns";
-import {DEFAULT_MOUNT_ID, DrivePath, isDocumentType, isFolderType, isInlineEditable} from "@workspace/lib/types";
+import {DEFAULT_MOUNT_ID, DrivePath, isFolderType, isInlineEditable} from "@workspace/lib/types";
 import {DriveShareSummary} from "./drive-share-summary";
 import {ArrowRight, ChevronLeft, Download, Pencil, Trash2, UserRoundPlus} from "lucide-react";
 import {DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator} from "@workspace/ui/components/dropdown-menu";
@@ -225,9 +225,6 @@ export function DriveTable({
                                                 className: "h-4 w-4 mr-2 text-muted-foreground flex-shrink-0",
                                                 ...(isFolderType(item.type) ? {
                                                     fill: "var(--app-drive-light-color)"
-                                                } : {}),
-                                                ...(isDocumentType(item.type) ? {
-                                                    fill: "var(--app-stickies-light-color)"
                                                 } : {})
                                             }
                                         )}
