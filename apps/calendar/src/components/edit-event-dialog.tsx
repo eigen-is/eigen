@@ -310,7 +310,7 @@ export function EditEventDialog({open, onOpenChange, event, ownerUserId, calenda
                                     />
                                     {!allDay && (
                                         <span className="text-xs text-muted-foreground ml-auto">
-                                            {(event.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone).split('/').pop()?.replace(/_/g, ' ')}
+                                            {(event.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone).split('/').pop()?.replace(/_/g, ' ')} time zone
                                         </span>
                                     )}
                                 </div>

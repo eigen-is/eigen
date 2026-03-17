@@ -228,7 +228,7 @@ export function CreateEventDialog({open, onOpenChange, defaultDate, defaultCalen
                                 />
                                 {!allDay && (
                                     <span className="text-xs text-muted-foreground ml-auto">
-                                        {Intl.DateTimeFormat().resolvedOptions().timeZone.split('/').pop()?.replace(/_/g, ' ')}
+                                        {Intl.DateTimeFormat().resolvedOptions().timeZone.split('/').pop()?.replace(/_/g, ' ')} time zone
                                     </span>
                                 )}
                             </div>
