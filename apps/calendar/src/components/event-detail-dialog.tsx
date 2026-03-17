@@ -235,11 +235,8 @@ export function EventDetailDialog({open, onOpenChange, event, calendar, sharedCa
         <>
             <Dialog open={open && !showDeleteDialog && !showRecurringDeleteDialog && !showRecurringDeleteConfirm && !editOpen && !showRsvpScopeDialog} onOpenChange={onOpenChange}>
                 <DialogContent size="md">
-                    <DialogHeader>
-                        {/* <div className="flex items-start gap-3"> */}
-                            {/* <div className="h-4 w-4 rounded-full mt-1 shrink-0" style={{backgroundColor: color}}/> */}
-                            <DialogTitle className="text-xl">{event.title}</DialogTitle>
-                        {/* </div> */}
+                    <DialogHeader>]
+                        <DialogTitle className="text-xl">{event.title}</DialogTitle>
                     </DialogHeader>
 
                     <div className="space-y-3">
@@ -249,7 +246,7 @@ export function EventDetailDialog({open, onOpenChange, event, calendar, sharedCa
                                 <span>{formatTimeRange(event)}</span>
                                 {event.timezone && (
                                     <span className="ml-1.5 text-xs text-muted-foreground">
-                                        {event.timezone.split('/').pop()?.replace(/_/g, ' ')}
+                                        {event.timezone.split('/').pop()?.replace(/_/g, ' ')} time zone
                                     </span>
                                 )}
                             </div>
