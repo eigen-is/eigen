@@ -517,6 +517,40 @@ describe('IMAP/Dovecot Maildir Compatibility', () => {
         expect(flags.seen).toBe(true);
     });
 
+    // -- Copy creates new message --
+
+    test('messageCopy creates independent copy in target mailbox', async () => {
+        const draftRes = await authedRequest(ctx.charlie.user.sessionToken,
+            `/mail/${charlieId}/message/draft`, {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({mail: {subject: 'Copy Source', text: 'body'}}),
+            });
+        const draft = await draftRes.json() as any;
+
+        // Copy to Archive
+        const copyRes = await authedRequest(ctx.charlie.user.sessionToken,
+            `/mail/${charlieId}/message/copy`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({messageId: draft.id, targetMailbox: 'Archive'}),
+            });
+        expect(copyRes.status).toBe(200);
+
+        // Original still in Drafts
+        const draftsRes = await authedRequest(ctx.charlie.user.sessionToken,
+            `/mail/${charlieId}/mailbox/Drafts`);
+        const drafts = await draftsRes.json() as any[];
+        expect(drafts.some(m => m.id === draft.id)).toBe(true);
+
+        // Copy in Archive (different message ID)
+        const archiveRes = await authedRequest(ctx.charlie.user.sessionToken,
+            `/mail/${charlieId}/mailbox/Archive`);
+        const archive = await archiveRes.json() as any[];
+        const copied = archive.find(m => m.subject === 'Copy Source' && m.id !== draft.id);
+        expect(copied).toBeDefined();
+    });
+
     // -- Atomic delivery --
 
     test('deliverAtomic goes through tmp then new', async () => {

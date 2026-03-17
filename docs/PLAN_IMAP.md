@@ -647,30 +647,17 @@ async syncMailbox(mailbox: string): Promise<void> {
 }
 ```
 
-### `syncAllMailboxes()`
-
-Only syncs the 6 standard mailboxes (not extra IMAP-created folders):
-
-```typescript
-async syncAllMailboxes(): Promise<void> {
-    for (const mailbox of STANDARD_MAILBOXES) {
-        await this.syncMailbox(mailbox)
-    }
-}
-```
-
 ### When to Sync
 
 | Trigger | Method | Notes |
 |---------|--------|-------|
 | API request for mailbox contents | `syncMailbox(mailbox)` | Before returning data |
-| Periodic background poll | `syncAllMailboxes()` every 30s | Catches Dovecot changes |
-| After Eigen writes (deliver, move, etc.) | `syncMailbox(mailbox)` | Immediate consistency |
+| Filesystem watcher | `syncMailbox(mailbox)` via `fs.watch()` | Instant detection of Dovecot changes |
+| After Eigen writes (deliver, copy) | `syncMailbox(mailbox)` | Immediate consistency |
 
-**Start with polling. Add filesystem watchers later as an optimization.** `fs.watch()` has platform-specific
-quirks (especially on networked filesystems and Windows). Polling every 30s is simple, reliable, and sufficient
-for a self-hosted system. If lower latency is needed later, add `fs.watch()` on each mailbox's `cur/` and `new/`
-with debouncing.
+`MaildirStore.watchMailboxes()` sets up `fs.watch()` on each standard mailbox's `cur/` and `new/` directories.
+Changes trigger `syncMailbox()` which detects new messages, flag renames, and deletions, then emits SSE events.
+The `syncingMailboxes` reentrancy guard prevents redundant concurrent syncs on the same mailbox.
 
 ### SSE Events for Sync
 
@@ -835,7 +822,8 @@ Data is throwaway during dev — just replace the schema and migration. No backw
 | **new** `deliverToCur()` | `tmp/` → `cur/` with flags (for drafts, sent copies) |
 | **new** `findFileByUniqueId()` | Scan `cur/` to find file by message ID (fallback) |
 | **new** `renameInCur()` | Rename within same `cur/` (for flag updates) |
-| **new** `cleanStaleTmp()` | Remove `tmp/` files older than 36 hours |
+| **new** `watchMailboxes()` | `fs.watch()` on `cur/` + `new/` for each standard mailbox |
+| **new** `unwatchMailboxes()` | Close all filesystem watchers |
 
 ### `apps/api/src/lib/mail/maildir.ts`
 
@@ -851,7 +839,6 @@ Data is throwaway during dev — just replace the schema and migration. No backw
 | `readAndParse()` | Accept filename parameter, look up from DB/disk |
 | **new** `messageSetFlagged()` | Rename file to toggle `F` flag |
 | **new** `syncMailbox()` | Full scan sync: `new/` → `cur/`, new files, flag changes, deletions, SSE |
-| **new** `syncAllMailboxes()` | Sync 6 standard mailboxes |
 
 ### `apps/api/src/lib/mail/maildb.ts`
 
@@ -862,7 +849,6 @@ Data is throwaway during dev — just replace the schema and migration. No backw
 | `~ setStarred()` → `setFlagged()` | Rename |
 | **new** `updateFlags()` | Update flag columns + filename from sync |
 | **new** `setFilename()` | Update filename after flag rename |
-| **new** `updateMailbox()` | Update mailbox column (for moves) |
 
 ### `apps/api/src/lib/mail/mail-parse.ts`
 
@@ -941,10 +927,10 @@ The `~/Maildir` path maps to `data/home/{userId}/eigen.mail/Maildir` in Eigen's 
 | 4 | `maildir-store.ts` | `deliverAtomic()`, `deliverToCur()`, `moveNewToCur()`, `renameInCur()`, `findFileByUniqueId()`, `cleanStaleTmp()`. Fix `mailboxDir()`, `createStandardMailboxes()`. |
 | 5 | `maildb.ts` | Remove lowercase, add `updateFlags()`, `setFilename()`, `updateMailbox()`, rename `setStarred` → `setFlagged` |
 | 6 | `mail-parse.ts` | Remove hardcoded flag defaults |
-| 7 | `maildir.ts` | `syncMailbox()`, `syncAllMailboxes()`, update all methods to use new store/DB APIs, fix hardcoded names, add `messageSetFlagged()` |
+| 7 | `maildir.ts` | `syncMailbox()`, fs.watch via `MaildirStore`, update all methods to use new store/DB APIs, fix hardcoded names, add `messageSetFlagged()` |
 | 8 | `mail.ts`, `routes/mail.ts` | Fix facade mailbox names, add flagged route |
 | 9 | Frontend | `isStarred` → `isFlagged`, lowercase → canonical mailbox names, `Spam` → `Junk` |
-| 10 | Cleanup | Remove `.attributes` file support, add `tmp/` cleanup, periodic sync |
+| 10 | Cleanup | Remove `.attributes` file support, `fs.watch()` for live sync |
 
 Each step should be independently testable. Delete dev data between steps if schema changes.
 
@@ -958,8 +944,8 @@ Each step should be independently testable. Delete dev data between steps if sch
 | IMAP client moves message to custom folder | Eigen detects deletion from source. Message accessible via IMAP. | None — by design |
 | IMAP client moves message from custom folder to INBOX | Eigen detects new message on next INBOX sync. | None — works correctly |
 | Dovecot delivers 1000 messages at once | Next sync parses all 1000. Could take a few seconds. | Low — optimize later with header-only parse |
-| `mail.db` gets corrupted or deleted | Rebuild by running `syncAllMailboxes()` on empty DB. | None — DB is a cache |
+| `mail.db` gets corrupted or deleted | Rebuild by requesting each mailbox (triggers `syncMailbox()`). | None — DB is a cache |
 | File exists in `cur/` but is 0 bytes (partial write) | `parseEml()` returns null, message skipped in sync. | Low — log warning |
 | Filename has unexpected format (no `:2,`) | `parseFlagsFromFilename()` returns all-false. `getMailIDfromFileName()` returns whole filename. | Low — safe defaults |
 | Two Eigen instances for same user | Sync-on-request means each sees consistent state. Writes may conflict. | Out of scope — single-user |
-| Network filesystem (NFS) | `rename()` not atomic. `fs.watch()` unreliable. | Use polling, not watchers. Avoid NFS for Maildir. |
+| Network filesystem (NFS) | `rename()` not atomic. `fs.watch()` unreliable. | Avoid NFS for Maildir. |
