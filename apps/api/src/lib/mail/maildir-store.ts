@@ -97,12 +97,6 @@ export class MaildirStore {
         return this.storage.readdir(curPath)
     }
 
-    async listNewFiles(mailbox: string): Promise<string[]> {
-        const newPath = this.storage.pathJoin(this.mailboxDir(mailbox), NEW)
-        if (!await this.storage.dirExists(newPath)) return []
-        return this.storage.readdir(newPath)
-    }
-
     async readMessage(mailbox: string, filename: string): Promise<{content: string, size: number}> {
         const filePath = this.storage.pathJoin(this.mailboxDir(mailbox), CUR, filename)
         const file = this.storage.file(filePath)
@@ -133,11 +127,6 @@ export class MaildirStore {
         if (await this.storage.fileExists(filePath)) {
             await this.storage.unlink(filePath)
         }
-    }
-
-    async fileExistsInCur(mailbox: string, filename: string): Promise<boolean> {
-        const filePath = this.storage.pathJoin(this.mailboxDir(mailbox), CUR, filename)
-        return this.storage.fileExists(filePath)
     }
 
     async findFileByUniqueId(uniqueId: string, mailbox: string): Promise<string | undefined> {
