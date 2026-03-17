@@ -13,8 +13,8 @@ import {
     Settings,
     Sheet,
     StickyNote,
-    User,
-    Users
+    UserRound,
+    UsersRound
 } from "lucide-react";
 import {useRouter} from "@tanstack/react-router";
 import {Button} from "../../button.tsx";
@@ -76,7 +76,6 @@ function UserDropdown({rootRoute}: { rootRoute: TopbarProps['rootRoute'] }) {
                         <DialogDescription>
                             Logging out will end your current session. You will be logged out of your account and will
                             need to log in again to continue.
-
                         </DialogDescription>
                     </DialogHeader>
                     <DialogFooter className="flex justify-end gap-2">
@@ -119,7 +118,7 @@ function UserDropdown({rootRoute}: { rootRoute: TopbarProps['rootRoute'] }) {
                                     {app.icon === 'layout-dashboard' && <LayoutDashboard/>}
                                     {app.icon === 'mail' && <Mail/>}
                                     {app.icon === 'calendar' && <Calendar/>}
-                                    {app.icon === 'users' && <Users/>}
+                                    {app.icon === 'users' && <UsersRound/>}
                                     {app.icon === 'hard-drive' && <HardDrive/>}
                                     {app.icon === 'file-text' && <FileText/>}
                                     {app.icon === 'sticky-note' && <StickyNote/>}
@@ -134,7 +133,7 @@ function UserDropdown({rootRoute}: { rootRoute: TopbarProps['rootRoute'] }) {
                     <DropdownMenuSeparator/>
                     <DropdownMenuItem asChild>
                         <a href={getSpaceProfileUrl()}>
-                            <User/>
+                            <UserRound/>
                             Profile
                         </a>
                     </DropdownMenuItem>
