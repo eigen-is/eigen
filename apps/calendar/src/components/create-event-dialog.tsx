@@ -150,6 +150,7 @@ export function CreateEventDialog({open, onOpenChange, defaultDate, defaultCalen
                 description: description.trim() || null,
                 location: location.trim() || null,
                 rrule: rruleString,
+                timezone: allDay ? null : Intl.DateTimeFormat().resolvedOptions().timeZone,
                 data: attendees.length > 0 ? {attendees} : undefined,
             });
             onOpenChange(false);

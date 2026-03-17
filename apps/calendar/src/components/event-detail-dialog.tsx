@@ -245,7 +245,12 @@ export function EventDetailDialog({open, onOpenChange, event, calendar, sharedCa
                     <div className="space-y-3">
                         <div className="flex items-start gap-3 text-sm">
                             <Clock className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0"/>
-                            <span>{formatTimeRange(event)}</span>
+                            <div>
+                                <span>{formatTimeRange(event)}</span>
+                                {event.timezone && event.timezone !== Intl.DateTimeFormat().resolvedOptions().timeZone && (
+                                    <span className="ml-1 text-muted-foreground">({event.timezone})</span>
+                                )}
+                            </div>
                         </div>
 
                         {recurrenceText && (
