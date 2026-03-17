@@ -51,6 +51,7 @@ const CreateEventSchema = t.Object({
     description: t.Optional(t.Nullable(t.String())),
     location: t.Optional(t.Nullable(t.String())),
     rrule: t.Optional(t.Nullable(t.String())),
+    timezone: t.Optional(t.Nullable(t.String())),
     parentEventId: t.Optional(t.Nullable(t.String())),
     recurrenceDate: t.Optional(t.Nullable(t.String())),
     status: t.Optional(t.Union([t.Literal('confirmed'), t.Literal('tentative'), t.Literal('cancelled')])),
@@ -65,6 +66,7 @@ const UpdateEventSchema = t.Object({
     description: t.Optional(t.Nullable(t.String())),
     location: t.Optional(t.Nullable(t.String())),
     rrule: t.Optional(t.Nullable(t.String())),
+    timezone: t.Optional(t.Nullable(t.String())),
     status: t.Optional(t.Union([t.Literal('confirmed'), t.Literal('tentative'), t.Literal('cancelled')])),
     data: t.Optional(t.Nullable(EventDataSchema)),
 });

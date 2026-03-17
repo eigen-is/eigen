@@ -26,6 +26,7 @@ export const events = sqliteTable('events', {
     endTime: integer('endTime').notNull(),
     allDay: integer('allDay', {mode: 'boolean'}).notNull().default(false),
     rrule: text('rrule'),
+    timezone: text('timezone'),
     parentEventId: text('parentEventId'),
     recurrenceDate: text('recurrenceDate'),
     status: text('status').notNull().default('confirmed'),

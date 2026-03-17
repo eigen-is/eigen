@@ -81,6 +81,7 @@ async function pullPendingInvitations(
             endTime: event.endTime,
             allDay: event.allDay,
             rrule: event.rrule,
+            timezone: event.timezone,
             status: event.status,
             sequence: event.sequence,
             data: {
