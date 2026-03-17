@@ -11,7 +11,6 @@ import type {BunSQLiteDatabase} from 'drizzle-orm/bun-sqlite';
 import {and, eq, gte, isNull, lte, sql} from 'drizzle-orm';
 import {v4 as uuidv4} from 'uuid';
 import {RRule} from 'rrule';
-import {DateTime} from 'luxon';
 import type {Home} from '../home';
 import * as schema from './schema';
 import {CALENDAR_DB_CONFIG} from './db-config';
@@ -55,6 +54,54 @@ function computeEtag(event: {
         data: event.data,
     }));
     return hash.digest('hex');
+}
+
+type LocalComponents = { year: number; month: number; day: number; hour: number; minute: number; second: number };
+
+const intlCache = new Map<string, Intl.DateTimeFormat>();
+
+function getIntlFormatter(tz: string): Intl.DateTimeFormat {
+    let fmt = intlCache.get(tz);
+    if (!fmt) {
+        fmt = new Intl.DateTimeFormat('en-GB', {
+            timeZone: tz,
+            year: 'numeric', month: '2-digit', day: '2-digit',
+            hour: '2-digit', minute: '2-digit', second: '2-digit',
+            hour12: false,
+        });
+        intlCache.set(tz, fmt);
+    }
+    return fmt;
+}
+
+function utcToLocal(epochSeconds: number, tz: string): LocalComponents {
+    const fmt = getIntlFormatter(tz);
+    const parts = fmt.formatToParts(new Date(epochSeconds * 1000));
+    const get = (type: Intl.DateTimeFormatPartTypes) => parseInt(parts.find(p => p.type === type)!.value);
+    return {
+        year: get('year'),
+        month: get('month'),
+        day: get('day'),
+        hour: get('hour') % 24,
+        minute: get('minute'),
+        second: get('second'),
+    };
+}
+
+function localToUtcSeconds(tz: string, year: number, month: number, day: number, hour: number, minute: number, second: number): number {
+    const guessMs = Date.UTC(year, month - 1, day, hour, minute, second);
+    const guessEpoch = Math.floor(guessMs / 1000);
+    const local = utcToLocal(guessEpoch, tz);
+    const localMs = Date.UTC(local.year, local.month - 1, local.day, local.hour, local.minute, local.second);
+    const offsetMs = localMs - guessMs;
+    const adjusted = Math.floor((guessMs - offsetMs) / 1000);
+    const verify = utcToLocal(adjusted, tz);
+    const verifyMs = Date.UTC(verify.year, verify.month - 1, verify.day, verify.hour, verify.minute, verify.second);
+    if (verifyMs !== guessMs) {
+        const offsetMs2 = verifyMs - guessMs;
+        return Math.floor((new Date(guessMs).getTime() - offsetMs2) / 1000);
+    }
+    return adjusted;
 }
 
 function dbEventToCalendarEvent(row: typeof schema.events.$inferSelect): CalendarEvent {
@@ -1000,10 +1047,10 @@ function expandRecurrence(event: CalendarEvent, rangeFrom: number, rangeTo: numb
     if (tz) {
         // Timezone-aware expansion: convert to wall-clock, let rrule work in wall-clock space,
         // then convert results back to real UTC. This avoids rrule's broken built-in tzid handling.
-        const localDt = DateTime.fromSeconds(event.startTime, {zone: tz});
+        const local = utcToLocal(event.startTime, tz);
         const wallClockDtstart = new Date(Date.UTC(
-            localDt.year, localDt.month - 1, localDt.day,
-            localDt.hour, localDt.minute, localDt.second,
+            local.year, local.month - 1, local.day,
+            local.hour, local.minute, local.second,
         ));
 
         const rule = new RRule({
@@ -1012,12 +1059,12 @@ function expandRecurrence(event: CalendarEvent, rangeFrom: number, rangeTo: numb
         });
 
         // Pad range by ±1 day to handle timezone offset edge cases, then filter
-        const localFrom = DateTime.fromSeconds(rangeFrom - 86400, {zone: tz});
+        const localFrom = utcToLocal(rangeFrom - 86400, tz);
         const wallClockFrom = new Date(Date.UTC(
             localFrom.year, localFrom.month - 1, localFrom.day,
             localFrom.hour, localFrom.minute, localFrom.second,
         ));
-        const localTo = DateTime.fromSeconds(rangeTo + 86400, {zone: tz});
+        const localTo = utcToLocal(rangeTo + 86400, tz);
         const wallClockTo = new Date(Date.UTC(
             localTo.year, localTo.month - 1, localTo.day,
             localTo.hour, localTo.minute, localTo.second,
@@ -1027,15 +1074,10 @@ function expandRecurrence(event: CalendarEvent, rangeFrom: number, rangeTo: numb
         const results: CalendarEventOccurrence[] = [];
 
         for (const date of dates) {
-            const localOcc = DateTime.fromObject({
-                year: date.getUTCFullYear(),
-                month: date.getUTCMonth() + 1,
-                day: date.getUTCDate(),
-                hour: date.getUTCHours(),
-                minute: date.getUTCMinutes(),
-                second: date.getUTCSeconds(),
-            }, {zone: tz});
-            const ts = Math.floor(localOcc.toSeconds());
+            const ts = localToUtcSeconds(tz,
+                date.getUTCFullYear(), date.getUTCMonth() + 1, date.getUTCDate(),
+                date.getUTCHours(), date.getUTCMinutes(), date.getUTCSeconds(),
+            );
             if (ts >= rangeFrom && ts <= rangeTo) {
                 results.push({
                     ...event,
@@ -1107,28 +1149,22 @@ function computeOccurrenceTimes(parent: CalendarEvent, recurrenceDate: string): 
     if (parent.rrule) {
         if (tz) {
             // Timezone-aware: expand in wall-clock space, convert back to UTC
-            const localDt = DateTime.fromSeconds(parent.startTime, {zone: tz});
+            const local = utcToLocal(parent.startTime, tz);
             const wallClockDtstart = new Date(Date.UTC(
-                localDt.year, localDt.month - 1, localDt.day,
-                localDt.hour, localDt.minute, localDt.second,
+                local.year, local.month - 1, local.day,
+                local.hour, local.minute, local.second,
             ));
             const rule = new RRule({...RRule.parseString(parent.rrule), dtstart: wallClockDtstart});
-            // occDate is YYYY-MM-DD in wall-clock space (from formatOccurrenceDate)
             const dayStart = new Date(occDate);
             const dayEnd = new Date(occDate);
             dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
             const matches = rule.between(dayStart, dayEnd, true);
             if (matches.length > 0) {
                 const match = matches[0];
-                const localOcc = DateTime.fromObject({
-                    year: match.getUTCFullYear(),
-                    month: match.getUTCMonth() + 1,
-                    day: match.getUTCDate(),
-                    hour: match.getUTCHours(),
-                    minute: match.getUTCMinutes(),
-                    second: match.getUTCSeconds(),
-                }, {zone: tz});
-                const startTime = Math.floor(localOcc.toSeconds());
+                const startTime = localToUtcSeconds(tz,
+                    match.getUTCFullYear(), match.getUTCMonth() + 1, match.getUTCDate(),
+                    match.getUTCHours(), match.getUTCMinutes(), match.getUTCSeconds(),
+                );
                 return {startTime, endTime: startTime + duration};
             }
         } else {
@@ -1146,17 +1182,12 @@ function computeOccurrenceTimes(parent: CalendarEvent, recurrenceDate: string): 
 
     // Fallback: place dtstart's time-of-day onto the occurrence date
     if (tz) {
-        const localDt = DateTime.fromSeconds(parent.startTime, {zone: tz});
+        const local = utcToLocal(parent.startTime, tz);
         const occDateParts = occDate.toISOString().substring(0, 10).split('-');
-        const localOcc = DateTime.fromObject({
-            year: parseInt(occDateParts[0]),
-            month: parseInt(occDateParts[1]),
-            day: parseInt(occDateParts[2]),
-            hour: localDt.hour,
-            minute: localDt.minute,
-            second: localDt.second,
-        }, {zone: tz});
-        const startTime = Math.floor(localOcc.toSeconds());
+        const startTime = localToUtcSeconds(tz,
+            parseInt(occDateParts[0]), parseInt(occDateParts[1]), parseInt(occDateParts[2]),
+            local.hour, local.minute, local.second,
+        );
         return {startTime, endTime: startTime + duration};
     }
 
