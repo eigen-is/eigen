@@ -44,7 +44,7 @@ export default class Maildir {
         this.db = new MailDB(this.home)
         await this.db.init()
         if (isNew) {
-            await this.mailboxDeliver(welcomeMail(this.home.user.name, this.home.user.email), false)
+            await this.mailboxDeliver(welcomeMail(this.home.user.name, this.home.user.email))
         }
         this.store.watchMailboxes(mailbox => this.syncMailbox(mailbox))
     }
@@ -77,23 +77,9 @@ export default class Maildir {
         return this.getMailboxInfo(mailbox)
     }
 
-    async mailboxDeliver(message: string, notify = true): Promise<string> {
+    async mailboxDeliver(message: string): Promise<string> {
         const {uniqueId} = await this.store.deliverAtomic(message, '')
-
         await this.syncMailbox('')
-
-        if (notify) {
-            const email = this.db.getEmail(uniqueId)
-            if (email) {
-                this.emit(SSEventType.MAIL_RECEIVED, {
-                    messageId: email.id,
-                    mailbox: '',
-                    subject: email.subject,
-                    fromShort: email.fromShort,
-                }, {link: `/mail/box/inbox?mailId=${email.id}`, tag: 'mail'})
-            }
-        }
-
         return uniqueId
     }
 
@@ -371,12 +357,6 @@ export default class Maildir {
             }
         } finally {
             this.syncingMailboxes.delete(mailbox)
-        }
-    }
-
-    async syncAllMailboxes(): Promise<void> {
-        for (const mailbox of STANDARD_MAILBOXES) {
-            await this.syncMailbox(mailbox)
         }
     }
 
