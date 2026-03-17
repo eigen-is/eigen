@@ -30,7 +30,8 @@ Test → Eden Treaty / authedRequest() → app.handle() → Real business logic 
 | `drive.test.ts`     | Mounts, folders, files, sharing, ACL, docs, stickies |
 | `home.test.ts`      | Size, isolation                                      |
 | `contacts.test.ts`  | CRUD, labels, isolation                              |
-| `mail.test.ts`      | Mailboxes, isolation                                 |
+| `mail.test.ts`      | Mailboxes, drafts, moves, deletes, isolation         |
+| `mail-imap.test.ts` | Maildir format, flags, sync, simulated Dovecot       |
 | `chat.test.ts`      | Messages, whispers, commands, read-only ACL          |
 | `collab.test.ts`    | Yjs operations, storage                              |
 | `calendar.test.ts`           | Calendars, events, recurrence, sharing                             |
