@@ -247,8 +247,10 @@ export function EventDetailDialog({open, onOpenChange, event, calendar, sharedCa
                             <Clock className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0"/>
                             <div>
                                 <span>{formatTimeRange(event)}</span>
-                                {event.timezone && event.timezone !== Intl.DateTimeFormat().resolvedOptions().timeZone && (
-                                    <span className="ml-1 text-muted-foreground">({event.timezone})</span>
+                                {event.timezone && (
+                                    <span className="ml-1.5 text-xs text-muted-foreground">
+                                        {event.timezone.split('/').pop()?.replace(/_/g, ' ')}
+                                    </span>
                                 )}
                             </div>
                         </div>

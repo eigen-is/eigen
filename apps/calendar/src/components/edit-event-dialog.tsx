@@ -308,6 +308,11 @@ export function EditEventDialog({open, onOpenChange, event, ownerUserId, calenda
                                         onChange={setRruleString}
                                         startDate={new Date(startDate)}
                                     />
+                                    {!allDay && (
+                                        <span className="text-xs text-muted-foreground ml-auto">
+                                            {(event.timezone || Intl.DateTimeFormat().resolvedOptions().timeZone).split('/').pop()?.replace(/_/g, ' ')}
+                                        </span>
+                                    )}
                                 </div>
                             </div>
                         </div>
