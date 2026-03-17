@@ -61,17 +61,18 @@ export type ParsedMail = {
 
 export type EmailSummary = {
     id: string;
+    filename: string;
     subject: string;
     fromShort: string;
     textShort: string;
     date: Date;
     isRead: boolean;
-    isStarred: boolean;
+    isFlagged: boolean;
     isDraft: boolean;
+    isReplied: boolean;
     hasAttachments: boolean;
     mailbox: string;
     size: number;
-    _isParsed: boolean;
 };
 
 export type Email = ParsedMail & EmailSummary;

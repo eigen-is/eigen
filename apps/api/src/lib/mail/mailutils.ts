@@ -1,29 +1,82 @@
-import {v4 as uuidv4} from "uuid"
+import {hostname} from 'os'
+import type {EmailSummary} from '@workspace/lib/types/mail'
+
+let deliveryCounter = 0
 
 const STANDARD_MAILBOX_FLAGS: Record<string, string[]> = {
     '': ['\\HasNoChildren', '\\Inbox'],
-    'inbox': ['\\HasNoChildren', '\\Inbox'],
-    'sent': ['\\HasNoChildren', '\\Sent'],
-    'drafts': ['\\HasNoChildren', '\\Drafts'],
-    'trash': ['\\HasNoChildren', '\\Trash'],
-    'junk': ['\\HasNoChildren', '\\Junk'],
-    'spam': ['\\HasNoChildren', '\\Junk'],
-    'archive': ['\\HasNoChildren', '\\Archive'],
+    'Sent': ['\\HasNoChildren', '\\Sent'],
+    'Drafts': ['\\HasNoChildren', '\\Drafts'],
+    'Trash': ['\\HasNoChildren', '\\Trash'],
+    'Junk': ['\\HasNoChildren', '\\Junk'],
+    'Archive': ['\\HasNoChildren', '\\Archive'],
+}
+
+const FLAG_MAP = {seen: 'S', replied: 'R', flagged: 'F', draft: 'D', trashed: 'T', forwarded: 'P'} as const
+type FlagKey = keyof typeof FLAG_MAP
+
+export function createUniqueMessageId(): string {
+    const time = Math.floor(Date.now() / 1000)
+    const usec = (Date.now() % 1000) * 1000
+    const pid = process.pid
+    const seq = deliveryCounter++
+    const host = hostname().replace(/\//g, '\\057').replace(/:/g, '\\072')
+    return `${time}.M${usec}P${pid}Q${seq}.${host}`
 }
 
 export function getMailIDfromFileName(fileName: string): string {
-    let fileId = fileName.split(':')[0]
-    if (fileId.endsWith('.eml')) {
-        fileId = fileId.substring(0, fileId.length - 4)
-    }
-    return fileId
+    const colonIndex = fileName.indexOf(':')
+    const withoutFlags = colonIndex >= 0 ? fileName.substring(0, colonIndex) : fileName
+    const commaIndex = withoutFlags.indexOf(',')
+    return commaIndex >= 0 ? withoutFlags.substring(0, commaIndex) : withoutFlags
 }
 
-export function createUniqueMessageId(): string {
-    return `${Date.now()}.${uuidv4()}`
-}
-
-export function getStandardMailboxFlags(mailboxName: string): string[] {
-    const flags = STANDARD_MAILBOX_FLAGS[mailboxName.toLowerCase()]
+export function getStandardMailboxFlags(mailbox: string): string[] {
+    const flags = STANDARD_MAILBOX_FLAGS[mailbox]
     return flags ? [...flags] : ['\\HasNoChildren']
+}
+
+export function buildMaildirFilename(uniqueId: string, flags: Record<string, boolean>, size?: number): string {
+    const sizeHint = size != null ? `,S=${size}` : ''
+    const flagStr = Object.entries(FLAG_MAP)
+        .filter(([key]) => flags[key])
+        .map(([, char]) => char)
+        .sort()
+        .join('')
+    return `${uniqueId}${sizeHint}:2,${flagStr}`
+}
+
+export function parseFlagsFromFilename(fileName: string) {
+    const match = fileName.match(/:2,([A-Za-z]*)/)
+    const flagStr = match?.[1] || ''
+    return {
+        seen: flagStr.includes('S'),
+        replied: flagStr.includes('R'),
+        flagged: flagStr.includes('F'),
+        draft: flagStr.includes('D'),
+        trashed: flagStr.includes('T'),
+        forwarded: flagStr.includes('P'),
+    }
+}
+
+export function rebuildFlagsSuffix(currentFilename: string, changes: Partial<Record<FlagKey, boolean>>): string {
+    const match = currentFilename.match(/:2,([A-Za-z]*)/)
+    const existing = match?.[1] || ''
+    const keywords = existing.replace(/[A-Z]/g, '')
+    const current = parseFlagsFromFilename(currentFilename)
+    const merged = {...current, ...changes}
+    const standardFlags = Object.entries(FLAG_MAP)
+        .filter(([key]) => merged[key as FlagKey])
+        .map(([, char]) => char)
+        .sort()
+        .join('')
+    return standardFlags + keywords
+}
+
+export function applyFlagsFromFilename(email: EmailSummary, filename: string): void {
+    const flags = parseFlagsFromFilename(filename)
+    email.isRead = flags.seen
+    email.isFlagged = flags.flagged
+    email.isDraft = flags.draft
+    email.isReplied = flags.replied
 }

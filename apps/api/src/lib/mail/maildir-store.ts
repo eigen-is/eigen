@@ -1,7 +1,7 @@
 import {LocalFilesystem, PATHS, STANDARD_MAILBOXES} from '../core'
-import {getStandardMailboxFlags} from './mailutils'
+import {buildMaildirFilename, createUniqueMessageId} from './mailutils'
 
-const {ROOT, MAILDIR, CUR, NEW, TMP, ATTRIBUTES_FILE} = PATHS.MAIL
+const {ROOT, MAILDIR, CUR, NEW, TMP} = PATHS.MAIL
 
 export class MaildirStore {
     readonly basePath = MAILDIR
@@ -17,42 +17,17 @@ export class MaildirStore {
 
     async createStandardMailboxes(): Promise<void> {
         for (const mailbox of STANDARD_MAILBOXES) {
-            const mailboxPath = this.mailboxDir(mailbox)
-            if (await this.storage.dirExists(mailboxPath)) continue
-
-            await this.storage.mkdir(mailboxPath)
-            await this.storage.mkdir(this.storage.pathJoin(mailboxPath, CUR))
-            await this.storage.mkdir(this.storage.pathJoin(mailboxPath, NEW))
-            await this.storage.mkdir(this.storage.pathJoin(mailboxPath, TMP))
-
-            const attributesPath = this.storage.pathJoin(mailboxPath, ATTRIBUTES_FILE)
-            const attributes = getStandardMailboxFlags(mailbox)
-            await this.storage.file(attributesPath).write(JSON.stringify(attributes))
+            if (!await this.storage.dirExists(this.mailboxDir(mailbox))) {
+                await this.createMailboxDir(mailbox)
+            }
         }
+
+        const subscriptions = STANDARD_MAILBOXES.filter(m => m !== '').join('\n') + '\n'
+        await this.storage.file(this.storage.pathJoin(this.basePath, 'subscriptions')).write(subscriptions)
     }
 
     async mailboxDirExists(mailbox: string): Promise<boolean> {
         return this.storage.dirExists(this.mailboxDir(mailbox))
-    }
-
-    async listMailboxDirs(): Promise<string[]> {
-        const entries = await this.storage.readdir(this.basePath, {withFileTypes: true})
-        const mailboxes: string[] = ['']
-        for (const entry of entries) {
-            if (entry.isDirectory() && entry.name.startsWith('.') && ![CUR, NEW, TMP].includes(entry.name)) {
-                mailboxes.push(entry.name.substring(1))
-            }
-        }
-        return mailboxes
-    }
-
-    async getMailboxAttributes(mailbox: string): Promise<string[]> {
-        const attributesPath = this.storage.pathJoin(this.mailboxDir(mailbox), ATTRIBUTES_FILE)
-        if (await this.storage.fileExists(attributesPath)) {
-            return this.storage.file(attributesPath).json()
-        }
-        const name = this.storage.pathBasename(mailbox)
-        return getStandardMailboxFlags(name)
     }
 
     async createMailboxDir(mailbox: string): Promise<void> {
@@ -61,25 +36,55 @@ export class MaildirStore {
         await this.storage.mkdir(this.storage.pathJoin(mailboxPath, CUR))
         await this.storage.mkdir(this.storage.pathJoin(mailboxPath, NEW))
         await this.storage.mkdir(this.storage.pathJoin(mailboxPath, TMP))
+        if (mailbox !== '') {
+            await this.storage.file(this.storage.pathJoin(mailboxPath, 'maildirfolder')).write('')
+        }
     }
 
-    async deliver(message: string, mailbox: string, filename: string): Promise<void> {
+    async deliverAtomic(message: string, mailbox: string): Promise<{uniqueId: string, size: number}> {
+        const uniqueId = createUniqueMessageId()
+        const size = Buffer.byteLength(message, 'utf-8')
+        const filename = `${uniqueId},S=${size}`
         const mailboxPath = this.mailboxDir(mailbox)
-        const filePath = this.storage.pathJoin(mailboxPath, NEW, filename)
-        await this.storage.file(filePath).write(message)
+
+        const tmpPath = this.storage.pathJoin(mailboxPath, TMP, filename)
+        await this.storage.file(tmpPath).write(message)
+
+        const newPath = this.storage.pathJoin(mailboxPath, NEW, filename)
+        await this.storage.rename(tmpPath, newPath)
+
+        return {uniqueId, size}
+    }
+
+    async deliverToCur(mailbox: string, message: string, flags: Record<string, boolean>): Promise<{uniqueId: string, size: number, filename: string}> {
+        const uniqueId = createUniqueMessageId()
+        const size = Buffer.byteLength(message, 'utf-8')
+        const filename = buildMaildirFilename(uniqueId, flags, size)
+        const mailboxPath = this.mailboxDir(mailbox)
+
+        const tmpPath = this.storage.pathJoin(mailboxPath, TMP, filename)
+        await this.storage.file(tmpPath).write(message)
+
+        const curPath = this.storage.pathJoin(mailboxPath, CUR, filename)
+        await this.storage.rename(tmpPath, curPath)
+
+        return {uniqueId, size, filename}
     }
 
     async moveNewToCur(mailbox: string): Promise<void> {
         const mailboxPath = this.mailboxDir(mailbox)
         const newPath = this.storage.pathJoin(mailboxPath, NEW)
-        const curPath = this.storage.pathJoin(mailboxPath, CUR)
         if (!await this.storage.dirExists(newPath)) return
 
-        const files = await this.storage.readdir(newPath)
-        for (const fileName of files) {
-            const srcPath = this.storage.pathJoin(newPath, fileName)
-            if (await this.storage.fileExists(srcPath)) {
-                await this.storage.rename(srcPath, this.storage.pathJoin(curPath, fileName))
+        for (const fileName of await this.storage.readdir(newPath)) {
+            if (fileName.startsWith('.')) continue
+            const src = this.storage.pathJoin(newPath, fileName)
+            const curName = fileName.includes(':') ? fileName : `${fileName}:2,`
+            const dst = this.storage.pathJoin(mailboxPath, CUR, curName)
+            try {
+                await this.storage.rename(src, dst)
+            } catch (e: any) {
+                if (e.code !== 'ENOENT') throw e
             }
         }
     }
@@ -88,6 +93,12 @@ export class MaildirStore {
         const curPath = this.storage.pathJoin(this.mailboxDir(mailbox), CUR)
         if (!await this.storage.dirExists(curPath)) return []
         return this.storage.readdir(curPath)
+    }
+
+    async listNewFiles(mailbox: string): Promise<string[]> {
+        const newPath = this.storage.pathJoin(this.mailboxDir(mailbox), NEW)
+        if (!await this.storage.dirExists(newPath)) return []
+        return this.storage.readdir(newPath)
     }
 
     async readMessage(mailbox: string, filename: string): Promise<{content: string, size: number}> {
@@ -101,17 +112,18 @@ export class MaildirStore {
         return this.storage.file(filePath).arrayBuffer()
     }
 
-    async moveMessage(fromMailbox: string, fromFilename: string, toMailbox: string, toFilename: string): Promise<void> {
+    async moveMessage(fromMailbox: string, fromFilename: string, toMailbox: string): Promise<void> {
         const srcPath = this.storage.pathJoin(this.mailboxDir(fromMailbox), CUR, fromFilename)
-        const dstPath = this.storage.pathJoin(this.mailboxDir(toMailbox), CUR, toFilename)
+        const dstPath = this.storage.pathJoin(this.mailboxDir(toMailbox), CUR, fromFilename)
         await this.storage.rename(srcPath, dstPath)
     }
 
-    async copyMessage(fromMailbox: string, fromFilename: string, toMailbox: string, toFilename: string): Promise<void> {
-        const srcPath = this.storage.pathJoin(this.mailboxDir(fromMailbox), CUR, fromFilename)
-        const dstPath = this.storage.pathJoin(this.mailboxDir(toMailbox), CUR, toFilename)
-        const content = await this.storage.file(srcPath).text()
-        await this.storage.file(dstPath).write(content)
+    async renameInCur(mailbox: string, oldFilename: string, newFilename: string): Promise<void> {
+        const curPath = this.storage.pathJoin(this.mailboxDir(mailbox), CUR)
+        await this.storage.rename(
+            this.storage.pathJoin(curPath, oldFilename),
+            this.storage.pathJoin(curPath, newFilename),
+        )
     }
 
     async deleteMessage(mailbox: string, filename: string): Promise<void> {
@@ -121,14 +133,14 @@ export class MaildirStore {
         }
     }
 
-    async writeToMailboxCur(mailbox: string, filename: string, content: string): Promise<void> {
-        const filePath = this.storage.pathJoin(this.mailboxDir(mailbox), CUR, filename)
-        await this.storage.file(filePath).write(content)
-    }
-
     async fileExistsInCur(mailbox: string, filename: string): Promise<boolean> {
         const filePath = this.storage.pathJoin(this.mailboxDir(mailbox), CUR, filename)
         return this.storage.fileExists(filePath)
+    }
+
+    async findFileByUniqueId(uniqueId: string, mailbox: string): Promise<string | undefined> {
+        const files = await this.listCurFiles(mailbox)
+        return files.find(f => f.startsWith(uniqueId))
     }
 
     async dirSize(): Promise<number> {
@@ -136,12 +148,7 @@ export class MaildirStore {
     }
 
     mailboxDir(mailbox: string): string {
-        if (mailbox === '' || mailbox.toLowerCase() === 'inbox') {
-            return this.basePath
-        }
-        let dirname = `${this.basePath}/.${mailbox.toLowerCase().replace('/', '.')}`
-        dirname = dirname.replace(/\.{2,}/g, '.')
-        dirname = dirname.replace(/\/+/g, '/')
-        return dirname
+        if (mailbox === '' || mailbox === 'INBOX') return this.basePath
+        return `${this.basePath}/.${mailbox.replace('/', '.')}`
     }
 }

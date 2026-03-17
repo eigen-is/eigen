@@ -4,6 +4,7 @@ import {SSEventType} from '@workspace/lib/types/sse';
 import {
     invalidateDraftUpdated,
     invalidateMailDeleted,
+    invalidateMailFlagsChanged,
     invalidateMailMoved,
     invalidateMailReadChanged,
     invalidateMailReceived
@@ -42,6 +43,11 @@ export function handleMailSSEvent(event: SSEvent, queryClient: QueryClient): boo
 
         case SSEventType.MAIL_READ_CHANGED:
             invalidateMailReadChanged(queryClient, mail.messageId, mailbox);
+            invalidateMailboxes(queryClient);
+            return true;
+
+        case SSEventType.MAIL_FLAGS_CHANGED:
+            invalidateMailFlagsChanged(queryClient, mail.messageId, mailbox);
             invalidateMailboxes(queryClient);
             return true;
 

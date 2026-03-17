@@ -30,6 +30,7 @@ export const SSEventType = {
     MAIL_MOVED: 'mail:moved',
     MAIL_READ_CHANGED: 'mail:read-changed',
     MAIL_DRAFT_UPDATED: 'mail:draft-updated',
+    MAIL_FLAGS_CHANGED: 'mail:flags-changed',
     MAIL_SENT: 'mail:sent',
     // Drive events
     DRIVE_FOLDER_CREATED: 'drive:folder-created',
@@ -104,7 +105,7 @@ type SSEventMailNotification = SSEventBase & SSEventNotification & {
 
 // Mail data-only events (no body, no toast, just cache invalidation)
 type SSEventMailDataUpdate = SSEventBase & {
-    type: typeof SSEventType.MAIL_READ_CHANGED | typeof SSEventType.MAIL_DRAFT_UPDATED;
+    type: typeof SSEventType.MAIL_READ_CHANGED | typeof SSEventType.MAIL_DRAFT_UPDATED | typeof SSEventType.MAIL_FLAGS_CHANGED;
     mail: SSEventMailData;
 };
 

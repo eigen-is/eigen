@@ -79,7 +79,7 @@ function MailRoute() {
     };
 
     const handleDeleteEmail = async (mail: Email) => {
-        if (mail.mailbox === 'trash') {
+        if (mail.mailbox === 'Trash') {
             setPendingDeleteMail(mail);
             setDeleteDialogOpen(true);
         } else {
@@ -138,7 +138,7 @@ function MailRoute() {
 
     const handleArchiveEmailById = async (emailId: string) => {
         const email = await getEmailById(emailId);
-        if (email) handleMoveEmail(email, 'archive');
+        if (email) handleMoveEmail(email, 'Archive');
     };
 
     const handleArchiveEmailsByIds = async (emailIds: string[]) => {
@@ -147,7 +147,7 @@ function MailRoute() {
 
     const handleReportSpamById = async (emailId: string) => {
         const email = await getEmailById(emailId);
-        if (email) handleMoveEmail(email, 'spam');
+        if (email) handleMoveEmail(email, 'Junk');
     };
 
     const handleReportSpamByIds = async (emailIds: string[]) => {

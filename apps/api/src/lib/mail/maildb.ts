@@ -28,20 +28,21 @@ export default class MailDB {
 
         const record = {
             id: email.id,
+            filename: email.filename,
             subject: email.subject?.toString() || '',
             fromShort: String(email.fromShort || ''),
             textShort: String(email.textShort || ''),
             date,
             size: email.size,
             isRead: Boolean(email.isRead),
-            isStarred: Boolean(email.isStarred),
+            isFlagged: Boolean(email.isFlagged),
             isDraft: Boolean(email.isDraft),
+            isReplied: Boolean(email.isReplied),
             hasAttachments: Boolean(email.hasAttachments),
-            mailbox: String(email.mailbox || '').toLowerCase(),
-            _isParsed: Boolean(email._isParsed),
+            mailbox: String(email.mailbox || ''),
             createdAt: new Date(),
             updatedAt: new Date(),
-        } as const
+        }
 
         const existing = this.db.select().from(schema.emails).where(eq(schema.emails.id, record.id)).get()
         if (existing) {
@@ -57,12 +58,10 @@ export default class MailDB {
     }
 
     getEmailsCount(mailbox: string) {
-        mailbox = mailbox.toLowerCase()
         return this.db.select({count: count()}).from(schema.emails).where(eq(schema.emails.mailbox, mailbox)).get()!.count
     }
 
     getEmailsCountUnread(mailbox: string) {
-        mailbox = mailbox.toLowerCase()
         return this.db.select({count: count()}).from(schema.emails).where(
             and(eq(schema.emails.mailbox, mailbox), eq(schema.emails.isRead, false))
         ).get()!.count
@@ -77,36 +76,26 @@ export default class MailDB {
     }
 
     moveEmail(id: string, mailbox: string) {
-        mailbox = mailbox.toLowerCase()
-        const isDraft = mailbox === 'drafts'
-        this.db.update(schema.emails).set({mailbox, isDraft}).where(eq(schema.emails.id, id)).run()
-    }
-
-    renameMailbox(mailbox: string, newMailbox: string) {
-        mailbox = mailbox.toLowerCase()
-        newMailbox = newMailbox.toLowerCase()
-        this.db.update(schema.emails).set({mailbox: newMailbox}).where(eq(schema.emails.mailbox, mailbox)).run()
-    }
-
-    deleteMailbox(mailbox: string) {
-        mailbox = mailbox.toLowerCase()
-        this.db.delete(schema.emails).where(eq(schema.emails.mailbox, mailbox)).run()
+        this.db.update(schema.emails).set({mailbox}).where(eq(schema.emails.id, id)).run()
     }
 
     setRead(id: string, isRead: boolean) {
         this.db.update(schema.emails).set({isRead}).where(eq(schema.emails.id, id)).run()
     }
 
-    setStarred(id: string, isStarred: boolean) {
-        this.db.update(schema.emails).set({isStarred}).where(eq(schema.emails.id, id)).run()
+    setFlagged(id: string, isFlagged: boolean) {
+        this.db.update(schema.emails).set({isFlagged}).where(eq(schema.emails.id, id)).run()
     }
 
-    setDraft(id: string, isDraft: boolean) {
-        this.db.update(schema.emails).set({isDraft}).where(eq(schema.emails.id, id)).run()
+    setFilename(id: string, filename: string) {
+        this.db.update(schema.emails).set({filename}).where(eq(schema.emails.id, id)).run()
+    }
+
+    updateFlags(id: string, flags: {isRead: boolean, isFlagged: boolean, isDraft: boolean, isReplied: boolean}, filename: string) {
+        this.db.update(schema.emails).set({...flags, filename}).where(eq(schema.emails.id, id)).run()
     }
 
     getAllEmails(mailbox: string) {
-        mailbox = mailbox.toLowerCase()
         return this.db.select().from(schema.emails).where(eq(schema.emails.mailbox, mailbox)).all()
     }
 
