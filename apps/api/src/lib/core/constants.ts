@@ -1,4 +1,4 @@
-import { EIGEN_ACCENT_COLORS_SHUFFLED } from '@workspace/lib/constants';
+import {EIGEN_ACCENT_COLORS_SHUFFLED} from '@workspace/lib/constants';
 
 export const PATHS = {
     DRIVE: {
@@ -18,7 +18,6 @@ export const PATHS = {
         CUR: 'cur',
         NEW: 'new',
         TMP: 'tmp',
-        ATTRIBUTES_FILE: '.attributes'
     },
     CONTACTS: {
         ROOT: 'eigen.contacts',
@@ -31,7 +30,7 @@ export const PATHS = {
     }
 } as const;
 
-export const STANDARD_MAILBOXES = ['', 'Sent', 'Drafts', 'Trash', 'Spam', 'Archive'] as const;
+export const STANDARD_MAILBOXES = ['', 'Sent', 'Drafts', 'Trash', 'Junk', 'Archive'] as const;
 
 export const DEFAULT_LABELS = [
     {name: 'Family', color: EIGEN_ACCENT_COLORS_SHUFFLED[0].value},

@@ -1,9 +1,8 @@
 import {type QueryClient, useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {getMailComposeUrl, mailApi} from '@workspace/lib/api.ts';
-import {Email} from "@workspace/lib/types/mail";
+import type {Email} from "@workspace/lib/types/mail";
 import {useAuth} from '@workspace/lib/auth';
 
-// Define query keys for reuse
 export const emailKeys = {
     all: ['emails'] as const,
     lists: () => [...emailKeys.all, 'list'] as const,
@@ -12,7 +11,6 @@ export const emailKeys = {
     detail: (id: string) => [...emailKeys.details(), id] as const,
 };
 
-// Hook to fetch emails for a specific mailbox
 export function useEmails(mailboxPath: string) {
     const {user} = useAuth();
     const ownerId = user?.id || '';
@@ -22,16 +20,14 @@ export function useEmails(mailboxPath: string) {
         queryFn: async () => {
             let path = mailboxPath.toLowerCase();
             path = path === 'inbox' ? '' : path;
-            // Wildcard route - use type assertion for dynamic path
             const response = await (mailApi({ownerId}).mailbox as any)[path].get();
             return (response.data || []) as Email[];
         },
-        staleTime: 1 * 60 * 1000, // 1 minute
+        staleTime: 1 * 60 * 1000,
         enabled: !!ownerId,
     });
 }
 
-// Hook to fetch a specific email by ID
 export function useEmail(messageId: string | undefined) {
     const {user} = useAuth();
     const ownerId = user?.id || '';
@@ -48,13 +44,11 @@ export function useEmail(messageId: string | undefined) {
     });
 }
 
-// Hook to fetch a specific email by ID
 export function useEmailById() {
     const queryClient = useQueryClient();
     const {user} = useAuth();
     const ownerId = user?.id || '';
 
-    // Return a function that uses queryClient.fetchQuery
     return async (messageId: string): Promise<Email | null> => {
         if (!ownerId) return null;
         try {
@@ -79,7 +73,7 @@ export function useDeleteEmail() {
 
     return useMutation({
         mutationFn: async (email: Email) => {
-            if (email.mailbox === 'trash') {
+            if (email.mailbox === 'Trash') {
                 await mailApi({ownerId}).message({id: email.id}).delete();
             } else {
                 await mailApi({ownerId}).message["move-to-trash"].put({messageId: email.id});
@@ -87,10 +81,10 @@ export function useDeleteEmail() {
             return email;
         },
         onSuccess: (email) => {
-            if (email.mailbox === 'trash') {
-                invalidateMailDeleted(queryClient, email.id, 'trash');
+            if (email.mailbox === 'Trash') {
+                invalidateMailDeleted(queryClient, email.id, 'Trash');
             } else {
-                invalidateMailMoved(queryClient, email.id, email.mailbox, 'trash');
+                invalidateMailMoved(queryClient, email.id, email.mailbox, 'Trash');
             }
         },
     });
@@ -112,6 +106,25 @@ export function useToggleReadEmail() {
             return email;
         },
         onSuccess: (email) => invalidateMailReadChanged(queryClient, email.id, email.mailbox),
+    });
+}
+
+export function useToggleFlaggedEmail() {
+    const queryClient = useQueryClient();
+    const {user} = useAuth();
+    const ownerId = user?.id || '';
+
+    return useMutation({
+        mutationFn: async ({email, isFlagged}: { email: Email, isFlagged: boolean }) => {
+            if (isFlagged === email.isFlagged) {
+                return email;
+            }
+            await mailApi({ownerId}).message({id: email.id}).flagged.put({
+                flagged: isFlagged
+            });
+            return email;
+        },
+        onSuccess: (email) => invalidateMailFlagsChanged(queryClient, email.id, email.mailbox),
     });
 }
 
@@ -161,7 +174,12 @@ export function invalidateMailReadChanged(queryClient: QueryClient, messageId: s
     queryClient.invalidateQueries({queryKey: emailKeys.list(mailbox)});
 }
 
+export function invalidateMailFlagsChanged(queryClient: QueryClient, messageId: string, mailbox: string): void {
+    queryClient.invalidateQueries({queryKey: emailKeys.detail(messageId)});
+    queryClient.invalidateQueries({queryKey: emailKeys.list(mailbox)});
+}
+
 export function invalidateDraftUpdated(queryClient: QueryClient, messageId: string): void {
-    queryClient.invalidateQueries({queryKey: emailKeys.list('drafts')});
+    queryClient.invalidateQueries({queryKey: emailKeys.list('Drafts')});
     queryClient.invalidateQueries({queryKey: emailKeys.detail(messageId)});
 }

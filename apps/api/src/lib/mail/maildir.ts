@@ -1,5 +1,12 @@
-import type {Attachment, Email, EmailDraft, EmailSummary, MaildirMailbox} from "@workspace/lib/types/mail"
-import {createUniqueMessageId, getMailIDfromFileName} from "./mailutils"
+import type {Email, EmailDraft, EmailSummary, MaildirMailbox} from "@workspace/lib/types/mail"
+import {
+    applyFlagsFromFilename,
+    createUniqueMessageId,
+    getMailIDfromFileName,
+    getStandardMailboxFlags,
+    parseFlagsFromFilename,
+    rebuildFlagsSuffix
+} from "./mailutils"
 import {createEmlContent} from "./mailfile"
 import {parseEml} from "./mail-parse"
 import {welcomeMail} from "./welcome"
@@ -9,11 +16,17 @@ import type {Home} from "../home"
 import {draftToMailOptions, sendMail} from './sender'
 import {type SSEventMailData, SSEventType} from "@workspace/lib/types/sse"
 import {buildMailEvent} from './sse-events'
-import {ApiError, PATHS} from '../core'
+import {ApiError, STANDARD_MAILBOXES} from '../core'
+
+function canonicalMailbox(name: string): string {
+    if (name === '' || name.toLowerCase() === 'inbox') return ''
+    return STANDARD_MAILBOXES.find(m => m.toLowerCase() === name.toLowerCase()) ?? name
+}
 
 export default class Maildir {
     private store: MaildirStore
     private db!: MailDB
+    private syncingMailboxes = new Set<string>()
 
     constructor(private home: Home) {
         this.store = new MaildirStore(home.homeDir)
@@ -24,12 +37,15 @@ export default class Maildir {
     }
 
     async init() {
-        if (!await this.store.exists()) {
+        const isNew = !await this.store.exists()
+        if (isNew) {
             await this.store.createStandardMailboxes()
-            await this.mailboxDeliver(welcomeMail(this.home.user.name, this.home.user.email), false)
         }
         this.db = new MailDB(this.home)
         await this.db.init()
+        if (isNew) {
+            await this.mailboxDeliver(welcomeMail(this.home.user.name, this.home.user.email), false)
+        }
     }
 
     async size(): Promise<number> {
@@ -39,70 +55,54 @@ export default class Maildir {
     // -- Mailbox operations --
 
     async mailboxesList(): Promise<MaildirMailbox[]> {
-        const mailboxNames = await this.store.listMailboxDirs()
         const mailboxes: MaildirMailbox[] = []
-
-        for (const name of mailboxNames) {
-            const info = await this.getMailboxInfo(name)
-            if (info) mailboxes.push(info)
+        for (const name of STANDARD_MAILBOXES) {
+            if (await this.store.mailboxDirExists(name)) {
+                mailboxes.push(this.getMailboxInfo(name))
+            }
         }
-
         return mailboxes
     }
 
-    async mailboxCreate(mailbox: string, attributes: string[] = []): Promise<void> {
+    async mailboxCreate(mailbox: string): Promise<void> {
         if (await this.store.mailboxDirExists(mailbox)) {
             throw new ApiError(409, `Mailbox '${mailbox}' already exists`)
         }
         await this.store.createMailboxDir(mailbox)
-        if (attributes.length > 0) {
-            const attributesPath = this.store.storage.pathJoin(this.store.mailboxDir(mailbox), PATHS.MAIL.ATTRIBUTES_FILE)
-            await this.store.storage.file(attributesPath).write(JSON.stringify(attributes))
-        }
     }
 
     async mailboxExists(mailbox: string): Promise<MaildirMailbox | false> {
-        return await this.getMailboxInfo(mailbox) || false
+        if (!await this.store.mailboxDirExists(mailbox)) return false
+        return this.getMailboxInfo(mailbox)
     }
 
     async mailboxDeliver(message: string, notify = true): Promise<string> {
-        const messageId = createUniqueMessageId()
-        const filename = `${messageId}.eml`
+        const {uniqueId} = await this.store.deliverAtomic(message, '')
 
-        await this.store.deliver(message, '', filename)
+        await this.syncMailbox('')
 
-        this.syncAndNotify(messageId, notify)
-
-        return filename
-    }
-
-    async mailboxGet(mailbox: string): Promise<EmailSummary[]> {
-        if (!await this.store.mailboxDirExists(mailbox)) {
-            throw new ApiError(404, `Mailbox '${mailbox}' not found`)
-        }
-
-        await this.store.moveNewToCur(mailbox)
-
-        const dbMessages = await this.db.getAllEmails(mailbox)
-        const dbById = new Map(dbMessages.map(m => [m.id, m]))
-        const messages: EmailSummary[] = []
-
-        const curFiles = await this.store.listCurFiles(mailbox)
-        for (const fileName of curFiles) {
-            const id = getMailIDfromFileName(fileName)
-            const cached = dbById.get(id)
-            if (cached) {
-                messages.push(cached)
-            } else {
-                const parsed = await this.readAndParse(id, mailbox)
-                if (parsed) {
-                    messages.push(parsed)
-                    this.db.addEmail(parsed)
-                }
+        if (notify) {
+            const email = this.db.getEmail(uniqueId)
+            if (email) {
+                this.emit(SSEventType.MAIL_RECEIVED, {
+                    messageId: email.id,
+                    mailbox: '',
+                    subject: email.subject,
+                    fromShort: email.fromShort,
+                }, {link: `/mail/box/inbox?mailId=${email.id}`, tag: 'mail'})
             }
         }
 
-        return messages
+        return uniqueId
+    }
+
+    async mailboxGet(mailbox: string): Promise<EmailSummary[]> {
+        mailbox = canonicalMailbox(mailbox)
+        if (!await this.store.mailboxDirExists(mailbox)) {
+            throw new ApiError(404, `Mailbox '${mailbox}' not found`)
+        }
+        await this.syncMailbox(mailbox)
+        return this.db.getAllEmails(mailbox)
     }
 
     // -- Message operations --
@@ -112,13 +112,14 @@ export default class Maildir {
             const cached = this.db.getEmail(messageId)
             if (!cached) return null
 
-            const parsed = await this.readAndParse(messageId, cached.mailbox)
+            const parsed = await this.readAndParse(messageId, cached.mailbox, cached.filename)
             if (!parsed) return null
 
             for (const a of parsed.attachments) {
-                a.content = new Buffer(0)
+                a.content = Buffer.alloc(0)
             }
 
+            applyFlagsFromFilename(parsed, cached.filename)
             return {...parsed, ...cached} as Email
         } catch {
             return null
@@ -128,14 +129,14 @@ export default class Maildir {
     async messageGetFile(messageId: string): Promise<ArrayBuffer> {
         const email = this.db.getEmail(messageId)
         if (!email) throw new ApiError(404, `Email '${messageId}' not found`)
-        return this.store.readMessageBuffer(email.mailbox, `${messageId}.eml`)
+        return this.store.readMessageBuffer(email.mailbox, email.filename)
     }
 
-    async messageGetAttachment(messageId: string, index: number): Promise<Attachment | null> {
+    async messageGetAttachment(messageId: string, index: number) {
         const email = this.db.getEmail(messageId)
         if (!email) throw new ApiError(404, `Message '${messageId}' not found`)
 
-        const parsed = await this.readAndParse(messageId, email.mailbox)
+        const parsed = await this.readAndParse(messageId, email.mailbox, email.filename)
         if (!parsed?.attachments || index >= parsed.attachments.length) {
             throw new ApiError(404, `Attachment ${index} not found for message '${messageId}'`)
         }
@@ -148,16 +149,17 @@ export default class Maildir {
         if (!email) throw new ApiError(404, `Message '${messageId}' not found`)
 
         this.db.deleteEmail(messageId)
-        await this.store.deleteMessage(email.mailbox, `${messageId}.eml`)
+        await this.store.deleteMessage(email.mailbox, email.filename)
 
         this.emit(SSEventType.MAIL_DELETED, {
             messageId,
-            mailbox: email.mailbox || 'inbox',
+            mailbox: email.mailbox,
             subject: email.subject,
         })
     }
 
     async messageMove(messageId: string, targetMailbox: string): Promise<void> {
+        targetMailbox = canonicalMailbox(targetMailbox)
         const email = this.db.getEmail(messageId)
         if (!email) throw new ApiError(404, `Message '${messageId}' not found`)
 
@@ -165,14 +167,9 @@ export default class Maildir {
             throw new ApiError(404, `Target mailbox '${targetMailbox}' not found`)
         }
 
-        const filename = `${messageId}.eml`
-        if (!await this.store.fileExistsInCur(email.mailbox, filename)) {
-            throw new ApiError(404, `File for message '${messageId}' not found`)
-        }
-
-        const sourceMailbox = email.mailbox || 'inbox'
+        const sourceMailbox = email.mailbox
+        await this.store.moveMessage(sourceMailbox, email.filename, targetMailbox)
         this.db.moveEmail(messageId, targetMailbox)
-        await this.store.moveMessage(email.mailbox, filename, targetMailbox, filename)
 
         this.emit(SSEventType.MAIL_MOVED, {
             messageId,
@@ -183,6 +180,7 @@ export default class Maildir {
     }
 
     async messageCopy(messageId: string, targetMailbox: string): Promise<void> {
+        targetMailbox = canonicalMailbox(targetMailbox)
         const email = this.db.getEmail(messageId)
         if (!email) throw new ApiError(404, `Message '${messageId}' not found`)
 
@@ -190,38 +188,51 @@ export default class Maildir {
             throw new ApiError(404, `Target mailbox '${targetMailbox}' not found`)
         }
 
-        const filename = `${messageId}.eml`
-        if (!await this.store.fileExistsInCur(email.mailbox, filename)) {
-            throw new ApiError(404, `File for message '${messageId}' not found`)
-        }
-
-        await this.store.copyMessage(email.mailbox, filename, targetMailbox, filename)
+        const {content} = await this.store.readMessage(email.mailbox, email.filename)
+        await this.store.deliverAtomic(content, targetMailbox)
+        await this.syncMailbox(targetMailbox)
     }
 
     async messageSetRead(messageId: string, read: boolean): Promise<void> {
+        await this.renameFlag(messageId, {seen: read}, SSEventType.MAIL_READ_CHANGED)
+        this.db.setRead(messageId, read)
+    }
+
+    async messageSetFlagged(messageId: string, flagged: boolean): Promise<void> {
+        await this.renameFlag(messageId, {flagged}, SSEventType.MAIL_FLAGS_CHANGED)
+        this.db.setFlagged(messageId, flagged)
+    }
+
+    private async renameFlag(messageId: string, changes: Parameters<typeof rebuildFlagsSuffix>[1], eventType: Parameters<typeof buildMailEvent>[0]): Promise<void> {
         const email = this.db.getEmail(messageId)
         if (!email) throw new ApiError(404, `Message '${messageId}' not found`)
 
-        this.db.setRead(messageId, read)
-        this.emit(SSEventType.MAIL_READ_CHANGED, {
-            messageId,
-            mailbox: email.mailbox || 'inbox',
-        })
+        const newFlagStr = rebuildFlagsSuffix(email.filename, changes)
+        const uniqueWithSize = email.filename.split(':')[0]
+        const newFilename = `${uniqueWithSize}:2,${newFlagStr}`
+
+        if (newFilename !== email.filename) {
+            await this.store.renameInCur(email.mailbox, email.filename, newFilename)
+            this.db.setFilename(messageId, newFilename)
+        }
+
+        this.emit(eventType, {messageId, mailbox: email.mailbox})
     }
 
     // -- Draft & Send --
 
     async messageHandleDraft(email: EmailDraft): Promise<EmailDraft> {
-        let draftsMailbox = await this.mailboxExists('Drafts')
-        if (!draftsMailbox) {
-            await this.mailboxCreate('Drafts', ['\\HasNoChildren', '\\Drafts'])
-            draftsMailbox = await this.mailboxExists('Drafts') as MaildirMailbox
-        }
-
         const isNew = (email.id || '').trim() === ''
-        const messageId = isNew ? createUniqueMessageId() : email.id
-        const filename = `${messageId}.eml`
         const user = this.home.user
+
+        // Delete old draft if updating
+        if (!isNew) {
+            const old = this.db.getEmail(email.id)
+            if (old) {
+                await this.store.deleteMessage(old.mailbox, old.filename)
+                this.db.deleteEmail(email.id)
+            }
+        }
 
         email.from = {
             value: [{address: user.email, name: user.name}],
@@ -230,7 +241,7 @@ export default class Maildir {
         }
 
         const emlContent = createEmlContent({
-            id: messageId,
+            id: isNew ? createUniqueMessageId() : email.id,
             subject: email.subject || '',
             from: email.from,
             to: email.to,
@@ -241,18 +252,19 @@ export default class Maildir {
             date: new Date(),
         })
 
-        await this.store.writeToMailboxCur('Drafts', filename, emlContent)
+        const {uniqueId, filename} = await this.store.deliverToCur('Drafts', emlContent, {draft: true, seen: true})
 
-        const parsed = await this.readAndParse(messageId, draftsMailbox.name)
-        if (!parsed) throw new Error(`Failed to parse draft message: ${messageId}`)
+        const parsed = await this.readAndParse(uniqueId, 'Drafts', filename)
+        if (!parsed) throw new Error(`Failed to parse draft message: ${uniqueId}`)
 
-        parsed.isDraft = true
-        parsed.mailbox = draftsMailbox.name
+        applyFlagsFromFilename(parsed, filename)
+        parsed.filename = filename
+        parsed.mailbox = 'Drafts'
         this.db.addEmail(parsed as EmailSummary)
 
         this.emit(SSEventType.MAIL_DRAFT_UPDATED, {
-            messageId,
-            mailbox: 'drafts',
+            messageId: uniqueId,
+            mailbox: 'Drafts',
             subject: parsed.subject,
         })
 
@@ -279,10 +291,10 @@ export default class Maildir {
             }
 
             if (sent) {
-                await this.messageMove(mail.id, 'sent')
+                await this.messageMove(mail.id, 'Sent')
                 this.emit(SSEventType.MAIL_SENT, {
                     messageId: mail.id,
-                    mailbox: 'sent',
+                    mailbox: 'Sent',
                     subject: mail.subject,
                 })
             }
@@ -293,46 +305,107 @@ export default class Maildir {
         return mail
     }
 
+    // -- Sync --
+
+    async syncMailbox(mailbox: string): Promise<void> {
+        if (this.syncingMailboxes.has(mailbox)) return
+        this.syncingMailboxes.add(mailbox)
+        try {
+            // Phase 1: Move new/ → cur/
+            await this.store.moveNewToCur(mailbox)
+
+            // Phase 2: Build disk state from cur/
+            const diskFiles = new Map<string, string>()
+            for (const fileName of await this.store.listCurFiles(mailbox)) {
+                if (!fileName.startsWith('.')) {
+                    diskFiles.set(getMailIDfromFileName(fileName), fileName)
+                }
+            }
+
+            // Phase 3: Get DB state
+            const dbRecords = this.db.getAllEmails(mailbox)
+            const dbById = new Map(dbRecords.map(r => [r.id, r]))
+
+            // New messages (on disk but not in DB)
+            for (const [id, fileName] of diskFiles) {
+                if (!dbById.has(id)) {
+                    try {
+                        const {content, size} = await this.store.readMessage(mailbox, fileName)
+                        const parsed = await parseEml(id, mailbox, content, size)
+                        if (parsed) {
+                            applyFlagsFromFilename(parsed, fileName)
+                            parsed.filename = fileName
+                            this.db.addEmail(parsed as EmailSummary)
+                        }
+                    } catch (e: any) {
+                        if (e.code !== 'ENOENT') console.warn(`syncMailbox: failed to parse ${fileName}:`, e.message)
+                    }
+                }
+            }
+
+            // Flag changes (on disk with different filename)
+            for (const [id, record] of dbById) {
+                const diskFilename = diskFiles.get(id)
+                if (diskFilename && diskFilename !== record.filename) {
+                    const flags = parseFlagsFromFilename(diskFilename)
+                    this.db.updateFlags(id, {
+                        isRead: flags.seen,
+                        isFlagged: flags.flagged,
+                        isDraft: flags.draft,
+                        isReplied: flags.replied,
+                    }, diskFilename)
+                }
+            }
+
+            // Deleted messages (in DB but not on disk)
+            for (const [id] of dbById) {
+                if (!diskFiles.has(id)) {
+                    this.db.deleteEmail(id)
+                }
+            }
+        } finally {
+            this.syncingMailboxes.delete(mailbox)
+        }
+    }
+
+    async syncAllMailboxes(): Promise<void> {
+        for (const mailbox of STANDARD_MAILBOXES) {
+            await this.syncMailbox(mailbox)
+        }
+    }
+
     // -- Private helpers --
 
-    private async readAndParse(messageId: string, mailbox: string): Promise<Email | null> {
+    private async readAndParse(messageId: string, mailbox: string, filename?: string): Promise<Email | null> {
         try {
-            const {content, size} = await this.store.readMessage(mailbox, `${messageId}.eml`)
+            if (!filename) {
+                const record = this.db.getEmail(messageId)
+                filename = record?.filename
+            }
+            if (!filename) {
+                console.warn(`readAndParse: filename not in DB for ${messageId}, scanning disk`)
+                filename = await this.store.findFileByUniqueId(messageId, mailbox)
+            }
+            if (!filename) return null
+
+            const {content, size} = await this.store.readMessage(mailbox, filename)
             return parseEml(messageId, mailbox, content, size)
         } catch {
             return null
         }
     }
 
-    private syncAndNotify(messageId: string, notify: boolean) {
-        this.mailboxGet('').then(() => {
-            if (!notify) return
-            this.messageGet(messageId).then(parsed => {
-                if (parsed) {
-                    this.emit(SSEventType.MAIL_RECEIVED, {
-                        messageId: parsed.id,
-                        mailbox: 'inbox',
-                        subject: parsed.subject,
-                        fromShort: parsed.fromShort,
-                    }, {link: `/mail/box/inbox?mailId=${parsed.id}`, tag: 'mail'})
-                }
-            })
-        })
-    }
-
-    private async getMailboxInfo(mailboxName: string): Promise<MaildirMailbox | null> {
-        if (!await this.store.mailboxDirExists(mailboxName)) return null
-
-        const attributes = await this.store.getMailboxAttributes(mailboxName)
-        if (!mailboxName && !attributes.includes('\\Inbox')) {
-            attributes.push('\\Inbox')
+    private getMailboxInfo(mailboxName: string): MaildirMailbox {
+        const flags = getStandardMailboxFlags(mailboxName)
+        if (!mailboxName && !flags.includes('\\Inbox')) {
+            flags.push('\\Inbox')
         }
 
         return {
             path: mailboxName,
             name: mailboxName ? mailboxName.split('.').pop() || mailboxName : 'INBOX',
             delimiter: '.',
-            flags: attributes,
+            flags,
             total: this.db.getEmailsCount(mailboxName),
             unread: this.db.getEmailsCountUnread(mailboxName),
         }
