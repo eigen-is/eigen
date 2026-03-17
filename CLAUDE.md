@@ -52,7 +52,6 @@ bun run check          # typecheck + test
 
 ### Critical Rules
 
-- **Never run package install commands** — always ask the user
 - **No migrations or backward compatibility** — data is throwaway during dev. Prefer clean schemas
 - **Always run `bun run typecheck` and `bun run test`** after changes
 - **English everywhere** — code, comments, docs
