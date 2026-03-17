@@ -3,7 +3,6 @@
 - Read CLAUDE.md for project context and architecture
 
 ## Development Environment
-- **Never run package install commands** - always ask the user
 - Use **Bun** as the JavaScript runtime
 - All development with **TypeScript**
 - **Always run `bun run typecheck`** and `bun run test` after changes
