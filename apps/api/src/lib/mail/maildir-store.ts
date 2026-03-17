@@ -1,3 +1,4 @@
+import type {FSWatcher} from 'node:fs'
 import {LocalFilesystem, PATHS, STANDARD_MAILBOXES} from '../core'
 import {buildMaildirFilename, createUniqueMessageId} from './mailutils'
 
@@ -6,6 +7,7 @@ const {ROOT, MAILDIR, CUR, NEW, TMP} = PATHS.MAIL
 export class MaildirStore {
     readonly basePath = MAILDIR
     readonly storage: LocalFilesystem
+    private watchers: FSWatcher[] = []
 
     constructor(homeDir: string) {
         this.storage = new LocalFilesystem(`${homeDir}/${ROOT}`)
@@ -145,6 +147,28 @@ export class MaildirStore {
 
     async dirSize(): Promise<number> {
         return (await this.storage.dirSize(ROOT)) || 0
+    }
+
+    watchMailboxes(onChange: (mailbox: string) => void): void {
+        for (const mailbox of STANDARD_MAILBOXES) {
+            const mailboxPath = this.mailboxDir(mailbox)
+            for (const subdir of [CUR, NEW]) {
+                try {
+                    const watcher = this.storage.watch(
+                        this.storage.pathJoin(mailboxPath, subdir),
+                        () => onChange(mailbox),
+                    )
+                    this.watchers.push(watcher)
+                } catch {
+                    // Directory may not exist yet
+                }
+            }
+        }
+    }
+
+    unwatchMailboxes(): void {
+        for (const watcher of this.watchers) watcher.close()
+        this.watchers = []
     }
 
     mailboxDir(mailbox: string): string {

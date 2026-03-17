@@ -46,6 +46,7 @@ export default class Maildir {
         if (isNew) {
             await this.mailboxDeliver(welcomeMail(this.home.user.name, this.home.user.email), false)
         }
+        this.store.watchMailboxes(mailbox => this.syncMailbox(mailbox))
     }
 
     async size(): Promise<number> {
@@ -336,6 +337,9 @@ export default class Maildir {
                             applyFlagsFromFilename(parsed, fileName)
                             parsed.filename = fileName
                             this.db.addEmail(parsed as EmailSummary)
+                            this.emit(SSEventType.MAIL_RECEIVED, {
+                                messageId: id, mailbox, subject: parsed.subject, fromShort: parsed.fromShort,
+                            })
                         }
                     } catch (e: any) {
                         if (e.code !== 'ENOENT') console.warn(`syncMailbox: failed to parse ${fileName}:`, e.message)
@@ -354,6 +358,7 @@ export default class Maildir {
                         isDraft: flags.draft,
                         isReplied: flags.replied,
                     }, diskFilename)
+                    this.emit(SSEventType.MAIL_FLAGS_CHANGED, {messageId: id, mailbox})
                 }
             }
 
@@ -361,6 +366,7 @@ export default class Maildir {
             for (const [id] of dbById) {
                 if (!diskFiles.has(id)) {
                     this.db.deleteEmail(id)
+                    this.emit(SSEventType.MAIL_DELETED, {messageId: id, mailbox})
                 }
             }
         } finally {
@@ -412,6 +418,7 @@ export default class Maildir {
     }
 
     async destruct(): Promise<void> {
+        this.store.unwatchMailboxes()
         if (this.db) {
             await this.db.destruct()
         }

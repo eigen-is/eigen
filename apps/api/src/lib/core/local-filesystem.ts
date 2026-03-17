@@ -161,6 +161,10 @@ export class LocalFilesystem {
         };
     }
 
+    watch(relativePath: string, callback: fs.WatchListener<string>): fs.FSWatcher {
+        return fs.watch(this.getFilePath(relativePath), callback)
+    }
+
     pathJoin(...paths: string[]): string {
         return path.join(...paths);
     }
