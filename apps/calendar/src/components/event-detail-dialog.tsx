@@ -235,17 +235,17 @@ export function EventDetailDialog({open, onOpenChange, event, calendar, sharedCa
         <>
             <Dialog open={open && !showDeleteDialog && !showRecurringDeleteDialog && !showRecurringDeleteConfirm && !editOpen && !showRsvpScopeDialog} onOpenChange={onOpenChange}>
                 <DialogContent size="md">
-                    <DialogHeader>]
+                    <DialogHeader>
                         <DialogTitle className="text-xl">{event.title}</DialogTitle>
                     </DialogHeader>
 
                     <div className="space-y-3">
                         <div className="flex items-start gap-3 text-sm">
                             <Clock className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0"/>
-                            <div>
+                            <div className="flex flex-grow justify-between items-start">
                                 <span>{formatTimeRange(event)}</span>
                                 {event.timezone && (
-                                    <span className="ml-1.5 text-xs text-muted-foreground">
+                                    <span className="text-xs text-muted-foreground">
                                         {event.timezone.split('/').pop()?.replace(/_/g, ' ')} time zone
                                     </span>
                                 )}
