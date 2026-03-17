@@ -11,6 +11,7 @@ import type {BunSQLiteDatabase} from 'drizzle-orm/bun-sqlite';
 import {and, eq, gte, isNull, lte, sql} from 'drizzle-orm';
 import {v4 as uuidv4} from 'uuid';
 import {RRule} from 'rrule';
+import {DateTime} from 'luxon';
 import type {Home} from '../home';
 import * as schema from './schema';
 import {CALENDAR_DB_CONFIG} from './db-config';
@@ -36,6 +37,7 @@ function computeEtag(event: {
     endTime: number;
     allDay: boolean;
     rrule?: string | null;
+    timezone?: string | null;
     status: string;
     data?: EventData | null;
 }): string {
@@ -48,6 +50,7 @@ function computeEtag(event: {
         endTime: event.endTime,
         allDay: event.allDay,
         rrule: event.rrule,
+        timezone: event.timezone,
         status: event.status,
         data: event.data,
     }));
@@ -67,6 +70,7 @@ function dbEventToCalendarEvent(row: typeof schema.events.$inferSelect): Calenda
         endTime: row.endTime,
         allDay: row.allDay,
         rrule: row.rrule ?? null,
+        timezone: row.timezone ?? null,
         parentEventId: row.parentEventId ?? null,
         recurrenceDate: row.recurrenceDate ?? null,
         status: row.status as CalendarEvent['status'],
@@ -210,6 +214,7 @@ export class Calendar {
         description?: string | null;
         location?: string | null;
         rrule?: string | null;
+        timezone?: string | null;
         parentEventId?: string | null;
         recurrenceDate?: string | null;
         status?: CalendarEvent['status'];
@@ -222,6 +227,7 @@ export class Calendar {
         const id = uuidv4();
         const uid = uuidv4();
         const rruleStr = input.rrule ?? null;
+        const timezone = input.timezone ?? null;
         const status = input.status ?? 'confirmed';
         const etag = computeEtag({
             title: input.title,
@@ -231,6 +237,7 @@ export class Calendar {
             endTime: input.endTime,
             allDay: input.allDay,
             rrule: rruleStr,
+            timezone,
             status,
             data: input.data,
         });
@@ -247,6 +254,7 @@ export class Calendar {
             endTime: input.endTime,
             allDay: input.allDay,
             rrule: rruleStr,
+            timezone,
             parentEventId: input.parentEventId ?? null,
             recurrenceDate: input.recurrenceDate ?? null,
             status,
@@ -286,6 +294,7 @@ export class Calendar {
         description?: string | null;
         location?: string | null;
         rrule?: string | null;
+        timezone?: string | null;
         status?: CalendarEvent['status'];
         data?: EventData | null;
     }, user?: UserIdentity): CalendarEvent {
@@ -313,15 +322,16 @@ export class Calendar {
         const data = input.data !== undefined ? input.data : existing.data;
 
         const rruleStr = input.rrule !== undefined ? (input.rrule ?? null) : (existing.rrule ?? null);
+        const timezone = input.timezone !== undefined ? (input.timezone ?? null) : (existing.timezone ?? null);
 
         const etag = computeEtag({
             title, description, location, startTime, endTime, allDay,
-            rrule: rruleStr, status, data,
+            rrule: rruleStr, timezone, status, data,
         });
 
         this.db.update(schema.events).set({
             title, description, location, startTime, endTime, allDay,
-            rrule: rruleStr, status, etag, data,
+            rrule: rruleStr, timezone, status, etag, data,
             updatedAt: sql`unixepoch()`,
         }).where(eq(schema.events.id, id)).run();
 
@@ -646,6 +656,7 @@ export class Calendar {
         endTime: number;
         allDay: boolean;
         rrule: string | null;
+        timezone: string | null;
         status: CalendarEvent['status'];
         sequence: number;
         data: EventData;
@@ -668,6 +679,7 @@ export class Calendar {
             endTime: payload.endTime,
             allDay: payload.allDay,
             rrule: payload.rrule,
+            timezone: payload.timezone,
             status: payload.status,
             data: payload.data,
         });
@@ -684,6 +696,7 @@ export class Calendar {
             endTime: payload.endTime,
             allDay: payload.allDay,
             rrule: payload.rrule,
+            timezone: payload.timezone,
             status: payload.status,
             sequence: payload.sequence,
             etag,
@@ -705,6 +718,7 @@ export class Calendar {
         endTime: number;
         allDay: boolean;
         rrule: string | null;
+        timezone?: string | null;
         status: CalendarEvent['status'];
         sequence: number;
         attendees?: Attendee[];
@@ -715,6 +729,7 @@ export class Calendar {
         // Don't extend rrule beyond what the attendee has locally — they may have
         // truncated it via "delete this and following" and that intent should stick.
         const rrule = constrainRRule(payload.rrule, linked.rrule);
+        const timezone = payload.timezone !== undefined ? (payload.timezone ?? null) : (linked.timezone ?? null);
 
         const data: EventData = {
             ...linked.data,
@@ -729,6 +744,7 @@ export class Calendar {
             endTime: payload.endTime,
             allDay: payload.allDay,
             rrule,
+            timezone,
             status: payload.status,
             data,
         });
@@ -741,6 +757,7 @@ export class Calendar {
             endTime: payload.endTime,
             allDay: payload.allDay,
             rrule,
+            timezone,
             status: payload.status,
             sequence: payload.sequence,
             etag,
@@ -978,6 +995,60 @@ function expandRecurrence(event: CalendarEvent, rangeFrom: number, rangeTo: numb
     if (!event.rrule) return [];
 
     const eventDuration = event.endTime - event.startTime;
+    const tz = event.timezone;
+
+    if (tz) {
+        // Timezone-aware expansion: convert to wall-clock, let rrule work in wall-clock space,
+        // then convert results back to real UTC. This avoids rrule's broken built-in tzid handling.
+        const localDt = DateTime.fromSeconds(event.startTime, {zone: tz});
+        const wallClockDtstart = new Date(Date.UTC(
+            localDt.year, localDt.month - 1, localDt.day,
+            localDt.hour, localDt.minute, localDt.second,
+        ));
+
+        const rule = new RRule({
+            ...RRule.parseString(event.rrule),
+            dtstart: wallClockDtstart,
+        });
+
+        // Pad range by ±1 day to handle timezone offset edge cases, then filter
+        const localFrom = DateTime.fromSeconds(rangeFrom - 86400, {zone: tz});
+        const wallClockFrom = new Date(Date.UTC(
+            localFrom.year, localFrom.month - 1, localFrom.day,
+            localFrom.hour, localFrom.minute, localFrom.second,
+        ));
+        const localTo = DateTime.fromSeconds(rangeTo + 86400, {zone: tz});
+        const wallClockTo = new Date(Date.UTC(
+            localTo.year, localTo.month - 1, localTo.day,
+            localTo.hour, localTo.minute, localTo.second,
+        ));
+
+        const dates = rule.between(wallClockFrom, wallClockTo, true);
+        const results: CalendarEventOccurrence[] = [];
+
+        for (const date of dates) {
+            const localOcc = DateTime.fromObject({
+                year: date.getUTCFullYear(),
+                month: date.getUTCMonth() + 1,
+                day: date.getUTCDate(),
+                hour: date.getUTCHours(),
+                minute: date.getUTCMinutes(),
+                second: date.getUTCSeconds(),
+            }, {zone: tz});
+            const ts = Math.floor(localOcc.toSeconds());
+            if (ts >= rangeFrom && ts <= rangeTo) {
+                results.push({
+                    ...event,
+                    startTime: ts,
+                    endTime: ts + eventDuration,
+                    occurrenceDate: formatOccurrenceDate(date),
+                });
+            }
+        }
+        return results;
+    }
+
+    // No timezone: original UTC behavior
     const dtstart = new Date(event.startTime * 1000);
     const rule = new RRule({
         ...RRule.parseString(event.rrule),
@@ -1029,22 +1100,66 @@ function truncateRRule(rruleStr: string, beforeDate: Date): string {
 
 function computeOccurrenceTimes(parent: CalendarEvent, recurrenceDate: string): {startTime: number; endTime: number} {
     const duration = parent.endTime - parent.startTime;
+    const tz = parent.timezone;
     const dtstart = new Date(parent.startTime * 1000);
     const occDate = new Date(recurrenceDate + 'T00:00:00Z');
 
     if (parent.rrule) {
-        const rule = new RRule({...RRule.parseString(parent.rrule), dtstart});
-        const dayStart = new Date(occDate);
-        const dayEnd = new Date(occDate);
-        dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
-        const matches = rule.between(dayStart, dayEnd, true);
-        if (matches.length > 0) {
-            const startTime = Math.floor(matches[0].getTime() / 1000);
-            return {startTime, endTime: startTime + duration};
+        if (tz) {
+            // Timezone-aware: expand in wall-clock space, convert back to UTC
+            const localDt = DateTime.fromSeconds(parent.startTime, {zone: tz});
+            const wallClockDtstart = new Date(Date.UTC(
+                localDt.year, localDt.month - 1, localDt.day,
+                localDt.hour, localDt.minute, localDt.second,
+            ));
+            const rule = new RRule({...RRule.parseString(parent.rrule), dtstart: wallClockDtstart});
+            // occDate is YYYY-MM-DD in wall-clock space (from formatOccurrenceDate)
+            const dayStart = new Date(occDate);
+            const dayEnd = new Date(occDate);
+            dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
+            const matches = rule.between(dayStart, dayEnd, true);
+            if (matches.length > 0) {
+                const match = matches[0];
+                const localOcc = DateTime.fromObject({
+                    year: match.getUTCFullYear(),
+                    month: match.getUTCMonth() + 1,
+                    day: match.getUTCDate(),
+                    hour: match.getUTCHours(),
+                    minute: match.getUTCMinutes(),
+                    second: match.getUTCSeconds(),
+                }, {zone: tz});
+                const startTime = Math.floor(localOcc.toSeconds());
+                return {startTime, endTime: startTime + duration};
+            }
+        } else {
+            const rule = new RRule({...RRule.parseString(parent.rrule), dtstart});
+            const dayStart = new Date(occDate);
+            const dayEnd = new Date(occDate);
+            dayEnd.setUTCDate(dayEnd.getUTCDate() + 1);
+            const matches = rule.between(dayStart, dayEnd, true);
+            if (matches.length > 0) {
+                const startTime = Math.floor(matches[0].getTime() / 1000);
+                return {startTime, endTime: startTime + duration};
+            }
         }
     }
 
     // Fallback: place dtstart's time-of-day onto the occurrence date
+    if (tz) {
+        const localDt = DateTime.fromSeconds(parent.startTime, {zone: tz});
+        const occDateParts = occDate.toISOString().substring(0, 10).split('-');
+        const localOcc = DateTime.fromObject({
+            year: parseInt(occDateParts[0]),
+            month: parseInt(occDateParts[1]),
+            day: parseInt(occDateParts[2]),
+            hour: localDt.hour,
+            minute: localDt.minute,
+            second: localDt.second,
+        }, {zone: tz});
+        const startTime = Math.floor(localOcc.toSeconds());
+        return {startTime, endTime: startTime + duration};
+    }
+
     const startTime = Math.floor(occDate.getTime() / 1000) +
         dtstart.getUTCHours() * 3600 + dtstart.getUTCMinutes() * 60 + dtstart.getUTCSeconds();
     return {startTime, endTime: startTime + duration};
