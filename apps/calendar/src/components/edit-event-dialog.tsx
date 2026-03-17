@@ -188,6 +188,7 @@ export function EditEventDialog({open, onOpenChange, event, ownerUserId, calenda
         try {
             const {startTimestamp, endTimestamp} = buildTimestamps();
             const data = {...event.data, attendees: attendees.length > 0 ? attendees : undefined};
+            const timezone = allDay ? null : (event.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone);
             const updates = {
                 title: title.trim(),
                 startTime: startTimestamp,
@@ -196,6 +197,7 @@ export function EditEventDialog({open, onOpenChange, event, ownerUserId, calenda
                 description: description.trim() || null,
                 location: location.trim() || null,
                 rrule: rruleString,
+                timezone,
                 data: Object.values(data).some(v => v !== undefined) ? data : null,
             };
 

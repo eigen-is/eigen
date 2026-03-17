@@ -42,6 +42,7 @@ export async function propagateInvitation(
                 endTime: event.endTime,
                 allDay: event.allDay,
                 rrule: event.rrule,
+                timezone: event.timezone,
                 status: event.status,
                 sequence: event.sequence,
                 data: {
@@ -90,6 +91,7 @@ export async function propagateInvitation(
                 endTime: event.endTime,
                 allDay: event.allDay,
                 rrule: event.rrule,
+                timezone: event.timezone,
                 status: event.status,
                 sequence: event.sequence,
                 attendees: newAttendees,
