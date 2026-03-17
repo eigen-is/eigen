@@ -187,3 +187,4 @@ Detailed architecture docs in `docs/`:
 | [TODO-GUEST-USERS.md](docs/TODO-GUEST-USERS.md)       | Guest user access plan                   |
 | [TODO-CALENDAR-TIMEZONE.md](docs/TODO-CALENDAR-TIMEZONE.md) | Timezone-aware recurrence expansion |
 | [FORTUNE-SHEETS-TODO.md](docs/FORTUNE-SHEETS-TODO.md) | Fortune-sheet refactoring audit          |
+| [RESEARCH_AI.md](docs/RESEARCH_AI.md)                 | Local/private AI integration research    |
