@@ -38,7 +38,18 @@
       "mcp__plugin_playwright_playwright__browser_click",
       "mcp__plugin_playwright_playwright__browser_evaluate",
       "mcp__plugin_playwright_playwright__browser_type",
-      "Bash(node:*)"
+      "Bash(node:*)",
+      "WebFetch(domain:webllm.mlc.ai)",
+      "WebFetch(domain:www.resemble.ai)",
+      "WebFetch(domain:github.com)",
+      "Bash(gh api:*)",
+      "Bash(gh search:*)",
+      "WebFetch(domain:www.npmjs.com)",
+      "Bash(which gh:*)",
+      "WebFetch(domain:pypi.org)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "WebFetch(domain:caniuse.com)",
+      "WebFetch(domain:ollama.com)"
     ]
   },
   "bypassPermissions": "bypassPermissions"
