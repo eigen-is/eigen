@@ -121,6 +121,8 @@ describe('IMAP/Dovecot Maildir Compatibility', () => {
     beforeAll(async () => {
         ctx = await getTestContext();
         charlieId = ctx.charlie.user.id;
+        // Ensure Charlie's Maildir is fully initialized before tests write files
+        await authedRequest(ctx.charlie.user.sessionToken, `/mail/${charlieId}/mailboxes`);
     });
 
     // -- Mailbox structure --
