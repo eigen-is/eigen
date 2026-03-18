@@ -49,7 +49,8 @@
       "WebFetch(domain:pypi.org)",
       "WebFetch(domain:raw.githubusercontent.com)",
       "WebFetch(domain:caniuse.com)",
-      "WebFetch(domain:ollama.com)"
+      "WebFetch(domain:ollama.com)",
+      "Bash(for i:*)"
     ]
   },
   "bypassPermissions": "bypassPermissions"

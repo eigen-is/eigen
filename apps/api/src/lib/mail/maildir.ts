@@ -26,7 +26,7 @@ function canonicalMailbox(name: string): string {
 export default class Maildir {
     private store: MaildirStore
     private db!: MailDB
-    private syncingMailboxes = new Set<string>()
+    private syncingMailboxes = new Map<string, Promise<void>>()
 
     constructor(private home: Home) {
         this.store = new MaildirStore(home.homeDir)
@@ -295,68 +295,75 @@ export default class Maildir {
     // -- Sync --
 
     async syncMailbox(mailbox: string): Promise<void> {
-        if (this.syncingMailboxes.has(mailbox)) return
-        this.syncingMailboxes.add(mailbox)
+        const running = this.syncingMailboxes.get(mailbox)
+        if (running) return running
+
+        const promise = this.doSyncMailbox(mailbox)
+        this.syncingMailboxes.set(mailbox, promise)
         try {
-            // Phase 1: Move new/ → cur/
-            await this.store.moveNewToCur(mailbox)
-
-            // Phase 2: Build disk state from cur/
-            const diskFiles = new Map<string, string>()
-            for (const fileName of await this.store.listCurFiles(mailbox)) {
-                if (!fileName.startsWith('.')) {
-                    diskFiles.set(getMailIDfromFileName(fileName), fileName)
-                }
-            }
-
-            // Phase 3: Get DB state
-            const dbRecords = this.db.getAllEmails(mailbox)
-            const dbById = new Map(dbRecords.map(r => [r.id, r]))
-
-            // New messages (on disk but not in DB)
-            for (const [id, fileName] of diskFiles) {
-                if (!dbById.has(id)) {
-                    try {
-                        const {content, size} = await this.store.readMessage(mailbox, fileName)
-                        const parsed = await parseEml(id, mailbox, content, size)
-                        if (parsed) {
-                            applyFlagsFromFilename(parsed, fileName)
-                            parsed.filename = fileName
-                            this.db.addEmail(parsed as EmailSummary)
-                            this.emit(SSEventType.MAIL_RECEIVED, {
-                                messageId: id, mailbox, subject: parsed.subject, fromShort: parsed.fromShort,
-                            })
-                        }
-                    } catch (e: any) {
-                        if (e.code !== 'ENOENT') console.warn(`syncMailbox: failed to parse ${fileName}:`, e.message)
-                    }
-                }
-            }
-
-            // Flag changes (on disk with different filename)
-            for (const [id, record] of dbById) {
-                const diskFilename = diskFiles.get(id)
-                if (diskFilename && diskFilename !== record.filename) {
-                    const flags = parseFlagsFromFilename(diskFilename)
-                    this.db.updateFlags(id, {
-                        isRead: flags.seen,
-                        isFlagged: flags.flagged,
-                        isDraft: flags.draft,
-                        isReplied: flags.replied,
-                    }, diskFilename)
-                    this.emit(SSEventType.MAIL_FLAGS_CHANGED, {messageId: id, mailbox})
-                }
-            }
-
-            // Deleted messages (in DB but not on disk)
-            for (const [id] of dbById) {
-                if (!diskFiles.has(id)) {
-                    this.db.deleteEmail(id)
-                    this.emit(SSEventType.MAIL_DELETED, {messageId: id, mailbox})
-                }
-            }
+            await promise
         } finally {
             this.syncingMailboxes.delete(mailbox)
+        }
+    }
+
+    private async doSyncMailbox(mailbox: string): Promise<void> {
+        // Phase 1: Move new/ → cur/
+        await this.store.moveNewToCur(mailbox)
+
+        // Phase 2: Build disk state from cur/
+        const diskFiles = new Map<string, string>()
+        for (const fileName of await this.store.listCurFiles(mailbox)) {
+            if (!fileName.startsWith('.')) {
+                diskFiles.set(getMailIDfromFileName(fileName), fileName)
+            }
+        }
+
+        // Phase 3: Get DB state
+        const dbRecords = this.db.getAllEmails(mailbox)
+        const dbById = new Map(dbRecords.map(r => [r.id, r]))
+
+        // New messages (on disk but not in DB)
+        for (const [id, fileName] of diskFiles) {
+            if (!dbById.has(id)) {
+                try {
+                    const {content, size} = await this.store.readMessage(mailbox, fileName)
+                    const parsed = await parseEml(id, mailbox, content, size)
+                    if (parsed) {
+                        applyFlagsFromFilename(parsed, fileName)
+                        parsed.filename = fileName
+                        this.db.addEmail(parsed as EmailSummary)
+                        this.emit(SSEventType.MAIL_RECEIVED, {
+                            messageId: id, mailbox, subject: parsed.subject, fromShort: parsed.fromShort,
+                        })
+                    }
+                } catch (e: any) {
+                    if (e.code !== 'ENOENT') console.warn(`syncMailbox: failed to parse ${fileName}:`, e.message)
+                }
+            }
+        }
+
+        // Flag changes (on disk with different filename)
+        for (const [id, record] of dbById) {
+            const diskFilename = diskFiles.get(id)
+            if (diskFilename && diskFilename !== record.filename) {
+                const flags = parseFlagsFromFilename(diskFilename)
+                this.db.updateFlags(id, {
+                    isRead: flags.seen,
+                    isFlagged: flags.flagged,
+                    isDraft: flags.draft,
+                    isReplied: flags.replied,
+                }, diskFilename)
+                this.emit(SSEventType.MAIL_FLAGS_CHANGED, {messageId: id, mailbox})
+            }
+        }
+
+        // Deleted messages (in DB but not on disk)
+        for (const [id] of dbById) {
+            if (!diskFiles.has(id)) {
+                this.db.deleteEmail(id)
+                this.emit(SSEventType.MAIL_DELETED, {messageId: id, mailbox})
+            }
         }
     }
 
