@@ -42,11 +42,12 @@ used by both previews and the docs editor.
 
 ## Image Previews
 
-`image-preview.ts` generates screen-res WebP (max 2560px) via sharp. Special handling:
+Unified flow in `generateImagePreview()` (`thumbnails.ts`): try sharp first, fall back to exiftool extraction.
+Used by both upload thumbnails (512px) and screen previews (max 2560px).
 
-- RAW/PSD/AI: extract embedded JPEG via exiftool if available
-- PDF: extract first-page thumbnail via `pdftocairo` if available
-- Regular images: sharp resize + WebP conversion
+- Standard images (JPEG, PNG, WebP, GIF, TIFF): sharp resize + WebP conversion
+- HEIC/RAW/PSD/AI: sharp if libvips supports it, else exiftool extracts embedded JPEG → sharp → WebP
+- Gate: `isExiftoolCandidate()` — true for any `image/*` mime or known exiftool extensions (.cr2, .psd, .heic, etc.)
 
 ## Frontend Overlay
 
@@ -79,9 +80,9 @@ Heavy editors (Tiptap for markdown, CodeMirror for code) are lazy-loaded only wh
 | File                                                                      | Purpose                                          |
 |---------------------------------------------------------------------------|--------------------------------------------------|
 | `apps/api/src/lib/preview/preview-cache.ts`                               | Orchestration: check cache, generate, serve      |
-| `apps/api/src/lib/preview/image-preview.ts`                               | Screen-res WebP generation                       |
 | `apps/api/src/lib/preview/text-preview.ts`                                | markdown-it + lowlight → HTML body + DOMPurify   |
-| `apps/api/src/lib/preview/exiftool-preview.ts`                            | Embedded JPEG extraction for RAW/PSD/AI          |
+| `apps/api/src/lib/preview/exiftool-preview.ts`                            | Embedded JPEG extraction for RAW/PSD/AI/HEIC     |
+| `apps/api/src/lib/shared/thumbnails.ts`                                   | Unified image processing (sharp + exiftool)      |
 | `apps/api/src/lib/drive/drive.ts`                                         | `getPreview()` + `getTextPreview()` methods      |
 | `apps/api/src/routes/drive.ts`                                            | `/preview` + `/text-preview` routes              |
 | `packages/ui/src/styles/eigen-prose.css`                                  | Shared prose + code highlight styles             |

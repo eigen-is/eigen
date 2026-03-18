@@ -2,17 +2,8 @@ import * as path from 'path';
 import * as fs from 'node:fs';
 import {isExiftoolExtension} from '@workspace/lib/constants';
 
-const EXIFTOOL_MIMES = new Set([
-    'image/x-canon-cr2', 'image/x-canon-cr3', 'image/x-nikon-nef',
-    'image/x-sony-arw', 'image/x-adobe-dng', 'image/x-olympus-orf',
-    'image/x-panasonic-rw2', 'image/x-fuji-raf', 'image/x-pentax-pef',
-    'image/vnd.adobe.photoshop', 'application/photoshop',
-    'application/postscript', 'application/illustrator',
-    'image/heic', 'image/heif',
-]);
-
-export function isExiftoolSupported(mimeType: string, fileName: string): boolean {
-    if (EXIFTOOL_MIMES.has(mimeType)) return true;
+export function isExiftoolCandidate(mimeType: string, fileName: string): boolean {
+    if (mimeType.startsWith('image/')) return true;
     return isExiftoolExtension(fileName);
 }
 
