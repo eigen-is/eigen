@@ -85,7 +85,7 @@ function DriveRoute() {
             onAfterAction={() => {
                 navigate({
                     to: '/mime/$mimeType',
-                    params: {mimeType: 'application-eigensheet'}
+                    params: {mimeType: 'application-eigensheets'}
                 });
             }}
             allowDelete={to === 'by-me'}

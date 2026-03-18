@@ -8,7 +8,7 @@ export const Route = createFileRoute('/')({
         throw redirect({
             to: '/mime/$mimeType',
             params: {
-                mimeType: 'application-eigenslide'
+                mimeType: 'application-eigenslides'
             }
         });
     },
