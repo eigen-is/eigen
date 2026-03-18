@@ -1,72 +1,68 @@
-# Backend Code Review: Collab (Yjs, WebSocket, Editor)
+# Backend Review: Collab (Yjs, WebSocket, Real-time Editing)
+
+**Scope:** `apps/api/src/lib/collab/`, `apps/api/src/routes/collab.ts`, `apps/api/src/routes/editor.ts`,
+`apps/api/src/utils/singleton.ts`, `apps/api/src/utils/websockets.ts`
+**Reviewed:** 2026-03-18
 
 ## Summary
 
-The collab domain handles collaborative real-time editing for Eigen's document types (eigendoc, eigenstickies,
-eigenslides, eigensheets). It consists of:
+The collab domain provides server-side Yjs document hosting for eigendoc, eigenstickies, eigenslides, and eigensheets.
+Each document is backed by a SQLite database (`data.db`) inside the Drive mount, storing incremental Yjs updates and
+periodic snapshots. WebSocket connections carry the Yjs sync protocol (sync + awareness messages). An inner `DbProvider`
+class handles persistence, snapshots, and revision history. A separate `editor.ts` route handles inline editing of plain
+text/markdown files (no Yjs).
 
-- **`CollabDocument`** (`apps/api/src/lib/collab/collabDocument.ts`) -- server-side Yjs document with WebSocket
-  connections, awareness, and DB-backed persistence via an inner `DbProvider` class.
-- **`DbProvider`** (same file, inner class) -- stores incremental Yjs updates to SQLite, periodically compacts into
-  snapshots, provides revision history.
-- **Schema/config** (`schema.ts`, `db-config.ts`) -- two tables: `doc_updates` (incremental) and `doc_snapshots`
-  (compacted state).
-- **Collab route** (`apps/api/src/routes/collab.ts`) -- REST endpoints for doc info/revisions + WebSocket endpoint for
-  real-time sync.
-- **Editor route** (`apps/api/src/routes/editor.ts`) -- REST-only inline text file editing (markdown/code), unrelated
-  to Yjs.
+Key files:
+- `apps/api/src/lib/collab/collabDocument.ts` -- `CollabDocument` class (WebSocket handling) + `DbProvider` (persistence)
+- `apps/api/src/lib/collab/schema.ts` -- `doc_updates` and `doc_snapshots` tables
+- `apps/api/src/lib/collab/db-config.ts` -- migration for collab database
+- `apps/api/src/routes/collab.ts` -- REST endpoints (info, revisions) + WebSocket endpoint
+- `apps/api/src/routes/editor.ts` -- REST-only inline text file editing
 
-The architecture follows the project patterns: Drive owns document lifecycle, `createAsyncSingleton` ensures
-single-init, and `SharedDrive` wraps permission checks. The WebSocket handler uses Bun's native `ServerWebSocket`.
+## Critical Issues
 
-## Architecture Compliance
+### 1. Document updates are never broadcast to other connected clients
 
-| Rule | Status | Notes |
-|------|--------|-------|
-| Domain class in `lib/collab/` | Pass | `CollabDocument` + `DbProvider` |
-| Route in `routes/collab.ts` | Pass | Thin router with auth |
-| DB schema in `lib/collab/schema.ts` | Pass | Drizzle ORM schema |
-| DB config in `lib/collab/db-config.ts` | Pass | Versioned migration |
-| Auth via `{auth: true}` | Pass | All REST endpoints |
-| Errors via `ApiError` | Partial | Editor uses `ApiError`; collab route uses raw `ws.close()` codes |
-| English everywhere | Pass | |
-| No JSDoc | Pass | |
-| `type` over `interface` | Pass | No interfaces used |
+`apps/api/src/lib/collab/collabDocument.ts`, `handleMessage()` (lines 243-311)
 
-## Issues Found
+When a client sends a Yjs SyncStep2 (type 1) or Update (type 2) message, `readSyncMessage()` at line 263 calls
+`Y.applyUpdate(doc, data, transactionOrigin)` inside y-protocols. This fires the Y.Doc's `update` event. The only
+listener is `DbProvider.updateHandler` (registered at line 39), which calls `storeUpdate()` to persist to SQLite.
 
-### Critical
+There is no listener that broadcasts the update to other connected WebSocket clients. The comment on line 276 --
+_"No need to broadcast - updates trigger the doc's 'update' event which is handled separately"_ -- is incorrect.
+The `update` event only triggers DB persistence, not network broadcast.
 
-**1. Missing document update broadcast to peers**
-`apps/api/src/lib/collab/collabDocument.ts`, lines 250-276
+Verified by tracing the full y-protocols flow:
+1. Client sends `[MESSAGE_SYNC(0), SyncStep2(1), updateData...]` or `[MESSAGE_SYNC(0), Update(2), updateData...]`
+2. `handleMessage` reads MESSAGE_SYNC, then calls `syncProtocol.readSyncMessage(decoder, encoder, this.doc, conn)`
+3. `readSyncMessage` (y-protocols/sync.js line 118) reads the sub-type, dispatches to `readSyncStep2` or `readUpdate`
+4. Both call `Y.applyUpdate(doc, decoding.readVarUint8Array(decoder), transactionOrigin)`
+5. Y.Doc fires `update` event
+6. `DbProvider.updateHandler` stores to DB -- but nobody sends to other WebSocket clients
+7. `readSyncMessage` writes nothing to the encoder for SyncStep2/Update messages
+8. `encoding.length(encoder) > 1` is false (only the MESSAGE_SYNC byte from line 260), so no response is sent
+9. The originating client gets no ack, and no other client gets the update
 
-When a client sends a Yjs SyncStep2 or Update message, `readSyncMessage()` (line 263) applies the update to the
-server's `Y.Doc`. This fires the doc's `update` event, but the only listener is `DbProvider.updateHandler` (line 36-38)
-which persists to DB. There is no mechanism to broadcast the update to other connected WebSocket clients.
+Awareness messages ARE correctly broadcast (lines 301-308). Document content updates are not.
 
-The comment on line 276 says _"No need to broadcast - updates trigger the doc's 'update' event which is handled
-separately"_ -- but this is incorrect. The `update` event only triggers DB persistence, not network broadcast.
+**Impact**: Multi-user real-time collaboration is non-functional. Changes made by one user are persisted server-side but
+never delivered to other connected clients. Users only see each other's edits after reconnecting (when the initial sync
+loads the full document state from DB).
 
-Awareness updates ARE broadcast (line 305), but document content updates are not.
-
-**Impact**: In multi-user editing, changes from one client are stored server-side but never delivered to other connected
-clients in real time. Collaboration appears broken for 2+ concurrent editors.
-
-**Fix**: Register an `update` handler on `this.doc` in the `CollabDocument` class (not `DbProvider`) that encodes the
-update as a Yjs sync message and calls `broadcastMessage` to all other connections. Something like:
+**Fix**: Register a `doc.on('update', ...)` handler in `CollabDocument` (not DbProvider) that encodes the update as a
+Yjs sync message and calls `broadcastMessage`. The `transactionOrigin` passed by `readSyncMessage` is `conn` (the
+sending WebSocket), so it can be used to exclude the sender:
 
 ```typescript
-// In CollabDocument.init(), after creating the doc:
 this.doc.on('update', (update: Uint8Array, origin: any) => {
     const encoder = encoding.createEncoder();
     encoding.writeVarUint(encoder, MESSAGE_SYNC);
     syncProtocol.writeUpdate(encoder, update);
     const message = encoding.toUint8Array(encoder);
-    // origin is the connection that sent the update -- exclude it
     if (origin instanceof ServerWebSocket) {
         this.broadcastMessage(origin, message);
     } else {
-        // broadcast to all if origin is not a ws (e.g., server-side change)
         for (const conn of this.connections) {
             if (conn.readyState === 1) conn.send(Buffer.from(message));
         }
@@ -74,122 +70,181 @@ this.doc.on('update', (update: Uint8Array, origin: any) => {
 });
 ```
 
-Note: the `transactionOrigin` passed to `readSyncMessage` is currently `conn` (the WebSocket), so it can be used as
-the origin to exclude.
+### 2. Awareness removal on disconnect is never broadcast to remaining clients
 
-**2. Snapshot creation has a race condition and deletes all updates unconditionally**
-`apps/api/src/lib/collab/collabDocument.ts`, lines 82-115
+`apps/api/src/lib/collab/collabDocument.ts`, `unsubscribe()` (lines 213-241)
 
-`createSnapshot()` performs multiple DB operations without a transaction:
-1. Encodes current doc state (line 84)
-2. Gets the last update ID (line 86-89)
-3. Inserts the snapshot with that ID (line 93-96)
-4. **Deletes ALL updates** with no WHERE clause (line 98)
+When a user disconnects, `removeAwarenessStates()` is called (line 221) to clean up their awareness data. This emits
+`change` and `update` events on the `Awareness` object (verified in y-protocols/awareness.js lines 184-185). However,
+`CollabDocument` never registers a listener on `awareness.on('update', ...)`.
 
-If a new update is written between steps 2 and 4, it will be deleted without being included in the snapshot. This
-causes silent data loss.
+This means remaining clients are never notified that a user has left. Their cursors/selections/presence indicators
+remain visible as ghost data until the client-side awareness timeout fires (typically 30 seconds).
 
-**Fix**: Wrap in a transaction, or change line 98 to only delete updates up to `lastUpdate.id`:
+The y-websocket reference implementation handles this by listening to awareness `update` events and broadcasting them.
+
+**Fix**: In `init()`, register:
+
 ```typescript
-this.db.delete(schema.docUpdates).where(lte(schema.docUpdates.id, lastUpdate.id)).run();
+this.awareness.on('update', ({ added, updated, removed }: { added: number[], updated: number[], removed: number[] }, origin: any) => {
+    const changedClients = added.concat(updated, removed);
+    const encoder = encoding.createEncoder();
+    encoding.writeVarUint(encoder, MESSAGE_AWARENESS);
+    encoding.writeVarUint8Array(encoder, awarenessProtocol.encodeAwarenessUpdate(this.awareness, changedClients));
+    const message = encoding.toUint8Array(encoder);
+    // broadcast to all except origin (if origin is a WebSocket)
+    for (const conn of this.connections) {
+        if (conn !== origin && conn.readyState === 1) {
+            conn.send(Buffer.from(message));
+        }
+    }
+});
 ```
 
-### Important
+## Important Issues
 
-**3. Per-message permission check is expensive and redundant**
-`apps/api/src/routes/collab.ts`, lines 121-131
+### 3. Snapshot creation can lose concurrent updates
+
+`apps/api/src/lib/collab/collabDocument.ts`, `createSnapshot()` (lines 82-115)
+
+The snapshot flow performs four separate DB operations without a transaction:
+1. Encodes current doc state (line 84)
+2. Gets the last update ID (lines 86-89)
+3. Inserts the snapshot referencing that ID (lines 93-96)
+4. Deletes ALL updates unconditionally: `this.db.delete(schema.docUpdates).run()` (line 98)
+
+If a new update is stored between steps 2 and 4, it gets deleted without being captured in the snapshot. While
+JavaScript is single-threaded, the Y.Doc `update` event can fire during `createSnapshot` if another message is processed
+in between (though in practice this is unlikely since `storeUpdate` triggers `createSnapshot` synchronously).
+
+The more concrete concern is that the DELETE has no WHERE clause. It deletes all updates, not just those up to
+`lastUpdate.id`. If any update is inserted after step 2 (e.g., from a different async context or a race during snapshot
+creation triggered by `destroy()`), it is silently lost.
+
+**Fix**: Use a bounded delete: `this.db.delete(schema.docUpdates).where(lte(schema.docUpdates.id, lastUpdate.id)).run()`
+
+### 4. Per-message permission checks cause unnecessary DB overhead
+
+`apps/api/src/routes/collab.ts`, `message` handler (lines 102-135)
 
 Every WebSocket message triggers:
-- `getSharedDrive(ownerId, user)` -- resolves/creates Home + SharedDrive
+- `getSharedDrive(ownerId, user)` -- resolves Home + potentially creates SharedDrive
 - `drive.canRead(mountId, pathId, user)` -- DB query to check ACL
-- `drive.getCollabDocument(mountId, pathId)` -- singleton lookup
+- `drive.getCollabDocument(mountId, pathId)` -- singleton lookup (fast, but SharedDrive adds a permission check)
 - `drive.canWrite(mountId, pathId, user)` -- another DB query for ACL
 
-For a busy document with many edits, this means multiple DB round-trips per keystroke per user. The document reference
-and write permission should be resolved once at connection time and cached on the WebSocket data object.
+For a document with active editing, this means 2-3 DB queries per keystroke per user. The document reference and write
+permission were already resolved at connection time in the `open` handler.
 
-**4. Double unsubscribe on disconnect**
-`apps/api/src/routes/collab.ts`, lines 89-95 and 137-160
+**Fix**: Store the `CollabDocument` instance and `canWrite` boolean on the WebSocket data object during `open`. In the
+`message` handler, read from `ws.data` instead of re-resolving. This reduces per-message cost to zero DB queries.
 
-When a WebSocket disconnects, `unsubscribe` can be called twice:
-1. `keepWebSocketAlive` detects the connection is no longer open and calls its `onClose` callback (line 91), which
-   calls `document.unsubscribe()`.
-2. The WebSocket `close` handler (line 137) also calls `document.unsubscribe()`.
+Note: the per-message `canWrite` check does have value for live permission changes (downgrading a user to read-only
+while they're connected), but this could be handled by invalidating cached permissions via an event rather than
+re-querying every message.
 
-While `unsubscribe` is idempotent for the connection removal (Set.delete is safe), the stale connection cleanup loop
-(lines 226-235) runs each time, and if the document triggers `closeCollabDocument` (line 239) on the first call,
-the second call re-opens the document via `getCollabDocument` only to unsubscribe from a fresh empty document.
+### 5. `createAsyncSingleton` never recovers from initialization failure
 
-**5. `keepWebSocketAlive` interval is never cleared on normal close**
-`apps/api/src/utils/websockets.ts`, lines 4-20
-
-The `setInterval` returned by `keepWebSocketAlive` is only cleared when the ping fails or the readyState is not OPEN.
-If the WebSocket closes normally (via `close` handler), the interval continues running until the next 15-second tick
-detects the closed state. The function should return the interval ID so the caller can clear it, or use a reference
-that can be cleaned up.
-
-**6. Editor route missing explicit permission checks**
-`apps/api/src/routes/editor.ts`, lines 25-50 (GET) and 52-84 (PUT)
-
-The GET endpoint calls `drive.getPath()` and `drive.downloadFile()`, and the PUT endpoint calls `drive.getPath()` and
-`drive.writeFileContent()`. For the owner's own drive, `getPath` does not check read permissions (it's a direct mount
-lookup). For shared drives, `SharedDrive.getPath` checks read permission. However, for the PUT endpoint on the owner's
-own drive, `writeFileContent` does check write permission.
-
-For the GET endpoint on the owner's own drive, there are no explicit permission checks before returning file content.
-While an owner should have read access to their own files, this is implicit rather than explicit and differs from the
-pattern in the collab routes.
-
-**7. `createAsyncSingleton` never resets after error**
 `apps/api/src/utils/singleton.ts`
 
-If the factory function throws during initialization, `initializationPromise` is set but `instance` remains null. On
-the next call, `initializationPromise` is not null, so it returns the same rejected promise. This means a transient
-error (e.g., temporary DB lock) permanently breaks the singleton -- it can never recover.
+If the factory function rejects, `initializationPromise` is set to the rejected promise but `instance` remains null.
+On subsequent calls, `initializationPromise` is not null, so the same rejected promise is returned forever. A transient
+error (e.g., temporary DB lock, file system hiccup) permanently breaks the singleton.
 
-### Minor
+For `Drive.documents` (the collab document map), there is no cleanup path: if `CollabDocument.init()` fails once, that
+document is permanently inaccessible until server restart. For `getHome`, the `cleanupHomeFactory` function can remove
+the map entry, but the singleton inside the old map entry is still broken.
 
-**8. Deprecated `new Buffer()` usage**
+**Fix**: Reset `initializationPromise` on rejection:
+
+```typescript
+initializationPromise = factoryFn().then(result => {
+    instance = result;
+    return result;
+}).catch(err => {
+    initializationPromise = null;
+    throw err;
+});
+```
+
+### 6. Double-unsubscribe can initialize a new document unnecessarily
+
+`apps/api/src/routes/collab.ts`, `close` handler (lines 137-160) vs `keepWebSocketAlive` callback (lines 89-95)
+
+Both the WebSocket `close` handler and the `keepWebSocketAlive` interval-based onClose callback call unsubscribe on
+disconnect. When the first one fires and it's the last connection, `unsubscribe` calls `drive.closeCollabDocument()`,
+which calls `destruct()` and removes the singleton from `Drive.documents`.
+
+When the second one fires:
+- The `keepWebSocketAlive` callback captured the document instance at `open` time, so it calls `document.unsubscribe()`
+  directly. The `this.closed` guard (line 215) makes this a no-op. Safe.
+- The `close` handler re-resolves `getCollabDocument(mountId, pathId)`. Since the old entry was deleted from
+  `Drive.documents`, this creates a NEW `CollabDocument`, opens a new Y.Doc, loads state from DB -- then immediately
+  calls `unsubscribe()` on this fresh document. The new document has 0 connections and triggers `closeCollabDocument()`
+  again.
+
+In the normal case (`close` fires first, interval fires later), the interval hits the `this.closed` guard. But if the
+interval fires first, the `close` handler does the wasteful re-init.
+
+**Fix**: Either (a) have `keepWebSocketAlive` return the interval ID so the `close` handler can clear it, or (b) have
+the `close` handler skip unsubscribe if already done (track a per-connection "cleaned up" flag on `ws.data`).
+
+### 7. Collab document database is never closed
+
+`apps/api/src/lib/collab/collabDocument.ts`, `destruct()` (lines 192-202) and
+`apps/api/src/lib/drive/drive.ts`, `closeCollabDocument()` (lines 496-510)
+
+When a `CollabDocument` is destructed (last user disconnects), `DbProvider.destroy()` unregisters the update handler
+and creates a final snapshot, then `CollabDocument.destruct()` destroys the Y.Doc and Awareness. But neither calls
+`mount.closeDatabase(dataDbPathId)`.
+
+The `ManagedDatabase` stays open with its sync timer (`setInterval`) still running. Over time, if many documents are
+opened and closed, this leaks file handles and timers. The database is reusable if the document is reopened (since
+`mount.openDatabase` returns the existing singleton), so this is not a correctness issue, but it is a resource leak.
+
+**Fix**: `closeCollabDocument` should call `mount.closeDatabase(dataDbPathId)` after `destruct()`. The `dataDbPathId`
+would need to be stored on the `CollabDocument` or resolved at close time.
+
+## Minor Issues
+
+### 8. Deprecated `new Buffer()` usage
+
 `apps/api/src/lib/collab/collabDocument.ts`, line 273
 
 ```typescript
 conn.send(new Buffer(responseMessage));
 ```
 
-`new Buffer()` is deprecated. The rest of the file correctly uses `Buffer.from()` (lines 322, 341, 360). This line
-should be `Buffer.from(responseMessage)` for consistency.
+`new Buffer()` is deprecated. The rest of the file correctly uses `Buffer.from()` (lines 322, 343, 360). This should
+be `Buffer.from(responseMessage)`.
 
-**9. Inconsistent `Buffer.from` vs `new Buffer` for send calls**
-`apps/api/src/lib/collab/collabDocument.ts`
+### 9. Excessive console.log in production code paths
 
-Line 273 uses `new Buffer(responseMessage)`, while lines 322 and 341 use `Buffer.from(message)`. All should use
-`Buffer.from()`.
+`apps/api/src/lib/collab/collabDocument.ts`, lines 153, 163, 210, 225, 236, 344, 361
 
-**10. Excessive console.log in production paths**
-`apps/api/src/lib/collab/collabDocument.ts`, lines 153, 163, 210, 225, 236, 344
+Every document creation, init, subscribe, unsubscribe, sync step, and awareness send produces console output. For a
+system with many concurrent users, this generates significant log noise. Consider a debug flag or structured logger.
 
-Every document creation, init, subscribe, unsubscribe, and sync step produces console output. For a system with many
-concurrent users and documents, this generates significant log noise. Consider using a debug-level logger or removing
-the verbose logs.
+### 10. `revisionId` parameter not validated
 
-**11. `revisionId` param not validated as integer**
 `apps/api/src/routes/collab.ts`, line 46
 
 ```typescript
 const state = document.getRevisionState(parseInt(params.revisionId, 10));
 ```
 
-`params.revisionId` is a raw string from the URL. `parseInt` with a non-numeric string returns `NaN`, which passes to
-the DB query and returns no result (handled by the 404 check). However, using Elysia's `t.Numeric()` or validating
-would be cleaner.
+`parseInt` with a non-numeric string returns `NaN`, which passes to the DB query and returns no result (caught by the
+404 check). Not a security issue but untidy. Use Elysia's `t.Numeric()` in the route params.
 
-**12. `@ts-ignore` comments suppress type safety**
+### 11. `@ts-ignore` comments suppress type safety
+
 `apps/api/src/routes/collab.ts`, lines 68, 103, 139
 
-Three `@ts-ignore` comments are used for `ws.data?.user`. This suggests a typing issue with Elysia's WebSocket data
-types that should be resolved with proper generics rather than suppressed.
+Three `@ts-ignore` comments for `ws.data?.user`. This suggests a typing issue with Elysia's WebSocket `data` type that
+should be resolved with proper generics rather than suppressed.
 
-**13. Modifying Set during iteration in `destruct`**
+### 12. Modifying Set during iteration in `destruct`
+
 `apps/api/src/lib/collab/collabDocument.ts`, lines 195-198
 
 ```typescript
@@ -199,76 +254,98 @@ for (const conn of this.connections) {
 }
 ```
 
-Deleting from a Set while iterating it. While this works in JavaScript (the spec allows it), it's fragile and may
-confuse readers. Consider clearing the set after the loop instead.
+Deleting from a Set while iterating is allowed by the JS spec but fragile. Prefer closing all connections first, then
+clearing: iterate to close, then call `this.connections.clear()`.
 
-**14. WebSocket `close` handler calls `ws.close()` for auth failure**
+### 13. WebSocket `close` handler calls `ws.close()` on already-closing socket
+
 `apps/api/src/routes/collab.ts`, line 142
 
-Inside the `close` handler, if user is null, `ws.close(1008, ...)` is called. But the WebSocket is already closing
-(that's why the `close` handler fired). Calling close on an already-closing socket is a no-op at best, confusing at
-worst.
+Inside the `close` handler, `ws.close(1008, ...)` is called if user is null. But the WebSocket is already closing
+(that's why the handler fired). This is a no-op but confusing.
 
-## Robustness
+### 14. `getSharedDrive` null check is dead code
+
+`apps/api/src/routes/collab.ts`, line 125
+
+```typescript
+if (!drive || !(await drive.canRead(mountId, pathId, user))) {
+```
+
+`getSharedDrive` never returns null -- it throws `ApiError(401)` if user is missing, or returns a Drive/SharedDrive
+instance. The `!drive` check is dead code.
+
+### 15. Stale connection cleanup during `unsubscribe` modifies Set during iteration
+
+`apps/api/src/lib/collab/collabDocument.ts`, lines 226-234
+
+The stale connection cleanup loop iterates `this.connections` and calls `this.connections.delete(connection)` inside the
+loop. Same issue as #12 -- works but fragile.
+
+## Observations
+
+### Architecture compliance
+
+| Rule | Status | Notes |
+|------|--------|-------|
+| Domain class in `lib/collab/` | Pass | `CollabDocument` + `DbProvider` |
+| Route in `routes/collab.ts` | Pass | Thin router with auth |
+| DB schema in `lib/collab/schema.ts` | Pass | |
+| DB config in `lib/collab/db-config.ts` | Pass | |
+| Auth via `{auth: true}` | Pass | All REST endpoints; WebSocket checks in `open` handler |
+| `type` over `interface` | Pass | |
+| English everywhere | Pass | |
+| No JSDoc | Pass | |
+
+### Write-permission enforcement
+
+The read-only check in `handleMessage` (lines 253-255) uses `decoding.peekUint8(decoder)` to inspect the sync sub-type
+without advancing the decoder position. It blocks sub-types 1 (SyncStep2) and 2 (Update) for read-only users while
+allowing sub-type 0 (SyncStep1, state request). This is correct.
+
+The use of `peekUint8` (raw byte) versus `readVarUint` (variable-length) is safe because sync sub-type values 0, 1, 2
+are all single-byte varuints.
+
+### Robustness
 
 | Area | Assessment |
 |------|------------|
-| WebSocket cleanup on disconnect | Partial -- works but has double-unsubscribe risk and interval leak |
-| Yjs state persistence | Good -- incremental updates + periodic snapshots with revision history |
-| Yjs state recovery on restart | Good -- loads latest snapshot + subsequent updates |
-| Permission enforcement | Good at connection time; expensive per-message; write-block is correct for sync protocol |
-| Concurrent editing | **Broken** -- updates not broadcast between peers |
-| Memory management | Good -- documents auto-close when last connection leaves, singleton prevents duplicates |
-| Error recovery | Weak -- singleton errors are permanent, DB errors in snapshot only logged |
-| Document deletion | Good -- recursive close of collab documents before deletion |
+| **Document content sync** | **Broken** -- updates stored but never broadcast to peers |
+| **Awareness sync** | **Partially broken** -- incoming awareness broadcasts work; disconnect removal does not broadcast |
+| **Persistence** | Good -- incremental updates + periodic snapshots with revision history |
+| **State recovery on restart** | Good -- loads latest snapshot + subsequent updates |
+| **Permission enforcement** | Correct but expensive (per-message DB queries) |
+| **Memory management** | Resource leak -- ManagedDatabase never closed after document close |
+| **Error recovery** | Weak -- singleton errors are permanent for collab documents |
+| **Cleanup on disconnect** | Works but has double-unsubscribe overhead and potential re-init |
 
-### Write-permission enforcement detail
-
-The read-only check in `handleMessage` (line 253-255) blocks sync message types 1 (SyncStep2) and 2 (Update) for
-read-only users, which correctly prevents write operations. SyncStep1 (type 0) is allowed for read-only users, which
-is correct since it only requests state.
-
-## Test Coverage
+### Test coverage
 
 File: `apps/api/src/test/collab.test.ts` (418 lines)
 
-| Category | Tests | Quality |
-|----------|-------|---------|
-| Auth enforcement | 2 | Good -- unauthenticated and unauthorized access |
-| Info endpoint | 3 | Good -- owner, denied, shared read |
-| WebSocket connection | 4 | Adequate -- auth, connection, ping-pong, permission |
-| Document updates | 4 | Weak -- many tests bail early with `if (wsRes.status !== 101) return` |
-| Permission changes | 2 | Weak -- same early-return pattern |
+| Category | Tests | Assessment |
+|----------|-------|------------|
+| Auth enforcement | 2 | Good |
+| Info endpoint | 3 | Good |
+| WebSocket connection | 4 | Adequate |
+| Document updates | 4 | Weak -- conditional on `wsRes.status === 101` |
+| Permission changes | 2 | Weak -- same conditional pattern |
 
 **Coverage gaps**:
-- No test for multi-user document sync (broadcast verification) -- this would have caught Critical Issue #1
-- No test for revision creation/retrieval via the REST API after actual Yjs operations
-- No test for document cleanup after last user disconnects
-- No test for concurrent snapshot creation race condition
-- WebSocket tests are conditional (`if status !== 101 return`) -- if the test environment doesn't support WS upgrade,
-  all WebSocket behavioral tests silently pass without executing
-- No tests for the editor route at all
+- No test verifies that updates from client A reach client B (would have caught Critical #1)
+- No test verifies awareness removal is broadcast on disconnect (would have caught Critical #2)
+- No test for revision creation/retrieval after actual Yjs operations
+- No test for document cleanup when last user disconnects
+- No test for concurrent snapshot creation
+- WebSocket tests silently skip via `if (wsRes.status !== 101) return` -- if the test environment doesn't support
+  WebSocket upgrade, all behavioral tests pass without executing
+- No tests for the editor route
 
-## Recommendations
+### Editor route (editor.ts)
 
-1. **Fix the broadcast bug immediately** -- this is a fundamental correctness issue that makes collaborative editing
-   non-functional for multiple users. Add a `doc.on('update', ...)` handler in `CollabDocument` that broadcasts to all
-   other connections.
+The editor route is separate from the Yjs collab system and handles inline editing of plain text/markdown files via
+REST. It uses optimistic concurrency control via `expectedUpdatedAt` comparison. It properly validates file type, size,
+and UTF-8 encoding. For shared drives, `getSharedDrive` returns a `SharedDrive` which checks permissions in `getPath`
+(read) and `writeFileContent` (write). The frontmatter preservation logic is clean.
 
-2. **Wrap snapshot creation in a transaction** and use a bounded DELETE to prevent the race condition that can lose
-   updates.
-
-3. **Cache document reference and permissions at connection time** -- store the `CollabDocument` instance and
-   `canWrite` boolean on the WebSocket data object during `open`, eliminating per-message DB lookups.
-
-4. **Fix the double-unsubscribe** -- either remove the `close` handler's unsubscribe (rely on `keepWebSocketAlive`), or
-   have `keepWebSocketAlive` return the interval ID and clear it in the `close` handler. Choose one cleanup path.
-
-5. **Fix `createAsyncSingleton`** to reset `initializationPromise` on error so transient failures don't permanently
-   break document access.
-
-6. **Add editor route tests** and make WebSocket tests fail (not skip) when WS upgrade is unavailable.
-
-7. **Replace `@ts-ignore`** with proper Elysia WebSocket typing.
-
-8. **Replace `new Buffer()`** with `Buffer.from()` on line 273.
+No issues found beyond the scope of this review.

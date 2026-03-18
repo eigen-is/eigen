@@ -1,334 +1,313 @@
-# Deep Code Review: Sheets App + Fortune-Sheet Package
+# Frontend Review: Sheets + Fortune-Sheet Deep Dive
 
-## Summary
-
-The Sheets ecosystem consists of a thin app layer (`apps/sheets/`, ~400 lines across 9 source files) and a
-substantial forked spreadsheet engine (`packages/fortune-sheet/`, ~142,000 lines across 150+ files). The app layer
-is well-structured and follows Eigen conventions. The fortune-sheet package has received significant cleanup work --
-all `export default` usages are gone, toolbar and several dialog components are migrated to shadcn, and the icon
-system has been replaced with Lucide -- but a large amount of work remains: 1,740 lines of legacy CSS across 5
-files, 327 `luckysheet-*` class name references in components, 70 `@ts-ignore` directives in core, and 43
-`as any` casts in components.
-
-The package is only used by `apps/sheets/` and should be moved into it. The existing FORTUNE-SHEETS-TODO.md and
-CLEANUP-NOTES.md documents are thorough and accurate -- this review largely confirms their findings and adds
-new issues.
+**Scope:** `apps/sheets/`, `packages/fortune-sheet/`
+**Reviewed:** 2026-03-18
 
 ---
 
-## Fortune-Sheet Package Analysis
+## Critical Issues
 
-### Current State
+### 1. MIME type typo breaks navigation in 3 route files (previous)
 
-**What it is**: A full React spreadsheet engine forked from the open-source fortune-sheet project (which itself was
-a React port of luckysheet). It includes a core engine (~42K lines: modules, events, canvas renderer, formula
-parser), React UI components (~8K lines), and a formula parser (~5K lines, plus ~5K lines of tests).
+`application-eigensheet` (missing trailing `s`) is used instead of `application-eigensheets` in three places. The canonical MIME type is `application/eigensheets` (defined at `packages/lib/src/types/drive.ts:19`); the URL-form is `application-eigensheets`.
 
-**How much has been modified**: Substantial. The UI layer has been heavily reworked:
-- Icon system replaced: `SVGDefines.tsx` (1,254 lines of inline SVG symbols) replaced with Lucide icons via
-  `icon-map.tsx` (273 lines)
-- Toolbar fully migrated to `@workspace/ui` shared components (`SharedToolbar`, `TooltipButton`, `DropdownMenu`)
-- Several dialog components migrated to shadcn (`ConditionRules`, `FormatSearch`, `FormulaSearch`, `SearchReplace`,
-  `SplitColumn`, `LocationCondition`, `DataVerification`)
-- Modal system rewritten to use shadcn `Dialog` (`context/modal.tsx`)
-- Custom hooks (`useDialog`, `useAlert`) built on shadcn primitives
-- FilterMenu bottom buttons migrated to shadcn `Button`
-- All `export default` eliminated
-- Chinese labels in `ImgBoxs` replaced with English text and Lucide icons
-- Accessibility additions: screen reader regions, `aria-label` attributes, keyboard navigation
-- Yjs/collaboration support added via external `use-sheet.ts` hook in the app layer
-- Eigen clipboard integration added to `Workbook/index.tsx`
-- Scroll performance optimized: scroll state moved out of React context into `globalCache` with
-  `requestAnimationFrame` coalescing
+- `/apps/sheets/src/routes/index.tsx:11` -- index redirect sends users to `/mime/application-eigensheet`
+- `/apps/sheets/src/routes/_auth._sidebar.mime.$mimeType.tsx:81` -- `onAfterAction` navigates to the wrong MIME
+- `/apps/sheets/src/routes/_auth._sidebar.shared.$to.tsx:88` -- same issue
 
-The **core engine** (`core/` directory, ~42K lines) has been left largely untouched from the upstream fork,
-with some targeted fixes.
+The sidebar (`sheets-sidebar.tsx:33,59`) correctly uses `application-eigensheets`. This means: (a) the landing page redirects to a MIME filter that matches nothing, (b) after delete/rename the user lands on an empty view.
 
-### Code Quality Issues
+**Impact:** The sheets app's default landing view likely shows no files.
+**Fix:** Replace `application-eigensheet` with `application-eigensheets` in all three files.
 
-#### Dead/Commented-Out Code
+### 2. `validateSearch` drops `uid` parameter -- shared-items detail pane broken (new)
 
-1. **`/packages/fortune-sheet/src/components/Workbook/index.tsx:165`** -- TODO comment with no implementation:
-   `// TODO setCellValue(draftCtx, d.r, d.c, expandedData, d.v);`
-   The line below it does a simpler assignment. It is unclear whether setCellValue was needed for formatting.
+`/apps/sheets/src/routes/_auth._sidebar.shared.$to.tsx:14-16`:
+```
+validateSearch: (search: Record<string, unknown>) => {
+    const pid = typeof search.pid === 'string' ? search.pid : undefined;
+    return {pid} as DriveSearchParams;
+}
+```
 
-2. **`/packages/fortune-sheet/src/components/FxEditor/index.tsx:126-212`** -- Large blocks of commented-out
-   jQuery/luckysheet code (formula search up/down arrows, F4 key handling). ~90 lines of dead code.
+`DriveSearchParams` (at `packages/lib/src/types/drive.ts:132-135`) includes both `pid` and `uid`. The validator only extracts `pid` and casts with `as DriveSearchParams`, so `uid` is silently discarded. Yet at line 23, `uid` is destructured from `Route.useSearch()`, and at line 27 it is passed to `usePathInfo(uid || '', ...)`. Since `uid` is always `undefined` after validation, `usePathInfo` receives an empty string as the ownerId when viewing shared-with-me items, which will fail to load the detail pane for files owned by other users.
 
-3. **`/packages/fortune-sheet/src/components/SheetOverlay/index.tsx:380-389`** -- Commented-out useEffect for
-   cell input focus.
+This same bug exists in the other collab apps (docs, slides, stickies) -- it is a cross-app pattern. But for this review, it affects the sheets shared-items view.
 
-4. **`/packages/fortune-sheet/src/components/SheetOverlay/index.tsx:842-845`** -- Commented-out dropdown list div.
+**Impact:** Selecting a shared-with-me item in the detail pane fetches with the wrong ownerId, breaking the preview.
+**Fix:** Add `const uid = typeof search.uid === 'string' ? search.uid : undefined;` and include it in the returned object.
 
-5. **`/packages/fortune-sheet/src/components/SheetTab/index.tsx:122-125`** -- Commented-out drop placeholder.
+### 3. Stale closure in `onPaste` reads outdated `context` (previous, re-analyzed)
 
-6. **`/packages/fortune-sheet/src/components/ContextMenu/FilterMenu.tsx:481-531`** -- The `filter-by-condition`
-   menu item renders a hidden div (`display: "none"`) with string template placeholders
-   (`luckysheet-\${menuid}-bycondition`) -- this feature is unfinished and renders dead DOM.
+`/packages/fortune-sheet/src/components/Workbook/index.tsx:691-787`:
 
-#### Console Logging
+The `onPaste` callback captures `context` in its closure (line 786: `[context, setContextWithProduce]`). Within the handler, lines 743-765 read `context.luckysheet_select_save`, `context.luckysheetfile`, and `context.currentSheetId` directly (not inside the Immer recipe). These reads use the `context` value from when the callback was created. If `context` has changed since the last render (e.g., the user switched sheets or moved the selection), the paste will operate on stale data -- potentially inserting rows at wrong positions or accessing the wrong sheet.
 
-**`/apps/sheets/src/components/sheets/hooks/use-sheet.ts`** -- 13 `console.log` calls left in production code.
-These are debug traces (`[sheet] flushSnapshot`, `[sheet] connecting to`, etc.) that should be removed or
-converted to a debug-only logger.
+The Eigen clipboard branch (lines 710-733) correctly uses `setContextWithProduce((draftCtx) => ...)`, but the normal paste branch (lines 737-783) reads `context` outside the recipe for row-calculation and then calls `setContextWithProduce` with the stale-computed values.
 
-#### Type Safety
+**Impact:** Paste of multi-row HTML content may miscalculate how many rows to add if state changed between renders.
+**Fix:** Move the row-count calculation inside the Immer recipe, reading from `draftCtx` instead of the closed-over `context`.
 
-- **43 `as any` casts** across 15 component files. Worst offenders:
-  - `Workbook/index.tsx` (in paste handler, context access)
-  - `ContextMenu/index.tsx` (6 casts, mostly `(rightclick as any)[dir]` for dynamic locale keys)
-  - `DataVerification/index.tsx` (6 casts)
-  - `ConditionFormat/index.tsx` and `ConditionRules.tsx` (5 combined)
-- **70 `@ts-ignore` directives** in core/ (16 in mouse.ts, 10 in paste.ts, 10 in formula.ts)
-- **`css.d.ts`** declares `*.css` modules with empty types -- needed until all CSS imports are removed
+### 4. `applyOp` crashes if all sheets are hidden (new)
 
-#### Legacy CSS Class Names
+`/packages/fortune-sheet/src/components/Workbook/api.ts:88-95`:
 
-**327 `luckysheet-*` class name references** across 23 component files. As documented in CLEANUP-NOTES.md,
-many of these are DOM selectors used by core/ code and cannot be freely renamed. The highest concentrations:
-- `SheetOverlay/index.tsx`: 39 references
-- `SheetOverlay/index.css`: 70 references
-- `ContextMenu/index.css`: 31 references
-- `FxEditor/index.tsx`: 26 references
-- `ImgBoxs/index.tsx`: 22 references
+When a remote "hide sheet" op arrives and the hidden sheet is the current sheet, the code filters for visible sheets and takes `[0].id`. If the filter returns an empty array (all sheets hidden -- an edge case that could be produced by a malicious or buggy remote client), this dereferences `undefined[0].id` and throws a TypeError, crashing the workbook.
 
-#### Remaining CSS Files (1,740 lines total)
+**Impact:** Remote op can crash the local client.
+**Fix:** Guard with `if (shownSheets.length > 0)` before accessing `[0].id`.
+
+---
+
+## Important Issues
+
+### 5. 13 `console.log` calls in production Yjs hook (previous)
+
+`/apps/sheets/src/components/sheets/hooks/use-sheet.ts` -- Lines 38, 46, 51, 64, 84, 94, 101, 105, 119, 154, 158, 197, 206. These log on every connect, every sync, every snapshot flush, every restore. In a multi-user session they produce substantial console noise.
+
+**Impact:** Log noise in production, potential minor performance cost for large snapshot logging.
+**Fix:** Remove all `console.log`/`console.warn` calls. Keep `console.error` for actual errors (lines 84, 154, 206).
+
+### 6. `DocsRoot` function name -- copy-paste artifact (previous)
+
+`/apps/sheets/src/routes/__root.tsx:18` -- The root component function is named `DocsRoot`, and the route component at line 61 references `DocsRoot`. This was clearly copy-pasted from the docs app.
+
+**Impact:** Developer confusion when navigating code.
+**Fix:** Rename to `SheetsRoot`.
+
+### 7. `interface` instead of `type` (previous)
+
+`/apps/sheets/src/routes/__root.tsx:14-16` -- `interface MyRouterContext` violates the project rule "always `type` over `interface` -- except when methods are needed."
+
+`/apps/sheets/src/components/sheets-sidebar.tsx:12` -- `interface SheetsSidebarProps` same issue.
+
+**Impact:** Code style inconsistency.
+**Fix:** Change both to `type ... = { ... }`.
+
+### 8. Unbounded Y.Array growth for ops (previous, expanded)
+
+`/apps/sheets/src/components/sheets/hooks/use-sheet.ts:145` -- Every local edit pushes ops to `doc.getArray('ops')`. This array is never compacted. Over a long editing session the Yjs document grows monotonically. New joiners must process the entire op history during initial sync. Snapshots are saved periodically, but old ops are never pruned.
+
+The snapshot-on-first-flush pattern (lines 161-165) means the very first edit triggers an immediate flush, and subsequent edits debounce at 1 second. But after restoring from a revision, the ops array still contains all pre-restore operations, which are now semantically invalid against the new state.
+
+**Impact:** Memory growth proportional to session length; slow initial sync for large documents; potential inconsistencies after revision restore.
+**Fix:** After flushing a snapshot, clear the ops Y.Array (or periodically compact it). After `handleRestore`, ops from before the restore should be discarded.
+
+### 9. `isLocalOpRef` flag not resilient to rapid local edits (previous, re-confirmed)
+
+`/apps/sheets/src/components/sheets/hooks/use-sheet.ts:73-75`:
+
+```
+if (isLocalOpRef.current) {
+    isLocalOpRef.current = false;
+    return;
+}
+```
+
+`handleOp` sets `isLocalOpRef.current = true` at line 143 before pushing to the Y.Array. The observer checks this flag. If two local ops fire synchronously before the observer runs, only the first one gets skipped. The second local op would be re-applied as if it were remote.
+
+In practice, `doc.transact()` batching prevents this in most cases, but it is a theoretical correctness issue for any code path that calls `handleOp` twice without yielding.
+
+**Impact:** Possible double-application of local operations under specific timing conditions.
+**Fix:** Use a counter instead of a boolean, incrementing on each local op push and decrementing in the observer.
+
+### 10. `filter-by-condition` renders dead hidden DOM (previous)
+
+`/packages/fortune-sheet/src/components/ContextMenu/FilterMenu.tsx:481-531`:
+
+The `filter-by-condition` menu item renders a `<div>` with `display: "none"` containing unfinished template placeholders (`luckysheet-\${menuid}-bycondition`). This is dead DOM from the upstream fork -- the feature was never implemented.
+
+**Impact:** Wasted DOM nodes, confusing code, broken template literals.
+**Fix:** Remove the entire hidden div block. If the filter-by-condition feature is wanted, implement it properly.
+
+### 11. `onKeyPress` is deprecated React event (new)
+
+`/packages/fortune-sheet/src/components/SheetOverlay/index.tsx:882`:
+```
+onKeyPress={(e) => e.stopPropagation()}
+```
+
+`onKeyPress` was deprecated in React 17 and removed in some newer React DOM implementations. This event handler on the bottom add-row control should use `onKeyDown` instead.
+
+**Impact:** May not fire in future React versions; no functional impact currently.
+**Fix:** Replace with `onKeyDown`.
+
+### 12. 20 `eslint-disable-next-line react-hooks/exhaustive-deps` suppressions (new)
+
+Across 10 component files in fortune-sheet:
+- `FxEditor/index.tsx`: 3
+- `SheetOverlay/index.tsx`: 3
+- `SheetOverlay/InputBox.tsx`: 3
+- `DataVerification/DropdownList.tsx`: 2
+- `Workbook/index.tsx`: 2
+- `Sheet/index.tsx`: 2
+- Others: 5
+
+Each suppression indicates a useEffect/useMemo/useCallback that intentionally omits dependencies. While most of these are legitimate (e.g., only re-running when selection changes, not when the data they read changes), they create a maintenance hazard. Anyone modifying these hooks must carefully verify whether the omitted dependency was intentional.
+
+The most concerning is `SheetOverlay/index.tsx:494` where `cellValue()` is called inside an effect that only depends on `context.sheetFocused`, but `cellValue` reads from `context.luckysheet_select_save` and `context.luckysheetfile` -- the stale value is intentional (capture on focus change) but fragile.
+
+**Impact:** Maintenance risk; potential for stale reads if code is modified.
+**Fix:** Document each suppression with a comment explaining why the dependency is intentionally omitted.
+
+### 13. Chinese comments remain in context.ts, patch.ts, and CSS files (previous, updated count)
+
+Core files still contain Chinese comments:
+- `core/context.ts`: ~40 Chinese comments (field-level: "复制粘贴", "筛选", "选区拖动替换", etc.)
+- `core/context.ts:319-358`: Entire Chinese locale blocks for `optionLabel_zh` and `optionLabel_zh_tw`
+- `core/utils/patch.ts`: 4 Chinese comments ("撤消增表", "正常增表", "撤销删表", "正常删表")
+- CSS files: 3 Chinese comments in `ContextMenu/index.css` and `SheetOverlay/index.css`
+
+The project rule is "English everywhere."
+
+**Impact:** Code style violation; harder to understand for non-Chinese-speaking contributors.
+**Fix:** Translate all Chinese comments to English.
+
+---
+
+## Minor Issues
+
+### 14. `onSave` no-op callback (previous)
+
+`/apps/sheets/src/components/sheets-sidebar.tsx:87-88`:
+```
+onSave={() => {}}
+```
+
+`DriveCreateSheets` declares `onSave` as optional (`onSave?: (newPath: string) => void` at `packages/ui/src/components/layout/drive/drive-create-sheets.tsx:11`). The empty callback should be omitted.
+
+**Fix:** Remove the `onSave` prop.
+
+### 15. DriveContext duplication across 5 apps (previous)
+
+`/apps/sheets/src/routes/__root.tsx:9-12` defines `DriveContext` identically to docs, slides, stickies, and drive apps. All five create the same context with `{rootPath: null, mountId: DEFAULT_MOUNT_ID}`.
+
+**Impact:** Unnecessary code duplication.
+**Fix:** Consider extracting to `@workspace/ui` or `@workspace/lib` as a shared context.
+
+### 16. `editor.tsx` wraps `handleOp` in unnecessary extra callback (new)
+
+`/apps/sheets/src/components/sheets/editor.tsx:41-43`:
+```
+const onOp = useCallback((ops: any[]) => {
+    handleOp(ops);
+}, [handleOp]);
+```
+
+This creates a wrapper function that does nothing but forward arguments. `handleOp` is already a stable `useCallback`. It can be passed directly as `onOp={handleOp}`.
+
+Similarly, `onChange` at line 45-47 wraps `saveSnapshot` with an unnecessary `as any` cast.
+
+**Impact:** Unnecessary allocation; `as any` hides the type mismatch between `Record<string, any>[]` and `SheetData[]`.
+**Fix:** Pass `handleOp` directly. Fix the type signature of `saveSnapshot` to accept `Record<string, any>[]` or properly type the `SheetData` type.
+
+### 17. `LinkEidtCard` directory typo (previous)
+
+`/packages/fortune-sheet/src/components/LinkEidtCard/` -- "Eidt" should be "Edit". The import at `SheetOverlay/index.tsx:37` already uses the corrected name `LinkEditCard` for the export, but the directory path retains the typo.
+
+**Fix:** Rename directory to `LinkEditCard/` and update all imports.
+
+### 18. Remaining CSS: 5 files totaling ~1,740 lines (previous, counts re-verified)
 
 | File | Lines | Imported By |
 |------|-------|-------------|
-| `SheetOverlay/index.css` | 956 | `SheetOverlay/index.tsx` |
-| `SheetTab/index.css` | 280 | `SheetTab/index.tsx` |
-| `ContextMenu/index.css` | 282 | `ContextMenu/index.tsx`, `ContextMenu/SheetTab.tsx` |
-| `LinkEidtCard/index.css` | 182 | `LinkEidtCard/index.tsx` |
-| `SheetOverlay/ScrollBar/index.css` | 40 | `ScrollBar/index.tsx` |
+| `SheetOverlay/index.css` | ~957 | `SheetOverlay/index.tsx` |
+| `ContextMenu/index.css` | ~282 | `ContextMenu/index.tsx`, `ContextMenu/SheetTab.tsx` |
+| `SheetTab/index.css` | ~280 | `SheetTab/index.tsx` |
+| `LinkEidtCard/index.css` | ~182 | `LinkEidtCard/index.tsx` |
+| `SheetOverlay/ScrollBar/index.css` | ~40 | `ScrollBar/index.tsx` |
 
-#### Naming Issues
+Progress since FORTUNE-SHEETS-TODO.md was written: `Workbook/index.css`, `DataVerification/index.css`, and `SearchReplace/index.css` have all been deleted. 5 files remain.
 
-- **`LinkEidtCard/`** -- typo in directory name (should be `LinkEditCard/`). Documented in CLEANUP-NOTES.md
-  as deferred.
-- **`FxEditor/NameBox.tsx`** -- The file was cleaned up and now exports `NameBox` correctly. The audit doc
-  mentioned a `LocationBox` mismatch that has been fixed.
+### 19. 81 `@ts-ignore` directives across 22 files (previous, updated count)
 
-### Architecture Issues
+Previous review counted 70. Actual count is 81 across 22 files. Worst offenders:
+- `core/events/mouse.ts`: 16
+- `core/events/paste.ts`: 10
+- `core/modules/formula.ts`: 10
+- `core/modules/cell.ts`: 8
+- `core/modules/toolbar.ts`: 6
+- `core/locale/index.ts`: 5
+- `core/modules/cursor.ts`: 4
 
-**State Management**: The package uses a single monolithic `Context` object (defined in `core/context.ts`, 694
-lines, with ~100+ fields) managed via Immer's `produceWithPatches`. Every state change runs through
-`setContextWithProduce` in Workbook/index.tsx, which:
-1. Applies the mutation recipe
-2. Generates JSON patches (for undo history)
-3. Filters patches
-4. Pushes to undo list
-5. Emits ops for Yjs sync
+These are in the core engine (untouched from upstream) and are low-priority for cleanup.
 
-This is a functional pattern but creates a performance bottleneck: every interaction (mouse move during selection,
-typing, scrolling) produces a full context update. The `noHistory` fast-path (line 270-275) mitigates this for
-mouse-move operations by skipping patch generation, but the fundamental pattern of a single state atom means
-every consumer re-renders on every change.
+### 20. 36 `as any` casts in component files (previous, updated count)
 
-**Global scroll optimization**: Scroll state was correctly moved to `globalCache` (outside React) with
-`requestAnimationFrame` coalescing via `scrollListeners`. This is a good pattern that prevents the context
-re-render problem for the most frequent operation.
+Previous review counted 43. Actual count is 36 across 11 files. Worst offenders:
+- `icon-map.tsx`: 9 (all in the `SVGIcon` function mapping legacy icon names)
+- `ContextMenu/index.tsx`: 6 (dynamic locale key access)
+- `DataVerification/index.tsx`: 6
+- `ConditionFormat/index.tsx`: 3
+- `LocationCondition/index.tsx`: 3
 
-**Core module sizes**: Several core modules are excessively large:
-- `events/mouse.ts`: 5,434 lines
-- `modules/formula.ts`: 3,550 lines
-- `modules/dropCell.ts`: 3,036 lines
-- `modules/selection.ts`: 2,332 lines
-- `events/paste.ts`: 2,064 lines
-- `core/canvas.ts`: 2,191 lines
+### 21. 327 `luckysheet-*` class name references (previous, confirmed)
 
-These are inherited from the upstream fork and would benefit from splitting, but this is low priority since
-the core is functional.
+Count confirmed at 327 across 23 component files. Many are required by the core engine which uses `document.querySelector` / `getElementById` for DOM manipulation (canvas rendering, cell positioning). These cannot be removed without auditing `core/` usage. The heaviest files:
+- `SheetOverlay/index.css`: 70
+- `SheetOverlay/index.tsx`: 39
+- `ContextMenu/index.css`: 31
+- `FxEditor/index.tsx`: 26
+- `InputBox.tsx`: 25
+- `ImgBoxs/index.tsx`: 22
 
-### Yjs Integration Quality
+### 22. `SheetTab/index.tsx:105` renders legacy icon markup (new)
 
-The Yjs integration lives in `apps/sheets/src/components/sheets/hooks/use-sheet.ts` (218 lines), NOT inside
-fortune-sheet itself. This is a clean architectural choice -- the spreadsheet engine is unaware of Yjs, and
-the hook bridges between them.
+```
+<i className="iconfont luckysheet-iconfont-caidan2"/>
+```
 
-**How it works**:
-1. Creates a `Y.Doc` with a `state` Y.Map (for snapshots) and an `ops` Y.Array (for incremental operations)
-2. On WebSocket sync, reads the snapshot to initialize the workbook
-3. Local edits fire `onOp` -> push ops to Y.Array -> Yjs broadcasts to peers
-4. Remote ops arrive via Y.Array observation -> `workbookRef.current.applyOp(ops)`
-5. Snapshots are debounced (1s after first flush) and flushed on `beforeunload`
+This references a Chinese icon font class (`luckysheet-iconfont-caidan2`) that may not be loaded in the Eigen build, since the icon system was migrated to Lucide. If no iconfont CSS is imported, this renders as an invisible empty element.
 
-**Potential issues**:
-1. **Race condition on late joiners**: If a user joins between op #N and the next snapshot save, they
-   initialize from the last snapshot and miss ops that occurred after that snapshot but before they joined.
-   The ops Y.Array grows unboundedly -- there is no compaction or op-to-snapshot reconciliation.
-2. **No conflict resolution**: Two users editing the same cell simultaneously will both push ops. The last
-   writer wins at the cell level, but intermediate states may flash on screen.
-3. **Snapshot size growth**: The full sheet JSON is stored as a single Y.Map string value. For large sheets,
-   this becomes expensive to serialize/deserialize.
-4. **`isLocalOpRef` flag**: The local-op-skip mechanism (line 73-75) uses a boolean ref, but if two local ops
-   fire in quick succession before the observer runs, the second might not be flagged correctly. In practice,
-   `doc.transact()` batches mitigate this.
+**Impact:** Potentially invisible menu icon on the sheet tab bar.
+**Fix:** Replace with a Lucide icon component (e.g., `<Menu size={14}/>`).
 
-### Should It Move to apps/sheets?
+### 23. `css.d.ts` still needed (previous, status confirmed)
 
-**Current situation**: `@workspace/fortune-sheet` is in `packages/` (shared packages area) but is only consumed
-by `apps/sheets/`. No other app imports it. The CLEANUP-NOTES.md already recommends moving it.
-
-**Analysis**:
-- `bun.lock` confirms only `apps/sheets` and the root `package.json` reference it
-- It imports from `@workspace/lib` and `@workspace/ui`, which are available to apps too
-- It is not and will never be a generic reusable package -- it is deeply customized for Eigen
-- Keeping it in `packages/` implies it is a shared library, which is misleading
-
-**Recommendation: Move it.** The path would be `apps/sheets/src/fortune-sheet/`. Benefits:
-1. Makes the dependency explicit and reduces cognitive load
-2. Eliminates the workspace package indirection
-3. Colocates all sheets code in one place
-4. The `@workspace/fortune-sheet` import alias becomes unnecessary
-5. Simplifies the build -- one fewer package to typecheck independently
-
-**Migration path**:
-1. Move `packages/fortune-sheet/src/` to `apps/sheets/src/fortune-sheet/`
-2. Update imports in `apps/sheets/` from `@workspace/fortune-sheet` to relative paths
-3. Move `packages/fortune-sheet/package.json` dependencies into `apps/sheets/package.json`
-4. Remove `packages/fortune-sheet/` entirely
-5. Update `tsconfig.json` path mappings
-
-### Refactoring Recommendations (Prioritized)
-
-#### Phase 1 -- Quick Wins
-
-1. **Remove console.log statements from `use-sheet.ts`** -- 13 debug traces in production code
-2. **Fix MIME type typo** -- `application-eigensheet` (missing `s`) used in three route files (see Sheets App
-   issues below). This may cause the index redirect and `onAfterAction` navigations to show no content.
-3. **Fix `LinkEidtCard` directory name** -- rename to `LinkEditCard`, update all imports
-4. **Delete `css.d.ts`** once all CSS files are removed (not yet -- 5 remain)
-
-#### Phase 2 -- CSS Migration
-
-5. **Migrate `ScrollBar/index.css`** (40 lines) -- smallest, low risk
-6. **Migrate `LinkEidtCard/index.css`** (182 lines) -- self-contained component
-7. **Migrate `ContextMenu/index.css`** (282 lines) -- shared by 2 components
-8. **Migrate `SheetTab/index.css`** (280 lines) -- tab area styling
-9. **Migrate `SheetOverlay/index.css`** (956 lines) -- largest, most complex, needs core/ ID audit first
-
-#### Phase 3 -- Package Relocation
-
-10. **Move fortune-sheet from `packages/` to `apps/sheets/src/`**
-
-#### Phase 4 -- Type Safety
-
-11. **Eliminate `as any` casts in components** (43 across 15 files)
-12. **Address `@ts-ignore` directives in core** (70 across 14 files)
-13. **Replace native form elements in CustomSort** -- native `<input type="checkbox/radio">` and `<select>`
-    with shadcn equivalents
+`/packages/fortune-sheet/src/css.d.ts` declares `*.css` modules. Still needed because 5 CSS files remain with direct imports. Cannot be deleted yet.
 
 ---
 
-## Sheets App Analysis
+## Observations
 
-### Architecture Compliance
+### Architecture strengths
 
-The sheets app follows Eigen patterns well:
+- **Clean separation of Yjs from spreadsheet engine:** The `use-sheet.ts` hook bridges between Yjs and fortune-sheet's `onOp`/`applyOp` API without the engine knowing about collaboration. This is architecturally sound and makes it possible to use the spreadsheet engine standalone.
 
-| Pattern | Status | Notes |
-|---------|--------|-------|
-| AppShell wrapper | Yes | `__root.tsx` uses `AppShell` with conditional sidebar |
-| Auth guard | Yes | `_auth.tsx` with `beforeLoad` redirect |
-| DriveLayout | Yes | `_auth._sidebar.mime.$mimeType.tsx` uses shared `DriveLayout` |
-| Shared hooks | Yes | Uses `useCollabDocumentInfo`, `useMimeContent`, `usePathInfo`, etc. |
-| EigenApp provider | Yes | `main.tsx` wraps with `EigenApp` |
-| File-based routing | Yes | TanStack Router with proper route tree |
-| No direct useQuery | Yes | All data fetching through `@workspace/lib` hooks |
+- **Op-based sync is correct for the use case:** Compared to syncing full JSON snapshots, the op-based approach (`patchToOp` / `opToPatch` in `core/utils/patch.ts`) provides granular conflict handling. The patch-to-op translation correctly handles special operations (insert/delete rows/columns, add/delete sheets, merge cells) by emitting structured ops rather than raw patches.
 
-### Issues Found
+- **Scroll performance optimization is well-implemented:** Moving scroll state to `globalCache` with `requestAnimationFrame` coalescing (in `SheetOverlay/index.tsx:177-214`) and scroll listeners (in `Workbook/index.tsx:71-81`) avoids the React re-render bottleneck for the highest-frequency user interaction.
 
-#### Critical
+- **App layer is compact and correct:** The sheets app at ~400 lines across 14 files follows Eigen patterns precisely -- AppShell, auth guards, DriveLayout, shared hooks. The toolbar cleanly separates File menu (left) from collaboration controls (right).
 
-1. **MIME type typo in 3 route files** -- `application-eigensheet` instead of `application-eigensheets`:
-   - `/apps/sheets/src/routes/index.tsx:12` -- index redirect uses `application-eigensheet`
-   - `/apps/sheets/src/routes/_auth._sidebar.mime.$mimeType.tsx:81` -- onAfterAction uses `application-eigensheet`
-   - `/apps/sheets/src/routes/_auth._sidebar.shared.$to.tsx:88` -- onAfterAction uses `application-eigensheet`
+- **Revision history integration:** The `handleRestore` function in `use-sheet.ts:168-208` correctly handles Yjs state restoration by creating a temp doc, applying the update, and merging key-by-key into the live doc. This preserves WebSocket connectivity during restore.
 
-   The sidebar correctly uses `application-eigensheets` (line 33 and 59 of `sheets-sidebar.tsx`). This mismatch
-   means: (a) the index page redirects to a MIME filter that may not match any files, (b) after file operations
-   the user is navigated to a non-functional view.
+### What the FORTUNE-SHEETS-TODO.md gets right
 
-   The MIME type constant in `packages/lib/src/types/drive.ts:19` is `application/eigensheets` (with slashes
-   for DB, hyphens for URLs). The correct URL form is `application-eigensheets`.
+The TODO document at `docs/FORTUNE-SHEETS-TODO.md` is thorough and accurate. Key points confirmed by this review:
+- CSS file inventory and line counts are correct (minus the 3 already deleted)
+- The `LinkEidtCard` typo, `NameBox` export fix, and dead CSS file deletions are all accurately tracked
+- The phased priority order is sensible
+- The `export default` elimination has been completed as the TODO indicated
 
-#### Important
+### What the previous review gets right
 
-2. **Excessive console logging in `use-sheet.ts`** -- 13 console.log/warn/error calls for routine operations
-   (connecting, syncing, flushing snapshots). These should be removed or gated behind a debug flag.
+The previous review's findings are largely confirmed:
+- MIME type typo (critical) -- verified
+- Console logging (13 calls) -- verified
+- DocsRoot naming -- verified
+- DriveContext duplication -- verified, affects 5 apps
+- Type safety counts were close (previous said 43 `as any`, actual is 36; previous said 70 `@ts-ignore`, actual is 81)
+- The Yjs sync analysis (race conditions, unbounded ops, snapshot size) is accurate
+- The recommendation to move fortune-sheet to `apps/sheets/src/` is sound
 
-3. **`__root.tsx` function named `DocsRoot`** (`/apps/sheets/src/routes/__root.tsx:18`) -- Copy-paste artifact
-   from the docs app. Should be renamed to `SheetsRoot` for clarity.
+### New findings not in the previous review
 
-4. **DriveContext defined in `__root.tsx`** (`/apps/sheets/src/routes/__root.tsx:9-12`) -- This creates a
-   `DriveContext` with a `DriveContextType` from `@workspace/lib`. Other apps (docs, stickies, slides) likely
-   have the same pattern duplicated. Consider whether this should be a shared pattern in `@workspace/ui`.
-
-5. **`interface` usage** (`/apps/sheets/src/routes/__root.tsx:14-16`) -- `interface MyRouterContext` violates
-   the "always `type` over `interface`" rule from CLAUDE.md.
-
-#### Minor
-
-6. **`onSave` empty callback** (`/apps/sheets/src/components/sheets-sidebar.tsx:88`) -- `onSave={() => {}}`
-   is a no-op prop passed to `DriveCreateSheets`. If it is optional in the component, it should be omitted.
-
-7. **Unused import** (`/apps/sheets/src/routes/_auth._sidebar.shared.$to.tsx:7`) -- `EigenLoader` is imported
-   and used, but `useContext` from `'react'` is also imported (used). However, `uid` is destructured from
-   `Route.useSearch()` at line 24 but `uid` is not declared in `validateSearch` at line 14-16 -- the search
-   params type only declares `pid`. This means `uid` will always be `undefined` from the validated search,
-   though it may work via raw URL params.
-
-8. **Hardcoded `defaultValue="1"` in context menu inputs** -- The insert row/column inputs in
-   `ContextMenu/index.tsx` default to "1" but this is not localized.
-
-### Component Quality
-
-The app components are clean and well-structured:
-
-- **`editor.tsx`** (84 lines) -- Clean composition of fortune-sheet Workbook with toolbar items. Good use of
-  `useCallback` and `useMemo` to prevent unnecessary re-renders. The `TOOLBAR_ITEMS` config is a clean
-  declarative pattern.
-
-- **`toolbar.tsx`** (111 lines) -- Well-structured File menu with proper state management for dialogs.
-  Uses shared components (`DriveCreateSheets`, `DriveDeleteItem`, `DriveRenameItem`, `RevisionHistory`,
-  `DocumentModeButton`). Clean separation of left/right toolbar items.
-
-- **`use-sheet.ts`** (218 lines) -- Solid Yjs integration hook. Proper cleanup on unmount (disconnect,
-  destroy doc, clear refs). The debounced snapshot saving with `beforeunload` flush is well-designed.
-  The `handleRestore` function for revision history correctly handles both Y.Map and Y.Array types.
-
-- **`sheets-sidebar.tsx`** (95 lines) -- Standard sidebar following the pattern from other apps.
-
----
-
-## Overall Recommendations
-
-### Priority 1: Fix Bugs
-1. **Fix the MIME type typo** (`application-eigensheet` -> `application-eigensheets`) in 3 route files.
-   This is likely causing broken navigation in production.
-
-### Priority 2: Clean Up Noise
-2. Remove 13 `console.log` statements from `use-sheet.ts`
-3. Rename `DocsRoot` to `SheetsRoot` in `__root.tsx`
-4. Change `interface MyRouterContext` to `type MyRouterContext`
-
-### Priority 3: Move Fortune-Sheet
-5. Move `packages/fortune-sheet/` into `apps/sheets/src/fortune-sheet/`. The package is only used by the
-   sheets app, and keeping it in `packages/` misleadingly implies it is a shared library.
-
-### Priority 4: Continue CSS Migration
-6. Follow the phased plan in `docs/FORTUNE-SHEETS-TODO.md` -- it is thorough and accurate. Start with the
-   smallest files (`ScrollBar/index.css` at 40 lines, `LinkEidtCard/index.css` at 182 lines) and work up
-   to `SheetOverlay/index.css` (956 lines). The CLEANUP-NOTES.md warning about `luckysheet-*` DOM selectors
-   is critical -- always check core/ before removing any class name.
-
-### Priority 5: Type Safety
-7. Systematically replace `as any` casts in component files (43 total). Many are in locale key access
-   patterns (`(rightclick as any)[dir]`) that could be fixed with proper locale types.
-
-### On the Core Engine
-The core engine (`core/` directory, ~42K lines) has significant technical debt (70 `@ts-ignore`, 5,434-line
-mouse handler, 3,550-line formula module) but it **works**. Refactoring it is high-risk, low-reward relative
-to the UI layer cleanup. The existing documentation in `CLEANUP-NOTES.md` and `RENDERING.md` is excellent
-and provides the necessary context for anyone who needs to touch core/ in the future.
+1. `validateSearch` drops `uid` -- critical for shared-items (issue #2)
+2. `applyOp` crash when all sheets hidden (issue #4)
+3. `onKeyPress` deprecation (issue #11)
+4. 20 exhaustive-deps suppressions (issue #12)
+5. Legacy icon font reference in SheetTab (issue #22)
+6. Unnecessary callback wrapper in editor.tsx (issue #16)
+7. Updated `@ts-ignore` count (81 vs 70)
+8. Updated `as any` count (36 vs 43)
