@@ -44,36 +44,34 @@ Tracking all findings from the [full code review](OVERVIEW.md). Phases match the
 - [x] C22: Drive query keys — added `ownerId` to all keys, hooks, invalidation functions, and SSE handler
 - [x] C10: SharedDrive — added `createSlides` and `createSheets` overrides with permission checks
 - [x] C11: MIME typos — `eigenslide`→`eigenslides`, `eigensheet`→`eigensheets` in 6 route files
-- [ ] C12: Mail download and attachment URLs broken — missing ownerId segment
-- [ ] C13: Draft mutations silently swallow errors
-- [ ] C37: `validateSearch` drops `uid` in drive shared routes
-- [ ] C40: Sheets `validateSearch` drops `uid` — same pattern
+- [x] C12: Mail URLs — added `ownerId` to download/attachment URL builders + updated call sites
+- [x] C13: Draft mutations — removed try/catch, errors now propagate to TanStack Query
+- [x] C37+C40: `validateSearch` — added `uid` extraction in 11 route files (drive, docs, stickies, slides, sheets)
 
 ### Data integrity
 
-- [ ] C20: `getMe()` returns null after self-contact creation
-- [ ] C18: BCC headers persisted in stored EML
-- [ ] C19: `deleteCalendar` orphans shared entries and linked invitations
-- [ ] I10: `movePath` allows moving folder into own descendant
-- [ ] I11: `movePath` missing write permission check on target parent
-- [ ] I12: Folder deletion does not propagate ACL removal for descendants
-- [ ] I13: `closeCollabDocument` writes mount total size instead of doc size
-- [ ] I16: Race condition in Home cleanup/recreation lifecycle
-- [ ] I17: `Home.destruct()` opens unresolved databases just to close them
-- [ ] I18: EML uses hardcoded MIME boundary string
-- [ ] I19: `messageDelete` deletes DB before file
-- [ ] I20: Non-atomic flag updates in mail
-- [ ] I21: `updateContact` with omitted `labels` strips all labels
-- [ ] I23: No RRULE validation — malformed rules crash range queries
-- [ ] I24: Recurring event range query loads ALL recurring events
-- [ ] I25: `updateEvent` returns stale sequence number
-- [ ] I26: Recurring vs non-recurring range filtering inconsistency
-- [ ] I27: Team SSE notifications commented out
-- [ ] I28: `removeMount` does not close mount resources
-- [ ] I29: `SharedDrive` inherits broken shared paths methods
-- [ ] I30: `getStorageFile` casts S3File to BunFile (S3 previews broken)
-- [ ] I31: Per-message WebSocket permission checks cause DB overhead
-- [ ] C35: Team calendar save overwrites entire shares array
+- [x] C20: `addYourself` now returns `addContact()` result (the DB-generated contactId)
+- [x] C18: BCC stripped from EML, random MIME boundary generated (I18 also fixed)
+- [x] C19: `deleteCalendar` propagates share removal before deleting
+- [x] I10: `movePath` walks ancestor chain to prevent folder-into-descendant cycles
+- [x] I11: `movePath` checks write permission on target parent
+- [x] I12: `deleteFolder` recursively propagates ACL removal for descendants
+- [x] I13: Removed incorrect mount-total-size write from `closeCollabDocument`
+- [ ] I16: Deferred — Home cleanup/recreation race (low practical risk, 5-min timeout)
+- [ ] I17: Deferred — databases are always opened during init, theoretical concern
+- [x] I19: `messageDelete` now deletes file before DB record
+- [ ] I20: Deferred — file+DB atomicity is a fundamental limitation, low risk
+- [x] I21: `setContactLabels` only called when `labels !== undefined`
+- [x] I23: RRULE validated via `RRule.parseString()` on create and update
+- [ ] I24: Deferred — performance optimization, not a correctness bug
+- [x] I25: `updateEvent` returns re-fetched event after `incrementSequence`
+- [x] ~~I26~~: Dropped — asymmetry between timezone/non-timezone paths is intentional
+- [x] I27: Improved comment explaining deliberate design choice (staleTime refresh)
+- [x] I28: `removeMount` now calls `mount.closeAllDatabases()` before removing
+- [x] I29: `SharedDrive` throws on `getSharedPathsByMe`/`getSharedPathsWithMe`/`getSharedWith`
+- [ ] I30: Deferred — S3File/BunFile type mismatch needs design work
+- [x] ~~I31~~: Dropped — per-message `canWrite` check is intentional
+- [x] C35: Team calendar save merges team share with existing shares instead of replacing
 
 ## Phase 3: Frontend Correctness
 

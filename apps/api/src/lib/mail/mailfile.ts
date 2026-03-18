@@ -23,31 +23,32 @@ function formatAddresses(field: AddressObject | undefined): string {
 export function createEmlContent(input: EmlInput): string {
     const date = input.date ? input.date.toUTCString() : new Date().toUTCString()
 
+    const boundary = `boundary-${crypto.randomUUID()}`;
+
     const headers = [
         `From: ${formatAddresses(input.from)}`,
         `To: ${formatAddresses(input.to)}`,
         `CC: ${formatAddresses(input.cc)}`,
-        `BCC: ${formatAddresses(input.bcc)}`,
         `Subject: ${input.subject || ''}`,
         `Date: ${date}`,
         `Message-ID: <${input.id}@eigen.local>`,
         `MIME-Version: 1.0`,
-        `Content-Type: multipart/alternative; boundary="boundary-string"`
+        `Content-Type: multipart/alternative; boundary="${boundary}"`
     ]
 
     const body = [
         ``,
-        `--boundary-string`,
+        `--${boundary}`,
         `Content-Type: text/plain; charset=utf-8`,
         ``,
         input.text || '',
         ``,
-        `--boundary-string`,
+        `--${boundary}`,
         `Content-Type: text/html; charset=utf-8`,
         ``,
         input.html || '',
         ``,
-        `--boundary-string--`
+        `--${boundary}--`
     ]
 
     return [...headers, ...body].join('\r\n')

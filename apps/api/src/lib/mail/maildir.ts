@@ -135,8 +135,8 @@ export default class Maildir {
         const email = this.db.getEmail(messageId)
         if (!email) throw new ApiError(404, `Message '${messageId}' not found`)
 
-        this.db.deleteEmail(messageId)
         await this.store.deleteMessage(email.mailbox, email.filename)
+        this.db.deleteEmail(messageId)
 
         this.emit(SSEventType.MAIL_DELETED, {
             messageId,

@@ -242,10 +242,14 @@ export class Calendar {
         return this.getCalendarById(id)!;
     }
 
-    public deleteCalendar(id: string): void {
+    public async deleteCalendar(id: string): Promise<void> {
         const existing = this.getCalendarById(id);
         if (!existing) throw new ApiError(404, 'Calendar not found');
         if (existing.isDefault) throw new ApiError(400, 'Cannot delete default calendar');
+
+        if (existing.shares?.length) {
+            await propagateCalendarShare(this.home, {...existing, shares: []}, existing.shares);
+        }
 
         this.db.delete(schema.calendars).where(eq(schema.calendars.id, id)).run();
         this.home.notify(buildCalendarEvent(SSEventType.CALENDAR_DELETED, {calendarId: id, title: existing.name}));
@@ -274,6 +278,9 @@ export class Calendar {
         const id = uuidv4();
         const uid = uuidv4();
         const rruleStr = input.rrule ?? null;
+        if (rruleStr) {
+            try { RRule.parseString(rruleStr); } catch { throw new ApiError(400, 'Invalid RRULE'); }
+        }
         const timezone = input.timezone ?? null;
         const status = input.status ?? 'confirmed';
         const etag = computeEtag({
@@ -369,6 +376,9 @@ export class Calendar {
         const data = input.data !== undefined ? input.data : existing.data;
 
         const rruleStr = input.rrule !== undefined ? (input.rrule ?? null) : (existing.rrule ?? null);
+        if (rruleStr && input.rrule !== undefined) {
+            try { RRule.parseString(rruleStr); } catch { throw new ApiError(400, 'Invalid RRULE'); }
+        }
         const timezone = input.timezone !== undefined ? (input.timezone ?? null) : (existing.timezone ?? null);
 
         const etag = computeEtag({
@@ -396,6 +406,7 @@ export class Calendar {
             this.incrementSequence(id);
             const withSequence = this.getEventById(id)!;
             propagateInvitation(this.home, withSequence, user, oldAttendees, withSequence.data!.attendees!).catch(console.error);
+            return withSequence;
         }
 
         return updated;

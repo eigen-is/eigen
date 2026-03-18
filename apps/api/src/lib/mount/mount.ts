@@ -537,6 +537,16 @@ export class Mount {
         }
     }
 
+    async closeAllDatabases(): Promise<void> {
+        for (const [, getter] of this.documentDbs) {
+            try {
+                const db = await getter();
+                await db.close();
+            } catch {}
+        }
+        this.documentDbs.clear();
+    }
+
     async getTotalSize(): Promise<number> {
         const result = await this.db.select({
             total: sql<number>`COALESCE(SUM(${paths.size}), 0)`

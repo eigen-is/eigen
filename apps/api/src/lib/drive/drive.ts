@@ -102,6 +102,10 @@ export default class Drive {
         if (mountId === this.defaultMountId) {
             throw new ApiError(400, 'Cannot remove default mount');
         }
+        const mount = this.mounts.get(mountId);
+        if (mount) {
+            await mount.closeAllDatabases();
+        }
         this.mounts.delete(mountId);
     }
 
@@ -281,9 +285,9 @@ export default class Drive {
         }
 
         await this.closeCollabDocumentsRecursively(mountId, pathId);
+        await this.propagateACLRemovalRecursively(mountId, pathId);
 
         await mount.deletePath(pathId);
-        await propagateACLChange(folder, folder.acl, null);
 
         if (isCollabType(folder.type) || isChatType(folder.type)) {
             this.emit(SSEventType.DRIVE_FILE_DELETED, folder);
@@ -328,6 +332,20 @@ export default class Drive {
 
         if (!(await this.canWrite(mountId, pathId, this.owner))) {
             throw new ApiError(403, 'No write permission');
+        }
+
+        if (!(await this.canWrite(mountId, targetParentId, this.owner))) {
+            throw new ApiError(403, 'No write permission on target folder');
+        }
+
+        // Prevent moving a folder into its own descendant
+        let ancestor = targetParent;
+        while (ancestor.parentId) {
+            if (ancestor.parentId === pathId) {
+                throw new ApiError(400, 'Cannot move a folder into its own descendant');
+            }
+            ancestor = (await mount.getPath(ancestor.parentId))!;
+            if (!ancestor) break;
         }
 
         await mount.updatePath(pathId, {parentId: targetParentId});
@@ -506,11 +524,6 @@ export default class Drive {
             }
         }
 
-        const path = await mount.getPath(pathId);
-        if (path) {
-            const size = await mount.getTotalSize();
-            await mount.updatePath(pathId, {size});
-        }
     }
 
     async openDatabase<S extends SchemaType>(
@@ -651,6 +664,21 @@ export default class Drive {
         const mount = this.mounts.get(mountId);
         if (!mount) throw new ApiError(404, `Mount not found: ${mountId}`);
         return mount;
+    }
+
+    private async propagateACLRemovalRecursively(mountId: string, pathId: string): Promise<void> {
+        const mount = this.getMount(mountId);
+        const path = await mount.getPath(pathId);
+        if (!path) return;
+        if (path.acl) {
+            await propagateACLChange(path, path.acl, null);
+        }
+        if (isContainerType(path.type)) {
+            const children = await mount.listFolder(pathId);
+            for (const child of children) {
+                await this.propagateACLRemovalRecursively(mountId, child.id);
+            }
+        }
     }
 
     private async closeCollabDocumentsRecursively(mountId: string, pathId: string): Promise<void> {

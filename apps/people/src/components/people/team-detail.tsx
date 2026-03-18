@@ -247,9 +247,10 @@ export function TeamDetail({team, organizationId}: TeamDetailProps) {
                 },
             } as any);
             if (defaultCal && draftCalEnabled) {
+                const existingShares = (defaultCal.shares || []).filter(s => s.targetId !== teamTarget);
                 const shares = draftCalPermission === 'read'
-                    ? null
-                    : [{targetId: teamTarget, permission: draftCalPermission as 'free-busy' | 'write'}];
+                    ? (existingShares.length > 0 ? existingShares : null)
+                    : [...existingShares, {targetId: teamTarget, permission: draftCalPermission as 'free-busy' | 'write'}];
                 await updateCalendar.mutateAsync({id: defaultCal.id, shares});
             }
             toast.success('Team settings saved');

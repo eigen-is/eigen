@@ -222,4 +222,16 @@ export default class SharedDrive extends Drive {
     public async closeDatabase(mountId: string, pathId: string): Promise<void> {
         return this.sharedDrive.closeDatabase(mountId, pathId);
     }
+
+    // These methods operate on the owner's shared.db and must not be called on a SharedDrive instance,
+    // which represents another user's view of this drive.
+    async getSharedPathsWithMe(): Promise<DrivePath[]> {
+        throw new ApiError(403, 'Cannot query shared paths on a shared drive');
+    }
+    async getSharedPathsByMe(): Promise<DrivePath[]> {
+        throw new ApiError(403, 'Cannot query shared paths on a shared drive');
+    }
+    async getSharedWith(_user: User): Promise<DrivePath[]> {
+        throw new ApiError(403, 'Cannot query shared paths on a shared drive');
+    }
 }
