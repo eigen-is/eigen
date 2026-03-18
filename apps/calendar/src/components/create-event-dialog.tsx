@@ -1,4 +1,5 @@
 import {useEffect, useMemo, useState} from 'react';
+import {toast} from 'sonner';
 import {AlignLeft, Calendar, Clock, MapPin, UsersRound} from 'lucide-react';
 import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle} from '@workspace/ui/components/dialog';
 import {Button} from '@workspace/ui/components/button';
@@ -155,7 +156,7 @@ export function CreateEventDialog({open, onOpenChange, defaultDate, defaultCalen
             });
             onOpenChange(false);
         } catch (error) {
-            console.error('Error creating event:', error);
+            toast.error('Failed to create event');
         } finally {
             setTimeout(() => setIsLoading(false), 350);
         }
@@ -224,7 +225,7 @@ export function CreateEventDialog({open, onOpenChange, defaultDate, defaultCalen
                                 <RecurrencePicker
                                     value={rruleString}
                                     onChange={setRruleString}
-                                    startDate={new Date(startDate)}
+                                    startDate={new Date(startDate + 'T00:00:00')}
                                 />
                                 {!allDay && (
                                     <span className="text-xs text-muted-foreground ml-auto">

@@ -55,7 +55,7 @@ export function DriveListToolbar({
                                      onCreateSlides,
                                      onCreateSheets,
                                  }: DriveListToolbarProps) {
-    const {data: breadcrumbPaths = []} = showBreadcrumb ? useBreadcrumb(ownerId, mountId, pathId) : {data: []};
+    const {data: breadcrumbPaths = []} = useBreadcrumb(ownerId, mountId, showBreadcrumb ? pathId : undefined);
     const {isMobile} = useLayout();
 
     const handleBreadcrumbClick = (path: DrivePath) => {

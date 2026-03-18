@@ -98,6 +98,7 @@ export function SlideCanvas({
                     aspectRatio: SLIDE_ASPECT_RATIO,
                     maxHeight: '100%',
                     maxWidth: '100%',
+                    containerType: 'size',
                     backgroundColor: slide.backgroundColor,
                     ...(bgUrl ? {backgroundImage: `url(${bgUrl})`, backgroundSize: 'cover', backgroundPosition: 'center'} : {}),
                 }}

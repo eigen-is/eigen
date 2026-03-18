@@ -79,7 +79,7 @@ export function MembersList({members, searchQuery, activeMemberId, onRowClick}: 
     const {selectedIndex, handleKeyDown} = useKeyboardListNavigation({
         items: filteredMembers,
         activeId: activeMemberId,
-        getId: (m) => m.userId,
+        getId: (m) => m.id,
         onSelect: (id) => onRowClick(id),
         containerRef: listRef,
         selection,

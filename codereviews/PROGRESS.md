@@ -50,6 +50,8 @@ Tracking all findings from the [full code review](OVERVIEW.md). Phases match the
 
 ### Data integrity
 
+- [ ] NEW: Calendar share permission resolution — individual share (read) overrides team share (write) in `shared_calendars` cache. `propagateCalendarShare` should resolve max permission across all matching shares.
+
 - [x] C20: `addYourself` now returns `addContact()` result (the DB-generated contactId)
 - [x] C18: BCC stripped from EML, random MIME boundary generated (I18 also fixed)
 - [x] C19: `deleteCalendar` propagates share removal before deleting
