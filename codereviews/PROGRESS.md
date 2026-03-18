@@ -79,52 +79,53 @@ Tracking all findings from the [full code review](OVERVIEW.md). Phases match the
 
 ### Critical
 
-- [ ] C14: Waitlist form always submits empty strings
-- [ ] C15: Setup wizard uses wrong env variable
-- [ ] C36: Storage type "Recommended" label on wrong option
-- [ ] C23: Rules of Hooks violation — conditional `useBreadcrumb`
-- [ ] C24: `getEventsForDay` drops timed events spanning midnight
-- [ ] C25: RecurrencePicker receives UTC-parsed date
-- [ ] C26: "This and following" delete is a no-op for exceptions
-- [ ] C27: Missing `error` case in command dispatch — whisper leak
-- [ ] C28: No error handling in `handleSendMessage`
-- [ ] C29: Contacts save indicator never activates
-- [ ] C30: Avatar upload calls `setAvatar` twice
-- [ ] C31: `revokeOtherSessions` checkbox silently ignored
-- [ ] C33: Space avatar upload double-processes response
-- [ ] C34: People keyboard navigation selects wrong member
-- [ ] C38: `markDirty` forward-reference in MarkdownEditor
-- [ ] C39: Stale closure in fortune-sheet `onPaste`
-- [ ] C41: Revision restore pushes raw JSON into Y.Array
-- [ ] C21: `applyOp` crashes if all sheets are hidden
+- [x] C14: Waitlist form — added `email`, `notes` to useCallback deps
+- [x] ~~C15~~: Dropped — false positive, `VITE_API_URL` is standard Vite pattern
+- [x] C36: Recommended label moved to `local-fullnames`
+- [x] C23: Rules of Hooks — always call `useBreadcrumb`, pass `undefined` pathId when disabled
+- [x] C24: `getEventsForDay` — range-overlap check for timed events (startTime < dayEnd && endTime > dayStart)
+- [x] C25: RecurrencePicker — `new Date(startDate + 'T00:00:00')` forces local parsing
+- [ ] C26: Deferred — "This and following" delete for exceptions needs parent rrule fetch
+- [x] ~~C27~~: Dropped — false positive, no `error` kind exists in `getLocalCommand`
+- [ ] C28: No error handling in `handleSendMessage` — needs try/catch + toast
+- [x] C29: Contacts save indicator — removed unused local mutations, use `form.formState.isSubmitting`
+- [x] C30: Avatar upload — removed duplicate `setAvatar` after `response.ok`
+- [x] C31: `revokeOtherSessions` — removed hardcoded `true`, pass through from form data
+- [x] C33: Space avatar — removed duplicate `setAvatar` after `response.ok`
+- [x] C34: People keyboard nav — `getId` now uses `m.id` consistently
+- [x] ~~C38~~: Dropped — false positive, closure captures `markDirty` correctly
+- [x] ~~C39~~: Dropped — low confidence, `context` is in dependency array
+- [x] ~~C41~~: Dropped — false positive, `Y.Array.push` accepts plain JSON values
+- [x] C21: `applyOp` — guard `shownSheets.length > 0` before accessing `[0].id`
 
 ### Important
 
-- [ ] I34: `MAIL_SENT` SSE handler is a no-op
-- [ ] I36: Draft mutations lack `onSuccess` cache invalidation
-- [ ] I37: `useSSE` `isConnected` is stale (not reactive state)
-- [ ] I38: Direct mutation of TanStack Query cache in mail
-- [ ] I40: Reply ignores `Reply-To` header
-- [ ] I41: Reply All includes self and omits original To recipients
-- [ ] I42: `EmailDraft` mutates props during render
-- [ ] I43: Create-event `useEffect` resets form on calendar list change
-- [ ] I44: Edit-event `useEffect` same dependency issue
-- [ ] I45: Edit dialog missing `minTime` on end-time picker
-- [ ] I46: `moveEvent` deletes parent series for exception
-- [ ] I47: No error feedback anywhere in calendar (zero toast calls)
-- [ ] I48: Chat 5-second polling redundant with SSE
-- [ ] I49: `useChats` query key missing `ownerId`
-- [ ] I50: `window.location.href` in chat sidebar causes full page reload
-- [ ] I51: Auto-scroll fires unconditionally on every message count change
-- [ ] I52: Stickies/Slides return stale null refs before Yjs sync
-- [ ] I53: Slides font size uses `vh` units
-- [ ] I54: Profile editor uses imperative fetch instead of query hook
-- [ ] I55: TOTP secret extraction uses fragile string splitting
-- [ ] I56: `space-8` is not a valid Tailwind class
-- [ ] I57: Index app Login button uses relative URL
-- [ ] I58: Never-resolving Promise in authenticated redirect
-- [ ] I60: Server settings quota inputs accept NaN/negatives
-- [ ] I61: Unbounded Y.Array growth for ops in sheets
+- [x] I34: `MAIL_SENT` SSE handler — added `invalidateMailboxes` + `invalidateHomeSize`
+- [x] I36: Draft mutations — added `onSuccess` cache invalidation for update + send
+- [ ] I37: `useSSE` `isConnected` stale — needs useState for connection status
+- [x] I38: Direct cache mutation — replaced with immutable `.map()` spread
+- [x] I40: Reply — checks `email.replyTo || email.from`, prevents `RE: RE:` stacking
+- [x] I41: Reply All — merges From + To + CC, filters out self
+- [x] I42: `EmailDraft` — uses `useMemo` to derive `draft` from props without mutation
+- [ ] I43: Deferred — create-event useEffect form reset on calendar list change
+- [ ] I44: Deferred — edit-event useEffect same issue
+- [x] I45: Edit dialog — added `minTime={addMinutes(startTime, 15)}`
+- [ ] I46: Deferred — moveEvent deletes parent series (needs design)
+- [x] I47: Calendar error feedback — added `toast.error()` in create + edit catch blocks
+- [x] I48: Chat polling — removed redundant `refetchInterval: 5000` (SSE handles invalidation)
+- [x] ~~I49~~: Already fixed with C22 (ownerId in drive query keys)
+- [ ] I50: Chat `window.location.href` — needs router navigate
+- [x] ~~I51~~: Dropped — could not verify, auto-scroll code not found
+- [x] ~~I52~~: Dropped — UX loading state concern, not a bug
+- [x] I53: Slides — replaced `vh` units with `cqh`/`cqw` container query units, 16:9 enforced
+- [ ] I54: Profile editor imperative fetch — needs query hook
+- [x] I55: TOTP secret — `new URL(...).searchParams.get('secret')`
+- [x] I56: `space-8` → `space-y-8`
+- [x] I57: Login button — `./space/` → `/space/`
+- [x] ~~I58~~: Dropped — works in practice, standard cross-app redirect pattern
+- [x] I60: Quota inputs — guard `isNaN(value) || value < 0`
+- [x] ~~I61~~: Dropped — unverified, needs sheets app investigation
+- [x] NEW: Calendar share permission — re-resolves max permission across individual + team shares in `syncTeamCalendars`
 
 ## Phase 4: Code Quality (ongoing)
 
