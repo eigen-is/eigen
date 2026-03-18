@@ -1,6 +1,6 @@
 import {memo, useEffect, useRef} from 'react';
 import {ArrowDownToLine, ArrowUpToLine, ChevronDown, ChevronUp, Copy, Trash2,} from 'lucide-react';
-import {BORDER_RADIUS_ROUND, pxToPercent, SlideObject} from './types';
+import {BORDER_RADIUS_ROUND, pxToPercent, SLIDE_BASE_HEIGHT, SLIDE_BASE_WIDTH, SlideObject} from './types';
 import {useMediaResolver} from '@workspace/lib/drive';
 import {
     ContextMenu,
@@ -9,6 +9,14 @@ import {
     ContextMenuSeparator,
     ContextMenuTrigger,
 } from '@workspace/ui/components/context-menu';
+
+function pxToPercentHeight(val: number): string {
+    return `${(val / SLIDE_BASE_HEIGHT) * 100}cqh`;
+}
+
+function pxToPercentWidth(val: number): string {
+    return `${(val / SLIDE_BASE_WIDTH) * 100}cqw`;
+}
 
 export function getObjectPositionStyle(obj: SlideObject): React.CSSProperties {
     return {
@@ -19,9 +27,9 @@ export function getObjectPositionStyle(obj: SlideObject): React.CSSProperties {
         transform: obj.rotation ? `rotate(${obj.rotation}deg)` : undefined,
         transformOrigin: 'center center',
         backgroundColor: obj.type === 'text' && obj.backgroundColor ? obj.backgroundColor : undefined,
-        ...(obj.borderWidth && obj.borderColor ? {border: `${obj.borderWidth}px solid ${obj.borderColor}`} : {}),
+        ...(obj.borderWidth && obj.borderColor ? {border: `${pxToPercentHeight(obj.borderWidth)} solid ${obj.borderColor}`} : {}),
         ...(obj.borderRadius ? {
-            borderRadius: obj.borderRadius >= BORDER_RADIUS_ROUND ? '50%' : `${obj.borderRadius}px`,
+            borderRadius: obj.borderRadius >= BORDER_RADIUS_ROUND ? '50%' : pxToPercentWidth(obj.borderRadius),
             overflow: 'hidden' as const
         } : {}),
     };
@@ -29,14 +37,14 @@ export function getObjectPositionStyle(obj: SlideObject): React.CSSProperties {
 
 export function getTextStyle(obj: SlideObject & { type: 'text' }): React.CSSProperties {
     return {
-        fontSize: `${obj.fontSize / 1080 * 100}vh`,
+        fontSize: pxToPercentHeight(obj.fontSize),
         fontWeight: obj.fontWeight,
         fontStyle: obj.fontStyle,
         textDecoration: obj.textDecoration !== 'none' ? obj.textDecoration : undefined,
         textAlign: obj.textAlign as React.CSSProperties['textAlign'],
         color: obj.color,
         lineHeight: obj.lineHeight || 1.2,
-        letterSpacing: obj.letterSpacing ? `${obj.letterSpacing}px` : undefined,
+        letterSpacing: obj.letterSpacing ? pxToPercentWidth(obj.letterSpacing) : undefined,
     };
 }
 

@@ -1,4 +1,5 @@
 import {useEffect, useMemo, useState} from 'react';
+import {toast} from 'sonner';
 import {AlignLeft, Calendar, Clock, MapPin, UsersRound} from 'lucide-react';
 import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle} from '@workspace/ui/components/dialog';
 import {Button} from '@workspace/ui/components/button';
@@ -231,7 +232,7 @@ export function EditEventDialog({open, onOpenChange, event, ownerUserId, calenda
 
             onOpenChange(false);
         } catch (error) {
-            console.error('Error updating event:', error);
+            toast.error('Failed to update event');
         } finally {
             setTimeout(() => setIsLoading(false), 350);
         }
@@ -282,7 +283,7 @@ export function EditEventDialog({open, onOpenChange, event, ownerUserId, calenda
                                                className="h-8 text-sm"/>
                                         <TimeSelect value={startTime} onChange={handleStartTimeChange}/>
                                         <span className="text-muted-foreground text-sm">–</span>
-                                        <TimeSelect value={endTime} onChange={setEndTime} referenceTime={startTime}/>
+                                        <TimeSelect value={endTime} onChange={setEndTime} referenceTime={startTime} minTime={addMinutes(startTime, 15)}/>
                                     </div>
                                 )}
 

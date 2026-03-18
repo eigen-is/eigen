@@ -70,10 +70,9 @@ export function getEventsForDay(events: CalendarEventOccurrence[], day: Date): C
             const dayEndUtcMs = dayUtcMs + 86400000;
             return (e.startTime * 1000) < dayEndUtcMs && (e.endTime * 1000) > dayUtcMs;
         }
-        const start = new Date(e.startTime * 1000);
-        return start.getFullYear() === day.getFullYear() &&
-            start.getMonth() === day.getMonth() &&
-            start.getDate() === day.getDate();
+        const dayStart = new Date(day.getFullYear(), day.getMonth(), day.getDate()).getTime() / 1000;
+        const dayEnd = dayStart + 86400;
+        return e.startTime < dayEnd && e.endTime > dayStart;
     });
 }
 

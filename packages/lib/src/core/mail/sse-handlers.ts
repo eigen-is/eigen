@@ -58,6 +58,8 @@ export function handleMailSSEvent(event: SSEvent, queryClient: QueryClient): boo
             return true;
 
         case SSEventType.MAIL_SENT:
+            invalidateMailboxes(queryClient);
+            invalidateHomeSize(queryClient);
             return true;
 
         default:

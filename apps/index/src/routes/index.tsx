@@ -37,7 +37,7 @@ export function HomeComponent() {
     }, []);
 
     const handleLogin = useCallback(() => {
-        window.location.href = './space/';
+        window.location.href = '/space/';
     }, []);
 
     const handleShowWaitlist = useCallback(() => {
@@ -63,7 +63,7 @@ export function HomeComponent() {
             toast.error('Failed to sign up', {description: 'Signing up currently not available, please try again'});
         }
 
-    }, []);
+    }, [email, notes]);
 
     return (
         <div className="flex flex-col items-center justify-center min-h-screen p-4">

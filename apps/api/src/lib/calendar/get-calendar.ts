@@ -69,5 +69,24 @@ export async function syncTeamCalendars(user: User) {
         }
     }
 
+    // Re-resolve permissions for user-owned shared calendars where the user
+    // may have both an individual share and a team share. The cached permission
+    // might be stale if a team share was added/removed after the individual share
+    // was propagated.
+    const sharedCalendars = cal.getSharedCalendars();
+    for (const sc of sharedCalendars) {
+        const parsed = parseOwnerId(sc.ownerUserId);
+        if (parsed.type === 'team') continue;
+        try {
+            const ownerHome = await getHome(sc.ownerUserId);
+            const resolved = ownerHome.calendar.checkPermission(sc.calendarId, user.email, memberships.teamIds);
+            if (resolved && resolved !== sc.permission) {
+                cal.ensureSharedEntry(sc.ownerUserId, sc.calendarId, sc.calendarName, sc.calendarColor, resolved);
+            }
+        } catch {
+            // Owner home not available, skip
+        }
+    }
+
     return cal.getSharedCalendars();
 }

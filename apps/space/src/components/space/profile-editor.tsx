@@ -188,11 +188,6 @@ export function ProfileEditor() {
                                                 }
                                             });
 
-                                            // Parse the response and update the avatar
-                                            if (response.ok) {
-                                                const responseData = await response.text();
-                                                setAvatar(responseData);
-                                            }
                                         } catch (err: unknown) {
                                             console.error('Error uploading file:', err);
                                             uploadHandler.error();
