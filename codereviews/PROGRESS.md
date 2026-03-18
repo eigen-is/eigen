@@ -33,11 +33,11 @@ Tracking all findings from the [full code review](OVERVIEW.md). Phases match the
 
 ### Missing `await`
 
-- [ ] C16: Missing `await` on `matchesACL` in share propagation
-- [ ] C17: `getTeamExists` missing `await` — always truthy
-- [ ] I22: `updateUser` not awaited in contacts
-- [ ] I39: Missing `await` on async calls in mail bulk operations
-- [ ] C32: `onSubmit` in ChangePassword does not await
+- [x] C16: `await matchesACL()` in `receiveACLChange` (drive.ts:565)
+- [x] C17: `await getTeam()` in `getTeamExists` (team.ts:11)
+- [x] I22: `await updateUser()` in contacts `updateContact` (contacts.ts:167)
+- [x] I39: `await handleDeleteEmail/handleMoveEmail` in mail bulk handlers (4 locations)
+- [x] C32: `await onPasswordChange()` in ChangePassword `onSubmit` (change-password.tsx:95)
 
 ### Broken features
 
