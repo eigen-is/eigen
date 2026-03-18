@@ -78,7 +78,7 @@ function DriveRoute() {
             onAfterAction={() => {
                 navigate({
                     to: '/mime/$mimeType',
-                    params: {mimeType: 'application-eigenslide'}
+                    params: {mimeType: 'application-eigenslides'}
                 });
             }}
             allowDelete={true}

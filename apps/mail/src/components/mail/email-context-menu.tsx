@@ -11,6 +11,7 @@ import {MaildirMailbox} from "@workspace/lib/types/mail";
 import {ucfirst} from "@workspace/ui/lib/utils";
 import {getMailMessageDownloadUrl} from "@workspace/lib/api";
 import {CSSProperties} from "react";
+import {useAuth} from "@workspace/lib/auth";
 
 interface EmailContextMenuProps {
     style: CSSProperties;
@@ -45,6 +46,7 @@ export function EmailContextMenu({
                                      onClose,
                                      onPrint
                                  }: EmailContextMenuProps) {
+    const {user} = useAuth();
     const firstId = messageIds[0] || '';
 
     return (
@@ -119,7 +121,7 @@ export function EmailContextMenu({
             {isSingleSelect && (
                 <>
                     <DropdownMenuItem onClick={() => {
-                        const url = getMailMessageDownloadUrl(firstId);
+                        const url = getMailMessageDownloadUrl(user!.id, firstId);
                         window.open(url, "_blank");
                         onClose();
                     }}>

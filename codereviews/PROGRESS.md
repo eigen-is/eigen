@@ -42,8 +42,8 @@ Tracking all findings from the [full code review](OVERVIEW.md). Phases match the
 ### Broken features
 
 - [x] C22: Drive query keys — added `ownerId` to all keys, hooks, invalidation functions, and SSE handler
-- [ ] C10: SharedDrive missing `createSlides` and `createSheets` overrides
-- [ ] C11: Slides and Sheets MIME type typos in 6 route files
+- [x] C10: SharedDrive — added `createSlides` and `createSheets` overrides with permission checks
+- [x] C11: MIME typos — `eigenslide`→`eigenslides`, `eigensheet`→`eigensheets` in 6 route files
 - [ ] C12: Mail download and attachment URLs broken — missing ownerId segment
 - [ ] C13: Draft mutations silently swallow errors
 - [ ] C37: `validateSearch` drops `uid` in drive shared routes

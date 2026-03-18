@@ -91,8 +91,8 @@ export const getDrivePreviewUrl = (ownerId: string, mountId: string, pathId: str
 export const getDriveThumbnailUrl = (ownerId: string, mountId: string, fileName: string) => `${API_HOST}/drive/${ownerId}/${mountId}/thumb/${fileName}`;
 export const getCollabWebSocketUrl = (ownerId: string, mountId: string, pathId: string) => `${API_HOST.replace('http', 'ws')}/ws/collab/${ownerId}/${mountId}/${pathId}`;
 export const getInlineEditUrl = (ownerId: string, mountId: string, pathId: string) => getDriveAppUrl(`edit/${ownerId}/${mountId}/${pathId}`);
-export const getMailMessageDownloadUrl = (messageId: string) => `${API_HOST}/mail/message/download/${messageId}`;
-export const getMailAttachmentUrl = (messageId: string, attachmentIndex: number, fileName: string) => `${API_HOST}/mail/message/${messageId}/attachment/${attachmentIndex}/${encodeURIComponent(fileName)}`;
+export const getMailMessageDownloadUrl = (ownerId: string, messageId: string) => `${API_HOST}/mail/${ownerId}/message/${messageId}/download`;
+export const getMailAttachmentUrl = (ownerId: string, messageId: string, attachmentIndex: number, fileName: string) => `${API_HOST}/mail/${ownerId}/message/${messageId}/attachment/${attachmentIndex}/${encodeURIComponent(fileName)}`;
 export const getSpaceZipUrl = () => `${API_HOST}/space/zip`;
 export const getCollabAccessUrl = (ownerId: string, mountId: string, pathId: string) => `${API_HOST}/collab/${ownerId}/${mountId}/${pathId}/access`;
 export const getCollabRevisionUrl = (ownerId: string, mountId: string, pathId: string, revisionId: number) => `${API_HOST}/collab/${ownerId}/${mountId}/${pathId}/revisions/${revisionId}`;
