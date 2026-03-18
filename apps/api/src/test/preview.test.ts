@@ -1,5 +1,7 @@
 import {beforeAll, describe, expect, test} from 'bun:test';
 import {authedRequest, driveGet, driveUpload, getTestContext} from './setup';
+import {generateImagePreview} from '../lib/shared/thumbnails';
+import {isExiftoolCandidate} from '../lib/preview/exiftool-preview';
 
 describe('Preview', () => {
     let token: string;
@@ -98,5 +100,128 @@ describe('Preview', () => {
         expect(second.status).toBe(200);
         const data = await second.json();
         expect(data.body).toContain('Cache test');
+    });
+
+    test('image preview is cached on second request', async () => {
+        const pngBytes = new Uint8Array([
+            137,80,78,71,13,10,26,10,0,0,0,13,73,72,68,82,0,0,0,4,0,0,0,4,8,2,0,0,0,38,147,9,
+            41,0,0,0,9,112,72,89,115,0,0,3,232,0,0,3,232,1,181,123,82,107,0,0,0,17,73,68,65,84,
+            120,156,99,248,207,192,0,71,8,22,94,14,0,174,147,15,241,166,148,72,35,0,0,0,0,73,69,
+            78,68,174,66,96,130,
+        ]);
+        const file = new File([pngBytes], 'cached.png', {type: 'image/png'});
+        const uploaded = await driveUpload(token, ownerId, mountId, rootId, file);
+
+        const first = await authedRequest(token, `/drive/${ownerId}/${mountId}/file/${uploaded.id}/preview`);
+        expect(first.status).toBe(200);
+
+        const second = await authedRequest(token, `/drive/${ownerId}/${mountId}/file/${uploaded.id}/preview`);
+        expect(second.status).toBe(200);
+        expect(second.headers.get('content-type')).toBe('image/webp');
+    });
+
+    test('upload image generates thumbnail', async () => {
+        const pngBytes = new Uint8Array([
+            137,80,78,71,13,10,26,10,0,0,0,13,73,72,68,82,0,0,0,4,0,0,0,4,8,2,0,0,0,38,147,9,
+            41,0,0,0,9,112,72,89,115,0,0,3,232,0,0,3,232,1,181,123,82,107,0,0,0,17,73,68,65,84,
+            120,156,99,248,207,192,0,71,8,22,94,14,0,174,147,15,241,166,148,72,35,0,0,0,0,73,69,
+            78,68,174,66,96,130,
+        ]);
+        const file = new File([pngBytes], 'thumb-test.png', {type: 'image/png'});
+        const uploaded = await driveUpload(token, ownerId, mountId, rootId, file);
+        expect(uploaded.thumbnail).toBeTruthy();
+    });
+});
+
+describe('generateImagePreview', () => {
+    const tmpDir = '/tmp/eigen-preview-test-' + Date.now();
+
+    async function writeTempFile(name: string, data: Buffer): Promise<string> {
+        const {mkdirSync} = await import('node:fs');
+        mkdirSync(tmpDir, {recursive: true});
+        const filePath = `${tmpDir}/${name}`;
+        await Bun.write(filePath, data);
+        return filePath;
+    }
+
+    test('converts PNG file to WebP and returns dimensions', async () => {
+        const pngBytes = Buffer.from([
+            137,80,78,71,13,10,26,10,0,0,0,13,73,72,68,82,0,0,0,4,0,0,0,4,8,2,0,0,0,38,147,9,
+            41,0,0,0,9,112,72,89,115,0,0,3,232,0,0,3,232,1,181,123,82,107,0,0,0,17,73,68,65,84,
+            120,156,99,248,207,192,0,71,8,22,94,14,0,174,147,15,241,166,148,72,35,0,0,0,0,73,69,
+            78,68,174,66,96,130,
+        ]);
+        const filePath = await writeTempFile('test.png', pngBytes);
+        const result = await generateImagePreview(filePath, 'image/png', 'test.png', tmpDir, 'test-png');
+        expect(result).not.toBeNull();
+        expect(result!.width).toBe(4);
+        expect(result!.height).toBe(4);
+        // WebP magic bytes: RIFF....WEBP
+        expect(result!.data[0]).toBe(0x52); // R
+        expect(result!.data[1]).toBe(0x49); // I
+        expect(result!.data[2]).toBe(0x46); // F
+        expect(result!.data[3]).toBe(0x46); // F
+    });
+
+    test('returns null for non-image mime', async () => {
+        const filePath = await writeTempFile('file.txt', Buffer.from('not an image'));
+        const result = await generateImagePreview(filePath, 'text/plain', 'file.txt', tmpDir, 'test-txt');
+        expect(result).toBeNull();
+    });
+
+    test('returns null for corrupt image data', async () => {
+        const filePath = await writeTempFile('bad.png', Buffer.from('not valid png data'));
+        const result = await generateImagePreview(filePath, 'image/png', 'bad.png', tmpDir, 'test-bad');
+        expect(result).toBeNull();
+    });
+
+    test('JPEG file produces WebP output', async () => {
+        const sharp = (await import('sharp')).default;
+        const jpegBuf = await sharp({create: {width: 2, height: 2, channels: 3, background: {r: 0, g: 128, b: 255}}})
+            .jpeg().toBuffer();
+
+        const filePath = await writeTempFile('test.jpg', jpegBuf);
+        const result = await generateImagePreview(filePath, 'image/jpeg', 'test.jpg', tmpDir, 'test-jpg');
+        expect(result).not.toBeNull();
+        expect(result!.data[0]).toBe(0x52); // RIFF
+    });
+
+    test('respects maxSize option', async () => {
+        const sharp = (await import('sharp')).default;
+        const largePng = await sharp({create: {width: 100, height: 100, channels: 3, background: {r: 255, g: 0, b: 0}}})
+            .png().toBuffer();
+
+        const filePath = await writeTempFile('large.png', largePng);
+        const result = await generateImagePreview(filePath, 'image/png', 'large.png', tmpDir, 'test-large', {maxSize: 32});
+        expect(result).not.toBeNull();
+        expect(result!.width).toBe(100);
+        expect(result!.height).toBe(100);
+
+        const meta = await sharp(result!.data).metadata();
+        expect(meta.width).toBeLessThanOrEqual(32);
+        expect(meta.height).toBeLessThanOrEqual(32);
+    });
+});
+
+describe('isExiftoolCandidate', () => {
+    test('standard image mimes are candidates', () => {
+        expect(isExiftoolCandidate('image/png', 'test.png')).toBe(true);
+        expect(isExiftoolCandidate('image/jpeg', 'test.jpg')).toBe(true);
+        expect(isExiftoolCandidate('image/webp', 'test.webp')).toBe(true);
+        expect(isExiftoolCandidate('image/heic', 'test.heic')).toBe(true);
+        expect(isExiftoolCandidate('image/vnd.adobe.photoshop', 'test.psd')).toBe(true);
+    });
+
+    test('exiftool extensions are candidates even with non-image mime', () => {
+        expect(isExiftoolCandidate('application/photoshop', 'test.psd')).toBe(true);
+        expect(isExiftoolCandidate('application/octet-stream', 'photo.cr2')).toBe(true);
+        expect(isExiftoolCandidate('application/octet-stream', 'photo.heic')).toBe(true);
+    });
+
+    test('non-image types without exiftool extensions are not candidates', () => {
+        expect(isExiftoolCandidate('text/plain', 'file.txt')).toBe(false);
+        expect(isExiftoolCandidate('video/mp4', 'clip.mp4')).toBe(false);
+        expect(isExiftoolCandidate('font/woff2', 'font.woff2')).toBe(false);
+        expect(isExiftoolCandidate('application/pdf', 'doc.pdf')).toBe(false);
     });
 });
