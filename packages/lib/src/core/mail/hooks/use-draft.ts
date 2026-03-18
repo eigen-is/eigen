@@ -20,27 +20,17 @@ export function createDraftEmail(input: DraftInput): EmailDraft {
 }
 
 export async function updateDraftEmail(draft: EmailDraft, ownerId: string): Promise<EmailDraft | null> {
-    try {
-        const response = await mailApi({ownerId}).message.draft.put({
-            mail: draft
-        });
-        return response.data || null;
-    } catch (error) {
-        console.error('Error updating draft:', error);
-        return null;
-    }
+    const response = await mailApi({ownerId}).message.draft.put({
+        mail: draft
+    });
+    return response.data || null;
 }
 
 export async function sendDraftEmail(draft: EmailDraft, ownerId: string): Promise<EmailDraft | null> {
-    try {
-        const response = await mailApi({ownerId}).message.send.post({
-            mail: draft
-        });
-        return response.data || null;
-    } catch (error) {
-        console.error('Error sending draft:', error);
-        return null;
-    }
+    const response = await mailApi({ownerId}).message.send.post({
+        mail: draft
+    });
+    return response.data || null;
 }
 
 export function useUpdateDraft() {
