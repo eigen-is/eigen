@@ -4,14 +4,14 @@ import type {S3Config} from '@workspace/lib/types';
 import {settingsKeys} from './use-server-settings';
 
 const s3ConfigKeys = {
-    all: [...settingsKeys.all, 's3-config'] as const,
+    all: [...settingsKeys.all, 's3config'] as const,
 };
 
 export function useServerS3Config() {
     return useQuery({
         queryKey: s3ConfigKeys.all,
         queryFn: async () => {
-            const res = await (settingsApi as any)['s3-config'].get();
+            const res = await settingsApi.s3config.get();
             return (res.data || null) as S3Config | null;
         },
         staleTime: 5 * 60 * 1000,
@@ -23,7 +23,7 @@ export function useUpdateServerS3Config() {
 
     return useMutation({
         mutationFn: async (body: S3Config) => {
-            const res = await (settingsApi as any)['s3-config'].put(body);
+            const res = await settingsApi.s3config.put(body as any);
             if (res.error) throw new Error(String(res.error));
             return res.data as S3Config;
         },
