@@ -14,7 +14,11 @@ export class LocalKeyStorage implements StorageBackend {
     }
 
     private getFilePath(key: string): string {
-        return path.join(this.dataDir, key);
+        const resolved = path.resolve(this.dataDir, key);
+        if (!resolved.startsWith(this.dataDir)) {
+            throw new Error(`Path traversal blocked: ${key}`);
+        }
+        return resolved;
     }
 
     read(key: string): BunFile {

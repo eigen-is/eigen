@@ -14,7 +14,11 @@ export class LocalFilesystem {
     }
 
     private getFilePath(filePath: string): string {
-        return path.join(this.baseDir, filePath);
+        const resolved = path.resolve(this.baseDir, filePath);
+        if (!resolved.startsWith(this.baseDir)) {
+            throw new Error(`Path traversal blocked: ${filePath}`);
+        }
+        return resolved;
     }
 
     read(filePath: string): BunFile {

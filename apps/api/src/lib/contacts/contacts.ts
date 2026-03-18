@@ -315,6 +315,9 @@ export class Contacts {
     }
 
     public async downloadAvatar(filename: string) {
+        if (/[/\\]/.test(filename) || filename.includes('..')) {
+            return null;
+        }
         const file = this.storage.read(`avatars/${filename}`);
         if (!(await file.exists())) {
             return null;
