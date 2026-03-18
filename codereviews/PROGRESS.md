@@ -8,10 +8,10 @@ Tracking all findings from the [full code review](OVERVIEW.md). Work by pattern,
 
 - [x] ~~C8~~ Downgraded: Collab updates poll-synced via 5s resyncInterval, not broken. Added server-side broadcast for instant sync.
 - [x] C9: Awareness removal on disconnect now broadcast (fixed alongside broadcast)
-- [ ] I14: Snapshot creation can lose concurrent updates (BE Collab #3)
-- [ ] I15: `createAsyncSingleton` permanently broken after transient error (BE Core #2)
-- [ ] I32: Collab document database never closed (BE Collab #7)
-- [ ] I33: Double-unsubscribe can re-init closed collab document (BE Collab #6)
+- [x] I14: Snapshot creation bounded DELETE (BE Collab #3)
+- [x] I15: `createAsyncSingleton` resets on failure (BE Core #2)
+- [x] I32: Collab document database now closed via `mount.closeDatabase()` (BE Collab #7)
+- [x] I33: Double-unsubscribe fixed via shared cleanup function + WeakMap (BE Collab #6)
 
 ## Session 2: Missing `await` Sweep
 

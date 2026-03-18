@@ -63,8 +63,6 @@ export const collabRouter = new Elysia({
         }),
 
         async open(ws) {
-            console.log('WebSocket connection opened');
-
             // @ts-ignore
             const user = ws.data?.user;
             if (!user) {
@@ -72,9 +70,7 @@ export const collabRouter = new Elysia({
                 return;
             }
 
-            const ownerId = ws.data.params.ownerId;
-            const mountId = ws.data.params.mountId;
-            const pathId = ws.data.params.pathId;
+            const {ownerId, mountId, pathId} = ws.data.params;
 
             const drive = await getSharedDrive(ownerId, user);
             if (!drive || !(await drive.canRead(mountId, pathId, user))) {
@@ -83,16 +79,27 @@ export const collabRouter = new Elysia({
             }
             try {
                 const document = await drive.getCollabDocument(mountId, pathId);
+                const rawWs = ws as unknown as ServerWebSocket<any>;
+                document.subscribe(user, rawWs);
 
-                document.subscribe(user, ws as unknown as ServerWebSocket<any>);
+                // @ts-ignore – store on ws.data for use in message/close handlers
+                ws.data.collabDocument = document;
+                // @ts-ignore
+                ws.data.collabCleaned = false;
 
-                keepWebSocketAlive(user, ws as unknown as ServerWebSocket<any>, async () => {
+                const cleanup = () => {
+                    // @ts-ignore
+                    if (ws.data.collabCleaned) return;
+                    // @ts-ignore
+                    ws.data.collabCleaned = true;
                     try {
-                        document.unsubscribe(user, ws as unknown as ServerWebSocket<any>);
+                        document.unsubscribe(user, rawWs);
                     } catch (err) {
                         console.error('Error unsubscribing from document:', err);
                     }
-                });
+                };
+
+                keepWebSocketAlive(user, rawWs, cleanup);
             } catch (err) {
                 console.error('Error getting document:', err);
                 ws.close(1008, "Failed to get document");
@@ -100,6 +107,11 @@ export const collabRouter = new Elysia({
         },
 
         async message(ws, message) {
+            if (typeof message === 'string') {
+                if (message === 'ping') ws.send('pong');
+                return;
+            }
+
             // @ts-ignore
             const user = ws.data?.user;
             if (!user) {
@@ -107,55 +119,44 @@ export const collabRouter = new Elysia({
                 return;
             }
 
-            const ownerId = ws.data.params.ownerId;
-            const mountId = ws.data.params.mountId;
-            const pathId = ws.data.params.pathId;
-
-            if (typeof message === 'string') {
-                if (message === 'ping') {
-                    ws.send('pong');
-                }
-                return;
-            }
-
             try {
                 const update = message instanceof Uint8Array ? message : new Uint8Array(message as Buffer);
+                const {ownerId, mountId, pathId} = ws.data.params;
+
+                // @ts-ignore – set by open handler; may be absent if message arrives before open completes
+                let document = ws.data.collabDocument;
+                if (!document) {
+                    const drive = await getSharedDrive(ownerId, user);
+                    if (!drive || !(await drive.canRead(mountId, pathId, user))) return;
+                    document = await drive.getCollabDocument(mountId, pathId);
+                    // @ts-ignore
+                    ws.data.collabDocument = document;
+                }
 
                 const drive = await getSharedDrive(ownerId, user);
-                if (!drive || !(await drive.canRead(mountId, pathId, user))) {
-                    console.error('canRead failed');
-                    ws.close(1008, "Authentication failed");
-                    return;
-                }
-                const document = await drive.getCollabDocument(mountId, pathId);
-                document.handleMessage(ws as unknown as ServerWebSocket<any>, update, await drive.canWrite(mountId, pathId, user));
+                const canWrite = await drive.canWrite(mountId, pathId, user);
+                document.handleMessage(ws as unknown as ServerWebSocket<any>, update, canWrite);
             } catch (err) {
                 console.error('Error processing message:', err);
             }
         },
 
-        async close(ws) {
-            try {
-                // @ts-ignore
-                const user = ws.data?.user;
-                if (!user) {
-                    ws.close(1008, "Authentication failed");
-                    return;
-                }
+        close(ws) {
+            // @ts-ignore
+            if (ws.data?.collabCleaned) return;
+            // @ts-ignore
+            ws.data.collabCleaned = true;
 
-                const ownerId = ws.data.params.ownerId;
-                const mountId = ws.data.params.mountId;
-                const pathId = ws.data.params.pathId;
-
+            // @ts-ignore
+            const user = ws.data?.user;
+            // @ts-ignore
+            const document = ws.data?.collabDocument;
+            if (user && document) {
                 try {
-                    const drive = await getSharedDrive(ownerId, user);
-                    const document = await drive.getCollabDocument(mountId, pathId);
                     document.unsubscribe(user, ws as unknown as ServerWebSocket<any>);
                 } catch (err) {
-                    console.error('Error handling WebSocket close:', err);
+                    console.error('Error unsubscribing from document:', err);
                 }
-            } catch (err) {
-                console.error('Error handling WebSocket close:', err);
             }
         }
     });
