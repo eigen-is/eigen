@@ -4,7 +4,7 @@ import * as syncProtocol from "y-protocols/sync";
 import {type ServerWebSocket} from "bun";
 import * as encoding from "lib0/encoding";
 import * as decoding from "lib0/decoding";
-import {desc, eq, gt, lt} from "drizzle-orm";
+import {desc, eq, gt, lt, lte} from "drizzle-orm";
 import type {DrivePath} from "@workspace/lib/types/drive";
 import type {Drive} from "../drive";
 import type {ManagedDatabase} from "../core";
@@ -95,7 +95,9 @@ class DbProvider {
                 lastUpdateId: lastUpdate.id,
             }).run();
 
-            this.db.delete(schema.docUpdates).run();
+            this.db.delete(schema.docUpdates)
+                .where(lte(schema.docUpdates.id, lastUpdate.id))
+                .run();
 
             const allSnapshots = this.db.select({id: schema.docSnapshots.id}).from(schema.docSnapshots)
                 .orderBy(desc(schema.docSnapshots.id))
@@ -145,6 +147,7 @@ export default class CollabDocument {
     private connections: Set<ServerWebSocket<any>> = new Set();
     private connectionClientIds: Map<ServerWebSocket<any>, Set<number>> = new Map();
     private closed: boolean = false;
+    public dataDbPathId: string | null = null;
 
     constructor(drive: Drive, path: DrivePath) {
         this.drive = drive;
@@ -172,6 +175,7 @@ export default class CollabDocument {
         }
 
         const managedDb = await this.drive.openDatabase(this.path.mountId, COLLAB_DB_CONFIG, dataDbPath.id);
+        this.dataDbPathId = dataDbPath.id;
 
         this.doc = new Y.Doc();
         this.doc.gc = true;
