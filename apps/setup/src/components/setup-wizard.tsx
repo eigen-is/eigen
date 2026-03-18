@@ -49,7 +49,7 @@ export function SetupWizard() {
     const [formData, setFormData] = useState<SetupData>({
         domain: 'eigen.is',
         orgName: 'Eigen',
-        storageType: 'local-id',
+        storageType: 'local-fullnames',
         s3Bucket: '',
         s3Region: '',
         s3AccessKeyId: '',
