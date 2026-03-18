@@ -97,7 +97,7 @@ export const calendarRouter = new Elysia({name: "calendar"})
 
     .delete("/calendar/:ownerId/calendars/:calId", async ({params, user}) => {
         const cal = await resolveCalendar(user, params.ownerId);
-        cal.deleteCalendar(params.calId);
+        await cal.deleteCalendar(params.calId);
         return {success: true};
     }, {auth: true})
 

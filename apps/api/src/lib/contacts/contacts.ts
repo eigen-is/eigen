@@ -183,8 +183,9 @@ export class Contacts {
             })
             .where(eq(schema.contacts.id, id));
 
-        // Update labels if provided
-        await this.setContactLabels(id, labels || []);
+        if (labels !== undefined) {
+            await this.setContactLabels(id, labels || []);
+        }
 
         this.emitContact(SSEventType.CONTACT_UPDATED, id, `${contactData.firstName} ${contactData.lastName}`.trim());
     }
@@ -346,7 +347,7 @@ export class Contacts {
         const user = this.home.user;
         const nameParts = (user.name || '').split(' ');
         // add the user to the contacts table
-        await this.addContact({
+        return await this.addContact({
             eigenId: user.id,
             firstName: nameParts[0] || '',
             lastName: [...nameParts.slice(1)].join(' ') || '',
@@ -360,7 +361,6 @@ export class Contacts {
             avatar: '',
             labels: []
         });
-        return user.id;
     }
 
     public async getMe() {

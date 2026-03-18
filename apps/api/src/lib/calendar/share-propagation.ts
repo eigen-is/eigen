@@ -23,9 +23,10 @@ export async function notifySharedCalendarUsers(
             const user = await getUserByEmail(share.targetId);
             if (user) userIds.add(user.id);
         } else if (parsed.type === 'team') {
-            // for teams, we really on staletime refresh at FE
-            //    const members = await getTeamMembers(parsed.id);
-            //    for (const member of members) userIds.add(member.user.id);
+            // Team members are not notified via SSE for calendar share changes.
+            // Instead, the frontend uses TanStack Query's staleTime to periodically
+            // re-sync team calendars (via syncTeamCalendars in get-calendar.ts).
+            // This avoids the cost of resolving all team members on every share change.
         }
     }
 
