@@ -81,15 +81,15 @@ export function EmailDraft({
     const auth = useAuth();
 
     const draft = useMemo(() => {
-        const d = {...(email ?? createDraftEmail({}))};
-        d.from = {
-            value: [{name: auth.user!.name || '', address: auth.user!.email || ''}],
-            html: '', text: '',
+        const d = email ?? createDraftEmail({});
+        return {
+            ...d,
+            from: {
+                value: [{name: auth.user!.name || '', address: auth.user!.email || ''}],
+                html: '', text: '',
+            },
+            ...(to ? {to: {value: [{name: '', address: to}], html: to, text: to}} : {}),
         };
-        if (to) {
-            d.to = {value: [{name: '', address: to}], html: to, text: to};
-        }
-        return d;
     }, [email, to, auth.user]);
 
     const fromName = draft.from?.value[0].name || draft.from?.value[0].address;
