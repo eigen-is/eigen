@@ -19,6 +19,9 @@ export function createAsyncSingleton<T>(factoryFn: () => Promise<T>): () => Prom
         initializationPromise = factoryFn().then(result => {
             instance = result;
             return result;
+        }).catch(err => {
+            initializationPromise = null;
+            throw err;
         });
 
         return initializationPromise;

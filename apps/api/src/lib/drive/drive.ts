@@ -496,10 +496,14 @@ export default class Drive {
     async closeCollabDocument(mountId: string, pathId: string): Promise<void> {
         const mount = this.getMount(mountId);
         const key = `${this.owner.id}.${mountId}.${pathId}`;
-        const document = this.documents.get(key);
-        if (document) {
-            (await document()).destruct();
+        const documentFn = this.documents.get(key);
+        if (documentFn) {
+            const doc = await documentFn();
+            doc.destruct();
             this.documents.delete(key);
+            if (doc.dataDbPathId) {
+                await mount.closeDatabase(doc.dataDbPathId);
+            }
         }
 
         const path = await mount.getPath(pathId);
