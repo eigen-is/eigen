@@ -562,7 +562,7 @@ export default class Drive {
     }
 
     async receiveACLChange(path: DrivePath, newACL: DriveACL[] | null): Promise<void> {
-        if (newACL === null || !matchesACL(newACL, this.owner, 'read')) {
+        if (newACL === null || !(await matchesACL(newACL, this.owner, 'read'))) {
             this.sharedDb.delete(sharedSchema.sharedPaths)
                 .where(eq(sharedSchema.sharedPaths.id, path.id))
                 .run();
