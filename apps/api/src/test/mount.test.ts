@@ -6,7 +6,7 @@ import {getUniqueFileName} from '../lib/drive/naming';
 import {type DatabaseConfig, ManagedDatabase, type SchemaType} from '../lib/core';
 import {LocalStorage} from '../lib/storage/local-storage';
 
-const TEST_DIR = join(import.meta.dir, '../../../../data/test-mount-' + Date.now());
+const TEST_DIR = join(import.meta.dir, '../../../../data-test/test-mount-' + Date.now());
 const OWNER_ID = 'test-owner-id';
 
 function createGetLocalDatabase(baseDir: string) {

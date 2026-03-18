@@ -2,7 +2,7 @@ import type {User} from 'better-auth/types';
 import {BunSQLiteDatabase} from 'drizzle-orm/bun-sqlite';
 import {eq} from 'drizzle-orm';
 import {ApiError, type DatabaseConfig, type ManagedDatabase, type SchemaType} from '../core';
-import {createDefaultMountConfig, Mount} from '../mount';
+import {createDefaultMountConfig, createMountConfig, Mount} from '../mount';
 import {
     DRIVE_TYPE_CHAT,
     DRIVE_TYPE_DOC,
@@ -12,7 +12,8 @@ import {
     DRIVE_TYPE_SLIDES,
     DRIVE_TYPE_STICKIES,
     type MountConfig,
-    type MountInfo
+    type MountInfo,
+    type MountSettings
 } from '@workspace/lib/types';
 import {
     type DriveACL,
@@ -60,10 +61,27 @@ export default class Drive {
         this.owner = home.user;
     }
 
-    async init(): Promise<void> {
-        const config = createDefaultMountConfig();
-        await this.addMount(config);
+    async init(autoCreateDefaultMount: boolean = false): Promise<void> {
+        const settings = this.home.settings?.get() as Record<string, unknown> | undefined;
+        const mountSettings = (settings?.['mounts'] ?? {}) as Record<string, MountSettings>;
+
+        for (const [id, ms] of Object.entries(mountSettings)) {
+            if (!ms.enabled) continue;
+            const config = createMountConfig(id, ms);
+            await this.addMount(config);
+        }
+
+        if (this.mounts.size === 0 && autoCreateDefaultMount) {
+            const config = createDefaultMountConfig();
+            await this.addMount(config);
+        }
+
         this.sharedDb = await getSharedDatabase(this.home);
+    }
+
+    getMountConfig(mountId: string): MountConfig {
+        const mount = this.getMount(mountId);
+        return mount.config;
     }
 
     async addMount(config: MountConfig): Promise<void> {

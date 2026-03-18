@@ -16,6 +16,7 @@ import {setupRouter} from "./routes/setup";
 import {chatRouter} from "./routes/chat";
 import {calendarRouter} from "./routes/calendar";
 import {teamRouter} from "./routes/team";
+import {settingsRouter} from "./routes/settings";
 import {editorRouter} from "./routes/editor";
 
 export const app = new Elysia()
@@ -33,6 +34,7 @@ export const app = new Elysia()
     .use(contactsRouter)
     .use(calendarRouter)
     .use(teamRouter)
+    .use(settingsRouter)
     .use(spaceRouter)
     .use(publicRouter)
     .use(driveRouter)

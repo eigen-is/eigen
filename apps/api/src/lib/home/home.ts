@@ -15,6 +15,7 @@ import type {Calendar} from '../calendar/calendar';
 import type {SSEvent} from '@workspace/lib/types/sse';
 import {createAsyncSingleton} from '../../utils/singleton';
 import type {Drive} from '../drive';
+import {resolveUserQuotas} from '../config/quota';
 
 export type HomeSettings = Record<string, unknown>;
 
@@ -49,7 +50,7 @@ export class Home {
     get mail(): Maildir { return this._mail; }
     get calendar(): Calendar { return this._calendar; }
 
-    public async init() {
+    public async init(autoCreateDefaultMount: boolean = false) {
         if (this.initialized) {
             return this;
         }
@@ -61,7 +62,7 @@ export class Home {
         this.initializationStarted = true;
 
         await this.settings?.load();
-        await this._drive?.init();
+        await this._drive?.init(autoCreateDefaultMount);
         await this._contacts?.init();
         await this._mail?.init();
         await this._calendar?.init();
@@ -101,15 +102,25 @@ export class Home {
         this.sseListeners = this.sseListeners.filter(l => l !== listener);
     }
 
-    public async size() {
-        const [mail, contacts, drive] = await Promise.all([
+    public async size(teamIds: string[] = []) {
+        const [mail, contacts, driveDefault] = await Promise.all([
             this._mail?.size(),
             this._contacts?.size(),
             this._drive.size('default')
         ]);
-        const maxMB = 50;
-        const max = maxMB * 1024 * 1024;
-        return {mail, contacts, drive, used: ((mail || 0) + (contacts || 0) + drive), max};
+
+        const mountConfig = this._drive.getMountConfig('default');
+        const quotas = await resolveUserQuotas(mountConfig, teamIds);
+        const mailAndContactsUsed = (mail || 0) + (contacts || 0);
+
+        return {
+            mailAndContacts: {used: mailAndContactsUsed, max: quotas.mailAndContactsMax},
+            drive: {default: {used: driveDefault, max: quotas.mountMax}},
+            total: {
+                used: mailAndContactsUsed + driveDefault,
+                max: quotas.mailAndContactsMax + quotas.mountMax,
+            },
+        };
     }
 
     protected async destruct() {

@@ -5,11 +5,12 @@ import {Label} from '@workspace/ui/components/label';
 import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '@workspace/ui/components/select';
 import {Switch} from '@workspace/ui/components/switch';
 import {Separator} from '@workspace/ui/components/separator';
-import {Check, Pencil, Plus, Trash2, UserPlus, X} from 'lucide-react';
+import {HardDrive, Pencil, Plus, Settings, Trash2, UserPlus, X} from 'lucide-react';
 import {Dialog, DialogContent, DialogHeader, DialogTitle} from '@workspace/ui/components/dialog';
 import {DeleteDialog} from '@workspace/ui/components/layout/delete/delete-dialog';
 import {TooltipButton} from '@workspace/ui/components/layout/toolbar/tooltip-button.tsx';
 import {UserItem} from '@workspace/ui/components/layout/user-item';
+import {MountForm, type MountFormValues} from '@workspace/ui/components/layout/mount/mount-form';
 import {
     useAddTeamMember,
     usePeopleMembers,
@@ -19,16 +20,18 @@ import {
     useUpdateTeam
 } from '@workspace/lib/people';
 import {useCalendars, useUpdateCalendar} from '@workspace/lib/calendar';
-import {useTeamSettings, useUpdateTeamSettings} from '@workspace/lib/team';
+import {useTeamSettings, useUpdateTeamSettings, useTeamMounts, useAddTeamMount, useUpdateTeamMount} from '@workspace/lib/team';
+import {useCheckS3Connection, useServerSettings} from '@workspace/lib/settings';
+import type {MountSettings} from '@workspace/lib/types/settings';
 import {teamOwnerId} from '@workspace/lib/types';
 import {useNavigate} from '@tanstack/react-router';
 import {toast} from 'sonner';
 import type {OrgMember, OrgTeam} from '@workspace/lib/types/people';
 
-interface TeamDetailToolbarProps {
+type TeamDetailToolbarProps = {
     team: OrgTeam;
     organizationId?: string;
-}
+};
 
 export function TeamDetailToolbar({team, organizationId}: TeamDetailToolbarProps) {
     const [showDelete, setShowDelete] = useState(false);
@@ -121,15 +124,61 @@ function AddMemberDialog({open, onOpenChange, availableMembers, onAdd}: {
     );
 }
 
-interface TeamDetailProps {
-    team: OrgTeam;
-    organizationId?: string;
+function MountDialog({open, onOpenChange, onSubmit, onS3Check, initialValues, title, submitLabel, isEdit, defaultStorageType, defaultMaxSizeMB}: {
+    open: boolean;
+    onOpenChange: (open: boolean) => void;
+    onSubmit: (values: MountFormValues) => Promise<void>;
+    onS3Check?: MountFormProps['onS3Check'];
+    initialValues?: Partial<MountFormValues>;
+    title: string;
+    submitLabel: string;
+    isEdit?: boolean;
+    defaultStorageType?: MountFormValues['storageType'];
+    defaultMaxSizeMB?: number;
+}) {
+    return (
+        <Dialog open={open} onOpenChange={onOpenChange}>
+            <DialogContent size="sm">
+                <DialogHeader>
+                    <DialogTitle>{title}</DialogTitle>
+                </DialogHeader>
+                <MountForm
+                    initialValues={initialValues}
+                    defaultStorageType={defaultStorageType}
+                    defaultMaxSizeMB={defaultMaxSizeMB}
+                    onSubmit={async (values) => {
+                        await onSubmit(values);
+                        onOpenChange(false);
+                    }}
+                    onCancel={() => onOpenChange(false)}
+                    onS3Check={onS3Check}
+                    submitLabel={submitLabel}
+                    isEdit={isEdit}
+                />
+            </DialogContent>
+        </Dialog>
+    );
 }
 
+type MountFormProps = React.ComponentProps<typeof MountForm>;
+
+type TeamDetailProps = {
+    team: OrgTeam;
+    organizationId?: string;
+};
+
 export function TeamDetail({team, organizationId}: TeamDetailProps) {
-    const [isEditing, setIsEditing] = useState(false);
-    const [editName, setEditName] = useState(team.name);
     const [showAddDialog, setShowAddDialog] = useState(false);
+    const [showAddMount, setShowAddMount] = useState(false);
+    const [editingMount, setEditingMount] = useState<{id: string; mount: MountSettings} | null>(null);
+    const [showSettingsForm, setShowSettingsForm] = useState(false);
+
+    // Settings form draft state
+    const [draftName, setDraftName] = useState(team.name);
+    const [draftCalEnabled, setDraftCalEnabled] = useState(true);
+    const [draftCalPermission, setDraftCalPermission] = useState('read');
+    const [draftMailMax, setDraftMailMax] = useState('');
+    const [draftMountMax, setDraftMountMax] = useState('');
 
     const updateTeam = useUpdateTeam();
     const {data: teamMembers = []} = useTeamMembers(team.id);
@@ -137,12 +186,17 @@ export function TeamDetail({team, organizationId}: TeamDetailProps) {
     const addMember = useAddTeamMember();
     const removeMember = useRemoveTeamMember();
 
-    // Calendar settings
     const ownerId = teamOwnerId(team.id);
     const {data: calendars = []} = useCalendars(ownerId);
     const updateCalendar = useUpdateCalendar(ownerId);
     const {data: settings} = useTeamSettings(team.id);
     const updateSettings = useUpdateTeamSettings(team.id);
+    const {data: serverSettings} = useServerSettings();
+    const s3Check = useCheckS3Connection();
+
+    const {data: mounts = {}} = useTeamMounts(team.id);
+    const addMount = useAddTeamMount(team.id);
+    const updateMount = useUpdateTeamMount(team.id);
 
     const defaultCal = calendars.find(c => c.isDefault);
     const teamTarget = `team_${team.id}`;
@@ -157,45 +211,72 @@ export function TeamDetail({team, organizationId}: TeamDetailProps) {
     const teamMemberUserIds = new Set(teamMembers.map((m: {userId: string}) => m.userId));
     const availableMembers = allMembers.filter(m => !teamMemberUserIds.has(m.userId));
 
+    const defaultMountStorageType = serverSettings?.defaults.mount.storageType === 'local-id' ? 'local' as const
+        : serverSettings?.defaults.mount.storageType === 'local-fullnames' ? 'local-key' as const
+        : 's3' as const;
+
     useEffect(() => {
-        setEditName(team.name);
-        setIsEditing(false);
-    }, [team.id, team.name]);
+        setShowSettingsForm(false);
+    }, [team.id]);
 
-    const handleSaveName = async () => {
-        if (!editName.trim() || editName.trim() === team.name) {
-            setIsEditing(false);
-            setEditName(team.name);
-            return;
-        }
+    const openSettingsForm = () => {
+        setDraftName(team.name);
+        setDraftCalEnabled(calendarEnabled);
+        setDraftCalPermission(calendarPermission);
+        setDraftMailMax(settings?.memberOverrides?.mailAndContactsMaxMB?.toString() ?? '');
+        setDraftMountMax(settings?.memberOverrides?.defaultMountMaxSizeMB?.toString() ?? '');
+        setShowSettingsForm(true);
+    };
+
+    const handleSaveSettings = async () => {
         try {
-            await updateTeam.mutateAsync({teamId: team.id, name: editName.trim()});
-            toast.success('Team name updated');
-            setIsEditing(false);
+            if (draftName.trim() && draftName.trim() !== team.name) {
+                await updateTeam.mutateAsync({teamId: team.id, name: draftName.trim()});
+            }
+            await updateSettings.mutateAsync({
+                calendar: {enabled: draftCalEnabled},
+                memberOverrides: {
+                    mailAndContactsMaxMB: draftMailMax ? Number(draftMailMax) : null,
+                    defaultMountMaxSizeMB: draftMountMax ? Number(draftMountMax) : null,
+                },
+            } as any);
+            if (defaultCal && draftCalEnabled) {
+                const shares = draftCalPermission === 'read'
+                    ? null
+                    : [{targetId: teamTarget, permission: draftCalPermission as 'free-busy' | 'write'}];
+                await updateCalendar.mutateAsync({id: defaultCal.id, shares});
+            }
+            toast.success('Team settings saved');
+            setShowSettingsForm(false);
         } catch (error) {
-            toast.error(error instanceof Error ? error.message : 'Failed to update team name');
+            toast.error(error instanceof Error ? error.message : 'Failed to save settings');
         }
     };
 
-    const handleCalendarEnabledChange = async (enabled: boolean) => {
+    const handleAddMount = async (values: MountFormValues) => {
         try {
-            await updateSettings.mutateAsync({calendar: {enabled}});
-            toast.success(enabled ? 'Team calendar enabled' : 'Team calendar disabled');
-        } catch (error) {
-            toast.error(error instanceof Error ? error.message : 'Failed to update settings');
+            await addMount.mutateAsync({
+                name: values.name,
+                storageType: values.storageType,
+                maxSizeMB: values.maxSizeMB,
+            });
+            toast.success(`Mount "${values.name}" created`);
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Failed to add mount');
         }
     };
 
-    const handlePermissionChange = async (value: string) => {
-        if (!defaultCal) return;
-        const shares = value === 'read'
-            ? null
-            : [{targetId: teamTarget, permission: value as 'free-busy' | 'write'}];
+    const handleEditMount = async (values: MountFormValues) => {
+        if (!editingMount) return;
         try {
-            await updateCalendar.mutateAsync({id: defaultCal.id, shares});
-            toast.success('Calendar permission updated');
-        } catch (error) {
-            toast.error(error instanceof Error ? error.message : 'Failed to update permission');
+            await updateMount.mutateAsync({
+                mountId: editingMount.id,
+                maxSizeMB: values.maxSizeMB,
+                name: values.name,
+            });
+            toast.success('Mount updated');
+        } catch (err) {
+            toast.error(err instanceof Error ? err.message : 'Failed to update mount');
         }
     };
 
@@ -218,76 +299,171 @@ export function TeamDetail({team, organizationId}: TeamDetailProps) {
         }
     };
 
+    const handleS3Check = (config: Parameters<NonNullable<MountFormProps['onS3Check']>>[0]) =>
+        s3Check.mutateAsync(config);
+
     return (
         <div className="p-6 space-y-6">
-            <div className="flex items-center gap-3">
-                {isEditing ? (
-                    <div className="flex items-center gap-2 flex-1">
-                        <Input
-                            value={editName}
-                            onChange={e => setEditName(e.target.value)}
-                            className="text-xl font-semibold"
-                            autoFocus
-                            onKeyDown={e => {
-                                if (e.key === 'Enter') handleSaveName();
-                                if (e.key === 'Escape') {
-                                    setIsEditing(false);
-                                    setEditName(team.name);
-                                }
-                            }}
-                        />
-                        <Button variant="ghost" size="icon" onClick={handleSaveName}>
-                            <Check className="h-4 w-4"/>
-                        </Button>
-                        <Button variant="ghost" size="icon" onClick={() => {
-                            setIsEditing(false);
-                            setEditName(team.name);
-                        }}>
-                            <X className="h-4 w-4"/>
-                        </Button>
-                    </div>
-                ) : (
-                    <div className="flex items-center gap-2 flex-1 min-w-0">
-                        <h2 className="text-xl font-semibold truncate">{team.name}</h2>
-                        <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0"
-                                onClick={() => setIsEditing(true)}>
-                            <Pencil className="h-3.5 w-3.5"/>
-                        </Button>
-                    </div>
+            {/* Header */}
+            <div className="flex items-center justify-between">
+                <h2 className="text-xl font-semibold truncate">{team.name}</h2>
+                {!showSettingsForm && (
+                    <Button variant="ghost" size="sm" onClick={openSettingsForm}>
+                        <Pencil className="h-4 w-4 mr-1"/>Edit
+                    </Button>
                 )}
             </div>
 
-            <div className="space-y-4">
+            {/* Settings form (toggled) */}
+            {showSettingsForm ? (
+                <div className="space-y-5 border rounded-lg p-4">
+                    <div className="space-y-1.5">
+                        <Label>Team Name</Label>
+                        <Input value={draftName} onChange={e => setDraftName(e.target.value)}/>
+                    </div>
+
+                    <Separator/>
+
+                    <div className="space-y-4">
+                        <div className="flex items-center justify-between">
+                            <Label>Calendar</Label>
+                            <Switch checked={draftCalEnabled} onCheckedChange={setDraftCalEnabled}/>
+                        </div>
+                        {draftCalEnabled && (
+                            <div className="flex items-center justify-between">
+                                <Label>Member access</Label>
+                                <Select value={draftCalPermission} onValueChange={setDraftCalPermission}>
+                                    <SelectTrigger className="w-32"><SelectValue/></SelectTrigger>
+                                    <SelectContent>
+                                        <SelectItem value="free-busy">Free/Busy</SelectItem>
+                                        <SelectItem value="read">Read</SelectItem>
+                                        <SelectItem value="write">Write</SelectItem>
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                        )}
+                    </div>
+
+                    <Separator/>
+
+                    <div className="space-y-3">
+                        <h3 className="text-sm font-medium text-muted-foreground uppercase tracking-wide">Quota Overrides</h3>
+                        <p className="text-xs text-muted-foreground">Override server defaults for members of this team. Leave empty to inherit.</p>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-1.5">
+                                <Label>Mail & Contacts (MB)</Label>
+                                <Input type="number" min={10} placeholder="Inherit" value={draftMailMax} onChange={e => setDraftMailMax(e.target.value)}/>
+                            </div>
+                            <div className="space-y-1.5">
+                                <Label>Default Mount (MB)</Label>
+                                <Input type="number" min={10} placeholder="Inherit" value={draftMountMax} onChange={e => setDraftMountMax(e.target.value)}/>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div className="flex items-center justify-end gap-2 pt-2">
+                        <Button variant="outline" onClick={() => setShowSettingsForm(false)}>Cancel</Button>
+                        <Button onClick={handleSaveSettings}>Save Settings</Button>
+                    </div>
+                </div>
+            ) : (
+                /* Read-only settings display */
+                <div className="space-y-4">
+                    <div className="flex items-center justify-between">
+                        <span className="text-sm text-muted-foreground">Calendar</span>
+                        <span className="text-sm">{calendarEnabled ? `Enabled (${calendarPermission})` : 'Disabled'}</span>
+                    </div>
+                    {(settings?.memberOverrides?.mailAndContactsMaxMB || settings?.memberOverrides?.defaultMountMaxSizeMB) && (
+                        <div className="flex items-center justify-between">
+                            <span className="text-sm text-muted-foreground">Quota overrides</span>
+                            <span className="text-sm">
+                                {settings?.memberOverrides?.mailAndContactsMaxMB && `Mail: ${settings.memberOverrides.mailAndContactsMaxMB} MB`}
+                                {settings?.memberOverrides?.mailAndContactsMaxMB && settings?.memberOverrides?.defaultMountMaxSizeMB && ' · '}
+                                {settings?.memberOverrides?.defaultMountMaxSizeMB && `Mount: ${settings.memberOverrides.defaultMountMaxSizeMB} MB`}
+                            </span>
+                        </div>
+                    )}
+                </div>
+            )}
+
+            <Separator/>
+
+            {/* Mounts */}
+            <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                    <Label>Calendar</Label>
-                    <Switch checked={calendarEnabled} onCheckedChange={handleCalendarEnabledChange}/>
+                    <h3 className="text-sm font-medium">Mounts ({Object.keys(mounts).length})</h3>
+                    <Button variant="ghost" size="sm" onClick={() => setShowAddMount(true)}>
+                        <HardDrive className="h-4 w-4 mr-1"/>Add
+                    </Button>
                 </div>
 
-                {calendarEnabled && defaultCal && (
-                    <div className="flex items-center justify-between">
-                        <Label>Member access</Label>
-                        <Select value={calendarPermission} onValueChange={handlePermissionChange}>
-                            <SelectTrigger className="w-32">
-                                <SelectValue/>
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="free-busy">Free/Busy</SelectItem>
-                                <SelectItem value="read">Read</SelectItem>
-                                <SelectItem value="write">Write</SelectItem>
-                            </SelectContent>
-                        </Select>
+                <MountDialog
+                    open={showAddMount}
+                    onOpenChange={setShowAddMount}
+                    onSubmit={handleAddMount}
+                    onS3Check={handleS3Check}
+                    title="Add Mount"
+                    submitLabel="Create Mount"
+                    defaultStorageType={defaultMountStorageType}
+                    defaultMaxSizeMB={serverSettings?.quotas.defaultMountMaxSizeMB}
+                />
+
+                <MountDialog
+                    open={!!editingMount}
+                    onOpenChange={(open) => { if (!open) setEditingMount(null); }}
+                    onSubmit={handleEditMount}
+                    onS3Check={handleS3Check}
+                    initialValues={editingMount ? {
+                        name: editingMount.mount.name ?? editingMount.id,
+                        storageType: editingMount.mount.storageType,
+                        maxSizeMB: editingMount.mount.maxSizeMB ?? 500,
+                    } : undefined}
+                    title="Edit Mount"
+                    submitLabel="Save Changes"
+                    isEdit
+                />
+
+                {Object.keys(mounts).length === 0 ? (
+                    <p className="text-sm text-muted-foreground py-2 text-center">No mounts. Add one to enable team drive.</p>
+                ) : (
+                    <div className="space-y-2">
+                        {Object.entries(mounts).map(([id, mount]: [string, MountSettings]) => (
+                            <div key={id} className="flex items-center gap-3 p-3 border rounded-lg">
+                                <HardDrive className="h-4 w-4 text-muted-foreground shrink-0"/>
+                                <div className="flex-1 min-w-0">
+                                    <div className="text-sm font-medium truncate">{mount.name || id}</div>
+                                    <div className="text-xs text-muted-foreground">
+                                        {mount.storageType} · {mount.maxSizeMB ?? '∞'} MB
+                                    </div>
+                                </div>
+                                <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={() => setEditingMount({id, mount})}>
+                                    <Settings className="h-3.5 w-3.5"/>
+                                </Button>
+                                <Switch
+                                    checked={mount.enabled}
+                                    onCheckedChange={async (enabled) => {
+                                        try {
+                                            await updateMount.mutateAsync({mountId: id, enabled});
+                                            toast.success(enabled ? 'Mount enabled' : 'Mount disabled');
+                                        } catch (err) {
+                                            toast.error(err instanceof Error ? err.message : 'Failed to update mount');
+                                        }
+                                    }}
+                                />
+                            </div>
+                        ))}
                     </div>
                 )}
             </div>
 
             <Separator/>
 
+            {/* Members */}
             <div className="space-y-3">
                 <div className="flex items-center justify-between">
                     <h3 className="text-sm font-medium">Members ({teamMembers.length})</h3>
                     <Button variant="ghost" size="sm" onClick={() => setShowAddDialog(true)}>
-                        <UserPlus className="h-4 w-4 mr-1"/>
-                        Add
+                        <UserPlus className="h-4 w-4 mr-1"/>Add
                     </Button>
                 </div>
 

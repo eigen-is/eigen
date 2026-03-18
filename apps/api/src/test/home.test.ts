@@ -14,19 +14,20 @@ describe('Home', () => {
 
         expect(error).toBeNull();
         expect(data).toBeDefined();
-        expect(typeof data!.mail).toBe('number');
-        expect(typeof data!.contacts).toBe('number');
-        expect(typeof data!.drive).toBe('number');
-        expect(typeof data!.used).toBe('number');
-        expect(typeof data!.max).toBe('number');
-        expect(data!.max).toBeGreaterThan(0);
+        expect(typeof data!.mailAndContacts.used).toBe('number');
+        expect(typeof data!.mailAndContacts.max).toBe('number');
+        expect(typeof data!.drive.default.used).toBe('number');
+        expect(typeof data!.drive.default.max).toBe('number');
+        expect(typeof data!.total.used).toBe('number');
+        expect(typeof data!.total.max).toBe('number');
+        expect(data!.total.max).toBeGreaterThan(0);
     });
 
-    test('used = mail + contacts + drive', async () => {
+    test('total.used = mailAndContacts.used + drive.default.used', async () => {
         const {data} = await ctx.alice.api
             .home({ownerId: ctx.alice.user.id}).size.get();
 
-        expect(data!.used).toBe(data!.mail + data!.contacts + data!.drive);
+        expect(data!.total.used).toBe(data!.mailAndContacts.used + data!.drive.default.used);
     });
 
     test('Bob has his own separate home', async () => {
@@ -35,7 +36,7 @@ describe('Home', () => {
 
         expect(error).toBeNull();
         expect(data).toBeDefined();
-        expect(typeof data!.used).toBe('number');
+        expect(typeof data!.total.used).toBe('number');
     });
 
     test('ownerId spoofing on size endpoint still resolves authenticated user home', async () => {

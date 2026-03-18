@@ -48,6 +48,7 @@ next-env.d.ts
 /data/server
 /data/team
 /data/org
+/data-test/
 .env
 
 /data/test*

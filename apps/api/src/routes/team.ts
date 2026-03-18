@@ -6,26 +6,83 @@ import {getMemberships, getOrgRole} from "../lib/user";
 import {teamOwnerId} from "@workspace/lib/types";
 import {ApiError} from "../lib/core";
 
-async function requireTeamAdmin(userId: string, teamId: string) {
+async function requireTeamAccess(userId: string, teamId: string): Promise<'admin' | 'member'> {
     const role = await getOrgRole(userId);
-    if (role === 'admin' || role === 'owner') return;
+    if (role === 'admin' || role === 'owner') return 'admin';
     const memberships = await getMemberships(userId);
     if (!memberships.teamIds.includes(teamId)) throw new ApiError(403, 'Not a member of this team');
-    throw new ApiError(403, 'Admin or owner role required');
+    return 'member';
+}
+
+async function requireTeamAdmin(userId: string, teamId: string) {
+    const access = await requireTeamAccess(userId, teamId);
+    if (access !== 'admin') throw new ApiError(403, 'Admin or owner role required');
+}
+
+async function getTeamHome(teamId: string): Promise<TeamHome> {
+    return await getHome(teamOwnerId(teamId)) as TeamHome;
 }
 
 export const teamRouter = new Elysia({name: "team"})
     .use(betterAuth)
 
     .get("/team/:teamId/settings", async ({params, user}) => {
-        const memberships = await getMemberships(user.id);
-        if (!memberships.teamIds.includes(params.teamId)) throw new ApiError(403, 'Not a member of this team');
-        const teamHome = await getHome(teamOwnerId(params.teamId)) as TeamHome;
+        await requireTeamAccess(user.id, params.teamId);
+        const teamHome = await getTeamHome(params.teamId);
         return teamHome.settings.get();
     }, {auth: true})
 
     .put("/team/:teamId/settings", async ({params, body, user}) => {
         await requireTeamAdmin(user.id, params.teamId);
-        const teamHome = await getHome(teamOwnerId(params.teamId)) as TeamHome;
-        return await teamHome.settings.set(body);
-    }, {body: t.Object({calendar: t.Optional(t.Object({enabled: t.Optional(t.Boolean())}))}), auth: true});
+        const teamHome = await getTeamHome(params.teamId);
+        return await teamHome.settings.set({
+            ...body,
+            memberOverrides: body.memberOverrides ? {
+                mailAndContactsMaxMB: body.memberOverrides.mailAndContactsMaxMB ?? undefined,
+                defaultMountMaxSizeMB: body.memberOverrides.defaultMountMaxSizeMB ?? undefined,
+            } : undefined,
+        });
+    }, {
+        body: t.Object({
+            calendar: t.Optional(t.Object({enabled: t.Optional(t.Boolean())})),
+            memberOverrides: t.Optional(t.Object({
+                mailAndContactsMaxMB: t.Optional(t.Nullable(t.Number({minimum: 10}))),
+                defaultMountMaxSizeMB: t.Optional(t.Nullable(t.Number({minimum: 10}))),
+            })),
+        }),
+        auth: true,
+    })
+
+    .get("/team/:teamId/mounts", async ({params, user}) => {
+        await requireTeamAccess(user.id, params.teamId);
+        const teamHome = await getTeamHome(params.teamId);
+        return teamHome.settings.get().mounts ?? {};
+    }, {auth: true})
+
+    .post("/team/:teamId/mount", async ({params, body, user}) => {
+        await requireTeamAdmin(user.id, params.teamId);
+        const teamHome = await getTeamHome(params.teamId);
+        return teamHome.addMount(body);
+    }, {
+        body: t.Object({
+            name: t.String({minLength: 1}),
+            storageType: t.Optional(t.Union([
+                t.Literal('local'), t.Literal('local-key'), t.Literal('s3'),
+            ])),
+            maxSizeMB: t.Optional(t.Number({minimum: 10})),
+        }),
+        auth: true,
+    })
+
+    .put("/team/:teamId/mount/:mountId", async ({params, body, user}) => {
+        await requireTeamAdmin(user.id, params.teamId);
+        const teamHome = await getTeamHome(params.teamId);
+        return teamHome.updateMount(params.mountId, body);
+    }, {
+        body: t.Object({
+            enabled: t.Optional(t.Boolean()),
+            maxSizeMB: t.Optional(t.Number({minimum: 10})),
+            name: t.Optional(t.String({minLength: 1})),
+        }),
+        auth: true,
+    });

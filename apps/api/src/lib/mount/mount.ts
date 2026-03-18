@@ -14,7 +14,8 @@ import {
     DRIVE_MIME_STICKIES,
     type DriveContainerType,
     type DrivePath,
-    type MountConfig
+    type MountConfig,
+    type MountSettings
 } from '@workspace/lib/types';
 import type {DriveVisibility} from '@workspace/lib/types/drive';
 import * as schema from './schema';
@@ -733,5 +734,15 @@ export function createDefaultMountConfig(id: string = 'default', storageType: Mo
         name: 'My Drive',
         storageType,
         isDefault: true
+    };
+}
+
+export function createMountConfig(id: string, settings: MountSettings): MountConfig {
+    return {
+        id,
+        name: settings.name ?? (id === 'default' ? 'My Drive' : id),
+        storageType: settings.storageType,
+        isDefault: id === 'default',
+        maxSizeMB: settings.maxSizeMB,
     };
 }

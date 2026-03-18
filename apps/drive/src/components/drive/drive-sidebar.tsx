@@ -23,8 +23,9 @@ import {useMatch, useNavigate} from '@tanstack/react-router';
 import {usePathInfo, useRootFolder} from '@workspace/lib/drive';
 import {usePublicConfig} from '@workspace/lib/public';
 import {usePeopleTeams} from '@workspace/lib/people';
+import {useTeamMounts} from '@workspace/lib/team';
 import {teamOwnerId} from '@workspace/lib/types';
-import {DEFAULT_MOUNT_ID} from '@workspace/lib/types/mount';
+import type {MountSettings} from '@workspace/lib/types/settings';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -34,10 +35,10 @@ import {
 import {DriveCreateFolder} from '@workspace/ui/components/layout/drive/drive-create-folder';
 import {DriveCreateDoc} from '@workspace/ui/components/layout/drive/drive-create-doc';
 import {DriveCreateStickies} from '@workspace/ui/components/layout/drive/drive-create-stickies';
-import {DriveUploadFiles} from '@workspace/ui/components/layout/drive/drive-upload-files';
 import {DriveCreateChat} from '@workspace/ui/components/layout/drive/drive-create-chat';
 import {DriveCreateSlides} from '@workspace/ui/components/layout/drive/drive-create-slides';
 import {DriveCreateSheets} from '@workspace/ui/components/layout/drive/drive-create-sheets';
+import {DriveUploadFiles} from '@workspace/ui/components/layout/drive/drive-upload-files';
 
 interface DriveSidebarProps {
     condensed?: boolean;
@@ -46,11 +47,10 @@ interface DriveSidebarProps {
     rootPath: DrivePath | null;
 }
 
-/** Sidebar item that resolves the root pathId for a shared drive */
-function SharedDriveItem({ownerId, label, icon, condensed}: {
-    ownerId: string; label: string; icon: React.ReactNode; condensed: boolean
+function TeamMountItem({ownerId, mountId, label, icon, condensed}: {
+    ownerId: string; mountId: string; label: string; icon: React.ReactNode; condensed: boolean
 }) {
-    const {data: root} = useRootFolder(ownerId, DEFAULT_MOUNT_ID);
+    const {data: root} = useRootFolder(ownerId, mountId);
     if (!root) return null;
     return (
         <SidebarItem
@@ -59,6 +59,34 @@ function SharedDriveItem({ownerId, label, icon, condensed}: {
             label={label}
             condensed={condensed}
         />
+    );
+}
+
+function TeamDriveItems({teamId, teamName, icon, condensed}: {
+    teamId: string; teamName: string; icon: React.ReactNode; condensed: boolean
+}) {
+    const ownerId = teamOwnerId(teamId);
+    const {data: mounts} = useTeamMounts(teamId);
+
+    const enabledMounts = mounts
+        ? Object.entries(mounts).filter(([, m]: [string, MountSettings]) => m.enabled)
+        : [];
+
+    if (enabledMounts.length === 0) return null;
+
+    return (
+        <>
+            {enabledMounts.map(([id, mount]) => (
+                <TeamMountItem
+                    key={id}
+                    ownerId={ownerId}
+                    mountId={id}
+                    label={mount.name || id}
+                    icon={icon}
+                    condensed={condensed}
+                />
+            ))}
+        </>
     );
 }
 
@@ -251,10 +279,10 @@ export function DriveSidebar({
                     <Separator/>
                     <SidebarSection condensed={condensed} title={condensed ? undefined : "Shared Drives"}>
                         {teams.map((team) => (
-                            <SharedDriveItem
+                            <TeamDriveItems
                                 key={team.id}
-                                ownerId={teamOwnerId(team.id)}
-                                label={team.name}
+                                teamId={team.id}
+                                teamName={team.name}
                                 icon={<UserAvatar email={teamOwnerId(team.id)} className="h-4 w-4"/>}
                                 condensed={condensed}
                             />

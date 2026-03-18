@@ -14,6 +14,7 @@ export type MountConfig = {
     name: string;
     storageType: 'local' | 'local-key' | 's3';
     isDefault: boolean;
+    maxSizeMB?: number;
     localPath?: string;
     s3Config?: S3Config;
     createdAt?: Date;

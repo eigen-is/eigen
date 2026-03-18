@@ -1,0 +1,50 @@
+import {type QueryClient, useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
+import {teamApi} from '@workspace/lib/api';
+import type {MountSettings} from '@workspace/lib/types/settings';
+import {teamKeys} from './use-team-settings';
+
+export const teamMountKeys = {
+    all: (teamId: string) => [...teamKeys.all, 'mounts', teamId] as const,
+};
+
+export function useTeamMounts(teamId: string) {
+    return useQuery({
+        queryKey: teamMountKeys.all(teamId),
+        queryFn: async () => {
+            const res = await teamApi({teamId}).mounts.get();
+            return (res.data || {}) as Record<string, MountSettings>;
+        },
+        staleTime: 5 * 60 * 1000,
+        enabled: !!teamId,
+    });
+}
+
+export function useAddTeamMount(teamId: string) {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: async (body: {name: string; storageType?: string; maxSizeMB?: number}) => {
+            const res = await teamApi({teamId}).mount.post(body as any);
+            if (res.error) throw new Error(String(res.error));
+            return res.data;
+        },
+        onSuccess: () => invalidateTeamMounts(queryClient, teamId),
+    });
+}
+
+export function useUpdateTeamMount(teamId: string) {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: async ({mountId, ...body}: {mountId: string; enabled?: boolean; maxSizeMB?: number; name?: string}) => {
+            const res = await teamApi({teamId}).mount({mountId}).put(body as any);
+            if (res.error) throw new Error(String(res.error));
+            return res.data;
+        },
+        onSuccess: () => invalidateTeamMounts(queryClient, teamId),
+    });
+}
+
+export function invalidateTeamMounts(queryClient: QueryClient, teamId: string): void {
+    queryClient.invalidateQueries({queryKey: teamMountKeys.all(teamId)});
+}

@@ -121,8 +121,8 @@ describe('Drive', () => {
             const {data: size} = await ctx.alice.api.home({ownerId: ctx.alice.user.id}).size.get();
 
             expect(size).toBeDefined();
-            expect(size!.drive).toBeGreaterThan(0);
-            expect(size!.used).toBeGreaterThan(0);
+            expect(size!.drive.default.used).toBeGreaterThan(0);
+            expect(size!.total.used).toBeGreaterThan(0);
         });
 
         test('download file returns correct content', async () => {

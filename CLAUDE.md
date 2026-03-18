@@ -78,6 +78,9 @@ bun run check          # typecheck + test
 | **Errors**            | `apps/api/src/lib/core/errors.ts`           | `throw new ApiError(status, message)`                                                                      |
 | **SSE emission**      | `apps/api/src/lib/[domain]/sse-events.ts`   | `home.notify(buildEvent(...))`                                                                             |
 | **Auth**              | `apps/api/src/lib/auth/auth.ts`             | better-auth with org/team/2FA plugins                                                                      |
+| **Server settings**   | `apps/api/src/lib/config/server-settings.ts` | Runtime-adjustable quotas & defaults via `JsonStore<ServerSettings>`                                       |
+| **Quota resolution**  | `apps/api/src/lib/config/quota.ts`          | `resolveUserQuotas()` — server default + team overrides (most permissive wins)                             |
+| **Quota enforcement** | `apps/api/src/lib/config/enforcement.ts`    | `enforceFileUpload`, `enforceBatchUpload`, `enforceAvatarUpload`                                           |
 | **Singleton factory** | `apps/api/src/utils/singleton.ts`           | `createAsyncSingleton()` for Home/DB instances                                                             |
 
 ### Frontend

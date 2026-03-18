@@ -13,8 +13,8 @@ interface SetupData {
     storageType: StorageType
     s3Bucket: string
     s3Region: string
-    s3AccessKey: string
-    s3SecretKey: string
+    s3AccessKeyId: string
+    s3SecretAccessKey: string
     s3Endpoint: string
     adminUsername: string
     adminPassword: string
@@ -52,8 +52,8 @@ export function SetupWizard() {
         storageType: 'local-id',
         s3Bucket: '',
         s3Region: '',
-        s3AccessKey: '',
-        s3SecretKey: '',
+        s3AccessKeyId: '',
+        s3SecretAccessKey: '',
         s3Endpoint: '',
         adminUsername: '',
         adminPassword: '',
@@ -274,22 +274,22 @@ export function SetupWizard() {
                                         </div>
                                     </div>
                                     <div>
-                                        <Label htmlFor="s3AccessKey">Access Key</Label>
+                                        <Label htmlFor="s3AccessKeyId">Access Key ID</Label>
                                         <Input
-                                            id="s3AccessKey"
-                                            value={formData.s3AccessKey}
-                                            onChange={updateField('s3AccessKey')}
+                                            id="s3AccessKeyId"
+                                            value={formData.s3AccessKeyId}
+                                            onChange={updateField('s3AccessKeyId')}
                                             required
                                             className="mt-1.5"
                                         />
                                     </div>
                                     <div>
-                                        <Label htmlFor="s3SecretKey">Secret Key</Label>
+                                        <Label htmlFor="s3SecretAccessKey">Secret Access Key</Label>
                                         <Input
-                                            id="s3SecretKey"
+                                            id="s3SecretAccessKey"
                                             type="password"
-                                            value={formData.s3SecretKey}
-                                            onChange={updateField('s3SecretKey')}
+                                            value={formData.s3SecretAccessKey}
+                                            onChange={updateField('s3SecretAccessKey')}
                                             required
                                             className="mt-1.5"
                                         />
