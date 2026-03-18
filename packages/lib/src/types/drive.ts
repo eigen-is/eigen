@@ -99,14 +99,17 @@ export function isInlineEditable(mimeType: string, name: string): boolean {
 }
 
 
+export type ImageDimensions = {
+    width: number;
+    height: number;
+};
+
 export type DrivePathDetails = {
     originalName?: string;
-    width?: number;
-    height?: number;
     duration?: number;
     pageCount?: number;
     [key: string]: unknown;
-} | null;
+} & Partial<ImageDimensions> | null;
 
 export type DrivePath = {
     id: string;

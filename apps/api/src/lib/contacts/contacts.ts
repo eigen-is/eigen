@@ -8,7 +8,7 @@ import type {Home} from "../home";
 import {getHome} from "../home";
 import type {User} from "better-auth/types";
 import {getUserByEmail, updateUser} from "../user/";
-import {generateThumbnail} from "../shared/thumbnails";
+import {generateImagePreview} from "../shared/thumbnails";
 import {DEFAULT_LABELS, LocalFilesystem, PATHS} from "../core";
 import {buildContactEvent, buildLabelEvent} from "./sse-events";
 import {SSEventType} from "@workspace/lib/types/sse";
@@ -297,19 +297,19 @@ export class Contacts {
         this.cleanupAvatarImages();
 
         const buffer = Buffer.from(await file.arrayBuffer());
-        const thumbnail = await generateThumbnail(buffer, file.type, {
+        const result = await generateImagePreview(buffer, file.type, file.name, '', 'avatar', {
             maxSize: 512,
             quality: 80,
             format: 'webp',
             fit: 'cover'
         });
 
-        if (!thumbnail) {
+        if (!result) {
             throw new ApiError(400, 'Failed to generate avatar thumbnail');
         }
 
         const fileName = `${uuidv4()}.webp`;
-        await this.storage.write(`${PATHS.CONTACTS.AVATARS}/${fileName}`, thumbnail);
+        await this.storage.write(`${PATHS.CONTACTS.AVATARS}/${fileName}`, result.data);
 
         return `contacts/${this.home.user.id}/avatar/${fileName}`;
     }
