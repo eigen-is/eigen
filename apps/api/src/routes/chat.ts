@@ -9,7 +9,7 @@ export const chatRouter = new Elysia({name: "chat"})
     .get("/chat/:ownerId/:mountId/:chatId/messages", async ({params, query, user}) => {
         const drive = await getSharedDrive(params.ownerId, user);
         const chat = await drive.getChat(params.mountId, params.chatId);
-        const limit = query.limit ? parseInt(query.limit) : 50;
+        const limit = Math.min(Math.max(1, query.limit ? parseInt(query.limit) : 50), 200);
         return await chat.getMessagesForUser(user.id, user.email, limit, query.before || undefined);
     }, {
         query: t.Object({
@@ -36,12 +36,11 @@ export const chatRouter = new Elysia({name: "chat"})
         );
     }, {
         body: t.Object({
-            content: t.String(),
+            content: t.String({maxLength: 50000}),
             type: t.Optional(t.Union([
                 t.Literal('message'),
                 t.Literal('emote'),
                 t.Literal('whisper'),
-                t.Literal('system'),
             ])),
             whisperTo: t.Optional(t.String()),
             replyTo: t.Optional(t.String()),

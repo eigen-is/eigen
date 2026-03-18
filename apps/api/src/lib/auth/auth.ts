@@ -95,7 +95,7 @@ export const auth = betterAuth({
     appName: "eigen",
     baseURL: process.env["API_URL"],
     basePath: "/auth",
-    secret: getServerConfig()?.secret || "+/SmL4b3+bxwJgsJU7yT1Sbfm9YR/0GZhVGRaBm838c=",
+    secret: getServerConfig()?.secret || crypto.randomUUID(),
 });
 
 export async function authAddUserToDefaultOrg(user: User): Promise<void> {

@@ -24,8 +24,11 @@ import {
 
 export const mailRouter = new Elysia({name: "mail"})
     .use(betterAuth)
-    // Public delivery endpoint (no auth, no ownerId)
-    .post("/mail/deliver/:to", async ({params, body}) => await mailboxDeliver(params.to, body as ArrayBuffer))
+    // Public delivery endpoint (no auth, no ownerId) — used by SMTP relay
+    .post("/mail/deliver/:to", async ({params, body}) => await mailboxDeliver(params.to, body as ArrayBuffer), {
+        parse: 'arrayBuffer',
+        body: t.Any({maxLength: 25 * 1024 * 1024}),
+    })
     // All other routes use /:ownerId/ pattern
     .get("/mail/:ownerId/mailboxes", async ({user}) => await mailboxesList(user), {auth: true})
     .get("/mail/:ownerId/mailbox/*", async ({params, user}) => await mailboxGet(user, params['*']), {auth: true})
@@ -126,7 +129,8 @@ export const mailRouter = new Elysia({name: "mail"})
         set.headers['Cache-Control'] = 'public, max-age=86400';
         set.headers['Expires'] = new Date(Date.now() + 86400000).toUTCString();
         set.headers['Content-Type'] = 'application/octet-stream';
-        set.headers['Content-Disposition'] = `attachment; filename="${params.fileName}"`;
+        const safeName = params.fileName.replace(/[\x00-\x1f"\\]/g, '_');
+        set.headers['Content-Disposition'] = `attachment; filename="${safeName}"`;
         const attachment = await messageGetAttachment(user, params.id, Number(params.index));
         return attachment?.content ?? null;
     }, {auth: true});

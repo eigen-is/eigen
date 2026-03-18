@@ -113,11 +113,14 @@ export class ChatRoom {
             createdAt: now,
         };
 
+        const sseMessage = type === 'whisper'
+            ? {...message, content: '', whisperTo: null}
+            : message;
         this.home.notify(buildChatEvent(SSEventType.CHAT_MESSAGE_POSTED, {
             chatId: this.path.id,
             ownerId: this.path.ownerId,
             mountId: this.path.mountId,
-            message,
+            message: sseMessage,
         }));
 
         return message;

@@ -40,7 +40,7 @@ export function usePostMessage(ownerId: string, mountId: string, chatId: string)
     return useMutation({
         mutationFn: async (body: {
             content: string;
-            type?: 'message' | 'emote' | 'whisper' | 'system';
+            type?: 'message' | 'emote' | 'whisper';
             whisperTo?: string;
             replyTo?: string;
             attachments?: string[]

@@ -2,7 +2,7 @@ import {Elysia, t} from "elysia";
 import {betterAuth} from "./auth";
 import {getSharedDrive} from "../lib/drive";
 import {getHome} from "../lib/home";
-import {enforceFileUpload, enforceBatchUpload} from "../lib/config/enforcement";
+import {enforceBatchUpload, enforceFileUpload} from "../lib/config/enforcement";
 
 export const driveRouter = new Elysia({name: "drive"})
     .use(betterAuth)
@@ -110,7 +110,7 @@ export const driveRouter = new Elysia({name: "drive"})
         const drive = await getSharedDrive(params.ownerId, user);
         const path = await drive.getPath(params.mountId, params.pathId);
         if (path && path.name) {
-            const displayName = path.details?.originalName || path.name;
+            const displayName = (path.details?.originalName || path.name).replace(/[\x00-\x1f"\\]/g, '_');
             set.headers['Content-Disposition'] = `attachment; filename="${displayName}"`;
             set.headers['Cache-Control'] = 'public, max-age=86400';
             set.headers['Expires'] = new Date(Date.now() + 86400000).toUTCString();

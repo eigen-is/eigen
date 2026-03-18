@@ -162,6 +162,9 @@ export class MaildirStore {
 
     mailboxDir(mailbox: string): string {
         if (mailbox === '' || mailbox === 'INBOX') return this.basePath
+        if (/[^a-zA-Z0-9._\- /]/.test(mailbox) || mailbox.includes('..')) {
+            throw new Error(`Invalid mailbox name: ${mailbox}`)
+        }
         return `${this.basePath}/.${mailbox.replace('/', '.')}`
     }
 }
