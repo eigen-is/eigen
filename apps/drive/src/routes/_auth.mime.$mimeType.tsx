@@ -11,7 +11,8 @@ export const Route = createFileRoute('/_auth/mime/$mimeType')({
     component: DriveRoute,
     validateSearch: (search: Record<string, unknown>) => {
         const pid = typeof search.pid === 'string' ? search.pid : undefined;
-        return {pid} as DriveSearchParams;
+        const uid = typeof search.uid === 'string' ? search.uid : undefined;
+        return {pid, uid} as DriveSearchParams;
     },
 });
 
