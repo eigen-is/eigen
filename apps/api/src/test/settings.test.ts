@@ -222,6 +222,204 @@ describe('Team Mount Management', () => {
         const settings = await getRes.json() as any;
         expect(settings.memberOverrides.mailAndContactsMaxMB).toBeUndefined();
     });
+
+    test('admin can add a second mount', async () => {
+        const res = await authedRequest(ctx.alice.user.sessionToken, `/team/${teamId}/mount`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({name: 'Archives', storageType: 'local-key', maxSizeMB: 100}),
+        });
+        expect(res.status).toBe(200);
+        const mount = await res.json() as any;
+        expect(mount.name).toBe('Archives');
+        expect(mount.storageType).toBe('local-key');
+        expect(mount.maxSizeMB).toBe(100);
+    });
+
+    test('mounts list shows both mounts', async () => {
+        const res = await authedRequest(ctx.alice.user.sessionToken, `/team/${teamId}/mounts`);
+        const mounts = await res.json() as Record<string, any>;
+        expect(Object.keys(mounts).length).toBe(2);
+        const names = Object.values(mounts).map((m: any) => m.name);
+        expect(names).toContain('Shared Files');
+        expect(names).toContain('Archives');
+    });
+
+    test('disabling one mount does not affect the other', async () => {
+        const listRes = await authedRequest(ctx.alice.user.sessionToken, `/team/${teamId}/mounts`);
+        const mounts = await listRes.json() as Record<string, any>;
+        const [id1, id2] = Object.keys(mounts);
+
+        await authedRequest(ctx.alice.user.sessionToken, `/team/${teamId}/mount/${id1}`, {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({enabled: false}),
+        });
+
+        const afterRes = await authedRequest(ctx.alice.user.sessionToken, `/team/${teamId}/mounts`);
+        const after = await afterRes.json() as Record<string, any>;
+        expect(after[id1].enabled).toBe(false);
+        expect(after[id2].enabled).toBe(true);
+    });
+
+    test('admin can update specific mount among multiple', async () => {
+        const listRes = await authedRequest(ctx.alice.user.sessionToken, `/team/${teamId}/mounts`);
+        const mounts = await listRes.json() as Record<string, any>;
+        const archiveId = Object.entries(mounts).find(([, m]: [string, any]) => m.name === 'Archives')![0];
+
+        const res = await authedRequest(ctx.alice.user.sessionToken, `/team/${teamId}/mount/${archiveId}`, {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({maxSizeMB: 250, name: 'Archives (Expanded)'}),
+        });
+        expect(res.status).toBe(200);
+        const updated = await res.json() as any;
+        expect(updated.maxSizeMB).toBe(250);
+        expect(updated.name).toBe('Archives (Expanded)');
+        expect(updated.storageType).toBe('local-key');
+    });
+
+    test('updating nonexistent mount returns 404', async () => {
+        const res = await authedRequest(ctx.alice.user.sessionToken, `/team/${teamId}/mount/nonexistent`, {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({enabled: false}),
+        });
+        expect(res.status).toBe(404);
+    });
+});
+
+describe('Quota Resolution with Team Overrides', () => {
+    let ctx: Awaited<ReturnType<typeof getTestContext>>;
+    let teamId: string;
+
+    beforeAll(async () => {
+        ctx = await getTestContext();
+        const config = getServerConfig();
+
+        await authedRequest(ctx.alice.user.sessionToken,
+            '/auth/organization/set-active', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({organizationId: config!.orgId}),
+            });
+
+        const teamRes = await authedRequest(ctx.alice.user.sessionToken,
+            '/auth/organization/create-team', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({name: 'Quota Test Team', organizationId: config!.orgId}),
+            });
+        const team = await teamRes.json() as any;
+        teamId = team.id;
+
+        await authedRequest(ctx.alice.user.sessionToken,
+            '/auth/organization/add-team-member', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({teamId, userId: ctx.alice.user.id}),
+            });
+    });
+
+    test('team override elevates user quota via home/size', async () => {
+        await authedRequest(ctx.alice.user.sessionToken,
+            `/team/${teamId}/settings`, {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({memberOverrides: {defaultMountMaxSizeMB: 1000}}),
+            });
+
+        const sizeRes = await authedRequest(ctx.alice.user.sessionToken,
+            `/home/${ctx.alice.user.id}/size`);
+        const size = await sizeRes.json() as any;
+        expect(size.drive.default.max).toBe(1000 * 1024 * 1024);
+    });
+
+    test('server default applies when team override is cleared', async () => {
+        await authedRequest(ctx.alice.user.sessionToken,
+            `/team/${teamId}/settings`, {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({memberOverrides: {defaultMountMaxSizeMB: null}}),
+            });
+
+        const sizeRes = await authedRequest(ctx.alice.user.sessionToken,
+            `/home/${ctx.alice.user.id}/size`);
+        const size = await sizeRes.json() as any;
+        expect(size.drive.default.max).toBe(500 * 1024 * 1024);
+    });
+
+    test('most permissive team override wins', async () => {
+        const team2Res = await authedRequest(ctx.alice.user.sessionToken,
+            '/auth/organization/create-team', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({name: 'Quota Test Team 2', organizationId: getServerConfig()!.orgId}),
+            });
+        const team2 = await team2Res.json() as any;
+
+        await authedRequest(ctx.alice.user.sessionToken,
+            '/auth/organization/add-team-member', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({teamId: team2.id, userId: ctx.alice.user.id}),
+            });
+
+        await authedRequest(ctx.alice.user.sessionToken,
+            `/team/${teamId}/settings`, {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({memberOverrides: {defaultMountMaxSizeMB: 200}}),
+            });
+        await authedRequest(ctx.alice.user.sessionToken,
+            `/team/${team2.id}/settings`, {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({memberOverrides: {defaultMountMaxSizeMB: 800}}),
+            });
+
+        const sizeRes = await authedRequest(ctx.alice.user.sessionToken,
+            `/home/${ctx.alice.user.id}/size`);
+        const size = await sizeRes.json() as any;
+        expect(size.drive.default.max).toBe(800 * 1024 * 1024);
+
+        // Clean up
+        await authedRequest(ctx.alice.user.sessionToken,
+            `/team/${teamId}/settings`, {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({memberOverrides: {defaultMountMaxSizeMB: null}}),
+            });
+        await authedRequest(ctx.alice.user.sessionToken,
+            `/team/${team2.id}/settings`, {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({memberOverrides: {defaultMountMaxSizeMB: null}}),
+            });
+    });
+
+    test('team override below server default still uses server default (most permissive)', async () => {
+        await authedRequest(ctx.alice.user.sessionToken,
+            `/team/${teamId}/settings`, {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({memberOverrides: {defaultMountMaxSizeMB: 50}}),
+            });
+
+        const sizeRes = await authedRequest(ctx.alice.user.sessionToken,
+            `/home/${ctx.alice.user.id}/size`);
+        const size = await sizeRes.json() as any;
+        // Server default is 500 MB, team says 50 MB — max(500, 50) = 500
+        expect(size.drive.default.max).toBe(500 * 1024 * 1024);
+
+        // Clean up
+        await authedRequest(ctx.alice.user.sessionToken,
+            `/team/${teamId}/settings`, {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({memberOverrides: {defaultMountMaxSizeMB: null}}),
+            });
+    });
 });
 
 describe('Setup Flow', () => {
