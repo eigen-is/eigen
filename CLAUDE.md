@@ -136,8 +136,10 @@ These patterns have caused bugs across multiple domains:
 - **Never mutate TanStack Query cache directly** — use `queryClient.setQueryData()` or `invalidateQueries()`, not
   direct object mutation on cached data
 - **No `"use client"` directives** — this is a Vite project, not Next.js. The directive is a no-op
-- **Route `ownerId` params must be validated** — if a route accepts `:ownerId`, either verify it matches the
-  authenticated user (or team membership) and reject with 403, or remove the parameter entirely
+- **Every authenticated route must include `:ownerId` as the second path segment** — `ownerId` identifies the Home
+  that owns the resource. For personal data it equals `user.id`; for team data it's `team_{teamId}`. This consistent
+  prefix enables future load-balancer sharding by ownerId (all requests for one Home on the same server). Routes must
+  validate that the caller has access to the specified ownerId (owns it or is a team member)
 
 ### SSE Pattern
 

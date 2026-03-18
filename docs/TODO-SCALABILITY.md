@@ -75,6 +75,10 @@ Front-door entry point routing all incoming traffic to API Gateway instances.
 Authenticates requests and routes them to the correct API server based on user identity.
 
 - Session management, consistent routing, service discovery.
+- **Routing key**: Every authenticated route includes `:ownerId` as the second path segment (e.g.,
+  `/mail/:ownerId/...`, `/drive/:ownerId/...`). This identifies the Home that owns the resource. The gateway can
+  extract `ownerId` from the URL and use consistent hashing to route all requests for one Home to the same server,
+  ensuring per-user SQLite databases and in-memory Yjs documents stay co-located.
 
 ### 3. Redis Service Registry
 
