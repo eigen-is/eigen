@@ -26,7 +26,7 @@ import {
 import {ChatRoom} from '../chat';
 import {canRead, canWrite, filterRedundantACL, matchesACL, normalizeACL} from './acl';
 import {validateACLEntries} from '@workspace/lib/validation';
-import {extractImageDetails, getThumbnail, saveThumbnail} from '../shared/thumbnails';
+import {getThumbnail, saveThumbnail} from '../shared/thumbnails';
 import {getScreenPreview, getTextPreviewData} from '../preview/preview-cache';
 import CollabDocument from '../collab/collabDocument';
 import {getSharedDatabase} from './shared';
@@ -213,7 +213,6 @@ export default class Drive {
         }
 
         const buffer = await file.arrayBuffer();
-        const bufferData = Buffer.from(buffer);
         const pathId = await mount.createFile(
             parentId,
             safeName,
@@ -222,17 +221,16 @@ export default class Drive {
             buffer
         );
 
-        const [thumbnail, imageDetails] = await Promise.all([
-            saveThumbnail(mount.thumbsDir, pathId, bufferData, file.type),
-            extractImageDetails(bufferData, file.type)
-        ]);
+        const storageFile = await mount.getStorageFile(pathId);
+        const storagePath = storageFile.name!;
+        const thumbnail = await saveThumbnail(mount.thumbsDir, pathId, storagePath, file.type, safeName);
 
         const details: Record<string, unknown> = {};
-        if (imageDetails) Object.assign(details, imageDetails);
+        if (thumbnail) { details['width'] = thumbnail.width; details['height'] = thumbnail.height; }
         if (originalName) details['originalName'] = originalName;
 
         const updates: Partial<DrivePath> = {};
-        if (thumbnail) updates.thumbnail = thumbnail;
+        if (thumbnail) updates.thumbnail = thumbnail.fileName;
         if (Object.keys(details).length > 0) updates.details = details;
 
         if (Object.keys(updates).length > 0) {
