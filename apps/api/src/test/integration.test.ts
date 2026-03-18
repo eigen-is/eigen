@@ -134,13 +134,13 @@ describe('Cross-Domain Integration', () => {
     describe('Home and Drive Integration', () => {
         test('home size increases after drive upload', async () => {
             const {data: sizeBefore} = await ctx.alice.api.home({ownerId: ctx.alice.user.id}).size.get();
-            const driveSizeBefore = sizeBefore!.drive;
+            const driveSizeBefore = sizeBefore!.drive.default.used;
 
             const file = new File(['test content for size'], 'size-test.txt', {type: 'text/plain'});
             await driveUpload(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, aliceRootId, file);
 
             const {data: sizeAfter} = await ctx.alice.api.home({ownerId: ctx.alice.user.id}).size.get();
-            expect(sizeAfter!.drive).toBeGreaterThan(driveSizeBefore);
+            expect(sizeAfter!.drive.default.used).toBeGreaterThan(driveSizeBefore);
         });
     });
 

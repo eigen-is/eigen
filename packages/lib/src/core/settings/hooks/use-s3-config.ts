@@ -1,0 +1,36 @@
+import {type QueryClient, useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
+import {settingsApi} from '@workspace/lib/api';
+import type {S3Config} from '@workspace/lib/types';
+import {settingsKeys} from './use-server-settings';
+
+const s3ConfigKeys = {
+    all: [...settingsKeys.all, 's3-config'] as const,
+};
+
+export function useServerS3Config() {
+    return useQuery({
+        queryKey: s3ConfigKeys.all,
+        queryFn: async () => {
+            const res = await (settingsApi as any)['s3-config'].get();
+            return (res.data || null) as S3Config | null;
+        },
+        staleTime: 5 * 60 * 1000,
+    });
+}
+
+export function useUpdateServerS3Config() {
+    const queryClient = useQueryClient();
+
+    return useMutation({
+        mutationFn: async (body: S3Config) => {
+            const res = await (settingsApi as any)['s3-config'].put(body);
+            if (res.error) throw new Error(String(res.error));
+            return res.data as S3Config;
+        },
+        onSuccess: () => invalidateServerS3Config(queryClient),
+    });
+}
+
+export function invalidateServerS3Config(queryClient: QueryClient): void {
+    queryClient.invalidateQueries({queryKey: s3ConfigKeys.all});
+}

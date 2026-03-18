@@ -8,6 +8,7 @@ import {
 } from "../config/server-config";
 import {existsSync, mkdirSync} from "fs";
 import {dirname} from "path";
+import {randomBytes} from "crypto";
 import {getServerDataPath} from "../config/paths";
 
 export const isSetupRequired = checkSetupRequired;
@@ -132,8 +133,8 @@ export type SetupInput = {
     storageType: 'local-fullnames' | 'local-id' | 's3';
     s3Bucket?: string;
     s3Region?: string;
-    s3AccessKey?: string;
-    s3SecretKey?: string;
+    s3AccessKeyId?: string;
+    s3SecretAccessKey?: string;
     s3Endpoint?: string;
     adminEmail: string;
     adminPassword: string;
@@ -176,7 +177,7 @@ export async function completeSetup(input: SetupInput): Promise<SetupResult> {
     }
 
     if (input.storageType === 's3') {
-        if (!input.s3Bucket || !input.s3Region || !input.s3AccessKey || !input.s3SecretKey) {
+        if (!input.s3Bucket || !input.s3Region || !input.s3AccessKeyId || !input.s3SecretAccessKey) {
             return {success: false, error: "S3 configuration requires bucket, region, access key, and secret key"};
         }
     }
@@ -228,11 +229,13 @@ export async function completeSetup(input: SetupInput): Promise<SetupResult> {
                 s3: input.storageType === 's3' ? {
                     bucket: input.s3Bucket!,
                     region: input.s3Region!,
-                    accessKey: input.s3AccessKey!,
-                    secretKey: input.s3SecretKey!,
-                    endpoint: input.s3Endpoint
+                    accessKeyId: input.s3AccessKeyId!,
+                    secretAccessKey: input.s3SecretAccessKey!,
+                    endpoint: input.s3Endpoint ?? '',
+                    prefix: '',
                 } : undefined
             },
+            secret: randomBytes(32).toString('base64'),
             setupCompleted: true,
             setupCompletedAt: new Date().toISOString()
         };

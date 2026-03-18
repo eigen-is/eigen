@@ -26,6 +26,7 @@ export const chatApi = api.chat;
 export const calendarApi = api.calendar;
 export const spaceApi = api.space;
 export const teamApi = api.team;
+export const settingsApi = api.settings;
 export const setupApi = api.setup;
 
 export const SPACE_APP_URL = import.meta.env.VITE_APP_SPACE_URL as string;

@@ -2,6 +2,7 @@ import {Elysia, t} from "elysia";
 import {betterAuth} from "./auth";
 import {getSharedDrive} from "../lib/drive";
 import {getHome} from "../lib/home";
+import {enforceFileUpload, enforceBatchUpload} from "../lib/config/enforcement";
 
 export const driveRouter = new Elysia({name: "drive"})
     .use(betterAuth)
@@ -85,17 +86,19 @@ export const driveRouter = new Elysia({name: "drive"})
         return await drive.getPath(params.mountId, params.pathId);
     }, {auth: true})
     .post("/drive/:ownerId/:mountId/file/:pathId", async ({params, body, user}) => {
+        await enforceFileUpload(params.ownerId, user.id, params.mountId, body.file.size);
         const drive = await getSharedDrive(params.ownerId, user);
         return await drive.uploadFile(params.mountId, params.pathId, body.file);
     }, {
-        body: t.Object({file: t.File({maxSize: 35 * 1024 * 1024})}),
+        body: t.Object({file: t.File()}),
         auth: true
     })
     .post("/drive/:ownerId/:mountId/files/:pathId", async ({params, body, user}) => {
+        await enforceBatchUpload(params.ownerId, user.id, params.mountId, body.files);
         const drive = await getSharedDrive(params.ownerId, user);
         return await drive.uploadFiles(params.mountId, params.pathId, body.files);
     }, {
-        body: t.Object({files: t.Files({maxSize: 10 * 1024 * 1024})}),
+        body: t.Object({files: t.Files()}),
         auth: true
     })
     .delete("/drive/:ownerId/:mountId/file/:pathId", async ({params, user}) => {

@@ -1,6 +1,7 @@
 import {Elysia} from "elysia";
 import {betterAuth} from "./auth.ts";
 import {getHome} from "../lib/home";
+import {getMemberships} from "../lib/user";
 
 export const homeRouter = new Elysia({name: "home"})
     .use(betterAuth)
@@ -8,7 +9,8 @@ export const homeRouter = new Elysia({name: "home"})
     // Get root folder
     .get("/home/:ownerId/size", async ({user}) => {
         const home = await getHome(user.id);
-        return await home.size();
+        const {teamIds} = await getMemberships(user.id);
+        return await home.size(teamIds);
     }, {
         auth: true
     })

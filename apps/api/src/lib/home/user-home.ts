@@ -7,6 +7,7 @@ import {Drive} from "../drive";
 import {JsonStore, LocalFilesystem} from "../core";
 import {Calendar} from "../calendar/calendar";
 import type {UserSettings} from "@workspace/lib/types/settings";
+import {getServerSettings, mapStorageType} from "../config/server-settings";
 
 export class UserHome extends Home {
     declare public settings: JsonStore<UserSettings>;
@@ -22,5 +23,22 @@ export class UserHome extends Home {
         this._mail = new Maildir(this);
         this._drive = new Drive(this);
         this._calendar = new Calendar(this);
+    }
+
+    override async init() {
+        await this.settings.load();
+        if (!this.settings.get().mounts?.['default']) {
+            const serverSettings = getServerSettings();
+            await this.settings.set({
+                mounts: {
+                    default: {
+                        storageType: mapStorageType(serverSettings.defaults.mount.storageType),
+                        maxSizeMB: serverSettings.quotas.defaultMountMaxSizeMB,
+                        enabled: true,
+                    }
+                }
+            });
+        }
+        return super.init(true);
     }
 }

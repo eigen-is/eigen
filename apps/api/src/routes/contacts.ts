@@ -2,6 +2,7 @@
 import {Elysia, t} from "elysia";
 import {betterAuth} from "./auth";
 import {getContacts} from "../lib/contacts/contacts";
+import {enforceAvatarUpload} from "../lib/config/enforcement";
 
 const AddressSchema = t.Object({
     street: t.Optional(t.String()),
@@ -83,15 +84,12 @@ export const contactsRouter = new Elysia({name: "contacts"})
                                                     }) => await (await getContacts(user)).deleteLabel(params.id), {
         auth: true
     })
-    .post("/contacts/:ownerId/avatar", async ({
-                                                  body,
-                                                  user
-                                              }) => await (await getContacts(user)).uploadAvatar(body.file), {
+    .post("/contacts/:ownerId/avatar", async ({body, user}) => {
+        await enforceAvatarUpload(user.id, body.file.size);
+        return await (await getContacts(user)).uploadAvatar(body.file);
+    }, {
         body: t.Object({
-            file: t.File({
-                format: 'image/*',
-                maxSize: 15 * 1024 * 1024
-            })
+            file: t.File({format: 'image/*'})
         }),
         auth: true
     })

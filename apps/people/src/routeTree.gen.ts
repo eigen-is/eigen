@@ -13,6 +13,7 @@ import { Route as LoginRouteImport } from './routes/login'
 import { Route as AuthRouteImport } from './routes/_auth'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as AuthTeamsRouteImport } from './routes/_auth.teams'
+import { Route as AuthSettingsRouteImport } from './routes/_auth.settings'
 import { Route as AuthMembersRouteImport } from './routes/_auth.members'
 
 const LoginRoute = LoginRouteImport.update({
@@ -34,6 +35,11 @@ const AuthTeamsRoute = AuthTeamsRouteImport.update({
   path: '/teams',
   getParentRoute: () => AuthRoute,
 } as any)
+const AuthSettingsRoute = AuthSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => AuthRoute,
+} as any)
 const AuthMembersRoute = AuthMembersRouteImport.update({
   id: '/members',
   path: '/members',
@@ -44,12 +50,14 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/members': typeof AuthMembersRoute
+  '/settings': typeof AuthSettingsRoute
   '/teams': typeof AuthTeamsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/login': typeof LoginRoute
   '/members': typeof AuthMembersRoute
+  '/settings': typeof AuthSettingsRoute
   '/teams': typeof AuthTeamsRoute
 }
 export interface FileRoutesById {
@@ -58,14 +66,22 @@ export interface FileRoutesById {
   '/_auth': typeof AuthRouteWithChildren
   '/login': typeof LoginRoute
   '/_auth/members': typeof AuthMembersRoute
+  '/_auth/settings': typeof AuthSettingsRoute
   '/_auth/teams': typeof AuthTeamsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/login' | '/members' | '/teams'
+  fullPaths: '/' | '/login' | '/members' | '/settings' | '/teams'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/login' | '/members' | '/teams'
-  id: '__root__' | '/' | '/_auth' | '/login' | '/_auth/members' | '/_auth/teams'
+  to: '/' | '/login' | '/members' | '/settings' | '/teams'
+  id:
+    | '__root__'
+    | '/'
+    | '/_auth'
+    | '/login'
+    | '/_auth/members'
+    | '/_auth/settings'
+    | '/_auth/teams'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -104,6 +120,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AuthTeamsRouteImport
       parentRoute: typeof AuthRoute
     }
+    '/_auth/settings': {
+      id: '/_auth/settings'
+      path: '/settings'
+      fullPath: '/settings'
+      preLoaderRoute: typeof AuthSettingsRouteImport
+      parentRoute: typeof AuthRoute
+    }
     '/_auth/members': {
       id: '/_auth/members'
       path: '/members'
@@ -116,11 +139,13 @@ declare module '@tanstack/react-router' {
 
 interface AuthRouteChildren {
   AuthMembersRoute: typeof AuthMembersRoute
+  AuthSettingsRoute: typeof AuthSettingsRoute
   AuthTeamsRoute: typeof AuthTeamsRoute
 }
 
 const AuthRouteChildren: AuthRouteChildren = {
   AuthMembersRoute: AuthMembersRoute,
+  AuthSettingsRoute: AuthSettingsRoute,
   AuthTeamsRoute: AuthTeamsRoute,
 }
 
