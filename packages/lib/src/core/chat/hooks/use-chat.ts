@@ -12,7 +12,7 @@ export const chatKeys = {
 
 export function useChats(ownerId: string) {
     return useQuery({
-        queryKey: [...driveKeys.mime('application-eigenchat'), 'own'],
+        queryKey: [...driveKeys.mime(ownerId, 'application-eigenchat'), 'own'],
         queryFn: async () => {
             const response = await driveApi({ownerId}).mime({mimeType: 'application-eigenchat'}).get();
             const all = (response.data || []) as DrivePath[];

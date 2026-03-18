@@ -96,7 +96,7 @@ export function DriveUploadFiles({
                     uploadHandler.complete();
 
                     // Invalidate the parent folder cache so new files appear
-                    invalidateItemCreated(queryClient, path.mountId, path.id);
+                    invalidateItemCreated(queryClient, path.ownerId, path.mountId, path.id);
 
                     // Notify parent component
                     if (onAfterAction) {
