@@ -2,15 +2,19 @@ import * as path from 'path';
 import * as fs from 'node:fs';
 import type {Mount} from '../mount';
 import type {DrivePath} from '@workspace/lib/types/drive';
-import {getImagePreview, getScreenCacheKey} from './image-preview';
-import {cleanupExtract, extractEmbeddedPreview, isExiftoolSupported} from './exiftool-preview';
+import {generateImagePreview} from '../shared/thumbnails';
+import {isExiftoolCandidate} from './exiftool-preview';
 import {generateTextPreview, isTextPreviewSupported, type TextPreviewResult} from './text-preview';
-import {generateThumbnail} from '../shared/thumbnails';
 
 type PreviewResult =
     | { type: 'image'; data: Buffer; contentType: 'image/webp' }
     | { type: 'redirect'; url: string }
     | null;
+
+function getScreenCacheKey(pathId: string, updatedAt: Date | string): string {
+    const ts = updatedAt instanceof Date ? updatedAt.getTime() : new Date(updatedAt).getTime();
+    return `${pathId}-${ts}.screen.webp`;
+}
 
 function getTextCacheKey(pathId: string, updatedAt: Date | string): string {
     const ts = updatedAt instanceof Date ? updatedAt.getTime() : new Date(updatedAt).getTime();
@@ -30,18 +34,26 @@ export async function getScreenPreview(mount: Mount, drivePath: DrivePath, embed
         return {type: 'redirect', url: embedUrl};
     }
 
-    // Image (standard formats sharp can handle)
-    if (mime.startsWith('image/') && !isExiftoolSupported(mime, drivePath.name)) {
-        const data = await getImagePreview(mount, drivePath);
-        if (data) return {type: 'image', data, contentType: 'image/webp'};
-        return null;
-    }
+    // Image (any format — sharp first, exiftool fallback)
+    if (isExiftoolCandidate(mime, drivePath.name)) {
+        const cacheFile = path.join(mount.previewsDir, getScreenCacheKey(drivePath.id, drivePath.updatedAt));
 
-    // RAW/PSD/AI → exiftool extract → sharp → WebP
-    if (isExiftoolSupported(mime, drivePath.name)) {
-        const result = await getExiftoolPreview(mount, drivePath);
-        if (result) return {type: 'image', data: result, contentType: 'image/webp'};
-        return null;
+        // Cache hit
+        if (fs.existsSync(cacheFile)) {
+            return {type: 'image', data: Buffer.from(await Bun.file(cacheFile).arrayBuffer()), contentType: 'image/webp'};
+        }
+
+        const storageFile = await mount.getStorageFile(drivePath.id);
+        const filePath = storageFile.name!;
+
+        const result = await generateImagePreview(
+            filePath, mime, drivePath.name, mount.previewsDir, drivePath.id,
+            {maxSize: 2560, quality: 85}
+        );
+        if (!result) return null;
+
+        await Bun.write(cacheFile, result.data);
+        return {type: 'image', data: result.data, contentType: 'image/webp'};
     }
 
     return null;
@@ -75,30 +87,4 @@ export async function getTextPreviewData(mount: Mount, drivePath: DrivePath): Pr
     // Write to cache
     await Bun.write(cacheFile, JSON.stringify(result));
     return result;
-}
-
-async function getExiftoolPreview(mount: Mount, drivePath: DrivePath): Promise<Buffer | null> {
-    const cacheFile = path.join(mount.previewsDir, getScreenCacheKey(drivePath.id, drivePath.updatedAt));
-
-    // Cache hit
-    if (fs.existsSync(cacheFile)) {
-        return Buffer.from(await Bun.file(cacheFile).arrayBuffer());
-    }
-
-    // Need the file on disk for exiftool
-    const storageFile = await mount.getStorageFile(drivePath.id);
-    const filePath = storageFile.name!;
-
-    const extractPath = await extractEmbeddedPreview(filePath, mount.previewsDir, drivePath.id);
-    if (!extractPath) return null;
-
-    try {
-        const preview = await generateThumbnail(extractPath, 'image/jpeg', {maxSize: 2560, quality: 85});
-        if (!preview) return null;
-
-        await Bun.write(cacheFile, preview);
-        return preview;
-    } finally {
-        await cleanupExtract(extractPath);
-    }
 }
