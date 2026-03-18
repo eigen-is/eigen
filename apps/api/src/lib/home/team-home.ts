@@ -76,8 +76,7 @@ export class TeamHome extends Home {
         if (!existing) throw new ApiError(404, 'Mount not found');
 
         const updated = {...existing, ...update};
-        const currentMounts = this.settings.get().mounts ?? {};
-        await this.settings.set({mounts: {...currentMounts, [mountId]: updated}});
+        await this.settings.set({mounts: { [mountId]: updated}});
         return updated;
     }
 }
