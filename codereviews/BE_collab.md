@@ -21,38 +21,52 @@ Key files:
 
 ## Critical Issues
 
-### 1. Document updates are never broadcast to other connected clients
+No critical issues. The previous review claimed "document updates are never broadcast" and marked collab as
+non-functional. This was **incorrect** -- see Important #1 below for the corrected analysis.
+
+## Important Issues
+
+### 1. Document updates are poll-synced (5s delay) instead of broadcast instantly
 
 `apps/api/src/lib/collab/collabDocument.ts`, `handleMessage()` (lines 243-311)
 
-When a client sends a Yjs SyncStep2 (type 1) or Update (type 2) message, `readSyncMessage()` at line 263 calls
-`Y.applyUpdate(doc, data, transactionOrigin)` inside y-protocols. This fires the Y.Doc's `update` event. The only
-listener is `DbProvider.updateHandler` (registered at line 39), which calls `storeUpdate()` to persist to SQLite.
+**Previous review claimed this was Critical and that collab was "non-functional". That was wrong.**
 
-There is no listener that broadcasts the update to other connected WebSocket clients. The comment on line 276 --
-_"No need to broadcast - updates trigger the doc's 'update' event which is handled separately"_ -- is incorrect.
-The `update` event only triggers DB persistence, not network broadcast.
+The server does NOT broadcast document updates to other connected clients. When Client A sends an update, the server
+applies it to the Y.Doc and stores it to DB, but never sends it to Client B. However, all frontend apps create their
+`WebsocketProvider` with `resyncInterval: 5000`:
 
-Verified by tracing the full y-protocols flow:
-1. Client sends `[MESSAGE_SYNC(0), SyncStep2(1), updateData...]` or `[MESSAGE_SYNC(0), Update(2), updateData...]`
-2. `handleMessage` reads MESSAGE_SYNC, then calls `syncProtocol.readSyncMessage(decoder, encoder, this.doc, conn)`
-3. `readSyncMessage` (y-protocols/sync.js line 118) reads the sub-type, dispatches to `readSyncStep2` or `readUpdate`
-4. Both call `Y.applyUpdate(doc, decoding.readVarUint8Array(decoder), transactionOrigin)`
-5. Y.Doc fires `update` event
-6. `DbProvider.updateHandler` stores to DB -- but nobody sends to other WebSocket clients
-7. `readSyncMessage` writes nothing to the encoder for SyncStep2/Update messages
-8. `encoding.length(encoder) > 1` is false (only the MESSAGE_SYNC byte from line 260), so no response is sent
-9. The originating client gets no ack, and no other client gets the update
+```typescript
+// apps/docs/src/components/docs/editor.tsx:56-59
+// apps/stickies/src/components/stickies/hooks/use-board.ts:98-101
+// apps/slides/src/components/slides/hooks/use-deck.ts (similar)
+// apps/sheets/src/components/sheets/hooks/use-sheet.ts (similar)
+const yProvider = new WebsocketProvider(wsUrl, '', yDoc, {
+    resyncInterval: 5000,
+    connect: true,
+});
+```
 
-Awareness messages ARE correctly broadcast (lines 301-308). Document content updates are not.
+Every 5 seconds, each client sends a SyncStep1 (its state vector) to the server. The server responds with a SyncStep2
+containing any state differences. This means Client B receives Client A's changes within 0-5 seconds.
 
-**Impact**: Multi-user real-time collaboration is non-functional. Changes made by one user are persisted server-side but
-never delivered to other connected clients. Users only see each other's edits after reconnecting (when the initial sync
-loads the full document state from DB).
+**What actually works:**
+- Multi-user editing works correctly (changes converge via Yjs CRDT)
+- Changes appear on other clients within ~5 seconds
+- Awareness (cursors) is broadcast instantly (lines 301-308)
 
-**Fix**: Register a `doc.on('update', ...)` handler in `CollabDocument` (not DbProvider) that encodes the update as a
-Yjs sync message and calls `broadcastMessage`. The `transactionOrigin` passed by `readSyncMessage` is `conn` (the
-sending WebSocket), so it can be used to exclude the sender:
+**What's suboptimal:**
+- Up to 5 seconds latency vs. instant with server-side broadcast
+- Every client does a full sync handshake every 5 seconds regardless of whether anything changed
+- With N concurrent users, this generates N sync round-trips every 5 seconds (O(N) traffic)
+
+The comment on line 276 -- _"No need to broadcast - updates trigger the doc's 'update' event which is handled
+separately"_ -- is misleading. The update event only triggers DB persistence. The actual sync relies on client-side
+polling.
+
+**Fix**: Add a `doc.on('update', ...)` handler that broadcasts to peers. This would make edits appear instantly and
+reduce unnecessary sync traffic. The `transactionOrigin` from `readSyncMessage` is `conn` (the sending WebSocket),
+which can be used to exclude the sender:
 
 ```typescript
 this.doc.on('update', (update: Uint8Array, origin: any) => {
@@ -69,6 +83,9 @@ this.doc.on('update', (update: Uint8Array, origin: any) => {
     }
 });
 ```
+
+With broadcast in place, `resyncInterval` could be increased (e.g., 30s) as a fallback recovery mechanism rather than
+the primary sync path.
 
 ### 2. Awareness removal on disconnect is never broadcast to remaining clients
 
@@ -100,8 +117,6 @@ this.awareness.on('update', ({ added, updated, removed }: { added: number[], upd
     }
 });
 ```
-
-## Important Issues
 
 ### 3. Snapshot creation can lose concurrent updates
 
@@ -310,7 +325,7 @@ are all single-byte varuints.
 
 | Area | Assessment |
 |------|------------|
-| **Document content sync** | **Broken** -- updates stored but never broadcast to peers |
+| **Document content sync** | **Functional but high-latency** -- updates polled via 5s resyncInterval, not broadcast |
 | **Awareness sync** | **Partially broken** -- incoming awareness broadcasts work; disconnect removal does not broadcast |
 | **Persistence** | Good -- incremental updates + periodic snapshots with revision history |
 | **State recovery on restart** | Good -- loads latest snapshot + subsequent updates |
