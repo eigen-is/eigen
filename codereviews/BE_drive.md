@@ -1,142 +1,170 @@
-# Backend Code Review: Drive (Mount, Storage, ACL, Previews)
+# Backend Review: Drive (Storage, Mounts, ACL, Previews)
 
-## Summary
-
-The Drive domain is well-structured, following project conventions consistently. The code separates concerns cleanly
-across Drive (orchestration), Mount (storage + metadata), storage backends (pluggable I/O), ACL (permission logic), and
-previews (image/text rendering). The `SharedDrive` proxy pattern for cross-user access is a smart design. Test coverage
-is strong for core operations and ACL inheritance.
-
-This review found one critical bug (missing `await` on an async call), several important security and correctness
-issues, and a number of minor improvements.
+**Scope:** `apps/api/src/lib/{drive,mount,storage,preview}/`, `apps/api/src/routes/drive.ts`
+**Reviewed:** 2026-03-18
 
 ---
 
-## Architecture Compliance
+## Critical Issues
 
-The code follows the documented architecture patterns well:
+### 1. Missing `await` on async `matchesACL` in `receiveACLChange`
 
-- Domain class `Drive` is owned by the `Home` singleton, as specified.
-- Routes in `apps/api/src/routes/drive.ts` are thin, delegating to `getSharedDrive()`.
-- DB schemas use Drizzle ORM with `db-config.ts` migration patterns.
-- Storage backends implement the `StorageBackend` interface.
-- SSE events use the `buildDriveEvent()` pattern with `home.notify()`.
-- ACL uses additive inheritance as documented.
-- Thumbnails and previews follow the cache strategy described in PREVIEWS.md.
-
----
-
-## Issues Found
-
-### Critical
-
-#### 1. Missing `await` on async `matchesACL` in `receiveACLChange`
-
-**File**: `apps/api/src/lib/drive/drive.ts`, line 561
+**File:** `apps/api/src/lib/drive/drive.ts:561`
+**Status:** Previously found -- verified and confirmed
 
 ```typescript
 if (newACL === null || !matchesACL(newACL, this.owner, 'read')) {
 ```
 
-`matchesACL` is an `async` function returning `Promise<boolean>`. Without `await`, the expression
-`!matchesACL(...)` evaluates `!Promise` which is always `false`. This means the unshare branch is **never taken**
-when `newACL` is non-null -- the user's shared.db entry is never deleted when access is revoked via ACL change.
+`matchesACL` is `async` (returns `Promise<boolean>`, defined at `acl.ts:66`). Without `await`, `!matchesACL(...)` evaluates `!Promise` which is always `false`. The unshare branch is taken only when `newACL === null` (full ACL removal). When a user's individual entry is removed but other ACL entries remain (newACL is non-null), the condition short-circuits to `false` and the stale entry is never deleted from `shared.db`.
 
-**Impact**: When Alice removes Bob from an ACL, Bob's `shared.db` retains a stale entry. Bob still sees the item in
-"shared with me" even though actual access checks (which do `await`) correctly deny access. This is a data consistency
-bug -- stale entries accumulate in shared.db indefinitely.
+**Impact:** Stale entries accumulate in shared.db indefinitely. Users continue seeing items in "shared with me" after their access is revoked. Actual access checks (which do `await`) correctly deny access, so this is a data-consistency / UX bug, not a privilege escalation.
 
-**Fix**: Add `await`:
+**Fix:**
 ```typescript
 if (newACL === null || !(await matchesACL(newACL, this.owner, 'read'))) {
 ```
 
+### 2. `SharedDrive` missing overrides for `createSlides` and `createSheets`
+
+**File:** `apps/api/src/lib/drive/sharedDrive.ts`
+**Status:** New finding
+
+`SharedDrive` overrides `createDoc`, `createStickies`, and `createChat` (delegating to `this.sharedDrive` with write permission checks), but does NOT override `createSlides` or `createSheets`. These are inherited from `Drive`, which calls `this.getMount(mountId)`. Since `SharedDrive.init()` is a no-op, `this.mounts` is empty, so `getMount` throws `ApiError(404, 'Mount not found')` for any mount.
+
+The routes at `drive.ts:62-74` call `drive.createSlides()` and `drive.createSheets()` via `getSharedDrive()`. When `ownerId !== user.id`, this always fails with a 404 error even if the user has write permission.
+
+**Impact:** Creating slides or sheets on shared drives (including team drives) is broken. Only the drive owner can create them.
+
+**Fix:** Add overrides matching the existing pattern:
+```typescript
+public async createSlides(mountId: string, parentId: string, name: string): Promise<DrivePath> {
+    if (!(await this.canWrite(mountId, parentId, this.user))) {
+        throw new ApiError(403, 'No write permission');
+    }
+    return this.sharedDrive.createSlides(mountId, parentId, name);
+}
+
+public async createSheets(mountId: string, parentId: string, name: string): Promise<DrivePath> {
+    if (!(await this.canWrite(mountId, parentId, this.user))) {
+        throw new ApiError(403, 'No write permission');
+    }
+    return this.sharedDrive.createSheets(mountId, parentId, name);
+}
+```
+
 ---
 
-### Important
+## Important Issues
 
-#### 2. No ACL check on `downloadFile` in `Drive` class
+### 3. `SharedDrive` inherits broken `getSharedPathsWithMe` and `getSharedPathsByMe`
 
-**File**: `apps/api/src/lib/drive/drive.ts`, lines 357-364
+**File:** `apps/api/src/lib/drive/sharedDrive.ts`
+**Status:** Previously found -- verified, impact clarified
 
+`SharedDrive` does not override `getSharedPathsWithMe()`, `getSharedPathsByMe()`, or `getSharedWith()`. These inherited methods access `this.sharedDb`, which is never initialized in `SharedDrive` (set via `init()` which is a no-op). Calling any of these crashes with "Cannot read properties of undefined".
+
+Routes at `drive.ts:19-26` call these through `getSharedDrive()`. If `ownerId !== user.id`, a `SharedDrive` is returned and these methods crash. The routes `/drive/:ownerId/shared/by-me` and `/drive/:ownerId/shared/with-me` are affected.
+
+Separately, the `/drive/:ownerId/shared-with-me` route (line 27-30) correctly bypasses `getSharedDrive` and calls `ownerHome.drive.getSharedWith(user)` directly, so that route works.
+
+**Impact:** 500 error when requesting shared paths for a user other than yourself, or for team drives.
+
+**Fix:** Either override these in `SharedDrive` or restrict the routes to only accept `user.id` as the ownerId.
+
+### 4. Folder deletion does not propagate ACL removal for descendants
+
+**File:** `apps/api/src/lib/drive/drive.ts:285-286`
+**Status:** New finding
+
+When deleting a folder, ACL propagation only happens for the folder itself:
 ```typescript
-async downloadFile(mountId: string, pathId: string): Promise<ArrayBuffer | null> {
-    const mount = this.getMount(mountId);
-    const path = await mount.getPath(pathId);
-    if (!path || path.type !== DRIVE_TYPE_FILE) {
-        return null;
-    }
-    return await mount.readFile(pathId);
+await mount.deletePath(pathId);
+await propagateACLChange(folder, folder.acl, null);
+```
+
+If descendants have their own ACL entries, those are deleted from storage (via `mount.deletePath` recursive deletion) but the corresponding `shared.db` entries in recipients' databases are never removed. For example: if folder A has ACL for Bob and subfolder B has ACL for Carol, deleting A removes Bob's shared entry but leaves Carol's entry for the now-deleted subfolder B.
+
+**Impact:** Stale entries in `shared.db` for users who had access to descendants of deleted folders. Same as issue 1: they see phantom items in "shared with me" that return errors when accessed.
+
+**Fix:** Before calling `mount.deletePath`, collect all paths with ACL entries recursively, then propagate null for each after deletion:
+```typescript
+const pathsWithACL = await this.collectACLPathsRecursively(mount, pathId);
+await mount.deletePath(pathId);
+for (const p of pathsWithACL) {
+    await propagateACLChange(p, p.acl, null);
 }
 ```
 
-The `Drive` class itself does not check `canRead` before returning file content. The `SharedDrive` wrapper adds the
-check via `withReadPermission`, so cross-user access is protected. However, this means the `Drive` class relies entirely
-on its callers for access control on downloads.
+### 5. `movePath` allows moving a folder into its own descendant
 
-The route handler at line 109-119 calls `drive.downloadFile()` through `getSharedDrive()`, which returns either the
-owner's `Drive` (no check needed) or a `SharedDrive` (check applied). So the route is safe. But any future internal
-caller using `Drive.downloadFile()` directly would bypass ACL.
+**File:** `apps/api/src/lib/drive/drive.ts:315-338`
+**Status:** Previously found -- verified
 
-**Recommendation**: Add a `canRead` check inside `Drive.downloadFile()` for defense-in-depth, matching the pattern used
-by `getFolderContents`, `writeFileContent`, etc.
+The `movePath` method does not check whether `targetParentId` is a descendant of `pathId`. Moving a folder into its own subtree creates an orphan cycle -- the folder and all its descendants become unreachable from root.
 
-#### 3. No ACL check on `getPreview` and `getTextPreview` in `Drive` class
+The check at line 324-327 verifies the target parent is a folder and the user has write permission on the source, but does not walk the ancestry.
 
-**File**: `apps/api/src/lib/drive/drive.ts`, lines 382-394
+**Impact:** Data corruption -- orphaned subtrees that are invisible in the UI but still consume storage. No way to recover without direct DB manipulation.
 
-Same pattern as `downloadFile` -- the `Drive` class methods don't check permissions. Again, the `SharedDrive` wrapper
-adds the check, so routes are safe. But `Drive.getPreview()` and `Drive.getTextPreview()` should also be
-defense-in-depth protected.
+**Fix:** Walk from `targetParentId` to root; if `pathId` is encountered, throw 400.
 
-#### 4. `SharedDrive.openDatabase` and `SharedDrive.closeDatabase` skip ACL checks
+### 6. `movePath` does not check write permission on target parent
 
-**File**: `apps/api/src/lib/drive/sharedDrive.ts`, lines 200-210
+**File:** `apps/api/src/lib/drive/drive.ts:329`
+**Status:** Previously found -- verified
 
-```typescript
-public async openDatabase<S extends SchemaType>(...): Promise<ManagedDatabase<S>> {
-    return this.sharedDrive.openDatabase(mountId, config, pathId);
-}
-
-public async closeDatabase(mountId: string, pathId: string): Promise<void> {
-    return this.sharedDrive.closeDatabase(mountId, pathId);
-}
-```
-
-These methods delegate directly to the owner's drive without any permission check. A user accessing a shared drive
-could open or close arbitrary databases if they can construct the right `pathId`. This is likely benign in practice
-(these are called internally for collab docs, which check read/write before opening), but it breaks the pattern
-established by every other `SharedDrive` method.
-
-**Recommendation**: Wrap with `withReadPermission` (or `withWritePermission` for close).
-
-#### 5. `movePath` allows moving a folder into its own descendant
-
-**File**: `apps/api/src/lib/drive/drive.ts`, lines 315-338
-
-The `movePath` method checks that the target parent is a folder and that the user has write permission, but does not
-check whether the target is a descendant of the source. Moving a folder into its own subtree creates an orphan cycle
-in the path tree -- the folder and all its descendants become unreachable from the root.
-
-**Recommendation**: Walk up from `targetParentId` to root; if `pathId` is encountered, throw a 400 error.
-
-#### 6. `movePath` does not check write permission on target parent
-
-**File**: `apps/api/src/lib/drive/drive.ts`, line 329
-
+Only write permission on the source path is checked:
 ```typescript
 if (!(await this.canWrite(mountId, pathId, this.owner))) {
 ```
 
-Only write permission on the **source** path is checked. The user might not have write permission on the target folder.
-Contrast with `SharedDrive.movePath` (line 180) which also only checks source. This allows moving items into folders
-where the user cannot create new items.
+No check on `targetParentId`. A user with read access to a folder and write access to a file elsewhere could move that file into the read-only folder. The `SharedDrive.movePath` (line 179-183) also only checks write on the source.
 
-**Recommendation**: Also check `canWrite(mountId, targetParentId, this.owner)`.
+**Impact:** Users can move items into folders where they don't have write permission, bypassing the ACL model.
 
-#### 7. `removeMount` does not close mount resources
+**Fix:** Add `canWrite(mountId, targetParentId, this.owner)` check.
 
-**File**: `apps/api/src/lib/drive/drive.ts`, lines 101-106
+### 7. `closeCollabDocument` writes mount total size instead of document size
+
+**File:** `apps/api/src/lib/drive/drive.ts:505-509`
+**Status:** Previously found -- verified
+
+```typescript
+const size = await mount.getTotalSize();
+await mount.updatePath(pathId, {size});
+```
+
+`mount.getTotalSize()` returns the sum of all file sizes in the entire mount (all files, not just this document). This value is stored as the document's size. As more files are added to the mount, every document that gets closed will have its size inflated to the mount total.
+
+**Impact:** All collab document sizes are wrong in the UI. On a busy mount, sizes could be megabytes larger than reality. Size-based quota calculations would also be affected.
+
+**Fix:** Either compute the document's own DB file size, or skip the size update (the DB path entry doesn't represent a traditional file).
+
+### 8. Content-Disposition header injection via filename
+
+**File:** `apps/api/src/routes/drive.ts:114`
+**Status:** Previously found -- verified
+
+```typescript
+const displayName = path.details?.originalName || path.name;
+set.headers['Content-Disposition'] = `attachment; filename="${displayName}"`;
+```
+
+`originalName` comes directly from the uploaded file's original name, stored without sanitization for header-special characters. A filename containing `"`, `\n`, or `\r` produces a malformed or injectable Content-Disposition header. `path.name` is sanitized for `/` and `\` but not for quotes or control characters.
+
+**Impact:** HTTP response splitting/header injection. In practice, modern browsers and Elysia's response handling mitigate most exploitation, but it's still a correctness issue.
+
+**Fix:** Use RFC 5987 encoding or sanitize:
+```typescript
+const safeName = displayName.replace(/["\\\r\n]/g, '_');
+set.headers['Content-Disposition'] = `attachment; filename="${safeName}"`;
+```
+
+### 9. `removeMount` does not close mount resources
+
+**File:** `apps/api/src/lib/drive/drive.ts:101-106`
+**Status:** Previously found -- verified
 
 ```typescript
 async removeMount(mountId: string): Promise<void> {
@@ -147,105 +175,16 @@ async removeMount(mountId: string): Promise<void> {
 }
 ```
 
-When a mount is removed, its databases and open collab documents are not closed. The `Mount` has `documentDbs` that
-hold open `ManagedDatabase` instances. These will continue to hold file handles and sync timers until the `Home`
-destructs. There is also no cleanup of the mount's physical storage.
+Open databases in `Mount.documentDbs`, sync timers, and file handles are not closed. The mount's `ManagedDatabase` instances hold open SQLite connections and sync timers that continue running until Home destructs.
 
-#### 8. Content-Disposition header injection via filename
+**Impact:** Resource leaks (file handles, timers, memory) after mount removal. No physical storage cleanup.
 
-**File**: `apps/api/src/routes/drive.ts`, line 114
+**Fix:** Close the mount's document DBs and metadata DB before removing from the map.
 
-```typescript
-set.headers['Content-Disposition'] = `attachment; filename="${displayName}"`;
-```
+### 10. `getStorageFile` casts S3File to BunFile
 
-If a file name contains a double-quote or newline, this produces a malformed or injectable header. The `displayName`
-comes from either `path.details.originalName` or `path.name`. While `path.name` is sanitized (slashes stripped), it is
-not sanitized for double-quotes or control characters.
-
-**Recommendation**: Use RFC 5987 `filename*` encoding, or at minimum strip/escape `"` and control chars from the name:
-```typescript
-const safeName = displayName.replace(/["\\]/g, '_');
-set.headers['Content-Disposition'] = `attachment; filename="${safeName}"`;
-```
-
-#### 9. Path traversal protection inconsistent across storage backends
-
-**File**: `apps/api/src/lib/storage/local-key-storage.ts` vs `apps/api/src/lib/storage/local-storage.ts`
-
-`LocalStorage.resolve()` (line 18-23) has explicit path traversal detection:
-```typescript
-if (!resolved.startsWith(this.dataDir + path.sep) && resolved !== this.dataDir) {
-    throw new ApiError(400, 'Invalid storage path: path traversal detected');
-}
-```
-
-`LocalKeyStorage.getFilePath()` (line 16-18) has **no** such check:
-```typescript
-private getFilePath(key: string): string {
-    return path.join(this.dataDir, key);
-}
-```
-
-While `LocalKeyStorage` keys are UUIDs with extensions (generated by `buildStorageKey`), the `getFilePath` method
-accepts any string. If a malicious key like `../../etc/passwd` were passed, it would resolve outside the data directory.
-
-In practice this is safe because keys are always generated internally (UUID-based), but it would be good practice to add
-the same traversal guard for defense-in-depth.
-
-#### 10. S3Storage missing `getPath` method
-
-**File**: `apps/api/src/lib/storage/s3-storage.ts`
-
-The `StorageBackend` interface declares `getPath?` as optional, and `S3Storage` does not implement it.
-In `Mount.openDatabase()` (mount.ts line 499), when `needsTempCopy` is false (only for `local-key` storage),
-the code calls `this.storage.getPath!(...)` with a non-null assertion. If somehow `openDatabase` were called on an
-S3 mount without the temp copy path, this would crash at runtime.
-
-Currently `needsTempCopy` is true for S3, so this code path is never reached. But the `!` assertion masks the
-potential failure.
-
----
-
-### Minor
-
-#### 11. `closeCollabDocument` sets path size to mount total size
-
-**File**: `apps/api/src/lib/drive/drive.ts`, lines 505-509
-
-```typescript
-const path = await mount.getPath(pathId);
-if (path) {
-    const size = await mount.getTotalSize();
-    await mount.updatePath(pathId, {size});
-}
-```
-
-This updates the collab document's `size` field with the **entire mount's total size**, not the document's own size.
-This appears to be a bug -- the document's size should be the size of its own data.db, not the total of all files in
-the mount.
-
-#### 12. `uploadFile` parent type check is stricter than `createFolder`
-
-**File**: `apps/api/src/lib/drive/drive.ts`
-
-- `createFolder` (line 155): checks `isContainerType(parent.type)` -- allows uploading into docs, chats, etc.
-- `uploadFile` (line 215): checks `parent.type !== 'folder'` -- only allows uploading into plain folders.
-
-This inconsistency means you can create a folder inside a doc (e.g., to store media files for the doc), but you cannot
-upload a file into that same doc container. This is likely intentional (docs manage their own files), but the asymmetry
-should be documented.
-
-#### 13. `getUniqueFileName` can produce infinite-like loop
-
-**File**: `apps/api/src/lib/drive/naming.ts`, line 18
-
-The counter caps at 10,000, falling back to `Date.now()`. This is a reasonable safety net, but the `Date.now()` fallback
-is not checked against `usedNames`, so it could theoretically collide if called twice in the same millisecond.
-
-#### 14. `getStorageFile` casts S3File to BunFile
-
-**File**: `apps/api/src/lib/mount/mount.ts`, line 446
+**File:** `apps/api/src/lib/mount/mount.ts:444-447`
+**Status:** Previously found -- verified, impact clarified
 
 ```typescript
 async getStorageFile(pathId: string): Promise<BunFile> {
@@ -254,164 +193,180 @@ async getStorageFile(pathId: string): Promise<BunFile> {
 }
 ```
 
-For S3 storage, `read()` returns `S3File`, not `BunFile`. The `as BunFile` cast hides this type mismatch. Callers
-(like `saveThumbnail`) use `storageFile.name!` which is `undefined` for S3File objects. The `saveThumbnail` call in
-`uploadFile` (line 243) passes this to `saveThumbnail(mount.thumbsDir, pathId, storagePath, ...)` where
-`storagePath` would be `undefined`.
+For S3 storage, `read()` returns `S3File`. The `as BunFile` cast silences TypeScript. The caller at `drive.ts:243` does `storageFile.name!` to get the file path, which for S3File returns the S3 key (e.g., `prefix/uuid.ext`), not a local filesystem path.
 
-For S3 mounts, thumbnails and previews would silently fail because the source path is wrong.
+This path is then passed to `saveThumbnail` as the `source` parameter. Inside `generateImagePreview`, when `source` is a string, it's treated as a local file path for sharp to read. For S3 mounts, this path doesn't exist on disk, so sharp fails and returns null. Thumbnails silently fail on S3 mounts.
 
-#### 15. `buildDriveEvent` uses `as SSEvent` cast
+Similarly, `getScreenPreview` at `preview-cache.ts:47` does `storageFile.name!` for the file path -- image previews also fail silently for S3 mounts.
 
-**File**: `apps/api/src/lib/drive/sse-events.ts`, line 73
+**Impact:** No thumbnails or image previews for S3-backed mounts. No error reported to the user.
 
-The `as SSEvent` cast bypasses type checking on the constructed event object. If the `SSEvent` type changes, this would
-silently produce invalid events.
+**Fix:** For remote mounts, download to temp before thumbnail/preview generation, or change `getStorageFile` to return a union type.
 
-#### 16. `SharedDrive` extends `Drive` but overrides `init()` to do nothing
+---
 
-**File**: `apps/api/src/lib/drive/sharedDrive.ts`, lines 11, 43
+## Minor Issues
+
+### 11. `SharedDrive.openDatabase` and `closeDatabase` skip ACL checks
+
+**File:** `apps/api/src/lib/drive/sharedDrive.ts:200-210`
+**Status:** Previously found -- verified, risk assessment adjusted
+
+These methods delegate directly to the owner's drive without permission checks. In practice, callers (collab system, chat) perform their own access checks before calling these, and the `pathId` is internally derived. The risk is low but breaks the pattern that every `SharedDrive` method wraps with permission checks.
+
+**Impact:** Low. Defense-in-depth concern only.
+
+### 12. Path traversal protection inconsistent across storage backends
+
+**File:** `apps/api/src/lib/storage/local-key-storage.ts:16-18` vs `local-storage.ts:18-23`
+**Status:** Previously found -- verified, risk assessment adjusted
+
+`LocalStorage.resolve()` has explicit path traversal detection. `LocalKeyStorage.getFilePath()` does not. Keys for `LocalKeyStorage` are always generated internally via `buildStorageKey` (UUID + extension), so the attack surface is minimal. But any future code that passes user-controlled input to `getFilePath` would be vulnerable.
+
+**Impact:** Low (defense-in-depth). Currently safe because keys are always UUID-based.
+
+### 13. `uploadFile` parent type check is stricter than `createFolder`
+
+**File:** `apps/api/src/lib/drive/drive.ts:215` vs `drive.ts:155`
+**Status:** Previously found -- verified
+
+- `createFolder` checks `isContainerType(parent.type)` -- allows creating folders inside docs, chats, etc.
+- `uploadFile` checks `parent.type !== 'folder'` -- only allows uploading into plain folders.
+
+This asymmetry is likely intentional (collab types manage their own child files through the collab system, not through direct upload), but it's undocumented and could confuse API consumers.
+
+### 14. `getUniqueFileName` Date.now fallback not collision-safe
+
+**File:** `apps/api/src/lib/drive/naming.ts:20`
+**Status:** Previously found -- verified
+
+The `Date.now()` fallback after 10,000 counter iterations is not checked against `usedNames`. Two calls in the same millisecond could collide. In practice this path is nearly unreachable (requires 10,000+ files with the same base name), and `assertUniqueName` at the DB level provides a final check.
+
+**Impact:** Negligible. Theoretical only.
+
+### 15. `buildDriveEvent` uses `as SSEvent` cast
+
+**File:** `apps/api/src/lib/drive/sse-events.ts:73`
+**Status:** Previously found -- verified
+
+The `as SSEvent` cast bypasses type checking on the constructed event object. If the `SSEvent` type evolves, invalid events would be silently produced.
+
+**Impact:** Type-safety concern only. No runtime impact currently.
+
+### 16. `SharedDrive.breadCrumb` reverses a mutation of the original array
+
+**File:** `apps/api/src/lib/drive/sharedDrive.ts:186-198`
+**Status:** New finding
 
 ```typescript
-export default class SharedDrive extends Drive {
-    ...
-    public async init() {
+public async breadCrumb(mountId: string, pathId: string) {
+    const bread = await this.sharedDrive.breadCrumb(mountId, pathId);
+    const crumb: DrivePath[] = [];
+    while (bread.length > 0) {
+        const path = bread.pop();
+        ...
     }
-```
-
-The `constructor` calls `super(sharedHome)` which sets up `Drive` internals. Then `init()` is overridden to be a
-no-op. But `SharedDrive` never calls `super.init()`, meaning `this.sharedDb` on the `Drive` base class is never set.
-Since `SharedDrive` delegates all calls to `this.sharedDrive`, the base class `sharedDb` is unused. However, this
-means `SharedDrive.getSharedPathsWithMe()` would crash if called, because it inherits from `Drive` and would try to
-use the uninitialized `sharedDb`. Currently `SharedDrive` does not override `getSharedPathsWithMe()` or
-`getSharedPathsByMe()`, so these inherited methods are accessible but broken.
-
-**Recommendation**: Make `SharedDrive` use composition instead of inheritance, or override all inherited methods that
-touch `sharedDb`.
-
-#### 17. Redundant ACL filter can produce unexpected null
-
-**File**: `apps/api/src/lib/drive/drive.ts`, lines 451-456
-
-```typescript
-if (normalizedACL && normalizedACL.length > 0) {
-    const {filtered} = await filterRedundantACL(
-        normalizedACL, item, mount.getPath.bind(mount)
-    );
-    normalizedACL = filtered.length > 0 ? filtered : null;
+    return crumb.reverse();
 }
 ```
 
-If all ACL entries are redundant (already inherited), the ACL is set to `null`. This is correct behavior but may
-surprise users -- they add ACL entries, but after save the ACL appears empty because the entries were "optimized away"
-by the redundancy filter. The frontend should communicate this.
+The method pops from `bread` (mutating the array from `this.sharedDrive.breadCrumb`), building `crumb` in reverse order (deepest first), then reverses it. The logic is correct but unnecessarily complex. It iterates from deepest to root, breaking when the user loses read access. Items above the user's access boundary are excluded.
+
+The only subtle issue: `bread.pop()` could return `undefined` if `bread` is empty, but the `while (bread.length > 0)` guard prevents that. No bug here, just unusual style.
+
+**Impact:** None. Observation only.
+
+### 17. S3Storage `write` returns `await file.write(data)` but S3File.write may return void
+
+**File:** `apps/api/src/lib/storage/s3-storage.ts:48-52`
+**Status:** New finding
+
+```typescript
+async write(key: string, data: Buffer | Uint8Array | ArrayBuffer | BunFile): Promise<number> {
+    const file = this.read(key);
+    const written = await file.write(data);
+    return written;
+}
+```
+
+The `StorageBackend` interface declares `write` returns `Promise<number>`. Bun's `S3File.write()` returns `Promise<number>` for most inputs, so this should work. However, unlike `Bun.write()` which always returns the byte count, `S3File.write()` behavior may vary by input type.
+
+**Impact:** Low. The return value is only used by `mount.writeFile` which independently computes size from the input data.
 
 ---
 
-## Robustness
+## Observations
+
+### Architecture compliance
+
+The code follows documented patterns well:
+- Domain class `Drive` owned by `Home` singleton
+- Thin routes delegating to `getSharedDrive()`
+- Drizzle ORM schemas with `db-config.ts` migrations
+- Pluggable storage backends implementing `StorageBackend` interface
+- SSE events via `buildDriveEvent()` + `home.notify()`
+- Additive ACL inheritance as documented
+
+### SharedDrive composition vs inheritance
+
+`SharedDrive extends Drive` but overrides `init()` to a no-op and delegates all overridden methods to `this.sharedDrive` (the actual owner's Drive instance). This is effectively composition disguised as inheritance. The base class fields (`mounts`, `sharedDb`, `documents`) are never initialized but remain accessible through inherited methods that aren't overridden (creating bugs 2 and 3 above). Switching to composition would eliminate this class of bugs.
 
 ### Concurrency
 
-- The `withPathLock` mechanism in `Mount` (lines 293-306) provides per-path mutual exclusion for rename/move
-  operations on path-based storage. This is well-implemented using promise-based queuing.
-- However, there is no locking for concurrent uploads to the same folder, which could lead to duplicate name
-  detection races. Two concurrent uploads of the same filename could both pass the `getChildByName` check before
-  either inserts, though `assertUniqueName` would catch one of them at insert time.
-- The `createAsyncSingleton` pattern for collab documents prevents duplicate DB opens.
+- `withPathLock` in Mount (lines 293-306) provides per-path mutual exclusion for rename/move on path-based storage. Well-implemented using promise-based queuing.
+- No locking for concurrent uploads to the same folder. Two concurrent uploads of the same filename could both pass `getChildByName` before either inserts. `assertUniqueName` at insert time provides the final guard, but the second upload would get a 409 error rather than an auto-rename.
+- `createAsyncSingleton` for collab document DBs prevents duplicate opens correctly.
 
-### Error Handling
+### Error handling
 
-- Storage backend errors in `delete` are caught and logged, returning `false` -- operations degrade gracefully.
-- Thumbnail generation failures are caught and produce `null` -- uploads succeed even when thumbnails fail.
-- Preview generation failures are caught and return `null` -- the route returns 404.
-- `propagateACLChange` catches errors per-user (line 34), so one failed propagation does not block others.
-- The `destruct()` method catches per-document errors (line 605), preventing one failed close from stopping others.
+- Storage `delete` errors are caught and logged, returning `false` -- graceful degradation.
+- Thumbnail generation failures return `null` -- uploads succeed without thumbnails.
+- Preview generation failures return `null` -- route returns 404.
+- `propagateACLChange` catches errors per-user (line 34), preventing one failure from blocking others.
+- `destruct()` catches per-document errors (line 605), preventing cascade failures.
 
-### Edge Cases
+### Edge cases handled well
 
-- Very large image dimensions (>12000px) are rejected by `sharpResize` (thumbnails.ts line 44).
-- The preview cache cleanup on mount init handles filesystem errors silently.
-- Text preview decodes with `fatal: true` to reject binary files masquerading as text.
-
----
-
-## Test Coverage
-
-### Well-Covered Areas
-
-- **Mount operations**: Both `local-key` and `local` storage backends tested (create, read, write, delete, rename,
-  move, breadcrumb, duplicate detection).
-- **Name validation**: Thorough testing of path traversal attempts (`.`, `..`, `/`, `\`, null bytes).
-- **ACL inheritance**: Extensive multi-level tests (A -> B -> C with various permission combinations).
-- **Visibility**: public-read, public-write, private transitions tested.
-- **Sharing lifecycle**: Full share -> read -> upgrade -> downgrade -> revoke cycle tested.
-- **Previews**: Text (plain, markdown, code), image (PNG, JPEG), video redirect, unsupported types, caching.
-- **Team drives**: Team mount creation, cross-member access, team member restrictions.
-
-### Missing Test Coverage
-
-1. **S3 storage backend**: No tests. All mount tests use `local-key` or `local` storage.
-2. **`movePath` into descendant**: No test verifying that moving a folder into its own subtree is prevented (because
-   it currently is not prevented).
-3. **Cross-mount operations**: No tests for operations spanning multiple mounts.
-4. **`removeMount`**: No test for mount removal behavior.
-5. **Concurrent uploads**: No test for race conditions on duplicate filename detection.
-6. **`closeCollabDocument` size update**: No test verifying the size written on close (which currently writes the
-   wrong value -- see issue #11).
-7. **`receiveACLChange` unshare path**: The missing `await` bug means the unshare path is never tested correctly,
-   even though the test suite does test ACL revocation end-to-end (it passes because the route-level permission
-   checks work correctly, masking the stale `shared.db` entry).
-8. **Exiftool fallback**: Only tested via `isExiftoolCandidate` unit tests; no integration test for actual RAW/PSD
-   preview extraction.
-9. **Database open/close lifecycle**: No test for `Mount.openDatabase` / `Mount.closeDatabase` with temp file
-   management.
-10. **`SharedDrive` inherited methods**: No test verifying that `SharedDrive.getSharedPathsWithMe()` or
-   `getSharedPathsByMe()` work correctly (they would crash -- see issue #16).
+- Very large images (>12000px) rejected by `sharpResize` (thumbnails.ts:44).
+- Preview cache cleanup handles filesystem errors silently.
+- Text preview decodes with `fatal: true` to reject binary files.
+- Root folder deletion explicitly blocked.
+- Name validation catches `.`, `..`, `/`, `\`, and null bytes.
 
 ---
 
-## Recommendations
+## Test Coverage Gaps
 
-1. **Fix the missing `await` on line 561 of `drive.ts`** -- this is the highest priority. It causes stale shared
-   entries to accumulate. Add a targeted test for `receiveACLChange` unshare behavior.
-
-2. **Add move-into-descendant check** in `movePath` to prevent cycle creation.
-
-3. **Add write permission check on move target** -- check `canWrite` on `targetParentId`, not just `pathId`.
-
-4. **Fix `closeCollabDocument` size** -- use the document's own size, not `mount.getTotalSize()`.
-
-5. **Sanitize Content-Disposition filename** -- escape or encode special characters.
-
-6. **Add path traversal guard to `LocalKeyStorage`** -- match the pattern already used in `LocalStorage`.
-
-7. **Add ACL checks to `SharedDrive.openDatabase`/`closeDatabase`** -- wrap with permission checks.
-
-8. **Refactor `SharedDrive`** -- switch from inheritance to composition to avoid exposing broken inherited methods.
-
-9. **Add S3 storage tests** -- even if just with a mocked S3 endpoint, to catch the `getPath` and `BunFile` cast
-   issues.
-
-10. **Close mount resources in `removeMount`** -- close open databases and collab documents before removing.
+1. **S3 storage backend**: No tests. All mount tests use local-key or local storage.
+2. **`movePath` into descendant**: No test (because prevention doesn't exist yet -- see issue 5).
+3. **`SharedDrive.createSlides`/`createSheets`**: No test (would reveal bug 2).
+4. **`SharedDrive.getSharedPathsWithMe`/`getSharedPathsByMe`**: No test (would reveal bug 3).
+5. **`removeMount` lifecycle**: No test for resource cleanup on mount removal.
+6. **Concurrent uploads**: No race-condition test for duplicate filename detection.
+7. **`closeCollabDocument` size**: No test for the stored size value (would reveal bug 7).
+8. **`receiveACLChange` unshare**: Tests pass because route-level checks mask the stale shared.db entry from bug 1.
+9. **Recursive folder deletion with descendant ACLs**: No test (would reveal bug 4).
 
 ---
 
 ## File Reference
 
-| File | Line(s) | Issue |
-|------|---------|-------|
-| `apps/api/src/lib/drive/drive.ts` | 561 | Critical: missing `await` on `matchesACL` |
-| `apps/api/src/lib/drive/drive.ts` | 357-364 | Missing ACL check on `downloadFile` |
-| `apps/api/src/lib/drive/drive.ts` | 382-394 | Missing ACL check on `getPreview`/`getTextPreview` |
-| `apps/api/src/lib/drive/drive.ts` | 315-338 | No descendant check on move |
-| `apps/api/src/lib/drive/drive.ts` | 329 | Missing write check on move target |
-| `apps/api/src/lib/drive/drive.ts` | 101-106 | `removeMount` leaks resources |
-| `apps/api/src/lib/drive/drive.ts` | 505-509 | Wrong size written on collab close |
-| `apps/api/src/lib/drive/sharedDrive.ts` | 200-210 | `openDatabase`/`closeDatabase` skip ACL |
-| `apps/api/src/lib/drive/sharedDrive.ts` | 11, 43 | Broken inherited methods via `extends Drive` |
-| `apps/api/src/routes/drive.ts` | 114 | Content-Disposition header injection |
-| `apps/api/src/lib/storage/local-key-storage.ts` | 16-18 | No path traversal guard |
-| `apps/api/src/lib/storage/s3-storage.ts` | (all) | Missing `getPath`, no tests |
-| `apps/api/src/lib/mount/mount.ts` | 446 | `BunFile` cast on S3 `read()` result |
-| `apps/api/src/lib/drive/sse-events.ts` | 73 | `as SSEvent` cast bypasses type safety |
-| `apps/api/src/lib/drive/naming.ts` | 18 | `Date.now()` fallback not collision-safe |
+| File | Line(s) | Issue # | Severity |
+|------|---------|---------|----------|
+| `apps/api/src/lib/drive/drive.ts` | 561 | 1 | Critical |
+| `apps/api/src/lib/drive/sharedDrive.ts` | (missing) | 2 | Critical |
+| `apps/api/src/lib/drive/sharedDrive.ts` | inherits | 3 | Important |
+| `apps/api/src/lib/drive/drive.ts` | 285-286 | 4 | Important |
+| `apps/api/src/lib/drive/drive.ts` | 315-338 | 5 | Important |
+| `apps/api/src/lib/drive/drive.ts` | 329 | 6 | Important |
+| `apps/api/src/lib/drive/drive.ts` | 505-509 | 7 | Important |
+| `apps/api/src/routes/drive.ts` | 114 | 8 | Important |
+| `apps/api/src/lib/drive/drive.ts` | 101-106 | 9 | Important |
+| `apps/api/src/lib/mount/mount.ts` | 444-447 | 10 | Important |
+| `apps/api/src/lib/drive/sharedDrive.ts` | 200-210 | 11 | Minor |
+| `apps/api/src/lib/storage/local-key-storage.ts` | 16-18 | 12 | Minor |
+| `apps/api/src/lib/drive/drive.ts` | 215 vs 155 | 13 | Minor |
+| `apps/api/src/lib/drive/naming.ts` | 20 | 14 | Minor |
+| `apps/api/src/lib/drive/sse-events.ts` | 73 | 15 | Minor |
+| `apps/api/src/lib/drive/sharedDrive.ts` | 186-198 | 16 | Minor |
+| `apps/api/src/lib/storage/s3-storage.ts` | 48-52 | 17 | Minor |

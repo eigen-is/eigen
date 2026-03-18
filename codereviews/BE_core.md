@@ -1,200 +1,194 @@
-# Backend Code Review: Core (Auth, Home, Config, Setup, SSE)
+# Backend Review: Core (Auth, Home, Config, Setup, SSE)
 
-## Summary
+**Scope:** `apps/api/src/lib/{core,config,auth,home,setup,team}/`, `apps/api/src/utils/`, related routes
+**Reviewed:** 2026-03-18
 
-The core backend infrastructure is well-designed with clean separation of concerns: the Home singleton hierarchy, JsonStore for config persistence, ManagedDatabase for SQLite lifecycle, and the async singleton factory are all solid abstractions. The codebase follows its own documented patterns consistently. However, there are several bugs (one critical), a few security considerations worth hardening, race condition risks in the singleton/home lifecycle, and gaps in error handling and test coverage.
+## Critical Issues
 
-## Architecture Compliance
+**1. `getTeamExists` missing `await` -- always returns `true`**
+- **File:** `apps/api/src/lib/team/team.ts:10-12`
+- **Code:** `return getTeam(teamId) !== undefined;`
+- `getTeam()` is declared `async`, so it always returns a Promise, which is always truthy. This means `getTeamExists()` returns `true` for any input, including fabricated team IDs. The caller in `get-home.ts:34` (`if (!await getTeamExists(parsed.id))`) will never throw 404, allowing `TeamHome` instances to be created for non-existent teams. This creates directories under `data/team/<nonexistent>/` and could be exploited for disk exhaustion.
+- Note: Drizzle's `.get()` on bun:sqlite is synchronous, but the `async` keyword on `getTeam` wraps the return value in a Promise regardless.
+- **Fix:** `return (await getTeam(teamId)) !== undefined;`
+- **Previous review:** Identified correctly. Still present.
 
-The code closely follows CLAUDE.md and the documented architecture patterns:
+## Important Issues
 
-- **Home singleton pattern**: `UserHome`, `TeamHome`, `OrgHome` hierarchy with `getHome()` factory -- matches docs exactly.
-- **Domain class layout**: `lib/[domain]/[domain].ts` for business logic, `lib/[domain]/schema.ts` for DB schemas -- consistent.
-- **Route structure**: Thin Elysia routers in `routes/`, `{auth: true}` macro -- consistent.
-- **ManagedDatabase**: WAL mode, versioned migrations, dirty tracking, sync callbacks -- all as documented.
-- **SSE pattern**: `home.notify()` -> SSE stream -> frontend handlers -- correctly implemented.
-- **Config/settings**: `JsonStore<ServerConfig>` and `JsonStore<ServerSettings>` with atomic writes (tmp+rename) -- clean.
-- **Error handling**: `ApiError` thrown and caught in `app.ts` `onError` handler -- consistent.
-- **`type` over `interface`**: Followed consistently. No JSDoc. English everywhere.
+**2. Singleton factory permanently caches failed initialization**
+- **File:** `apps/api/src/utils/singleton.ts:19-22`
+- If `factoryFn()` rejects, `initializationPromise` stays set to the rejected promise and `instance` remains `null`. All subsequent calls return the same rejected promise forever. The factory never retries.
+- Impact: if a Home initialization fails transiently (disk full, temporary DB corruption), the user is permanently locked out until server restart. This applies to every use of `createAsyncSingleton` throughout the codebase -- Home factories, Mount database singletons, collab document singletons.
+- **Fix:** Clear `initializationPromise` on rejection so the next call retries.
+- **Previous review:** Identified correctly. Still present.
 
-**Minor deviation**: `user.ts:29` has a JSDoc comment (`/** Resolves a user's org... */`) which contradicts the "No JSDoc" rule in CLAUDE.md.
+**3. Race condition in Home cleanup/recreation lifecycle**
+- **Files:** `apps/api/src/lib/home/home.ts:78-87`, `apps/api/src/lib/home/get-home.ts:62-64`
+- When the 5-minute inactivity timeout fires (`touch()` callback), it first calls `cleanupHomeFactory(ownerId)` which removes the factory from the `homeFactories` map, then calls `this.destruct()` (which is async and takes time to close DBs). If a request for the same `ownerId` arrives between the map deletion and destruct completion, `getHome()` creates a new factory and Home while the old one is still closing databases. Two Home instances would then exist for the same user, potentially causing SQLite contention.
+- The `touch()` method resets the timer on every access (line 59 in `get-home.ts`), so the window is narrow but real under concurrent requests near the timeout boundary.
+- **Fix:** Either defer removing from the map until after destruct completes, or use a "destructing" sentinel that blocks new factory creation until the old Home is fully torn down.
+- **Previous review:** Identified correctly. Still present.
 
-## Issues Found
+**4. Home `destruct()` may open databases that were never used, just to close them**
+- **File:** `apps/api/src/lib/home/home.ts:151-158`
+- The `managedDatabases` map stores `createAsyncSingleton(factory)` getters. During `destruct()`, the loop calls `getter()` for every entry. If a database was registered (via `getLocalDatabase`) but never actually opened (the singleton was never resolved), calling `getter()` triggers the factory -- creating, opening, and initializing the database just to immediately close it.
+- Impact: slow destruction, unnecessary I/O, potential errors during shutdown.
+- **Fix:** Track whether each singleton has been resolved. Only call close on resolved instances. One approach: wrap the getter to track state.
+- **Previous review:** Identified correctly. Still present.
 
-### Critical
+**5. Auth secret uses hardcoded fallback before setup**
+- **File:** `apps/api/src/lib/auth/auth.ts:98`
+- `secret: getServerConfig()?.secret || "+/SmL4b3+bxwJgsJU7yT1Sbfm9YR/0GZhVGRaBm838c="`
+- Before setup completes, `getServerConfig()` returns `null`, so the hardcoded fallback is used. This secret is committed to the repository. If the API is network-accessible before setup, an attacker could craft valid sessions. After setup, a random secret is generated (setup.ts:239), invalidating any pre-setup sessions.
+- Practical risk is low for self-hosted deployments where setup happens immediately after first start, but worth hardening.
+- **Mitigation:** Generate a random ephemeral secret at startup instead of using a static fallback. Or refuse auth operations until setup is completed.
+- **Previous review:** Identified correctly. Still present.
 
-**1. `getTeamExists` is missing `await` -- always returns `true`**
-- **File**: `apps/api/src/lib/team/team.ts:11`
-- **Code**: `return getTeam(teamId) !== undefined;`
-- `getTeam()` is `async` and returns a `Promise`, which is always truthy (never `undefined`). This means `getTeamExists()` always returns `true`, even for non-existent team IDs. This allows creating `TeamHome` instances for fabricated team IDs via `getHome("team_nonexistent")`, which would create directories under `data/team/nonexistent/` and potentially be exploited for resource exhaustion or bypassing team membership checks.
-- **Fix**: `return (await getTeam(teamId)) !== undefined;`
+**6. `parseOwnerId` returns `{type: 'user', id: ''}` for invalid input instead of null**
+- **File:** `packages/lib/src/types/owner.ts:25-26`
+- For inputs that are not valid emails and not valid IDs (failing the regex), `parseOwnerId` returns `{type: 'user', id: ''}`. The caller in `get-home.ts:18` checks `if (!parsed)`, but since the function always returns an object, this guard is dead code. The flow still works safely by accident: the empty `id` reaches `getUserById('')` which returns `null`, triggering a 404 with the misleading message "User not found" instead of "Invalid ownerId format".
+- Additionally, the UUID regex `^[0-9a-fA-Z]{32}$` uses `A-Z` in the character class (matching all uppercase letters, not just hex digits A-F). Combined with the `i` flag, this matches the full alphanumeric range `[a-zA-Z0-9]`. This happens to be correct for better-auth's ID format (which uses `createRandomStringGenerator("a-z", "A-Z", "0-9")` to generate 32-character alphanumeric IDs), but the comment "check if id is valid uuid" is misleading since these are not UUIDs.
+- **Fix:** Return `null` for invalid input and update the type to `ParsedOwnerId | null`. Update callers accordingly. Fix the comment to say "alphanumeric ID" rather than "uuid".
+- **Previous review:** Identified the dead code and empty-id issue correctly. The regex analysis above adds new detail about why it happens to work for better-auth IDs despite the misleading character class.
 
-### Important
+**7. `LocalFilesystem` has no path traversal protection**
+- **File:** `apps/api/src/lib/core/local-filesystem.ts:16-18`
+- `getFilePath(filePath)` does `path.join(this.baseDir, filePath)` without checking that the result stays within `baseDir`. Compare with `LocalStorage.resolve()` in `local-storage.ts:18-23` which explicitly checks for traversal.
+- Current risk is low because most `LocalFilesystem` callers use hardcoded constants from `PATHS`. However, the `file()` method, `write()`, and `rename()` are used in contexts where user-influenced strings could eventually flow in (e.g., contact avatars, mail filenames, JsonStore filenames).
+- **Fix:** Add the same traversal check as `LocalStorage.resolve()`: verify that `path.resolve(fullPath).startsWith(this.baseDir + path.sep)`.
+- **Previous review:** Identified correctly. Still present.
 
-**2. Auth secret fallback is a hardcoded default**
-- **File**: `apps/api/src/lib/auth/auth.ts:98`
-- **Code**: `secret: getServerConfig()?.secret || "+/SmL4b3+bxwJgsJU7yT1Sbfm9YR/0GZhVGRaBm838c="`
-- Before setup completes, `getServerConfig()` returns `null`, so the hardcoded secret is used. This is necessary for bootstrapping, but the fallback secret is committed to the repository. If the API is exposed before setup completes, sessions signed with this secret would be valid. After setup, a new random secret is generated, but any sessions created during setup with the default secret would become invalid (which is probably fine but worth noting).
-- **Recommendation**: Log a warning when using the fallback secret. Consider refusing to start the auth system until setup is complete, or generating a random ephemeral secret at startup.
+**8. SSE route and home/size route ignore the `:ownerId` URL parameter**
+- **Files:** `apps/api/src/routes/sse.ts:8,13`, `apps/api/src/routes/home.ts:10-11`
+- Both routes define `:ownerId` in the URL pattern but always use `user.id` instead of `params.ownerId`. This is security-correct behavior (prevents spoofing), but the unused URL parameter is misleading. The test at `sse.test.ts:62-72` and `home.test.ts:42-54` confirm spoofing is prevented.
+- This means team SSE events are not subscribable from the client. Team-triggered events (e.g., team drive changes) would only be delivered if the client subscribes to the TeamHome's SSE stream, which is not currently possible.
+- **Recommendation:** This is likely intentional for security. Document the pattern. If team SSE is needed in the future, add explicit ownerId validation with membership checks.
+- **Previous review:** Identified correctly. Clarified that both SSE and home/size routes share this pattern.
 
-**3. `parseOwnerId` silently returns `{type: 'user', id: ''}` for invalid IDs**
-- **File**: `packages/lib/src/types/owner.ts:25-26`
-- When a non-UUID, non-email, non-prefixed value is passed, `parseOwnerId` returns `{type: 'user', id: ''}` -- an empty user ID. The callers in `get-home.ts:18` check `if (!parsed)` but `parseOwnerId` never returns a falsy value; it always returns an object. The empty `id` would then be passed to `getUserById('')`, which presumably returns `null`, triggering the 404. So this works by accident rather than by design.
-- **Fix**: Either return `null` for invalid input and update the return type, or check `parsed.id === ''` in `get-home.ts`. The `if (!parsed)` guard on line 18 is dead code.
+**9. `home.size()` only reports the default mount**
+- **File:** `apps/api/src/lib/home/home.ts:105-123`
+- `size()` calls `this._drive.size('default')` and returns only `drive: {default: {...}}`. For users or teams with multiple mounts, non-default mount storage is excluded from `total.used` and from the response entirely.
+- Impact: storage reporting is inaccurate for multi-mount configurations (teams typically use non-default mounts).
+- **Fix:** Iterate over all mounts and aggregate their sizes.
+- **Previous review:** Identified correctly. Still present.
 
-**4. Singleton factory never clears failed initialization**
-- **File**: `apps/api/src/utils/singleton.ts`
-- If `factoryFn()` rejects, `initializationPromise` remains set to the rejected promise, and `instance` stays `null`. Every subsequent call will return the same rejected promise forever. The factory will never retry.
-- For `getHome()`, this means if a Home fails to initialize (e.g., disk full, corrupt DB), the user is locked out until server restart.
-- **Fix**: Add a `.catch()` handler that clears `initializationPromise` on failure:
-  ```typescript
-  initializationPromise = factoryFn().then(result => {
-      instance = result;
-      return result;
-  }).catch(err => {
-      initializationPromise = null;
-      throw err;
-  });
-  ```
+**10. `enforceAvatarUpload` assumes a 'default' mount exists**
+- **File:** `apps/api/src/lib/config/enforcement.ts:46`
+- `resolveQuotas(userId, userId, 'default')` calls `home.drive.getMountConfig('default')`, which calls `getMount('default')`. If a user somehow has no default mount (e.g., TeamHome instances which start with no mounts), this would throw `ApiError(404, 'Mount not found: default')`.
+- In practice, `UserHome.init()` always creates a default mount (user-home.ts:42), so this only affects TeamHome. Avatar uploads are likely only used by real users, but the assumption is fragile.
+- **Previous review:** Identified correctly. Still present.
 
-**5. Race condition between `cleanupHomeFactory` and `getHome`**
-- **File**: `apps/api/src/lib/home/get-home.ts:28-29,62-64`
-- When a Home's 5-minute timeout fires, it calls `cleanupHomeFactory(ownerId)` which deletes the factory from the map, then calls `destruct()`. If `getHome(ownerId)` is called between `cleanupHomeFactory` and `destruct` completing, a new Home will be created while the old one is still destructing (closing databases). This could cause two Home instances for the same user to exist simultaneously, leading to database contention or corrupt state.
-- The `touch()` on line 59 resets the timer on every access, which helps, but the window exists when the timeout fires.
-- **Recommendation**: Make the cleanup atomic -- either defer deletion from the map until after destruct completes, or use a "destructing" state that blocks new factory creation.
+## Minor Issues
 
-**6. Home `destruct()` re-opens databases to close them**
-- **File**: `apps/api/src/lib/home/home.ts:150-159`
-- In `destruct()`, the loop `for (const [key, getter] of this.managedDatabases)` calls `getter()` which is a `createAsyncSingleton` factory. If a managed database was never opened, calling `getter()` during destruct will *create and open* it just to close it. This is wasteful and potentially harmful.
-- **Fix**: Track opened instances separately, or check if the singleton has been resolved before calling it.
+**11. Redundant double WAL checkpoint is not always redundant**
+- **File:** `apps/api/src/lib/core/managed-database.ts:126-127`
+- The previous review claimed `close()` does a redundant second `wal_checkpoint(TRUNCATE)` after `sync()`. This is incorrect. `sync()` only runs its checkpoint if `this.isDirty && this.callbacks.onSync` (line 110). For databases without sync callbacks (most local databases) or clean databases, `sync()` returns early without checkpointing. The explicit checkpoint on line 127 ensures WAL cleanup regardless.
+- **Previous review finding corrected:** Not actually redundant.
 
-**7. `home.size()` ignores non-default mounts**
-- **File**: `apps/api/src/lib/home/home.ts:105-123`
-- `size()` only computes `drive.size('default')` and returns `drive: {default: {...}}`. For users or teams with multiple mounts, storage used by non-default mounts is not counted in `total.used`, which could make the reported total misleading.
+**12. Redundant `this.user = user` in `UserHome` constructor**
+- **File:** `apps/api/src/lib/home/user-home.ts:17`
+- `super(user, cleanUp)` already sets `this.user = user` in the `Home` base constructor (home.ts:44). The second assignment is redundant.
+- **Previous review:** Identified correctly. Still present.
 
-**8. SSE route ignores `ownerId` parameter**
-- **File**: `apps/api/src/routes/sse.ts:8,13`
-- The route is `/sse/:ownerId/events` but the handler always uses `user.id` to get the Home: `getHome(user.id)`. The `params.ownerId` is completely ignored. This means a user can never subscribe to team events via SSE. The test at `sse.test.ts:62-72` confirms this behavior (Bob requesting Alice's events gets his own).
-- This is either intentional (security-correct) or a missing feature. If team SSE is needed, the route needs to validate that the user has access to the requested ownerId.
+**13. Console logging of OTP codes**
+- **File:** `apps/api/src/lib/auth/auth.ts:75`
+- `console.log('send otp', user, otp, ctx?.request)` logs the full OTP code and the entire user object to stdout. This is a development placeholder (the OTP email sending is not implemented), but if logs are collected in a deployed environment, OTP codes would be exposed.
+- **Fix:** Replace with a proper email-sending implementation, or at minimum log without the actual OTP value.
+- **Previous review:** Identified correctly. Still present.
 
-**9. `LocalFilesystem` has no path traversal protection**
-- **File**: `apps/api/src/lib/core/local-filesystem.ts:16-18`
-- `getFilePath` does `path.join(this.baseDir, filePath)` without any traversal check. While `LocalStorage` (drive storage) has explicit traversal protection, `LocalFilesystem` (used by Home for config files, mail, contacts) does not. If any user-controlled input flows into `LocalFilesystem` methods, it could escape the base directory.
-- Currently, most `LocalFilesystem` usage is with hardcoded paths from `PATHS` constants, so the practical risk is low. But the `file()` method and `write()` method are used with user-influenced filenames in some contexts (e.g., mail attachments, contact avatars).
-- **Recommendation**: Add the same traversal check as `LocalStorage.resolve()`.
+**14. `readdir` method uses `any` return type**
+- **File:** `apps/api/src/lib/core/local-filesystem.ts:130-132`
+- Returns `Promise<any[]>` and casts options with `as any`. Type safety is lost.
+- **Previous review:** Identified correctly. Still present.
 
-### Minor
+**15. `toLocaleLowerCase()` vs `toLowerCase()` inconsistency**
+- **File:** `apps/api/src/lib/user/user.ts:8`
+- `getUserByEmail` uses `email.toLocaleLowerCase()` which is locale-dependent (e.g., Turkish 'I' lowercase rules). `parseOwnerId` in `owner.ts:11` uses `.toLowerCase()`. For email addresses, `toLowerCase()` is the correct choice per RFC 5321.
+- **Previous review:** Identified correctly. Still present.
 
-**10. Redundant `this.user = user` in `UserHome` constructor**
-- **File**: `apps/api/src/lib/home/user-home.ts:17`
-- `super(user, cleanUp)` already sets `this.user = user` in the `Home` constructor (line 44). The assignment in `UserHome` is redundant.
+**16. WebSocket keepalive does not actually close the socket**
+- **File:** `apps/api/src/utils/websockets.ts:10-13`
+- When ping fails (or socket is not OPEN), the code calls `onClose()` and clears the interval, but never calls `ws.close()`. The underlying WebSocket connection may linger as a half-open connection.
+- **Fix:** Call `ws.close()` before or after `onClose()`.
+- **Previous review:** Identified correctly. Still present.
 
-**11. `readdir` method uses `any` return type**
-- **File**: `apps/api/src/lib/core/local-filesystem.ts:130-133`
-- `readdir` returns `Promise<any[]>` and casts options with `as any`. This loses type safety. Should use proper overload signatures or a typed return.
+**17. SSE keepalive event does not conform to SSEvent type**
+- **File:** `apps/api/src/routes/sse.ts:35`
+- `controller.enqueue({event: 'keepalive'})` sends an object with an `event` property, but the `SSEvent` union type (in `packages/lib/src/types/sse.ts`) requires `type` and `title` properties at minimum. The `ReadableStream<SSEvent>` typing is violated at runtime. This works because Elysia's `sse()` serialization handles arbitrary objects, but it is a type safety gap.
+- **Previous review:** Identified correctly. Still present.
 
-**12. `toLocaleLowerCase()` vs `toLowerCase()` inconsistency**
-- **File**: `apps/api/src/lib/user/user.ts:8`
-- Uses `email.toLocaleLowerCase()` which is locale-dependent. `parseOwnerId` in `owner.ts:11` uses `.toLowerCase()`. Email normalization should be consistent across the codebase.
+**18. `config/schema.ts` appears unused**
+- **File:** `apps/api/src/lib/config/schema.ts`
+- Defines a `systemConfig` SQLite table that is not used anywhere. The config system uses `JsonStore` (JSON files on disk), not SQLite.
+- **Previous review:** Identified correctly. Still present.
 
-**13. Setup route has no rate limiting**
-- **File**: `apps/api/src/routes/setup.ts`
-- The `/setup/complete` endpoint can be called repeatedly (though it checks `isSetupRequired()`). Before setup is completed, there's no authentication. An attacker could attempt to complete setup before the legitimate admin. This is somewhat mitigated by the self-hosted nature, but worth noting.
+**19. JSDoc comment in user.ts**
+- **File:** `apps/api/src/lib/user/user.ts:26-28`
+- `/** Resolves a user's org and team memberships from the auth database. */` contradicts the "No JSDoc" rule in CLAUDE.md.
+- **Previous review:** Identified correctly (line number was 29, now 26-28).
 
-**14. Console logging of OTP**
-- **File**: `apps/api/src/lib/auth/auth.ts:76`
-- `console.log('send otp', user, otp, ctx?.request)` logs the OTP code to stdout. This is clearly a development placeholder but could be a security issue if logs are exposed in production.
+**20. `Home.getZip()` always throws**
+- **File:** `apps/api/src/lib/home/home.ts:162-164`
+- Always throws `Error('Not implemented')`. The route at `routes/home.ts:17-29` catches it and returns 500. This is dead code unless there are plans to implement it.
+- **Previous review:** Identified correctly. Still present.
 
-**15. Server config and settings use module-level `await`**
-- **Files**: `apps/api/src/lib/config/server-config.ts:83`, `apps/api/src/lib/config/server-settings.ts:48`
-- Both modules use top-level `await ensureLoaded()`. This means importing these modules blocks on file I/O. While this ensures data is available synchronously via `get()`, it couples module load order to filesystem state. If the data directory doesn't exist when these modules are first imported (e.g., during testing), it silently creates directories as a side effect.
+**21. Empty catch blocks in `LocalFilesystem`**
+- **File:** `apps/api/src/lib/core/local-filesystem.ts:65,75,102,125,187`
+- Several methods silently swallow errors. Most are intentional (returning empty arrays when directories don't exist), but `dirSize` at line 125 could hide I/O errors that affect quota calculations.
+- **Previous review:** Identified correctly (line numbers slightly adjusted).
 
-**16. `WebSocket` keepalive doesn't close the socket**
-- **File**: `apps/api/src/utils/websockets.ts:13`
-- When ping fails, the code calls `onClose()` but doesn't actually close the WebSocket (`ws.close()`). The dead connection may linger.
+**22. Module-level `await` in config modules**
+- **Files:** `apps/api/src/lib/config/server-config.ts:83`, `apps/api/src/lib/config/server-settings.ts:55`
+- Both use top-level `await ensureLoaded()`. This is a standard Bun pattern and works correctly, but it means importing these modules triggers filesystem I/O as a side effect and creates the `data/server/` directory if it does not exist.
+- **Previous review:** Identified correctly. This is more of an architectural note than an issue.
 
-**17. SSE `keepalive` event format mismatch**
-- **File**: `apps/api/src/routes/sse.ts:35`
-- The keepalive sends `{event: 'keepalive'}` but the `SSEvent` union type doesn't include a `keepalive` event type. The `controller.enqueue()` expects `SSEvent` but receives a non-conforming object. This works at runtime because JavaScript doesn't enforce types, but it's a type safety hole.
+**23. `getTeamMembers` silently returns empty array on error**
+- **File:** `apps/api/src/lib/team/team.ts:14-24`
+- The `catch` block returns `[]` for any error, including non-"not found" errors like database corruption. This hides real failures.
+- **Previous review:** Not identified. New finding.
 
-**18. `Home.getZip()` always throws**
-- **File**: `apps/api/src/lib/home/home.ts:162-164`
-- `getZip()` throws `'Not implemented'`. The route at `routes/home.ts:17-29` catches this and returns 500. This is dead code that should either be implemented or removed. The test confirms this returns 500.
+**24. Setup `completeSetup` performs partial work on failure**
+- **File:** `apps/api/src/lib/setup/setup.ts:194-261`
+- If the function fails after `initializeDatabaseSchema()` but before `saveServerConfig()` (e.g., creating the admin user or org fails), the database schema is created but the config is not saved. The next setup attempt will succeed (schema tables use `CREATE TABLE IF NOT EXISTS`), but there may be leftover partial data (e.g., a user row without an org).
+- Since this is a first-run setup and data is throwaway during dev, the practical impact is low. For production, wrapping this in a transaction would be more robust.
+- **Previous review:** Not identified. New finding.
 
-**19. Empty catch blocks**
-- **File**: `apps/api/src/lib/core/local-filesystem.ts:65,77,125,187`
-- Multiple empty `catch` blocks silently swallow errors. While some are intentional (e.g., directory listing when dir doesn't exist), the `dirSize` catch at line 125 could hide real I/O errors that affect quota calculations.
+**25. `parseOwnerId` does not handle `team_` and `org_` prefixes exclusively**
+- **File:** `packages/lib/src/types/owner.ts:14-21`
+- The two `if` statements are not `else if`. If a string starts with `team_` (which is checked first), it also falls through to check if it starts with `org_`. This is harmless in practice since no string starts with both `team_` and `org_`, but it should use `else if` for clarity and correctness.
+- **Previous review:** Not identified. New finding (minor).
 
-**20. `config/schema.ts` appears unused**
-- **File**: `apps/api/src/lib/config/schema.ts`
-- Defines a `systemConfig` table but it doesn't appear to be used anywhere in the config system. `ServerConfig` and `ServerSettings` use `JsonStore` (JSON files), not SQLite. This is dead code.
+**26. `LocalKeyStorage` has no path traversal protection**
+- **File:** `apps/api/src/lib/storage/local-key-storage.ts:16-18`
+- Similar to `LocalFilesystem`, `getFilePath(key)` does `path.join(this.dataDir, key)` without traversal checking. Unlike `LocalStorage` which has explicit traversal protection (`resolve()` method), `LocalKeyStorage` does not.
+- Risk is low because keys are typically UUIDs generated by the system (via `buildStorageKey`), but the class accepts arbitrary string keys.
+- **Previous review:** Not identified. New finding.
 
-## Robustness
+## Observations
 
-**Error handling**: Generally good. `ApiError` is used consistently for user-facing errors, and the global `onError` handler in `app.ts` catches everything. The `Home.destruct()` method wraps each domain destruction in try/catch to prevent cascading failures. `JsonStore.load()` falls back to defaults on parse errors.
+**Architecture compliance is strong.** The codebase closely follows its own documented patterns: Home singleton hierarchy, domain class layout, thin Elysia routers, `ApiError` usage, `type` over `interface`, no JSDoc (with one exception). The consistency is notably high.
 
-**Edge cases worth noting**:
-- `JsonStore.save()` uses atomic write (tmp + rename) which is correct for crash safety.
-- `ManagedDatabase` migrations run sequentially and are idempotent (`CREATE TABLE IF NOT EXISTS` style).
-- The `deepMerge` in `json-store.ts` correctly handles nested objects, null values, and arrays (arrays are replaced, not merged, which is the right behavior for settings).
-- `ManagedDatabase.close()` calls `sync()` then does a redundant second `wal_checkpoint(TRUNCATE)` on line 127. The `sync()` on line 126 already does the checkpoint. Minor redundancy.
+**Error handling is generally good.** `ApiError` provides clean user-facing errors. The global `onError` handler in `app.ts:47-56` catches both `ApiError` and unexpected errors. `Home.destruct()` wraps each domain destruction in individual try/catch blocks (home.ts:126-149), preventing cascading failures. `JsonStore.load()` gracefully falls back to defaults on parse errors.
 
-**Missing defensive coding**:
-- No timeout on `Home.init()` -- if a domain init hangs, the Home singleton is stuck in "initializing" state forever, blocking all subsequent requests for that user.
-- `enforceAvatarUpload` at `enforcement.ts:46` uses `'default'` mount for quota resolution, which may not exist for all users.
+**JsonStore atomic writes are correctly implemented.** The write-to-tmp-then-rename pattern (json-store.ts:64-68) ensures crash safety. The `deepMerge` function handles nested objects, null values, and arrays (replaced, not merged) correctly.
 
-## Test Coverage
+**ManagedDatabase is well-designed.** WAL mode, busy timeout, versioned migrations with sequential ordering, dirty tracking for sync optimization, and clean lifecycle management (open/sync/close). Migration logging provides good visibility.
 
-**What's tested (well)**:
-- Home size endpoint: structure validation, user isolation, ownerId spoofing protection (4 tests)
-- Server settings: admin access control, read/update, non-admin rejection (5 tests)
-- Quota enforcement: upload within quota, upload exceeding max (2 tests)
-- Team mount management: CRUD, multi-mount scenarios (8 tests)
-- Quota resolution with team overrides: elevation, clearing, most-permissive wins (4 tests)
-- Setup flow: secret generation, default settings (2 tests)
-- SSE: auth required, invalid token, headers, spoofing, multiple clients, cancellation, separate streams, ACL events (8 tests)
+**Test coverage has improved since the previous review.** A `json-store.test.ts` file now exists with 10 tests covering defaults, persistence, deep merge, arrays, corrupt JSON, atomic writes, and multi-instance scenarios. The previous review listed "No tests for JsonStore" as missing coverage -- this has been addressed.
 
-**What's missing**:
-- **No `setup.test.ts`**: The setup flow is tested indirectly in `test/setup.ts` (test harness) and a few tests in `settings.test.ts`, but there's no dedicated test file for setup edge cases (double setup, invalid input, S3 validation).
-- **No tests for `ManagedDatabase`**: Migration ordering, version skipping, WAL checkpoint, dirty tracking, sync timer, concurrent open attempts.
-- **No tests for `JsonStore`**: Corrupt JSON, concurrent writes, deep merge edge cases.
-- **No tests for `createAsyncSingleton`**: Concurrent calls, factory failure and retry, cleanup.
-- **No tests for `LocalFilesystem`**: Path traversal, concurrent operations, `cleanupEmptyDirs`.
-- **No tests for `parseOwnerId`**: Invalid inputs, edge cases (email-like strings, malformed prefixes).
-- **No tests for `Home.init()` concurrency**: Multiple init calls for the same Home, timeout behavior.
-- **No negative tests for settings**: Invalid quota values (0, negative), invalid storage types.
-- **No tests for S3 config endpoints**: `GET/PUT /settings/s3config`, `POST /settings/s3check`.
-- **No test for `enforceAvatarUpload`**.
-- Test cleanup is commented out at `test/setup.ts:147-150`, so test data accumulates.
+**Test cleanup approach is valid.** The previous review noted that cleanup is "commented out" at `test/setup.ts:147-150`. However, line 6 (`rmSync(TEST_DATA_ROOT, {recursive: true, force: true})`) cleans up at the start of each test run. This is a deliberate pattern that preserves test data after a run for debugging, while ensuring a clean state for the next run.
 
-## Recommendations
+**Missing test coverage (still applicable):**
+- No dedicated setup edge case tests (double setup, invalid S3 config)
+- No unit tests for `createAsyncSingleton` (failure retry, concurrent calls)
+- No unit tests for `ManagedDatabase` (migration ordering, WAL checkpoint, sync timer)
+- No tests for `LocalFilesystem` path handling
+- No tests for `parseOwnerId` with edge cases
+- No tests for S3 config endpoints (`GET/PUT /settings/s3config`, `POST /settings/s3check`)
+- No tests for `enforceAvatarUpload`
 
-**Priority 1 (bugs to fix now)**:
-1. Add `await` to `getTeamExists` in `apps/api/src/lib/team/team.ts:11`.
-2. Fix `createAsyncSingleton` to clear `initializationPromise` on rejection.
-3. Fix `parseOwnerId` to return `null` for invalid IDs (or update callers to check empty `id`).
-
-**Priority 2 (security hardening)**:
-4. Add path traversal protection to `LocalFilesystem.getFilePath()`.
-5. Remove OTP console.log from auth.ts or gate it behind a debug flag.
-6. Add rate limiting or IP-based lockout to the setup endpoint.
-7. Log a warning when using the fallback auth secret.
-
-**Priority 3 (robustness)**:
-8. Fix the Home destruct/cleanup race condition -- make cleanup atomic.
-9. Fix `destruct()` to not open databases just to close them.
-10. Add `ws.close()` in the websocket keepalive failure handler.
-11. Add a timeout to `Home.init()` to prevent infinite hangs.
-
-**Priority 4 (code quality)**:
-12. Remove dead code: `config/schema.ts`, `Home.getZip()` (or implement it).
-13. Remove redundant `this.user = user` in `UserHome`.
-14. Remove JSDoc comment in `user.ts`.
-15. Replace `any` types in `LocalFilesystem.readdir()`.
-16. Normalize email case handling consistently (`toLowerCase` everywhere).
-
-**Priority 5 (test coverage)**:
-17. Add unit tests for `createAsyncSingleton`, `JsonStore`, `ManagedDatabase`.
-18. Add integration tests for setup edge cases.
-19. Add tests for `parseOwnerId` with invalid inputs.
-20. Uncomment or fix test cleanup in `test/setup.ts`.
+**Previous review accuracy assessment:**
+- Issues 1-9, 11-20: All correctly identified and verified against the current code
+- Issue 10 (redundant WAL checkpoint): Partially incorrect -- the second checkpoint is not redundant for databases without sync callbacks. Corrected in this review.
+- Test coverage claim about JsonStore: Now outdated -- tests exist
+- Test cleanup claim: Slightly misleading -- cleanup happens at next run start, not never
