@@ -10,7 +10,7 @@
 
 The Eigen codebase is architecturally sound and impressively consistent for a project of this breadth. The monorepo structure is clean, the documented patterns (CLAUDE.md, docs/) are actually followed in practice, and the critical rule that all data hooks live in `packages/lib` is respected across every single app. The Home singleton hierarchy, ManagedDatabase lifecycle, SSE event system, and thin-route-to-domain-class pattern are well-designed and uniformly applied.
 
-This deep review uncovered **21 critical issues**, **~80 important issues**, and **~120 minor issues** across the 18 review files. The most severe confirmed findings are: broken real-time collaboration broadcast (the collab system stores updates but never sends them to other clients), drive cache collisions from missing ownerId in query keys, several authorization bypasses in calendar and chat, and a class of missing-await bugs that silently break async control flow in multiple domains. There are also two broken navigation flows from MIME type typos, multiple broken frontend features (shared-items detail panes, mail attachments, waitlist form), and systemic type safety erosion from ~50+ `as any` casts in the shared hook layer.
+This deep review uncovered **19 critical issues**, **~80 important issues**, and **~120 minor issues** across the 18 review files. The most severe confirmed findings are: drive cache collisions from missing ownerId in query keys, several authorization bypasses in calendar and chat, and a class of missing-await bugs that silently break async control flow in multiple domains. There are also two broken navigation flows from MIME type typos, multiple broken frontend features (shared-items detail panes, mail attachments, waitlist form), and systemic type safety erosion from ~50+ `as any` casts in the shared hook layer.
 
 None of these are architecturally difficult to fix. The codebase's clean structure makes targeted fixes straightforward. The main risk is the accumulated density of issues -- fixing them requires touching many files across many domains.
 
@@ -21,7 +21,7 @@ Several first-round findings were challenged and re-evaluated in this deep revie
 | Finding | Verdict | Detail |
 |---------|---------|--------|
 | Mail XSS via ShadowContent | **False positive** | Backend sanitizes all email HTML with `DOMPurify.sanitize()` at parse time (`mail-parse.ts:10`). The frontend component receives pre-sanitized HTML. Not a vulnerability. Downgraded to minor defense-in-depth observation. |
-| Collab broadcast missing | **Confirmed critical** | Traced through y-protocols source. `readSyncStep2`/`readUpdate` apply updates to the doc but write nothing to the encoder. No broadcast handler registered. Multi-user editing is non-functional. |
+| Collab broadcast missing | **Downgraded to Important** | The server does NOT broadcast updates, but all frontend apps use `WebsocketProvider` with `resyncInterval: 5000` -- clients poll every 5 seconds and receive changes via sync handshake. Collab works with up to 5s latency, not "non-functional". Adding server-side broadcast would make it instant and reduce traffic. |
 | Redundant WAL checkpoint in ManagedDatabase | **Corrected** | The second `wal_checkpoint(TRUNCATE)` in `close()` is NOT redundant -- `sync()` only checkpoints when dirty AND sync callbacks exist. For databases without sync callbacks, the explicit checkpoint is the only cleanup path. |
 | Test cleanup "commented out" | **Corrected** | Cleanup runs at the *start* of each test run (`rmSync` on line 6 of setup.ts), not never. The pattern preserves data after a run for debugging. |
 | Calendar `shared` endpoint ownerId | **Downgraded** | From Critical to Minor. The endpoint ignores ownerId but always returns the authenticated user's data -- no data leakage possible. |
@@ -41,7 +41,7 @@ Several first-round findings were challenged and re-evaluated in this deep revie
 | [BE Contacts](BE_contacts.md) | Contact management | 1 | 7 | 11 | `apps/api/src/lib/contacts/` |
 | [BE Calendar](BE_calendar.md) | Calendar, RRULE, sharing, invites | 3 | 10 | 6 | `apps/api/src/lib/calendar/` |
 | [BE Chat](BE_chat.md) | Chat rooms, slash commands | 2 | 8 | 7 | `apps/api/src/lib/chat/` |
-| [BE Collab](BE_collab.md) | Yjs, WebSocket, real-time editing | 2 | 5 | 8 | `apps/api/src/lib/collab/` |
+| [BE Collab](BE_collab.md) | Yjs, WebSocket, real-time editing | 0 | 7 | 8 | `apps/api/src/lib/collab/` |
 | [FE Shared](FE_shared.md) | packages/lib + packages/ui | 3 | 11 | 11 | `packages/{lib,ui}/` |
 | [FE Drive](FE_drive.md) | Drive app | 3 | 8 | 12 | `apps/drive/` |
 | [FE Mail](FE_mail.md) | Mail app | 2 | 12 | 12 | `apps/mail/` |
@@ -54,7 +54,7 @@ Several first-round findings were challenged and re-evaluated in this deep revie
 | [FE Setup](FE_setup.md) | Setup wizard, index/landing | 3 | 7 | 8 | `apps/{setup,index}/` |
 | [FE Sheets Deep](FE_sheets_deep.md) | Sheets + fortune-sheet | 4 | 9 | 10 | `apps/sheets/`, `packages/fortune-sheet/` |
 
-**Totals:** 21 critical, ~80 important, ~120 minor issues across 18 reviews.
+**Totals:** 19 critical, ~82 important, ~120 minor issues across 18 reviews.
 
 ---
 
@@ -78,8 +78,7 @@ Every critical issue from every review, organized by impact category.
 
 | # | Issue | Location | Review |
 |---|-------|----------|--------|
-| 8 | **Collab updates never broadcast to peers** -- `readSyncStep2`/`readUpdate` apply updates to the Y.Doc but never send them to other WebSocket clients. Multi-user real-time editing is non-functional across all 4 collab apps. | `apps/api/src/lib/collab/collabDocument.ts:243-311` | [BE Collab](BE_collab.md) #1 |
-| 9 | **Awareness removal on disconnect never broadcast** -- when a user disconnects, remaining clients are never notified. Ghost cursors persist for ~30 seconds. | `apps/api/src/lib/collab/collabDocument.ts:213-241` | [BE Collab](BE_collab.md) #2 |
+| ~~8~~ | ~~Collab updates never broadcast~~ | **Downgraded to Important** -- collab works via client-side 5s resyncInterval. Adding broadcast improves latency. | [BE Collab](BE_collab.md) #1 |
 | 10 | **SharedDrive missing `createSlides` and `createSheets` overrides** -- these fall through to the base `Drive` class which has no initialized mounts, returning 404. Creating slides/sheets on shared or team drives is broken. | `apps/api/src/lib/drive/sharedDrive.ts` | [BE Drive](BE_drive.md) #2 |
 | 11 | **Slides and Sheets MIME type typos** -- `application-eigenslide` (singular) used in 6 route files instead of `application-eigenslides` (plural). Navigation after create/delete and initial redirect show empty file lists. | `apps/slides/src/routes/index.tsx:11`, `apps/sheets/src/routes/index.tsx:11` (+ 4 more) | [FE Collab](FE_collab.md) #1, [FE Sheets](FE_sheets_deep.md) #1 |
 | 12 | **Mail download and attachment URLs broken** -- URL builders omit the required `/:ownerId/` segment, producing 404s. All attachment downloads silently fail. | `packages/lib/src/core/api.ts:94-95` | [FE Mail](FE_mail.md) #1 |

@@ -178,6 +178,34 @@ export default class CollabDocument {
         this.provider = new DbProvider(this.doc, this.path.name, managedDb);
         this.awareness = new awarenessProtocol.Awareness(this.doc);
 
+        this.doc.on('update', (update: Uint8Array, origin: unknown) => {
+            const encoder = encoding.createEncoder();
+            encoding.writeVarUint(encoder, MESSAGE_SYNC);
+            syncProtocol.writeUpdate(encoder, update);
+            const message = encoding.toUint8Array(encoder);
+            if (origin && typeof origin === 'object' && 'readyState' in origin) {
+                this.broadcastMessage(origin as ServerWebSocket<any>, message);
+            } else {
+                for (const conn of this.connections) {
+                    if (conn.readyState === 1) conn.send(Buffer.from(message));
+                }
+            }
+        });
+
+        this.awareness.on('update', ({added, updated, removed}: {added: number[], updated: number[], removed: number[]}, origin: unknown) => {
+            const changedClients = added.concat(updated, removed);
+            if (changedClients.length === 0) return;
+            const encoder = encoding.createEncoder();
+            encoding.writeVarUint(encoder, MESSAGE_AWARENESS);
+            encoding.writeVarUint8Array(encoder, awarenessProtocol.encodeAwarenessUpdate(this.awareness, changedClients));
+            const message = encoding.toUint8Array(encoder);
+            for (const conn of this.connections) {
+                if (conn !== origin && conn.readyState === 1) {
+                    conn.send(Buffer.from(message));
+                }
+            }
+        });
+
         return this;
     }
 
