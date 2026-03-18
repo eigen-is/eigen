@@ -32,7 +32,8 @@ export async function resolveCalendarForEvents(user: User, ownerId: string, cale
             throw new ApiError(403, 'Not a member of this team');
         }
         const home = await getHome(ownerId);
-        return {calendar: home.calendar, permission: 'write'};
+        const permission = home.calendar.checkPermission(calendarId, user.email, memberships.teamIds);
+        return {calendar: home.calendar, permission: permission || 'read'};
     }
 
     if (ownerId === user.id) {
