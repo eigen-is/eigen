@@ -25,7 +25,7 @@ function TwoFaComponent() {
             if (result.data) {
                 // Get the TOTP URI from the response
                 setTotpUri(result.data.totpURI);
-                setSecretKey(result.data.totpURI.split('secret=')[1].split('&')[0]);
+                setSecretKey(new URL(result.data.totpURI).searchParams.get('secret') || '');
                 setSetupStep("qrcode");
                 toast.success('Two-factor authentication initialized. Please scan the QR code.');
             } else {

@@ -1,7 +1,7 @@
 import type {CalendarItem, CalendarShare} from '@workspace/lib/types/calendar';
 import type {SSEvent} from '@workspace/lib/types/sse';
 import {parseOwnerId} from '@workspace/lib/types';
-import {getUserByEmail} from '../user/';
+import {getMemberships, getUserByEmail} from '../user/';
 import type {Home} from '../home';
 import {getHome} from '../home';
 import {getTeamMembers} from '../team';
@@ -73,34 +73,17 @@ export async function propagateCalendarShare(
     // Don't propagate to the calendar owner
     userIds.delete(ownerHome.user.id);
 
-    const newShareMap = new Map<string, CalendarShare['permission']>();
-    for (const share of newShares) {
-        newShareMap.set(share.targetId.toLowerCase(), share.permission);
-    }
-
     for (const userId of userIds) {
         try {
             const targetHome = await getHome(userId);
-            const targetEmail = targetHome.user.email.toLowerCase();
+            const targetEmail = targetHome.user.email;
+            const memberships = await getMemberships(userId);
 
-            let permission: CalendarShare['permission'] | null = null;
-            if (newShareMap.has(targetEmail)) {
-                permission = newShareMap.get(targetEmail)!;
-            } else {
-                // Check team-based shares
-                for (const share of newShares) {
-                    if (share.targetId.startsWith('team_')) {
-                        const teamId = share.targetId.substring(5);
-                        const members = await getTeamMembers(teamId);
-                        if (members.some(m => m.user.id === userId)) {
-                            const permRank = {'free-busy': 0, 'read': 1, 'write': 2} as const;
-                            if (!permission || permRank[share.permission] > permRank[permission]) {
-                                permission = share.permission;
-                            }
-                        }
-                    }
-                }
-            }
+            const permission = ownerHome.calendar.checkPermission(
+                calendar.id,
+                targetEmail,
+                memberships.teamIds,
+            );
 
             if (permission) {
                 targetHome.calendar.receiveShare(

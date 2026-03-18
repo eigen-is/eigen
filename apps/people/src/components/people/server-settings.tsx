@@ -5,7 +5,13 @@ import {Label} from '@workspace/ui/components/label';
 import {Separator} from '@workspace/ui/components/separator';
 import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '@workspace/ui/components/select';
 import {EigenLoader} from '@workspace/ui/components/layout/braket/eigen-loader';
-import {useServerSettings, useUpdateServerSettings, useServerS3Config, useUpdateServerS3Config, useCheckS3Connection} from '@workspace/lib/settings';
+import {
+    useCheckS3Connection,
+    useServerS3Config,
+    useServerSettings,
+    useUpdateServerS3Config,
+    useUpdateServerSettings
+} from '@workspace/lib/settings';
 import {toast} from 'sonner';
 import type {ServerSettings} from '@workspace/lib/types/settings';
 import type {S3Config} from '@workspace/lib/types';
@@ -54,6 +60,7 @@ export function ServerSettingsPage() {
     };
 
     const updateQuota = (key: keyof ServerSettings['quotas'], value: number) => {
+        if (isNaN(value) || value < 0) return;
         setDirty(true);
         setDraft(prev => ({...prev, quotas: {...prev.quotas, [key]: value}}));
     };

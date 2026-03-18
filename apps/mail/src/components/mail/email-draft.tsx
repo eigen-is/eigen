@@ -80,44 +80,28 @@ export function EmailDraft({
 
     const auth = useAuth();
 
-    if (!email) {
-        email = createDraftEmail({});
-    }
-
-    // Get the draft status (sendable/saveable)
-    // const { isSendable } = getEmailDraftStatus(email);
-
-    // Set from email address
-    email.from = {
-        value: [{
-            name: auth.user!.name || '',
-            address: auth.user!.email || '',
-        }],
-        html: '',
-        text: '',
-    };
-
-    if (to) {
-        email.to = {
-            value: [{
-                name: '',
-                address: to,
-            }],
-            html: to,
-            text: to,
+    const draft = useMemo(() => {
+        const d = {...(email ?? createDraftEmail({}))};
+        d.from = {
+            value: [{name: auth.user!.name || '', address: auth.user!.email || ''}],
+            html: '', text: '',
+        };
+        if (to) {
+            d.to = {value: [{name: '', address: to}], html: to, text: to};
         }
-    }
+        return d;
+    }, [email, to, auth.user]);
 
-    const fromName = email.from?.value[0].name || email.from?.value[0].address;
-    const fromEmail = email.from?.value[0].address;
+    const fromName = draft.from?.value[0].name || draft.from?.value[0].address;
+    const fromEmail = draft.from?.value[0].address;
 
     // Set focus on the appropriate field based on priority
     useEffect(() => {
         // Check if To field is empty by checking the defaultValue we're using in the input
-        const toFieldEmpty = !email.to || email.to.html === '' || email.to.text === '';
+        const toFieldEmpty = !draft.to || draft.to.html === '' || draft.to.text === '';
 
         // Check if subject is empty
-        const subjectEmpty = !email.subject || String(email.subject).trim() === '';
+        const subjectEmpty = !draft.subject || String(draft.subject).trim() === '';
 
         if (toFieldEmpty && toFieldRef.current) {
             toFieldRef.current.focus();
@@ -126,7 +110,7 @@ export function EmailDraft({
         } else if (textareaRef.current) {
             textareaRef.current.focus();
         }
-    }, [email]);
+    }, [draft]);
 
     // Create a function to get the current draft values
     const getCurrentDraft = useMemo(() => () => {
@@ -171,7 +155,7 @@ export function EmailDraft({
             subject: subjectFieldRef.current?.value || '',
             text: textareaRef.current?.value || ''
         };
-    }, [email]);
+    }, [draft]);
 
     // Handle send email functionality
     const handleSendEmail = async () => {
@@ -215,7 +199,7 @@ export function EmailDraft({
                         <div className="flex items-center border-b">
                             <div className="w-16 text-sm text-muted-foreground py-2">To:</div>
                             <ContactAutosuggest
-                                initialValue={email.to?.text || ""}
+                                initialValue={draft.to?.text || ""}
                                 onChange={() => {
                                     // Value is read from ref on submit
                                 }}
@@ -233,7 +217,7 @@ export function EmailDraft({
                         <div className="flex items-center border-b">
                             <div className="w-16 text-sm text-muted-foreground py-2">Cc:</div>
                             <ContactAutosuggest
-                                initialValue={email.cc?.text || ""}
+                                initialValue={draft.cc?.text || ""}
                                 onChange={() => {
                                     // Value is read from ref on submit
                                 }}
@@ -251,7 +235,7 @@ export function EmailDraft({
                         <div className="flex items-center border-b">
                             <div className="w-16 text-sm text-muted-foreground py-2">Bcc:</div>
                             <ContactAutosuggest
-                                initialValue={email.bcc?.text || ""}
+                                initialValue={draft.bcc?.text || ""}
                                 onChange={() => {
                                     // Value is read from ref on submit
                                 }}
@@ -282,7 +266,7 @@ export function EmailDraft({
                             <Input
                                 id="subject"
                                 ref={subjectFieldRef}
-                                defaultValue={email.subject ? String(email.subject) : ""}
+                                defaultValue={draft.subject ? String(draft.subject) : ""}
                                 className="bg-transparent border-none focus-visible:ring-0 py-2 px-0 h-auto"
                                 disabled={isSending}
                             />
@@ -294,7 +278,7 @@ export function EmailDraft({
                         <Textarea
                             className="w-full h-full min-h-[200px] border-none resize-none focus-visible:ring-0 bg-transparent p-0"
                             placeholder="Write your message here..."
-                            defaultValue={email.text || ""}
+                            defaultValue={draft.text || ""}
                             ref={textareaRef}
                             disabled={isSending}
                         />

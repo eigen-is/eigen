@@ -21,6 +21,7 @@ import {format} from "date-fns";
 import {DeleteDialog} from "@workspace/ui/components/layout/delete/delete-dialog";
 import {Column, ColumnLayout} from "@workspace/ui/components/layout/app/column-layout.tsx";
 import {useLayout} from "@workspace/ui/components/layout/app/layout-context.tsx";
+import {useAuth} from "@workspace/lib/auth";
 
 export type MailSearchParams = {
     mailId?: string;
@@ -44,6 +45,7 @@ function MailRoute() {
     const {mailId, mode, to} = Route.useSearch();
     const navigate = useNavigate();
     const {isTablet} = useLayout();
+    const {user} = useAuth();
     const deleteMail = useDeleteEmail();
     const moveMail = useMoveEmail();
     const toggleMailRead = useToggleReadEmail();
@@ -60,7 +62,9 @@ function MailRoute() {
     const {data: mailboxes = []} = useMailboxes();
 
     const selectedEmailInData = emails.find(m => m.id === selectedEmail?.id);
-    if (selectedEmailInData) selectedEmailInData.isRead = true;
+    const displayEmails = selectedEmailInData
+        ? emails.map(m => m.id === selectedEmail?.id ? {...m, isRead: true} : m)
+        : emails;
 
     const navigateToList = () => {
         navigate({
@@ -161,8 +165,8 @@ function MailRoute() {
             return;
         }
         handleNewDraftEmail(createDraftEmail({
-            to: email.from,
-            subject: `RE: ${email.subject}`,
+            to: email.replyTo || email.from,
+            subject: email.subject?.startsWith('RE:') ? email.subject : `RE: ${email.subject}`,
             text: `\n\nOn ${format(new Date(email.date), "d MMM yyyy 'at' h:mm a")} ${email.from?.value[0]?.name} <${email.from?.value[0]?.address}> wrote:\n\n${email.text}`,
         }));
     };
@@ -173,10 +177,15 @@ function MailRoute() {
             toast.error("Could not load email");
             return;
         }
+        const myEmail = user?.email?.toLowerCase();
+        const toValues = Array.isArray(email.to) ? email.to.flatMap(t => t.value) : (email.to?.value || []);
         const ccValues = Array.isArray(email.cc) ? email.cc.flatMap(c => c.value) : (email.cc?.value || []);
+        const replyTo = (email.replyTo || email.from)?.value || [];
+        const allRecipients = [...replyTo, ...toValues, ...ccValues]
+            .filter(addr => addr.address?.toLowerCase() !== myEmail);
         handleNewDraftEmail(createDraftEmail({
-            to: {value: [...(email.from?.value || []), ...ccValues], html: '', text: ''},
-            subject: `RE: ${email.subject}`,
+            to: {value: allRecipients, html: '', text: ''},
+            subject: email.subject?.startsWith('RE:') ? email.subject : `RE: ${email.subject}`,
             text: `\n\nOn ${format(new Date(email.date), "d MMM yyyy 'at' h:mm a")} ${email.from?.value[0]?.name} <${email.from?.value[0]?.address}> wrote:\n\n${email.text}`,
         }));
     };
@@ -252,7 +261,7 @@ function MailRoute() {
                 <Column id="list" width={listWidth} toolbar={listToolbar}>
                     <div className="flex flex-col border-r h-full overflow-hidden">
                         <EmailList
-                            emails={emails}
+                            emails={displayEmails}
                             searchQuery={searchQuery}
                             isLoading={isEmailsLoading}
                             error={isEmailsError}

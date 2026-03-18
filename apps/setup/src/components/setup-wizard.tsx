@@ -221,7 +221,7 @@ export function SetupWizard() {
                                         <Label htmlFor="local-id" className="flex-1 cursor-pointer font-normal">
                                             <div className="font-medium">Local storage (ID-based)</div>
                                             <p className="text-sm text-muted-foreground">
-                                                Recommended. Files stored with unique IDs.
+                                                Files stored with unique IDs.
                                             </p>
                                         </Label>
                                     </div>
@@ -231,7 +231,7 @@ export function SetupWizard() {
                                         <Label htmlFor="local-fullnames" className="flex-1 cursor-pointer font-normal">
                                             <div className="font-medium">Local storage (full names)</div>
                                             <p className="text-sm text-muted-foreground">
-                                                Files stored with original filenames.
+                                                Recommended. Files stored with original filenames.
                                             </p>
                                         </Label>
                                     </div>

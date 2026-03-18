@@ -101,7 +101,7 @@ export function ChangePassword({onPasswordChange}: {
 
     return (
 
-        <div className="space-8 pb-20 m-4">
+        <div className="space-y-8 pb-20 m-4">
             <Form {...form}>
                 <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-6">
                     <FormField

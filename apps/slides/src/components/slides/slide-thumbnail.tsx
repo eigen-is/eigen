@@ -41,6 +41,7 @@ export const SlideThumbnail = memo(function SlideThumbnail({
                 style={{aspectRatio: SLIDE_ASPECT_RATIO}}
             >
                 <div className="w-full h-full relative" style={{
+                    containerType: 'size',
                     backgroundColor: slide.backgroundColor,
                     ...(bgUrl ? {
                         backgroundImage: `url(${bgUrl})`,

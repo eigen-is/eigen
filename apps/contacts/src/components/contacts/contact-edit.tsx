@@ -4,7 +4,7 @@ import {zodResolver} from '@hookform/resolvers/zod';
 import React, {useState} from 'react';
 import {Camera, Plus, Trash2} from 'lucide-react';
 import {format} from "date-fns";
-import {useAddContact, useLabels, useUpdateContact} from '@workspace/lib/contacts';
+import {useLabels} from '@workspace/lib/contacts';
 import {useAuth} from '@workspace/lib/auth';
 import {type Contact} from "@workspace/lib/types/contact";
 import {useUpload} from '@workspace/ui/components/layout/upload-provider/upload-provider';
@@ -81,8 +81,6 @@ export function ContactEdit({
     const {user} = useAuth();
 
     const {data: labels = [], error: labelsError} = useLabels();
-    const addContactMutation = useAddContact();
-    const updateContactMutation = useUpdateContact();
     const [error, setError] = useState<string | null>(null);
     const [avatar, setAvatar] = useState<string | null>(contact?.avatar || null);
     const fileInputRef = React.useRef<HTMLInputElement>(null);
@@ -120,7 +118,7 @@ export function ContactEdit({
         }
     });
 
-    const isLoading = addContactMutation.isPending || updateContactMutation.isPending;
+    const isLoading = form.formState.isSubmitting;
 
     return (
         <div className="h-full flex flex-col overflow-hidden">
@@ -183,10 +181,6 @@ export function ContactEdit({
                                                         }
                                                     });
 
-                                                    if (response.ok) {
-                                                        const responseData = await response.text();
-                                                        setAvatar(responseData);
-                                                    }
                                                 } catch (err: unknown) {
                                                     console.error('Error uploading file:', err);
                                                     uploadHandler.error();

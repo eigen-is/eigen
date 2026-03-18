@@ -397,11 +397,11 @@ function SlideEditorInner({ownerId, path, canWrite, mediaFolderId, onAccessDialo
                 }}
             >
                 <div
-                    className="w-full h-full relative"
+                    className="relative w-full"
                     style={{
                         aspectRatio: '16/9',
-                        maxWidth: '100vw',
-                        maxHeight: '100vh',
+                        maxHeight: '100%',
+                        containerType: 'size',
                         backgroundColor: activeSlide.backgroundColor,
                         ...(bgUrl ? {
                             backgroundImage: `url(${bgUrl})`,

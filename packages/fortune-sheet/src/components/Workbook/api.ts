@@ -90,9 +90,12 @@ export function generateAPIs(
                                     (sheet.hide === undefined || sheet.hide !== 1) &&
                                     sheet.id !== ops[0].id
                             );
-                            ctx_.currentSheetId = [...shownSheets].sort(
+                            const sorted = [...shownSheets].sort(
                                 (a, b) => (a.order ?? 0) - (b.order ?? 0)
-                            )[0].id as string;
+                            );
+                            if (sorted.length > 0) {
+                                ctx_.currentSheetId = sorted[0].id as string;
+                            }
                         }
                     }
                     createFilterOptions(ctx_, ctx_.luckysheet_filter_save, ops[0]?.id);

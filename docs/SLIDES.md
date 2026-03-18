@@ -15,6 +15,11 @@ Y.Map            "objects"     → objectId → Y.Map { id, slideId, type, x, y,
 **Coordinates**: Stored as absolute pixels (0-1920 for x/w, 0-1080 for y/h). Converted to percentages for rendering via
 `pxToPercent(val, axis)` in `types.ts`. This makes layout resolution-independent.
 
+**Dimensions**: Font sizes, border widths, border radii, and letter spacing use CSS container query units (`cqh`/`cqw`)
+relative to the slide container (which has `container-type: size`). This ensures all dimensions scale with the slide
+container rather than the browser viewport. The helpers `pxToPercentHeight(val)` and `pxToPercentWidth(val)` in
+`slide-object.tsx` convert from the 1920x1080 coordinate space to `cqh`/`cqw` units.
+
 ### Object Types
 
 **Text**: `text`, `fontSize`, `fontWeight`, `fontStyle`, `textDecoration`, `textAlign`, `verticalAlign`, `color`,

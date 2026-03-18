@@ -31,7 +31,6 @@ export function useMessages(ownerId: string, mountId: string, chatId: string | u
             return (response.data || []) as ChatMessage[];
         },
         enabled: !!chatId && !!ownerId && !!mountId,
-        refetchInterval: 5000,
     });
 }
 
