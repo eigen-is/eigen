@@ -59,6 +59,17 @@ bun run check          # typecheck + test
 - **`type` over `interface`** — except when methods are needed
 - **Never use `useQuery`/`useMutation` directly in apps** — all data hooks live in
   `packages/lib/src/core/[domain]/hooks/`
+- **Never use `as any`** — fix the type at the source (route schema, response type) instead of casting in hooks.
+  Eden Treaty provides end-to-end safety; `as any` silently breaks it
+- **Always `await` async calls** — missing `await` is the #1 bug class in this codebase. A bare async call returns a
+  truthy Promise, silently skipping the intended logic. Especially dangerous in conditionals (`if (!asyncFn())` is
+  always false)
+- **Sanitize user-provided paths and filenames** — validate against `..`, `/`, and control characters before using in
+  file system paths or HTTP headers (e.g., `Content-Disposition`). Never interpolate raw user input into headers
+- **Use theme tokens, not hardcoded colors** — use `text-muted-foreground`, `bg-muted`, `border` etc. instead of
+  `text-gray-500`, `bg-blue-50`. Hardcoded colors break dark mode
+- **Every mutation needs error feedback** — wrap `mutateAsync` in try/catch with `toast.error()`, or use the
+  `onError` callback. Never swallow errors by catching and returning null
 - **Keep docs up to date** — when a task is fully completed, update relevant docs in `docs/` and this file if the
   change affects architecture patterns, file locations, or critical rules
 
@@ -109,6 +120,24 @@ export const driveKeys = {
 ```
 
 Export invalidation functions for use in SSE handlers + mutation `onSuccess`.
+
+### Common Pitfalls
+
+These patterns have caused bugs across multiple domains:
+
+- **Query keys must include `ownerId`** for any owner-scoped data. Without it, switching between personal and team
+  contexts serves stale cached data from the wrong owner
+- **`SharedDrive` must override every `Drive` creation method** — when adding a new eigen file type, add a
+  corresponding `create*` override in `SharedDrive` or it will 404 on shared/team drives
+- **MIME type strings must match the Eigen File Types table exactly** — use the constants, don't type them by hand.
+  `eigenslides` not `eigenslide`, `eigensheets` not `eigensheet`
+- **`validateSearch` in shared routes must extract all URL params the route uses** — missing params (like `uid`)
+  silently break detail panes for shared items
+- **Never mutate TanStack Query cache directly** — use `queryClient.setQueryData()` or `invalidateQueries()`, not
+  direct object mutation on cached data
+- **No `"use client"` directives** — this is a Vite project, not Next.js. The directive is a no-op
+- **Route `ownerId` params must be validated** — if a route accepts `:ownerId`, either verify it matches the
+  authenticated user (or team membership) and reject with 403, or remove the parameter entirely
 
 ### SSE Pattern
 
@@ -179,6 +208,8 @@ Detailed architecture docs in `docs/`:
 | [TESTING.md](docs/TESTING.md)                                   | Test setup, patterns, test files                |
 | [DOCKER.md](docs/DOCKER.md)                                     | Docker deployment                               |
 | [IMAP.md](docs/PLAN_IMAP.md)                                         | IMAP/Dovecot Maildir compatibility plan         |
+
+| [Code Reviews](codereviews/OVERVIEW.md)                         | Full-stack code review findings + fix priorities |
 
 ### Future/Planning Docs
 
