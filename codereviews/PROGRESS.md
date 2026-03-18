@@ -137,4 +137,4 @@ Tracking all findings from the [full code review](OVERVIEW.md). Phases match the
 - [ ] Replace `interface` with `type` (~60+ instances)
 - [ ] Fortune-sheet: CSS files, `@ts-ignore` (81), Chinese comments
 - [ ] Hardcoded light-mode colors → theme tokens (Drive, Chat, Space, Calendar)
-- [ ] `ownerId` URL param: validate or remove across mail, contacts, SSE, calendar, home routes
+- [x] `ownerId` URL param: documented as intentional routing key for future sharding (CLAUDE.md + TODO-SCALABILITY.md)
