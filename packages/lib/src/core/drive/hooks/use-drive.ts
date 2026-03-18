@@ -9,26 +9,27 @@ export {DEFAULT_MOUNT_ID};
 // Define query keys for reuse
 export const driveKeys = {
     all: ['drive'] as const,
-    mounts: () => [...driveKeys.all, 'mounts'] as const,
-    root: (ownerId: string, mountId: string) => [...driveKeys.all, 'root', ownerId, mountId] as const,
-    folders: () => [...driveKeys.all, 'folder'] as const,
-    folder: (mountId: string, pathId: string) => [...driveKeys.folders(), mountId, pathId] as const,
-    mimeTypes: () => [...driveKeys.all, 'mime'] as const,
-    mime: (mimeType: string) => [...driveKeys.mimeTypes(), mimeType] as const,
-    paths: () => [...driveKeys.all, 'path'] as const,
-    path: (mountId: string, pathId: string) => [...driveKeys.paths(), mountId, pathId] as const,
-    permissions: () => [...driveKeys.all, 'permissions'] as const,
-    read: (mountId: string, pathId: string) => [...driveKeys.permissions(), 'read', mountId, pathId] as const,
-    write: (mountId: string, pathId: string) => [...driveKeys.permissions(), 'write', mountId, pathId] as const,
-    shared: (to: 'by-me' | 'with-me') => [...driveKeys.all, 'shared', to] as const,
-    textPreviews: () => [...driveKeys.all, 'text-preview'] as const,
-    textPreview: (mountId: string, pathId: string) => [...driveKeys.textPreviews(), mountId, pathId] as const,
+    owner: (ownerId: string) => [...driveKeys.all, ownerId] as const,
+    mounts: (ownerId: string) => [...driveKeys.owner(ownerId), 'mounts'] as const,
+    root: (ownerId: string, mountId: string) => [...driveKeys.owner(ownerId), 'root', mountId] as const,
+    folders: (ownerId: string) => [...driveKeys.owner(ownerId), 'folder'] as const,
+    folder: (ownerId: string, mountId: string, pathId: string) => [...driveKeys.folders(ownerId), mountId, pathId] as const,
+    mimeTypes: (ownerId: string) => [...driveKeys.owner(ownerId), 'mime'] as const,
+    mime: (ownerId: string, mimeType: string) => [...driveKeys.mimeTypes(ownerId), mimeType] as const,
+    paths: (ownerId: string) => [...driveKeys.owner(ownerId), 'path'] as const,
+    path: (ownerId: string, mountId: string, pathId: string) => [...driveKeys.paths(ownerId), mountId, pathId] as const,
+    permissions: (ownerId: string) => [...driveKeys.owner(ownerId), 'permissions'] as const,
+    read: (ownerId: string, mountId: string, pathId: string) => [...driveKeys.permissions(ownerId), 'read', mountId, pathId] as const,
+    write: (ownerId: string, mountId: string, pathId: string) => [...driveKeys.permissions(ownerId), 'write', mountId, pathId] as const,
+    shared: (ownerId: string, to: 'by-me' | 'with-me') => [...driveKeys.owner(ownerId), 'shared', to] as const,
+    textPreviews: (ownerId: string) => [...driveKeys.owner(ownerId), 'text-preview'] as const,
+    textPreview: (ownerId: string, mountId: string, pathId: string) => [...driveKeys.textPreviews(ownerId), mountId, pathId] as const,
 };
 
 // GET MOUNTS
 export function useMounts(ownerId: string) {
     return useQuery({
-        queryKey: driveKeys.mounts(),
+        queryKey: driveKeys.mounts(ownerId),
         queryFn: async () => {
             const response = await driveApi({ownerId}).mounts.get();
             return response.data || [];
@@ -54,7 +55,7 @@ export function useRootFolder(ownerId: string, mountId: string = DEFAULT_MOUNT_I
 // GET FOLDER CONTENTS
 export function useFolderContent(ownerId: string, mountId: string, pathId: string) {
     return useQuery({
-        queryKey: driveKeys.folder(mountId, pathId),
+        queryKey: driveKeys.folder(ownerId, mountId, pathId),
         queryFn: async () => {
             if (!pathId) return [];
             const response = await driveApi({ownerId})({mountId}).folder({pathId}).get();
@@ -72,7 +73,7 @@ export function useFolderContent(ownerId: string, mountId: string, pathId: strin
 // GET MIME CONTENTS (aggregates over all mounts)
 export function useMimeContent(ownerId: string, mimeType: string) {
     return useQuery({
-        queryKey: driveKeys.mime(mimeType),
+        queryKey: driveKeys.mime(ownerId, mimeType),
         queryFn: async () => {
             if (!mimeType) return [];
             const response = await driveApi({ownerId}).mime({mimeType}).get();
@@ -90,7 +91,7 @@ export function useMimeContent(ownerId: string, mimeType: string) {
 // GET PATH INFO
 export function usePathInfo(ownerId: string, mountId: string, pathId: string | undefined) {
     return useQuery({
-        queryKey: driveKeys.path(mountId, pathId || ''),
+        queryKey: driveKeys.path(ownerId, mountId, pathId || ''),
         queryFn: async () => {
             if (!pathId) return null;
             const response = await driveApi({ownerId})({mountId}).path({pathId}).get();
@@ -109,7 +110,7 @@ export function useCreateFolder(ownerId: string, mountId: string = DEFAULT_MOUNT
             const response = await driveApi({ownerId})({mountId}).folder({pathId: parentId}).post({folderName});
             return response.data;
         },
-        onSuccess: (_data, variables) => invalidateItemCreated(queryClient, mountId, variables.parentId),
+        onSuccess: (_data, variables) => invalidateItemCreated(queryClient, ownerId, mountId, variables.parentId),
     });
 }
 
@@ -121,7 +122,7 @@ export function useUploadFile(ownerId: string, mountId: string = DEFAULT_MOUNT_I
             const response = await driveApi({ownerId})({mountId}).file({pathId: parentId}).post({file});
             return response.data;
         },
-        onSuccess: (_data, variables) => invalidateItemCreated(queryClient, mountId, variables.parentId),
+        onSuccess: (_data, variables) => invalidateItemCreated(queryClient, ownerId, mountId, variables.parentId),
     });
 }
 
@@ -133,7 +134,7 @@ export function useUploadFiles(ownerId: string, mountId: string = DEFAULT_MOUNT_
             const response = await driveApi({ownerId})({mountId}).files({pathId: parentId}).post({files});
             return response.data;
         },
-        onSuccess: (_data, variables) => invalidateItemCreated(queryClient, mountId, variables.parentId),
+        onSuccess: (_data, variables) => invalidateItemCreated(queryClient, ownerId, mountId, variables.parentId),
     });
 }
 
@@ -145,7 +146,7 @@ export function useDeleteFolder(ownerId: string, mountId: string = DEFAULT_MOUNT
             const response = await driveApi({ownerId})({mountId}).folder({pathId}).delete();
             return response.data;
         },
-        onSuccess: (_data, pathId) => invalidateItemDeleted(queryClient, mountId, pathId, parentId, mimeType),
+        onSuccess: (_data, pathId) => invalidateItemDeleted(queryClient, ownerId, mountId, pathId, parentId, mimeType),
     });
 }
 
@@ -157,7 +158,7 @@ export function useDeleteFile(ownerId: string, mountId: string = DEFAULT_MOUNT_I
             const response = await driveApi({ownerId})({mountId}).file({pathId}).delete();
             return response.data;
         },
-        onSuccess: (_data, pathId) => invalidateItemDeleted(queryClient, mountId, pathId, parentId, mimeType),
+        onSuccess: (_data, pathId) => invalidateItemDeleted(queryClient, ownerId, mountId, pathId, parentId, mimeType),
     });
 }
 
@@ -168,7 +169,7 @@ export function useMovePath(ownerId: string, mountId: string = DEFAULT_MOUNT_ID,
             const response = await driveApi({ownerId})({mountId}).path({pathId}).move.put({targetParentId});
             return response.data;
         },
-        onSuccess: (_data, variables) => invalidatePathMoved(queryClient, mountId, variables.pathId, variables.targetParentId, currentParentId),
+        onSuccess: (_data, variables) => invalidatePathMoved(queryClient, ownerId, mountId, variables.pathId, variables.targetParentId, currentParentId),
     });
 }
 
@@ -179,7 +180,7 @@ export function useRenamePath(ownerId: string, mountId: string = DEFAULT_MOUNT_I
             const response = await driveApi({ownerId})({mountId}).path({pathId}).rename.put({newName});
             return response.data;
         },
-        onSuccess: (_data, variables) => invalidatePathRenamed(queryClient, mountId, variables.pathId, parentId, mimeType),
+        onSuccess: (_data, variables) => invalidatePathRenamed(queryClient, ownerId, mountId, variables.pathId, parentId, mimeType),
     });
 }
 
@@ -195,14 +196,14 @@ export function useUpdateACL(ownerId: string, mountId: string = DEFAULT_MOUNT_ID
             const response = await driveApi({ownerId})({mountId}).path({pathId: path.id}).acl.put({acl, visibility});
             return response.data;
         },
-        onSuccess: (_data, variables) => invalidateAclUpdated(queryClient, variables.path.mountId, variables.path.id, variables.path.parentId),
+        onSuccess: (_data, variables) => invalidateAclUpdated(queryClient, ownerId, variables.path.mountId, variables.path.id, variables.path.parentId),
     });
 }
 
 // CHECK READ PERMISSION
 export function useCheckReadPermission(ownerId: string, mountId: string, pathId: string | undefined) {
     return useQuery({
-        queryKey: driveKeys.read(mountId, pathId || ''),
+        queryKey: driveKeys.read(ownerId, mountId, pathId || ''),
         queryFn: async () => {
             if (!pathId) return {canRead: false};
             const response = await driveApi({ownerId})({mountId}).path({pathId}).permissions.read.get();
@@ -216,7 +217,7 @@ export function useCheckReadPermission(ownerId: string, mountId: string, pathId:
 // CHECK WRITE PERMISSION
 export function useCheckWritePermission(ownerId: string, mountId: string, pathId: string | undefined) {
     return useQuery({
-        queryKey: driveKeys.write(mountId, pathId || ''),
+        queryKey: driveKeys.write(ownerId, mountId, pathId || ''),
         queryFn: async () => {
             if (!pathId) return {canWrite: false};
             const response = await driveApi({ownerId})({mountId}).path({pathId}).permissions.write.get();
@@ -230,7 +231,7 @@ export function useCheckWritePermission(ownerId: string, mountId: string, pathId
 // GET BREADCRUMB PATH
 export function useBreadcrumb(ownerId: string, mountId: string, pathId: string | undefined) {
     return useQuery({
-        queryKey: [...driveKeys.path(mountId, pathId || ''), 'breadcrumb'],
+        queryKey: [...driveKeys.path(ownerId, mountId, pathId || ''), 'breadcrumb'],
         queryFn: async () => {
             if (!pathId) return [];
             const response = await driveApi({ownerId})({mountId}).path({pathId}).breadcrumb.get();
@@ -249,7 +250,7 @@ export function useCreateDoc(ownerId: string, mountId: string = DEFAULT_MOUNT_ID
             const response = await driveApi({ownerId})({mountId}).folder({pathId: parentId}).doc.post({fileName});
             return response.data;
         },
-        onSuccess: (_data, variables) => invalidateItemCreated(queryClient, mountId, variables.parentId, 'DRIVE_MIME_DOC'),
+        onSuccess: (_data, variables) => invalidateItemCreated(queryClient, ownerId, mountId, variables.parentId, 'DRIVE_MIME_DOC'),
     });
 }
 
@@ -261,7 +262,7 @@ export function useCreateStickies(ownerId: string, mountId: string = DEFAULT_MOU
             const response = await driveApi({ownerId})({mountId}).folder({pathId: parentId}).stickies.post({fileName});
             return response.data;
         },
-        onSuccess: (_data, variables) => invalidateItemCreated(queryClient, mountId, variables.parentId, 'DRIVE_MIME_STICKIES'),
+        onSuccess: (_data, variables) => invalidateItemCreated(queryClient, ownerId, mountId, variables.parentId, 'DRIVE_MIME_STICKIES'),
     });
 }
 
@@ -273,7 +274,7 @@ export function useCreateSlides(ownerId: string, mountId: string = DEFAULT_MOUNT
             const response = await driveApi({ownerId})({mountId}).folder({pathId: parentId}).slides.post({fileName});
             return response.data;
         },
-        onSuccess: (_data, variables) => invalidateItemCreated(queryClient, mountId, variables.parentId, 'DRIVE_MIME_SLIDES'),
+        onSuccess: (_data, variables) => invalidateItemCreated(queryClient, ownerId, mountId, variables.parentId, 'DRIVE_MIME_SLIDES'),
     });
 }
 
@@ -285,13 +286,13 @@ export function useCreateSheets(ownerId: string, mountId: string = DEFAULT_MOUNT
             const response = await driveApi({ownerId})({mountId}).folder({pathId: parentId}).sheets.post({fileName});
             return response.data;
         },
-        onSuccess: (_data, variables) => invalidateItemCreated(queryClient, mountId, variables.parentId, 'DRIVE_MIME_SHEETS'),
+        onSuccess: (_data, variables) => invalidateItemCreated(queryClient, ownerId, mountId, variables.parentId, 'DRIVE_MIME_SHEETS'),
     });
 }
 
 export function useSharedPaths(ownerId: string, to: 'by-me' | 'with-me') {
     return useQuery({
-        queryKey: driveKeys.shared(to),
+        queryKey: driveKeys.shared(ownerId, to),
         queryFn: async () => {
             if (to === 'by-me') {
                 const response = await driveApi({ownerId}).shared['by-me'].get();
@@ -308,7 +309,7 @@ export function useSharedPaths(ownerId: string, to: 'by-me' | 'with-me') {
 // TEXT PREVIEW
 export function useTextPreview(ownerId: string, mountId: string, pathId: string, enabled: boolean) {
     return useQuery({
-        queryKey: driveKeys.textPreview(mountId, pathId),
+        queryKey: driveKeys.textPreview(ownerId, mountId, pathId),
         queryFn: async () => {
             const response = await driveApi({ownerId})({mountId}).file({pathId})['text-preview'].get();
             if (response.error) throw new Error(String(response.error));
@@ -320,62 +321,62 @@ export function useTextPreview(ownerId: string, mountId: string, pathId: string,
 }
 
 // SSE invalidation functions
-export function invalidateAclSharedOrUnshared(queryClient: QueryClient): void {
-    queryClient.invalidateQueries({queryKey: driveKeys.shared('with-me')});
+export function invalidateAclSharedOrUnshared(queryClient: QueryClient, ownerId: string): void {
+    queryClient.invalidateQueries({queryKey: driveKeys.shared(ownerId, 'with-me')});
 }
 
-export function invalidateItemCreated(queryClient: QueryClient, mountId: string, parentId: string | null | undefined, mimeType?: string | null): void {
+export function invalidateItemCreated(queryClient: QueryClient, ownerId: string, mountId: string, parentId: string | null | undefined, mimeType?: string | null): void {
     if (parentId) {
-        queryClient.invalidateQueries({queryKey: driveKeys.folder(mountId, parentId)});
+        queryClient.invalidateQueries({queryKey: driveKeys.folder(ownerId, mountId, parentId)});
     }
     if (mimeType) {
         const normalizedMimeType = mimeType.replace('/', '-');
-        queryClient.invalidateQueries({queryKey: driveKeys.mime(normalizedMimeType)});
+        queryClient.invalidateQueries({queryKey: driveKeys.mime(ownerId, normalizedMimeType)});
     }
     invalidateHomeSize(queryClient);
 }
 
-export function invalidateItemDeleted(queryClient: QueryClient, mountId: string, pathId: string, parentId: string | null | undefined, mimeType: string | null | undefined): void {
+export function invalidateItemDeleted(queryClient: QueryClient, ownerId: string, mountId: string, pathId: string, parentId: string | null | undefined, mimeType: string | null | undefined): void {
     if (parentId) {
-        queryClient.invalidateQueries({queryKey: driveKeys.folder(mountId, parentId)});
+        queryClient.invalidateQueries({queryKey: driveKeys.folder(ownerId, mountId, parentId)});
     }
-    queryClient.removeQueries({queryKey: driveKeys.path(mountId, pathId)});
+    queryClient.removeQueries({queryKey: driveKeys.path(ownerId, mountId, pathId)});
     if (mimeType) {
         const normalizedMimeType = mimeType.replace('/', '-');
-        queryClient.invalidateQueries({queryKey: driveKeys.mime(normalizedMimeType)});
+        queryClient.invalidateQueries({queryKey: driveKeys.mime(ownerId, normalizedMimeType)});
     }
     invalidateHomeSize(queryClient);
 }
 
-export function invalidatePathRenamed(queryClient: QueryClient, mountId: string, pathId: string, parentId: string | null | undefined, mimeType: string | null | undefined): void {
-    queryClient.invalidateQueries({queryKey: driveKeys.path(mountId, pathId)});
+export function invalidatePathRenamed(queryClient: QueryClient, ownerId: string, mountId: string, pathId: string, parentId: string | null | undefined, mimeType: string | null | undefined): void {
+    queryClient.invalidateQueries({queryKey: driveKeys.path(ownerId, mountId, pathId)});
     if (parentId) {
-        queryClient.invalidateQueries({queryKey: driveKeys.folder(mountId, parentId)});
+        queryClient.invalidateQueries({queryKey: driveKeys.folder(ownerId, mountId, parentId)});
     }
     if (mimeType) {
         const normalizedMimeType = mimeType.replace('/', '-');
-        queryClient.invalidateQueries({queryKey: driveKeys.mime(normalizedMimeType)});
+        queryClient.invalidateQueries({queryKey: driveKeys.mime(ownerId, normalizedMimeType)});
     }
 }
 
-export function invalidatePathMoved(queryClient: QueryClient, mountId: string, pathId: string, parentId: string | null | undefined, oldParentId: string | null | undefined): void {
-    queryClient.invalidateQueries({queryKey: driveKeys.path(mountId, pathId)});
+export function invalidatePathMoved(queryClient: QueryClient, ownerId: string, mountId: string, pathId: string, parentId: string | null | undefined, oldParentId: string | null | undefined): void {
+    queryClient.invalidateQueries({queryKey: driveKeys.path(ownerId, mountId, pathId)});
     if (parentId) {
-        queryClient.invalidateQueries({queryKey: driveKeys.folder(mountId, parentId)});
+        queryClient.invalidateQueries({queryKey: driveKeys.folder(ownerId, mountId, parentId)});
     }
     if (oldParentId) {
-        queryClient.invalidateQueries({queryKey: driveKeys.folder(mountId, oldParentId)});
+        queryClient.invalidateQueries({queryKey: driveKeys.folder(ownerId, mountId, oldParentId)});
     }
 }
 
-export function invalidateAclUpdated(queryClient: QueryClient, mountId: string, pathId: string, parentId: string | null | undefined): void {
-    queryClient.invalidateQueries({queryKey: driveKeys.shared('by-me')});
-    queryClient.invalidateQueries({queryKey: driveKeys.shared('with-me')});
-    queryClient.invalidateQueries({queryKey: driveKeys.path(mountId, pathId)});
-    queryClient.invalidateQueries({queryKey: driveKeys.read(mountId, pathId)});
-    queryClient.invalidateQueries({queryKey: driveKeys.write(mountId, pathId)});
+export function invalidateAclUpdated(queryClient: QueryClient, ownerId: string, mountId: string, pathId: string, parentId: string | null | undefined): void {
+    queryClient.invalidateQueries({queryKey: driveKeys.shared(ownerId, 'by-me')});
+    queryClient.invalidateQueries({queryKey: driveKeys.shared(ownerId, 'with-me')});
+    queryClient.invalidateQueries({queryKey: driveKeys.path(ownerId, mountId, pathId)});
+    queryClient.invalidateQueries({queryKey: driveKeys.read(ownerId, mountId, pathId)});
+    queryClient.invalidateQueries({queryKey: driveKeys.write(ownerId, mountId, pathId)});
     if (parentId) {
-        queryClient.invalidateQueries({queryKey: driveKeys.folder(mountId, parentId)});
+        queryClient.invalidateQueries({queryKey: driveKeys.folder(ownerId, mountId, parentId)});
     }
 }
 
