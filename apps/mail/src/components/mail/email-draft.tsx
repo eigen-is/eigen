@@ -136,7 +136,7 @@ export function EmailDraft({
         }
 
         return {
-            ...email,
+            ...draft,
             to: toFieldRef.current?.value ? {
                 value: convertStringToEmailAddressArray(toFieldRef.current?.value || ''),
                 text: toFieldRef.current?.value || '',
