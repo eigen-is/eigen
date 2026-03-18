@@ -1,72 +1,42 @@
-# Frontend Code Review: Drive App
+# Frontend Review: Drive App
 
-## Summary
-
-The Drive app is a file management frontend with inline editing, MIME-filtered views, shared-file views, and team drive
-support. The codebase is well-structured overall, with most data hooks properly centralized in `packages/lib` and shared
-UI components in `packages/ui`. The app follows the project's architectural patterns for routing, layout, and SSE
-invalidation. However, there are several issues ranging from a rules-of-hooks violation to type safety gaps, dark mode
-breakage, and missing edge-case handling.
-
-**Files reviewed:**
-
-- `apps/drive/src/` -- all 17 source files (routes, components, main, routeTree.gen)
-- `apps/drive/css/globals.css`
-- `packages/lib/src/core/drive/` -- hooks, SSE handlers, media resolver, index
-- `packages/lib/src/core/editor/` -- hooks, index
-- `packages/ui/src/components/layout/drive/` -- DriveLayout, DriveList, DriveTable, DriveDetail, DriveUploadFiles,
-  useDriveDialogs
+**Scope:** `apps/drive/` (all source files), `apps/drive/css/globals.css`, plus shared components in
+`packages/ui/src/components/layout/drive/`, `packages/lib/src/core/drive/`, `packages/lib/src/core/editor/`
+**Reviewed:** 2026-03-18
 
 ---
 
-## Architecture Compliance
+## Critical Issues
 
-**Hooks in packages/lib (PASS):** The app correctly delegates all `useQuery`/`useMutation` calls to hooks in
-`packages/lib/src/core/drive/hooks/` and `packages/lib/src/core/editor/hooks/`. No direct `useQuery` or `useMutation`
-calls exist in `apps/drive/src/`. The single `useQueryClient` import in `native-file-editor.tsx` (line 6) is used only
-for cache invalidation, which is acceptable.
-
-**Routing (PASS):** File-based TanStack Router with `_auth.tsx` guard using `beforeLoad` redirect. The root `index.tsx`
-redirects to `/fs/$ownerId/$mountId/$pathId` with sensible defaults.
-
-**Layout system (PASS):** Uses `AppShell` at the root, `DriveLayout` (which wraps `ColumnLayout` + `Column`) for all
-main views, and the inline editor uses `ColumnLayout` directly with proper column IDs.
-
-**SSE integration (PASS):** `sse-handlers.ts` correctly handles all drive event types and calls the shared invalidation
-functions exported from `use-drive.ts`.
-
-**Query keys (PASS):** Well-structured hierarchical key scheme in `driveKeys`. Invalidation functions are exported for
-reuse. Editor keys follow the same pattern.
-
----
-
-## Issues Found
-
-### Critical
-
-#### 1. Rules of Hooks Violation: Conditional Hook Call in DriveListToolbar
-
-**File:** `packages/ui/src/components/layout/drive/drive-list.tsx`, line 58
+### C1. Rules of Hooks Violation: Conditional Hook Call in DriveListToolbar
+**File:** `packages/ui/src/components/layout/drive/drive-list.tsx:58`
+**Status:** Confirmed from previous review (issue #1)
 
 ```typescript
 const {data: breadcrumbPaths = []} = showBreadcrumb ? useBreadcrumb(ownerId, mountId, pathId) : {data: []};
 ```
 
-This is a conditional hook call, which violates React's Rules of Hooks. Hooks must be called unconditionally at the
-top level of a component. If `showBreadcrumb` changes between renders, React's hook ordering will break, causing
-undefined behavior or crashes.
+`useBreadcrumb` is called conditionally. React requires hooks to be called unconditionally and in the same order on
+every render. If `showBreadcrumb` ever flips between renders (it does not today -- the fs route passes `true`, the
+mime/shared routes pass `false` -- but nothing enforces this statically), React's hook reconciliation will corrupt
+state, causing crashes or silent data corruption.
 
-**Fix:** Always call the hook but pass an empty/disabled condition:
+**Impact:** Latent correctness bug. Any future code change that toggles `showBreadcrumb` at runtime will break the
+component. React's linter and future Strict Mode will flag this.
+
+**Fix:** Always call the hook; use the `enabled` mechanism already built into `useBreadcrumb`:
 ```typescript
 const {data: breadcrumbPaths = []} = useBreadcrumb(ownerId, mountId, showBreadcrumb ? pathId : undefined);
 ```
-Since `useBreadcrumb` already has `enabled: !!pathId`, passing `undefined` will simply skip the query.
+Since `useBreadcrumb` has `enabled: !!pathId`, passing `undefined` disables the query without skipping the hook call.
 
-#### 2. Search Params Type Mismatch: `uid` Not Validated in Shared Route
+---
 
-**File:** `apps/drive/src/routes/_auth.shared.$to.tsx`, lines 13-16, 22
+### C2. Search Params `uid` Not Validated in Shared Route -- Detail Panel Broken for "Shared With Me"
+**File:** `apps/drive/src/routes/_auth.shared.$to.tsx:13-16, 22, 26`
+**Status:** Confirmed from previous review (issue #2)
 
-The `validateSearch` function only extracts `pid` from the search params:
+The `validateSearch` function only extracts `pid`:
 ```typescript
 validateSearch: (search: Record<string, unknown>) => {
     const pid = typeof search.pid === 'string' ? search.pid : undefined;
@@ -79,238 +49,471 @@ But line 22 destructures `uid` from the search result:
 const {uid, pid} = Route.useSearch();
 ```
 
-The `DriveSearchParams` type in `packages/lib/src/types/drive.ts` does declare `uid?: string`, but the validator never
-extracts or validates it. This means `uid` will always be `undefined` at runtime, which breaks the "shared with me"
-detail panel -- clicking a shared file will fail to load its path info because `usePathInfo` is called with `uid || ''`
-(line 26), and the file's actual `ownerId` (set via `uid: path.ownerId` on line 47) is discarded by the validator.
+And line 26 uses it to fetch the selected file's path info:
+```typescript
+const {data: selectedPath = null} = usePathInfo(uid || '', mountId, pid || '');
+```
+
+Since `uid` is never extracted by the validator, it is always `undefined`. When a user clicks a shared file (which sets
+`uid: path.ownerId` in the navigation on line 47), the validator strips it, so `usePathInfo` is called with an empty
+ownerId and returns nothing. The detail panel never loads for shared items.
+
+**Impact:** The "shared with me" detail panel is non-functional. Users cannot see file metadata, thumbnails, or access
+lists for files shared with them.
 
 **Fix:** Add `uid` extraction to the validator:
 ```typescript
-validateSearch: (search: Record<string, unknown>) => {
-    const pid = typeof search.pid === 'string' ? search.pid : undefined;
-    const uid = typeof search.uid === 'string' ? search.uid : undefined;
-    return {pid, uid} as DriveSearchParams;
-},
+const pid = typeof search.pid === 'string' ? search.pid : undefined;
+const uid = typeof search.uid === 'string' ? search.uid : undefined;
+return {pid, uid} as DriveSearchParams;
 ```
 
 ---
 
-### Important
+### C3. `markDirty` Used Before Declaration in MarkdownEditor
+**File:** `apps/drive/src/components/editor/markdown-editor.tsx:75-81, 93`
+**Status:** New finding
 
-#### 3. CodeEditorView Ignores Content/Language/onChange Changes
+```typescript
+const editor = useEditor({
+    extensions: useMarkdownExtensions(content),
+    content,
+    onUpdate: () => {
+        markDirty();       // <-- line 79: references markDirty
+    },
+});
+// ... lines 83-92 ...
+const {saveState, showConflict, setShowConflict, markDirty, doSave, confirmClose} =
+    useEditorSave({...});  // <-- line 93-94: markDirty declared here
+```
 
-**File:** `apps/drive/src/components/editor/code-editor.tsx`, lines 135-147
+The `onUpdate` callback on line 79 captures `markDirty` from line 93 via closure. This works at runtime because
+`onUpdate` is not called during `useEditor` initialization -- it fires later when the user types -- and by that time
+`markDirty` has been assigned. However, this is a fragile forward-reference pattern:
 
-The `useEffect` that creates the CodeMirror editor instance only depends on `[isDark]`:
+1. It silently violates the temporal dead zone contract of `const` -- if `onUpdate` were ever invoked synchronously
+   during editor setup (which some Tiptap extensions can do), it would throw a `ReferenceError`.
+2. It makes the code ordering dependency invisible: moving the `useEditorSave` call or the `useEditor` call will
+   silently break the component with no TypeScript or lint warning.
+3. ESLint's `no-use-before-define` rule (if enabled) would flag this.
+
+**Impact:** Correctness risk. Works today but is one Tiptap update or refactor away from a runtime crash.
+
+**Fix:** Use a ref to hold the markDirty function, assigned after useEditorSave returns:
+```typescript
+const markDirtyRef = useRef<() => void>(() => {});
+
+const editor = useEditor({
+    extensions: useMarkdownExtensions(content),
+    content,
+    onUpdate: () => { markDirtyRef.current(); },
+});
+
+const {markDirty, ...rest} = useEditorSave({...});
+markDirtyRef.current = markDirty;
+```
+
+---
+
+## Important Issues
+
+### I1. CodeEditorView useEffect Missing Dependencies
+**File:** `apps/drive/src/components/editor/code-editor.tsx:135-147`
+**Status:** Confirmed from previous review (issue #3), with additional analysis
+
 ```typescript
 useEffect(() => {
-    // ...creates EditorView with content, language, onChange...
+    if (!containerRef.current) return;
+    const extensions = [...cmBaseExtensions(language, isDark)];
+    if (onChange) {
+        extensions.push(EditorView.updateListener.of(update => {
+            if (update.docChanged) onChange(update.state.doc.toString());
+        }));
+    }
+    const state = EditorState.create({doc: content, extensions});
+    const view = new EditorView({state, parent: containerRef.current});
+    viewRef.current = view;
     return () => view.destroy();
 }, [isDark]);
 ```
 
-This means if `content`, `language`, or `onChange` change, the editor will not rebuild. While `content` is unlikely to
-change during editing (it's the initial value), the `onChange` callback created via `useCallback` in the parent *could*
-have a new identity. More importantly, `language` and `content` are both used inside the effect but missing from the
-dependency array. If the component is ever remounted with different props but the same `isDark` value, the editor will
-show stale content.
+The effect depends on `content`, `language`, and `onChange`, but only lists `[isDark]`. The parent compensates by using
+`key={reloadKey}` to force full unmount/remount on content changes. But the `onChange` callback from the `CodeEditor`
+parent is created with `useCallback(... , [markDirty])`, meaning its identity changes if `markDirty` changes.
 
-The current code works because `key={reloadKey}` on the parent forces full remounting when reloads happen. This is
-fragile -- the correctness depends on the parent always using the key prop correctly.
+Additionally, when `CodeEditorView` is used inside `MarkdownEditor`'s source mode (line 133-139), it receives a fresh
+`onChange` arrow function on every render (`onChange={(val) => { ... }}`), but this is safe only because the effect
+ignores onChange changes -- the stale `onChange` closure still calls the original `setSourceContent` and `markDirty`.
 
-#### 4. Non-Null Assertion on `auth.user` in Guarded Routes
+**Impact:** The stale `onChange` closure means that if a parent re-renders with a different `onChange` but the same
+`isDark`, the new callback is silently ignored. In the `CodeEditor` usage this is currently safe because the parent
+uses `key` for remounting. In the `MarkdownEditor` source-mode usage, the stale closure still works because
+`setSourceContent` and `markDirty` are stable references. But it is fragile.
 
-**File:** `apps/drive/src/routes/_auth.mime.$mimeType.tsx`, line 23
-**File:** `apps/drive/src/routes/_auth.shared.$to.tsx`, line 24
+**Fix:** Either add the missing dependencies and properly rebuild on change, or document the intentional omission with
+a comment explaining the `key`-based remounting contract.
+
+---
+
+### I2. DriveUploadFiles Has Render-Phase Side Effect
+**File:** `packages/ui/src/components/layout/drive/drive-upload-files.tsx:47-55`
+**Status:** New finding
+
+```typescript
+// Trigger file input click when open changes to true
+if (open && fileInputRef.current && initialFiles.length === 0) {
+    setTimeout(() => {
+        fileInputRef.current?.click();
+        onOpenChange(false);
+    }, 0);
+}
+```
+
+This code runs directly in the render body (not in a useEffect). Every re-render where `open` is true and
+`initialFiles` is empty will schedule another `setTimeout` that clicks the file input and closes the dialog. In React
+18+, renders can be interrupted and retried (concurrent features), meaning this side effect can fire multiple times.
+
+The `useEffect` on lines 35-45 also has missing exhaustive dependencies: it references `processFiles`,
+`onAfterUpload`, and `onOpenChange` but only depends on `[open, initialFiles]`.
+
+**Impact:** Multiple file-picker dialogs could open in quick succession under concurrent rendering, or the file picker
+could fail to open if the render is interrupted.
+
+**Fix:** Move the file input click logic into a `useEffect`:
+```typescript
+useEffect(() => {
+    if (open && initialFiles.length === 0) {
+        fileInputRef.current?.click();
+        onOpenChange(false);
+    }
+}, [open, initialFiles.length, onOpenChange]);
+```
+
+---
+
+### I3. Non-Null Assertion on `auth.user` in Guarded Routes
+**File:** `apps/drive/src/routes/_auth.mime.$mimeType.tsx:23`
+**File:** `apps/drive/src/routes/_auth.shared.$to.tsx:24`
+**Status:** Confirmed from previous review (issue #4)
 
 ```typescript
 const ownerId = auth.user!.id;
 ```
 
-Both routes use the non-null assertion operator on `auth.user`. While the `_auth.tsx` route guard ensures the user is
-authenticated, the guard uses `context.auth.isAuthenticated` which is evaluated during `beforeLoad`. If there is ever a
-race condition where the auth state changes between route load and component render (e.g., session expiry), the `!`
-assertion could cause a runtime crash. A safer pattern would be:
+Both routes use `!` to assert `auth.user` is non-null. The `_auth.tsx` guard redirects unauthenticated users during
+`beforeLoad`, but this runs at navigation time, not render time. If the auth state changes between navigation and
+render (e.g., session expiration, token invalidation), `auth.user` could be null, causing a runtime crash.
 
-```typescript
-const ownerId = auth.user?.id ?? '';
-```
+The root route (`__root.tsx:22`) correctly handles this with `user?.id || ''`.
 
-This is how `__root.tsx` handles it (line 22: `user?.id || ''`).
+**Impact:** Potential runtime crash on session expiry while viewing mime or shared routes.
 
-#### 5. Sidebar "Upload file" Menu Item Does Not Trigger File Picker
+**Fix:** Use optional chaining: `const ownerId = auth.user?.id ?? '';`
 
-**File:** `apps/drive/src/components/drive/drive-sidebar.tsx`, lines 198-208
+---
 
-The "Upload file" dropdown menu item has a hidden `<input type="file">` inside it, but clicking the menu item calls
-`setUploadOpen(true)` rather than triggering the file input. The hidden input has an `onChange` handler but no
-mechanism to be clicked. Since the `DriveUploadFiles` component (which `setUploadOpen` opens) shows its own native
-file picker, the hidden input inside the dropdown is dead code that will never fire.
-
-```typescript
-<DropdownMenuItem onClick={() => setUploadOpen(true)}>
-    <UploadIcon className="h-4 w-4 mr-2"/>
-    Upload file
-    <input
-        type="file"
-        className="hidden"
-        onChange={handleFileChange}   // <-- never triggered
-    />
-</DropdownMenuItem>
-```
-
-**Fix:** Remove the dead `<input>` element from the dropdown item.
-
-#### 6. Dark Mode Not Supported in Tiptap Editor Styles
-
+### I4. Dark Mode Not Supported in Tiptap Editor Styles
 **File:** `apps/drive/css/globals.css`
+**Status:** Confirmed from previous review (issue #6), verified against eigen-prose.css
 
-All Tiptap styles use hardcoded light-mode colors (e.g., `#f3f4f6` for inline code background, `#dc2626` for inline
-code color, `#d1d5db` for blockquote borders, `#6b7280` for blockquote text, `#f9fafb` for table headers, `#e5e7eb`
-for horizontal rules). There are zero `.dark` selectors or CSS variable usages for these styles, meaning the markdown
-editor is broken/unreadable in dark mode.
+All `.tiptap` styles use hardcoded light-mode colors:
+- Inline code: `background-color: #f3f4f6`, `color: #dc2626` (line 155-161)
+- Blockquote: `border-left: 3px solid #d1d5db`, `color: #6b7280` (lines 138-144)
+- Table headers: `background-color: #f9fafb` (line 217)
+- Table borders: `border: 1px solid #d1d5db` (line 209)
+- Horizontal rule: `border-top: 2px solid #e5e7eb` (line 150)
+- Selection highlight: `background-color: #bfdbfe` (line 240)
+- Checked task items: `color: #9ca3af` (line 131)
 
-The project already has a shared `eigen-prose.css` in `packages/ui/src/styles/` that handles dark mode correctly
-(per PREVIEWS.md and the CLAUDE.md feedback about shared stylesheets). The Tiptap styles should either use CSS
-variables or duplicate with `.dark` variants.
+There are zero `.dark .tiptap` rules. The shared `eigen-prose.css` at
+`packages/ui/src/styles/eigen-prose.css` has full dark mode support (lines 213-242) for the identical set of elements,
+demonstrating the expected pattern.
 
-#### 7. Video Preview in DriveDetail Only Handles Two MIME Types
+**Impact:** The markdown WYSIWYG editor (Tiptap) is unreadable in dark mode. Light gray text on light backgrounds,
+invisible borders, wrong selection colors.
 
-**File:** `packages/ui/src/components/layout/drive/drive-detail.tsx`, line 164
+**Fix:** Add `.dark .tiptap` variants mirroring the `eigen-prose.css` dark mode rules, or refactor to share CSS
+variables between the two.
+
+---
+
+### I5. `useMarkdownExtensions` Creates New Extension Instances Every Render
+**File:** `apps/drive/src/components/editor/markdown-editor.tsx:40-53`
+**Status:** New finding
+
+```typescript
+function useMarkdownExtensions(content: string) {
+    const bulletMarker = detectBulletMarker(content);
+    return [
+        StarterKit.configure({codeBlock: false}),
+        Markdown.configure({...}),
+        Typography, TaskList, TaskItem.configure({nested: true}),
+        // ... more extensions
+    ];
+}
+```
+
+Despite the `use` prefix, this is not a React hook -- it calls no hooks. It is called on line 76 inside `useEditor`:
+```typescript
+extensions: useMarkdownExtensions(content),
+```
+
+Every render creates new extension instances via `.configure()`. Tiptap's `useEditor` is designed to handle this
+(it compares extensions by type), but it is wasteful -- `detectBulletMarker` re-scans the content, and all
+`.configure()` calls allocate new objects. The `content` prop never changes (it comes from the initial load and the
+parent uses `key` for remounting), so the bullet marker detection runs repeatedly for the same result.
+
+**Impact:** Performance waste on every keystroke (Tiptap's `onUpdate` causes re-render, which re-runs this function).
+No functional bug.
+
+**Fix:** Memoize with `useMemo`:
+```typescript
+const extensions = useMemo(() => {
+    const bulletMarker = detectBulletMarker(content);
+    return [StarterKit.configure({codeBlock: false}), ...];
+}, [content]);
+```
+
+---
+
+### I6. Video Preview in DriveDetail Only Handles Two MIME Types
+**File:** `packages/ui/src/components/layout/drive/drive-detail.tsx:164`
+**Status:** Confirmed from previous review (issue #7)
 
 ```typescript
 {(path.mimeType === "video/mp4" || path.mimeType === "video/mpeg") && (
 ```
 
-This only renders the inline video player for MP4 and MPEG. Common video types like `video/webm`, `video/quicktime`
-(MOV), and `video/ogg` are excluded. Similarly, the audio check on line 175 uses loose equality (`==`) instead of
-strict (`===`), which is a minor inconsistency but not a bug since both operands are strings.
+Only `video/mp4` and `video/mpeg` get the inline `<video>` player. Modern browsers support `video/webm`,
+`video/quicktime` (MOV on Safari), and `video/ogg`. These are excluded. The audio check on line 175 covers 5 types but
+uses `==` instead of `===` (loose equality -- not a bug for string comparisons, but inconsistent).
 
-#### 8. `DriveSearchParams` Loose Type Assertion
+**Impact:** Users uploading WebM or MOV files will not see the inline video player in the detail panel.
 
-**File:** `apps/drive/src/routes/_auth.fs.$ownerId.$mountId.$pathId.tsx`, line 15
-**File:** `apps/drive/src/routes/_auth.mime.$mimeType.tsx`, line 13
-**File:** `apps/drive/src/routes/_auth.shared.$to.tsx`, line 15
-
-All three routes use `as DriveSearchParams` to cast the returned object from `validateSearch`. Since
-`DriveSearchParams` has optional fields (`pid?`, `uid?`), the cast is not dangerous today, but it suppresses
-TypeScript's structural checking. Using `satisfies DriveSearchParams` would be safer and would catch if the return
-shape diverges from the type.
+**Fix:** Use `path.mimeType.startsWith("video/")` for the video check, matching what the preview overlay already does.
 
 ---
 
-### Minor
+### I7. Hardcoded `text-gray-500` Instead of Theme Token in Access Lists
+**File:** `packages/ui/src/components/layout/drive/drive-access-list.tsx:60, 70`
+**File:** `packages/ui/src/components/layout/drive/drive-access-list-edit.tsx:271`
+**Status:** New finding
 
-#### 9. `interface` Used Instead of `type` in Two Places
+Three instances of `text-gray-500` instead of `text-muted-foreground`:
+```typescript
+// drive-access-list.tsx:60
+<p className="text-xs text-gray-500">Only people with access can open with the link</p>
+// drive-access-list.tsx:70
+<p className="text-xs text-gray-500">
+// drive-access-list-edit.tsx:271
+<p className="text-xs text-gray-500">
+```
 
-**File:** `apps/drive/src/routes/__root.tsx`, line 15: `interface MyRouterContext`
-**File:** `apps/drive/src/components/drive/drive-sidebar.tsx`, line 43: `interface DriveSidebarProps`
+The rest of the codebase consistently uses `text-muted-foreground` for secondary text. The `text-gray-500` class
+bypasses the Tailwind theme system and won't adapt to dark mode or custom themes.
 
-Per CONTRIBUTING.md: "Always `type` over `interface` (except when methods needed)". These are simple property-only
-shapes and should use `type`.
+**Impact:** These text elements will have wrong contrast in dark mode.
 
-#### 10. Commented-Out Code in Multiple Files
+**Fix:** Replace `text-gray-500` with `text-muted-foreground`.
 
-**File:** `apps/drive/src/components/editor/editor-toolbar.tsx`, line 29: Commented-out `TooltipButton` for back
-navigation.
+---
 
-**File:** `packages/ui/src/components/layout/drive/drive-list.tsx`, lines 357-360: Commented-out "new item button"
-in empty state.
+### I8. Unsafe Cast of `$to` Param to Union Type
+**File:** `apps/drive/src/routes/_auth.shared.$to.tsx:34`
+**Status:** New finding
 
-These should either be restored or removed.
+```typescript
+} = useSharedPaths(ownerId, to as 'by-me' | 'with-me');
+```
 
-#### 11. No-Op `onSave` Callbacks in Sidebar Dialogs
+The `$to` URL parameter is a free-form string from the URL. It is cast to `'by-me' | 'with-me'` without validation.
+If a user navigates to `/shared/invalid`, `useSharedPaths` will be called with `"invalid"` as the `to` parameter,
+which passes it to the API and may return an error or unexpected results.
 
-**File:** `apps/drive/src/components/drive/drive-sidebar.tsx`, lines 306-369
+**Impact:** No crash, but unexpected API behavior on malformed URLs.
 
-All create dialogs in the sidebar receive `onSave={() => {}}` (empty arrow function). These allocate a new function
-on every render. Since the sidebar also passes `onAfterAction={handleAfterAction}`, the `onSave` prop is effectively
-unused. Consider either passing `undefined` or removing the prop if the dialog components support it.
+**Fix:** Validate in `beforeLoad` or `validateSearch`, redirecting to a default if the value is not `by-me` or
+`with-me`.
 
-#### 12. Error Message Style Inconsistency
+---
 
-**File:** `apps/drive/src/routes/_auth.fs.$ownerId.$mountId.$pathId.tsx`, line 126: Uses `text-muted-foreground`
-with a whimsical message ("Encountering the null vector...").
+## Minor Issues
 
-**File:** `apps/drive/src/routes/__root.tsx`, line 47: Uses `text-red-500` with a standard message ("Error loading
-drive content").
+### M1. `interface` Used Instead of `type`
+**File:** `apps/drive/src/routes/__root.tsx:15` -- `interface MyRouterContext`
+**File:** `apps/drive/src/components/drive/drive-sidebar.tsx:43` -- `interface DriveSidebarProps`
+**File:** `packages/ui/src/components/layout/drive/drive-list.tsx:168` -- `interface DriveListProps`
+**Status:** Confirmed from previous review (issue #9), with additional instance found
 
-Error states should use a consistent visual style. The `__root.tsx` approach (red color + technical message) is more
-standard; the whimsical messages in the sub-routes are charming but may confuse users who encounter real errors.
+Per CONTRIBUTING.md: "Always `type` over `interface` (except when methods needed)". These are property-only shapes.
 
-#### 13. `DriveLayout` Prop `error` Typed as `any`
+---
 
-**File:** `packages/ui/src/components/layout/drive/drive-layout.tsx`, line 29
+### M2. Commented-Out Code
+**File:** `apps/drive/src/components/editor/editor-toolbar.tsx:29` -- Commented-out back navigation button
+**File:** `packages/ui/src/components/layout/drive/drive-list.tsx:357-360` -- Commented-out new item button in empty
+state
+**Status:** Confirmed from previous review (issue #10)
+
+Dead code adds noise. Should be removed or restored with a TODO comment.
+
+---
+
+### M3. No-Op `onSave` Callbacks in Sidebar Dialogs
+**File:** `apps/drive/src/components/drive/drive-sidebar.tsx:306-369`
+**Status:** Confirmed from previous review (issue #11)
+
+Six dialog components receive `onSave={() => {}}`. Each allocates a fresh function on every render. The sidebar uses
+`onAfterAction` for its post-action behavior, making `onSave` dead. Either pass `undefined` or, better, make `onSave`
+optional in the dialog component props.
+
+---
+
+### M4. `DriveSearchParams` Type Assertion in All Three Route Validators
+**File:** `apps/drive/src/routes/_auth.fs.$ownerId.$mountId.$pathId.tsx:16`
+**File:** `apps/drive/src/routes/_auth.mime.$mimeType.tsx:14`
+**File:** `apps/drive/src/routes/_auth.shared.$to.tsx:15`
+**Status:** Confirmed from previous review (issue #8)
+
+All use `as DriveSearchParams` to cast the validator return. Using `satisfies DriveSearchParams` would preserve
+TypeScript's structural checking and catch mismatches between the returned object and the type.
+
+---
+
+### M5. Edit Route Renders `null` While Loading Path Info
+**File:** `apps/drive/src/routes/_auth.edit.$ownerId.$mountId.$pathId.tsx:14`
+**Status:** Confirmed from previous review (UX section)
+
+```typescript
+if (!path) return null;
+```
+
+This causes a flash of empty content while `usePathInfo` loads. Every other loading state in the app shows
+`<EigenLoader/>`.
+
+**Fix:** Return a loading spinner instead of null.
+
+---
+
+### M6. `DriveContext` Defined in Root Route File
+**File:** `apps/drive/src/routes/__root.tsx:10-13`
+**Status:** Confirmed from previous review (issue #15)
+
+`DriveContext` is created and exported from the root route file. Other files import it via `'./__root'`. Contexts are
+conventionally in their own file. This creates an implicit dependency on the route file's path.
+
+---
+
+### M7. Error Message Style and Tone Inconsistency
+**File:** `apps/drive/src/routes/_auth.fs.$ownerId.$mountId.$pathId.tsx:126`
+**File:** `apps/drive/src/routes/_auth.mime.$mimeType.tsx:74`
+**File:** `apps/drive/src/routes/_auth.shared.$to.tsx:79`
+**File:** `apps/drive/src/routes/__root.tsx:47`
+**Status:** Confirmed from previous review (issue #12)
+
+The sub-routes use `text-muted-foreground` with "Encountering the null vector: a rendezvous with nothing at all."
+The root uses `text-red-500` with "Error loading drive content". These should use a consistent visual style and tone.
+
+---
+
+### M8. `DriveLayout` Props `error` and `data` Typed as `any`
+**File:** `packages/ui/src/components/layout/drive/drive-layout.tsx:29, 35`
+**Status:** Confirmed from previous review (issue #13)
 
 ```typescript
 error: any;
-```
-
-This should be `Error | null` for type safety. The same applies to `onAfterAction` on line 35:
-```typescript
 onAfterAction?: (actionType: string, data: any) => void;
 ```
 
-#### 14. Missing `Toolbar` Import in `drive-list.tsx`
-
-**File:** `packages/ui/src/components/layout/drive/drive-list.tsx`
-
-The `DriveListToolbar` component renders a raw `<div>` instead of using the shared `<Toolbar>` component that all other
-toolbars use (e.g., `editor-toolbar.tsx` uses `<Toolbar>`). This leads to slightly inconsistent toolbar styling.
-
-#### 15. `DriveContext` Created in Root Route Instead of a Dedicated File
-
-**File:** `apps/drive/src/routes/__root.tsx`, lines 10-13
-
-The `DriveContext` is created and exported from the root route file. Other route files import it from `./__root`.
-This works but is unconventional -- contexts are typically in their own file or in a shared location. If the route
-file is refactored, all imports would break.
+These should be `Error | null` and a typed union respectively.
 
 ---
 
-## UX/UI Quality
+### M9. DriveListToolbar Renders Raw `<div>` Instead of `<Toolbar>`
+**File:** `packages/ui/src/components/layout/drive/drive-list.tsx:137`
+**Status:** Confirmed from previous review (issue #14)
 
-**Good:**
-- Mobile responsiveness is handled well via `ColumnLayout` + `mobileColumn` switching in all routes.
-- The `onBack` handler is provided for mobile navigation in both the main file browser and inline editor.
-- Drag-and-drop file upload has a polished overlay with animation.
-- Internal drag-and-drop for moving files between folders works correctly.
-- Quick Look (preview) is available from the file list with sibling navigation.
-- Breadcrumb navigation works in both the file browser and editor toolbars.
-- The inline editor has proper unsaved-changes protection (beforeunload + confirm dialog).
-- Conflict resolution dialog for concurrent edits is well-implemented.
-- Lazy loading of heavy editors (Tiptap, CodeMirror) keeps initial bundle small.
-
-**Needs attention:**
-- The edit route (`_auth.edit.$ownerId.$mountId.$pathId.tsx`, line 14) renders `null` while loading the path info,
-  causing a flash of empty content. A loading spinner would be better.
-- The sidebar's "New" dropdown always creates items in the *currently viewed* folder. When viewing a mime-filtered or
-  shared-items view, `targetPath` falls back to `rootPath`, which may surprise users.
-- The mime-type route (`_auth.mime.$mimeType.tsx`) navigates to the same route on folder activation (line 57), which is
-  a no-op since mime views do not contain folders. The context menu still shows "Open" for folders in this view.
-- The empty state message ("Within this void, all possibilities are yet unobserved") provides no actionable guidance to
-  new users about how to create or upload files.
+The toolbar renders `<div className="flex items-center justify-between w-full">` instead of using the shared
+`<Toolbar>` component that all other toolbars use. This leads to slightly inconsistent height and padding.
 
 ---
 
-## Recommendations
+### M10. Sidebar Dead `<input type="file">` Inside Upload Menu Item
+**File:** `apps/drive/src/components/drive/drive-sidebar.tsx:198-206`
+**Status:** Confirmed from previous review (issue #5), reclassified from Important to Minor
 
-1. **Fix the conditional hook call in `DriveListToolbar`** -- this is a correctness bug that violates React rules and
-   could cause crashes in future React versions.
+The hidden file input inside the dropdown menu item is never triggered. Clicking the menu item calls
+`setUploadOpen(true)`, which opens `DriveUploadFiles` (which has its own file input). The `handleFileChange` function
+(line 136-141) and its associated `uploadFiles` state are dead code.
 
-2. **Fix the `uid` validation in `_auth.shared.$to.tsx`** -- without this, clicking shared files in "shared with me"
-   cannot load the file detail panel correctly since the owner ID is lost.
+**Fix:** Remove the hidden input, `handleFileChange`, and the `uploadFiles`/`setUploadFiles` state from the sidebar.
 
-3. **Add dark mode support to Tiptap editor styles** -- either extend `globals.css` with `.dark` variants or migrate
-   to CSS variables. This is a significant visual regression for dark-mode users.
+---
 
-4. **Add the `content` and `language` dependencies to the CodeEditorView effect** or add a comment explaining why the
-   omission is intentional (parent uses `key` for remounting).
+### M11. `newItemButton` Only Rendered on Mobile in DriveListToolbar
+**File:** `packages/ui/src/components/layout/drive/drive-list.tsx:162`
+**Status:** New finding
 
-5. **Replace `auth.user!` assertions** with safe optional chaining to match the pattern used in `__root.tsx`.
+```typescript
+<div className="flex gap-1">
+    {isMobile && newItemButton}
+</div>
+```
 
-6. **Clean up dead code** -- the hidden file input in the sidebar upload menu item, commented-out code blocks, and no-op
-   `onSave` callbacks add confusion without value.
+The "New" button in the DriveListToolbar is only rendered when `isMobile` is true. On desktop, there is no way to
+create folders/files from the list toolbar -- users must use the sidebar "New" dropdown or keyboard shortcuts. This is
+likely intentional (the sidebar handles it on desktop), but means the sidebar must be visible for creation actions.
 
-7. **Consider extracting `DriveContext`** to a dedicated file in `apps/drive/src/` for cleaner imports and separation
-   of concerns.
+---
+
+### M12. Loose Equality in Audio MIME Check
+**File:** `packages/ui/src/components/layout/drive/drive-detail.tsx:175`
+**Status:** Confirmed from previous review (part of issue #7)
+
+```typescript
+(path.mimeType == "audio/mpeg" || path.mimeType == "audio/wav" || ...)
+```
+
+Uses `==` instead of `===`. Not a bug (both sides are strings), but inconsistent with the rest of the codebase which
+uses strict equality.
+
+---
+
+## Observations
+
+**Architecture compliance is strong.** All data hooks are properly centralized in `packages/lib`. No direct
+`useQuery`/`useMutation` in the app layer. SSE handlers correctly call shared invalidation functions. Query keys are
+hierarchically structured and exported for reuse. The routing follows TanStack Router file-based conventions with proper
+auth guards.
+
+**Lazy loading is well-done.** Heavy editors (Tiptap + CodeMirror) are lazy-loaded via `React.lazy()` in
+`native-file-editor.tsx` (lines 13-14), keeping the initial drive bundle small. The `Suspense` boundary on line 114
+provides a loading fallback.
+
+**Conflict resolution is thorough.** The `useEditorSave` hook implements optimistic concurrency with `updatedAt`
+tokens, `Cmd+S` hotkey binding, `beforeunload` protection, and a three-option conflict dialog (Overwrite / Reload /
+Download). This is production-quality.
+
+**Drag-and-drop is well-implemented.** External file drops use a ref counter (`dragCounter`) to correctly handle
+enter/leave events on nested DOM elements. Internal drag-and-drop for moving files between folders validates drop
+targets (must be a folder, cannot drop onto itself). Multi-select drag is supported via the `useListDrag` hook.
+
+**Keyboard navigation is complete.** The `DriveTable` supports arrow key navigation, Enter to open, Space for Quick
+Look, and Shift/Cmd+click for multi-select via `useKeyboardListNavigation` and `useListSelection` hooks.
+
+**The team drives integration is clean.** The sidebar dynamically loads team mounts via `usePeopleTeams` and
+`useTeamMounts`, rendering each enabled mount as a sidebar link with the team avatar. The `teamOwnerId()` utility
+correctly prefixes team IDs.
+
+**The breadcrumb implementation in the editor toolbar is slightly different from the list toolbar.** The editor toolbar
+(`editor-toolbar.tsx:24`) calls `useBreadcrumb` unconditionally (correctly), while the list toolbar (`drive-list.tsx:58`)
+calls it conditionally (the Rules of Hooks issue above). They also handle navigation differently: the editor breadcrumb
+calls `onClose` for all items (navigating back to the parent folder), while the list breadcrumb calls `onRowSelect` or
+`onRowActivate` depending on whether the item is already active.
+
+**The `useEditorSave` hook has a subtle `doSave` stability issue.** `doSave` is wrapped in `useCallback` with
+dependencies `[fileSave, getContent, getFrontmatter]`. The `fileSave` mutation object from `useFileSave` is stable
+across renders, but `getContent` in `MarkdownEditor` depends on `[sourceMode, sourceContent, editor, content]` and will
+change frequently. This means `doSave` gets a new identity on every content change, which is fine since it's only
+called in event handlers (not passed as a dependency to other hooks), but it would be more efficient to use a ref for
+`getContent`.

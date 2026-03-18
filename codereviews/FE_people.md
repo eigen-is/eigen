@@ -1,149 +1,286 @@
-# Frontend Code Review: People App (Admin, Teams, Settings)
+# Frontend Review: People App (Org/Team Admin)
 
-## Summary
+**Scope:** `apps/people/`, related hooks in `packages/lib/src/core/people/`, `packages/lib/src/core/team/`,
+`packages/lib/src/core/settings/`, calendar hooks used by team detail
+**Reviewed:** 2026-03-18
 
-The People app is the admin UI for organization management: members list/CRUD, teams with drag-and-drop member
-assignment, team calendar and quota settings, mount management, and server-wide settings (quotas, storage type, S3
-configuration). It is the most complex of the four admin apps with 15 source files spanning routes, components, and
-shared hooks. Overall, it is well-structured with proper hook usage, but has several issues around type safety,
-form validation, and some edge cases in the mount/settings management.
+## Critical Issues
 
-## Architecture Compliance
+1. **Keyboard navigation selects wrong member -- ID type mismatch between `activeId` and `getId`**
+   `apps/people/src/components/people/members-list.tsx:79-83`
 
-**Passing:**
-- No direct `useQuery`/`useMutation` in app code -- all data access goes through hooks in `@workspace/lib/people`,
-  `@workspace/lib/team`, `@workspace/lib/settings`, and `@workspace/lib/calendar`.
-- Proper `AppShell` + sidebar with `ColumnLayout`/`Column` pattern for members and teams.
-- Auth guard in `_auth.tsx` with admin/owner role check (line 53: `currentMember.role === 'member'` rejects).
-- Query key hierarchy follows project conventions (`peopleKeys`, `teamKeys`, `settingsKeys`, `teamMountKeys`).
-- Mutation `onSuccess` callbacks properly invalidate related query keys.
-- `DroppableSidebarItem` enables drag-and-drop member assignment to teams.
-- Loading states handled with `EigenLoader` in all routes and the settings page.
+   `useKeyboardListNavigation` is configured with `activeId: activeMemberId` (the membership ID from the URL) and
+   `getId: (m) => m.userId` (the user UUID). These are different identifiers. Consequently:
+   - The hook's sync effect (line 37 in `use-keyboard-list-navigation.ts`) compares `activeId` against `getId(item)`
+     and will never find a match, so keyboard highlight never syncs with the URL-selected member.
+   - When the user presses arrow keys and `onSelect` fires, it passes `m.userId` to `onRowClick`, which navigates to
+     `/members?memberId={userId}`. The detail pane then does `members.find(m => m.id === memberId)` using the
+     membership ID field, which will not match the user UUID, so no detail is shown.
 
-**Deviations:**
-- `interface` used heavily in component files (8 instances) where `type` is preferred.
-- Several `as any` type casts in hooks and components, weakening type safety.
+   In short, clicking a member works (uses `member.id`), but keyboard navigation is broken (uses `member.userId`).
 
-## Issues Found
+   **Impact:** Keyboard-driven member selection shows empty detail pane.
+   **Fix:** Use a consistent identifier. Either change `getId` to `(m) => m.id` throughout the list (selection, drag,
+   keyboard), or change the URL param / detail lookup to use `userId`. The former is simpler since drag targets accept
+   `userId` and would need separate handling.
+   **Status:** New finding. The previous review noted the dual-ID pattern as "internally consistent but confusing"
+   (former Minor #5) -- this deeper analysis reveals it is actually a functional bug.
 
-### Critical
+2. **Team calendar save overwrites entire shares array, losing non-team shares**
+   `apps/people/src/components/people/team-detail.tsx:250-253`
 
-None.
-
-### Important
-
-1. **`as any` type cast in team settings save hides potential type mismatch**
-   `apps/people/src/components/people/team-detail.tsx`, line 248:
    ```typescript
-   await updateSettings.mutateAsync({
-       calendar: {enabled: draftCalEnabled},
-       memberOverrides: {
-           mailAndContactsMaxMB: draftMailMax ? Number(draftMailMax) : null,
-           defaultMountMaxSizeMB: draftMountMax ? Number(draftMountMax) : null,
-       },
-   } as any);
+   const shares = draftCalPermission === 'read'
+       ? null
+       : [{targetId: teamTarget, permission: draftCalPermission as 'free-busy' | 'write'}];
+   await updateCalendar.mutateAsync({id: defaultCal.id, shares});
    ```
-   The `as any` cast masks a real type issue: `memberOverrides` fields use `null` to indicate "inherit from
-   server default", but the `TeamSettings` type defines them as `number | undefined`, not `number | null`. The
-   cast hides this discrepancy. The backend may or may not handle `null` correctly -- this should be explicitly
-   typed.
 
-2. **Multiple `as any` casts in shared hooks reduce type safety**
-   - `packages/lib/src/core/people/hooks/use-members.ts:35,77`: `role: role as any` -- the role string from the
-     form is cast to bypass better-auth's role type. Should use a proper union type.
-   - `packages/lib/src/core/team/hooks/use-team-mounts.ts:27,40`: API call bodies cast `as any`.
-   - `packages/lib/src/core/settings/hooks/use-server-settings.ts:26`: Settings update body cast `as any`.
-   - `packages/lib/src/core/settings/hooks/use-s3-config.ts:26`: S3 config put body cast `as any`.
-   These are all in the shared hook layer, meaning every consumer inherits the weak typing.
+   When saving team settings, the calendar's `shares` field is replaced wholesale. If `draftCalPermission` is `read`,
+   `null` is sent which clears all shares. If `free-busy` or `write`, a single-element array is sent. In both cases,
+   any pre-existing shares on the team calendar (e.g., shares to individual users or other teams) are silently
+   destroyed. The `UpdateCalendarInput.shares` type is `CalendarShare[] | null`, confirming this is a full
+   replacement, not a merge.
 
-3. **Server settings form has no input validation**
-   `apps/people/src/components/people/server-settings.tsx`.
-   Quota values are bound directly to `<Input type="number">` with only `min` attributes. There is no validation
-   that prevents:
-   - NaN values (clearing the input and saving).
-   - Negative values via keyboard input (type="number" min doesn't prevent typing negatives).
-   - maxUploadSizeMB exceeding maxBatchUploadSizeMB.
-   - Unreasonably small values (e.g., 0 MB mount size).
-   The `updateQuota` function at line 56 passes `e.target.valueAsNumber` directly, which returns `NaN` for empty
-   inputs.
+   **Impact:** Saving team settings can silently remove calendar sharing with other entities.
+   **Fix:** Read `defaultCal.shares`, filter out the current team's entry, then append the new team share (or omit it
+   for `read`). Pass the merged array to `updateCalendar`.
+   **Status:** New finding. Not identified in the previous review.
 
-4. **Team detail quota override inputs accept invalid values**
-   `apps/people/src/components/people/team-detail.tsx`, lines 359-366.
-   Draft mail/mount max values are stored as strings and converted with `Number()` at save time. No validation
-   is performed. `Number('')` returns `0`, but the `draftMailMax ? Number(draftMailMax) : null` check prevents
-   that specific case. However, `Number('abc')` returns `NaN` which would be sent to the API.
+## Important Issues
 
-5. **`location.search.teamId` accessed as raw property without type assertion**
-   `apps/people/src/routes/__root.tsx`, line 20:
+1. **`as any` cast in team settings save hides `null` vs `undefined` type mismatch**
+   `apps/people/src/components/people/team-detail.tsx:242-248`
+
+   The `TeamSettings` type defines `memberOverrides` fields as `number | undefined`, but the save sends `null` to
+   mean "inherit from server default". The `as any` cast silences this. Whether the backend handles `null` correctly
+   depends on the JSON store implementation -- if it stores `null` literally, downstream `resolveUserQuotas()` may
+   treat `null` as a defined value rather than absent.
+
+   **Impact:** Potential incorrect quota resolution for teams with cleared overrides.
+   **Fix:** Either update the `TeamSettings` type to accept `number | null` for override fields, or send `undefined`
+   instead of `null`.
+   **Status:** Carried from previous review (former Important #1). Confirmed type mismatch still present.
+
+2. **Multiple `as any` casts in shared hooks weaken type safety for all consumers**
+   Locations:
+   - `packages/lib/src/core/people/hooks/use-members.ts:35` -- `role: role as any`
+   - `packages/lib/src/core/people/hooks/use-members.ts:77` -- `role: role as any`
+   - `packages/lib/src/core/team/hooks/use-team-mounts.ts:27` -- `body as any`
+   - `packages/lib/src/core/team/hooks/use-team-mounts.ts:40` -- `body as any`
+   - `packages/lib/src/core/settings/hooks/use-server-settings.ts:26` -- `body as any`
+   - `packages/lib/src/core/settings/hooks/use-s3-config.ts:26` -- `body as any`
+   - `packages/lib/src/core/calendar/hooks/use-calendar.ts:56` -- `(calendarApi(...) as any)(...).put(data as any)`
+
+   These are in the shared hook layer, so every consumer inherits the type erasure. The role casts are particularly
+   concerning since `role: string` from the form could be any string, bypassing better-auth's role validation.
+
+   **Impact:** Type errors in API payloads are invisible at compile time.
+   **Fix:** For roles, define `type OrgRole = 'owner' | 'admin' | 'member'` in `types/people.ts` and use it in the
+   form state and hook parameter. For Eden Treaty body mismatches, investigate whether the generated types can be
+   aligned or create explicit input types.
+   **Status:** Carried from previous review (former Important #2). Unchanged.
+
+3. **Server settings quota inputs accept NaN, negatives, and logically invalid values**
+   `apps/people/src/components/people/server-settings.tsx:56-58,136-167`
+
+   The `updateQuota` function passes `e.target.valueAsNumber` directly into state, which is `NaN` when the input is
+   cleared. `<Input type="number" min={10}>` does not prevent typing negatives or clearing. The backend validates
+   with `t.Number({minimum: 10})`, so invalid values cause a server rejection with a generic error toast rather
+   than inline feedback. Additionally, nothing prevents `maxUploadSizeMB` from exceeding `maxBatchUploadSizeMB`.
+
+   **Impact:** Poor UX -- users can enter invalid values and get unhelpful error messages.
+   **Fix:** Add client-side validation: guard against `NaN` in `updateQuota` (e.g., `if (isNaN(value)) return`),
+   add cross-field validation before save, and show inline error states.
+   **Status:** Carried from previous review (former Important #3). Confirmed backend guards exist but UX gap remains.
+
+4. **Team detail quota override inputs can send NaN to API**
+   `apps/people/src/components/people/team-detail.tsx:245-246,359-366`
+
+   Draft values are stored as strings and converted with `Number()` at save time. While `draftMailMax ? ... : null`
+   handles empty strings, a user typing non-numeric characters (possible via paste) would produce
+   `Number('abc') === NaN`, which would be sent to the API.
+
+   **Impact:** API error with unhelpful message on malformed input.
+   **Fix:** Validate converted values before saving. Check `isNaN()` and show feedback.
+   **Status:** Carried from previous review (former Important #4). Unchanged.
+
+5. **`location.search.teamId` accessed on untyped search at root level**
+   `apps/people/src/routes/__root.tsx:20`
+
    ```typescript
    const isTeamDetailSelected = location.pathname === '/teams' && location.search.teamId;
    ```
-   `location.search` is typed by TanStack Router, but at the root level it may not include `teamId`. This relies
-   on TypeScript's loose property access on the search object. A runtime check on `typeof` would be safer.
 
-6. **S3 configuration saving and server settings saving are independent operations**
-   `apps/people/src/components/people/server-settings.tsx`.
-   When switching the default storage type to S3, the user must: (1) change the storage type and save server
-   settings, (2) fill in S3 config and save separately. There is no warning if the user saves "storage type = S3"
-   without valid S3 credentials configured. This could leave the server in a broken state where new mounts default
-   to S3 but no S3 config exists.
+   At the root route level, `location.search` is the union of all route search schemas. While this works at runtime
+   because `teamId` is simply `undefined` on non-teams routes, it bypasses the typed search validation. If TanStack
+   Router's type strictness increases, this could break.
 
-### Minor
+   **Impact:** Low risk currently, but fragile pattern.
+   **Fix:** Use `typeof location.search === 'object' && 'teamId' in location.search && location.search.teamId`
+   or extract this logic into the teams route itself.
+   **Status:** Carried from previous review (former Important #5). Unchanged.
 
-1. **`interface` used where `type` is preferred (8 instances)**
-   In non-generated files:
-   - `__root.tsx:9` -- `interface MyRouterContext`
-   - `members-list.tsx:14,56` -- `MembersListToolbarProps`, `MembersListProps`
-   - `member-detail.tsx:13,49` -- `MemberDetailToolbarProps`, `MemberDetailProps`
-   - `people-sidebar.tsx:19` -- `PeopleSidebarProps`
-   - `create-user-dialog.tsx:12` -- `CreateUserDialogProps`
+6. **S3 config and server settings are saved independently with no cross-validation**
+   `apps/people/src/components/people/server-settings.tsx`
 
-2. **Create user dialog does not reset form on cancel if partially filled**
-   `apps/people/src/components/people/create-user-dialog.tsx`, line 98.
-   The cancel button calls `onOpenChange(false)` but does not reset the `name`, `username`, `password`, `role`
-   state. If the user opens the dialog, fills in some fields, cancels, and reopens -- the old values remain.
-   The reset only happens on successful creation (lines 34-37).
+   A user can set `storageType = 's3'` and save server settings without configuring S3 credentials. New mounts would
+   then default to S3 with no working backend. There is no warning or blocking validation.
 
-3. **Team sidebar links use query string navigation instead of TanStack Router search params**
-   `apps/people/src/components/people/people-sidebar.tsx`, line 97:
+   **Impact:** Admin could put the server in a broken state where new mounts fail.
+   **Fix:** When saving server settings with `storageType = 's3'`, check if S3 config exists (either saved or in
+   the current draft). Show a warning if not.
+   **Status:** Carried from previous review (former Important #6). Unchanged.
+
+7. **Auth guard rejects non-admin users in the component tree, not in route `beforeLoad`**
+   `apps/people/src/routes/_auth.tsx:22-64`
+
+   The `_auth.tsx` route's `beforeLoad` only checks authentication (redirects to `/login`). The admin/owner role
+   check happens in the `AuthGuard` component body (line 53), which means the full `AuthGuard` component mounts,
+   fetches `usePublicConfig` and `usePeopleMembers`, and renders a loading spinner before finally showing "Access
+   Denied". A non-admin user triggers two data fetches they should not need.
+
+   **Impact:** Unnecessary API calls for non-admin users; brief loading flash before access denial.
+   **Fix:** Move the role check into `beforeLoad` by having the router context include the user's org role, or
+   at minimum skip the members fetch when the role is already known.
+   **Status:** New finding.
+
+## Minor Issues
+
+1. **`interface` used where `type` is preferred (7 instances in non-generated files)**
+   - `apps/people/src/routes/__root.tsx:9` -- `interface MyRouterContext`
+   - `apps/people/src/components/people/members-list.tsx:14` -- `interface MembersListToolbarProps`
+   - `apps/people/src/components/people/members-list.tsx:56` -- `interface MembersListProps`
+   - `apps/people/src/components/people/member-detail.tsx:13` -- `interface MemberDetailToolbarProps`
+   - `apps/people/src/components/people/member-detail.tsx:49` -- `interface MemberDetailProps`
+   - `apps/people/src/components/people/people-sidebar.tsx:19` -- `interface PeopleSidebarProps`
+   - `apps/people/src/components/people/create-user-dialog.tsx:12` -- `interface CreateUserDialogProps`
+
+   Project convention (CONTRIBUTING.md) specifies `type` over `interface` except when methods are needed. None of
+   these have methods.
+
+   **Impact:** Style inconsistency. `team-detail.tsx` already correctly uses `type` for its props.
+   **Fix:** Replace `interface` with `type` in these files.
+   **Status:** Carried from previous review (former Minor #1). Count corrected from 8 to 7.
+
+2. **CreateUserDialog does not reset form state on cancel**
+   `apps/people/src/components/people/create-user-dialog.tsx:98`
+
+   The cancel button calls `onOpenChange(false)` but does not clear `name`, `username`, `password`, `role`. If a
+   user partially fills the form, cancels, and reopens, stale values persist. Reset only happens on successful
+   creation (lines 34-38).
+
+   **Impact:** Minor UX issue -- stale form data on reopen.
+   **Fix:** Add a reset function and call it in the `onOpenChange` handler when closing, or use a key prop to
+   remount on open.
+   **Status:** Carried from previous review (former Minor #2). Unchanged.
+
+3. **Team sidebar links use manual URL construction instead of typed search params**
+   `apps/people/src/components/people/people-sidebar.tsx:97`
+
    ```typescript
    to={`/teams?teamId=${team.id}`}
    ```
-   This constructs the URL manually with a string template instead of using TanStack Router's `search` parameter
-   object, bypassing type safety.
 
-4. **`organizationId` prop is unused in `CreateUserDialog`**
-   `apps/people/src/components/people/create-user-dialog.tsx`, line 18:
-   The component accepts `organizationId` as a prop but destructures it away and never uses it. The `useCreateUser`
-   hook at line 23 doesn't take an organizationId parameter. Dead parameter.
+   Builds URL as a string template, bypassing TanStack Router's typed `search` parameter. Should use
+   `to="/teams" search={{teamId: team.id}}` for type safety and consistency.
 
-5. **MembersList uses `member.id` for row click but `member.userId` for selection**
-   `apps/people/src/components/people/members-list.tsx`.
-   - `onRowClick` is called with `member.id` (line 114) -- this is the membership ID.
-   - `selection.handleItemClick` uses `member.userId` (line 112) -- this is the user ID.
-   - `activeMemberId` is compared against `member.id` (line 108).
-   This is internally consistent but could be confusing. The drag system uses `userId` while the URL params and
-   detail view use the membership `id`.
+   **Impact:** No type checking on the search param name or value.
+   **Fix:** Use TanStack Router's `search` prop.
+   **Status:** Carried from previous review (former Minor #3). Unchanged.
 
-6. **TeamDetail component is very large (500+ lines including all sub-components)**
-   `apps/people/src/components/people/team-detail.tsx` contains `TeamDetailToolbar`, `AddMemberDialog`,
-   `MountDialog`, and `TeamDetail` all in one file. Consider extracting `AddMemberDialog` and `MountDialog`
-   into separate files for readability.
+4. **`organizationId` prop accepted but unused in `CreateUserDialog`**
+   `apps/people/src/components/people/create-user-dialog.tsx:15,18`
 
-7. **No confirmation dialog for removing team members**
-   `apps/people/src/components/people/team-detail.tsx`, line 299-305.
-   Clicking the X button on a team member immediately triggers `handleRemoveMember` without a confirmation
-   dialog, unlike team deletion and member removal which both use `DeleteDialog`.
+   The `CreateUserDialogProps` type declares `organizationId?: string` and the component destructures it, but never
+   references it. The `useCreateUser` hook does not take an `organizationId`. The prop is passed from
+   `MembersListToolbar` at `_auth.members.tsx:54`.
 
-## Recommendations
+   **Impact:** Dead code; misleading API surface.
+   **Fix:** Remove the prop from the type, destructuring, and call site.
+   **Status:** Carried from previous review (former Minor #4). Unchanged.
 
-1. Add proper input validation to the server settings form. Use zod + react-hook-form (consistent with the
-   pattern used in Space app) or at minimum validate before saving. Guard against NaN and 0 values.
-2. Address the `as any` casts systematically. For the role field, define a `OrgRole = 'owner' | 'admin' | 'member'`
-   type. For API bodies, investigate whether the Eden Treaty types can be made compatible.
-3. Add a warning or validation when switching to S3 storage type without valid S3 credentials.
-4. Add a confirmation dialog before removing team members, matching the pattern used for team/org member deletion.
-5. Reset form state in `CreateUserDialog` when the dialog closes (not just on success).
-6. Remove the unused `organizationId` prop from `CreateUserDialog`.
-7. Consider splitting `team-detail.tsx` into smaller focused components.
-8. Replace `interface` with `type` in non-generated files per project convention.
+5. **Create team dialog in sidebar does not reset name on cancel**
+   `apps/people/src/components/people/people-sidebar.tsx:108-129`
+
+   The create team dialog's cancel button calls `setShowCreate(false)` but `newTeamName` is only reset on
+   successful creation (line 45). If the user types a name and cancels, the old text remains when reopening.
+
+   **Impact:** Minor UX issue -- stale team name on reopen.
+   **Fix:** Reset `newTeamName` in the `onOpenChange` handler or when showing the dialog.
+   **Status:** New finding.
+
+6. **No confirmation dialog for removing team members**
+   `apps/people/src/components/people/team-detail.tsx:497-504`
+
+   The X button on each team member row calls `handleRemoveMember` immediately, unlike team deletion
+   (`DeleteDialog` at line 60) and org member removal (`DeleteDialog` at line 38 of `member-detail.tsx`). This is
+   inconsistent and makes accidental removal easy.
+
+   **Impact:** Accidental member removal with no undo.
+   **Fix:** Add a `DeleteDialog` or at minimum a toast with undo, matching the pattern used elsewhere.
+   **Status:** Carried from previous review (former Minor #7). Unchanged.
+
+7. **TeamDetail is 513 lines with four components in one file**
+   `apps/people/src/components/people/team-detail.tsx`
+
+   Contains `TeamDetailToolbar`, `AddMemberDialog`, `MountDialog`, and `TeamDetail`. The main `TeamDetail` alone
+   is over 300 lines with extensive mount, member, calendar, and settings management.
+
+   **Impact:** Harder to navigate and maintain.
+   **Fix:** Extract `AddMemberDialog` and `MountDialog` into separate files. The settings form could also become
+   a sub-component.
+   **Status:** Carried from previous review (former Minor #6). Unchanged.
+
+8. **`teamMembers` data uses inline type annotation instead of shared type**
+   `apps/people/src/components/people/team-detail.tsx:217,487`
+
+   ```typescript
+   teamMembers.map((tm: {userId: string}) => m.userId)
+   ```
+
+   The `useTeamMembers` hook returns `data ?? []` without a typed return, so the component annotates team member
+   objects inline as `{userId: string}`. This is fragile and loses other fields the API returns.
+
+   **Impact:** If the team member shape changes, these inline annotations silently suppress type errors.
+   **Fix:** Add a `TeamMember` type to `types/people.ts` and use it as the return type of `useTeamMembers`.
+   **Status:** New finding.
+
+9. **No SSE events for org member or team membership changes**
+   `packages/lib/src/core/team/sse-handlers.ts`
+
+   The only team-related SSE event is `TEAM_SETTINGS_UPDATED`. There are no events for member added/removed,
+   team created/deleted, or org member role changed. If two admins manage the org simultaneously, changes by one
+   are invisible to the other until a manual refresh or the 2-minute stale time expires.
+
+   **Impact:** Stale UI during concurrent admin operations.
+   **Fix:** Add SSE events for member/team CRUD operations and corresponding invalidation handlers in the SSE
+   handler. Alternatively, reduce `staleTime` on people queries.
+   **Status:** New finding.
+
+10. **`handleAddMembersToTeam` in root silently stops on first error without reporting partial success**
+    `apps/people/src/routes/__root.tsx:22-33`
+
+    The drag-and-drop handler loops through `memberIds` and calls `addMember.mutateAsync` sequentially. On error,
+    it shows an error toast and returns, but does not report how many of the members were successfully added before
+    the failure.
+
+    **Impact:** User sees an error but does not know which members were added.
+    **Fix:** Track success count and report "Added N of M members" in the error case, or batch the operation.
+    **Status:** New finding.
+
+## Observations
+
+- The People app correctly delegates all data fetching to shared hooks in `packages/lib/`. No direct
+  `useQuery`/`useMutation` calls exist in app code.
+- The `EigenApp` provider stack (in `packages/ui`) provides SSE connectivity, but the People app does not benefit
+  much from it since org/team membership events are not SSE-driven.
+- The `_auth.tsx` guard uses `authClient.organization.setActive()` with a `useRef` to prevent re-firing, which is
+  a reasonable approach for ensuring the org context is set once.
+- Mount management (add, edit, enable/disable) in team detail is well-implemented with proper `MountForm` reuse
+  from the shared UI library.
+- The drag-and-drop member assignment to teams via `DroppableSidebarItem` is a nice interaction pattern.
+- Query key hierarchy is clean: `peopleKeys` for members/teams, `teamKeys` for team-level settings/mounts,
+  `settingsKeys` for server-wide config. Invalidation scopes are appropriately narrow.
+- The `mapStorageType` function in `types/settings.ts` correctly maps between the server-level storage type names
+  (`local-id`, `local-fullnames`) and the mount-level names (`local-key`, `local`).

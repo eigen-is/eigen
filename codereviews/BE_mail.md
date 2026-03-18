@@ -1,120 +1,98 @@
-# Backend Code Review: Mail (Maildir, IMAP)
+# Backend Review: Mail (Maildir, IMAP, SMTP)
 
-## Summary
+**Scope:** `apps/api/src/lib/mail/`, `apps/api/src/routes/mail.ts`
+**Reviewed:** 2026-03-18
 
-The mail backend is a well-structured Maildir++ implementation split across focused modules: `Maildir` (orchestrator),
-`MaildirStore` (filesystem), `MailDB` (database), `mailutils` (filename/flag helpers), `mail-parse` (EML parsing),
-`mailfile` (EML generation), `sender` (SMTP), and `mail.ts` (facade). The IMAP compatibility plan from `docs/IMAP.md`
-has been fully implemented: Maildir-compliant filenames, flag storage in filenames, atomic delivery via `tmp/`,
-`syncMailbox()` with full disk/DB reconciliation, `fs.watch()` for live detection, and Dovecot keyword preservation.
+---
 
-The code is generally clean and follows the project architecture patterns well. The split between store/db/orchestrator
-is logical and testable. However, several issues were found ranging from a security gap to concurrency concerns and
-minor correctness bugs.
+## Critical Issues
 
-## Architecture Compliance
+### 1. Mailbox name path traversal -- no sanitization on user-supplied mailbox names
 
-| Rule | Compliance | Notes |
-|------|-----------|-------|
-| Domain class in `lib/mail/maildir.ts` | Pass | Follows `lib/[domain]/[domain].ts` pattern |
-| Routes in `routes/mail.ts` | Pass | Thin router, delegates to facade |
-| Schema in `schema.ts` + `db-config.ts` | Pass | Drizzle schema + versioned migration |
-| SSE events in `sse-events.ts` | Pass | Uses `buildMailEvent()` with notification templates |
-| Shared types in `packages/lib/src/types/mail.ts` | Pass | `EmailSummary`, `Email`, `MaildirMailbox` |
-| Facade pattern in `mail.ts` | Pass | User -> Home -> Maildir resolution |
-| No JSDoc | Pass | |
-| `type` over `interface` | Pass | All local types use `type` |
-| English everywhere | Pass | |
+- **File:** `apps/api/src/lib/mail/maildir-store.ts:163-166`
+- **File:** `apps/api/src/routes/mail.ts:31,38`
+- **Impact:** An authenticated user can read/create directories outside their Maildir.
+- **Status:** New finding.
 
-## Issues Found
-
-### Critical
-
-**1. ownerId parameter is ignored -- no authorization check**
-- **File**: `apps/api/src/routes/mail.ts`, lines 30-132
-- **File**: `apps/api/src/lib/mail/mail.ts`, lines 7-10
-
-All authenticated routes include `:ownerId` in the URL path but never use `params.ownerId`. Every handler passes `user`
-(from the session) directly to the facade, which resolves `Home` from `user.id`. This means the `ownerId` URL
-parameter is cosmetic and ignored.
-
-While this means a user cannot access another user's mail (the session user is always used), it creates a misleading
-API contract. The existing test at line 327-340 of `mail.test.ts` proves this: Bob can call
-`POST /mail/${alice.id}/mailbox` with his own session token and it succeeds -- but the mailbox is created in Bob's
-account, not Alice's. The test title says "ownerId spoofing does not let Bob write mailboxes into Alice account" but the
-test actually shows the API silently ignores the spoofed ownerId and operates on the authenticated user's data, which
-is correct behavior but the API design is misleading.
-
-This is not a data leak, but the `ownerId` parameter should either be validated (reject if `ownerId !== user.id`) or
-removed from mail routes entirely to avoid confusion and prevent future regressions if someone starts using it.
-
-**2. Public delivery endpoint has no authentication or rate limiting**
-- **File**: `apps/api/src/routes/mail.ts`, line 28
-- **File**: `apps/api/src/lib/mail/mail.ts`, lines 32-39
-
-`POST /mail/deliver/:to` accepts arbitrary EML content from unauthenticated callers. There is no rate limiting, no
-size limit, no sender validation, and no spam filtering. An attacker could:
-- Flood any user's mailbox with arbitrary messages
-- Deliver messages with spoofed `From:` headers
-- Exhaust disk space (no quota check on delivery)
-
-The endpoint decodes the entire body as UTF-8 text (`new TextDecoder().decode(new Uint8Array(file))`) which could also
-fail for binary-heavy MIME messages with non-UTF-8 encoded parts.
-
-### Important
-
-**3. `readMessage` returns stale size from `file()` constructor**
-- **File**: `apps/api/src/lib/mail/maildir-store.ts`, lines 100-104
-- **File**: `apps/api/src/lib/core/local-filesystem.ts`, line 153
+The `mailboxDir` method constructs a filesystem path from an unsanitized mailbox name:
 
 ```typescript
-async readMessage(mailbox: string, filename: string): Promise<{content: string, size: number}> {
-    const filePath = this.storage.pathJoin(this.mailboxDir(mailbox), CUR, filename)
-    const file = this.storage.file(filePath)
-    return {content: await file.text(), size: file.size}
+mailboxDir(mailbox: string): string {
+    if (mailbox === '' || mailbox === 'INBOX') return this.basePath
+    return `${this.basePath}/.${mailbox.replace('/', '.')}`
 }
 ```
 
-`this.storage.file(filePath)` captures `bunFile.size` at object creation time (line 153 of `local-filesystem.ts`:
-`size: bunFile.size`). BunFile's `.size` is evaluated when the BunFile is created. If the file does not yet exist or
-was just written, `.size` could be 0 or stale. This is mainly a risk during sync when reading newly delivered messages.
-The size should be computed from the content length: `Buffer.byteLength(content, 'utf-8')`.
+`String.replace('/', '.')` only replaces the **first** `/` -- subsequent slashes remain. A mailbox name
+containing `..` can escape the Maildir directory. For example, a `mailboxCreate` call with mailbox
+`x/../../other-user` would construct path `Maildir/.x.../../other-user`, which after `path.join` resolution
+in `LocalFilesystem.getFilePath` becomes `eigen.mail/Maildir/.x./other-user` -- allowing creation of
+directories outside the expected Maildir hierarchy.
 
-**4. `syncMailbox` race condition: concurrent callers get coalesced but late arrivals miss changes**
-- **File**: `apps/api/src/lib/mail/maildir.ts`, lines 297-308
+The `mailboxGet` route uses wildcard params (`params['*']`) which can contain arbitrary path segments.
+Combined with `canonicalMailbox` (maildir.ts:21-24) which passes unrecognized names through unchanged,
+there is no validation layer between user input and filesystem operations.
 
-```typescript
-async syncMailbox(mailbox: string): Promise<void> {
-    const running = this.syncingMailboxes.get(mailbox)
-    if (running) return running  // <-- returns the same promise
-    ...
-}
-```
+**Fix:** Validate mailbox names against a strict pattern (e.g., `/^[A-Za-z0-9._-]+$/`) and reject names
+containing `..`, `/`, or `\`. Apply this validation in `canonicalMailbox` or at the route level before any
+filesystem operation.
 
-The concurrency guard uses a `Map<string, Promise<void>>` and returns the running promise to concurrent callers. This
-is an improvement over the `Set`-based skip pattern in the IMAP doc. However, if a filesystem change occurs _during_ a
-sync, the watcher callback will join the in-progress sync (which won't see the new change), and the change won't
-trigger another sync because `fs.watch` may have already fired. The result is a missed change that requires the next
-API request or the next `fs.watch` event to be picked up.
+---
 
-Consider queuing a re-sync when a request arrives while a sync is already running, so the sync happens again after
-the current one completes.
+### 2. Header injection in Content-Disposition on attachment download
 
-**5. EML generation uses a hardcoded, non-unique MIME boundary**
-- **File**: `apps/api/src/lib/mail/mailfile.ts`, line 35
+- **File:** `apps/api/src/routes/mail.ts:129`
+- **Impact:** HTTP response splitting / header injection.
+- **Status:** New finding.
+
+The attachment download endpoint interpolates `params.fileName` directly into an HTTP header:
 
 ```typescript
-`Content-Type: multipart/alternative; boundary="boundary-string"`
+set.headers['Content-Disposition'] = `attachment; filename="${params.fileName}"`;
 ```
 
-All generated EML messages use the literal string `"boundary-string"` as the MIME boundary. If the email body text
-itself contains the string `--boundary-string`, it will be misinterpreted as a MIME boundary by any mail parser,
-corrupting the message. RFC 2046 requires the boundary to be chosen such that it does not appear in the body.
+A malicious filename containing `"` or `\r\n` characters could break out of the header value, injecting
+arbitrary HTTP headers. For example, a filename like `evil"\r\nX-Injected: true` would corrupt the response.
+The same issue exists on line 48 with `params.id` in the EML download, though message IDs are internally
+generated and less likely to be attacker-controlled.
 
-Generate a unique boundary per message, e.g., `boundary_${crypto.randomUUID()}`.
+**Fix:** Sanitize the filename by removing or encoding `"`, `\r`, and `\n` characters. Ideally, use
+RFC 5987 `filename*=UTF-8''...` encoding for non-ASCII filenames, or simply strip all non-safe characters.
 
-**6. EML generation always emits empty BCC header**
-- **File**: `apps/api/src/lib/mail/mailfile.ts`, lines 26-36
+---
+
+### 3. Public delivery endpoint has no rate limiting, size limit, or auth
+
+- **File:** `apps/api/src/routes/mail.ts:28`
+- **File:** `apps/api/src/lib/mail/mail.ts:32-39`
+- **Impact:** Mailbox flooding, disk exhaustion, spoofed mail delivery.
+- **Status:** Carried from previous review (critical #2). Confirmed still present.
+
+`POST /mail/deliver/:to` accepts arbitrary EML content from unauthenticated callers with zero protections:
+no rate limiting, no body size limit, no sender verification, no spam filtering, no quota enforcement.
+An attacker can flood any user's mailbox with multi-MB messages until disk fills.
+
+The `to` parameter is used directly as an email address to look up a user via `getUserByEmail`
+(user.ts:6-8). While this does not allow injection (the lookup is via Drizzle ORM `eq()` which
+parameterizes the query), the endpoint itself is fully open.
+
+Additionally, `new TextDecoder().decode(new Uint8Array(file))` on line 38 of mail.ts will silently replace
+non-UTF-8 bytes with U+FFFD, potentially corrupting binary MIME parts in the delivered EML.
+
+**Fix:** Add rate limiting per IP, a body size limit (e.g., 25MB), and quota enforcement via
+`enforceFileUpload`. Consider restricting to localhost or requiring a shared secret for production MTA
+integration. Accept the body as a raw buffer and write it directly to disk rather than decoding to
+UTF-8 string.
+
+---
+
+### 4. BCC headers persisted in stored EML files
+
+- **File:** `apps/api/src/lib/mail/mailfile.ts:26-36`
+- **Impact:** BCC recipient list leaked to IMAP clients or anyone reading the Maildir on disk.
+- **Status:** Carried from previous review (important #6). Severity elevated to critical because this is a privacy violation per RFC 5322.
+
+`createEmlContent` always emits all headers including `BCC:`:
 
 ```typescript
 const headers = [
@@ -126,101 +104,197 @@ const headers = [
 ]
 ```
 
-Headers are always emitted, even when empty. This produces `BCC: ` and `CC: ` headers with empty values. More
-importantly, BCC headers should _never_ appear in the stored/sent message -- BCC recipients are supposed to be
-invisible to other recipients. A stored EML with a `BCC:` header leaks the BCC list if the file is accessed
-externally (e.g., via Dovecot IMAP).
+Even when empty, a `BCC: ` header is emitted. When BCC values are present, they are persisted in the
+EML file stored in Sent/Drafts. Any IMAP client (e.g., Dovecot serving these files) will expose the
+BCC recipients to the user and potentially to other mail clients that forward the raw source.
 
-Only emit headers when they have values, and always strip BCC from stored content.
+Per RFC 5322 section 3.6.3, the BCC field should be removed from the message before delivery.
 
-**7. `messageGet` swallows all errors silently**
-- **File**: `apps/api/src/lib/mail/maildir.ts`, lines 97-113
+**Fix:** Only emit CC/BCC headers when they have values. Never persist BCC in the stored EML --
+use BCC only in the SMTP envelope, not the message headers.
+
+---
+
+## Important Issues
+
+### 5. EML generation uses hardcoded MIME boundary
+
+- **File:** `apps/api/src/lib/mail/mailfile.ts:35`
+- **Impact:** Message corruption when body contains the boundary string.
+- **Status:** Carried from previous review (important #5). Confirmed, line reference verified.
+
+All generated EML messages use the literal boundary `"boundary-string"`. If the email body text
+or HTML contains the string `--boundary-string`, any conforming mail parser will misinterpret it as
+a MIME part delimiter, corrupting the message body. RFC 2046 section 5.1.1 requires the boundary
+to not appear in the encapsulated content.
+
+**Fix:** Generate a unique boundary per message: `boundary_${crypto.randomUUID().replace(/-/g, '')}`.
+
+---
+
+### 6. `messageDelete` deletes DB record before file -- inconsistency on failure
+
+- **File:** `apps/api/src/lib/mail/maildir.ts:134-146`
+- **Impact:** Orphaned files on disk; phantom delete SSE events.
+- **Status:** Carried from previous review (important #8). Confirmed at exact lines.
 
 ```typescript
-async messageGet(messageId: string): Promise<Email | null> {
-    try {
-        ...
-    } catch {
-        return null
-    }
+this.db.deleteEmail(messageId)           // line 138 - sync, DB record gone
+await this.store.deleteMessage(...)      // line 139 - async, may fail
+```
+
+If `store.deleteMessage` fails (permission error, disk I/O), the DB record is already gone and the SSE
+delete event has been emitted. The orphaned file will be re-discovered on next `syncMailbox` and
+re-inserted, creating a ghost message. Note: `messageMove` (line 157-159) correctly does file-first,
+then DB -- only `messageDelete` has the wrong order.
+
+**Fix:** Reverse the order: delete file first, then DB record. If the file is already gone (ENOENT),
+proceed with DB cleanup.
+
+---
+
+### 7. Non-atomic flag updates -- `renameFlag` + `setRead`/`setFlagged` are separate DB writes
+
+- **File:** `apps/api/src/lib/mail/maildir.ts:183-207`
+- **Impact:** Inconsistent DB state on crash between the two writes.
+- **Status:** Carried from previous review (important #9). Analysis deepened.
+
+`messageSetRead` calls `renameFlag` which does: (1) filesystem rename, (2) `db.setFilename`. Then
+`messageSetRead` does (3) `db.setRead`. Steps 2 and 3 are separate synchronous DB writes with no
+transaction. If the process crashes after step 2 but before step 3, the filename in DB reflects the
+new flag state but the `isRead` column does not.
+
+The `updateFlags` method in maildb.ts (line 94-96) already supports setting multiple flags and
+filename in a single write -- it is used by `syncMailbox` but not by `renameFlag`.
+
+**Fix:** Have `renameFlag` accept the flag column update and perform a single DB write using
+`db.updateFlags`, or wrap steps 2-3 in a SQLite transaction.
+
+---
+
+### 8. `messageGet` and `readAndParse` silently swallow all errors
+
+- **File:** `apps/api/src/lib/mail/maildir.ts:97-113` and `372-388`
+- **Impact:** Debugging difficulty; masks real errors as "not found".
+- **Status:** Carried from previous review (important #7). Confirmed both methods have bare catch blocks.
+
+Both `messageGet` (line 111) and `readAndParse` (line 386) have bare `catch` blocks that return `null`,
+converting any error (filesystem permission, corrupted DB, parsing bug) into a silent "message not found".
+The facade in mail.ts:48-52 then converts `null` to a 404 `ApiError`, making real errors
+indistinguishable from missing messages.
+
+**Fix:** Log the error in the catch block. Better: only catch `ENOENT`/expected errors and let others
+propagate so they surface as 500s with stack traces.
+
+---
+
+### 9. `ownerId` URL parameter ignored in all mail routes
+
+- **File:** `apps/api/src/routes/mail.ts:30-132`
+- **File:** `apps/api/src/lib/mail/mail.ts:7-10`
+- **Impact:** Misleading API contract; risk of future regression.
+- **Status:** Carried from previous review (critical #1). Downgraded to important -- no data leak exists.
+
+All authenticated routes include `:ownerId` in the URL but every handler passes `user` (from session)
+to the facade, which resolves `Home` from `user.id`. The `ownerId` parameter is entirely cosmetic.
+
+The test at mail.test.ts:326-340 proves this: Bob calls `POST /mail/${alice.id}/mailbox` and the
+mailbox is created in Bob's account. The test title says "ownerId spoofing does not let Bob write
+mailboxes into Alice account" -- this is correct behavior but misleading API design.
+
+**Fix:** Either validate `ownerId === user.id` and reject mismatches with 403, or remove `:ownerId`
+from mail routes entirely. Other domain routes (drive, calendar) use ownerId for team/org access, but
+mail is strictly personal -- the parameter serves no purpose here.
+
+---
+
+### 10. `syncMailbox` coalescing can miss filesystem changes during sync
+
+- **File:** `apps/api/src/lib/mail/maildir.ts:297-308`
+- **Impact:** Delivered messages not visible until next sync trigger.
+- **Status:** Carried from previous review (important #4). Confirmed.
+
+The concurrency guard returns the in-progress promise to concurrent callers:
+
+```typescript
+const running = this.syncingMailboxes.get(mailbox)
+if (running) return running
+```
+
+If `fs.watch` fires during an active sync, the watcher callback joins the running sync (which has
+already scanned the directory and won't see the new file). The change is missed until the next
+API request or `fs.watch` event.
+
+**Fix:** Track whether a re-sync was requested during execution. After `doSyncMailbox` completes, if
+a re-sync was requested, run again.
+
+---
+
+### 11. `addEmail` uses SELECT-then-INSERT/UPDATE instead of upsert
+
+- **File:** `apps/api/src/lib/mail/maildb.ts:24-53`
+- **Impact:** Non-atomic; unnecessary round-trip; potential race condition.
+- **Status:** New finding.
+
+```typescript
+const existing = this.db.select().from(schema.emails).where(eq(schema.emails.id, record.id)).get()
+if (existing) {
+    this.db.update(schema.emails).set(rest).where(eq(schema.emails.id, email.id)).run()
+} else {
+    this.db.insert(schema.emails).values(record).run()
 }
 ```
 
-The entire method is wrapped in a bare `catch` that returns `null`. Any error -- DB corruption, filesystem
-permission issues, parsing bugs -- is silently converted to "message not found". This makes debugging extremely
-difficult. At minimum, log the error. Better: only catch expected errors (ENOENT) and let others propagate.
+This is two queries where SQLite's `INSERT OR REPLACE` (or Drizzle's
+`.onConflictDoUpdate()`) would be atomic and faster. Under concurrent syncs, two callers could
+both see the email as missing and both attempt inserts, causing a constraint violation on the
+primary key.
 
-**8. `messageDelete` has DB/filesystem inconsistency window**
-- **File**: `apps/api/src/lib/mail/maildir.ts`, lines 134-146
+**Fix:** Use `db.insert(schema.emails).values(record).onConflictDoUpdate(...)`.
 
-```typescript
-this.db.deleteEmail(messageId)
-await this.store.deleteMessage(email.mailbox, email.filename)
-```
+---
 
-The DB record is deleted first (synchronous), then the file is deleted (async). If the file deletion fails (e.g.,
-permission error, file already gone), the DB record is already removed but the file remains on disk. This orphaned
-file will be re-discovered on the next sync and re-inserted into the DB. The SSE delete event was already emitted.
+### 12. HTML sanitization does not block CSS-based tracking
 
-Reverse the order: delete the file first, then the DB record. Or handle the file deletion error by re-inserting the
-DB record.
+- **File:** `apps/api/src/lib/mail/mail-parse.ts:10`
+- **Impact:** Email open tracking and potential data exfiltration via CSS.
+- **Status:** New finding.
 
-**9. `messageSetRead` / `messageSetFlagged` -- DB update happens even if rename fails**
-- **File**: `apps/api/src/lib/mail/maildir.ts`, lines 183-207
+`DOMPurify.sanitize(parsedMail.html, {FORCE_BODY: true})` strips scripts and event handlers but
+allows CSS by default. A malicious sender can embed `background-image: url('https://tracker.example/pixel.gif')`
+in inline styles or `<style>` blocks to track when a recipient opens the email. CSS `url()` values
+can also be used for data exfiltration in some contexts.
 
-```typescript
-async messageSetRead(messageId: string, read: boolean): Promise<void> {
-    await this.renameFlag(messageId, {seen: read}, SSEventType.MAIL_READ_CHANGED)
-    this.db.setRead(messageId, read)
-}
-```
+**Fix:** Add `FORBID_TAGS: ['style']` and `FORBID_ATTR: ['style']` to the DOMPurify config, or use
+`ALLOWED_ATTR` / `ALLOWED_TAGS` allowlists. Alternatively, strip all external URL references from CSS.
 
-Inside `renameFlag`, if `this.store.renameInCur()` throws, the exception propagates to the caller. But in
-`messageSetRead`/`messageSetFlagged`, the DB update (`this.db.setRead` / `this.db.setFlagged`) is a separate call
-after `renameFlag`. If `renameFlag` succeeds (including the `this.db.setFilename` inside it) but then the outer
-`this.db.setRead` fails, the filename is updated in DB but the read flag is not. These should be in a single
-transaction or the flag update should be inside `renameFlag`.
+---
 
-Actually, looking more carefully: `renameFlag` already calls `this.db.setFilename(messageId, newFilename)` at
-line 203. Then `messageSetRead` calls `this.db.setRead(messageId, read)` at line 185. This is two separate DB writes
-for what should be one atomic update. If the process crashes between them, the filename is updated but the flag is not.
-Consolidate into a single DB update.
+## Minor Issues
 
-### Minor
+### 13. `createUniqueMessageId` calls `Date.now()` twice
 
-**10. `createUniqueMessageId` has a microsecond-precision collision window**
-- **File**: `apps/api/src/lib/mail/mailutils.ts`, lines 18-25
+- **File:** `apps/api/src/lib/mail/mailutils.ts:19-20`
+- **Impact:** Seconds and microseconds component can be inconsistent.
+- **Status:** Carried from previous review (minor #10). Confirmed at exact lines.
 
 ```typescript
 const time = Math.floor(Date.now() / 1000)
 const usec = (Date.now() % 1000) * 1000
 ```
 
-Two calls to `Date.now()` are made, which could return different milliseconds, making the seconds and microseconds
-components inconsistent (e.g., time=1000, usec from 999ms of the previous second). Capture `Date.now()` once:
+If the two `Date.now()` calls span a second boundary, `time` and `usec` will be from different
+seconds (e.g., time=1000 from 999999ms, usec=0 from 1000000ms).
 
-```typescript
-const now = Date.now()
-const time = Math.floor(now / 1000)
-const usec = (now % 1000) * 1000
-```
+**Fix:** Capture `Date.now()` once: `const now = Date.now()`.
 
-**11. `canonicalMailbox` does not normalize custom folder names**
-- **File**: `apps/api/src/lib/mail/maildir.ts`, lines 21-24
+---
 
-```typescript
-function canonicalMailbox(name: string): string {
-    if (name === '' || name.toLowerCase() === 'inbox') return ''
-    return STANDARD_MAILBOXES.find(m => m.toLowerCase() === name.toLowerCase()) ?? name
-}
-```
+### 14. `size()` method uses `||` instead of `??` -- treats 0 as falsy
 
-For custom mailboxes (not in `STANDARD_MAILBOXES`), the input is returned as-is. If someone creates mailbox `Projects`
-and later requests `projects`, the lookup is case-sensitive at the filesystem/DB level and will fail. This is
-acceptable given the "fixed 6 mailboxes" design, but worth noting.
-
-**12. `dirSize` fallback to DB size is misleading**
-- **File**: `apps/api/src/lib/mail/maildir.ts`, lines 52-54
+- **File:** `apps/api/src/lib/mail/maildir.ts:52-54`
+- **Impact:** Returns DB-derived size for empty Maildirs instead of actual disk size.
+- **Status:** Carried from previous review (minor #12). Confirmed.
 
 ```typescript
 async size(): Promise<number> {
@@ -228,151 +302,182 @@ async size(): Promise<number> {
 }
 ```
 
-If `dirSize()` returns 0 (empty mailbox), the fallback `this.db.size()` is used, which sums the `size` column in the
-DB. These measure different things -- `dirSize` is the actual disk usage (includes tmp files, DB files, etc.) while
-`db.size()` is the sum of message sizes. The `||` operator treats 0 as falsy, so an empty Maildir falls through to
-the DB sum. Use `??` instead of `||` and consider which metric is actually desired.
+`dirSize()` returning 0 (empty maildir) triggers the fallback to `this.db.size()`, which
+computes a different metric (sum of message `size` columns vs actual disk usage).
 
-**13. `textShort` in DB stores full plaintext body**
-- **File**: `apps/api/src/lib/mail/mail-parse.ts`, line 27
+**Fix:** Use `??` instead of `||`. Also: `this.store.dirSize()` calls
+`this.storage.dirSize(ROOT)` which traverses the entire `eigen.mail/` directory tree -- this
+includes `mail.db` and WAL files, not just message files. Clarify which metric is intended.
+
+---
+
+### 15. `textShort` stores full plaintext body in DB
+
+- **File:** `apps/api/src/lib/mail/mail-parse.ts:27`
+- **Impact:** Database bloat; full body returned in every mailbox listing.
+- **Status:** Carried from previous review (minor #13). Additional impact identified.
+
+`textShort: parsedMail.text || ''` stores the entire plaintext body. The `getAllEmails` method
+(maildb.ts:98-100) selects all columns, so every `mailboxGet` request returns the full text of
+every message in the mailbox -- wasteful for list views.
+
+**Fix:** Truncate to a reasonable preview length (e.g., 200 chars) at parse time. Or select
+specific columns in `getAllEmails` to exclude `textShort` for list queries.
+
+---
+
+### 16. `welcome.ts` contains hardcoded Exchange headers and Message-ID
+
+- **File:** `apps/api/src/lib/mail/welcome.ts:7-11`
+- **Impact:** Unprofessional; references external Exchange infrastructure.
+- **Status:** Carried from previous review (minor #14). Confirmed.
+
+The welcome email contains `Thread-Topic`, `Thread-Index`, and a `Message-ID` referencing
+`DU0PR01MB9407.eurprd01.prod.exchangelabs.com`. Also hardcodes `Content-Language: nl-NL` and
+`Accept-Language: nl-NL, en-US`.
+
+**Fix:** Generate `Message-ID` dynamically using `createUniqueMessageId()@eigen.local`. Remove
+Exchange-specific headers and hardcoded language preferences.
+
+---
+
+### 17. Draft/send routes use `t.Any()` -- no runtime validation
+
+- **File:** `apps/api/src/routes/mail.ts:99,103`
+- **Impact:** No type safety or input validation on draft/send payloads.
+- **Status:** Carried from previous review (minor #17). Confirmed.
 
 ```typescript
-textShort: parsedMail.text || '',
+.put("/mail/:ownerId/message/draft", ..., { body: t.Object({mail: t.Any()}) })
+.post("/mail/:ownerId/message/send", ..., { body: t.Object({mail: t.Any()}) })
 ```
 
-The field is named `textShort` but stores the entire plaintext body. For large emails, this means the full body is
-duplicated in SQLite. Consider truncating to a reasonable preview length (e.g., 200 characters).
+The `DraftInput` type exists in `packages/lib/src/types/mail.ts:95-101` but is not used for
+runtime validation. Any JSON payload is accepted and cast to `EmailDraft`.
 
-**14. `welcome.ts` uses hardcoded Exchange-style headers**
-- **File**: `apps/api/src/lib/mail/welcome.ts`, lines 4-17
+**Fix:** Define an Elysia type schema matching `DraftInput` for runtime validation.
 
-The welcome email template includes Exchange-specific headers (`Thread-Topic`, `Thread-Index`) and a hardcoded
-`Message-ID` referencing `DU0PR01MB9407...eurprd01.prod.exchangelabs.com`. This is clearly copied from a real email
-and should be cleaned up. The `Message-ID` should be generated dynamically, and Exchange-specific headers should be
-removed.
+---
 
-**15. `sendMail` creates a new transport on every call**
-- **File**: `apps/api/src/lib/mail/sender.ts`, lines 20-26, 51-52
+### 18. `messageSend` returns `null` on failure -- swallows error
+
+- **File:** `apps/api/src/lib/mail/maildir.ts:288-291`
+- **Impact:** Client receives 200 with null body instead of an error status.
+- **Status:** Carried from previous review (minor #16). Confirmed.
+
+When `sendMail` throws or returns false, the draft has already been saved to Drafts (line 262)
+and the catch block returns `null`. The route returns this `null` as a 200 response with no
+indication of failure.
+
+**Fix:** Throw `ApiError(502, 'Failed to send email')` instead of returning `null`.
+
+---
+
+### 19. `sendMail` creates a new nodemailer transport on every call
+
+- **File:** `apps/api/src/lib/mail/sender.ts:51-52`
+- **Impact:** Minor overhead; prevents connection pooling for future SMTP support.
+- **Status:** Carried from previous review (minor #15). Confirmed.
+
+Currently uses `sendmail` transport (spawns `/usr/sbin/sendmail`) which makes this low-impact.
+If SMTP transport is added later, this becomes a connection leak.
+
+**Fix:** Create the transport once at module level or use a lazy singleton.
+
+---
+
+### 20. `messageGetAttachment` does not validate negative index
+
+- **File:** `apps/api/src/lib/mail/maildir.ts:127`
+- **File:** `apps/api/src/routes/mail.ts:130`
+- **Impact:** Unexpected behavior with negative array index.
+- **Status:** New finding.
+
+The route converts `params.index` to a number via `Number(params.index)`. A negative index
+like `-1` passes the `index >= parsed.attachments.length` check but
+`parsed.attachments[-1]` returns `undefined` in JavaScript, so the route returns `null`.
+While not exploitable, it should return a proper 400 error.
+
+**Fix:** Add `index < 0` to the bounds check, or validate at the route level with
+`t.Number({ minimum: 0 })`.
+
+---
+
+### 21. Unused label tables in schema
+
+- **File:** `apps/api/src/lib/mail/schema.ts:22-35`
+- **File:** `apps/api/src/lib/mail/db-config.ts:31-46`
+- **Impact:** Dead code; confusing for maintainers.
+- **Status:** Carried from previous review (recommendation #10). Confirmed.
+
+`emailLabels` and `emailsToLabels` tables are defined in both the Drizzle schema and the SQL
+migration but no code reads from or writes to them. The `DEFAULT_LABELS` constant in
+`constants.ts:35-40` suggests labels were planned but never implemented.
+
+**Fix:** Implement the label system or remove the dead schema and migration SQL.
+
+---
+
+### 22. `mailboxesList` excludes custom mailboxes
+
+- **File:** `apps/api/src/lib/mail/maildir.ts:58-66`
+- **Impact:** Custom mailboxes created via `mailboxCreate` are invisible in the list.
+- **Status:** Carried from previous review (minor #18). Analysis refined.
 
 ```typescript
-function createTransport(): Mail {
-    return nodemailer.createTransport({ sendmail: true, ... });
+async mailboxesList(): Promise<MaildirMailbox[]> {
+    for (const name of STANDARD_MAILBOXES) {
+        if (await this.store.mailboxDirExists(name)) {
+            mailboxes.push(this.getMailboxInfo(name))
+        }
+    }
+    return mailboxes
 }
-
-export async function sendMail(options: SendMailOptions): Promise<boolean> {
-    const transporter = createTransport();
-    ...
-}
 ```
 
-A new nodemailer transport is created for every outgoing email. While `sendmail` transport is lightweight (spawns a
-process), this prevents connection pooling if SMTP transport is used in the future. Consider caching the transport.
+Only `STANDARD_MAILBOXES` are checked. Any custom mailbox created via `mailboxCreate` (which
+the test suite does: `Projects`, `Duplicate`, etc.) will never appear in `mailboxesList`. The
+`mailbox-exists` endpoint can verify them individually, but they are invisible in the UI list.
 
-**16. `messageSend` returns `null` on error, losing error context**
-- **File**: `apps/api/src/lib/mail/maildir.ts`, lines 261-293
+**Fix:** Also scan for `.`-prefixed directories in the Maildir root that are not in
+`STANDARD_MAILBOXES`.
 
-```typescript
-} catch (error) {
-    console.error('Error sending email:', error)
-    return null
-}
-```
+---
 
-When sending fails, the draft has already been saved (line 262: `messageHandleDraft`), and the function returns `null`.
-The caller (route) has no way to distinguish "send failed" from "send succeeded but returned null for some reason".
-This should throw an `ApiError(502, ...)` so the client sees a proper error.
+## Observations
 
-**17. Draft `id` and `EmailDraft` type handling**
-- **File**: `apps/api/src/lib/mail/maildir.ts`, lines 211-259
+**Architecture compliance:** The mail domain follows project patterns well. Domain logic in
+`lib/mail/maildir.ts`, thin facade in `mail.ts`, routes in `routes/mail.ts`, schema + db-config
+pair, SSE events with notification templates. Uses `type` over `interface`, no JSDoc, English
+throughout.
 
-```typescript
-const isNew = (email.id || '').trim() === ''
-```
+**Maildir compliance:** The implementation correctly follows Maildir++ conventions: `tmp/new/cur/`
+directory structure, dot-prefixed subfolder naming (`.Sent`, `.Drafts`), `maildirfolder` marker
+files, `subscriptions` file, atomic delivery via tmp-then-rename, Maildir filename format
+(`uniqueId,S=size:2,FLAGS`), and Dovecot keyword flag preservation (lowercase letters after
+standard uppercase flags).
 
-The `EmailDraft` type extends `Email` which has `id: string` (non-optional). Checking `email.id || ''` is defensive
-but suggests the type is not accurate -- `id` should be `string | undefined` on `DraftInput` or the caller should
-explicitly pass an empty string. The `DraftInput` type in `types/mail.ts` does not include `id`, so the route passes
-`t.Any()` for the body, losing all type safety on the draft endpoint.
+**Test coverage:** Two test files totaling ~920 lines provide strong coverage of CRUD operations,
+draft lifecycle, cross-mailbox moves, error cases, Maildir filename utilities, Dovecot
+interop scenarios (external file placement, flag changes, expunge, cross-mailbox move), keyword
+preservation, case-insensitive lookup, copy semantics, and atomic delivery verification.
 
-**18. `mailboxesList` only returns standard mailboxes that exist on disk**
-- **File**: `apps/api/src/lib/mail/maildir.ts`, lines 58-66
+**Missing test coverage:**
+- Path traversal in mailbox names
+- Concurrent sync operations
+- Malformed EML parsing (corrupted headers, truncated content)
+- `messageGetAttachment` with out-of-range or negative index
+- `messageSend` error paths (sendmail failure, dev mode)
+- Public delivery with non-UTF-8 binary content
+- Draft update (overwriting existing draft by ID)
+- `size()` method correctness
 
-The method checks `this.store.mailboxDirExists(name)` for each standard mailbox. If a standard mailbox directory
-gets accidentally deleted (e.g., by external tool), it silently disappears from the list with no error. Consider
-auto-recreating missing standard mailboxes during the list operation.
-
-## Robustness
-
-**Filesystem error handling**: Generally good. `moveNewToCur` catches ENOENT (line 88-89 of `maildir-store.ts`).
-`syncMailbox` catches parse errors per-message (line 340-341 of `maildir.ts`). `deleteMessage` checks existence
-before unlink. However, `readMessage` has no error handling, and `moveMessage` will throw on ENOENT without recovery.
-
-**Database consistency**: SQLite with WAL mode provides good read concurrency. The `addEmail` method in `maildb.ts`
-(lines 24-53) does an existence check then insert/update -- this is two queries when an `INSERT OR REPLACE` would
-be atomic and faster.
-
-**Process crash recovery**: If the process crashes during `deliverAtomic`, a partial file may remain in `tmp/`. The
-IMAP doc mentions a `cleanStaleTmp()` method for files older than 36 hours, but this is not implemented. Stale
-`tmp/` files are harmless but accumulate.
-
-**Memory**: Full EML content is loaded into memory for parsing (`readMessage` returns string). For very large
-attachments, this could be problematic. The mail-parser supports streaming but `simpleParser` is used with string
-input.
-
-## Test Coverage
-
-**`mail.test.ts`** (343 lines): Good coverage of CRUD operations, draft lifecycle, cross-mailbox moves, error
-cases (404s, 409s), and cross-user isolation. Tests use the actual HTTP API via `authedRequest`.
-
-**`mail-imap.test.ts`** (583 lines): Excellent Maildir-specific coverage including:
-- Maildir filename format validation
-- Utility function unit tests (all helpers tested)
-- Draft delivery with correct flags
-- Flag rename operations (read, flagged)
-- Simulated Dovecot scenarios (new file in cur/, new file in new/, flag rename, expunge, cross-mailbox move)
-- Dovecot keyword preservation
-- Case-insensitive mailbox lookup
-- Move preserving flags
-- Copy creating independent message
-- Atomic delivery verification
-
-**Missing test scenarios**:
-- Concurrent sync operations (two syncs on the same mailbox)
-- Large message handling (attachment-heavy)
-- Malformed EML parsing (corrupted headers, missing fields)
-- `messageGetAttachment` with invalid index (negative, out of range)
-- `messageSend` in dev mode vs production mode
-- `mailboxDeliver` with non-UTF-8 content
-- Public delivery endpoint abuse (large body, binary content)
-- Watcher-triggered sync (fs.watch callbacks)
-- Draft update (saving over existing draft by ID)
-- `size()` method accuracy
-- Label operations (the `emailLabels` and `emailsToLabels` tables exist in schema but no code uses them)
-
-## Recommendations
-
-1. **Validate or remove `ownerId`** from mail routes. Either enforce `ownerId === user.id` or drop the parameter. The
-   current state is a bug waiting to happen if someone starts using `params.ownerId` instead of `user`.
-
-2. **Secure the delivery endpoint**. Add rate limiting, size limits, and consider requiring a shared secret or
-   restricting to localhost. Add quota enforcement via `enforceFileUpload` or similar.
-
-3. **Fix the EML boundary** to be unique per message. This is a correctness bug that will eventually corrupt a message.
-
-4. **Strip BCC headers** from stored EML content. This is a privacy issue.
-
-5. **Reverse delete order** in `messageDelete`: delete file first, then DB record.
-
-6. **Consolidate flag updates** in `renameFlag` to include the flag boolean alongside the filename update in a single
-   DB write.
-
-7. **Implement `cleanStaleTmp()`** to clean up partial deliveries older than 36 hours, as planned in the IMAP doc.
-
-8. **Truncate `textShort`** to a reasonable length (e.g., 200 chars) to avoid storing multi-MB plaintext bodies in the
-   DB summary table.
-
-9. **Add type safety to draft/send routes**. Replace `t.Any()` with a proper Elysia type definition for the draft
-   body to get compile-time and runtime validation.
-
-10. **Implement the label system** or remove the unused `emailLabels`/`emailsToLabels` tables from the schema. Dead
-    schema is confusing.
+**Robustness notes:**
+- `moveNewToCur` correctly catches ENOENT (maildir-store.ts:88-89)
+- `syncMailbox` catches per-message parse errors (maildir.ts:340-341)
+- `deleteMessage` checks file existence before unlink (maildir-store.ts:127)
+- `readMessage` has no error handling and will throw on ENOENT
+- `moveMessage` will throw on ENOENT without recovery
+- Full EML content loaded into memory for parsing -- no streaming for large messages
+- No `cleanStaleTmp()` implementation for cleaning up partial deliveries in `tmp/`
+- `DOMPurify` is correctly applied for XSS prevention on HTML email bodies

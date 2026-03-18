@@ -1,128 +1,83 @@
-# Frontend Code Review: Shared Packages (lib + ui)
+# Frontend Review: Shared Packages (packages/lib + packages/ui)
 
-## Summary
+**Scope:** `packages/lib/`, `packages/ui/`
+**Reviewed:** 2026-03-18
 
-The shared frontend packages are well-structured and follow a coherent architecture. `packages/lib` centralizes all data
-hooks, query keys, SSE handlers, types, and validation in a domain-organized layout. `packages/ui` provides a consistent
-layout system with `AppShell`, `ColumnLayout`, providers, and reusable components. The code is generally clean with good
-separation of concerns. The issues found are mostly around type safety erosion (`as any` casts), a few inconsistencies in
-query key design, stale `"use client"` directives, and some code duplication between `UserAvatar` and `UserItem`.
+## Critical Issues
 
-## Architecture Compliance
+**1. Rules of Hooks violation: conditional hook call in `DriveListToolbar`**
+`packages/ui/src/components/layout/drive/drive-list.tsx:58`
 
-**Mostly compliant.** The codebase follows the documented patterns well:
-
-- All data hooks live in `packages/lib/src/core/[domain]/hooks/` -- confirmed no direct `useQuery`/`useMutation` usage
-  in app code except one minor exception in `apps/drive/src/components/editor/native-file-editor.tsx` (line 27: uses
-  `useQueryClient()` directly for manual invalidation, which is acceptable since it calls `editorKeys` from the shared
-  package).
-- Query keys follow the hierarchical pattern documented in CONTRIBUTING.md.
-- SSE handlers are co-located with their domains and dispatch to the correct invalidation functions.
-- Types are in `packages/lib/src/types/`, validation in `packages/lib/src/validation/`.
-- Export maps in `package.json` files are organized by domain.
-- `EigenApp` correctly stacks providers: HotkeysProvider > TooltipProvider > QueryClient > Auth > Theme > SSE > Upload >
-  Preview > Toaster.
-
-## Issues Found
-
-### Critical
-
-**1. Drive query keys omit `ownerId`, causing cross-owner cache collisions**
-`packages/lib/src/core/drive/hooks/use-drive.ts` lines 10-26
-
-The `driveKeys` factory only includes `mountId` and `pathId` in most keys (e.g., `folder`, `path`, `read`, `write`,
-`textPreview`), but the actual query functions require and use `ownerId`. If a user views folders from different owners
-(e.g., their own drive then a team drive), the cache keys will collide because `ownerId` is not part of the key:
-
-```
-folder: (mountId, pathId) => [...driveKeys.folders(), mountId, pathId]
+```typescript
+const {data: breadcrumbPaths = []} = showBreadcrumb ? useBreadcrumb(ownerId, mountId, pathId) : {data: []};
 ```
 
-Should be:
+`useBreadcrumb` is called conditionally based on the `showBreadcrumb` prop. This violates React's Rules of Hooks -- hooks must be called unconditionally on every render. If `showBreadcrumb` changes between renders, React will produce incorrect state or crash. The fix is to always call the hook and use the `enabled` option:
 
+```typescript
+const {data: breadcrumbPaths = []} = useBreadcrumb(ownerId, mountId, pathId);
+// Then conditionally render breadcrumb UI based on showBreadcrumb
 ```
-folder: (ownerId, mountId, pathId) => [...driveKeys.folders(), ownerId, mountId, pathId]
-```
 
-This affects: `folder`, `path`, `read`, `write`, `textPreview`, and all invalidation functions that call them. The
-`root` key correctly includes `ownerId` but is the exception. The `mounts`, `shared`, and `mime` keys also omit
-`ownerId`. In a single-user scenario this works, but for team drives or shared-with-me paths, stale data from one
-owner's folder could be served for another's.
+Or pass `enabled: showBreadcrumb` into the hook. This is new.
 
-**2. UUID validation regex is incorrect**
-`packages/lib/src/types/owner.ts` line 24
+**2. Drive query keys omit `ownerId`, causing cross-owner cache collisions**
+`packages/lib/src/core/drive/hooks/use-drive.ts:10-26`
+
+The `driveKeys` factory excludes `ownerId` from most keys: `folder`, `path`, `read`, `write`, `textPreview`, `mounts`, `shared`, and `mime`. Only `root()` includes `ownerId`. Yet the actual query functions all pass `ownerId` to the API. When a user views their own drive and then a team drive, cache keys like `['drive', 'folder', 'default', '<pathId>']` collide, and stale data from one owner is served for the other.
+
+Similarly, the invalidation functions (`invalidateItemCreated`, `invalidatePathMoved`, etc.) do not scope by ownerId, meaning an SSE event for a team drive invalidation will also affect the user's personal drive cache entries that happen to share the same mountId+pathId structure.
+
+Fix: Add `ownerId` as the first parameter after the domain prefix in all keys that are not inherently global. Confirmed from previous review.
+
+**3. UUID validation regex accepts invalid characters**
+`packages/lib/src/types/owner.ts:24`
 
 ```typescript
 const uuidRegex = /^[0-9a-fA-Z]{32}$/i;
 ```
 
-This uses `a-fA-Z` (all letters) instead of `a-fA-F` (hex only), meaning it would accept invalid characters like `g`,
-`z` etc. The `i` flag makes `a-fA-Z` pointless since it already covers case, but the range itself is wrong. Also, this
-validates only 32-character hex strings without dashes -- this works if the system strips dashes, but the comment says
-"check if id is valid uuid" which is misleading.
+The character class `a-fA-Z` matches all letters A-Z, not just hex digits A-F. A string like `00000000000000000000000000000zzz` passes this regex. The `i` flag makes the explicit upper range redundant. Should be `/^[0-9a-f]{32}$/i`. Additionally, the regex validates dashless 32-char hex strings, but the system's UUIDs are standard 36-char dashed format -- this means `parseOwnerId` silently returns `{type: 'user', id: ''}` for any raw UUID with dashes, falling through to the validation check. This works only because the `validateEmailAddress` check on line 10 catches email-format IDs first, and the `team_`/`org_` prefix stripping on lines 14-19 leaves just the 32-char hex portion. Still, the regex should be correct. Confirmed from previous review.
 
-### Important
+## Important Issues
 
-**3. Pervasive `as any` casts in calendar hooks erase type safety**
-`packages/lib/src/core/calendar/hooks/use-calendar.ts` -- 13 occurrences (lines 56, 69, 83, 95, 108, 121, 134, 146,
-161, 194, 227, etc.)
+**4. `MAIL_SENT` SSE event handler is a no-op**
+`packages/lib/src/core/mail/sse-handlers.ts:60-61`
+
+```typescript
+case SSEventType.MAIL_SENT:
+    return true;
+```
+
+The handler matches the event but performs no cache invalidation. After sending an email, the Sent mailbox list remains stale until its staleTime expires or the user manually navigates away and back. Should at minimum call `invalidateMailMoved(queryClient, mail.messageId, 'Drafts', 'Sent')` and `invalidateMailboxes(queryClient)`. Confirmed from previous review.
+
+**5. Pervasive `as any` casts in calendar hooks erase type safety**
+`packages/lib/src/core/calendar/hooks/use-calendar.ts` -- 12 occurrences (lines 56, 69, 83, 95, 108, 121, 134, 146, 161, 194, 227-228)
 
 Nearly every calendar API call casts the Eden Treaty chain to `any`:
 ```typescript
 const response = await (calendarApi({ownerId}).calendars as any)({calId: calendarId}).events.post(eventData as any);
 ```
-This completely defeats the purpose of the type-safe Eden Treaty client. If the API changes (renames a parameter, changes
-a type), these calls will silently break at runtime instead of failing at typecheck. The calendar routes likely need
-their Elysia route definitions adjusted to produce correct Eden Treaty types.
 
-**4. `as any` casts in mail `useEmails` hook**
-`packages/lib/src/core/mail/hooks/use-emails.ts` line 23
+This defeats the type-safe API client entirely. If the API renames a parameter or changes a type, these will silently break at runtime instead of failing at build. This is the biggest type safety gap in the frontend. The Elysia route definitions for calendar probably use nested path parameters that Eden Treaty doesn't map cleanly -- the route types should be adjusted so Eden generates correct types. Confirmed from previous review; count verified at 12 (not 13).
 
-```typescript
-const response = await (mailApi({ownerId}).mailbox as any)[path].get();
-```
+**6. Additional `as any` casts across other hooks (21 total across all hook files)**
+- `packages/lib/src/core/mail/hooks/use-emails.ts:23` -- dynamic property access via `as any` on mailbox path
+- `packages/lib/src/core/contacts/hooks/use-labels.ts:40,58` -- label post/put bodies
+- `packages/lib/src/core/team/hooks/use-team-mounts.ts:27,40` -- mount post/put bodies
+- `packages/lib/src/core/settings/hooks/use-server-settings.ts:26` -- settings put body
+- `packages/lib/src/core/settings/hooks/use-s3-config.ts:26` -- s3config put body
+- `packages/lib/src/core/people/hooks/use-members.ts:35,77` -- `role: role as any`
 
-Dynamic property access via `as any` on the mailbox path. This loses all type safety for the mailbox endpoint.
+Confirmed from previous review. The total `as any` count across `packages/lib/src` is 21 occurrences.
 
-**5. `as any` casts in labels hooks**
-`packages/lib/src/core/contacts/hooks/use-labels.ts` lines 40, 58
+**7. Draft mutation hooks swallow errors, making `isError` state unreachable**
+`packages/lib/src/core/mail/hooks/use-draft.ts:22-44`
 
-```typescript
-const response = await contactsApi({ownerId}).labels.post(labelData as any);
-```
+Both `updateDraftEmail` and `sendDraftEmail` wrap API calls in try/catch and return `null` on failure instead of re-throwing. Since `useMutation` relies on thrown errors to set `isError`, consumers using `useSendDraft().isError` will never see `true`. The error is logged but not propagated. Fix: remove the try/catch or re-throw after logging. Confirmed from previous review.
 
-The `as any` on the post/put bodies suggests a type mismatch between the Label type and what the API expects.
-
-**6. `as any` casts in team mount hooks**
-`packages/lib/src/core/team/hooks/use-team-mounts.ts` lines 27, 40
-
-**7. `as any` casts in settings hooks**
-`packages/lib/src/core/settings/hooks/use-server-settings.ts` line 26
-`packages/lib/src/core/settings/hooks/use-s3-config.ts` line 26
-
-**8. `as any` casts in people hooks**
-`packages/lib/src/core/people/hooks/use-members.ts` lines 35, 77
-
-```typescript
-role: role as any
-```
-
-The role parameter is typed as `string` but the API expects a specific union type.
-
-**9. Module-level singleton QueryClient**
-`packages/ui/src/components/layout/app/eigen-app.tsx` line 21
-
-```typescript
-const queryClient = new QueryClient();
-```
-
-The `QueryClient` is created at module scope. This means all apps share a single static instance per module load. If the
-module is ever loaded in an SSR context or if multiple `EigenApp` instances are rendered (unlikely but possible), they
-will share cache state. The standard practice is to create the client inside the component or via `useState`/`useRef` to
-ensure one instance per component tree.
-
-**10. `useSSE` `isConnected` returns a snapshot, not reactive state**
-`packages/lib/src/core/sse/hooks/use-sse.ts` lines 62-64
+**8. `useSSE` `isConnected` is a stale snapshot, not reactive state**
+`packages/lib/src/core/sse/hooks/use-sse.ts:62-64`
 
 ```typescript
 return {
@@ -130,206 +85,185 @@ return {
 };
 ```
 
-`eventSourceRef.current` is a ref, so `isConnected` is computed once at render time and never triggers re-renders when
-the connection state changes. Any consumer checking `isConnected` will see a stale value. This should use `useState` to
-track connection state, updated via `onopen` and `onerror`/`onclose` event handlers.
+This is computed from a ref at render time and never triggers re-renders when the connection drops or reconnects. Any component reading `isConnected` gets a stale value. Should use `useState` updated via `eventSource.onopen`/`eventSource.onerror` handlers. Confirmed from previous review.
 
-**11. `console.log` left in production SSE path**
-`packages/lib/src/core/sse/hooks/use-sse.ts` line 50
+**9. `console.log` in production SSE path**
+`packages/lib/src/core/sse/hooks/use-sse.ts:50`
 
 ```typescript
 console.log('Received SSE event', sseEvent);
 ```
 
-Every SSE event triggers a console.log. This is noisy in production and a performance concern for high-frequency events.
+Every SSE event logs the full event object. This is noisy and a minor performance concern for high-frequency events (e.g., `CHAT_TYPING`). Confirmed from previous review.
 
-### Minor
+**10. Module-level singleton `QueryClient`**
+`packages/ui/src/components/layout/app/eigen-app.tsx:21`
 
-**12. Dutch comment in English-only codebase**
-`packages/lib/src/core/contacts/hooks/use-labels.ts` line 7
+```typescript
+const queryClient = new QueryClient();
+```
+
+Created at module scope rather than inside the component. This means all `EigenApp` instances share the same cache. In practice this is likely fine since there is one instance per app, but it prevents proper isolation and is a known anti-pattern (e.g., if the module ever gets loaded in a testing or SSR context). Standard practice: `const [queryClient] = useState(() => new QueryClient())`. Confirmed from previous review.
+
+**11. `UploadProvider.removeUpload` reads stale `uploads` closure**
+`packages/ui/src/components/layout/upload-provider/upload-provider.tsx:86-88`
+
+```typescript
+removeUpload: (id) => {
+    const upload = uploads.find(u => u.id === id)
+    if (upload?.cancelFn) upload.cancelFn()
+    setUploads(prev => prev.filter(upload => upload.id !== id))
+}
+```
+
+The `contextValue` object is recreated every render (it is not memoized), and the `removeUpload` function captures the `uploads` state from the current render closure. However, since `contextValue` is a new object each render, every consumer re-renders on every upload state change. The `uploads.find` call uses the closure value which could be stale if called from an event handler after a state update. The `setUploads` correctly uses functional form, but the `cancelFn` lookup might find a stale upload. `contextValue` should be memoized with `useMemo` or the functions extracted with `useCallback`. This is new.
+
+**12. Chat `useMessages` polls every 5 seconds alongside SSE**
+`packages/lib/src/core/chat/hooks/use-chat.ts:34`
+
+```typescript
+refetchInterval: 5000,
+```
+
+Messages are already invalidated by SSE events (`handleChatSSEvent` calls `invalidateMessages`). The 5-second polling is redundant when SSE is connected and generates unnecessary network traffic. Consider removing the polling or making it conditional on SSE connection status. Confirmed from previous review.
+
+**13. `UserAvatar`, `UserItem`, and `UserName` have triplicated user resolution logic**
+`packages/ui/src/components/layout/user-avatar.tsx:33-44`
+`packages/ui/src/components/layout/user-item.tsx:35-48`
+`packages/ui/src/components/layout/user-name.tsx:32-43`
+
+All three components independently:
+1. Call `useContacts()` to get the full contact list
+2. Call `usePublicUser(userId || email || '')`
+3. Call `usePublicConfig()` to get the org ID
+4. Call `usePeopleTeams(org?.orgId)` for team name resolution
+5. Compute `displayName` with the identical fallback chain
+6. Find contact by email with identical logic
+
+This is 4 queries per component instance. In a chat message list with 20 messages, that is `UserAvatar` per message plus potential `InlineEmail` components, each triggering the same 4 queries. TanStack Query deduplicates, but the logic duplication is a maintenance burden -- a change to the display name fallback chain must be made in three places.
+
+Fix: Extract into a `useResolvedUser(emailOrId)` hook that returns `{displayName, avatarSrc, resolvedEmail, isLoading}`. Confirmed from previous review; extended to note `UserName` as a third copy.
+
+**14. `parseOwnerId` falls through from `team_` check to `org_` check**
+`packages/lib/src/types/owner.ts:14-19`
+
+```typescript
+if (ownerId.startsWith('team_')) {
+    id = ownerId.slice(5);
+    type = 'team';
+}
+if (ownerId.startsWith('org_')) {
+    id = ownerId.slice(4);
+    type = 'org';
+}
+```
+
+These are two separate `if` statements, not `if/else if`. A string starting with `team_` will match the first condition, set `type = 'team'` and `id` to the sliced value, then also be checked against `org_` (which won't match, but costs an unnecessary check). More importantly, if someone constructed `org_team_abc`, both branches would execute. The second `if` should be `else if`. This is new.
+
+## Minor Issues
+
+**15. Dutch comment in English-only codebase**
+`packages/lib/src/core/contacts/hooks/use-labels.ts:7`
 
 ```typescript
 // Definieer query keys voor hergebruik
 ```
 
-CLAUDE.md and CONTRIBUTING.md state "English everywhere -- code, comments, docs."
+CLAUDE.md states "English everywhere". Should be "Define query keys for reuse". Confirmed from previous review.
 
-**13. `use client` directives are unnecessary**
-10 files in `packages/ui/src/components/layout/` have `"use client"` at the top. Since this is a Vite + React project
-(not Next.js), these directives have no effect. They add confusion about the rendering model.
+**16. Dead export map entries in `packages/lib/package.json`**
+Lines 19 and 34:
+```json
+"./admin": "./src/core/admin/index.ts",
+"./stickies": "./src/core/stickies/index.ts",
+```
 
-Files: `eigen-app.tsx`, `sse-provider.tsx`, `upload-provider.tsx`, `upload-container.tsx`, `preview-provider.tsx`,
-`user-avatar.tsx`, `user-item.tsx`, `user-name.tsx`, `drive-access-list.tsx`, `drive-access-list-edit.tsx`
+Neither `packages/lib/src/core/admin/` nor `packages/lib/src/core/stickies/` exist. Any consumer importing from `@workspace/lib/admin` or `@workspace/lib/stickies` will get a module resolution failure. Confirmed from previous review via glob search.
 
-**14. `interface` used instead of `type` in several places in `packages/ui`**
-CONTRIBUTING.md says "Always `type` over `interface` (except when methods needed)". Found 16 `interface` declarations in
-UI layout components:
-- `packages/ui/src/components/layout/app/eigen-app.tsx` line 16: `interface EigenAppProps`
-- `packages/ui/src/components/layout/app/topbar.tsx` line 46: `interface TopbarProps`
-- `packages/ui/src/components/layout/labels/label-provider.tsx` lines 6, 28
-- `packages/ui/src/components/layout/labels/label-dialog.tsx` line 36
-- `packages/ui/src/components/layout/drive/drive-create-folder-item.tsx` line 9
-- `packages/ui/src/components/layout/drive/file-preview.tsx` line 10
-- `packages/ui/src/components/layout/drive/drive-list.tsx` line 168
-- `packages/ui/src/components/layout/shadow-content.tsx` line 4
-- `packages/ui/src/components/layout/upload-provider/upload-with-progress.tsx` line 5
-- `packages/ui/src/components/layout/context-menu/context-menu-anchor.tsx` line 4
-- `packages/ui/src/components/layout/sse-provider/sse-provider.tsx` line 7
-- `packages/ui/src/components/layout/braket/*.tsx`
-- `packages/ui/src/components/layout/app/app-logo.tsx` line 9
+**17. `interface` used instead of `type` in 16 locations**
+CONTRIBUTING.md says "Always `type` over `interface` (except when methods needed)." Found 16 `interface` declarations in packages/ui layout components, none of which require methods:
 
-None of these need methods. All should be `type`.
+`eigen-app.tsx:16`, `topbar.tsx:46`, `label-provider.tsx:6,28`, `label-dialog.tsx:36`, `drive-create-folder-item.tsx:9`, `file-preview.tsx:10`, `drive-list.tsx:168`, `shadow-content.tsx:4`, `upload-with-progress.tsx:5`, `context-menu-anchor.tsx:4`, `sse-provider.tsx:7`, `app-logo.tsx:9`, `bra.tsx:3`, `ket.tsx:3`, `bar.tsx:3`
 
-**15. Dead export map entries in `packages/lib/package.json`**
-`"./admin": "./src/core/admin/index.ts"` -- the directory `packages/lib/src/core/admin/` does not exist.
-`"./stickies": "./src/core/stickies/index.ts"` -- the directory `packages/lib/src/core/stickies/` does not exist.
+Confirmed from previous review.
 
-These are phantom exports that will cause import resolution failures if any consumer tries to use them.
+**18. `"use client"` directives have no effect**
+41 files in `packages/ui/src/components/` have `"use client"` at the top. Since this is a Vite + React project (not Next.js RSC), these directives are inert. Many are from shadcn/ui component templates and are harmless but add confusion about the rendering model. The custom layout components (`eigen-app.tsx`, `sse-provider.tsx`, `upload-provider.tsx`, `upload-container.tsx`, `preview-provider.tsx`, `user-avatar.tsx`, `user-item.tsx`, `user-name.tsx`, `drive-access-list.tsx`, `drive-access-list-edit.tsx`) also have them. Confirmed from previous review; count updated from 10 to 41 (many are shadcn defaults).
 
-**16. `DriveLayoutProps.error` typed as `any`**
-`packages/ui/src/components/layout/drive/drive-layout.tsx` line 29
+**19. `DriveLayoutProps.error` and `onAfterAction` data typed as `any`**
+`packages/ui/src/components/layout/drive/drive-layout.tsx:29,35`
 
 ```typescript
 error: any;
-```
-
-Should use `Error | null` or a more specific type.
-
-**17. `DriveLayoutProps.onAfterAction` data typed as `any`**
-`packages/ui/src/components/layout/drive/drive-layout.tsx` line 35
-
-```typescript
 onAfterAction?: (actionType: string, data: any) => void;
 ```
 
-Should have a discriminated union or at least a defined shape.
+`error` should be `Error | null`. `onAfterAction` data should use a discriminated union or at least `unknown`. Confirmed from previous review.
 
-## Robustness
+**20. `mailboxKeys.list` takes `Record<string, any>` filter parameter**
+`packages/lib/src/core/mail/hooks/use-mailboxes.ts:8`
 
-**Error handling in hooks is inconsistent.** Some hooks throw errors from API responses (e.g., `useCreateCalendar`
-checks `if (response.error) throw new Error(...)`), while others silently return empty arrays or null (e.g.,
-`useMounts`, `useRootFolder` just return `response.data || []`). When an API call fails with an error status, the
-Eden Treaty response has `.error` set -- not checking it means the query succeeds with empty/null data, which is
-indistinguishable from "no data yet."
+```typescript
+list: (filters: Record<string, any>) => [...mailboxKeys.lists(), {filters}] as const,
+```
 
-Affected hooks that swallow errors silently:
-- `useMounts` (line 33): returns `[]` on error
-- `useRootFolder` (line 47): returns `null` on error
-- `useMailboxes` (line 21): returns `[]` on error
-- `useCalendars` (line 30): returns `[]` on error
-- `useSharedCalendars` (line 181): returns `[]` on error
-- `useHomeSize` (line 20): returns `null` on error
-- `useContact` (line 41): returns `data` without error check
+The `list` key factory accepts `any`-typed filters. This key is never actually used (the hook calls `mailboxKeys.lists()` directly), making it dead code that also erodes types. This is new.
 
-**Draft mutation hooks (`useUpdateDraft`, `useSendDraft`) catch errors and return `null` instead of throwing.**
-`packages/lib/src/core/mail/hooks/use-draft.ts` lines 22-44. `updateDraftEmail` and `sendDraftEmail` catch all errors
-and return `null`. Since `useMutation` relies on thrown errors to set `isError` state, consumers cannot distinguish
-"draft saved but returned null" from "network failure." The error is logged to console but the mutation reports success.
+**21. Error handling inconsistency across query hooks**
+Some hooks check `response.error` and throw (e.g., `useFolderContent`, `useCreateCalendar`, all contact mutations), while others silently return empty/null data (e.g., `useMounts` returns `[]`, `useRootFolder` returns `null`, `useMailboxes` returns `[]`, `useCalendars` casts and returns `[]`, `useHomeSize` returns `null`). When an API call fails, the latter group reports success with empty data, which is indistinguishable from "no data exists." The pattern should be consistent across all hooks. Confirmed from previous review.
 
-**`MAIL_SENT` SSE event is a no-op.**
-`packages/lib/src/core/mail/sse-handlers.ts` line 61. The handler matches `MAIL_SENT` but only returns `true` without
-any cache invalidation. The sent message should at minimum invalidate the Sent mailbox list.
+**22. `useCollabDocumentInfo` returns fallback instead of throwing on error**
+`packages/lib/src/core/collab/hooks/use-collab.ts:22-24`
 
-## Component Quality
+```typescript
+if (response.error) {
+    console.error('Error fetching document info:', response.error);
+    return {canRead: false, canWrite: false, path: null, folderContents: null};
+}
+```
 
-**`UserAvatar` and `UserItem` have substantial code duplication.**
-`packages/ui/src/components/layout/user-avatar.tsx` and `packages/ui/src/components/layout/user-item.tsx` both:
-1. Call `useContacts()` to search contacts by email
-2. Call `usePublicUser()` with the same lookup logic
-3. Call `usePublicConfig()` and `usePeopleTeams()` for team name resolution
-4. Compute `displayName` with the same fallback chain (team name > contact name > public name > name > email)
-5. Compute `avatarSrc` with the same logic
+An API error is logged then swallowed, returning a "no permissions" fallback. The query reports success, so consumers cannot distinguish "server error" from "user lacks permission." This is new.
 
-This resolution logic should be extracted into a shared hook (e.g., `useResolvedUser(emailOrId)`), with `UserAvatar` and
-`UserItem` consuming it.
+**23. `useAuthClient` hook returns the auth client as query data**
+`packages/lib/src/core/auth/hooks/use-auth-client.ts:27-31`
 
-**`UserAvatar` makes 4 API queries on every render.**
-Each `UserAvatar` instance triggers: `useContacts()`, `usePublicUser()`, `usePublicConfig()`, `usePeopleTeams()`. In a
-list of 20 users this means `useContacts` runs 20 times (though TanStack Query deduplicates). Still, calling the full
-contacts list just to resolve one avatar is heavy. A dedicated endpoint or a lighter hook would be better.
+```typescript
+export function useAuthClient() {
+    return useQuery({
+        queryKey: ['auth-client'],
+        queryFn: () => authClient
+    })
+}
+```
 
-**`UserItem` shows a loading spinner (`EigenLoader`) while fetching user data.**
-`packages/ui/src/components/layout/user-item.tsx` line 52. In a list of users, each `UserItem` shows its own spinner
-until both `usePublicUser` and `useContacts` resolve. This creates a flickering effect. `UserAvatar` does not have this
-guard, which means they behave inconsistently.
+This wraps a module-level singleton in `useQuery`, which is unusual. The `queryFn` just returns the already-available `authClient` -- it does not fetch anything. The only consumer benefit is a consistent `{data, isLoading}` shape, but `isLoading` will only be true on first render. This could simply be `export { authClient }`. This is new.
 
-**`SidebarContainer` has a z-index layering issue on mobile.**
-`packages/ui/src/components/layout/sidebar/sidebar-container.tsx` lines 26-33 and 35-39. The sidebar content div uses
-`z-50` while the backdrop overlay uses `z-40`. Since the backdrop is rendered after the sidebar content in the DOM, on
-mobile the backdrop will appear above the sidebar content in some browsers. The backdrop should have a lower z-index
-than the sidebar, or the sidebar should be rendered after the backdrop.
+**24. `SidebarContainer` mobile overlay renders after the sidebar, creating z-index conflict**
+`packages/ui/src/components/layout/sidebar/sidebar-container.tsx:26-42`
 
-## Hook Quality
+On mobile when `sidebarOpen` is true, the sidebar content gets `fixed inset-0 z-50` and the backdrop overlay gets `fixed inset-0 z-40`. Since the sidebar content appears first in the DOM, and the backdrop has a lower z-index, this works correctly -- but the overlay's `onClick` handler to close the sidebar could be occluded by the full-screen sidebar div above it in z-order. In practice, the sidebar content does not fill the full viewport width (it has `w-64`), so clicks on the backdrop area outside the sidebar still work. However, the sidebar div has `inset-0` which makes it full-screen, meaning the backdrop is fully covered. The sidebar content inside will only occupy part of the screen, but the sidebar div's click target covers everything. This means clicking outside the sidebar (on the backdrop) actually clicks on the z-50 sidebar div, not the z-40 backdrop. The close button works because it is inside the sidebar, but tapping the dark overlay area does not close the sidebar.
 
-**Query key patterns are consistent within domains but inconsistent across domains.** Each domain defines its own key
-factory (good), but the structures vary:
+Fix: The sidebar's container div should not use `inset-0` or should be limited to its actual width so the backdrop behind it is clickable. Confirmed from previous review; analysis updated with root cause.
 
-| Domain    | Root key      | Includes ownerId in keys? | Key factory location                                |
-|-----------|---------------|---------------------------|-----------------------------------------------------|
-| drive     | `['drive']`   | Only in `root()` key       | `use-drive.ts` (same file as hooks)                 |
-| mail      | `['emails']`  | No                         | `use-emails.ts` (same file)                         |
-| mailbox   | `['mailboxes']` | No                       | `use-mailboxes.ts` (same file)                      |
-| contacts  | `['contacts']` | No                        | `use-contacts.ts` (same file)                       |
-| labels    | `['labels']`  | No                         | `use-labels.ts` (same file)                         |
-| calendar  | `['calendar']` | Only in `calendarEvents()` | `use-calendar.ts` (same file)                      |
-| chat      | `['chat']`    | Yes (in `messages()`)      | `use-chat.ts` (same file)                           |
-| home      | `['home']`    | No                         | `use-home.ts` (same file)                           |
-| people    | `['people']`  | No                         | `keys.ts` (separate file, good)                     |
-| public    | `['publicUser']` / `['publicConfig']` | In detail key | `use-public.ts` (same file)      |
-| collab    | `['collab']`  | Yes (in doc/revision keys) | `use-collab.ts` (same file)                         |
-| settings  | `['settings']` | No                        | `use-server-settings.ts` (same file)                |
-| team      | `['team']`    | Yes (in settings/mount)    | `use-team-settings.ts` (same file)                  |
-| space     | `['space']`   | No                         | `use-space-settings.ts` (same file)                 |
-| editor    | `['editor']`  | Yes (in content key)       | `use-file-content.ts` (same file)                   |
+**25. `localIdCounter` in `useChatRoom` is a module-level mutable that persists across instances**
+`packages/lib/src/core/chat/hooks/use-chat-room.ts:15`
 
-The inconsistency around `ownerId` inclusion is the main concern. Domains that are inherently per-user (mail, contacts,
-home, space) get away with omitting it because they use `useAuth()` internally. But drive, which serves both personal
-and team contexts, should include it.
+```typescript
+let localIdCounter = 0;
+```
 
-**People hooks (`usePeopleMembers`, `usePeopleTeams`) keys don't include `organizationId`.**
-`packages/lib/src/core/people/hooks/keys.ts`. The keys `['people', 'members']` and `['people', 'teams']` are the same
-regardless of which organization is being queried. If the app ever supports viewing multiple orgs, this will cause cache
-collisions. Low risk currently since there's typically one org, but it's a latent bug.
+This counter is shared across all `useChatRoom` instances and never resets. While the IDs are prefixed with `local-` and only used for local system messages, the counter grows monotonically across all chat rooms. This is harmless but conceptually wrong -- it would be cleaner to use `useRef` inside the hook. This is new.
 
-**Chat `useMessages` uses `refetchInterval: 5000` alongside SSE.**
-`packages/lib/src/core/chat/hooks/use-chat.ts` line 34. Messages already get invalidated via SSE events
-(`handleChatSSEvent`). The 5-second polling is redundant when SSE is connected and wastes bandwidth. Consider making the
-polling conditional on SSE connection status, or removing it entirely.
+## Observations
 
-**Mail hooks use `useAuth()` internally while drive hooks take `ownerId` as a parameter.**
-This is an architectural inconsistency. Mail, contacts, calendar, and home hooks call `useAuth()` inside the hook to
-get `ownerId`. Drive, chat, collab, and editor hooks take `ownerId` as a parameter. The parameter approach is more
-flexible (works for team drives), but the inconsistency is confusing. Since drive already needs to support multi-owner
-scenarios, the parameter approach is correct there. The other domains should either adopt the same pattern or the
-difference should be documented.
+**Query key consistency.** Each domain defines its own key factory, which is good. But the approach to ownerId varies: drive only includes it in `root()`, calendar includes it in `calendarEvents()`, chat includes it in `messages()`, and mail/contacts/home omit it entirely (relying on `useAuth()` internally). The domains that are inherently single-user (mail, contacts, home) are safe omitting ownerId since TanStack Query is scoped to the single authenticated user's session. But drive, which serves personal and team contexts, needs ownerId in all keys.
 
-## Recommendations
+**SSE handler coverage is solid.** All 5 implemented domains (Drive, Mail, Contacts, Chat, Calendar) plus Space and Team have handlers registered in `useSSE`. The handler dispatch pattern (prefix check then switch) is consistent and each handler maps to specific invalidation functions. The only gap is `MAIL_SENT` being a no-op (issue #4 above).
 
-1. **Add `ownerId` to all drive query keys** -- this is the highest-impact change and prevents cross-owner cache
-   poisoning when team drives are used.
+**Eden Treaty type safety erosion.** The `as any` casts are concentrated in two areas: calendar hooks (nested path parameters that Eden Treaty does not map cleanly) and various mutation body parameters. The calendar issue is structural -- the Elysia route definitions likely use a pattern that does not produce correct Eden Treaty types for deeply nested resource paths. The other `as any` casts suggest minor mismatches between client types and API expectations. Both should be addressed at the API route definition level rather than with frontend casts.
 
-2. **Fix the UUID regex** in `parseOwnerId()` -- change `[0-9a-fA-Z]` to `[0-9a-fA-F]`.
+**Shared UI component library is well-organized.** The layout system (`AppShell`, `ColumnLayout`/`Column`, `SidebarContainer`) provides a consistent shell across all apps. The list hooks (`useListSelection`, `useKeyboardListNavigation`, `useListDrag`) are well-composed with clean generic signatures. The `DriveLayout` successfully abstracts the file browser UI for reuse by Drive, Docs, Stickies, etc.
 
-3. **Extract user resolution logic** from `UserAvatar` and `UserItem` into a shared `useResolvedUser(emailOrId)` hook
-   that returns `{displayName, avatarSrc, email, isLoading}`.
+**Provider stack ordering is correct.** `EigenApp` nests: HotkeysProvider > TooltipProvider > QueryClient > Auth > Theme > SSE > Upload > Preview > Toaster. This ensures auth is resolved before SSE connects, SSE is available before upload/preview, and toasts can fire from anywhere in the tree.
 
-4. **Address `as any` casts in calendar hooks** -- adjust the Elysia calendar route types so Eden Treaty generates
-   correct nested path types. This is the biggest type safety gap in the frontend.
-
-5. **Make error handling consistent** across all query hooks. Either check `response.error` and throw in all hooks, or
-   document that some hooks intentionally swallow errors. The current mix is confusing.
-
-6. **Remove `console.log` from SSE handler** (line 50 of `use-sse.ts`).
-
-7. **Remove or update dead export entries** (`admin`, `stickies`) from `packages/lib/package.json`.
-
-8. **Fix the Dutch comment** in `use-labels.ts` line 7.
-
-9. **Replace `interface` with `type`** in the 16 identified locations in `packages/ui` to match the project style guide.
-
-10. **Remove `"use client"` directives** from the 10 identified files -- they have no effect in a Vite project and add
-    confusion.
-
-11. **Fix the `MAIL_SENT` SSE handler** to invalidate the Sent mailbox.
-
-12. **Consider making chat polling conditional** on SSE connection status to avoid redundant network requests.
+**Validation layer is clean and minimal.** Email validation, ACL validation, and chat command validation are well-separated in `packages/lib/src/validation/`. The command validation is thorough with proper error messages for each command type.
