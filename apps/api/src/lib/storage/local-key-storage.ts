@@ -7,7 +7,7 @@ export class LocalKeyStorage implements StorageBackend {
     private dataDir: string;
 
     constructor(baseDir: string) {
-        this.dataDir = path.join(baseDir, 'data');
+        this.dataDir = path.resolve(baseDir, 'data');
         if (!fs.existsSync(this.dataDir)) {
             fs.mkdirSync(this.dataDir, {recursive: true});
         }
@@ -15,7 +15,7 @@ export class LocalKeyStorage implements StorageBackend {
 
     private getFilePath(key: string): string {
         const resolved = path.resolve(this.dataDir, key);
-        if (!resolved.startsWith(this.dataDir)) {
+        if (!resolved.startsWith(this.dataDir + path.sep) && resolved !== this.dataDir) {
             throw new Error(`Path traversal blocked: ${key}`);
         }
         return resolved;

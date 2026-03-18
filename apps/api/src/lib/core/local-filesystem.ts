@@ -7,7 +7,7 @@ export class LocalFilesystem {
     private baseDir: string;
 
     constructor(baseDir: string) {
-        this.baseDir = baseDir;
+        this.baseDir = path.resolve(baseDir);
         if (!fs.existsSync(this.baseDir)) {
             fs.mkdirSync(this.baseDir, {recursive: true});
         }
@@ -15,7 +15,7 @@ export class LocalFilesystem {
 
     private getFilePath(filePath: string): string {
         const resolved = path.resolve(this.baseDir, filePath);
-        if (!resolved.startsWith(this.baseDir)) {
+        if (!resolved.startsWith(this.baseDir + path.sep) && resolved !== this.baseDir) {
             throw new Error(`Path traversal blocked: ${filePath}`);
         }
         return resolved;

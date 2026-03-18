@@ -164,7 +164,7 @@ export class Contacts {
 
     public async updateContact(id: string, contact: Omit<Contact, 'id'>) {
         if (await this.you(id)) {
-            updateUser(this.home.user, `${contact.firstName} ${contact.lastName}`, contact.avatar || '');
+            await updateUser(this.home.user, `${contact.firstName} ${contact.lastName}`, contact.avatar || '');
             // check if this.home.user.email is included in contact.email, add as first element if not
             if (!contact.email.includes(this.home.user.email)) {
                 contact.email = [this.home.user.email, ...contact.email];

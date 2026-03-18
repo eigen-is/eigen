@@ -92,7 +92,7 @@ export function ChangePassword({onPasswordChange}: {
 
     // Handle form submission
     async function onSubmit(values: z.infer<typeof formSchema>) {
-        onPasswordChange({
+        await onPasswordChange({
             currentPassword: values.currentPassword,
             newPassword: values.newPassword,
             revokeOtherSessions: values.revokeOtherSessions

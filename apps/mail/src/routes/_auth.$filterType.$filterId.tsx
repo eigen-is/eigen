@@ -120,7 +120,7 @@ function MailRoute() {
 
     const handleDeleteEmailById = async (emailId: string) => {
         const email = await getEmailById(emailId);
-        if (email) handleDeleteEmail(email);
+        if (email) await handleDeleteEmail(email);
     };
 
     const handleDeleteEmailsByIds = async (emailIds: string[]) => {
@@ -129,7 +129,7 @@ function MailRoute() {
 
     const handleMoveEmailToFolderById = async (emailId: string, folderId: string) => {
         const email = await getEmailById(emailId);
-        if (email) handleMoveEmail(email, folderId);
+        if (email) await handleMoveEmail(email, folderId);
     };
 
     const handleMoveEmailsToFolderByIds = async (emailIds: string[], folderId: string) => {
@@ -138,7 +138,7 @@ function MailRoute() {
 
     const handleArchiveEmailById = async (emailId: string) => {
         const email = await getEmailById(emailId);
-        if (email) handleMoveEmail(email, 'Archive');
+        if (email) await handleMoveEmail(email, 'Archive');
     };
 
     const handleArchiveEmailsByIds = async (emailIds: string[]) => {
@@ -147,7 +147,7 @@ function MailRoute() {
 
     const handleReportSpamById = async (emailId: string) => {
         const email = await getEmailById(emailId);
-        if (email) handleMoveEmail(email, 'Junk');
+        if (email) await handleMoveEmail(email, 'Junk');
     };
 
     const handleReportSpamByIds = async (emailIds: string[]) => {

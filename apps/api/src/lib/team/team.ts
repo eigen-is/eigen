@@ -8,7 +8,7 @@ export async function getTeam(teamId:string) {
 }
 
 export async function getTeamExists(teamId: string) {
-    return getTeam(teamId) !== undefined;
+    return (await getTeam(teamId)) !== undefined;
 }
 
 export async function getTeamMembers(teamId: string) {
