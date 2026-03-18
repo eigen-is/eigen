@@ -21,7 +21,7 @@ export function useFileSave(ownerId: string, mountId: string, pathId: string) {
         },
         onSuccess: (data) => {
             if (!data.conflict) {
-                queryClient.invalidateQueries({queryKey: driveKeys.path(mountId, pathId)});
+                queryClient.invalidateQueries({queryKey: driveKeys.path(ownerId, mountId, pathId)});
                 queryClient.invalidateQueries({queryKey: editorKeys.content(ownerId, mountId, pathId)});
             }
         },

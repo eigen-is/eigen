@@ -19,32 +19,31 @@ export function handleDriveSSEvent(event: SSEvent, queryClient: QueryClient): bo
     switch (event.type) {
         case SSEventType.DRIVE_ACL_SHARED:
         case SSEventType.DRIVE_ACL_UNSHARED:
-            invalidateAclSharedOrUnshared(queryClient);
-            // Also invalidate path/permissions in case user is already viewing this path
-            invalidateAclUpdated(queryClient, path.mountId, path.id, path.parentId);
+            invalidateAclSharedOrUnshared(queryClient, path.ownerId);
+            invalidateAclUpdated(queryClient, path.ownerId, path.mountId, path.id, path.parentId);
             return true;
 
         case SSEventType.DRIVE_FOLDER_CREATED:
         case SSEventType.DRIVE_FILE_CREATED:
         case SSEventType.DRIVE_FILE_UPLOADED:
-            invalidateItemCreated(queryClient, path.mountId, path.parentId, path.mimeType);
+            invalidateItemCreated(queryClient, path.ownerId, path.mountId, path.parentId, path.mimeType);
             return true;
 
         case SSEventType.DRIVE_FOLDER_DELETED:
         case SSEventType.DRIVE_FILE_DELETED:
-            invalidateItemDeleted(queryClient, path.mountId, path.id, path.parentId, path.mimeType);
+            invalidateItemDeleted(queryClient, path.ownerId, path.mountId, path.id, path.parentId, path.mimeType);
             return true;
 
         case SSEventType.DRIVE_PATH_RENAMED:
-            invalidatePathRenamed(queryClient, path.mountId, path.id, path.parentId, path.mimeType);
+            invalidatePathRenamed(queryClient, path.ownerId, path.mountId, path.id, path.parentId, path.mimeType);
             return true;
 
         case SSEventType.DRIVE_PATH_MOVED:
-            invalidatePathMoved(queryClient, path.mountId, path.id, path.parentId, event.drive?.oldParentId);
+            invalidatePathMoved(queryClient, path.ownerId, path.mountId, path.id, path.parentId, event.drive?.oldParentId);
             return true;
 
         case SSEventType.DRIVE_ACL_UPDATED:
-            invalidateAclUpdated(queryClient, path.mountId, path.id, path.parentId);
+            invalidateAclUpdated(queryClient, path.ownerId, path.mountId, path.id, path.parentId);
             return true;
 
         default:
