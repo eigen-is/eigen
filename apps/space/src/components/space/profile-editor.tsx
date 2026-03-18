@@ -167,7 +167,7 @@ export function ProfileEditor() {
 
                                         try {
                                             // Use the uploadWithProgress helper with authentication
-                                            const response = await uploadWithProgress({
+                                            await uploadWithProgress({
                                                 url: getContactsAvatarUploadUrl(user?.id || ''),
                                                 formData,
                                                 headers: {

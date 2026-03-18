@@ -162,7 +162,7 @@ export function ContactEdit({
                                                 const uploadHandler = upload.createUpload(file.name);
 
                                                 try {
-                                                    const response = await uploadWithProgress({
+                                                    await uploadWithProgress({
                                                         url: getContactsAvatarUploadUrl(user?.id || ''),
                                                         formData,
                                                         headers: {
