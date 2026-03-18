@@ -163,13 +163,15 @@ export const calendarRouter = new Elysia({name: "calendar"})
     })
 
     .get("/calendar/:ownerId/calendars/:calId/access", async ({params, user}) => {
-        const {calendar} = await resolveCalendarForEvents(user, params.ownerId, params.calId);
+        const {calendar, permission} = await resolveCalendarForEvents(user, params.ownerId, params.calId);
         const calData = calendar.getCalendarById(params.calId);
         if (!calData) throw new ApiError(404, 'Calendar not found');
-        return {ownerUserId: params.ownerId, shares: calData.shares || []};
+        return {ownerUserId: params.ownerId, shares: permission === 'write' ? (calData.shares || []) : []};
     }, {auth: true})
 
-    // --- Pull shared-with-me from a specific owner ---
+    // Pull calendars that ownerId has shared with the calling user.
+    // ownerId is NOT the caller — it's the calendar owner being queried.
+    // Response is filtered to only include shares matching the caller's email/teams.
     .get("/calendar/:ownerId/shared-with-me", async ({params, user}) => {
         const ownerHome = await getHome(params.ownerId);
         const memberships = await getMemberships(user.id);

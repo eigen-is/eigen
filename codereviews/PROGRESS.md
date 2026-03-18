@@ -12,22 +12,22 @@ Tracking all findings from the [full code review](OVERVIEW.md). Phases match the
 - [x] `createAsyncSingleton` — resets on transient failure (I15)
 - [x] Collab DB leak — `closeCollabDocument` now closes the ManagedDatabase (I32)
 - [x] Double-unsubscribe — shared cleanup via `ws.data`, no phantom documents (I33)
-- [ ] C1: Team calendar auth bypass — hardcoded `permission: 'write'` for all team members
-- [ ] C3: Calendar `access` endpoint leaks share list to free-busy users
-- [ ] C2: Whisper content in SSE events (latent — becomes active if SSE expands)
-- [ ] C7: Clients can post `system` type chat messages
-- [ ] C4: Mailbox name path traversal (`..` not validated)
-- [ ] C5: Mail attachment header injection (Content-Disposition)
-- [ ] C6: Public mail delivery endpoint — no rate limit, size limit, or auth
-- [ ] I1: Path traversal in contacts avatar download
-- [ ] I2: Content-Disposition header injection in drive download
-- [ ] I3: Path traversal guard missing in `LocalFilesystem`
-- [ ] I4: Path traversal guard missing in `LocalKeyStorage`
-- [ ] I5: Hardcoded auth secret fallback in source
-- [ ] I6: Calendar shared-with-me allows user ID enumeration
-- [ ] I7: No message content length limit in chat
-- [ ] I8: No `limit` parameter validation/capping in chat
-- [ ] I9: HTML sanitization does not block CSS tracking in mail
+- [x] C1: Team calendar — `resolveCalendarForEvents` now calls `checkPermission` instead of hardcoding 'write'
+- [x] C3: Calendar `access` endpoint — shares only returned for `write` permission holders
+- [x] C2: Whisper SSE — content stripped from SSE payload, frontend refetches via filtered REST API
+- [x] C7: `system` type removed from route body schema + frontend hook
+- [x] C4: Mailbox name path traversal — `mailboxDir` now validates against `..` and control characters
+- [x] C5: Mail attachment header injection — filename sanitized (control chars, `"`, `\` replaced)
+- [x] C6: Mail delivery — 25MB body size limit added
+- [x] I1: Contacts avatar download — path traversal blocked (reject `/`, `\`, `..`)
+- [x] I2: Drive download — Content-Disposition filename sanitized
+- [x] I3: `LocalFilesystem.getFilePath` — `path.resolve` + prefix check blocks traversal
+- [x] I4: `LocalKeyStorage.getFilePath` — same fix
+- [x] I5: Auth secret fallback — replaced hardcoded secret with `crypto.randomUUID()`
+- [x] ~~I6~~: Calendar shared-with-me — not a real issue (ownerId is intentional for pull-based sharing)
+- [x] I7: Chat message content — `maxLength: 50000` added to body schema
+- [x] I8: Chat message limit — clamped to 1-200 range
+- [ ] I9: CSS tracking in mail — deferred (needs image proxy or "load remote content" toggle, not a quick fix)
 
 ## Phase 2: Data Integrity + Broken Features
 
