@@ -15,7 +15,7 @@ const settingsStore = new JsonStore<ServerSettings>(serverFs, 'settings.json', {
     },
     defaults: {
         mount: {
-            storageType: getStorageType(),
+            storageType: 'local-fullnames',
         },
     },
 });
@@ -24,7 +24,14 @@ let loaded = false;
 
 async function ensureLoaded() {
     if (!loaded) {
+        const exists = await serverFs.file('settings.json').exists();
         await settingsStore.load();
+        if (!exists) {
+            const configType = getStorageType();
+            if (configType !== 'local-fullnames') {
+                await settingsStore.set({defaults: {mount: {storageType: configType}}});
+            }
+        }
         loaded = true;
     }
 }

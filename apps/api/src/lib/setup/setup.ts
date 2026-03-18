@@ -6,6 +6,7 @@ import {
     saveServerConfig,
     type ServerConfig
 } from "../config/server-config";
+import {updateServerSettings} from "../config/server-settings";
 import {existsSync, mkdirSync} from "fs";
 import {dirname} from "path";
 import {randomBytes} from "crypto";
@@ -241,6 +242,10 @@ export async function completeSetup(input: SetupInput): Promise<SetupResult> {
         };
 
         await saveServerConfig(serverConfig);
+
+        await updateServerSettings({
+            defaults: {mount: {storageType: input.storageType}}
+        });
 
         return {
             success: true,
