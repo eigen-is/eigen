@@ -5,6 +5,14 @@ import {teamOwnerId} from '@workspace/lib/types';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
 
+async function addTeamMount(sessionToken: string, teamId: string, name = 'Team Drive') {
+    return authedRequest(sessionToken, `/team/${teamId}/mount`, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({name, storageType: 'local', maxSizeMB: 500}),
+    });
+}
+
 describe('Team Drives', () => {
     let ctx: TestCtx;
     let orgId: string;
@@ -50,6 +58,8 @@ describe('Team Drives', () => {
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({teamId, userId: ctx.bob.user.id}),
             });
+
+        await addTeamMount(ctx.alice.user.sessionToken, teamId);
     });
 
     test('team drive has mounts', async () => {
@@ -149,7 +159,8 @@ describe('Team Drives', () => {
     });
 
     test('text-preview works on team drive file', async () => {
-        const mountId = 'default';
+        const mountsRes = await authedRequest(ctx.alice.user.sessionToken, `/drive/${teamOwner}/mounts`);
+        const mountId = (await mountsRes.json() as any[])[0].id;
         const root = await driveGet(ctx.alice.user.sessionToken, teamOwner, mountId, 'root');
         const file = new File(['Hello from team'], 'team-preview.txt', {type: 'text/plain'});
         const uploaded = await driveUpload(ctx.alice.user.sessionToken, teamOwner, mountId, root.id, file);
@@ -163,7 +174,8 @@ describe('Team Drives', () => {
     });
 
     test('preview works on team drive image file', async () => {
-        const mountId = 'default';
+        const mountsRes = await authedRequest(ctx.alice.user.sessionToken, `/drive/${teamOwner}/mounts`);
+        const mountId = (await mountsRes.json() as any[])[0].id;
         const root = await driveGet(ctx.alice.user.sessionToken, teamOwner, mountId, 'root');
         const pngBytes = new Uint8Array([
             137,80,78,71,13,10,26,10,0,0,0,13,73,72,68,82,0,0,0,4,0,0,0,4,8,2,0,0,0,38,147,9,
@@ -181,7 +193,8 @@ describe('Team Drives', () => {
     });
 
     test('team member (bob) can access text-preview on team drive', async () => {
-        const mountId = 'default';
+        const mountsRes = await authedRequest(ctx.alice.user.sessionToken, `/drive/${teamOwner}/mounts`);
+        const mountId = (await mountsRes.json() as any[])[0].id;
         const root = await driveGet(ctx.alice.user.sessionToken, teamOwner, mountId, 'root');
         const file = new File(['Bob can read this'], 'bob-preview.txt', {type: 'text/plain'});
         const uploaded = await driveUpload(ctx.alice.user.sessionToken, teamOwner, mountId, root.id, file);
@@ -438,6 +451,8 @@ describe('Redundant ACL filtering', () => {
                 body: JSON.stringify({teamId: team.id, userId: ctx.alice.user.id}),
             });
 
+        await addTeamMount(ctx.alice.user.sessionToken, team.id);
+
         const tmRes = await authedRequest(ctx.alice.user.sessionToken,
             `/drive/${tOwner}/mounts`);
         const teamMounts = await tmRes.json() as any[];
@@ -567,6 +582,8 @@ describe('Team Drive Security Edge Cases', () => {
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({teamId, userId: ctx.bob.user.id}),
             });
+
+        await addTeamMount(ctx.alice.user.sessionToken, teamId);
 
         const tmRes = await authedRequest(ctx.alice.user.sessionToken,
             `/drive/${teamOwner}/mounts`);
@@ -738,6 +755,9 @@ describe('Cross-Team Access Edge Cases', () => {
                 headers: {'Content-Type': 'application/json'},
                 body: JSON.stringify({teamId: team2Id, userId: ctx.charlie.user.id}),
             });
+
+        await addTeamMount(ctx.alice.user.sessionToken, team1Id, 'Cross Team 1 Drive');
+        await addTeamMount(ctx.alice.user.sessionToken, team2Id, 'Cross Team 2 Drive');
 
         const t1Res = await authedRequest(ctx.alice.user.sessionToken,
             `/drive/${team1Owner}/mounts`);

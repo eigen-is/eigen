@@ -1,4 +1,4 @@
-import {PlusIcon, Users, UsersRound} from 'lucide-react';
+import {PlusIcon, Settings, Users, UsersRound} from 'lucide-react';
 import {Button} from '@workspace/ui/components/button';
 import {Separator} from '@workspace/ui/components/separator';
 import {SidebarItem} from '@workspace/ui/components/layout/sidebar/sidebar-item';
@@ -65,6 +65,12 @@ export function PeopleSidebar({
                         icon={<UsersRound className="h-4 w-4"/>}
                         label="Teams"
                         to="/teams"
+                        condensed={condensed}
+                    />
+                    <SidebarItem
+                        icon={<Settings className="h-4 w-4"/>}
+                        label="Settings"
+                        to="/settings"
                         condensed={condensed}
                     />
                 </SidebarSection>

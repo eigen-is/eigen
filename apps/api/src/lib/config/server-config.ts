@@ -1,13 +1,8 @@
 import {getServerDataPath} from './paths';
 import {type DeepPartial, JsonStore, LocalFilesystem} from '../core';
+import type {S3Config} from '@workspace/lib/types';
 
-export type S3Config = {
-    bucket: string;
-    region: string;
-    accessKey: string;
-    secretKey: string;
-    endpoint?: string;
-};
+export type {S3Config};
 
 export type ServerConfig = {
     domain: string;
@@ -17,6 +12,7 @@ export type ServerConfig = {
         type: 'local-id' | 'local-fullnames' | 's3';
         s3?: S3Config;
     };
+    secret: string;
     setupCompleted: boolean;
     setupCompletedAt?: string;
 };
@@ -27,6 +23,7 @@ const store = new JsonStore<ServerConfig>(serverFs, 'config.json', {
     orgName: '',
     orgId: '',
     storage: {type: 'local-id'},
+    secret: '',
     setupCompleted: false,
 });
 

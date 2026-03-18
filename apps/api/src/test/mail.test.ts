@@ -1,7 +1,9 @@
 import {beforeAll, describe, expect, test} from 'bun:test';
 import {authedRequest, getTestContext} from './setup';
 
-describe('Mail', () => {
+const isWindows = process.platform === 'win32';
+
+describe.skipIf(isWindows)('Mail', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
     let draftMessageId: string;
 

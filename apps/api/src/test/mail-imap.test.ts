@@ -11,6 +11,8 @@ import {
     rebuildFlagsSuffix
 } from '../lib/mail/mailutils';
 
+const isWindows = process.platform === 'win32';
+
 function userMaildir(userId: string) {
     return join(TEST_DATA_DIR, 'home', userId, 'eigen.mail', 'Maildir')
 }
@@ -114,7 +116,7 @@ describe('Maildir Utility Functions', () => {
     });
 });
 
-describe('IMAP/Dovecot Maildir Compatibility', () => {
+describe.skipIf(isWindows)('IMAP/Dovecot Maildir Compatibility', () => {
     let ctx: Awaited<ReturnType<typeof getTestContext>>;
     let charlieId: string;
 

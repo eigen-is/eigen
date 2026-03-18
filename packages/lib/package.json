@@ -35,6 +35,7 @@
     "./people": "./src/core/people/index.ts",
     "./space": "./src/core/space/index.ts",
     "./team": "./src/core/team/index.ts",
+    "./settings": "./src/core/settings/index.ts",
     "./editor": "./src/core/editor/index.ts",
     "./date": "./src/core/date.ts",
     "./types": "./src/types/index.ts",

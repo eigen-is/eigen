@@ -1,7 +1,11 @@
-import {mkdirSync} from 'fs';
+import {mkdirSync, rmSync} from 'fs';
 import {join} from 'path';
 
-const TEST_DATA_DIR = join(import.meta.dir, '../../../../data/test-' + Date.now());
+const TEST_DATA_ROOT = join(import.meta.dir, '../../../../data-test'); 
+// clear TEST_DATA_ROOT - remove all files and directories from previous test runs
+rmSync(TEST_DATA_ROOT, {recursive: true, force: true});
+
+const TEST_DATA_DIR = join(TEST_DATA_ROOT, 'test-' + Date.now());
 process.env['EIGEN_DATA_ROOT'] = TEST_DATA_DIR;
 
 mkdirSync(join(TEST_DATA_DIR, 'server'), {recursive: true});

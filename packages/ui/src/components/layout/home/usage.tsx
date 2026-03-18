@@ -6,12 +6,9 @@ import {cn} from "@workspace/ui/lib/utils";
 import {formatFileSize} from "@workspace/ui/lib/formatFileSize";
 
 export type StorageData = {
-    used: number;
-    max: number;
-    drive?: number;
-    mail?: number;
-    contacts?: number;
-    [key: string]: number | undefined;
+    mailAndContacts: { used: number; max: number };
+    drive: { default: { used: number; max: number } };
+    total: { used: number; max: number };
 }
 
 type StorageUsageProps = {
@@ -31,6 +28,10 @@ export function StorageUsage({className = "", condensed = false}: StorageUsagePr
     const {data: storageData, isLoading: storageLoading} = useHomeSize();
     const [showDetails, setShowDetails] = useState(false);
 
+    const totalUsed = storageData?.total.used ?? 0;
+    const totalMax = storageData?.total.max ?? 1;
+    const ratio = totalUsed / totalMax;
+
     return (
         <div className={cn(`p-3 select-none cursor-pointer`, className)} onClick={() => setShowDetails(!showDetails)}>
             <div>
@@ -40,13 +41,13 @@ export function StorageUsage({className = "", condensed = false}: StorageUsagePr
                         {storageLoading
                             ? <EigenLoader/>
                             : storageData
-                                ? `${formatFileSize(storageData.used)} / ${formatFileSize(storageData.max)}`
+                                ? `${formatFileSize(totalUsed)} / ${formatFileSize(totalMax)}`
                                 : "Unknown"}
                     </span>
                 </div>}
                 <Progress
-                    value={storageLoading || !storageData ? 0 : (storageData.used / storageData.max) * 100}
-                    indicatorClassName={getStorageUsageColor(storageLoading || !storageData ? 0 : (storageData.used / storageData.max))}
+                    value={storageLoading || !storageData ? 0 : ratio * 100}
+                    indicatorClassName={getStorageUsageColor(storageLoading || !storageData ? 0 : ratio)}
                     className="h-1.5"
                 />
             </div>
@@ -56,16 +57,16 @@ export function StorageUsage({className = "", condensed = false}: StorageUsagePr
                     (showDetails && !condensed) ? "max-h-36 opacity-100" : "max-h-0 opacity-0"
                 }`}
             >
-                <div className="space-y-2 mt-2 text-xs">
-                    {storageData && Object.entries(storageData)
-                        .filter(([key, value]) => key !== "used" && key !== "max" && value !== undefined)
-                        .map(([key, value]) => (
-                            <div key={key} className="flex justify-between">
-                                <span className="text-muted-foreground capitalize">{key}</span>
-                                <span>{formatFileSize(value as number)}</span>
-                            </div>
-                        ))}
-                </div>
+                {storageData && <div className="space-y-2 mt-2 text-xs">
+                    <div className="flex justify-between">
+                        <span className="text-muted-foreground">Mail & Contacts</span>
+                        <span>{formatFileSize(storageData.mailAndContacts.used)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                        <span className="text-muted-foreground">Drive</span>
+                        <span>{formatFileSize(storageData.drive.default.used)}</span>
+                    </div>
+                </div>}
             </div>
         </div>
     );

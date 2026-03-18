@@ -2,6 +2,7 @@ import {betterAuth} from "better-auth";
 import {drizzle} from 'drizzle-orm/bun-sqlite';
 import {drizzleAdapter} from "better-auth/adapters/drizzle";
 import {getServerDataPath} from "../config/paths";
+import {getServerConfig} from "../config/server-config";
 import {admin, organization, twoFactor} from "better-auth/plugins"
 import {
     account as accountScheme,
@@ -94,7 +95,7 @@ export const auth = betterAuth({
     appName: "eigen",
     baseURL: process.env["API_URL"],
     basePath: "/auth",
-    secret: "+/SmL4b3+bxwJgsJU7yT1Sbfm9YR/0GZhVGRaBm838c=",
+    secret: getServerConfig()?.secret || "+/SmL4b3+bxwJgsJU7yT1Sbfm9YR/0GZhVGRaBm838c=",
 });
 
 export async function authAddUserToDefaultOrg(user: User): Promise<void> {
