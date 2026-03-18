@@ -118,8 +118,8 @@ export function MountForm({
                         <SelectValue/>
                     </SelectTrigger>
                     <SelectContent>
-                        <SelectItem value="local">Local (ID-based)</SelectItem>
-                        <SelectItem value="local-key">Local (full names)</SelectItem>
+                        <SelectItem value="local">Local (full names)</SelectItem>
+                        <SelectItem value="local-key">Local (ID-based)</SelectItem>
                         <SelectItem value="s3">S3 Bucket</SelectItem>
                     </SelectContent>
                 </Select>

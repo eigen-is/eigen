@@ -20,9 +20,15 @@ import {
     useUpdateTeam
 } from '@workspace/lib/people';
 import {useCalendars, useUpdateCalendar} from '@workspace/lib/calendar';
-import {useTeamSettings, useUpdateTeamSettings, useTeamMounts, useAddTeamMount, useUpdateTeamMount} from '@workspace/lib/team';
+import {
+    useAddTeamMount,
+    useTeamMounts,
+    useTeamSettings,
+    useUpdateTeamMount,
+    useUpdateTeamSettings
+} from '@workspace/lib/team';
 import {useCheckS3Connection, useServerSettings} from '@workspace/lib/settings';
-import type {MountSettings} from '@workspace/lib/types/settings';
+import {mapStorageType, type MountSettings} from '@workspace/lib/types/settings';
 import {teamOwnerId} from '@workspace/lib/types';
 import {useNavigate} from '@tanstack/react-router';
 import {toast} from 'sonner';
@@ -211,9 +217,9 @@ export function TeamDetail({team, organizationId}: TeamDetailProps) {
     const teamMemberUserIds = new Set(teamMembers.map((m: {userId: string}) => m.userId));
     const availableMembers = allMembers.filter(m => !teamMemberUserIds.has(m.userId));
 
-    const defaultMountStorageType = serverSettings?.defaults.mount.storageType === 'local-id' ? 'local' as const
-        : serverSettings?.defaults.mount.storageType === 'local-fullnames' ? 'local-key' as const
-        : 's3' as const;
+    const defaultMountStorageType = serverSettings
+        ? mapStorageType(serverSettings.defaults.mount.storageType)
+        : 'local' as const;
 
     useEffect(() => {
         setShowSettingsForm(false);

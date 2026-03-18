@@ -44,12 +44,12 @@ export const settingsRouter = new Elysia({name: "settings"})
         auth: true,
     })
 
-    .get("/settings/s3-config", async ({user}) => {
+    .get("/settings/s3config", async ({user}) => {
         await requireAdmin(user.id);
         return getS3Config() ?? null;
     }, {auth: true})
 
-    .put("/settings/s3-config", async ({body, user}) => {
+    .put("/settings/s3config", async ({body, user}) => {
         await requireAdmin(user.id);
         await updateServerConfig({storage: {s3: {
             endpoint: body.endpoint,
@@ -72,7 +72,7 @@ export const settingsRouter = new Elysia({name: "settings"})
         auth: true,
     })
 
-    .post("/settings/s3-check", async ({body, user}) => {
+    .post("/settings/s3check", async ({body, user}) => {
         await requireAdmin(user.id);
         return checkS3Connection({
             endpoint: body.endpoint,

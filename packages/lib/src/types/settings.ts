@@ -21,6 +21,8 @@ export type TeamSettings = {
     };
 };
 
+export type ServerStorageType = 'local-id' | 'local-fullnames' | 's3';
+
 export type ServerSettings = {
     quotas: {
         mailAndContactsMaxMB: number;
@@ -30,7 +32,15 @@ export type ServerSettings = {
     };
     defaults: {
         mount: {
-            storageType: 'local-id' | 'local-fullnames' | 's3';
+            storageType: ServerStorageType;
         };
     };
 };
+
+export function mapStorageType(type: ServerStorageType): MountSettings['storageType'] {
+    switch (type) {
+        case 'local-id': return 'local-key';
+        case 'local-fullnames': return 'local';
+        case 's3': return 's3';
+    }
+}
