@@ -139,6 +139,20 @@ export default class SharedDrive extends Drive {
         return this.sharedDrive.createStickies(mountId, parentId, stickiesName);
     }
 
+    public async createSlides(mountId: string, parentId: string, slidesName: string): Promise<DrivePath> {
+        if (!(await this.canWrite(mountId, parentId, this.user))) {
+            throw new ApiError(403, 'No write permission');
+        }
+        return this.sharedDrive.createSlides(mountId, parentId, slidesName);
+    }
+
+    public async createSheets(mountId: string, parentId: string, sheetsName: string): Promise<DrivePath> {
+        if (!(await this.canWrite(mountId, parentId, this.user))) {
+            throw new ApiError(403, 'No write permission');
+        }
+        return this.sharedDrive.createSheets(mountId, parentId, sheetsName);
+    }
+
     public async createDoc(mountId: string, parentId: string, docName: string): Promise<DrivePath> {
         if (!(await this.canWrite(mountId, parentId, this.user))) {
             throw new ApiError(403, 'No write permission');

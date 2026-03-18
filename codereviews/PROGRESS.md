@@ -41,7 +41,7 @@ Tracking all findings from the [full code review](OVERVIEW.md). Phases match the
 
 ### Broken features
 
-- [ ] C22: Drive query keys omit `ownerId` — wrong data across owner switches
+- [x] C22: Drive query keys — added `ownerId` to all keys, hooks, invalidation functions, and SSE handler
 - [ ] C10: SharedDrive missing `createSlides` and `createSheets` overrides
 - [ ] C11: Slides and Sheets MIME type typos in 6 route files
 - [ ] C12: Mail download and attachment URLs broken — missing ownerId segment
