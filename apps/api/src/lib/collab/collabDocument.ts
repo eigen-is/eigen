@@ -40,28 +40,37 @@ class DbProvider {
     }
 
     private loadState(): void {
-        const snapshot = this.db.select().from(schema.docSnapshots)
-            .orderBy(desc(schema.docSnapshots.id))
-            .limit(1)
-            .get();
+        this.db.transaction((tx) => {
+            const snapshot = tx.select().from(schema.docSnapshots)
+                .orderBy(desc(schema.docSnapshots.id))
+                .limit(1)
+                .get();
 
-        if (snapshot) {
-            Y.applyUpdate(this.doc, snapshot.stateData as Uint8Array);
+            let loadedSnapshot = false;
+            if (snapshot) {
+                try {
+                    Y.applyUpdate(this.doc, snapshot.stateData as Uint8Array);
+                    loadedSnapshot = true;
+                } catch (error) {
+                    console.error(`[DbProvider] Corrupted snapshot for ${this.docId}, loading all updates instead`);
+                }
+            }
 
-            const updates = this.db.select().from(schema.docUpdates)
-                .where(gt(schema.docUpdates.id, snapshot.lastUpdateId))
-                .all();
+            const updates = loadedSnapshot && snapshot
+                ? tx.select().from(schema.docUpdates)
+                    .where(gt(schema.docUpdates.id, snapshot.lastUpdateId))
+                    .all()
+                : tx.select().from(schema.docUpdates).all();
+
             for (const update of updates) {
-                Y.applyUpdate(this.doc, update.updateData as Uint8Array);
+                try {
+                    Y.applyUpdate(this.doc, update.updateData as Uint8Array);
+                } catch (error) {
+                    console.error(`[DbProvider] Skipping corrupted update ${update.id} for ${this.docId}`);
+                }
             }
             this.updatesSinceSnapshot = updates.length;
-        } else {
-            const updates = this.db.select().from(schema.docUpdates).all();
-            for (const update of updates) {
-                Y.applyUpdate(this.doc, update.updateData as Uint8Array);
-            }
-            this.updatesSinceSnapshot = updates.length;
-        }
+        });
     }
 
     private storeUpdate(update: Uint8Array): void {
@@ -83,32 +92,34 @@ class DbProvider {
         try {
             const stateData = Buffer.from(Y.encodeStateAsUpdate(this.doc));
 
-            const lastUpdate = this.db.select({id: schema.docUpdates.id}).from(schema.docUpdates)
-                .orderBy(desc(schema.docUpdates.id))
-                .limit(1)
-                .get();
+            this.db.transaction((tx) => {
+                const lastUpdate = tx.select({id: schema.docUpdates.id}).from(schema.docUpdates)
+                    .orderBy(desc(schema.docUpdates.id))
+                    .limit(1)
+                    .get();
 
-            if (!lastUpdate) return;
+                if (!lastUpdate) return;
 
-            this.db.insert(schema.docSnapshots).values({
-                stateData,
-                lastUpdateId: lastUpdate.id,
-            }).run();
+                tx.insert(schema.docSnapshots).values({
+                    stateData,
+                    lastUpdateId: lastUpdate.id,
+                }).run();
 
-            this.db.delete(schema.docUpdates)
-                .where(lte(schema.docUpdates.id, lastUpdate.id))
-                .run();
-
-            const allSnapshots = this.db.select({id: schema.docSnapshots.id}).from(schema.docSnapshots)
-                .orderBy(desc(schema.docSnapshots.id))
-                .all();
-
-            if (allSnapshots.length > MAX_REVISIONS) {
-                const cutoffId = allSnapshots[MAX_REVISIONS - 1].id;
-                this.db.delete(schema.docSnapshots)
-                    .where(lt(schema.docSnapshots.id, cutoffId))
+                tx.delete(schema.docUpdates)
+                    .where(lte(schema.docUpdates.id, lastUpdate.id))
                     .run();
-            }
+
+                const allSnapshots = tx.select({id: schema.docSnapshots.id}).from(schema.docSnapshots)
+                    .orderBy(desc(schema.docSnapshots.id))
+                    .all();
+
+                if (allSnapshots.length > MAX_REVISIONS) {
+                    const cutoffId = allSnapshots[MAX_REVISIONS - 1].id;
+                    tx.delete(schema.docSnapshots)
+                        .where(lt(schema.docSnapshots.id, cutoffId))
+                        .run();
+                }
+            });
 
             this.updatesSinceSnapshot = 0;
         } catch (error) {
@@ -296,7 +307,7 @@ export default class CollabDocument {
             // Only send a response if we have content beyond the message type
             if (encoding.length(encoder) > 1) {
                 const responseMessage = encoding.toUint8Array(encoder);
-                conn.send(new Buffer(responseMessage));
+                conn.send(Buffer.from(responseMessage));
             }
 
             // No need to broadcast - updates trigger the doc's 'update' event which is handled separately

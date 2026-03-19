@@ -3,6 +3,20 @@ import {betterAuth} from "./auth";
 import {type ServerWebSocket} from "bun";
 import {getSharedDrive} from "../lib/drive";
 import {keepWebSocketAlive} from "../utils/websockets.ts";
+import {ApiError} from "../lib/core/errors.ts";
+import type CollabDocument from "../lib/collab/collabDocument.ts";
+import type {User} from "better-auth/types";
+import type Drive from "../lib/drive/drive.ts";
+import type SharedDrive from "../lib/drive/sharedDrive.ts";
+
+type CollabWsData = {
+    user?: User;
+    params: { ownerId: string; mountId: string; pathId: string };
+    drive?: Drive | SharedDrive;
+    collabDocument?: CollabDocument;
+    collabCleaned?: boolean;
+    pingInterval?: ReturnType<typeof setInterval>;
+};
 
 // Collab routes allow cross-owner access (collaborative editing on shared/team drives).
 // Access control is enforced by getSharedDrive() → SharedDrive ACL checks.
@@ -10,6 +24,7 @@ export const collabRouter = new Elysia({
     name: "collab",
     websocket: {
         perMessageDeflate: true,
+        maxPayloadLength: 4 * 1024 * 1024, // 4 MB
     }
 })
     .use(betterAuth)
@@ -32,28 +47,38 @@ export const collabRouter = new Elysia({
     .get("/collab/:ownerId/:mountId/:pathId/revisions", async ({params, user}) => {
         const drive = await getSharedDrive(params.ownerId, user);
         if (!await drive.canRead(params.mountId, params.pathId, user)) {
-            return {revisions: []};
+            throw new ApiError(403, "No read permission");
         }
         const document = await drive.getCollabDocument(params.mountId, params.pathId);
         return {revisions: document.getRevisions()};
     }, {auth: true})
 
-    .get("/collab/:ownerId/:mountId/:pathId/revisions/:revisionId", async ({params, user, set}) => {
+    .get("/collab/:ownerId/:mountId/:pathId/revisions/:revisionId", async ({params, user}) => {
         const drive = await getSharedDrive(params.ownerId, user);
         if (!await drive.canRead(params.mountId, params.pathId, user)) {
-            set.status = 403;
-            return {error: "No read permission"};
+            throw new ApiError(403, "No read permission");
         }
         const document = await drive.getCollabDocument(params.mountId, params.pathId);
-        const state = document.getRevisionState(parseInt(params.revisionId, 10));
+        const revisionId = Number(params.revisionId);
+        if (!Number.isInteger(revisionId) || revisionId <= 0) {
+            throw new ApiError(400, "Invalid revision ID");
+        }
+        const state = document.getRevisionState(revisionId);
         if (!state) {
-            set.status = 404;
-            return {error: "Revision not found"};
+            throw new ApiError(404, "Revision not found");
         }
         return new Response(Buffer.from(state), {
             headers: {"Content-Type": "application/octet-stream"}
         });
-    }, {auth: true})
+    }, {
+        auth: true,
+        params: t.Object({
+            ownerId: t.String(),
+            mountId: t.String(),
+            pathId: t.String(),
+            revisionId: t.String({pattern: '^[0-9]+$'}),
+        }),
+    })
 
     // WebSocket endpoint for collaborative editing
     .ws("/ws/collab/:ownerId/:mountId/:pathId", {
@@ -65,35 +90,34 @@ export const collabRouter = new Elysia({
         }),
 
         async open(ws) {
-            // @ts-ignore
-            const user = ws.data?.user;
+            const data = ws.data as unknown as CollabWsData;
+            const user = data.user;
             if (!user) {
                 ws.close(1008, "Authentication failed");
                 return;
             }
 
-            const {ownerId, mountId, pathId} = ws.data.params;
+            const {ownerId, mountId, pathId} = data.params;
 
             const drive = await getSharedDrive(ownerId, user);
             if (!drive || !(await drive.canRead(mountId, pathId, user))) {
                 ws.close(1008, "Authentication failed");
                 return;
             }
+
             try {
                 const document = await drive.getCollabDocument(mountId, pathId);
                 const rawWs = ws as unknown as ServerWebSocket<any>;
                 document.subscribe(user, rawWs);
 
-                // @ts-ignore – store on ws.data for use in message/close handlers
-                ws.data.collabDocument = document;
-                // @ts-ignore
-                ws.data.collabCleaned = false;
+                data.drive = drive;
+                data.collabDocument = document;
+                data.collabCleaned = false;
 
                 const cleanup = () => {
-                    // @ts-ignore
-                    if (ws.data.collabCleaned) return;
-                    // @ts-ignore
-                    ws.data.collabCleaned = true;
+                    if (data.collabCleaned) return;
+                    data.collabCleaned = true;
+                    if (data.pingInterval) clearInterval(data.pingInterval);
                     try {
                         document.unsubscribe(user, rawWs);
                     } catch (err) {
@@ -101,7 +125,7 @@ export const collabRouter = new Elysia({
                     }
                 };
 
-                keepWebSocketAlive(user, rawWs, cleanup);
+                data.pingInterval = keepWebSocketAlive(user, rawWs, cleanup);
             } catch (err) {
                 console.error('Error getting document:', err);
                 ws.close(1008, "Failed to get document");
@@ -114,8 +138,8 @@ export const collabRouter = new Elysia({
                 return;
             }
 
-            // @ts-ignore
-            const user = ws.data?.user;
+            const data = ws.data as unknown as CollabWsData;
+            const user = data.user;
             if (!user) {
                 ws.close(1008, "Authentication failed");
                 return;
@@ -123,19 +147,17 @@ export const collabRouter = new Elysia({
 
             try {
                 const update = message instanceof Uint8Array ? message : new Uint8Array(message as Buffer);
-                const {ownerId, mountId, pathId} = ws.data.params;
+                const {mountId, pathId} = data.params;
 
-                // @ts-ignore – set by open handler; may be absent if message arrives before open completes
-                let document = ws.data.collabDocument;
+                // drive is cached at open; fallback to fresh lookup if message arrives before open completes
+                const drive = data.drive ?? await getSharedDrive(data.params.ownerId, user);
+                let document = data.collabDocument;
                 if (!document) {
-                    const drive = await getSharedDrive(ownerId, user);
-                    if (!drive || !(await drive.canRead(mountId, pathId, user))) return;
+                    if (!(await drive.canRead(mountId, pathId, user))) return;
                     document = await drive.getCollabDocument(mountId, pathId);
-                    // @ts-ignore
-                    ws.data.collabDocument = document;
+                    data.collabDocument = document;
                 }
 
-                const drive = await getSharedDrive(ownerId, user);
                 const canWrite = await drive.canWrite(mountId, pathId, user);
                 document.handleMessage(ws as unknown as ServerWebSocket<any>, update, canWrite);
             } catch (err) {
@@ -144,15 +166,14 @@ export const collabRouter = new Elysia({
         },
 
         close(ws) {
-            // @ts-ignore
-            if (ws.data?.collabCleaned) return;
-            // @ts-ignore
-            ws.data.collabCleaned = true;
+            const data = ws.data as unknown as CollabWsData;
+            if (data.collabCleaned) return;
+            data.collabCleaned = true;
 
-            // @ts-ignore
-            const user = ws.data?.user;
-            // @ts-ignore
-            const document = ws.data?.collabDocument;
+            if (data.pingInterval) clearInterval(data.pingInterval);
+
+            const user = data.user;
+            const document = data.collabDocument;
             if (user && document) {
                 try {
                     document.unsubscribe(user, ws as unknown as ServerWebSocket<any>);
