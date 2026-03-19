@@ -200,7 +200,10 @@ export default class SharedDrive extends Drive {
 
     public async movePath(mountId: string, pathId: string, targetParentId: string): Promise<DrivePath> {
         if (!(await this.canWrite(mountId, pathId, this.user))) {
-            throw new ApiError(403, 'No write permission');
+            throw new ApiError(403, 'No write permission on source');
+        }
+        if (!(await this.canWrite(mountId, targetParentId, this.user))) {
+            throw new ApiError(403, 'No write permission on target folder');
         }
         return this.sharedDrive.movePath(mountId, pathId, targetParentId);
     }
@@ -231,15 +234,34 @@ export default class SharedDrive extends Drive {
         return this.sharedDrive.closeDatabase(mountId, pathId);
     }
 
-    // These methods operate on the owner's shared.db and must not be called on a SharedDrive instance,
-    // which represents another user's view of this drive.
-    async getSharedPathsWithMe(): Promise<DrivePath[]> {
-        throw new ApiError(403, 'Cannot query shared paths on a shared drive');
+    // Methods below must not be called on a SharedDrive. They are owner-only operations
+    // (mount management, share propagation, lifecycle) that are invoked internally by Home
+    // or the propagation system, never through routes.
+    getMountConfig(): never {
+        throw new ApiError(403, 'Not available on shared drive');
     }
-    async getSharedPathsByMe(): Promise<DrivePath[]> {
-        throw new ApiError(403, 'Cannot query shared paths on a shared drive');
+
+    async addMount(): Promise<never> {
+        throw new ApiError(403, 'Not available on shared drive');
     }
-    async getSharedWith(_user: User): Promise<DrivePath[]> {
-        throw new ApiError(403, 'Cannot query shared paths on a shared drive');
+
+    async removeMount(): Promise<never> {
+        throw new ApiError(403, 'Not available on shared drive');
+    }
+
+    async receiveACLChange(): Promise<never> {
+        throw new ApiError(403, 'Not available on shared drive');
+    }
+
+    async getSharedPathsWithMe(): Promise<never> {
+        throw new ApiError(403, 'Not available on shared drive');
+    }
+
+    async getSharedPathsByMe(): Promise<never> {
+        throw new ApiError(403, 'Not available on shared drive');
+    }
+
+    async getSharedWith(): Promise<never> {
+        throw new ApiError(403, 'Not available on shared drive');
     }
 }
