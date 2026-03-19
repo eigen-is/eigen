@@ -29,6 +29,8 @@ import {canRead, canWrite, filterRedundantACL, matchesACL, normalizeACL} from '.
 import {validateACLEntries} from '@workspace/lib/validation';
 import {getThumbnail, saveThumbnail} from '../shared/thumbnails';
 import {getScreenPreview, getTextPreviewData} from '../preview/preview-cache';
+import {getTextPreviewMode} from '@workspace/lib/constants';
+import {extractFrontmatter, MAX_INLINE_EDIT_SIZE, reattachFrontmatter} from './inline-edit';
 import CollabDocument from '../collab/collabDocument';
 import {getSharedDatabase} from './shared';
 import * as sharedSchema from './sharedschema';
@@ -395,6 +397,48 @@ export default class Drive {
         if (!updated) throw new ApiError(500, 'Failed to get updated file');
         this.emit(SSEventType.DRIVE_FILE_UPLOADED, updated);
         return updated;
+    }
+
+    async getEditableContent(mountId: string, pathId: string) {
+        const mount = this.getMount(mountId);
+        const path = await mount.getPath(pathId);
+        if (!path || path.type !== DRIVE_TYPE_FILE) throw new ApiError(404, 'File not found');
+
+        const editMode = getTextPreviewMode(path.mimeType, path.name);
+        if (!editMode) throw new ApiError(400, 'File type not supported for inline editing');
+        if (path.size > MAX_INLINE_EDIT_SIZE) throw new ApiError(413, 'File too large for inline editing');
+
+        const data = await mount.readFile(pathId);
+        if (!data) throw new ApiError(404, 'File content not found');
+
+        let content: string;
+        try {
+            content = new TextDecoder('utf-8', {fatal: true}).decode(data);
+        } catch {
+            throw new ApiError(400, 'File contains invalid UTF-8 encoding');
+        }
+
+        const {frontmatter, body} = editMode === 'markdown' ? extractFrontmatter(content) : {
+            frontmatter: null,
+            body: content
+        };
+        return {editMode, content: body, frontmatter, mimeType: path.mimeType, updatedAt: path.updatedAt};
+    }
+
+    async saveEditableContent(mountId: string, pathId: string, content: string, frontmatter: string | null, expectedUpdatedAt: string, force: boolean) {
+        const mount = this.getMount(mountId);
+        const path = await mount.getPath(pathId);
+        if (!path || path.type !== DRIVE_TYPE_FILE) throw new ApiError(404, 'File not found');
+
+        const currentUpdatedAt = path.updatedAt instanceof Date ? path.updatedAt.toISOString() : String(path.updatedAt);
+        if (expectedUpdatedAt !== currentUpdatedAt && !force) {
+            return {conflict: true as const, currentUpdatedAt};
+        }
+
+        const fullContent = reattachFrontmatter(content, frontmatter);
+        const updated = await this.writeFileContent(mountId, pathId, Buffer.from(fullContent, 'utf-8'));
+        const updatedAt = updated.updatedAt instanceof Date ? updated.updatedAt.toISOString() : String(updated.updatedAt);
+        return {conflict: false as const, updatedAt};
     }
 
     async getPreview(mountId: string, pathId: string, embedUrl: string) {

@@ -76,6 +76,9 @@ const UpdateSharedCalendarSchema = t.Object({
     visible: t.Optional(t.Boolean()),
 });
 
+// Calendar routes allow cross-owner access (shared calendars, team calendars).
+// Access control is enforced by resolveCalendar()/resolveCalendarForEvents() which check
+// ownership, team membership, or individual calendar shares.
 export const calendarRouter = new Elysia({name: "calendar"})
     .use(betterAuth)
 

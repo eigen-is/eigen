@@ -3,17 +3,18 @@ import {Download} from 'lucide-react';
 import {Button} from '@workspace/ui/components/button';
 import {toast} from 'sonner';
 import {getSpaceZipUrl} from '@workspace/lib/api';
+import {useAuth} from '@workspace/lib/auth';
 
 export function DownloadHome() {
+    const {user} = useAuth();
     const [isDownloading, setIsDownloading] = useState(false);
 
     const handleDownload = async () => {
         try {
             setIsDownloading(true);
 
-            // Create a hidden anchor element to trigger the download
             const downloadLink = document.createElement('a');
-            downloadLink.href = getSpaceZipUrl();
+            downloadLink.href = getSpaceZipUrl(user?.id || '');
             downloadLink.download = 'eigen-home.tar.gz'; // This will be overridden by the Content-Disposition header
 
             // Add credentials to ensure the auth cookie is sent

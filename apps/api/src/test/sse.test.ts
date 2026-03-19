@@ -59,16 +59,10 @@ describe('SSE', () => {
             }
         });
 
-        test('ownerId spoofing resolves to authenticated user', async () => {
+        test('ownerId spoofing is rejected with 403', async () => {
             const res = await authedRequest(ctx.bob.user.sessionToken,
                 `/sse/${ctx.alice.user.id}/events`);
-
-            expect(res.status).toBe(200);
-
-            if (res.body) {
-                const reader = res.body.getReader?.();
-                if (reader) await reader.cancel();
-            }
+            expect(res.status).toBe(403);
         });
     });
 

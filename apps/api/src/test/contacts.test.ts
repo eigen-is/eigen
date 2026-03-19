@@ -186,19 +186,10 @@ describe('Contacts', () => {
             expect(overlap.length).toBe(0);
         });
 
-        test('ownerId spoofing still returns Bob contacts for Bob token', async () => {
+        test('ownerId spoofing is rejected with 403', async () => {
             const spoofRes = await authedRequest(ctx.bob.user.sessionToken,
                 `/contacts/${ctx.alice.user.id}/contacts`);
-            const spoofContacts = await spoofRes.json() as any[];
-
-            const bobRes = await authedRequest(ctx.bob.user.sessionToken,
-                `/contacts/${ctx.bob.user.id}/contacts`);
-            const bobContacts = await bobRes.json() as any[];
-
-            const spoofIds = spoofContacts.map((c: any) => c.id).sort();
-            const bobIds = bobContacts.map((c: any) => c.id).sort();
-
-            expect(spoofIds).toEqual(bobIds);
+            expect(spoofRes.status).toBe(403);
         });
     });
 
@@ -211,12 +202,10 @@ describe('Contacts', () => {
             expect(data.eigenId).toBe(ctx.alice.user.id);
         });
 
-        test('ownerId spoofing on me endpoint still resolves authenticated user', async () => {
+        test('ownerId spoofing on me endpoint is rejected with 403', async () => {
             const res = await authedRequest(ctx.bob.user.sessionToken,
                 `/contacts/${ctx.alice.user.id}/me`);
-            const data = await res.json() as any;
-            expect(data).toBeDefined();
-            expect(data.eigenId).toBe(ctx.bob.user.id);
+            expect(res.status).toBe(403);
         });
 
         test('cannot delete own profile contact', async () => {
