@@ -1,41 +1,74 @@
-# Backend Review: Calendar (RRULE, Sharing, Scheduling)
+# Backend Calendar Code Review
 
-**Scope:** `apps/api/src/lib/calendar/`, `apps/api/src/routes/calendar.ts`
-**Reviewed:** 2026-03-18
+> Reviewed: 2026-03-19
+> Scope: `apps/api/src/lib/calendar/`, `apps/api/src/routes/calendar.ts`, shared types, all calendar test files
 
-## Summary
+## Architecture Overview
 
-The Calendar domain handles per-user and per-team SQLite calendars, RRULE-based recurrence expansion with
-timezone-aware DST handling, push-based calendar sharing, invitation propagation with linked event copies,
-per-occurrence RSVP, and CalDAV-readiness (uid, uri, etag, ctag, sequence). The code spans seven domain files
-(~1200 lines) plus one route file, backed by four test files.
+The calendar domain implements a per-user/per-team SQLite calendar system with CalDAV-ready schema design,
+timezone-aware
+RRULE recurrence expansion, push-based calendar sharing, invitation propagation with linked event copies, and
+per-occurrence RSVP. The implementation spans seven domain files (~1200 lines of business logic in `calendar.ts` alone)
+plus a thin route file, backed by four integration test files.
 
-The timezone-aware recurrence expansion is well-engineered. The `utcToLocal`/`localToUtcSeconds` pair with its
-double-verify DST correction is solid. The linked event guard, self-invite prevention, and idempotent invitation
-receipt are good defensive patterns. However, there are authorization gaps, missing validation, a calendar-deletion
-data leak, and several behavioral inconsistencies in range queries and propagation.
+### Core Components
 
-**Files reviewed:**
+| File                                              | Lines | Purpose                                                                                                                |
+|---------------------------------------------------|-------|------------------------------------------------------------------------------------------------------------------------|
+| `apps/api/src/lib/calendar/calendar.ts`           | ~1209 | Calendar class: all business logic for calendars, events, invitations, RSVP, recurrence expansion, timezone conversion |
+| `apps/api/src/lib/calendar/get-calendar.ts`       | ~94   | Access resolution (`resolveCalendar`, `resolveCalendarForEvents`, `syncTeamCalendars`)                                 |
+| `apps/api/src/lib/calendar/schema.ts`             | ~59   | Drizzle ORM schema: `calendars`, `events`, `sharedCalendars` tables                                                    |
+| `apps/api/src/lib/calendar/db-config.ts`          | ~72   | Database config with single v1 migration                                                                               |
+| `apps/api/src/lib/calendar/share-propagation.ts`  | ~103  | Push calendar shares to recipients + SSE notifications                                                                 |
+| `apps/api/src/lib/calendar/invite-propagation.ts` | ~153  | Push invitations to attendees, RSVP propagation to organizers                                                          |
+| `apps/api/src/lib/calendar/sse-events.ts`         | ~92   | SSE event builders with notification templates                                                                         |
+| `apps/api/src/routes/calendar.ts`                 | ~197  | Elysia route definitions (thin delegation layer)                                                                       |
+| `packages/lib/src/types/calendar.ts`              | ~130  | Shared TypeScript types used by FE and BE                                                                              |
 
-| File | Lines | Purpose |
-|------|-------|---------|
-| `apps/api/src/lib/calendar/calendar.ts` | 1198 | Core Calendar class, RRULE expansion, timezone conversion |
-| `apps/api/src/lib/calendar/schema.ts` | 59 | Drizzle schema (calendars, events, shared_calendars) |
-| `apps/api/src/lib/calendar/db-config.ts` | 72 | DB config + v1 migration |
-| `apps/api/src/lib/calendar/get-calendar.ts` | 72 | Access resolution + team calendar sync |
-| `apps/api/src/lib/calendar/share-propagation.ts` | 119 | Push shares to recipients + SSE notifications |
-| `apps/api/src/lib/calendar/invite-propagation.ts` | 153 | Push invites to attendees, RSVP propagation |
-| `apps/api/src/lib/calendar/sse-events.ts` | 93 | SSE event builders |
-| `apps/api/src/routes/calendar.ts` | 195 | API routes (thin) |
-| `packages/lib/src/types/calendar.ts` | 130 | Shared types |
+### Data Model
 
-## Critical Issues
+**Storage**: Per-user SQLite at `{home}/eigen.calendar/calendar.db`. Teams at
+`data/team/{teamId}/eigen.calendar/calendar.db`.
 
-**1. `resolveCalendarForEvents` hardcodes write access for all team members**
+**Event model**: Events are rows in the `events` table. Recurring events store an RFC 5545 RRULE string. Occurrences are
+never stored -- they are expanded in-memory via the `rrule` npm package during range queries. Recurrence exceptions
+(modifications or cancellations) are regular event rows with `parentEventId` + `recurrenceDate` set. A foreign key
+cascade ensures exceptions are deleted when their parent is deleted.
 
-`resolveCalendarForEvents()` returns `permission: 'write'` for every team member, regardless of the team calendar's
-actual share configuration. The `syncTeamCalendars()` function correctly resolves per-calendar permissions (defaulting
-to `read`), and the frontend sidebar reflects these. But `resolveCalendarForEvents()` bypasses all of this:
+**Invitation model**: The organizer creates an event with `data.attendees[]`. The server writes a "linked copy" to each
+attendee's default calendar, setting `organizerEventId`/`organizerUserId` to point back at the source. The linked-event
+guard (`updateEvent` lines 359-366) restricts attendee modifications to `data.reminders` and `data.color` only. RSVP
+status flows back to the organizer via `propagateRsvp()`.
+
+**Sharing model**: Push-based propagation. When shares change on a calendar, `propagateCalendarShare()` resolves target
+users (email) and team members, then writes/removes `shared_calendars` entries in each recipient's database. Team
+calendars are lazy-synced into users' `shared_calendars` on every `GET /calendar/:ownerId/shared` call via
+`syncTeamCalendars()`.
+
+**Timezone-aware recurrence**: Events can store a `timezone` string. When present, `expandRecurrence()` converts the
+event's UTC start time to wall-clock time in that timezone, runs the RRule expansion in wall-clock space, then converts
+results back to real UTC using `localToUtcSeconds()`. This prevents DST drift (e.g., a 23:30 CET event staying at
+23:30 CEST after spring-forward, rather than drifting to 00:30).
+
+### Access Resolution Flow
+
+1. **Own calendars** (`resolveCalendar`): `ownerId` matches `user.id` or is a team the user belongs to. Returns the
+   Calendar class directly with full access for calendar CRUD.
+2. **Shared event access** (`resolveCalendarForEvents`): Resolves permission level (`free-busy`/`read`/`write`) based
+   on calendar shares. Team members get at least `read` by default. Permission is enforced at the route layer.
+3. **Team calendar sync** (`syncTeamCalendars`): Called on every shared-list read. Iterates user's team memberships,
+   ensures `shared_calendars` entries exist with correct permissions, and also re-resolves permissions on user-owned
+   shared calendars as a safety net.
+
+---
+
+## Issues
+
+### Critical
+
+#### C1. `resolveCalendarForEvents` hardcodes `write` permission for all team members
+
+**File**: `apps/api/src/lib/calendar/get-calendar.ts`, lines 29-37
 
 ```typescript
 if (parsed.type === 'team') {
@@ -44,101 +77,81 @@ if (parsed.type === 'team') {
         throw new ApiError(403, 'Not a member of this team');
     }
     const home = await getHome(ownerId);
-    return {calendar: home.calendar, permission: 'write'};
+    const permission = home.calendar.checkPermission(calendarId, user.email, memberships.teamIds);
+    return {calendar: home.calendar, permission: permission || 'read'};
 }
 ```
 
-A team admin who sets a team calendar to `read` or `free-busy` via shares expects restricted access. But any team
-member can still create, update, and delete events via the events API because the route checks
-`if (permission !== 'write') throw new ApiError(403, ...)` -- and the hardcoded `'write'` always passes.
+After reading this code carefully, I see the function calls `checkPermission()` and falls back to `'read'`. This means
+team calendar permission IS enforced via share configuration. The `permission || 'read'` fallback means members without
+explicit shares get `read` access. This is correct and matches the documented behavior in `CALENDAR.md` line 80:
+"Default member permission is `read`. To grant `write` or `free-busy`, set shares on the team's default calendar."
 
-**File:** `apps/api/src/lib/calendar/get-calendar.ts:29-35`
-**Impact:** Authorization bypass. Team calendar share permissions are cosmetic only.
-**Fix:** Resolve actual permission via `checkPermission()` (like the non-team path does), defaulting to `read` for
-members without explicit shares. Mirror the logic from `syncTeamCalendars()` line 63.
-**Status:** Previously reported (issue #8 as Important). Elevated to Critical after verifying that team calendar
-permission settings are completely unenforced on write operations.
+The test file `team-calendar-share.test.ts` confirms this: "Bob with read permission cannot create events" (line 342)
+returns 403, and "upgrading to write permission allows event creation" (line 358) succeeds. **No issue here.**
 
----
+#### C2. `deleteCalendar` does not cancel attendee invitations before cascade-deleting events
 
-**2. `deleteCalendar` does not propagate share removal or cancel invitations**
-
-When a calendar with active shares is deleted, the calendar and its events are removed via CASCADE, but:
-
-1. Recipients' `shared_calendars` entries become orphaned -- they still reference the deleted calendar and will
-   appear in the sidebar until the next `syncTeamCalendars` refresh (which only handles team calendars, not
-   individual shares).
-2. Events with attendees are cascade-deleted without calling `propagateCancellation()`, so attendees keep stale
-   linked copies in their calendars forever.
+**File**: `apps/api/src/lib/calendar/calendar.ts`, lines 245-256
 
 ```typescript
-public deleteCalendar(id: string): void {
+public async deleteCalendar(id: string): Promise<void> {
     const existing = this.getCalendarById(id);
     if (!existing) throw new ApiError(404, 'Calendar not found');
     if (existing.isDefault) throw new ApiError(400, 'Cannot delete default calendar');
 
+    if (existing.shares?.length) {
+        await propagateCalendarShare(this.home, {...existing, shares: []}, existing.shares);
+    }
+
     this.db.delete(schema.calendars).where(eq(schema.calendars.id, id)).run();
     this.home.notify(buildCalendarEvent(SSEventType.CALENDAR_DELETED, {calendarId: id, title: existing.name}));
-    // No share propagation. No invitation cancellation.
 }
 ```
 
-**File:** `apps/api/src/lib/calendar/calendar.ts:245-252`
-**Impact:** Data integrity. Shared calendar entries and linked invitation copies become permanently orphaned.
-**Fix:** Before deleting, iterate the calendar's events to propagate cancellations for any with attendees, then
-call `propagateCalendarShare()` with empty new shares to trigger `removeShare()` on all recipients.
-**Status:** New finding.
+The share propagation is handled (line 250-252: if the calendar has shares, it propagates empty shares to remove
+recipients' `shared_calendars` entries). However, the cascade delete of events does NOT call `propagateCancellation()`
+for events with attendees. If a calendar contains invited events, the attendees' linked copies become permanently
+orphaned -- they still appear in the attendee's calendar, but RSVP and updates will silently fail because the
+organizer's event no longer exists.
 
----
+**Impact**: Data integrity. Orphaned linked invitation copies in attendees' calendars after calendar deletion.
+**Fix**: Before deleting, query all events in the calendar that have attendees (`data` containing `attendees` array),
+and call `propagateCancellation()` for each.
 
-**3. `access` endpoint leaks share list to `free-busy` users**
+#### C3. `access` endpoint leaks share list to `free-busy` users
 
-The `/calendar/:ownerId/calendars/:calId/access` endpoint returns the full shares array to any user with *any*
-permission level, including `free-busy`:
+**File**: `apps/api/src/routes/calendar.ts`, lines 165-170
 
 ```typescript
 .get("/calendar/:ownerId/calendars/:calId/access", async ({params, user}) => {
-    const {calendar} = await resolveCalendarForEvents(user, params.ownerId, params.calId);
+    const {calendar, permission} = await resolveCalendarForEvents(user, params.ownerId, params.calId);
     const calData = calendar.getCalendarById(params.calId);
     if (!calData) throw new ApiError(404, 'Calendar not found');
-    return {ownerUserId: params.ownerId, shares: calData.shares || []};
+    return {ownerUserId: params.ownerId, shares: permission === 'write' ? (calData.shares || []) : []};
 }, {auth: true})
 ```
 
-The `CalendarShare` array contains `targetId` values, which are email addresses for user shares and `team_{id}` for
-team shares. A user with only `free-busy` access (meant to see time blocks only, no details) can enumerate
-everyone the calendar is shared with, including their email addresses and permission levels.
+After reading carefully, the code checks `permission === 'write'` and returns an empty array for non-write users. This
+means `free-busy` and `read` users see `shares: []`. **This is correctly implemented.** No issue.
 
-**File:** `apps/api/src/routes/calendar.ts:165-170`
-**Impact:** Information disclosure. The `free-busy` permission level's privacy guarantee is violated.
-**Fix:** Check permission level and return an empty shares array (or 403) for `free-busy` users. Only `write`
-or possibly `read` users should see the share list.
-**Status:** New finding.
+### Important
 
-## Important Issues
+#### I1. No validation that `startTime < endTime`
 
-**4. No validation of RRULE strings on create/update**
+**File**: `apps/api/src/lib/calendar/calendar.ts`, `createEvent()` (line 260) and `updateEvent()` (line 343)
 
-RRULE strings from the client are stored as-is with no validation. A malformed RRULE (e.g., `FREQ=BANANAS` or
-syntactically invalid strings) is stored successfully but will throw when `RRule.parseString()` is called during
-`getEventsInRange()`. Since `expandRecurrence()` has no try/catch, one corrupted event makes the entire calendar's
-range queries fail with a 500 error.
+Neither the route schemas (`CreateEventSchema`, `UpdateEventSchema`) nor the Calendar class validates that
+`endTime > startTime`. A client can create events with zero or negative duration. `expandRecurrence()` computes
+`eventDuration = event.endTime - event.startTime` (line 1055) and uses it to set `endTime: ts + eventDuration` --
+a negative duration produces occurrences where endTime precedes startTime on every expansion.
 
-The impact is amplified by invite propagation: a malformed RRULE created by the organizer is propagated to all
-attendees' calendars via `receiveInvitation()`, corrupting their calendars too.
+**Impact**: Invalid data stored. Negative-duration occurrences in range queries. Potential frontend display bugs.
+**Fix**: Add `if (startTime >= endTime) throw new ApiError(400, 'endTime must be after startTime')` in both methods.
 
-**File:** `apps/api/src/lib/calendar/calendar.ts:256-311` (createEvent), `calendar.ts:336-401` (updateEvent)
-**Impact:** A single bad RRULE poisons all range queries for the affected calendar and all invited attendees.
-**Fix:** Validate with `RRule.parseString()` in a try/catch at create/update time, returning 400 for invalid rules.
-Additionally, wrap `expandRecurrence()` in a try/catch to gracefully skip corrupted events during range queries.
-**Status:** Previously reported (issue #3). Confirmed after tracing the full code path including invite propagation.
+#### I2. Recurring event range query loads ALL recurring events and ALL exceptions without date filtering
 
----
-
-**5. Recurring event range query loads all recurring events without date filtering**
-
-The `getEventsInRange()` method loads *all* recurring events and *all* exceptions from the database, regardless of
-the query range:
+**File**: `apps/api/src/lib/calendar/calendar.ts`, lines 453-468
 
 ```typescript
 const recurring = this.db.select().from(schema.events).where(
@@ -157,154 +170,63 @@ const exceptions = this.db.select().from(schema.events).where(
 ).all();
 ```
 
-For a user with many recurring events (some with UNTIL dates years in the past) and accumulated exceptions,
-every range query pays the cost of loading all of them. The recurring events are then individually expanded --
-`expandRecurrence()` will return empty arrays for past-UNTIL events, but the DB roundtrip and object allocation
-still happen.
+Both queries fetch every recurring event and every exception in the calendar, regardless of the query range. For a user
+with many recurring events that have long since ended (COUNT-based rules from years ago) and accumulated exceptions,
+every range query pays the cost of loading all of them. The `expandRecurrence()` call returns empty arrays for past
+events, but the DB I/O and object allocation still occur.
 
-**File:** `apps/api/src/lib/calendar/calendar.ts:442-457`
-**Impact:** Performance degradation proportional to total historical recurring events/exceptions, not the query range.
-**Fix:** For recurring events: while you cannot pre-filter fully (infinite recurrences have no end), you can exclude
-events whose UNTIL/COUNT makes their last occurrence precede `rangeFrom`. For exceptions: filter by
-`startTime <= to AND endTime >= from`, or by matching parent event IDs from the recurring results.
-**Status:** Previously reported as two separate issues (#10 and #12 in the prior review). Consolidated here as they
-share the same root cause -- the queries have no range predicates.
+Additionally, the exceptions query loads ALL exceptions across ALL parents, then groups them by parent in JavaScript.
+The exceptions could be scoped to only the parents fetched in the recurring query.
 
----
+**Impact**: Performance degradation proportional to total historical recurring events/exceptions, not the query range.
+**Fix**: For recurring events, add `lte(schema.events.startTime, to)` to exclude events that start after the range.
+For exceptions, use `WHERE parentEventId IN (...)` to scope to fetched parents.
 
-**6. `updateEvent` returns stale sequence number**
+#### I3. `shared-with-me` endpoint has no authorization check on ownerId
 
-When `updateEvent()` is called on an event with attendees, it increments the sequence number *after* reading the
-event to return:
+**File**: `apps/api/src/routes/calendar.ts`, lines 175-179
 
 ```typescript
-this.incrementCtag(existing.calendarId);
-const updated = this.getEventById(id)!;   // <-- reads here (sequence = N)
-// ...
-if (user && updated.data?.attendees?.length) {
-    this.incrementSequence(id);            // <-- increments here (sequence = N+1)
-    const withSequence = this.getEventById(id)!;
-    propagateInvitation(this.home, withSequence, user, oldAttendees, ...);
-}
-return updated;                            // <-- returns stale (sequence = N)
+.get("/calendar/:ownerId/shared-with-me", async ({params, user}) => {
+    const ownerHome = await getHome(params.ownerId);
+    const memberships = await getMemberships(user.id);
+    return ownerHome.calendar.getSharedWith(user.email, memberships.teamIds);
+}, {auth: true})
 ```
 
-The returned event has `sequence: N` while the database has `sequence: N+1`. The propagated invitation gets the
-correct sequence, but the API caller receives the stale value. If the frontend caches this response, the displayed
-sequence is wrong until the next refetch.
+Any authenticated user can call `GET /calendar/{anyUserId}/shared-with-me` to trigger `getHome()` on an arbitrary user.
+While the response is correctly filtered to only show shares matching the caller, the route allows:
 
-**File:** `apps/api/src/lib/calendar/calendar.ts:386-401`
-**Impact:** API returns incorrect data. Stale sequence in response may cause CalDAV interop issues.
-**Fix:** Move `incrementSequence()` before the `getEventById()` that produces the return value, or re-read after.
+- User ID enumeration (non-existent IDs produce errors, existing IDs return empty arrays)
+- Unnecessary Home singleton initialization for arbitrary users
 
-**Status:** New finding.
+**Impact**: Information disclosure (user existence probing), unnecessary resource consumption.
+**Fix**: Validate that `params.ownerId` corresponds to an existing shared calendar in the caller's `shared_calendars`
+table before calling `getHome()`.
 
----
+#### I4. Fire-and-forget propagation with inconsistent error handling
 
-**7. `shared-with-me` endpoint has no authorization check on ownerId**
+**File**: `apps/api/src/lib/calendar/calendar.ts`, multiple locations
 
-Any authenticated user can call `GET /calendar/{anyUserId}/shared-with-me`, which calls `getHome(params.ownerId)`
-without verifying the caller's relationship with that owner. While the result is filtered to only show calendars
-shared with the caller (via `getSharedWith(user.email, teamIds)`), the endpoint allows probing whether a user ID
-exists: non-existent IDs produce a 404 from `getHome()`, while existing IDs return an empty array.
-
-The call also triggers `getHome()` for an arbitrary user, initializing their Home singleton and calendar database
-if not already loaded.
-
-**File:** `apps/api/src/routes/calendar.ts:173-177`
-**Impact:** User ID enumeration. Unnecessary Home initialization for arbitrary users.
-**Fix:** Either validate that `params.ownerId` has shared something with the caller before calling `getHome()`,
-or restructure so the caller queries their own shared_calendars table for entries from that owner.
-**Status:** Previously reported (issue #1). Confirmed. Impact assessment remains the same -- the data returned is
-correctly filtered, so this is Important rather than Critical.
-
----
-
-**8. `from/to` validation uses falsy check, rejects valid timestamps**
+All invitation and share propagation calls use fire-and-forget:
 
 ```typescript
-const from = Number(params.from);
-const to = Number(params.to);
-if (!from || !to) throw new ApiError(400, 'Invalid from/to parameters');
+propagateInvitation(this.home, event, user, [], event.data.attendees).catch(console.error);
+notifySharedCalendarUsers(this.home, cal, sseEvent).catch(() => {});
 ```
 
-`Number("0")` produces `0`, which is falsy. Unix timestamp `0` (1970-01-01) is rejected. More importantly,
-negative timestamps (pre-epoch dates) are also truthy, so they pass validation but may produce unexpected behavior.
-The correct check is `Number.isNaN(from) || Number.isNaN(to)`.
+The inconsistency: invitation propagation logs errors via `console.error`, while SSE notifications silently swallow them
+via `.catch(() => {})`. If invitation propagation fails, the organizer's event is saved but attendees never receive the
+invite with no feedback. RSVP propagation to the organizer is also fire-and-forget -- an attendee's RSVP could succeed
+locally but fail to reach the organizer.
 
-**File:** `apps/api/src/routes/calendar.ts:106-108`, `calendar.ts:114-116`
-**Impact:** Valid range queries rejected. Inconsistent validation.
-**Fix:** Replace `!from || !to` with `Number.isNaN(from) || Number.isNaN(to)`. Optionally add `from >= to` check.
-**Status:** Previously reported (issue #7). Confirmed.
+**Impact**: Potential data inconsistency between organizer and attendee calendars with no detection or recovery.
+**Fix**: At minimum, replace `.catch(() => {})` with `.catch(console.error)` for consistency. For critical propagation
+(invites, RSVP), consider a warning in the response if propagation was scheduled to a missing user.
 
----
+#### I5. `parseOwnerId` used on email-based share targetIds
 
-**9. No `startTime < endTime` validation**
-
-Neither the route schemas nor the Calendar class validate that `endTime > startTime`. A client can create events
-with negative duration. `expandRecurrence()` computes `eventDuration = event.endTime - event.startTime`, which
-becomes negative, producing occurrences where `endTime < startTime`.
-
-**File:** `apps/api/src/routes/calendar.ts:46-59` (CreateEventSchema), `apps/api/src/lib/calendar/calendar.ts:256`
-**Impact:** Invalid data stored. Negative-duration occurrences in range queries.
-**Fix:** Add `endTime > startTime` validation in `CreateEventSchema` and `UpdateEventSchema`, or as a guard in
-`createEvent()`/`updateEvent()`. For all-day events, `endTime` should be at least one day after `startTime`.
-**Status:** Previously reported (issue #6). Confirmed.
-
----
-
-**10. Recurring vs. non-recurring range filtering is inconsistent**
-
-Non-recurring events use an overlap check: `startTime <= to AND endTime >= from`. This correctly includes events
-that started before the range but extend into it.
-
-Recurring event occurrences use a start-time-only check. The non-timezone path uses `rule.between(rangeStart,
-rangeEnd, true)`, which only matches occurrences whose dtstart falls within the range. The timezone path filters
-with `ts >= rangeFrom && ts <= rangeTo`. Both miss occurrences that start before `rangeFrom` but whose
-`endTime` (= `ts + eventDuration`) extends into the range.
-
-For example: a recurring 3-hour meeting that starts at 23:00 on the day before the range would be included as a
-non-recurring event (overlap check passes) but missed as a recurring occurrence (start time is before range).
-
-**File:** `apps/api/src/lib/calendar/calendar.ts:1081`, `calendar.ts:1100-1102`
-**Impact:** Recurring events spanning the range boundary are missing from results while equivalent non-recurring
-events are returned. Inconsistent behavior.
-**Fix:** In the timezone path, change the filter to `ts + eventDuration >= rangeFrom && ts <= rangeTo`. In the
-non-timezone path, adjust `rangeStart` backward by `eventDuration` before calling `rule.between()`, then filter
-the results.
-**Status:** New finding.
-
----
-
-**11. `notifySharedCalendarUsers` does not notify team members**
-
-The team notification code in `notifySharedCalendarUsers` is commented out:
-
-```typescript
-} else if (parsed.type === 'team') {
-    // for teams, we really on staletime refresh at FE
-}
-```
-
-Team members do not receive real-time SSE notifications when events change on team-shared calendars. They see
-updates only on the next frontend stale-time refresh.
-
-Note: `propagateCalendarShare()` (a different function in the same file) *does* resolve team members and propagate
-to them. The inconsistency is that share changes are real-time but event changes are not.
-
-**File:** `apps/api/src/lib/calendar/share-propagation.ts:25-29`
-**Impact:** Degraded real-time experience for team calendar users. Inconsistent behavior between share propagation
-(real-time) and event notifications (delayed).
-**Fix:** Uncomment and implement team member resolution, or document this as intentional with a rationale.
-**Status:** Previously reported (issue #4). Confirmed. Added observation about the inconsistency with
-`propagateCalendarShare`.
-
----
-
-**12. `parseOwnerId` used on email-based `targetId` in `notifySharedCalendarUsers`**
-
-`CalendarShare.targetId` is either an email address (for user shares) or `team_{id}` (for team shares). The code
-passes it to `parseOwnerId()`, which is designed for owner ID strings (UUID or `team_`-prefixed):
+**File**: `apps/api/src/lib/calendar/share-propagation.ts`, lines 20-24 and 55-57
 
 ```typescript
 for (const share of shares) {
@@ -313,43 +235,91 @@ for (const share of shares) {
         const user = await getUserByEmail(share.targetId);
 ```
 
-For email addresses, `parseOwnerId` detects the `@` and returns `{type: 'user', id: email.toLowerCase()}`.
-Then `getUserByEmail(share.targetId)` is called with the original (possibly mixed-case) email. This works because
-`getUserByEmail` lowercases internally, and `parseOwnerId` happens to route emails to the `user` branch.
+`CalendarShare.targetId` is an email address for user shares (confirmed by test: `{targetId: ctx.bob.user.email}`).
+`parseOwnerId()` is designed for owner IDs (UUIDs and `team_`-prefixed). It happens to classify email addresses as
+`user` type because they lack the `team_` prefix. Then `getUserByEmail(share.targetId)` correctly looks up the email.
+This works by coincidence but is semantically wrong. If an email contained `team_` (e.g., `team_lead@example.com`), it
+would be incorrectly classified as a team type.
 
-However, `parseOwnerId` was not designed for this use case. If its email detection logic ever changes, this code
-would silently break (e.g., the UUID regex check at line 24 of `owner.ts` would reject the email-derived `id`
-and return `{type: 'user', id: ''}`).
+**Impact**: Fragile code coupling. Correct behavior depends on `parseOwnerId` implementation details.
+**Fix**: Replace with direct check: `share.targetId.startsWith('team_')`.
 
-**File:** `apps/api/src/lib/calendar/share-propagation.ts:20-24`
-**Impact:** Fragile code coupling. Correct by coincidence.
-**Fix:** Replace `parseOwnerId` with a direct check: `share.targetId.startsWith('team_')`.
-**Status:** Previously reported (issue #5). Confirmed after tracing through `parseOwnerId` in
-`packages/lib/src/types/owner.ts`.
+#### I6. `updateEvent` returns stale sequence when attendees are present
 
----
+**File**: `apps/api/src/lib/calendar/calendar.ts`, lines 396-412
 
-**13. No unique constraint on `shared_calendars(ownerUserId, calendarId)`**
+```typescript
+this.incrementCtag(existing.calendarId);
+const updated = this.getEventById(id)!;
 
-The `shared_calendars` table has no unique constraint on `(ownerUserId, calendarId)`. The code handles this with
-check-then-insert logic in `receiveShare()` and `ensureSharedEntry()`, but without a unique constraint, concurrent
-share propagations to the same target could create duplicate entries.
+// ... SSE notification ...
 
-While SQLite's single-writer model makes this unlikely in normal operation, the async nature of share propagation
-(fire-and-forget from the mutation handler) means two propagation tasks could interleave their read-check and
-insert operations across different event loop ticks.
+if (user && updated.data?.attendees?.length) {
+    this.incrementSequence(id);
+    const withSequence = this.getEventById(id)!;
+    propagateInvitation(this.home, withSequence, user, oldAttendees, withSequence.data!.attendees!).catch(console.error);
+    return withSequence;
+}
 
-**File:** `apps/api/src/lib/calendar/schema.ts:48-59`, `apps/api/src/lib/calendar/db-config.ts:57-68`
-**Impact:** Potential duplicate shared calendar entries in edge cases.
-**Fix:** Add a unique index: `CREATE UNIQUE INDEX idx_shared_owner_cal ON shared_calendars(ownerUserId, calendarId)`.
-Update `receiveShare()` to use `INSERT ... ON CONFLICT ... DO UPDATE`.
-**Status:** Previously reported (issue #18). Confirmed.
+return updated;
+```
 
-## Minor Issues
+When the event has attendees, the code increments the sequence, re-reads the event (into `withSequence`), propagates
+the invitation with the correct sequence, and returns `withSequence`. This is actually correct -- the
+`return withSequence`
+on line 409 returns the post-increment value. The early `return updated` on line 412 is only reached when there are NO
+attendees. **No issue here on closer inspection.**
 
-**14. `shared` endpoint ignores `ownerId` parameter**
+#### I7. Recurring vs. non-recurring range filtering inconsistency
 
-The `GET /calendar/:ownerId/shared` endpoint declares an `ownerId` path parameter but never uses it:
+**File**: `apps/api/src/lib/calendar/calendar.ts`, lines 443-451 vs 1092
+
+Non-recurring events use overlap logic: `startTime <= to AND endTime >= from`. This includes events that start before
+the range but extend into it.
+
+The timezone-aware recurring expansion (line 1092) filters with `ts >= rangeFrom && ts <= rangeTo`, which only checks
+the occurrence start time. The non-timezone path uses `rule.between(rangeStart, rangeEnd, true)`, also start-time only.
+This means a recurring 3-hour event starting at 23:00 on the day before `rangeFrom` would be missed as a recurring
+occurrence but included as an equivalent non-recurring event.
+
+**Impact**: Recurring events spanning the range start boundary are missing from results.
+**Fix**: In the timezone path, change filter to `ts + eventDuration >= rangeFrom && ts <= rangeTo`. In the non-timezone
+path, adjust `rangeStart` backward by `eventDuration` before `rule.between()`.
+
+#### I8. `from/to` validation uses falsy check, rejects timestamp 0
+
+**File**: `apps/api/src/routes/calendar.ts`, lines 106-108
+
+```typescript
+const from = Number(params.from);
+const to = Number(params.to);
+if (!from || !to) throw new ApiError(400, 'Invalid from/to parameters');
+```
+
+`Number("0")` is `0`, which is falsy. Unix timestamp 0 (1970-01-01T00:00:00Z) is rejected as invalid. While unlikely
+in practice, this is incorrect validation. Use `Number.isNaN(from) || Number.isNaN(to)`.
+
+**Impact**: Edge case bug. Valid but unlikely range queries rejected.
+**Fix**: Replace with `if (Number.isNaN(from) || Number.isNaN(to))`.
+
+#### I9. No unique constraint on `shared_calendars(ownerUserId, calendarId)`
+
+**File**: `apps/api/src/lib/calendar/schema.ts`, lines 48-59
+
+The `shared_calendars` table has no unique constraint on `(ownerUserId, calendarId)`. The code uses check-then-insert
+logic in `receiveShare()` and `ensureSharedEntry()`, but without a unique constraint, concurrent share propagations
+could create duplicate entries. While SQLite's single-writer model makes this unlikely, the async fire-and-forget
+propagation pattern means two tasks could interleave their read-check and insert operations across event loop ticks.
+
+**Impact**: Potential duplicate shared calendar entries.
+**Fix**: Add `CREATE UNIQUE INDEX idx_shared_owner_cal ON shared_calendars(ownerUserId, calendarId)` and use
+`INSERT ... ON CONFLICT ... DO UPDATE`.
+
+### Minor
+
+#### M1. `shared` endpoint ignores `ownerId` parameter
+
+**File**: `apps/api/src/routes/calendar.ts`, lines 184-186
 
 ```typescript
 .get("/calendar/:ownerId/shared", async ({user}) => {
@@ -357,89 +327,56 @@ The `GET /calendar/:ownerId/shared` endpoint declares an `ownerId` path paramete
 }, {auth: true})
 ```
 
-It always operates on the authenticated user's data. `GET /calendar/anyone/shared` returns the caller's own shared
-calendars. This is not a security issue (it never leaks other users' data), but the semantic mismatch could confuse
-API consumers and is inconsistent with other calendar endpoints that use `ownerId`.
+The handler never uses `params.ownerId`. The route always operates on the authenticated user's data. Not a security
+issue but violates the ownerId contract documented in CLAUDE.md.
 
-**File:** `apps/api/src/routes/calendar.ts:182-184`
-**Impact:** Misleading API contract. No functional impact.
-**Fix:** Either use `ownerId` (with appropriate authorization) or remove it from the route pattern.
-**Status:** Previously reported (issue #2). Downgraded from Critical to Minor after confirming no security impact.
+#### M2. `notifySharedCalendarUsers` does not notify team members
 
----
+**File**: `apps/api/src/lib/calendar/share-propagation.ts`, lines 25-29
 
-**15. MD5 used for etag computation**
+```typescript
+} else if (parsed.type === 'team') {
+    // Team members are not notified via SSE for calendar share changes.
+    // Instead, the frontend uses TanStack Query's staleTime to periodically
+    // re-sync team calendars (via syncTeamCalendars in get-calendar.ts).
+}
+```
 
-`createHash('md5')` is used for etag generation. MD5 is cryptographically broken, and while etags are not a
-security mechanism (this is change detection, not authentication), security scanners commonly flag MD5 usage.
+Team members do not receive real-time SSE notifications when events change on team-shared calendars. This is documented
+as intentional (to avoid resolving all team members on every event change), but creates an inconsistency: share changes
+go through `propagateCalendarShare()` which DOES resolve team members, while event changes are delayed.
 
-**File:** `apps/api/src/lib/calendar/calendar.ts:43`
-**Impact:** Security scanner noise. No actual vulnerability.
-**Fix:** Replace with `createHash('sha256')` or a simpler non-crypto hash. Alternatively, use a counter-based
-etag (the ctag pattern already exists for calendars).
-**Status:** Previously reported (issue #11). Confirmed.
+#### M3. MD5 used for etag computation
 
----
+**File**: `apps/api/src/lib/calendar/calendar.ts`, line 43
 
-**16. SQL template literals split across lines**
+`createHash('md5')` is used for etag generation. MD5 is not a security concern here (etags are for change detection),
+but security scanners commonly flag MD5 usage. SHA-256 would avoid this noise.
 
-Multi-line SQL template literals with `IS NOT NULL` on a new line appear in three places:
+#### M4. SQL template literals split across lines
+
+**File**: `apps/api/src/lib/calendar/calendar.ts`, lines 456-457, 465-466, 1044-1045
 
 ```typescript
 sql`${schema.events.rrule}
 IS NOT NULL`,
 ```
 
-```typescript
-sql`${schema.calendars.ctag}
-+ 1`,
-```
+These appear to be accidental line breaks from auto-formatting. SQLite handles the whitespace correctly, but it hurts
+readability.
 
-These work because SQLite treats whitespace as token separators, but they appear to be accidental line breaks
-from auto-formatting. They reduce readability.
+#### M5. Timezone string not validated
 
-**File:** `apps/api/src/lib/calendar/calendar.ts:445-446`, `454-455`, `1033-1034`
-**Impact:** Readability.
-**Fix:** Keep on single lines: `` sql`${schema.events.rrule} IS NOT NULL` ``.
-**Status:** Previously reported (issue #13). Confirmed.
+**File**: `apps/api/src/lib/calendar/calendar.ts`, `createEvent()` and `updateEvent()`
 
----
+The `timezone` field is stored as-is with no validation. An invalid timezone string (e.g., `"Not/A/Zone"`) would cause
+a runtime error in `Intl.DateTimeFormat` during recurrence expansion, breaking range queries for that event.
 
-**17. Non-null assertion on optional `organizerEventId`**
+**Fix**: Validate against `Intl.supportedValuesOf('timeZone')` on create/update.
 
-```typescript
-const organizerEventId = event.data.organizerEventId!;
-```
+#### M6. `getEventsWithAttendee` performs full table scan with JS filtering
 
-`EventData.organizerEventId` is typed as `string | undefined`. The non-null assertion is safe because the code
-has already verified `event.data?.organizer` exists (line 954), and invite propagation always sets both fields
-together. However, the assertion obscures this implicit coupling.
-
-**File:** `apps/api/src/lib/calendar/calendar.ts:963`
-**Impact:** Defensive coding concern. No runtime risk in current code paths.
-**Fix:** Add an explicit guard: `if (!event.data.organizerEventId) throw new ApiError(500, 'Missing organizer
-event ID')`.
-**Status:** Previously reported (issue #16). Confirmed.
-
----
-
-**18. Typo in comment**
-
-```typescript
-// for teams, we really on staletime refresh at FE
-```
-
-Should be "we rely on stale-time refresh at FE".
-
-**File:** `apps/api/src/lib/calendar/share-propagation.ts:26`
-**Status:** Previously reported (issue #15). Confirmed.
-
----
-
-**19. `getEventsWithAttendee` performs full table scan with JS-side filtering**
-
-This method loads all non-linked events, maps them to typed objects, then filters in JavaScript by parsing the
-JSON `data` column:
+**File**: `apps/api/src/lib/calendar/calendar.ts`, lines 865-875
 
 ```typescript
 public getEventsWithAttendee(email: string): CalendarEvent[] {
@@ -452,72 +389,99 @@ public getEventsWithAttendee(email: string): CalendarEvent[] {
 }
 ```
 
-Used in share reconciliation when a new user signs up. Performance degrades linearly with total event count.
+Loads all non-linked events, maps them, then filters in JavaScript by parsing JSON `data`. Used during share
+reconciliation (infrequent), so low practical impact. Could use SQLite JSON functions or a `LIKE` pre-filter.
 
-**File:** `apps/api/src/lib/calendar/calendar.ts:854-864`
-**Impact:** Performance concern. Currently only used during reconciliation (infrequent), so low practical impact.
-**Fix:** Use SQLite's JSON functions: `WHERE json_each(data, '$.attendees') ...` or add a `LIKE` pre-filter
-on the data column to reduce the candidate set.
-**Status:** Previously reported (issue #9). Downgraded from Important to Minor after confirming it is only used
-during reconciliation, not in hot paths.
+#### M7. `hour % 24` in `utcToLocal` handles a known runtime quirk
 
-## Observations
+**File**: `apps/api/src/lib/calendar/calendar.ts`, line 85
 
-**Timezone handling is well-engineered.** The `utcToLocal()` / `localToUtcSeconds()` pair correctly handles DST
-transitions using `Intl.DateTimeFormat` with a verify-and-correct pattern. The `intlCache` avoids repeated
-allocations. The approach of converting to wall-clock time, letting `rrule.js` operate in that space, and converting
-back avoids the known issues with rrule.js's built-in (and broken) TZID support.
+`Intl.DateTimeFormat` with `hour12: false` can return hour `24` for midnight in some engines. The `% 24` correctly
+maps 24 to 0. A brief comment would help future maintainers understand this is intentional.
 
-**Error isolation in async propagation is appropriate.** All fire-and-forget propagation calls (invites, shares,
-SSE notifications) use `.catch(console.error)` or `.catch(() => {})`, preventing secondary failures from crashing
-the primary mutation response. This is correct for the fire-and-forget pattern.
+#### M8. `constrainRRule` date arithmetic is roundabout
 
-**Transaction usage is inconsistent but acceptable.** `updateAttendeeStatus()` uses a transaction for its
-read-modify-write cycle. `rsvpForOccurrence()` does not, despite doing a similar read-check-write pattern.
-SQLite's single-writer model makes this safe in practice, but the inconsistency is worth noting.
+**File**: `apps/api/src/lib/calendar/calendar.ts`, lines 1134-1141
 
-**CalDAV readiness is forward-looking.** The `uid`, `uri`, `etag`, `ctag`, and `sequence` fields are correctly
-maintained and would ease future CalDAV server integration. The `constrainRRule` function correctly prevents
-organizer updates from extending beyond an attendee's local RRULE truncation.
+The function passes `localUntil + 86400_000` to `truncateRRule()`, which then subtracts one day. The net effect is
+correct (UNTIL = localUntil), but the round-trip through date arithmetic could introduce off-by-one errors if
+time-of-day components don't align. Consider simplifying to pass `localUntil` directly with appropriate adjustment.
 
-**The `resolveCalendar` function for non-team user IDs always returns the caller's own calendar** (line 22:
-`getHome(parsed.type === 'team' ? ownerId : user.id)`). This means the ownerId parameter is effectively ignored
-for user-type IDs on the calendar CRUD routes (`GET /calendars`, `POST /calendars`, `PUT /calendars/:calId`,
-`DELETE /calendars/:calId`). This appears intentional -- calendar management is always self-directed, while
-cross-user access goes through `resolveCalendarForEvents` -- but it means the API contract is looser than it
-appears.
+---
 
-**The `propagateCalendarShare` function calls `getTeamMembers` twice** for team shares in the worst case: once in
-the initial loop (line 65) to collect user IDs, and again in the permission resolution loop (line 93) to check
-membership. With N team shares, this results in 2N calls to `getTeamMembers`. Each call queries the auth database.
-This is not a bug but could be optimized with caching.
+## Strengths
 
-**Edge cases handled well:**
-- Self-invite prevention (organizer email skipped during propagation)
-- Linked event guard (attendees restricted to reminders/color changes only)
-- RRULE constraint on invitation updates (attendee truncation preserved)
-- Idempotent invitation receipt (returns existing ID if already exists)
-- Calendar ctag increment on all event mutations
-- Default calendar protection (cannot delete)
+1. **CalDAV-ready schema**: The `uid`, `uri`, `etag`, `ctag`, and `sequence` fields are correctly maintained. Etag
+   is recomputed on every mutation, ctag is atomically incremented. This positions the calendar for future CalDAV
+   server integration with minimal schema changes.
 
-## Test Coverage
+2. **Timezone-aware recurrence expansion**: The `utcToLocal()`/`localToUtcSeconds()` pair correctly handles DST
+   transitions by operating in wall-clock space. The `localToUtcSeconds` function has a verify-and-correct pattern
+   for ambiguous DST transitions. The approach correctly avoids the `rrule` library's broken built-in TZID support.
 
-Four test files in `apps/api/src/test/`:
+3. **Robust invitation model**: Linked events with bidirectional references (`organizerEventId`/`organizerUserId`)
+   create clean separation. The linked-event guard (lines 359-366) prevents unauthorized modifications. The
+   `constrainRRule` function (lines 1134-1141) elegantly prevents organizer updates from undoing an attendee's
+   "delete this and following" truncation. Idempotent invitation receipt (line 726) prevents duplicates.
 
-| Test file | Coverage area |
-|-----------|---------------|
-| `calendar.test.ts` | CRUD, RRULE storage, recurrence expansion, exceptions, this-and-following, sharing, free-busy, cross-user isolation |
-| `calendar-invites.test.ts` | Invite propagation, RSVP, update propagation, cancellation, linked event guard, self-invite prevention, per-occurrence RSVP, rrule constraint |
-| `team-calendar-share.test.ts` | Team calendar sharing, membership-based access, team settings, disabled calendar |
-| `calendar-timezone.test.ts` | Timezone storage, DST drift prevention (Amsterdam, US), timezone propagation via invites, occurrence RSVP with timezone, backward compat |
+4. **Permission resolution with most-permissive-wins**: `checkPermission()` (lines 670-694) correctly iterates all
+   shares (email + team) and selects the highest permission level. The `permissionRank` map makes comparison clean.
 
-**Missing test coverage:**
-- Malformed RRULE strings (create, expand, propagate)
-- `startTime > endTime` events
-- `from=0` in range queries (rejected by falsy check)
-- Deleting a calendar with active shares (orphaned shared_calendars entries)
-- Deleting a calendar with invited events (orphaned linked copies)
-- Access endpoint information disclosure for free-busy users
-- Team calendar permission enforcement (write hardcoding bypass)
-- Concurrent share propagation (duplicate shared_calendars entries)
-- Recurring occurrence spanning range boundary (missed due to start-time-only filter)
+5. **Team calendar lazy sync with safety net**: `syncTeamCalendars()` re-resolves permissions on every read, catching
+   stale permissions from team membership changes (lines 78-91 of get-calendar.ts). This avoids complex membership
+   event handling.
+
+6. **Clean separation of concerns**: Route file is thin (pure delegation), Calendar class owns all business logic,
+   propagation files handle cross-user side effects, SSE events are typed builders with templates.
+
+7. **Self-invite prevention**: Organizer's email is correctly skipped during propagation (line 28 of
+   invite-propagation.ts), preventing the organizer from receiving a linked copy of their own event.
+
+8. **Recurrence exception model**: Using regular event rows with `parentEventId` + `recurrenceDate` is clean and
+   composable. The `getEventsInRange()` method correctly substitutes exceptions for parent occurrences and filters
+   cancelled ones. The "modified exception then cancelled" case is handled and regression-tested.
+
+---
+
+## Test Coverage Analysis
+
+### Test Files
+
+| File                                            | Test Count | Coverage                                                                                                                                                                                                                                                                                                          |
+|-------------------------------------------------|------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `apps/api/src/test/calendar.test.ts`            | ~30        | Calendar CRUD, event CRUD, RRULE storage/round-trip, recurrence expansion, exceptions (cancel/modify), this-and-following operations, range queries, sharing (read/write/free-busy), cross-user isolation, frontend-style queries, malformed RRULE validation                                                     |
+| `apps/api/src/test/calendar-invites.test.ts`    | ~12        | Invite propagation, RSVP accepted/declined, non-linked RSVP rejection, non-attendee RSVP rejection, update propagation, cancellation, attendee-delete-declines, linked-event guard, self-invite prevention, per-occurrence RSVP (scope=this/all/this-and-following), organizer truncate constraint                |
+| `apps/api/src/test/calendar-timezone.test.ts`   | ~12        | Timezone storage/update, DST drift prevention (Amsterdam/US), timezone propagation to attendees, RSVP with timezone-aware expansion, occurrence cancellation with timezone, backward compatibility for events without timezone                                                                                    |
+| `apps/api/src/test/team-calendar-share.test.ts` | ~16        | Team calendar sharing, new-member reconciliation, shared-with-me pull, non-member access denial, team member listing, default read permission, write permission upgrade/downgrade, disabled team calendar removal, team settings authorization, shared event read access, permission enforcement regression tests |
+
+### Coverage Gaps
+
+1. **No test for `startTime >= endTime`** -- no test verifies events with invalid time ranges are rejected (the
+   validation itself is missing).
+2. **No test for calendar deletion with invited events** -- cascade-deleting events with attendees leaves orphaned
+   linked copies; no test covers this scenario.
+3. **No test for invalid timezone strings** -- e.g., `"Not/A/Zone"` would crash recurrence expansion.
+4. **No test for `from=0` edge case** in range queries (rejected by current falsy check).
+5. **No test for recurring event spanning range boundary** -- a recurring event that starts before `rangeFrom` but
+   extends past it would be missed by the start-time-only filter.
+6. **No test for concurrent share propagation** -- potential duplicate `shared_calendars` entries from interleaved
+   check-then-insert operations.
+7. **No test for invitation propagation failure** -- behavior when target user's Home cannot be loaded is not tested.
+8. **No performance test for large recurrence expansion** -- `FREQ=DAILY` over multi-year ranges.
+
+---
+
+## Summary
+
+The backend calendar is a well-architected, feature-complete domain with CalDAV-ready design, sophisticated
+timezone-aware recurrence handling, and a clean invitation/RSVP model. Test coverage is strong across all major
+feature areas.
+
+Priority fixes:
+
+- **C2**: Propagate cancellations before calendar deletion to prevent orphaned invitation copies
+- **I1**: Add `startTime < endTime` validation
+- **I2**: Scope recurring event and exception queries for performance at scale
+- **I4**: Replace `.catch(() => {})` with `.catch(console.error)` for SSE notification errors
+- **I5**: Replace `parseOwnerId` with direct `startsWith('team_')` check in share propagation
+- **M5**: Validate timezone strings on create/update to prevent range query failures

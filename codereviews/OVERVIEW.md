@@ -1,60 +1,65 @@
 # Eigen Codebase Review: Executive Overview
 
-**Date:** 2026-03-18
-**Scope:** Full-stack review across all domains -- 7 backend reviews, 11 frontend reviews (18 total)
-**Methodology:** Deep-review agents per domain, cross-referenced and verified against source code
+**Date:** 2026-03-19
+**Scope:** Full-stack deep review across all domains — 7 backend reviews, 11 frontend reviews (18 total)
+**Methodology:** Independent review agents per domain, each reading all relevant documentation and every source file
+line-by-line. All findings verified against current code. Previous review (2026-03-18) challenged and corrected where
+inaccurate.
 
 ---
 
 ## Overall Assessment
 
-The Eigen codebase is architecturally sound and impressively consistent for a project of this breadth. The monorepo structure is clean, the documented patterns (CLAUDE.md, docs/) are actually followed in practice, and the critical rule that all data hooks live in `packages/lib` is respected across every single app. The Home singleton hierarchy, ManagedDatabase lifecycle, SSE event system, and thin-route-to-domain-class pattern are well-designed and uniformly applied.
+Eigen's codebase is architecturally disciplined and remarkably consistent for a project spanning 14 apps, 20+ backend
+domains, and two shared packages. The documented patterns (CLAUDE.md, docs/) are followed in practice. The Home
+singleton hierarchy, ManagedDatabase lifecycle, SSE event system, Eden Treaty type safety, and centralized hook
+architecture in `packages/lib` all work as designed.
 
-This deep review uncovered **19 critical issues**, **~80 important issues**, and **~120 minor issues** across the 18 review files. The most severe confirmed findings are: drive cache collisions from missing ownerId in query keys, several authorization bypasses in calendar and chat, and a class of missing-await bugs that silently break async control flow in multiple domains. There are also two broken navigation flows from MIME type typos, multiple broken frontend features (shared-items detail panes, mail attachments, waitlist form), and systemic type safety erosion from ~50+ `as any` casts in the shared hook layer.
+This review uncovered **40 critical issues**, **~136 important issues**, and **~170 minor issues** across 18 review
+files. Compared to the previous review (2026-03-18), **~15 previously-reported critical issues have been fixed**, but
+new issues were discovered — particularly around error handling gaps, stale closures, and SSE content leaks. Several
+previous "critical" findings were confirmed as **false positives** and removed (e.g., mail XSS, contacts save indicator,
+waitlist stale closure, calendar permission hardcoding, contacts `getMe()` null return).
 
-None of these are architecturally difficult to fix. The codebase's clean structure makes targeted fixes straightforward. The main risk is the accumulated density of issues -- fixing them requires touching many files across many domains.
+The most severe confirmed findings are: unauthenticated mail delivery with no rate limiting, SSE content leaks in chat
+delete/edit events, a race condition in Home lifecycle management, `ownerId` validation gaps across multiple backend
+routes, and pervasive missing error handling on frontend mutations. None require architectural changes — the clean
+structure makes targeted fixes straightforward.
 
-### Second-Round Corrections
+### Key Changes from Previous Review (2026-03-18)
 
-Several first-round findings were challenged and re-evaluated in this deep review:
-
-| Finding | Verdict | Detail |
-|---------|---------|--------|
-| Mail XSS via ShadowContent | **False positive** | Backend sanitizes all email HTML with `DOMPurify.sanitize()` at parse time (`mail-parse.ts:10`). The frontend component receives pre-sanitized HTML. Not a vulnerability. Downgraded to minor defense-in-depth observation. |
-| Collab broadcast missing | **Downgraded to Important** | The server does NOT broadcast updates, but all frontend apps use `WebsocketProvider` with `resyncInterval: 5000` -- clients poll every 5 seconds and receive changes via sync handshake. Collab works with up to 5s latency, not "non-functional". Adding server-side broadcast would make it instant and reduce traffic. |
-| Redundant WAL checkpoint in ManagedDatabase | **Corrected** | The second `wal_checkpoint(TRUNCATE)` in `close()` is NOT redundant -- `sync()` only checkpoints when dirty AND sync callbacks exist. For databases without sync callbacks, the explicit checkpoint is the only cleanup path. |
-| Test cleanup "commented out" | **Corrected** | Cleanup runs at the *start* of each test run (`rmSync` on line 6 of setup.ts), not never. The pattern preserves data after a run for debugging. |
-| Calendar `shared` endpoint ownerId | **Downgraded** | From Critical to Minor. The endpoint ignores ownerId but always returns the authenticated user's data -- no data leakage possible. |
-| Whisper SSE leak severity | **Reclassified** | Currently limited by SSE architecture (events only go to the chat owner's Home). Remains critical as a latent defect -- any future SSE change would immediately expose whisper content. |
-| Contacts save indicator (FE) | **Upgraded** | From Important to Critical. The component's own mutation hooks never fire, so `isPending` is always false -- enables double-submission with no feedback. |
-| Waitlist form stale closure | **Upgraded** | From Minor to Critical. The empty `useCallback` dependency array means the form always submits empty strings -- the feature is completely broken. |
+| Area                               | What Changed                                                                                                                                                                                                                                                                                                                                  |
+|------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| **False positives removed**        | Calendar permission hardcoding, calendar share leak to free-busy users, contacts `getMe()` null return, contacts save indicator, contacts avatar double-processing, waitlist stale closure, "Recommended" label wrong, path traversal in LocalFilesystem/LocalKeyStorage, singleton retry failure, auth secret hardcoded                      |
+| **Issues fixed since last review** | Drive `matchesACL` await, `SharedDrive` slides/sheets overrides, MIME type typos, mail download URLs, drive `Content-Disposition` sanitization, `getTeamExists` await, `as any` cleanup in lib hooks (21→0), drive Rules of Hooks, chat polling removed, mail reply-to handling, mail draft error handling, several Dutch comments translated |
+| **New issues found**               | Chat SSE content leaks (delete + edit), 2FA toggle cosmetic-only, mail toolbar sends stale data, `parseOwnerId` regex accepts non-hex, contacts delete dialog dead code, collab `closeCollabDocument` missing await                                                                                                                           |
 
 ---
 
 ## Domain Review Index
 
-| Review | Domain | Critical | Important | Minor | File |
-|--------|--------|----------|-----------|-------|------|
-| [BE Core](BE_core.md) | Auth, Home, Config, Setup, SSE | 1 | 9 | 16 | `apps/api/src/lib/{core,config,auth,home,setup}/` |
-| [BE Drive](BE_drive.md) | Drive, Mount, Storage, ACL, Previews | 2 | 8 | 7 | `apps/api/src/lib/{drive,mount,storage,preview}/` |
-| [BE Mail](BE_mail.md) | Maildir, EML, SMTP | 4 | 8 | 10 | `apps/api/src/lib/mail/` |
-| [BE Contacts](BE_contacts.md) | Contact management | 1 | 7 | 11 | `apps/api/src/lib/contacts/` |
-| [BE Calendar](BE_calendar.md) | Calendar, RRULE, sharing, invites | 3 | 10 | 6 | `apps/api/src/lib/calendar/` |
-| [BE Chat](BE_chat.md) | Chat rooms, slash commands | 2 | 8 | 7 | `apps/api/src/lib/chat/` |
-| [BE Collab](BE_collab.md) | Yjs, WebSocket, real-time editing | 0 | 7 | 8 | `apps/api/src/lib/collab/` |
-| [FE Shared](FE_shared.md) | packages/lib + packages/ui | 3 | 11 | 11 | `packages/{lib,ui}/` |
-| [FE Drive](FE_drive.md) | Drive app | 3 | 8 | 12 | `apps/drive/` |
-| [FE Mail](FE_mail.md) | Mail app | 2 | 12 | 12 | `apps/mail/` |
-| [FE Contacts](FE_contacts.md) | Contacts app | 2 | 5 | 15 | `apps/contacts/` |
-| [FE Calendar](FE_calendar.md) | Calendar app | 3 | 9 | 15 | `apps/calendar/` |
-| [FE Chat](FE_chat.md) | Chat app | 2 | 5 | 8 | `apps/chat/` |
-| [FE Collab](FE_collab.md) | Docs, Stickies, Slides, Sheets | 2 | 10 | 14 | `apps/{docs,stickies,slides,sheets}/` |
-| [FE Space](FE_space.md) | User settings, profile | 3 | 7 | 9 | `apps/space/` |
-| [FE People](FE_people.md) | Org/team admin | 2 | 5 | 10 | `apps/people/` |
-| [FE Setup](FE_setup.md) | Setup wizard, index/landing | 3 | 7 | 8 | `apps/{setup,index}/` |
-| [FE Sheets Deep](FE_sheets_deep.md) | Sheets + fortune-sheet | 4 | 9 | 10 | `apps/sheets/`, `packages/fortune-sheet/` |
+| Review                              | Domain                               | Critical | Important | Minor | File                                                            |
+|-------------------------------------|--------------------------------------|----------|-----------|-------|-----------------------------------------------------------------|
+| [BE Core](BE_core.md)               | Auth, Home, Config, Setup, SSE       | 2        | 7         | 12    | `apps/api/src/lib/{core,config,auth,home,setup,org,team,user}/` |
+| [BE Drive](BE_drive.md)             | Drive, Mount, Storage, ACL, Previews | 2        | 6         | 6     | `apps/api/src/lib/{drive,mount,storage,preview,share,shared}/`  |
+| [BE Mail](BE_mail.md)               | Maildir, EML, SMTP                   | 3        | 9         | 11    | `apps/api/src/lib/mail/`                                        |
+| [BE Contacts](BE_contacts.md)       | Contact management                   | 0        | 5         | 11    | `apps/api/src/lib/contacts/`                                    |
+| [BE Calendar](BE_calendar.md)       | Calendar, RRULE, sharing, invites    | 3        | 9         | 8     | `apps/api/src/lib/calendar/`                                    |
+| [BE Chat](BE_chat.md)               | Chat rooms, slash commands           | 2        | 7         | 7     | `apps/api/src/lib/chat/`                                        |
+| [BE Collab](BE_collab.md)           | Yjs, WebSocket, real-time editing    | 1        | 5         | 6     | `apps/api/src/lib/collab/`                                      |
+| [FE Shared](FE_shared.md)           | packages/lib + packages/ui           | 3        | 11        | 8     | `packages/{lib,ui}/`                                            |
+| [FE Drive](FE_drive.md)             | Drive app                            | 3        | 8         | 13    | `apps/drive/`                                                   |
+| [FE Mail](FE_mail.md)               | Mail app                             | 3        | 9         | 12    | `apps/mail/`                                                    |
+| [FE Contacts](FE_contacts.md)       | Contacts app                         | 4        | 7         | 16    | `apps/contacts/`                                                |
+| [FE Calendar](FE_calendar.md)       | Calendar app                         | 3        | 10        | 14    | `apps/calendar/`                                                |
+| [FE Chat](FE_chat.md)               | Chat app                             | 2        | 5         | 9     | `apps/chat/`                                                    |
+| [FE Collab](FE_collab.md)           | Docs, Stickies, Slides, Sheets       | 2        | 12        | 9     | `apps/{docs,stickies,slides,sheets}/`                           |
+| [FE Space](FE_space.md)             | User settings, profile               | 1        | 6         | 10    | `apps/space/`                                                   |
+| [FE People](FE_people.md)           | Org/team admin                       | 2        | 7         | 10    | `apps/people/`                                                  |
+| [FE Setup](FE_setup.md)             | Setup wizard, index/landing          | 1        | 6         | 9     | `apps/{setup,index}/`                                           |
+| [FE Sheets Deep](FE_sheets_deep.md) | Sheets + fortune-sheet               | 3        | 7         | 10    | `apps/sheets/`, `packages/fortune-sheet/`                       |
 
-**Totals:** 19 critical, ~82 important, ~120 minor issues across 18 reviews.
+**Totals:** 40 critical, ~136 important, ~171 minor issues across 18 reviews.
 
 ---
 
@@ -62,278 +67,269 @@ Several first-round findings were challenged and re-evaluated in this deep revie
 
 Every critical issue from every review, organized by impact category.
 
-### Security and Authorization
+### Security and Access Control
 
-| # | Issue | Location | Review |
-|---|-------|----------|--------|
-| 1 | **Team calendar permissions are cosmetic** -- `resolveCalendarForEvents` hardcodes `permission: 'write'` for all team members, bypassing share-level restrictions entirely. Admins setting read or free-busy see no effect. | `apps/api/src/lib/calendar/get-calendar.ts:29-35` | [BE Calendar](BE_calendar.md) #1 |
-| 2 | **Whisper content in SSE events** -- private whisper messages are included unfiltered in SSE payloads. Currently limited by SSE architecture (only owner's Home receives), but any future SSE expansion immediately creates an active privacy leak. | `apps/api/src/lib/chat/chat.ts:116-122` | [BE Chat](BE_chat.md) #1 |
-| 3 | **Calendar `access` endpoint leaks share list to free-busy users** -- users with free-busy access (meant to see only time blocks) can enumerate all shares including email addresses and permission levels. | `apps/api/src/routes/calendar.ts:165-170` | [BE Calendar](BE_calendar.md) #3 |
-| 4 | **Mailbox name path traversal** -- `mailboxDir` only replaces the first `/`, and `..` segments are not validated. Authenticated users can create/read directories outside their Maildir. | `apps/api/src/lib/mail/maildir-store.ts:163-166` | [BE Mail](BE_mail.md) #1 |
-| 5 | **Mail attachment header injection** -- `Content-Disposition` header interpolates unsanitized `params.fileName`, allowing response splitting via `"`, `\r`, `\n` characters. | `apps/api/src/routes/mail.ts:129` | [BE Mail](BE_mail.md) #2 |
-| 6 | **Public mail delivery endpoint has no protections** -- `POST /mail/deliver/:to` accepts arbitrary EML from unauthenticated callers with no rate limiting, size limit, or quota enforcement. | `apps/api/src/routes/mail.ts:28` | [BE Mail](BE_mail.md) #3 |
-| 7 | **Clients can post `system` type chat messages** -- no server-side guard prevents users from posting messages with `type: 'system'`, enabling social engineering (fake system announcements). | `apps/api/src/routes/chat.ts:40-45` | [BE Chat](BE_chat.md) #2 |
+| # | Issue                                                                                                                                                                                                                                     | Location                                                                                          | Review                           |
+|---|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|---------------------------------------------------------------------------------------------------|----------------------------------|
+| 1 | **Unauthenticated mail delivery with no rate limiting** — `POST /mail/deliver/:to` accepts arbitrary EML from any caller with no auth, rate limit, IP allowlist, size limit, or quota enforcement.                                        | [`apps/api/src/routes/mail.ts:28`](../apps/api/src/routes/mail.ts)                                | [BE Mail](BE_mail.md) C1         |
+| 2 | **`getSharedDrive` does not validate caller access to ownerId** — any authenticated user can create a `SharedDrive` for any other user. `listMounts()` leaks mount metadata without permission check.                                     | [`apps/api/src/lib/drive/get-drive.ts:12-24`](../apps/api/src/lib/drive/get-drive.ts)             | [BE Drive](BE_drive.md) #1       |
+| 3 | **`SharedDrive.movePath` skips write check on target parent** — source permission is checked, target is not. Users can move files into folders they have read-only access to.                                                             | [`apps/api/src/lib/drive/sharedDrive.ts:193-198`](../apps/api/src/lib/drive/sharedDrive.ts)       | [BE Drive](BE_drive.md) #2       |
+| 4 | **`ownerId` in mail routes accepted but never validated** — all authenticated mail routes ignore the URL parameter and operate on the session user's Home. Cross-user isolation test reveals Bob can POST to Alice's ownerId and get 200. | [`apps/api/src/routes/mail.ts`](../apps/api/src/routes/mail.ts)                                   | [BE Mail](BE_mail.md) C2         |
+| 5 | **`resolveCalendarForEvents` hardcodes `write` for team members** — bypasses share-level restrictions. Admins setting read-only or free-busy permissions see no effect.                                                                   | [`apps/api/src/lib/calendar/get-calendar.ts:29-35`](../apps/api/src/lib/calendar/get-calendar.ts) | [BE Calendar](BE_calendar.md) C1 |
+| 6 | **Calendar `access` endpoint leaks share list to free-busy users** — users with free-busy access can see all shares including emails and permission levels.                                                                               | [`apps/api/src/routes/calendar.ts:165-170`](../apps/api/src/routes/calendar.ts)                   | [BE Calendar](BE_calendar.md) C3 |
 
-### Broken Core Functionality
+### SSE Content Leaks
 
-| # | Issue | Location | Review |
-|---|-------|----------|--------|
-| ~~8~~ | ~~Collab updates never broadcast~~ | **Downgraded to Important** -- collab works via client-side 5s resyncInterval. Adding broadcast improves latency. | [BE Collab](BE_collab.md) #1 |
-| 10 | **SharedDrive missing `createSlides` and `createSheets` overrides** -- these fall through to the base `Drive` class which has no initialized mounts, returning 404. Creating slides/sheets on shared or team drives is broken. | `apps/api/src/lib/drive/sharedDrive.ts` | [BE Drive](BE_drive.md) #2 |
-| 11 | **Slides and Sheets MIME type typos** -- `application-eigenslide` (singular) used in 6 route files instead of `application-eigenslides` (plural). Navigation after create/delete and initial redirect show empty file lists. | `apps/slides/src/routes/index.tsx:11`, `apps/sheets/src/routes/index.tsx:11` (+ 4 more) | [FE Collab](FE_collab.md) #1, [FE Sheets](FE_sheets_deep.md) #1 |
-| 12 | **Mail download and attachment URLs broken** -- URL builders omit the required `/:ownerId/` segment, producing 404s. All attachment downloads silently fail. | `packages/lib/src/core/api.ts:94-95` | [FE Mail](FE_mail.md) #1 |
-| 13 | **Draft mutations silently swallow errors** -- try/catch returns `null` instead of re-throwing, making `useMutation.isError` unreachable. Users are navigated away from compose even on send failure, losing their draft. | `packages/lib/src/core/mail/hooks/use-draft.ts:22-44` | [FE Mail](FE_mail.md) #2 |
-| 14 | **Waitlist form always submits empty strings** -- `useCallback` with empty `[]` deps captures initial empty `email`/`notes` values permanently. The waitlist feature is completely broken. | `apps/index/src/routes/index.tsx:47-66` | [FE Setup](FE_setup.md) #2 |
-| 15 | **Setup wizard uses wrong env variable** -- reads `VITE_API_URL` instead of `VITE_API_HOST`. Falls back to `localhost:8000`, which breaks in non-development deployments. | `apps/setup/src/components/setup-wizard.tsx:24` | [FE Setup](FE_setup.md) #1 |
+| # | Issue                                                                                                                                                                                           | Location                                                                    | Review                   |
+|---|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------|--------------------------|
+| 7 | **`deleteMessage` SSE event leaks pre-deletion content** — the `existing` object retains original content instead of the cleared empty string. Also leaks whisper content for deleted whispers. | [`apps/api/src/lib/chat/chat.ts:224`](../apps/api/src/lib/chat/chat.ts)     | [BE Chat](BE_chat.md) #1 |
+| 8 | **`editMessage` SSE event leaks whisper content** — no whisper filtering on edit events, unlike the fixed post path. All SSE subscribers see edited whisper content.                            | [`apps/api/src/lib/chat/chat.ts:190-196`](../apps/api/src/lib/chat/chat.ts) | [BE Chat](BE_chat.md) #2 |
 
-### Data Integrity
+### Data Integrity and Core Bugs
 
-| # | Issue | Location | Review |
-|---|-------|----------|--------|
-| 16 | **Missing `await` on `matchesACL` in share propagation** -- `!matchesACL(...)` evaluates `!Promise` which is always false. The unshare branch only executes on full ACL removal, leaving stale shared.db entries when individual access is revoked. | `apps/api/src/lib/drive/drive.ts:561` | [BE Drive](BE_drive.md) #1 |
-| 17 | **`getTeamExists` missing `await`** -- always returns truthy (a Promise), allowing TeamHome instances for non-existent teams. Creates directories under `data/team/<nonexistent>/`. | `apps/api/src/lib/team/team.ts:10-12` | [BE Core](BE_core.md) #1 |
-| 18 | **BCC headers persisted in stored EML** -- `createEmlContent` always emits `BCC:` in the stored message. IMAP clients reading the Maildir expose BCC recipients, violating RFC 5322. | `apps/api/src/lib/mail/mailfile.ts:26-36` | [BE Mail](BE_mail.md) #4 |
-| 19 | **`deleteCalendar` orphans shared entries and linked invitations** -- calendar deletion cascades DB rows but does not propagate share removal or cancellation to recipients. Stale entries persist in other users' databases. | `apps/api/src/lib/calendar/calendar.ts:245-252` | [BE Calendar](BE_calendar.md) #2 |
-| 20 | **`getMe()` returns null after self-contact creation** -- `addYourself()` returns `user.id` but `getContactById` expects the DB-generated contact row UUID. | `apps/api/src/lib/contacts/contacts.ts:363-371` | [BE Contacts](BE_contacts.md) #1 |
-| 21 | **`applyOp` crashes if all sheets are hidden** -- remote "hide sheet" op with all sheets hidden dereferences `undefined[0].id`, crashing the workbook for all connected clients. | `packages/fortune-sheet/src/components/Workbook/api.ts:88-95` | [FE Sheets](FE_sheets_deep.md) #4 |
+| #  | Issue                                                                                                                                                                                                                      | Location                                                                                                                               | Review                           |
+|----|----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------------------------------------------|----------------------------------|
+| 9  | **Race condition in Home cleanup/recreation** — `touch()` timeout removes singleton from Map synchronously but `destruct()` is async and not awaited. Two Home instances can exist concurrently with concurrent DB access. | [`apps/api/src/lib/home/home.ts:78-87`](../apps/api/src/lib/home/home.ts), [`get-home.ts:62-64`](../apps/api/src/lib/home/get-home.ts) | [BE Core](BE_core.md) C1         |
+| 10 | **`Home.destruct()` opens never-used databases** — managed database map stores singleton factories that trigger during destruct even for databases never accessed.                                                         | [`apps/api/src/lib/home/home.ts:151-158`](../apps/api/src/lib/home/home.ts)                                                            | [BE Core](BE_core.md) C2         |
+| 11 | **`deleteCalendar` orphans attendee invitations** — cascade-deletes events without propagating cancellations to attendees. Stale linked invitation copies persist in other users' databases.                               | [`apps/api/src/lib/calendar/calendar.ts:245-252`](../apps/api/src/lib/calendar/calendar.ts)                                            | [BE Calendar](BE_calendar.md) C2 |
+| 12 | **Missing `await` on `closeCollabDocument`** — fire-and-forget async call in `unsubscribe()`. Skips database close on S3 backends, swallows errors.                                                                        | [`apps/api/src/lib/collab/collabDocument.ts:265`](../apps/api/src/lib/collab/collabDocument.ts)                                        | [BE Collab](BE_collab.md) #1     |
+| 13 | **`readMessage()` returns stale file size** — `BunFile.size` captured at object creation time, not at read time. Returns 0 or stale values for recently-written files.                                                     | [`apps/api/src/lib/mail/maildir.ts`](../apps/api/src/lib/mail/maildir.ts)                                                              | [BE Mail](BE_mail.md) C3         |
 
-### Additional Frontend Critical Issues
+### Frontend — Broken Functionality
 
-| # | Issue | Location | Review |
-|---|-------|----------|--------|
-| 22 | **Drive query keys omit `ownerId`** -- switching between personal and team drives serves cached data from the wrong owner. SSE invalidations also cross-contaminate. | `packages/lib/src/core/drive/hooks/use-drive.ts:10-26` | [FE Shared](FE_shared.md) #2 |
-| 23 | **Rules of Hooks violation** -- conditional `useBreadcrumb` call based on prop value. Will corrupt React state if prop changes between renders. | `packages/ui/src/components/layout/drive/drive-list.tsx:58` | [FE Shared](FE_shared.md) #1 |
-| 24 | **`getEventsForDay` drops timed events spanning midnight** -- only checks start time for non-all-day events. Multi-hour timed events crossing midnight are invisible on the second day. | `apps/calendar/src/components/calendar-utils.ts:73-76` | [FE Calendar](FE_calendar.md) C1 |
-| 25 | **RecurrencePicker receives UTC-parsed date** -- `new Date("2024-03-15")` is UTC midnight, which in western timezones produces wrong weekday presets and RRULE `BYDAY` values. | `apps/calendar/src/components/create-event-dialog.tsx:227` | [FE Calendar](FE_calendar.md) C2 |
-| 26 | **"This and following" delete is a no-op for exceptions** -- the expression always evaluates to null for recurrence exceptions since they don't carry the parent RRULE. | `apps/calendar/src/components/event-detail-dialog.tsx:167-174` | [FE Calendar](FE_calendar.md) C3 |
-| 27 | **Missing `error` case in command dispatch** -- malformed commands fall through the switch and get posted as plain messages visible to all. `/whisper badformat` leaks intended private content. | `packages/lib/src/core/chat/hooks/use-chat-room.ts:89-137` | [FE Chat](FE_chat.md) #1 |
-| 28 | **No error handling in `handleSendMessage`** -- zero try/catch blocks across 3 `.mutateAsync()` calls. Failures become unhandled promise rejections. Input is already cleared, so message text is lost. | `packages/lib/src/core/chat/hooks/use-chat-room.ts:69-141` | [FE Chat](FE_chat.md) #2 |
-| 29 | **Contacts save indicator never activates** -- component instantiates its own mutation hooks, but actual save uses parent's mutation. `isPending` is always false, enabling double-submission. | `apps/contacts/src/components/contacts/contact-edit.tsx:84-85` | [FE Contacts](FE_contacts.md) C1 |
-| 30 | **Avatar upload calls `setAvatar` twice** -- `onSuccess` callback and post-promise handler both fire, causing redundant state updates with potentially divergent values. | `apps/contacts/src/components/contacts/contact-edit.tsx:166-194` | [FE Contacts](FE_contacts.md) C2 |
-| 31 | **`revokeOtherSessions` checkbox is silently ignored** -- the handler hardcodes `true`, discarding the user's explicit choice. Sessions are always revoked regardless of the checkbox state. | `apps/space/src/routes/_auth.security.password.tsx:12` | [FE Space](FE_space.md) C1 |
-| 32 | **`onSubmit` in ChangePassword does not await** -- unhandled promise rejections, no loading state, allows double-submission during in-flight requests. | `apps/space/src/components/space/change-password.tsx:94-100` | [FE Space](FE_space.md) C2 |
-| 33 | **Space avatar upload double-processes response** -- `setAvatar` called twice, second call may receive empty string from consumed Response body stream, overwriting correct value. | `apps/space/src/components/space/profile-editor.tsx:168-195` | [FE Space](FE_space.md) C3 |
-| 34 | **People keyboard navigation selects wrong member** -- `activeId` uses membership ID but `getId` returns user UUID. Keyboard-driven selection shows empty detail pane. | `apps/people/src/components/people/members-list.tsx:79-83` | [FE People](FE_people.md) #1 |
-| 35 | **Team calendar save overwrites entire shares array** -- saving team settings silently destroys all pre-existing individual user shares on the team calendar. | `apps/people/src/components/people/team-detail.tsx:250-253` | [FE People](FE_people.md) #2 |
-| 36 | **Storage type "Recommended" label on wrong option** -- setup wizard labels `local-id` as recommended, but the project defaults to `local-fullnames` (including the most recent commit). | `apps/setup/src/components/setup-wizard.tsx:224` | [FE Setup](FE_setup.md) #3 |
-| 37 | **`validateSearch` drops `uid` in shared routes** -- detail pane broken for shared-with-me items across drive, sheets, and other collab apps. | `apps/drive/src/routes/_auth.shared.$to.tsx:13-16` | [FE Drive](FE_drive.md) C2 |
-| 38 | **`markDirty` forward-reference in MarkdownEditor** -- `onUpdate` callback captures `markDirty` before it is declared. Works by accident (callback fires asynchronously) but is one Tiptap update away from a crash. | `apps/drive/src/components/editor/markdown-editor.tsx:75-93` | [FE Drive](FE_drive.md) C3 |
-| 39 | **Stale closure in fortune-sheet `onPaste`** -- reads `context` from closure instead of Immer draft, potentially pasting at wrong positions after state changes. | `packages/fortune-sheet/src/components/Workbook/index.tsx:691-787` | [FE Sheets](FE_sheets_deep.md) #3 |
-| 40 | **Sheets `validateSearch` drops `uid`** -- same bug as #37, affecting the sheets shared-items view. | `apps/sheets/src/routes/_auth._sidebar.shared.$to.tsx:14-16` | [FE Sheets](FE_sheets_deep.md) #2 |
-| 41 | **Revision restore pushes raw JSON into Y.Array instead of Yjs types** -- stickies/slides/sheets restore logic does not convert array elements, breaking collaborative editing on restored sheets data. | `apps/stickies/src/components/stickies/board.tsx:108` | [FE Collab](FE_collab.md) #2 |
+| #  | Issue                                                                                                                                                                                                | Location                                                                                           | Review                           |
+|----|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------|----------------------------------|
+| 14 | **Mail toolbar Send bypasses form inputs** — sends stale cached data instead of user's current edits. Crashes for new compose (null as EmailDraftType).                                              | [`apps/mail/src/`](../apps/mail/src/)                                                              | [FE Mail](FE_mail.md) #2         |
+| 15 | **Missing `await` on `handleNewDraftEmail`** in reply/forward — violates the project's #1 critical rule about awaiting async calls.                                                                  | [`apps/mail/src/routes/_auth.$filterType.$filterId.tsx:167,186,199`](../apps/mail/src/routes/)     | [FE Mail](FE_mail.md) #1         |
+| 16 | **Mail mutation handlers have no error feedback** — 5 `mutateAsync` calls without try/catch or onError.                                                                                              | [`apps/mail/src/routes/_auth.$filterType.$filterId.tsx`](../apps/mail/src/routes/)                 | [FE Mail](FE_mail.md) #3         |
+| 17 | **Contacts delete from toolbar has no confirmation** — immediate data loss on click.                                                                                                                 | [`apps/contacts/src/`](../apps/contacts/src/)                                                      | [FE Contacts](FE_contacts.md) C1 |
+| 18 | **Contacts batch delete fires N parallel mutations with N navigations** — race condition between parallel deletes and navigates.                                                                     | [`apps/contacts/src/`](../apps/contacts/src/)                                                      | [FE Contacts](FE_contacts.md) C2 |
+| 19 | **Contacts batch label toggle fires mutations in tight loop with no error handling**                                                                                                                 | [`apps/contacts/src/`](../apps/contacts/src/)                                                      | [FE Contacts](FE_contacts.md) C3 |
+| 20 | **Contacts drag-and-drop label assignment — same fire-and-forget pattern**                                                                                                                           | [`apps/contacts/src/`](../apps/contacts/src/)                                                      | [FE Contacts](FE_contacts.md) C4 |
+| 21 | **`RecurrencePicker` in edit dialog receives UTC-parsed date** — `new Date(startDate)` without `T00:00:00`. Wrong weekday presets in western timezones. Create dialog was fixed but edit was missed. | [`apps/calendar/src/components/edit-event-dialog.tsx`](../apps/calendar/src/components/)           | [FE Calendar](FE_calendar.md) C1 |
+| 22 | **"This and following" delete is a no-op for exceptions** — exceptions don't carry the parent RRULE, so truncation logic is unreachable.                                                             | [`apps/calendar/src/components/event-detail-dialog.tsx:167-174`](../apps/calendar/src/components/) | [FE Calendar](FE_calendar.md) C2 |
+| 23 | **Setup wizard uses wrong env variable** — reads `VITE_API_URL` instead of `VITE_API_HOST`. Breaks in Docker/production.                                                                             | [`apps/setup/src/components/setup-wizard.tsx:24`](../apps/setup/src/components/setup-wizard.tsx)   | [FE Setup](FE_setup.md) #1       |
 
----
+### Frontend — Type Safety and Cache Integrity
 
-## Important Issues -- Tiered Priority
+| #  | Issue                                                                                                                                                              | Location                                                                                             | Review                                                         |
+|----|--------------------------------------------------------------------------------------------------------------------------------------------------------------------|------------------------------------------------------------------------------------------------------|----------------------------------------------------------------|
+| 24 | **`useCreateChat` passes `mountId` where `ownerId` expected** — `invalidateItemCreated` targets wrong owner, folder contents won't refresh.                        | [`packages/lib/src/core/drive/hooks/`](../packages/lib/src/core/drive/hooks/)                        | [FE Shared](FE_shared.md) #1                                   |
+| 25 | **UUID validation regex accepts non-hex characters** — `parseOwnerId` uses `a-Z` instead of `a-f`, accepting any letter as hex digit.                              | [`packages/lib/src/types/owner.ts`](../packages/lib/src/types/owner.ts)                              | [FE Shared](FE_shared.md) #2                                   |
+| 26 | **Calendar query keys omit `ownerId`** — `calendarList`, `eventRange`, `sharedCalendars` cause cross-context cache collisions between personal and team calendars. | [`packages/lib/src/core/calendar/hooks/`](../packages/lib/src/core/calendar/hooks/)                  | [FE Shared](FE_shared.md) #3, [FE Calendar](FE_calendar.md) C3 |
+| 27 | **Shared route `uid` not validated in Drive** — detail panel broken for "Shared With Me" items on non-default mounts.                                              | [`apps/drive/src/routes/_auth.shared.$to.tsx`](../apps/drive/src/routes/)                            | [FE Drive](FE_drive.md) C1                                     |
+| 28 | **`markDirty` forward-reference in MarkdownEditor** — works by accident (async callback), fragile against Tiptap updates.                                          | [`apps/drive/src/components/editor/markdown-editor.tsx:75-93`](../apps/drive/src/components/editor/) | [FE Drive](FE_drive.md) C2                                     |
+| 29 | **`handleMovePath` has no error handling** — `mutateAsync` without try/catch or error toast.                                                                       | [`apps/drive/src/`](../apps/drive/src/)                                                              | [FE Drive](FE_drive.md) C3                                     |
 
-### Tier 1: Security Hardening
+### Frontend — Chat and Collab
 
-| # | Issue | Location | Review |
-|---|-------|----------|--------|
-| 1 | Path traversal in contacts avatar download | `contacts.ts:317-318` | [BE Contacts](BE_contacts.md) #3 |
-| 2 | Content-Disposition header injection in drive download | `routes/drive.ts:114` | [BE Drive](BE_drive.md) #8 |
-| 3 | Path traversal guard missing in `LocalFilesystem` | `local-filesystem.ts:16-18` | [BE Core](BE_core.md) #7 |
-| 4 | Path traversal guard missing in `LocalKeyStorage` | `local-key-storage.ts:16-18` | [BE Core](BE_core.md) #26 |
-| 5 | Hardcoded auth secret fallback in source | `auth.ts:98` | [BE Core](BE_core.md) #5 |
-| 6 | Calendar shared-with-me allows user ID enumeration | `routes/calendar.ts:173-177` | [BE Calendar](BE_calendar.md) #7 |
-| 7 | No message content length limit in chat | `routes/chat.ts:39` | [BE Chat](BE_chat.md) #3 |
-| 8 | No `limit` parameter validation/capping in chat | `routes/chat.ts:12` | [BE Chat](BE_chat.md) #5 |
-| 9 | HTML sanitization does not block CSS tracking in mail | `mail-parse.ts:10` | [BE Mail](BE_mail.md) #12 |
+| #  | Issue                                                                                                                                                             | Location                                                                                           | Review                       |
+|----|-------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------------------------------------------------------------|------------------------------|
+| 30 | **Missing `error` case in command dispatch** — malformed `/whisper badformat` sent as public message, leaking intended private content.                           | [`packages/lib/src/core/chat/hooks/use-chat-room.ts:89-137`](../packages/lib/src/core/chat/hooks/) | [FE Chat](FE_chat.md) #1     |
+| 31 | **No error handling in `handleSendMessage`** — three `.mutateAsync()` calls with zero try/catch. Input cleared before send, so text is lost on failure.           | [`packages/lib/src/core/chat/hooks/use-chat-room.ts:69-141`](../packages/lib/src/core/chat/hooks/) | [FE Chat](FE_chat.md) #2     |
+| 32 | **Docs comment creation swallows errors** — `try/finally` with no `catch` and no `toast.error()`.                                                                 | [`apps/docs/src/components/comments/comment-dialog.tsx`](../apps/docs/src/components/)             | [FE Collab](FE_collab.md) C1 |
+| 33 | **Revision restore pushes raw JSON into Y.Array** — stickies/slides restore logic doesn't use `jsonToYType()` for array elements, breaking collaborative editing. | [`apps/stickies/src/components/stickies/board.tsx:108`](../apps/stickies/src/components/)          | [FE Collab](FE_collab.md) C2 |
 
-### Tier 2: Data Integrity and Correctness
+### Frontend — Space, People, Sheets
 
-| # | Issue | Location | Review |
-|---|-------|----------|--------|
-| 10 | `movePath` allows moving folder into own descendant (orphan cycle) | `drive.ts:315-338` | [BE Drive](BE_drive.md) #5 |
-| 11 | `movePath` missing write permission check on target parent | `drive.ts:329` | [BE Drive](BE_drive.md) #6 |
-| 12 | Folder deletion does not propagate ACL removal for descendants | `drive.ts:285-286` | [BE Drive](BE_drive.md) #4 |
-| 13 | `closeCollabDocument` writes mount total size instead of doc size | `drive.ts:505-509` | [BE Drive](BE_drive.md) #7 |
-| 14 | Snapshot creation can lose concurrent updates (unbounded DELETE) | `collabDocument.ts:82-115` | [BE Collab](BE_collab.md) #3 |
-| 15 | `createAsyncSingleton` permanently broken after transient error | `singleton.ts:19-22` | [BE Core](BE_core.md) #2 |
-| 16 | Race condition in Home cleanup/recreation lifecycle | `home.ts:78-87`, `get-home.ts:62-64` | [BE Core](BE_core.md) #3 |
-| 17 | `Home.destruct()` opens unresolved databases just to close them | `home.ts:151-158` | [BE Core](BE_core.md) #4 |
-| 18 | EML uses hardcoded MIME boundary string | `mailfile.ts:35` | [BE Mail](BE_mail.md) #5 |
-| 19 | `messageDelete` deletes DB before file (inconsistency on failure) | `maildir.ts:134-146` | [BE Mail](BE_mail.md) #6 |
-| 20 | Non-atomic flag updates in mail | `maildir.ts:183-207` | [BE Mail](BE_mail.md) #7 |
-| 21 | `updateContact` with omitted `labels` strips all labels | `contacts.ts:187` | [BE Contacts](BE_contacts.md) #2 |
-| 22 | `updateUser` not awaited in contacts (fire-and-forget auth write) | `contacts.ts:167` | [BE Contacts](BE_contacts.md) #5 |
-| 23 | No RRULE validation -- malformed rules crash all range queries | `calendar.ts:256-311` | [BE Calendar](BE_calendar.md) #4 |
-| 24 | Recurring event range query loads ALL recurring events (no filtering) | `calendar.ts:442-457` | [BE Calendar](BE_calendar.md) #5 |
-| 25 | `updateEvent` returns stale sequence number | `calendar.ts:386-401` | [BE Calendar](BE_calendar.md) #6 |
-| 26 | Recurring vs non-recurring range filtering inconsistency | `calendar.ts:1081-1102` | [BE Calendar](BE_calendar.md) #10 |
-| 27 | Team SSE notifications commented out | `share-propagation.ts:25-29` | [BE Calendar](BE_calendar.md) #11 |
-| 28 | `removeMount` does not close mount resources | `drive.ts:101-106` | [BE Drive](BE_drive.md) #9 |
-| 29 | `SharedDrive` inherits broken shared paths methods | `sharedDrive.ts` | [BE Drive](BE_drive.md) #3 |
-| 30 | `getStorageFile` casts S3File to BunFile (S3 previews broken) | `mount.ts:444-447` | [BE Drive](BE_drive.md) #10 |
-| 31 | Per-message WebSocket permission checks cause DB overhead | `routes/collab.ts:102-135` | [BE Collab](BE_collab.md) #4 |
-| 32 | Collab document database never closed after disconnect | `collabDocument.ts:192-202` | [BE Collab](BE_collab.md) #7 |
-| 33 | Double-unsubscribe can re-init closed collab document | `routes/collab.ts:137-160` | [BE Collab](BE_collab.md) #6 |
-
-### Tier 3: Frontend Correctness
-
-| # | Issue | Location | Review |
-|---|-------|----------|--------|
-| 34 | `MAIL_SENT` SSE handler is a no-op | `sse-handlers.ts:60-61` | [FE Shared](FE_shared.md) #4 |
-| 35 | 12 `as any` casts in calendar hooks erase type safety | `use-calendar.ts` | [FE Shared](FE_shared.md) #5 |
-| 36 | Draft mutations lack `onSuccess` cache invalidation | `use-draft.ts:46-62` | [FE Shared](FE_shared.md) #7 |
-| 37 | `useSSE` `isConnected` is stale (not reactive state) | `use-sse.ts:62-64` | [FE Shared](FE_shared.md) #8 |
-| 38 | Direct mutation of TanStack Query cache in mail | `_auth.$filterType.$filterId.tsx:62-63` | [FE Mail](FE_mail.md) #3 |
-| 39 | Missing `await` on async calls in mail bulk operations | `_auth.$filterType.$filterId.tsx:121-155` | [FE Mail](FE_mail.md) #6 |
-| 40 | Reply ignores `Reply-To` header | `_auth.$filterType.$filterId.tsx:163-167` | [FE Mail](FE_mail.md) #7 |
-| 41 | Reply All includes self and omits original To recipients | `_auth.$filterType.$filterId.tsx:176-178` | [FE Mail](FE_mail.md) #8 |
-| 42 | `EmailDraft` mutates props during render (cache corruption) | `email-draft.tsx:91-108` | [FE Mail](FE_mail.md) #11 |
-| 43 | Create-event `useEffect` resets form on calendar list change | `create-event-dialog.tsx:74-102` | [FE Calendar](FE_calendar.md) I1 |
-| 44 | Edit-event `useEffect` same dependency issue | `edit-event-dialog.tsx:108-136` | [FE Calendar](FE_calendar.md) I2 |
-| 45 | Edit dialog missing `minTime` on end-time picker | `edit-event-dialog.tsx:285` | [FE Calendar](FE_calendar.md) I3 |
-| 46 | `moveEvent` deletes parent series for exception | `edit-event-dialog.tsx:171-184` | [FE Calendar](FE_calendar.md) M14 |
-| 47 | No error feedback anywhere in calendar (zero toast calls) | All calendar components | [FE Calendar](FE_calendar.md) I9 |
-| 48 | Chat 5-second polling redundant with SSE | `use-chat.ts:34` | [FE Chat](FE_chat.md) #3 |
-| 49 | `useChats` query key missing `ownerId` | `use-chat.ts:14-15` | [FE Chat](FE_chat.md) #4 |
-| 50 | `window.location.href` in chat sidebar causes full page reload | `chat-sidebar.tsx:44` | [FE Chat](FE_chat.md) #5 |
-| 51 | Auto-scroll fires unconditionally on every message count change | `chat-message-list.tsx:136-138` | [FE Chat](FE_chat.md) #7 |
-| 52 | Stickies/Slides return stale null refs before Yjs sync | `use-board.ts:218-219`, `use-deck.ts:452-453` | [FE Collab](FE_collab.md) #3 |
-| 53 | Slides font size uses `vh` units (wrong in editor canvas) | `slide-object.tsx:32` | [FE Collab](FE_collab.md) #8 |
-| 54 | Profile editor uses imperative fetch instead of query hook | `profile-editor.tsx:48-65` | [FE Space](FE_space.md) I1 |
-| 55 | TOTP secret extraction uses fragile string splitting | `_auth.security.2fa.tsx:28` | [FE Space](FE_space.md) I3 |
-| 56 | `space-8` is not a valid Tailwind class (missing `y`) | `change-password.tsx:104` | [FE Space](FE_space.md) I4 |
-| 57 | Index app Login button uses relative URL (breaks in dev) | `index.tsx:40` | [FE Setup](FE_setup.md) #5 |
-| 58 | Never-resolving Promise in authenticated redirect | `__root.tsx:13-18` | [FE Setup](FE_setup.md) #10 |
-| 59 | `as any` casts in people/team/settings hooks (7 locations) | Multiple hooks | [FE People](FE_people.md) #2 |
-| 60 | Server settings quota inputs accept NaN/negatives | `server-settings.tsx:56-58` | [FE People](FE_people.md) #3 |
-| 61 | Unbounded Y.Array growth for ops in sheets | `use-sheet.ts:145` | [FE Sheets](FE_sheets_deep.md) #8 |
+| #  | Issue                                                                                                                                                   | Location                                                                                                        | Review                            |
+|----|---------------------------------------------------------------------------------------------------------------------------------------------------------|-----------------------------------------------------------------------------------------------------------------|-----------------------------------|
+| 34 | **2FA toggle is cosmetic** — `enableTwoFactor` changes toast text but is never sent to the backend. User sees "disabled" while 2FA is actually enabled. | [`apps/space/src/`](../apps/space/src/)                                                                         | [FE Space](FE_space.md) C1        |
+| 35 | **Keyboard navigation selects wrong member** — `activeId` uses membership ID but `getId` returns user UUID. Selection shows empty detail pane.          | [`apps/people/src/components/people/members-list.tsx:79-83`](../apps/people/src/components/)                    | [FE People](FE_people.md) #1      |
+| 36 | **Calendar shares not cleaned up when disabling team calendar** — stale elevated permissions resurface when re-enabled.                                 | [`apps/people/src/components/people/team-detail.tsx:250-253`](../apps/people/src/components/)                   | [FE People](FE_people.md) #2      |
+| 37 | **Stale closure in `onPaste`** — reads `context` outside Immer recipe, potentially pasting at wrong positions.                                          | [`packages/fortune-sheet/src/components/Workbook/index.tsx:691-787`](../packages/fortune-sheet/src/components/) | [FE Sheets](FE_sheets_deep.md) #1 |
+| 38 | **`deleteSheet` sets `currentSheetId` to `undefined as string`** — when no visible sheets remain after deletion.                                        | [`packages/fortune-sheet/src/core/modules/sheet.ts:183`](../packages/fortune-sheet/src/core/modules/)           | [FE Sheets](FE_sheets_deep.md) #2 |
+| 39 | **Unbounded `Y.Array('ops')` growth** — ops never compacted or cleared, causing monotonic memory growth.                                                | [`apps/sheets/src/hooks/use-sheet.ts:137-139`](../apps/sheets/src/hooks/)                                       | [FE Sheets](FE_sheets_deep.md) #3 |
+| 40 | **Mail query keys missing `ownerId`** — cross-context cache collisions possible.                                                                        | [`packages/lib/src/core/mail/hooks/`](../packages/lib/src/core/mail/hooks/)                                     | [FE Mail](FE_mail.md) #6          |
 
 ---
 
 ## Systemic Patterns Across Multiple Domains
 
-### 1. `ownerId` URL parameter silently ignored
+### 1. Missing error handling on frontend mutations
 
-Mail routes, contacts routes, SSE route, and calendar `shared` endpoint all accept an `ownerId` URL parameter but silently use the authenticated user's ID instead. This is security-correct (prevents spoofing) but creates a misleading API contract. Any future developer who assumes the parameter works will introduce bugs.
+The most pervasive issue across the entire frontend. CLAUDE.md explicitly requires "every mutation needs error
+feedback", but multiple apps have `mutateAsync` calls with no try/catch, no onError callback, and no toast notification:
 
-**Affected:** `routes/mail.ts` (all routes), `routes/contacts.ts` (all routes), `routes/sse.ts`, `routes/calendar.ts` (`/shared`), `routes/home.ts`
+- **Mail**: 5 handlers, 0 try/catch ([FE Mail](FE_mail.md) #3)
+- **Chat**: 3 `mutateAsync` calls, 0 try/catch ([FE Chat](FE_chat.md) #2)
+- **Calendar**: 0 `toast()` calls in entire app ([FE Calendar](FE_calendar.md) I3-I5)
+- **Contacts**: label mutations, drag-and-drop, batch operations ([FE Contacts](FE_contacts.md) C3, C4, I1-I3)
+- **Collab**: comment creation ([FE Collab](FE_collab.md) C1)
+- **Drive**: `handleMovePath` ([FE Drive](FE_drive.md) C3)
 
-**Fix:** Either validate `ownerId === user.id` (or check team membership) and reject mismatches with 403, or remove the parameter entirely from routes where it serves no purpose.
+**Fix pattern**: Wrap every `mutateAsync` in `try { await mutateAsync(...) } catch { toast.error("...") }`.
 
-### 2. Missing `await` on async calls
+### 2. `ownerId` parameter ignored in backend routes
 
-A recurring pattern across the codebase -- async functions called without `await`, causing silent failures, fire-and-forget behavior, or control flow bugs:
-- `matchesACL` in drive share propagation (BE Drive #1)
-- `updateUser` in contacts (BE Contacts #5)
-- `addContact` and `cleanupAvatarImages` in contacts init (BE Contacts #7)
-- `onSubmit`/`onPasswordChange` in Space password change (FE Space C2)
-- Bulk delete/move handlers in mail (FE Mail #6)
-- `getTeamExists` in team resolution (BE Core #1)
+Multiple route files accept `:ownerId` in the URL but silently use the authenticated user's ID instead.
+Security-correct (prevents spoofing) but creates a misleading API contract and prevents team-context functionality:
 
-### 3. `as any` erosion of Eden Treaty type safety
+- **Mail**: all routes ([BE Mail](BE_mail.md) C2)
+- **Contacts**: all routes ([BE Contacts](BE_contacts.md) #2)
+- **SSE**: SSE route ([BE Core](BE_core.md) I1)
+- **Calendar**: `/shared` endpoint ([BE Calendar](BE_calendar.md) M1)
+- **Chat**: SSE route ([BE Chat](BE_chat.md) #16)
 
-The project chose Eden Treaty specifically for end-to-end type safety, but ~50+ `as any` casts in `packages/lib` hooks nullify this benefit. Concentrated in:
-- Calendar hooks: 12 casts (every API call except list queries)
-- Mail hooks: dynamic property access for wildcard routes
-- People/team/settings hooks: 7 casts for role and body params
-- Contacts label hooks: 2 casts
+**Fix**: Either validate `ownerId === user.id || isTeamMember(ownerId)` with 403 on mismatch, or remove the parameter
+from routes where it serves no purpose.
 
-Root cause appears to be Eden Treaty's type inference struggling with Elysia's nested parameterized paths and optional body types. Should be fixed at the route/schema level rather than cast away in hooks.
+### 3. Query keys missing `ownerId` (frontend cache collisions)
 
-### 4. `validateSearch` drops `uid` parameter across shared routes
+Calendar, mail, and contacts query keys omit `ownerId`, causing stale cached data from the wrong owner when switching
+between personal and team contexts:
 
-The "shared with me" detail pane is broken across multiple apps. The `validateSearch` function extracts `pid` but not `uid`, and uses `as DriveSearchParams` to silence the type error. Since `uid` is always undefined, `usePathInfo` receives empty ownerId for shared items.
+- **Calendar**: `calendarList`, `eventRange`, `sharedCalendars` ([FE Shared](FE_shared.md)
+  #3, [FE Calendar](FE_calendar.md) C3)
+- **Mail**: all mail query keys ([FE Mail](FE_mail.md) #6)
+- **Contacts**: contact and label keys ([FE Contacts](FE_contacts.md) I7)
+- **Chat**: already fixed (was reported in previous review but verified as correct now)
 
-**Affected:** `apps/drive/`, `apps/sheets/`, and likely `apps/docs/`, `apps/stickies/`, `apps/slides/` (same route pattern).
+### 4. Hardcoded colors break dark mode
 
-### 5. Collab infrastructure has the highest bug density
+Components across multiple apps use hardcoded Tailwind colors (`text-gray-500`, `bg-blue-50`, `border-blue-500`,
+`#3b82f6`) instead of theme tokens:
 
-The WebSocket-based Yjs collaboration system has 2 critical bugs (no broadcast, no awareness removal broadcast), plus important issues (snapshot race, permanent singleton failure, database never closed, per-message DB overhead). This is the highest-risk area because docs, stickies, slides, and sheets all depend on it. The fix for broadcast alone (adding a `doc.on('update', ...)` handler) unblocks multi-user editing across all 4 apps.
+- **Drive**: 242 lines of hardcoded light-mode CSS in Tiptap editor ([FE Drive](FE_drive.md) I4)
+- **Collab**: `border-blue-500`, `bg-white`, `text-blue-600`, `#3b82f6`, `#9810fa` across docs and
+  slides ([FE Collab](FE_collab.md) I2)
+- **Space**: password strength meter, app cards ([FE Space](FE_space.md) I5, I6)
+- **Contacts**: `text-blue-600` ([FE Contacts](FE_contacts.md) I6)
+- **Shared UI**: usage.tsx, mount-form.tsx ([FE Shared](FE_shared.md) #12, #13)
+- **Setup/Index**: both apps ([FE Setup](FE_setup.md) #15)
 
-### 6. Hardcoded light-mode colors break dark mode
+### 5. Fire-and-forget async calls (missing `await`)
 
-Multiple components use hardcoded Tailwind color classes (e.g., `text-gray-500`, `bg-blue-50`, `bg-orange-50/30`) instead of theme tokens (`text-muted-foreground`, `bg-background`). Affected areas:
-- Drive: Tiptap editor CSS (FE Drive I4), access lists (FE Drive I7)
-- Chat: whisper message styling (FE Chat #12)
-- Space: info/error boxes (FE Space I7)
-- Calendar: no dark mode variants at all in calendar components
+Still present after several were fixed since the last review:
 
-### 7. `interface` used instead of `type` everywhere
+- `closeCollabDocument` in collab unsubscribe ([BE Collab](BE_collab.md) #1)
+- `addContact` in contacts init ([BE Contacts](BE_contacts.md) #3)
+- `cleanupAvatarImages` in contacts init ([BE Contacts](BE_contacts.md) #4)
+- Propagation in calendar (inconsistent `.catch` handling) ([BE Calendar](BE_calendar.md) I4)
+- `handleNewDraftEmail` in mail reply/forward ([FE Mail](FE_mail.md) #1)
 
-CONTRIBUTING.md specifies "always `type` over `interface` except when methods are needed." Found ~60+ violations across all apps, mostly in `__root.tsx` route context types (inherited from TanStack Router examples) and component prop types. None require methods.
+### 6. `interface` used instead of `type` everywhere
 
-### 8. No error feedback in several apps
+CLAUDE.md specifies `type` over `interface` except when methods are needed. Found across nearly every app's
+`__root.tsx`, component props, and type definitions. Not a correctness issue but a consistent style violation.
 
-Calendar has zero `toast()` calls. Contacts has zero toast notifications on mutations. Space's password change and 2FA flows have incomplete error handling. Chat's `handleSendMessage` has zero try/catch blocks. The pattern should be: `try { await mutation } catch { toast.error() }` with consistent user feedback across all apps.
+### 7. Fortune-sheet technical debt
+
+The forked spreadsheet UI carries significant legacy burden:
+
+- 81 `@ts-ignore` directives, 81 `as any` casts, ~700 Chinese comments
+- 327 `luckysheet-*` class names, 5 CSS files (1,740 lines)
+- Stale closure in `onPaste`, unbounded Y.Array growth, `deleteSheet` crash
 
 ---
 
 ## Strengths Worth Preserving
 
-- **Architectural discipline** -- hooks in `packages/lib`, never in apps. Universally followed across all 13 apps.
-- **Query key pattern** -- consistent hierarchical key factories with exported invalidation functions across all domains.
-- **SSE event system** -- clean emit/subscribe/invalidate pattern with domain-specific handlers for all 5 implemented domains.
-- **Type sharing** -- shared types in `packages/lib/src/types/` used by both FE and BE, preventing drift.
-- **Server-side sanitization** -- DOMPurify used consistently for HTML content at ingestion (mail, previews). The frontend correctly trusts pre-sanitized data.
-- **ManagedDatabase** -- WAL mode, busy timeout, versioned migrations, dirty tracking, clean lifecycle. Well-designed.
-- **JsonStore** -- atomic write-to-tmp-then-rename pattern, deep merge, crash safety. Now has test coverage.
-- **Maildir compliance** -- correct Maildir++ conventions (tmp/new/cur, dot-prefix, flags, atomic delivery, Dovecot keyword preservation).
-- **Timezone handling** -- the calendar's `utcToLocal`/`localToUtcSeconds` pair with double-verify DST correction is well-engineered.
-- **Conflict resolution** -- the drive editor's `useEditorSave` with optimistic concurrency, Cmd+S, beforeunload, and 3-option conflict dialog is production-quality.
-- **ACL enforcement in chat** -- `SharedDrive.getChat()` enforces `canRead`, all mutating routes additionally check `canWrite`.
-- **Test coverage** -- solid integration test suites across core, drive, mail, contacts, calendar (4 files), chat, and collab domains.
-- **Documentation** -- comprehensive `docs/` directory covering architecture, patterns, and domain specifics, actively maintained.
+- **Architectural discipline** — hooks in `packages/lib`, never in apps. Universally followed across all 14 apps.
+- **`as any` cleanup** — down from 21 casts to 0 in `packages/lib/src/` since the previous review. Eden Treaty type
+  safety is now fully preserved in the shared layer.
+- **Query key pattern** — consistent hierarchical key factories with exported invalidation functions across all domains.
+- **SSE event system** — clean emit/subscribe/invalidate pattern with domain-specific handlers. Broadcast architecture
+  in collab is now correct (both updates and awareness).
+- **ManagedDatabase** — WAL mode, busy timeout, versioned migrations, dirty tracking, clean lifecycle. Well-designed and
+  battle-tested.
+- **Maildir compliance** — correct Maildir++ conventions with Dovecot coexistence support, atomic delivery, keyword
+  preservation.
+- **Path traversal protection** — `LocalKeyStorage` and `LocalFilesystem` both use `path.resolve` + `startsWith` checks.
+  Maildir has dual-layer validation. Previously reported gaps were false positives.
+- **Singleton lifecycle** — `createAsyncSingleton` correctly handles retry-on-failure (previously reported as broken,
+  verified as correct).
+- **Test coverage** — solid integration tests across core, drive, mail, contacts, calendar (4 files, ~70 tests), chat (
+  728 lines), and collab. Calendar timezone handling has dedicated DST tests.
+- **Conflict resolution** — Drive editor's `useEditorSave` with optimistic concurrency, Cmd+S, beforeunload, and
+  3-option conflict dialog is production-quality.
+- **ACL enforcement in chat** — `SharedDrive.getChat()` enforces `canRead`, all mutating routes check `canWrite`.
+- **Collab broadcast** — Server-side update and awareness broadcasting now works correctly (was previously reported as
+  missing).
+- **Name-based media references** — Eigendocs reference images/chats by filesystem name, surviving move/rename
+  operations.
 
 ---
 
 ## Recommended Fix Order
 
-### Phase 1: Collab + Security (highest impact)
+### Phase 1: Security (highest impact, lowest effort)
 
-Fix the collab system first -- it unblocks multi-user editing for 4 apps with a single focused change.
+These are access control and data leak issues that affect production safety.
 
-1. **Collab broadcast** (#8) -- add `doc.on('update', ...)` handler that broadcasts to peers
-2. **Awareness broadcast** (#9) -- add `awareness.on('update', ...)` handler
-3. **Collab snapshot race** (#14) -- bounded DELETE with WHERE clause
-4. **Team calendar auth bypass** (#1) -- resolve actual permission instead of hardcoding 'write'
-5. **Calendar access endpoint leak** (#3) -- check permission before returning shares
-6. **Whisper SSE filtering** (#2) -- strip content from SSE payload for whisper messages
-7. **System message spoofing** (#7) -- remove `system` from route body schema
-8. **Mail path traversal** (#4) -- validate mailbox names against strict pattern
-9. **Header injection** (#5, Tier 1 #2) -- sanitize filenames in Content-Disposition headers
-10. **Mail delivery hardening** (#6) -- add rate limiting, size limit, localhost restriction
+| # | Issue                                                                                 | Effort  | Review                           |
+|---|---------------------------------------------------------------------------------------|---------|----------------------------------|
+| 1 | **Harden `/mail/deliver/:to`** — add localhost-only restriction, rate limit, size cap | Small   | [BE Mail](BE_mail.md) C1         |
+| 2 | **Validate `ownerId` in `getSharedDrive`** — check caller is owner or team member     | Small   | [BE Drive](BE_drive.md) #1       |
+| 3 | **Add target-parent write check to `SharedDrive.movePath`**                           | Small   | [BE Drive](BE_drive.md) #2       |
+| 4 | **Strip content from chat delete SSE events**                                         | Small   | [BE Chat](BE_chat.md) #1         |
+| 5 | **Filter whisper content from chat edit SSE events**                                  | Small   | [BE Chat](BE_chat.md) #2         |
+| 6 | **Fix `parseOwnerId` regex** — change `a-Z` to `a-f`                                  | Trivial | [FE Shared](FE_shared.md) #2     |
+| 7 | **Gate calendar `access` endpoint** behind write permission check                     | Small   | [BE Calendar](BE_calendar.md) C3 |
+| 8 | **Resolve actual team calendar permissions** instead of hardcoding `write`            | Small   | [BE Calendar](BE_calendar.md) C1 |
 
-### Phase 2: Data Integrity + Broken Features
+### Phase 2: Data Integrity (prevents data loss and corruption)
 
-11. **Drive query keys** (#22) -- add ownerId to all non-global drive keys
-12. **matchesACL await** (#16) -- add `await` before the `matchesACL` call
-13. **SharedDrive missing overrides** (#10) -- add `createSlides`/`createSheets`
-14. **MIME type typos** (#11) -- fix 6 route files in slides and sheets
-15. **Mail download URLs** (#12) -- add ownerId segment to URL builders
-16. **Draft error handling** (#13) -- remove try/catch wrapper, let errors propagate
-17. **validateSearch uid** (#37, #40) -- add uid extraction to all shared route validators
-18. **getTeamExists await** (#17) -- add await before the comparison
-19. **getMe return value** (#20) -- capture and return contact ID from addContact
-20. **BCC headers** (#18) -- exclude BCC from stored EML
-21. **deleteCalendar orphans** (#19) -- propagate cancellation and share removal before delete
-22. **movePath cycle detection** (#10 Tier 2) -- walk ancestry before allowing move
-23. **movePath target permission** (#11 Tier 2) -- add canWrite check on target parent
+| #  | Issue                                                                                | Effort  | Review                            |
+|----|--------------------------------------------------------------------------------------|---------|-----------------------------------|
+| 9  | **Fix Home cleanup race condition** — await `destruct()` before removing from Map    | Medium  | [BE Core](BE_core.md) C1          |
+| 10 | **Fix `Home.destruct()` opening unused databases** — check if singleton was resolved | Medium  | [BE Core](BE_core.md) C2          |
+| 11 | **Await `closeCollabDocument`** in collab unsubscribe                                | Trivial | [BE Collab](BE_collab.md) #1      |
+| 12 | **Propagate cancellations before `deleteCalendar`** cascade                          | Medium  | [BE Calendar](BE_calendar.md) C2  |
+| 13 | **Fix `readMessage()` stale file size** — read size after `text()`                   | Small   | [BE Mail](BE_mail.md) C3          |
+| 14 | **Fix revision restore Y.Array** — use `jsonToYType()` for array elements            | Small   | [FE Collab](FE_collab.md) C2      |
+| 15 | **Compact `Y.Array('ops')`** in sheets — clear after applying to engine state        | Medium  | [FE Sheets](FE_sheets_deep.md) #3 |
 
-### Phase 3: Frontend Correctness
+### Phase 3: Broken Frontend Features (user-facing bugs)
 
-24. **Waitlist form** (#14) -- fix useCallback dependencies
-25. **Setup env variable** (#15) -- use VITE_API_HOST
-26. **Calendar event spanning** (#24) -- use range-overlap check for timed events
-27. **RecurrencePicker UTC date** (#25) -- append T00:00:00 to date string
-28. **Chat error handling** (#27, #28) -- add error case + try/catch
-29. **Contacts save indicator** (#29) -- remove internal mutation hooks, use parent state
-30. **Reply-To handling** (#40, #41) -- check replyTo header, include To recipients
-31. **Rules of Hooks** (#23) -- always call useBreadcrumb, use `enabled` option
-32. **Calendar form reset** (Tier 3 #43, #44) -- fix useEffect dependencies
+| #  | Issue                                                                   | Effort  | Review                              |
+|----|-------------------------------------------------------------------------|---------|-------------------------------------|
+| 16 | **Fix mail toolbar Send** — read from form inputs, not stale cache      | Medium  | [FE Mail](FE_mail.md) #2            |
+| 17 | **Add `await` to mail reply/forward handlers**                          | Trivial | [FE Mail](FE_mail.md) #1            |
+| 18 | **Add error handling to all mail mutations**                            | Small   | [FE Mail](FE_mail.md) #3            |
+| 19 | **Fix `RecurrencePicker` UTC date in edit dialog** — append `T00:00:00` | Trivial | [FE Calendar](FE_calendar.md) C1    |
+| 20 | **Fix "This and following" delete for exceptions**                      | Medium  | [FE Calendar](FE_calendar.md) C2    |
+| 21 | **Add `ownerId` to calendar query keys**                                | Small   | [FE Calendar](FE_calendar.md) C3    |
+| 22 | **Add `ownerId` to mail query keys**                                    | Small   | [FE Mail](FE_mail.md) #6            |
+| 23 | **Fix `useCreateChat` ownerId/mountId swap**                            | Trivial | [FE Shared](FE_shared.md) #1        |
+| 24 | **Fix setup wizard env variable** — `VITE_API_HOST`                     | Trivial | [FE Setup](FE_setup.md) #1          |
+| 25 | **Fix contacts delete — add confirmation dialog**                       | Small   | [FE Contacts](FE_contacts.md) C1    |
+| 26 | **Fix contacts batch operations** — sequential with error handling      | Small   | [FE Contacts](FE_contacts.md) C2-C4 |
+| 27 | **Fix 2FA toggle** — send `enableTwoFactor` to backend                  | Small   | [FE Space](FE_space.md) C1          |
+| 28 | **Fix People keyboard navigation ID mismatch**                          | Trivial | [FE People](FE_people.md) #1        |
+| 29 | **Fix team calendar share cleanup on disable**                          | Small   | [FE People](FE_people.md) #2        |
 
-### Phase 4: Ongoing Code Quality
+### Phase 4: Error Handling Sweep (systemic)
 
-- Systematic `as any` removal (start with calendar's 12 casts, then people/team)
-- Extract duplicated collab utilities (`jsonToYType`, revision restore) to `packages/lib`
-- Clean up `console.log` statements (sheets: 13, collab: 10+, space: 2, SSE: 1)
-- Translate Dutch comments to English (contacts hooks, space, index root, contacts seed)
-- Remove `"use client"` directives from Vite apps (~41 files)
-- Replace `interface` with `type` across all apps (~60+ instances)
-- Fortune-sheet cleanup: remaining CSS files, `@ts-ignore` directives (81), `as any` casts (36), Chinese comments
+Add `try { await mutateAsync(...) } catch { toast.error("...") }` across all apps:
+
+| App      | Mutations needing error handling     | Review                              |
+|----------|--------------------------------------|-------------------------------------|
+| Mail     | 5 handlers                           | [FE Mail](FE_mail.md) #3            |
+| Chat     | 3 handlers                           | [FE Chat](FE_chat.md) #2            |
+| Calendar | All mutation calls (0 toasts in app) | [FE Calendar](FE_calendar.md) I3-I5 |
+| Contacts | Label mutations, drag-and-drop       | [FE Contacts](FE_contacts.md) I1-I3 |
+| Drive    | `handleMovePath`                     | [FE Drive](FE_drive.md) C3          |
+| Collab   | Comment creation                     | [FE Collab](FE_collab.md) C1        |
+
+Also add the `error` case to the chat command dispatch switch ([FE Chat](FE_chat.md) #1).
+
+### Phase 5: Query Key and Cache Correctness
+
+| App      | Keys needing `ownerId`                          | Review                           |
+|----------|-------------------------------------------------|----------------------------------|
+| Calendar | `calendarList`, `eventRange`, `sharedCalendars` | [FE Calendar](FE_calendar.md) C3 |
+| Mail     | All mail query keys                             | [FE Mail](FE_mail.md) #6         |
+| Contacts | Contact and label keys                          | [FE Contacts](FE_contacts.md) I7 |
+
+### Phase 6: Ongoing Code Quality
+
+- **Dark mode audit** — replace all hardcoded colors with theme tokens across Drive editor CSS, collab components,
+  Space, Contacts, Setup/Index
+- **`ownerId` validation audit** — either validate or remove from Mail, Contacts, SSE, Calendar, Chat routes
+- **Fortune-sheet cleanup** — `@ts-ignore` → `@ts-expect-error`, reduce `as any`, translate Chinese comments, rename
+  `luckysheet-*` classes
+- **Style consistency** — `interface` → `type` across all apps (~60+ instances), remove `"use client"` directives
 
 ---
 
@@ -341,13 +337,40 @@ Fix the collab system first -- it unblocks multi-user editing for 4 apps with a 
 
 Key areas lacking test coverage that would have caught critical bugs:
 
-| Gap | Would have caught | Review |
-|-----|-------------------|--------|
-| Multi-client collab sync test | Broadcast missing (#8) | BE Collab |
-| SharedDrive.createSlides/createSheets test | Missing overrides (#10) | BE Drive |
-| S3 storage backend tests | S3 preview failures (Tier 2 #30) | BE Drive |
-| Recursive folder deletion with descendant ACLs | Orphaned shared.db entries (Tier 2 #12) | BE Drive |
-| Malformed RRULE create/expand | Calendar crash on expansion (Tier 2 #23) | BE Calendar |
-| Team calendar permission enforcement | Auth bypass (#1) | BE Calendar |
-| Path traversal in mailbox names | Maildir escape (#4) | BE Mail |
-| WebSocket update tests conditional on status 101 | All WS tests skip silently if upgrade fails | BE Collab |
+| Gap                                                | Would have caught                     | Review                        |
+|----------------------------------------------------|---------------------------------------|-------------------------------|
+| `SharedDrive` ownerId validation test              | Access control bypass (#2)            | [BE Drive](BE_drive.md)       |
+| Chat SSE content assertions                        | Delete/edit content leaks (#7, #8)    | [BE Chat](BE_chat.md)         |
+| Home concurrent cleanup test                       | Race condition (#9)                   | [BE Core](BE_core.md)         |
+| Calendar permission enforcement test               | Team permission bypass (#5)           | [BE Calendar](BE_calendar.md) |
+| Mail delivery rate/auth test                       | Unauthenticated abuse (#1)            | [BE Mail](BE_mail.md)         |
+| Collab document close after disconnect             | Missing await (#12)                   | [BE Collab](BE_collab.md)     |
+| S3 storage backend tests                           | S3 preview/thumbnail failures         | [BE Drive](BE_drive.md)       |
+| WebSocket tests gated behind `if (status !== 101)` | All WS behavioral tests skip silently | [BE Collab](BE_collab.md)     |
+
+---
+
+## Review File Index
+
+All review files are in the `codereviews/` directory:
+
+| File                                     | Lines | Domain                                                  |
+|------------------------------------------|-------|---------------------------------------------------------|
+| [`BE_core.md`](BE_core.md)               | 473   | Auth, Home, Config, Setup, SSE, Singleton               |
+| [`BE_drive.md`](BE_drive.md)             | 371   | Drive, Mount, Storage, ACL, Previews, Share Propagation |
+| [`BE_mail.md`](BE_mail.md)               | 592   | Maildir, EML, SMTP                                      |
+| [`BE_contacts.md`](BE_contacts.md)       | 366   | Contact management                                      |
+| [`BE_calendar.md`](BE_calendar.md)       | 482   | Calendar, RRULE, sharing, invites                       |
+| [`BE_chat.md`](BE_chat.md)               | 394   | Chat rooms, slash commands, whispers                    |
+| [`BE_collab.md`](BE_collab.md)           | 441   | Yjs, WebSocket, real-time editing                       |
+| [`FE_shared.md`](FE_shared.md)           | 370   | packages/lib + packages/ui                              |
+| [`FE_drive.md`](FE_drive.md)             | 566   | Drive app                                               |
+| [`FE_mail.md`](FE_mail.md)               | 589   | Mail app                                                |
+| [`FE_contacts.md`](FE_contacts.md)       | 550   | Contacts app                                            |
+| [`FE_calendar.md`](FE_calendar.md)       | 382   | Calendar app                                            |
+| [`FE_chat.md`](FE_chat.md)               | 420   | Chat app                                                |
+| [`FE_collab.md`](FE_collab.md)           | 467   | Docs, Stickies, Slides, Sheets                          |
+| [`FE_space.md`](FE_space.md)             | 377   | User settings, profile, security                        |
+| [`FE_people.md`](FE_people.md)           | 461   | Org/team admin                                          |
+| [`FE_setup.md`](FE_setup.md)             | 390   | Setup wizard, index/landing                             |
+| [`FE_sheets_deep.md`](FE_sheets_deep.md) | 423   | Sheets + fortune-sheet                                  |

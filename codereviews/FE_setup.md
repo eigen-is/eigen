@@ -1,142 +1,147 @@
 # Frontend Review: Setup Wizard + Index App
 
 **Scope:** `apps/setup/`, `apps/index/`
-**Reviewed:** 2026-03-18
+**Reviewed:** 2026-03-19
+
+---
+
+## Architecture Overview
+
+### Setup Wizard (`apps/setup/`)
+
+A standalone single-page app for first-run server configuration. Runs on port 3011 at `/setup`. Three source files
+total: `main.tsx` (entry), `vite-env.d.ts`, and `components/setup-wizard.tsx` (the entire UI).
+
+**Flow:**
+
+1. On mount, calls `GET /setup/status` to check if the server is already configured.
+2. If already set up, shows "Already Configured" card with a "Go to Login" button (navigates to `/`).
+3. If setup is required, shows a single-page form with three sections: server configuration (domain, org name, storage
+   type), optional S3 credentials (shown when S3 storage is selected), and admin account creation (name, username,
+   password).
+4. On submit, calls `POST /setup/complete` with the form data plus a derived `adminEmail` field (`username@domain`).
+5. On success, shows "Setup Complete!" card with a "Go to Login" button.
+
+**Key design decisions:**
+
+- Does NOT use TanStack Router (intentionally -- single-page wizard has no routes).
+- Does NOT use Eden Treaty API client -- makes raw `fetch()` calls to the API.
+- Has its own custom Vite config instead of the shared `createAppConfig()`.
+- Minimal dependency footprint: just `@workspace/ui` for shadcn components and `@workspace/lib` (unused at runtime).
+
+### Index / Landing Page (`apps/index/`)
+
+The public-facing landing page at `/`. Uses TanStack Router with three routes: `/` (home), `/blog/` (blog list),
+`/blog/$id` (individual blog posts). Runs on port 3000.
+
+**Home page (`/`):** Animated app name rotator cycling through Eigen apps (Space, Calendar, Chat, etc.) every 2 seconds,
+tagline, Login button, Join Waitlist button (reveals inline form), and "Learn more" link to blog.
+
+**Blog:** Markdown-based blog system with a custom `<media-grid>` / `<media>` XML syntax parsed from markdown. Supports
+image/video grids with lightbox preview. Blog posts are loaded at build time via `import.meta.glob`. Metadata is
+pre-generated as JSON for PHP-based SSR (OG tags for social media crawlers).
+
+**Authenticated redirect:** If the user is already logged in and visits `/`, the `__root.tsx` `beforeLoad` guard
+redirects them to the Space app via `window.location.href`.
+
+---
 
 ## Critical Issues
 
 ### 1. Setup wizard uses wrong env variable name for API URL
 
 **File:** `apps/setup/src/components/setup-wizard.tsx:24`
-**Impact:** The setup wizard silently falls back to the hardcoded `http://localhost:8000` in every environment except development, where it happens to work by accident.
+**Impact:** The setup wizard silently falls back to the hardcoded `http://localhost:8000` in every non-development
+environment.
 
-The setup app reads `VITE_API_URL`:
 ```typescript
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 ```
 
-Every other app and the shared API client (`packages/lib/src/core/api.ts`) uses `VITE_API_HOST`. The `.env.dev.local` file defines `VITE_API_HOST=http://localhost:8000` -- there is no `VITE_API_URL` anywhere in the env files. In development the fallback to `localhost:8000` happens to be correct, but in production or Docker deployments (where `VITE_API_HOST` is set to the actual server URL), the setup wizard would still hit `localhost:8000` and fail or connect to the wrong server.
+Every other app and the shared API client (`packages/lib/src/core/api.ts:12`) uses `VITE_API_HOST`. The env files (
+`.env.dev.local`, `.env.eigen`, `.env.docker.local`) define `VITE_API_HOST` -- there is no `VITE_API_URL` anywhere. In
+development the fallback `localhost:8000` happens to match, but in Docker (`VITE_API_HOST=http://localhost/eigen`) or
+production (`VITE_API_HOST=https://api.eigen.is`), the setup wizard hits `localhost:8000` and fails silently.
 
-**Fix:** Replace `VITE_API_URL` with `VITE_API_HOST`, or better yet, use the existing `setupApi` Eden Treaty client exported from `packages/lib/src/core/api.ts:30` to get type-safe calls that automatically use the correct host.
+**Fix:** Replace `VITE_API_URL` with `VITE_API_HOST`, or better yet, replace the raw `fetch()` calls with the existing
+`setupApi` Eden Treaty client exported from `packages/lib/src/core/api.ts:30`. This provides type safety and
+automatically uses the correct host.
 
-**Status:** New finding.
-
-### 2. Waitlist form submits empty values due to stale closure
-
-**File:** `apps/index/src/routes/index.tsx:47-66`
-**Impact:** The waitlist signup form is broken -- it always sends empty strings for `email` and `notes`, regardless of what the user typed.
-
-```typescript
-const handleWaitlistSubmit = useCallback(async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSubmitting(true);
-    // ...
-    const waitlistResult = await publicApi.waitlist.post({email, notes});
-    // ...
-}, []);  // <-- empty dependency array
-```
-
-The callback captures `email` and `notes` from the initial render (both `""`), and the empty dependency array `[]` means the closure is never refreshed. Every form submission sends `{email: "", notes: ""}` to the API.
-
-**Fix:** Either add `[email, notes, resetForm]` to the dependency array, or remove `useCallback` entirely since there is no performance reason for it here (the callback is only passed to a `<form onSubmit>`).
-
-**Status:** Previously listed as Minor #2. Promoted to Critical because it is a functional bug that completely breaks the waitlist feature.
-
-### 3. Storage type "Recommended" label is on the wrong option
-
-**File:** `apps/setup/src/components/setup-wizard.tsx:224`
-**Impact:** The setup wizard labels `local-id` as "Recommended" but the project actually defaults to `local-fullnames`.
-
-The `local-id` radio button displays "Recommended. Files stored with unique IDs." However:
-- The setup wizard's own default `formData` is `storageType: 'local-fullnames'` (line 52).
-- The server-settings default in `apps/api/src/lib/config/server-settings.ts:18` is `storageType: 'local-fullnames'`.
-- The most recent commit (`0ff3c26`) explicitly set `local-fullnames` as the default storage type.
-
-The form defaults to `local-fullnames` (selected by default) but the text says `local-id` is recommended, creating a direct contradiction. Users who trust the "Recommended" label and switch to `local-id` get a non-default configuration, while users who leave the default get `local-fullnames` thinking it is not the recommended choice.
-
-**Fix:** Move the "Recommended" label to the `local-fullnames` option, or update the form default to `local-id` if that is truly preferred. Given the recent deliberate commit setting `local-fullnames` as default, the label should move.
-
-**Status:** New finding.
+---
 
 ## Important Issues
 
-### 4. Setup wizard `completeSetup` does not check `response.ok` before parsing JSON
+### 2. Setup wizard `completeSetup` and `checkSetupStatus` do not check `response.ok`
 
-**File:** `apps/setup/src/components/setup-wizard.tsx:31-42`
-**Impact:** Server errors with non-JSON bodies cause a confusing "Network error" message instead of the actual error.
+**File:** `apps/setup/src/components/setup-wizard.tsx:26-42`
+**Impact:** Server errors with non-JSON bodies produce a misleading "Network error" message instead of the actual error.
 
 ```typescript
+async function checkSetupStatus() {
+    const response = await fetch(`${API_URL}/setup/status`)
+    return response.json()  // No response.ok check
+}
+
 async function completeSetup(data: SetupData) {
-    const response = await fetch(`${API_URL}/setup/complete`, { ... });
-    return response.json();  // No response.ok check
+    // ...
+    const response = await fetch(`${API_URL}/setup/complete`, { ... })
+    return response.json()  // No response.ok check
 }
 ```
 
-The API route (`apps/api/src/routes/setup.ts:8`) sets `status = 400` on validation errors and returns a JSON body with `{success: false, error: "..."}`. But if the server returns a 500 with an HTML error page, or a network proxy returns a non-JSON error, `response.json()` throws a SyntaxError, which the catch block maps to "Network error. Please try again." -- hiding the real problem.
+The API route (`apps/api/src/routes/setup.ts:8-10`) returns `{success: false, error: "..."}` with status 400 for
+validation errors, which `response.json()` handles fine. But if the server returns a 500 with an HTML error page, or a
+network proxy returns a non-JSON error, `response.json()` throws a `SyntaxError`, which the `catch` block (line 96) maps
+to the generic "Network error. Please try again." -- hiding the real problem during the most critical setup phase.
 
-Similarly, `checkSetupStatus` (line 26-29) also lacks a `response.ok` check.
+**Fix:** Add `if (!response.ok) throw new Error(await response.text() || response.statusText)` before `response.json()`
+in both functions. Or switch to the Eden Treaty client (which handles this automatically).
 
-**Fix:** Add `if (!response.ok) { const body = await response.text(); throw new Error(body || response.statusText); }` before `response.json()`.
-
-**Status:** Previously listed as Minor #5. Promoted to Important because this is the initial setup flow where debugging issues is most critical.
-
-### 5. Index app Login button uses relative URL that breaks in development
+### 3. Index app Login button uses absolute path that breaks in development
 
 **File:** `apps/index/src/routes/index.tsx:40`
 **Impact:** The Login button navigates to a non-existent route during development.
 
 ```typescript
 const handleLogin = useCallback(() => {
-    window.location.href = './space/';
+    window.location.href = '/space/';
 }, []);
 ```
 
-In development, the Index app runs on `http://localhost:3000/` and the Space app runs on `http://localhost:3004/space`. The relative `./space/` resolves to `http://localhost:3000/space/` which is not a valid app. Meanwhile, the authenticated redirect in `__root.tsx:15` correctly uses the absolute `VITE_APP_SPACE_URL` env variable. This inconsistency means:
+In development, the Index app runs on `http://localhost:3000/` and the Space app runs on `http://localhost:3004/space`.
+The path `/space/` resolves to `http://localhost:3000/space/` which is not a valid app. Meanwhile, the authenticated
+redirect in `__root.tsx:15` correctly uses the absolute `VITE_APP_SPACE_URL` env variable. This inconsistency means:
 - In development: Login button goes to wrong URL; auto-redirect goes to correct URL.
-- In production: Both happen to work because all apps share the same domain.
+- In production: Both work because all apps share the same domain under different paths.
 
 **Fix:** Use `import.meta.env.VITE_APP_SPACE_URL` consistently, matching the approach in `__root.tsx`.
 
-**Status:** New finding.
-
-### 6. Setup wizard has no client-side validation beyond HTML `required`/`minLength`
+### 4. Setup wizard has no client-side validation beyond HTML `required`/`minLength`
 
 **File:** `apps/setup/src/components/setup-wizard.tsx`
 **Impact:** Invalid input reaches the server and returns generic error messages. The first-run experience is notably weaker than the rest of the project.
 
 Specific gaps:
-- **Password:** Only HTML `minLength={8}`. No strength indicator, unlike the Space app's `ChangePassword` component which has zod validation, a strength meter with color coding, and a confirm field.
-- **Username:** Accepts spaces, special characters, unicode. The constructed email (`admin@domain`) will fail server-side email validation if the username contains invalid characters. No client-side feedback on what is acceptable.
-- **Domain:** No format validation. Could submit "not a domain" or include protocols/paths.
+
+- **Password:** Only HTML `minLength={8}`. No strength indicator, no confirm field. Compare with the Space app's
+  `ChangePassword` component which uses zod validation with a strength meter and color coding.
+- **Username:** Accepts spaces, special characters, unicode. The derived email (`admin@domain`) will fail server-side
+  validation if the username contains invalid characters. No client-side feedback on what characters are acceptable.
+- **Domain:** No format validation. Users can submit "not a domain" or include protocols/paths.
 - **S3 endpoint:** No URL format validation when provided.
 
-The server-side `completeSetup` function validates required fields and password length, but provides only flat error strings (e.g., "S3 configuration requires bucket, region, access key, and secret key"). There is no field-level error mapping.
+The server-side `completeSetup` (in `apps/api/src/lib/setup/setup.ts:163-262`) validates required fields and password
+length but returns only flat error strings (e.g., "S3 configuration requires bucket, region, access key, and secret
+key"). There is no field-level error mapping back to the form.
 
-**Fix:** Add a zod schema similar to the Space app's password change form. At minimum, validate username format (alphanumeric/dots/hyphens), domain format (hostname pattern), and add a password strength indicator.
+**Fix:** Add a validation schema (zod or similar). At minimum: validate username format (alphanumeric/dots/hyphens),
+domain format (hostname pattern), and add a password strength indicator consistent with the Space app.
 
-**Status:** Previously listed as Important #3. Reconfirmed.
-
-### 7. Dutch comments in Index app root route
-
-**File:** `apps/index/src/routes/__root.tsx:11-17`
-**Impact:** Violates the "English everywhere" rule from CONTRIBUTING.md.
-
-Four Dutch comments:
-```typescript
-// Als de gebruiker is ingelogd en probeert de root URL te bezoeken,
-// stuur ze dan naar de drive app
-// Gebruik window.location voor externe redirects naar andere apps
-// Voorkom dat de huidige pagina laadt
-```
-
-**Fix:** Translate to English. Suggested: "If the user is authenticated and visiting the root URL, redirect to the Space app" and "Use window.location for cross-app redirects" and "Prevent the current page from loading".
-
-**Status:** Previously listed as Important #1. Reconfirmed.
-
-### 8. TanStackRouterDevtools unconditionally included in production
+### 5. TanStackRouterDevtools unconditionally included in production
 
 **File:** `apps/index/src/routes/__root.tsx:2,26`
-**Impact:** Adds unnecessary bundle size to the public-facing landing page. This is the only app in the project that includes router devtools. All other apps use `EigenApp` which conditionally includes `ReactQueryDevtools`.
+**Impact:** Adds unnecessary bundle size to the public-facing landing page. This is the only app in the project that
+unconditionally includes devtools.
 
 ```typescript
 import {TanStackRouterDevtools} from '@tanstack/react-router-devtools'
@@ -144,31 +149,36 @@ import {TanStackRouterDevtools} from '@tanstack/react-router-devtools'
 <TanStackRouterDevtools position="bottom-right"/>
 ```
 
-**Fix:** Remove the import and component entirely, or lazy-load it behind a dev-only check (`import.meta.env.DEV`).
+All other apps use `EigenApp` which conditionally includes `ReactQueryDevtools` only in development.
 
-**Status:** Previously listed as Important #2. Reconfirmed.
+**Fix:** Remove the import and component entirely, or lazy-load behind a dev check:
+`{import.meta.env.DEV && <TanStackRouterDevtools ... />}`.
 
-### 9. Setup wizard custom Vite config diverges from shared config
+### 6. Setup wizard custom Vite config diverges from shared config
 
 **File:** `apps/setup/vite.config.ts`
-**Impact:** The setup app is the only app (out of 13) that does not use `createAppConfig()` from `vite.shared.config.ts`. It manually configures plugins, paths, and build options, missing the shared config's `tanstackRouter` plugin, `rollupOptions.treeshake` settings, and `commonjsOptions`.
+**Impact:** The setup app is the only app (out of 13) that does not use `createAppConfig()` from
+`vite.shared.config.ts`. It manually configures plugins, paths, and build options, missing the shared config's
+`rollupOptions.treeshake` settings (`preset: 'smallest'`) and `commonjsOptions` (`defaultIsModuleExports: 'auto'`).
 
-Every other app, including the Index app, uses the one-liner pattern:
+Every other app uses the one-liner pattern:
 ```typescript
 import {createAppConfig} from '../../vite.shared.config'
 export default createAppConfig('setup')
 ```
 
-The setup app does not use TanStack Router (intentionally), which is one reason for the custom config. But the missing treeshake and commonjs settings mean the setup bundle may be larger than necessary.
+The setup app intentionally omits TanStack Router (it has no routes), but the missing build optimizations mean the setup
+bundle may be larger than necessary.
 
-**Fix:** Use `createAppConfig('setup')` with an override that removes the `tanstackRouter` plugin if needed, or add the missing build optimizations to the custom config.
+**Fix:** Use `createAppConfig('setup')` and override or remove the `tanstackRouter` plugin, or manually add the missing
+`rollupOptions.treeshake` and `commonjsOptions` to the custom config.
 
-**Status:** New finding.
+### 7. Never-resolving Promise in authenticated redirect
 
-### 10. Never-resolving Promise in authenticated redirect
-
-**File:** `apps/index/src/routes/__root.tsx:13-18`
-**Impact:** If `window.location.href` assignment is blocked (browser extension, CSP policy, popup blocker), TanStack Router's `beforeLoad` hangs forever with a pending Promise that never resolves or rejects. The user sees a blank page with no recovery path.
+**File:** `apps/index/src/routes/__root.tsx:17-18`
+**Impact:** If the `window.location.href` assignment is blocked or fails (browser extension, CSP policy, navigation
+guard), TanStack Router's `beforeLoad` hangs forever with a pending Promise. The user sees a blank page with no recovery
+path.
 
 ```typescript
 if (context.auth.isAuthenticated && window.location.pathname === '/') {
@@ -177,19 +187,26 @@ if (context.auth.isAuthenticated && window.location.pathname === '/') {
 }
 ```
 
+Under normal conditions this works fine because the page navigates away. But if anything prevents the navigation, there
+is no timeout or fallback -- the app is frozen.
+
 **Fix:** Add a timeout fallback:
 ```typescript
-return new Promise((_, reject) => setTimeout(() => reject(new Error('Redirect failed')), 5000));
+return new Promise((_, reject) =>
+    setTimeout(() => reject(new Error('Redirect failed')), 5000)
+);
 ```
-Or show a loading indicator while the redirect is in progress.
 
-**Status:** Previously listed as Important #5. Reconfirmed.
+Or render a "Redirecting..." screen and fall through to the normal page if the redirect does not happen within a few
+seconds.
+
+---
 
 ## Minor Issues
 
-### 11. `interface` used where `type` is preferred
+### 8. `interface` used where `type` is preferred
 
-**Impact:** Style violation per CONTRIBUTING.md.
+**Impact:** Style violation per CONTRIBUTING.md ("Always `type` over `interface`").
 
 Non-generated files using `interface`:
 - `apps/setup/src/components/setup-wizard.tsx:10` -- `interface SetupData`
@@ -206,9 +223,7 @@ The `apps/index/src/main.tsx:22` `interface Register` is required by TanStack Ro
 
 **Fix:** Replace `interface X {` with `type X = {` in the listed files.
 
-**Status:** Previously listed as Minor #1. Reconfirmed. Added the build-script interfaces.
-
-### 12. `useEffect` dependency on `apps.length` is misleading
+### 9. `useEffect` dependency on `apps.length` is misleading
 
 **File:** `apps/index/src/routes/index.tsx:30`
 **Impact:** No runtime issue, but misleading code.
@@ -222,16 +237,17 @@ React.useEffect(() => {
 }, [apps.length]);
 ```
 
-`apps` is a module-level constant imported from `@workspace/lib/apps`. Its `.length` never changes. An empty dependency array `[]` would communicate intent more clearly.
+`apps` is a module-level constant imported from `@workspace/lib/apps`. Its `.length` never changes. An empty dependency
+array `[]` would communicate the intent (run once on mount) more clearly.
 
 **Fix:** Change to `[]`.
 
-**Status:** Previously listed as Minor #3. Reconfirmed.
-
-### 13. Blog post `code` component destructures non-existent `inline` prop
+### 10. Blog post `code` component destructures non-existent `inline` prop
 
 **File:** `apps/index/src/components/BlogPost.tsx:47-52`
-**Impact:** Fragile code relying on a type cast. In react-markdown v10 (which this project uses), the `inline` prop for code components was removed. The `node` prop is also destructured but unused across all component overrides (lines 23, 35-47).
+**Impact:** In react-markdown v10 (used by this project per `apps/index/package.json`), the `inline` prop for code
+components was removed. The code casts `props` to add `inline?: boolean` but the value is always `undefined`, so all
+code elements render with block styling. Inline code like `` `example` `` appears as full-width block elements.
 
 ```typescript
 code: ({node, ...props}) => {
@@ -242,63 +258,215 @@ code: ({node, ...props}) => {
 },
 ```
 
-Since `inline` is always `undefined` in v10, all code elements render as block elements. Inline code like `\`example\`` renders with block styling.
+The `node` prop is also destructured but unused across all component overrides (lines 23, 35-47).
 
-**Fix:** Detect inline vs block code by checking whether the parent is a `<pre>` element, or by checking the children/className. Also remove the unused `node` destructuring from all component overrides.
+**Fix:** Detect inline vs block code by checking whether the parent element is `<pre>` (block code is wrapped in
+`<pre><code>`, inline code is just `<code>`). Remove unused `node` destructuring from all component overrides.
 
-**Status:** Previously listed as Minor #4. Severity upgraded because inline code is visually broken in the blog.
-
-### 14. Index app missing `HotkeysProvider` for `MediaPreview` hotkey
+### 11. Index app missing `HotkeysProvider` for `MediaPreview` hotkey
 
 **File:** `apps/index/src/main.tsx` and `apps/index/src/components/MediaPreview.tsx:11`
-**Impact:** Minor. `MediaPreview` uses `useHotkey('Escape', ...)` from `@tanstack/react-hotkeys`, which internally calls `useDefaultHotkeysOptions()`. The Index app does not include `HotkeysProvider` in its provider stack (unlike `EigenApp`). The library falls back to empty defaults when the context is null, so the Escape key still works, but this is an implicit dependency on library internals rather than proper context setup.
+**Impact:** `MediaPreview` uses `useHotkey('Escape', ...)` from `@tanstack/react-hotkeys`. The Index app does not
+include `HotkeysProvider` in its provider stack (unlike `EigenApp` which wraps all other apps). The library falls back
+to empty defaults when the context is missing, so the Escape key works in practice, but this relies on library
+internals.
 
-**Fix:** Either wrap the Index app in `HotkeysProvider` or use a plain `useEffect` with `addEventListener('keydown', ...)` for the single Escape handler, avoiding the external dependency.
+**Fix:** Either add `HotkeysProvider` to the Index app, or replace with a plain `useEffect`/
+`addEventListener('keydown', ...)` for the single Escape handler.
 
-**Status:** New finding.
-
-### 15. Duplicated `parseFrontmatter` function
+### 12. Duplicated `parseFrontmatter` function
 
 **Files:** `apps/index/src/data/blog-posts.ts:11-32` and `apps/index/scripts/generate-blog-meta.ts:14-36`
-**Impact:** Code duplication. Both files contain identical `parseFrontmatter` implementations. If the frontmatter format changes, both must be updated.
+**Impact:** Identical implementations. If the frontmatter format changes, both must be updated in sync.
 
-**Fix:** Extract to a shared utility within the index app (e.g., `apps/index/src/utils/frontmatter.ts`) and import from both locations.
+**Fix:** Extract to a shared utility (e.g., `apps/index/src/utils/frontmatter.ts`) and import from both locations.
 
-**Status:** New finding.
-
-### 16. Setup wizard missing `autocomplete` attributes on form fields
+### 13. Setup wizard missing `autocomplete` attributes on form fields
 
 **File:** `apps/setup/src/components/setup-wizard.tsx:318-360`
-**Impact:** Password managers cannot identify the admin account fields. The Space app's `ChangePassword` component correctly uses `autoComplete="current-password"` and `autoComplete="new-password"`. The setup wizard's password field, name field, and email-like username field lack these attributes.
+**Impact:** Password managers cannot identify the admin account fields. The Space app's `ChangePassword` component
+correctly uses `autoComplete` attributes.
 
 **Fix:** Add `autoComplete="new-password"` to the password input, `autoComplete="name"` to the admin name input, and `autoComplete="username"` to the username input.
 
-**Status:** New finding.
-
-### 17. Index app uses non-standard provider stack
+### 14. Index app uses non-standard provider stack
 
 **File:** `apps/index/src/main.tsx:34-43`
-**Impact:** Maintenance cost. The Index app manually composes `QueryClientProvider` + `AuthProvider` + `Toaster`, while all other apps use `EigenApp`. Any provider additions to `EigenApp` must be manually replicated. Already missing: `ThemeProvider` (the Index app does not respond to system dark/light mode), `TooltipProvider`, `HotkeysProvider`.
+**Impact:** The Index app manually composes `QueryClientProvider` + `AuthProvider` + `Toaster`, while all other apps use
+`EigenApp` (`packages/ui/src/components/layout/app/eigen-app.tsx`). Missing from the Index app: `ThemeProvider` (no dark
+mode support), `TooltipProvider`, `HotkeysProvider`.
 
-**Fix:** Acceptable as-is for the current minimal scope. If the Index app grows (e.g., adding more interactive features), consider switching to `EigenApp`.
+This is acceptable for the current minimal scope. The landing page does not need most of `EigenApp`'s features. However,
+the missing `ThemeProvider` means the landing page always renders in light mode even if the user's system prefers dark
+mode.
 
-**Status:** Previously listed as Important #6. Downgraded to Minor because the landing page's minimal needs genuinely justify a simpler stack, but the missing `ThemeProvider` means it does not respect dark mode.
+### 15. Hardcoded colors in both apps
 
-### 18. `vite-env.d.ts` presence inconsistent across apps
+**Impact:** Violates the project rule "Use theme tokens, not hardcoded colors."
+
+Setup wizard:
+
+- `apps/setup/src/components/setup-wizard.tsx:137` -- `bg-green-100` (success icon background)
+- `apps/setup/src/components/setup-wizard.tsx:138` -- `text-green-600` (success checkmark)
+
+Index app (throughout blog components):
+
+- `apps/index/src/routes/index.tsx:101` -- `text-blue-600 hover:text-blue-800` (Learn more link)
+- `apps/index/src/routes/blog.index.tsx:45` -- `text-blue-600 hover:text-blue-800` (Back to home link)
+- `apps/index/src/routes/blog.index.tsx:64` -- `hover:text-blue-600` (Blog post title hover)
+- `apps/index/src/routes/blog.$id.tsx:65,80` -- `text-blue-600 hover:text-blue-800` (Back to blog links)
+- `apps/index/src/components/BlogPost.tsx:43` -- `text-blue-600` (markdown links)
+
+These colors break in dark mode. The setup wizard's green should use theme-aware success colors, and the blog's blue
+links should use `text-primary` or a theme-aware link color.
+
+### 16. `vite-env.d.ts` presence inconsistent
 
 **Files:** `apps/setup/src/vite-env.d.ts`, `apps/index/src/vite-env.d.ts`
-**Impact:** No runtime impact. Present in Setup and Index but absent from Space, People, Mail, and other apps.
+**Impact:** No runtime impact. Present in Setup and Index but absent from most other apps.
 
-**Status:** Previously listed as Minor #6. Reconfirmed.
+---
 
-## Observations
+## Corrections from Previous Review
 
-- **Setup wizard S3 connection test:** The previous review noted that the People app's ServerSettingsPage has a "Test Connection" button for S3 that is absent from the setup wizard. This remains true and is a UX gap, but given that setup is a one-time operation and the server-side `completeSetup` does not test the S3 connection either (it just saves the config), adding a frontend test button alone would require a corresponding API endpoint. This is more of a feature request than a bug.
+The previous review (dated 2026-03-18) contained several findings that do not match the current source code. These have
+been verified as false positives or already-fixed issues:
 
-- **PHP-based SSR for blog SEO:** The Index app has a well-thought-out deployment story. The `index.php` template with `generate-blog-meta.ts` prebuild and `post-build.ts` postbuild scripts ensure social media crawlers get correct OG tags without requiring a Node.js server. The `.htaccess` rewrite rules route all requests through PHP. This is a pragmatic solution for a static SPA that needs dynamic meta tags.
+### Previously Critical #2: Waitlist stale closure -- FALSE POSITIVE
 
-- **Blog media grid system:** The custom `<media-grid>` / `<media>` XML-in-markdown syntax parsed by `parse-media-grids.ts` is creative but non-standard. It works well for the current single blog post. If the blog grows, consider using MDX instead, which provides native component rendering in markdown without custom regex parsing.
+The previous review claimed `handleWaitlistSubmit` had an empty dependency array `[]`, causing the closure to always
+capture empty strings. The actual code at `apps/index/src/routes/index.tsx:66` shows:
 
-- **Setup wizard's "Go to Login" button after completion** redirects to `/` (the Index app root). If the user is now authenticated (they just created an account but haven't signed in), they see the landing page. If they are auto-signed-in post-setup, the `__root.tsx` beforeLoad redirect sends them to Space. The flow works but the button label "Go to Login" is misleading if auto-login happens.
+```typescript
+}, [email, notes]);
+```
 
-- **The setup app does not use TanStack Router**, which is intentional and appropriate for a single-screen wizard. The custom Vite config (Issue #9) is the main consequence of this design decision.
+The dependency array correctly includes `email` and `notes`. The waitlist form works as intended. This was likely fixed
+between the previous review and now, or the previous review misread the code.
+
+### Previously Critical #3: "Recommended" label on wrong option -- FALSE POSITIVE
+
+The previous review claimed `local-id` was labeled "Recommended". The actual code at
+`apps/setup/src/components/setup-wizard.tsx:222-234` shows:
+
+- `local-id` (line 222-225): "Files stored with unique IDs." (no "Recommended" label)
+- `local-fullnames` (line 232-234): "Recommended. Files stored with original filenames."
+
+The "Recommended" label is correctly on `local-fullnames`, which matches the form default (
+`storageType: 'local-fullnames'` at line 52) and the server default (`apps/api/src/lib/config/server-settings.ts:18`).
+No issue exists.
+
+### Previously Important #7: Dutch comments -- ALREADY FIXED
+
+The previous review quoted four Dutch comments in `apps/index/src/routes/__root.tsx`. The current code at lines 11-18
+contains English comments:
+
+```typescript
+// If the user is logged in and tries to visit the root URL,
+// redirect them to the drive app
+// Use window.location for external redirects to other apps
+// Prevent the current page from loading
+```
+
+The comment on line 12 says "redirect them to the drive app" but the actual redirect target is the Space app. This is a
+minor inaccuracy in the comment, not a bug.
+
+### Previously Important #5: Login URL uses relative path -- CORRECTED
+
+The previous review quoted `'./space/'` (relative) but the actual code at line 40 is `'/space/'` (absolute
+root-relative). The core issue remains valid -- in development, `http://localhost:3000/space/` is not the Space app --
+but the description was inaccurate. Updated as Issue #3 in this review.
+
+---
+
+## Strengths
+
+1. **Clean separation of concerns.** The setup wizard is a standalone app with zero coupling to the main app
+   infrastructure. It uses only shadcn UI components and raw `fetch`. This is appropriate for a first-run tool that must
+   work before the full system is configured.
+
+2. **Proper theme token usage in layout.** Both apps use `bg-background`, `text-muted-foreground`, `bg-muted`, `border`,
+   `text-primary`, `bg-destructive/10`, `text-destructive` throughout their layouts. The hardcoded colors (Issue #15)
+   are limited to decorative elements and links.
+
+3. **Blog deployment architecture.** The PHP-based SSR for OG tags (`index.php` + `generate-blog-meta.ts` prebuild +
+   `post-build.ts` postbuild) is a pragmatic solution. Social media crawlers get correct meta tags without requiring a
+   Node.js server in production. The `.htaccess` rewrite rules are minimal and correct.
+
+4. **Blog media system.** The `<media-grid>` / `<media>` markdown extension in `parse-media-grids.ts` is
+   well-implemented: clean regex parsing, `useMemo` for performance, image/video support with thumbnails, posters, and a
+   lightbox preview. The `MediaGrid` component handles responsive column layouts cleanly.
+
+5. **Setup wizard error handling pattern.** The `handleSubmit` function correctly uses try/catch with explicit error
+   state, loading state, and a finally block. The error display uses destructive theme tokens.
+
+6. **Waitlist form UX polish.** The artificial minimum submission time (`Math.max(350 - duration, 0)`) prevents the form
+   from appearing to flash on fast connections. Form reset and toast feedback are handled consistently.
+
+---
+
+## Coverage Analysis
+
+| Area                       | Files                               | Status                                                         |
+|----------------------------|-------------------------------------|----------------------------------------------------------------|
+| Setup wizard core flow     | `setup-wizard.tsx`                  | Functional. Main gap: wrong env variable (Critical #1)         |
+| Setup server configuration | `setup-wizard.tsx` L179-311         | Works. Missing client validation (Important #4)                |
+| Setup admin account        | `setup-wizard.tsx` L314-366         | Works. Missing autocomplete (Minor #13)                        |
+| Landing page               | `index/routes/index.tsx`            | Works. Login URL broken in dev (Important #3)                  |
+| Waitlist form              | `index/routes/index.tsx` L47-66     | Functional (previous stale closure finding was false positive) |
+| Authenticated redirect     | `index/routes/__root.tsx` L10-19    | Works with fragility risk (Important #7)                       |
+| Blog list                  | `index/routes/blog.index.tsx`       | Works correctly                                                |
+| Blog post                  | `index/routes/blog.$id.tsx`         | Works. Inline code styling broken (Minor #10)                  |
+| Blog markdown rendering    | `index/components/BlogPost.tsx`     | Works for current content                                      |
+| Blog media grids           | `index/components/MediaGrid.tsx`    | Works correctly                                                |
+| Blog media preview         | `index/components/MediaPreview.tsx` | Works (missing provider is non-blocking)                       |
+| Blog data loading          | `index/data/blog-posts.ts`          | Works correctly                                                |
+| Blog SEO/SSR               | `index/index.php`, `scripts/*`      | Works correctly                                                |
+| Build configuration        | `setup/vite.config.ts`              | Functional but divergent (Important #6)                        |
+
+---
+
+## Summary
+
+| Severity  | Count |
+|-----------|-------|
+| Critical  | 1     |
+| Important | 6     |
+| Minor     | 9     |
+
+The single critical issue (wrong env variable) makes the setup wizard non-functional in Docker and production
+deployments. The important issues are a mix of robustness gaps (missing `response.ok` checks, never-resolving Promise)
+and development-environment friction (wrong login URL, devtools in production, divergent build config). The minor issues
+are primarily style consistency matters.
+
+Three findings from the previous review were false positives (waitlist stale closure, Recommended label, Dutch
+comments), and one was inaccurately described (login URL relative vs absolute). These have been corrected in this
+review.
+
+---
+
+## Relevant Files
+
+| File                                             | Role                                      |
+|--------------------------------------------------|-------------------------------------------|
+| `apps/setup/src/components/setup-wizard.tsx`     | Entire setup wizard UI                    |
+| `apps/setup/src/main.tsx`                        | Setup app entry point                     |
+| `apps/setup/vite.config.ts`                      | Custom Vite config (diverges from shared) |
+| `apps/index/src/routes/__root.tsx`               | Root route with auth redirect             |
+| `apps/index/src/routes/index.tsx`                | Landing page with waitlist form           |
+| `apps/index/src/routes/blog.index.tsx`           | Blog list page                            |
+| `apps/index/src/routes/blog.$id.tsx`             | Individual blog post page                 |
+| `apps/index/src/components/BlogPost.tsx`         | Markdown blog post renderer               |
+| `apps/index/src/components/MediaGrid.tsx`        | Media grid component                      |
+| `apps/index/src/components/MediaPreview.tsx`     | Lightbox media preview                    |
+| `apps/index/src/components/parse-media-grids.ts` | Custom markdown grid parser               |
+| `apps/index/src/data/blog-posts.ts`              | Blog post data loader                     |
+| `apps/index/src/main.tsx`                        | Index app entry point                     |
+| `apps/index/index.php`                           | PHP SSR template for OG tags              |
+| `apps/index/scripts/generate-blog-meta.ts`       | Prebuild blog metadata generator          |
+| `apps/index/scripts/post-build.ts`               | Postbuild asset path updater              |
+| `packages/lib/src/core/api.ts`                   | Shared API client (has `setupApi` export) |
+| `packages/lib/src/core/apps.ts`                  | App list used by landing page rotator     |
+| `apps/api/src/routes/setup.ts`                   | Setup API routes                          |
+| `apps/api/src/lib/setup/setup.ts`                | Setup business logic                      |
+| `vite.shared.config.ts`                          | Shared Vite configuration factory         |
