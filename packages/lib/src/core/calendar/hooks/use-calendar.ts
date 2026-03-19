@@ -53,7 +53,7 @@ export function useUpdateCalendar(ownerId: string) {
 
     return useMutation({
         mutationFn: async ({id, ...data}: UpdateCalendarInput) => {
-            const response = await (calendarApi({ownerId}).calendars as any)({id}).put(data as any);
+            const response = await calendarApi({ownerId}).calendars({calId: id}).put(data);
             if (response.error) throw new Error(String(response.error));
             return response.data;
         },
@@ -66,7 +66,7 @@ export function useDeleteCalendar(ownerId: string) {
 
     return useMutation({
         mutationFn: async (id: string) => {
-            const response = await (calendarApi({ownerId}).calendars as any)({id}).delete();
+            const response = await calendarApi({ownerId}).calendars({calId: id}).delete();
             if (response.error) throw new Error(String(response.error));
             return response.data;
         },
@@ -79,8 +79,8 @@ export function useDeleteCalendar(ownerId: string) {
 export function useEvents(ownerId: string, from: number, to: number, enabled = true) {
     return useQuery({
         queryKey: calendarKeys.eventRange(from, to),
-        queryFn: async () => {
-            const response = await (calendarApi({ownerId}).events as any)({from: String(from)})({to: String(to)}).get();
+        queryFn: async (): Promise<CalendarEventOccurrence[]> => {
+            const response = await calendarApi({ownerId})["event-range"]({from: String(from)})({to: String(to)}).get();
             return (response.data || []) as CalendarEventOccurrence[];
         },
         staleTime: 2 * 60 * 1000,
@@ -91,8 +91,8 @@ export function useEvents(ownerId: string, from: number, to: number, enabled = t
 export function useCalendarEvents(ownerId: string, calendarId: string, from: number, to: number, enabled = true) {
     return useQuery({
         queryKey: calendarKeys.calendarEvents(ownerId, calendarId, from, to),
-        queryFn: async () => {
-            const response = await (calendarApi({ownerId}).calendars as any)({calId: calendarId}).events({from: String(from)})({to: String(to)}).get();
+        queryFn: async (): Promise<CalendarEventOccurrence[]> => {
+            const response = await calendarApi({ownerId}).calendars({calId: calendarId})["event-range"]({from: String(from)})({to: String(to)}).get();
             return (response.data || []) as CalendarEventOccurrence[];
         },
         staleTime: 2 * 60 * 1000,
@@ -105,7 +105,7 @@ export function useCreateEvent(ownerId: string) {
 
     return useMutation({
         mutationFn: async ({calendarId, ...eventData}: CreateEventInput) => {
-            const response = await (calendarApi({ownerId}).calendars as any)({calId: calendarId}).events.post(eventData as any);
+            const response = await calendarApi({ownerId}).calendars({calId: calendarId}).events.post(eventData);
             if (response.error) throw new Error(String(response.error));
             return response.data;
         },
@@ -118,7 +118,7 @@ export function useUpdateEvent(ownerId: string) {
 
     return useMutation({
         mutationFn: async ({calendarId, id, ...data}: UpdateEventInput) => {
-            const response = await (calendarApi({ownerId}).calendars as any)({calId: calendarId}).events({id}).put(data as any);
+            const response = await calendarApi({ownerId}).calendars({calId: calendarId}).events({id}).put(data);
             if (response.error) throw new Error(String(response.error));
             return response.data;
         },
@@ -131,7 +131,7 @@ export function useDeleteEvent(ownerId: string) {
 
     return useMutation({
         mutationFn: async ({calendarId, id}: Pick<UpdateEventInput, 'id' | 'calendarId'>) => {
-            const response = await (calendarApi({ownerId}).calendars as any)({calId: calendarId}).events({id}).delete();
+            const response = await calendarApi({ownerId}).calendars({calId: calendarId}).events({id}).delete();
             if (response.error) throw new Error(String(response.error));
             return response.data;
         },
@@ -142,8 +142,8 @@ export function useDeleteEvent(ownerId: string) {
 export function useCalendarAccess(ownerId: string, calendarId: string, enabled = true) {
     return useQuery({
         queryKey: [...calendarKeys.all, 'access', ownerId, calendarId],
-        queryFn: async () => {
-            const response = await (calendarApi({ownerId}).calendars as any)({calId: calendarId}).access.get();
+        queryFn: async (): Promise<{ownerUserId: string; shares: Array<{targetId: string; permission: string}>}> => {
+            const response = await calendarApi({ownerId}).calendars({calId: calendarId}).access.get();
             return response.data as {ownerUserId: string; shares: Array<{targetId: string; permission: string}>};
         },
         staleTime: 5 * 60 * 1000,
@@ -157,8 +157,8 @@ export function useAllSharedCalendarEvents(sharedCalendars: SharedCalendar[], fr
     const results = useQueries({
         queries: visibleShared.map(sc => ({
             queryKey: calendarKeys.calendarEvents(sc.ownerUserId, sc.calendarId, from, to),
-            queryFn: async () => {
-                const response = await (calendarApi({ownerId: sc.ownerUserId}).calendars as any)({calId: sc.calendarId}).events({from: String(from)})({to: String(to)}).get();
+            queryFn: async (): Promise<CalendarEventOccurrence[]> => {
+                const response = await calendarApi({ownerId: sc.ownerUserId}).calendars({calId: sc.calendarId})["event-range"]({from: String(from)})({to: String(to)}).get();
                 return (response.data || []) as CalendarEventOccurrence[];
             },
             staleTime: 2 * 60 * 1000,
@@ -191,7 +191,7 @@ export function useUpdateSharedCalendar(ownerId: string) {
 
     return useMutation({
         mutationFn: async ({id, ...data}: UpdateSharedCalendarInput) => {
-            const response = await calendarApi({ownerId}).shared({id}).put(data as any);
+            const response = await calendarApi({ownerId}).shared({id}).put(data);
             if (response.error) throw new Error(String(response.error));
             return response.data;
         },
@@ -224,8 +224,8 @@ export function useRsvp(ownerId: string) {
             recurrenceDate?: string;
             remove?: boolean;
         }) => {
-            const response = await (calendarApi({ownerId}).calendars as any)
-                ({calId: calendarId}).events({id: eventId}).rsvp.put({status, scope, recurrenceDate, remove});
+            const response = await calendarApi({ownerId}).calendars({calId: calendarId})
+                .events({id: eventId}).rsvp.put({status, scope, recurrenceDate, remove});
             if (response.error) throw new Error(String(response.error));
             return response.data;
         },

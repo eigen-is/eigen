@@ -217,7 +217,7 @@ export function MountForm({
                         </Button>
 
                         {s3Check && (
-                            <span className={`text-sm flex items-center gap-1 ${s3Check.ok ? 'text-green-600' : 'text-destructive'}`}>
+                            <span className={`text-sm flex items-center gap-1 ${s3Check.ok ? 'text-green-600 dark:text-green-400' : 'text-destructive'}`}>
                                 {s3Check.ok ? (
                                     <CheckCircle2 className="h-4 w-4"/>
                                 ) : (

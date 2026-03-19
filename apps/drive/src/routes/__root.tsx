@@ -44,7 +44,7 @@ function DriveRoot() {
         return (
             <AppShell appName="drive" rootRoute={Route}>
                 <div className="flex flex-col items-center justify-center h-full w-full">
-                    <p className="text-red-500">Error loading drive content</p>
+                    <p className="text-destructive">Error loading drive content</p>
                     <p className="text-sm">{error.message}</p>
                 </div>
             </AppShell>

@@ -102,7 +102,7 @@ export const calendarRouter = new Elysia({name: "calendar"})
     }, {auth: true})
 
     // --- Events ---
-    .get("/calendar/:ownerId/events/:from/:to", async ({params, user}) => {
+    .get("/calendar/:ownerId/event-range/:from/:to", async ({params, user}) => {
         const from = Number(params.from);
         const to = Number(params.to);
         if (!from || !to) throw new ApiError(400, 'Invalid from/to parameters');
@@ -110,7 +110,7 @@ export const calendarRouter = new Elysia({name: "calendar"})
         return cal.getEventsInRange(from, to);
     }, {auth: true})
 
-    .get("/calendar/:ownerId/calendars/:calId/events/:from/:to", async ({params, user}) => {
+    .get("/calendar/:ownerId/calendars/:calId/event-range/:from/:to", async ({params, user}) => {
         const from = Number(params.from);
         const to = Number(params.to);
         if (!from || !to) throw new ApiError(400, 'Invalid from/to parameters');

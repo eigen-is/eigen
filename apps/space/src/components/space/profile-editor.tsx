@@ -123,7 +123,7 @@ export function ProfileEditor() {
 
     if (error && !contact) {
         return (
-            <div className="flex justify-center items-center h-64 text-red-500">
+            <div className="flex justify-center items-center h-64 text-destructive">
                 {error}
             </div>
         );
@@ -131,7 +131,7 @@ export function ProfileEditor() {
 
     return (<>
             {error && (
-                <div className="mb-4 p-3 bg-red-100 border border-red-200 text-red-600 rounded-md">
+                <div className="mb-4 p-3 bg-destructive/10 border border-destructive/20 text-destructive rounded-md">
                     {error}
                 </div>
             )}
@@ -262,9 +262,9 @@ export function ProfileEditor() {
                             )}
                         />
                     </div>
-                    <div className="bg-blue-50 border border-blue-200 text-blue-800 rounded-md p-4">
+                    <div className="bg-accent border text-accent-foreground rounded-md p-4">
                         <div className="flex">
-                            <InfoIcon className="h-5 w-5 text-blue-500 mr-2"/>
+                            <InfoIcon className="h-5 w-5 text-primary mr-2"/>
                             <div>
                                 <h3 className="font-medium">Important</h3>
                                 <p className="text-sm">

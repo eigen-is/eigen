@@ -141,8 +141,8 @@ GET    /calendar/:ownerId/calendars
 POST   /calendar/:ownerId/calendars
 PUT    /calendar/:ownerId/calendars/:calId        (includes shares)
 DELETE /calendar/:ownerId/calendars/:calId
-GET    /calendar/:ownerId/events/:from/:to        (all calendars)
-GET    /calendar/:ownerId/calendars/:calId/events/:from/:to
+GET    /calendar/:ownerId/event-range/:from/:to   (all calendars)
+GET    /calendar/:ownerId/calendars/:calId/event-range/:from/:to
 POST   /calendar/:ownerId/calendars/:calId/events
 PUT    /calendar/:ownerId/calendars/:calId/events/:id
 DELETE /calendar/:ownerId/calendars/:calId/events/:id

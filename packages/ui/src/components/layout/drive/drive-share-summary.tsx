@@ -38,7 +38,7 @@ export function DriveShareSummary({
                         <Tooltip delayDuration={300}>
                             <TooltipTrigger asChild>
                                 <span
-                                    className="-ml-4 h-6 w-6 rounded-full flex items-center justify-center bg-gray-100 position-relative"
+                                    className="-ml-4 h-6 w-6 rounded-full flex items-center justify-center bg-muted position-relative"
                                     style={{zIndex: 1}}
                                 >
                                     <Unlock className="h-3 w-3 text-primary"/>

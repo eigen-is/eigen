@@ -11,7 +11,6 @@ function PasswordComponent() {
     const navigate = useNavigate();
     const handlePasswordChange = async (data: { currentPassword: string, newPassword: string, revokeOtherSessions: boolean }) => {
         const result = await authClient.changePassword(data);
-        console.log(result);
         if (result.data) {
             toast.success('Password changed successfully');
 

@@ -73,7 +73,7 @@ function InlineEmail({email}: { email: string }) {
     return (
         <a
             href={getMailComposeUrl(email)}
-            className="inline-flex items-baseline gap-1 text-blue-600 hover:underline"
+            className="inline-flex items-baseline gap-1 text-primary hover:underline"
         >
             <UserAvatar email={email} size="sm" className="h-4 w-4 inline-block relative top-0.5"/>
             <span>{name}</span>
@@ -202,9 +202,9 @@ export function ChatMessageList({
                         <div
                             key={message.id}
                             className={cn(
-                                "flex gap-3 px-5 hover:bg-orange-50/50 transition-colors",
+                                "flex gap-3 px-5 hover:bg-orange-50/50 dark:hover:bg-orange-950/30 transition-colors",
                                 grouped ? "pt-0.5" : "pt-3",
-                                "bg-orange-50/30"
+                                "bg-orange-50/30 dark:bg-orange-950/20"
                             )}
                         >
                             <div className="w-9 shrink-0 pt-0.5">

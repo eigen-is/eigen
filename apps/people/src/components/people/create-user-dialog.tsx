@@ -19,7 +19,7 @@ export function CreateUserDialog({open, onOpenChange}: CreateUserDialogProps) {
     const [name, setName] = useState('');
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
-    const [role, setRole] = useState('member');
+    const [role, setRole] = useState<'user' | 'admin'>('user');
     const createUser = useCreateUser();
     const {data: config} = usePublicConfig();
 
@@ -35,7 +35,7 @@ export function CreateUserDialog({open, onOpenChange}: CreateUserDialogProps) {
             setName('');
             setUsername('');
             setPassword('');
-            setRole('member');
+            setRole('user');
         } catch (error) {
             toast.error(error instanceof Error ? error.message : 'Failed to create user');
         }
@@ -81,12 +81,12 @@ export function CreateUserDialog({open, onOpenChange}: CreateUserDialogProps) {
                         <Field>
                             <FieldLabel htmlFor="role">Role</FieldLabel>
                             <FieldContent>
-                                <Select value={role} onValueChange={setRole}>
+                                <Select value={role} onValueChange={(v) => setRole(v as 'user' | 'admin')}>
                                     <SelectTrigger>
                                         <SelectValue/>
                                     </SelectTrigger>
                                     <SelectContent>
-                                        <SelectItem value="member">Member</SelectItem>
+                                        <SelectItem value="user">Member</SelectItem>
                                         <SelectItem value="admin">Admin</SelectItem>
                                     </SelectContent>
                                 </Select>

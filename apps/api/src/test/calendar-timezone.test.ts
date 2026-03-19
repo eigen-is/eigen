@@ -32,7 +32,7 @@ describe('Calendar Timezone', () => {
     }
 
     async function getEvents(token: string, ownerId: string, from: number, to: number) {
-        const res = await authedRequest(token, `/calendar/${ownerId}/events/${from}/${to}`);
+        const res = await authedRequest(token, `/calendar/${ownerId}/event-range/${from}/${to}`);
         expect(res.status).toBe(200);
         return await res.json() as any[];
     }

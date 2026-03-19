@@ -57,7 +57,7 @@ export function DriveAccessList({
                         ><Lock/></AvatarIcon>
                         <div>
                             <p className="text-sm font-medium">Restricted</p>
-                            <p className="text-xs text-gray-500">Only people with access can open with the link</p>
+                            <p className="text-xs text-muted-foreground">Only people with access can open with the link</p>
                         </div>
                     </div>
                 ) : (
@@ -67,7 +67,7 @@ export function DriveAccessList({
                         ><Unlock/></AvatarIcon>
                         <div>
                             <p className="text-sm font-medium">Unrestricted</p>
-                            <p className="text-xs text-gray-500">
+                            <p className="text-xs text-muted-foreground">
                                 {path.visibility === 'public-write'
                                     ? "Anyone with the link can edit"
                                     : "Anyone with the link can view"}

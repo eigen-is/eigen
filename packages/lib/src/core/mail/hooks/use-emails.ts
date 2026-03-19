@@ -17,10 +17,8 @@ export function useEmails(mailboxPath: string) {
 
     return useQuery({
         queryKey: emailKeys.list(mailboxPath),
-        queryFn: async () => {
-            let path = mailboxPath.toLowerCase();
-            path = path === 'inbox' ? '' : path;
-            const response = await (mailApi({ownerId}).mailbox as any)[path].get();
+        queryFn: async (): Promise<Email[]> => {
+            const response = await mailApi({ownerId}).mailbox({mailboxPath: mailboxPath.toLowerCase()}).get();
             return (response.data || []) as Email[];
         },
         staleTime: 1 * 60 * 1000,

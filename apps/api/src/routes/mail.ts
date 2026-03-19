@@ -31,17 +31,14 @@ export const mailRouter = new Elysia({name: "mail"})
     })
     // All other routes use /:ownerId/ pattern
     .get("/mail/:ownerId/mailboxes", async ({user}) => await mailboxesList(user), {auth: true})
-    .get("/mail/:ownerId/mailbox/*", async ({params, user}) => await mailboxGet(user, params['*']), {auth: true})
+    .get("/mail/:ownerId/mailbox/:mailboxPath", async ({params, user}) => await mailboxGet(user, params.mailboxPath), {auth: true})
     .post("/mail/:ownerId/mailbox", async ({body, user}) => await mailboxCreate(user, body.mailbox), {
         auth: true,
         body: t.Object({
             mailbox: t.String(),
         })
     })
-    .get("/mail/:ownerId/mailbox-exists/*", async ({
-                                                       params,
-                                                       user
-                                                   }) => await mailboxExists(user, params['*']), {auth: true})
+    .get("/mail/:ownerId/mailbox-exists/:mailboxPath", async ({params, user}) => await mailboxExists(user, params.mailboxPath), {auth: true})
     .get("/mail/:ownerId/message/:id", async ({params, user}) => await messageGet(user, params.id), {auth: true})
     .get("/mail/:ownerId/message/:id/download", async ({params, user, set}) => {
         set.headers['Cache-Control'] = 'public, max-age=86400';
