@@ -21,7 +21,7 @@ export function useChatRoom(ownerId: string, mountId: string, chatId: string) {
     const postMessage = usePostMessage(ownerId, mountId, chatId);
     const uploadFile = useUploadFile(ownerId, mountId);
     const {data: chatPath} = usePathInfo(ownerId, mountId, chatId);
-    const updateACL = useUpdateACL(ownerId);
+    const updateACL = useUpdateACL(ownerId, mountId);
     const {data: writePermission} = useCheckWritePermission(ownerId, mountId, chatId);
     const readOnly = writePermission ? !writePermission.canWrite : false;
     const {data: chatContents = []} = useFolderContent(ownerId, mountId, chatId);
