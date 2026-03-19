@@ -242,10 +242,10 @@ export function TeamDetail({team, organizationId}: TeamDetailProps) {
             await updateSettings.mutateAsync({
                 calendar: {enabled: draftCalEnabled},
                 memberOverrides: {
-                    mailAndContactsMaxMB: draftMailMax ? Number(draftMailMax) : null,
-                    defaultMountMaxSizeMB: draftMountMax ? Number(draftMountMax) : null,
+                    mailAndContactsMaxMB: draftMailMax ? Number(draftMailMax) : undefined,
+                    defaultMountMaxSizeMB: draftMountMax ? Number(draftMountMax) : undefined,
                 },
-            } as any);
+            });
             if (defaultCal && draftCalEnabled) {
                 const existingShares = (defaultCal.shares || []).filter(s => s.targetId !== teamTarget);
                 const shares = draftCalPermission === 'read'

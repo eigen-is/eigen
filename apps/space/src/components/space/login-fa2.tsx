@@ -59,7 +59,7 @@ export function LoginFa2Form() {
                 // Wait a short time before navigating to give the toast time to show
                 await new Promise(resolve => setTimeout(resolve, 350))
 
-                // TODO: Reinder, dit moet misschien anders
+                // TODO: Reinder, this might need a different approach
                 window.location.reload();
             } else {
                 toast.error(result.error?.message || "Invalid verification code")

@@ -153,7 +153,6 @@ export default class CollabDocument {
         this.drive = drive;
         this.path = path;
 
-        console.log(`[CollabDocument] Created for path: ${path.name}`);
     }
 
     static async create(drive: Drive, mountId: string, docId: string): Promise<void> {
@@ -163,8 +162,6 @@ export default class CollabDocument {
     }
 
     public async init() {
-        console.log(`[CollabDocument] init for path: ${this.path.name}`);
-
         let dataDbPath = await this.drive.getChildByName(this.path.mountId, this.path.id, 'data.db');
         if (!dataDbPath) {
             await CollabDocument.create(this.drive, this.path.mountId, this.path.id);
@@ -233,16 +230,15 @@ export default class CollabDocument {
         this.doc.destroy();
     }
 
-    public subscribe(user: User, conn: ServerWebSocket<any>) {
+    public subscribe(_user: User, conn: ServerWebSocket<any>) {
         if (this.closed) {
             return;
         }
         this.connections.add(conn);
         this.sendSyncStep1(conn);
-        console.log(`User ${user.id} connected to document ${this.path.name}`);
     }
 
-    public unsubscribe(user: User, conn: ServerWebSocket<any>) {
+    public unsubscribe(_user: User, conn: ServerWebSocket<any>) {
         if (this.closed) {
             return;
         }
@@ -254,7 +250,6 @@ export default class CollabDocument {
         }
         this.connectionClientIds.delete(conn);
 
-        console.log(`User ${user.id} disconnected from document ${this.path.name}`);
         for (const connection of this.connections) {
             if (connection.readyState > 1) { // CLOSING or CLOSED
                 this.connections.delete(connection);
@@ -265,7 +260,6 @@ export default class CollabDocument {
                 this.connectionClientIds.delete(connection);
             }
         }
-        console.log(`Remaining connections: ${this.connections.size}`);
         // check if this.connections is empty
         if (this.connections.size <= 0) {
             this.drive.closeCollabDocument(this.path.mountId, this.path.id);
@@ -373,7 +367,6 @@ export default class CollabDocument {
 
             // Send the message
             conn.send(Buffer.from(syncMessage));
-            console.log('Sent initial document state, size:', syncMessage.length);
 
             // Send awareness information if any exists
             const awarenessStates = this.awareness.getStates();
@@ -390,7 +383,6 @@ export default class CollabDocument {
 
                 const awarenessMessage = encoding.toUint8Array(awarenessEncoder);
                 conn.send(Buffer.from(awarenessMessage));
-                console.log('Sent awareness states, size:', awarenessMessage.length);
             }
         } catch (err) {
             console.error('Error sending sync step 1:', err);

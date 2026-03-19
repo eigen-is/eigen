@@ -47,7 +47,6 @@ export function useSSE(options: UseSSEOptions = {}) {
             try {
                 const sseEvent = JSON.parse(event.data) as SSEvent;
                 handleEvent(sseEvent);
-                console.log('Received SSE event', sseEvent);
             } catch (e) {
                 console.error('Failed to parse SSE event', e);
             }

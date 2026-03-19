@@ -162,7 +162,7 @@ function TextPreviewContent({path}: { path: DrivePath }) {
     }
 
     return (
-        <div className="w-[80vw] h-[calc(100vh-7rem)] overflow-auto rounded bg-white dark:bg-zinc-900">
+        <div className="w-[80vw] h-[calc(100vh-7rem)] overflow-auto rounded bg-background">
             <div className="eigen-prose p-8 max-w-[52rem] mx-auto" dangerouslySetInnerHTML={{__html: data.body}}/>
         </div>
     );

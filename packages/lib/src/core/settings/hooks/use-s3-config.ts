@@ -23,7 +23,7 @@ export function useUpdateServerS3Config() {
 
     return useMutation({
         mutationFn: async (body: S3Config) => {
-            const res = await settingsApi.s3config.put(body as any);
+            const res = await settingsApi.s3config.put(body);
             if (res.error) throw new Error(String(res.error));
             return res.data as S3Config;
         },

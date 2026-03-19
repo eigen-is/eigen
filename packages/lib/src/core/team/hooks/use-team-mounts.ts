@@ -23,8 +23,8 @@ export function useAddTeamMount(teamId: string) {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: async (body: {name: string; storageType?: string; maxSizeMB?: number}) => {
-            const res = await teamApi({teamId}).mount.post(body as any);
+        mutationFn: async (body: {name: string; storageType?: 'local' | 'local-key' | 's3'; maxSizeMB?: number}) => {
+            const res = await teamApi({teamId}).mount.post(body);
             if (res.error) throw new Error(String(res.error));
             return res.data;
         },
@@ -37,7 +37,7 @@ export function useUpdateTeamMount(teamId: string) {
 
     return useMutation({
         mutationFn: async ({mountId, ...body}: {mountId: string; enabled?: boolean; maxSizeMB?: number; name?: string}) => {
-            const res = await teamApi({teamId}).mount({mountId}).put(body as any);
+            const res = await teamApi({teamId}).mount({mountId}).put(body);
             if (res.error) throw new Error(String(res.error));
             return res.data;
         },

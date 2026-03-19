@@ -29,10 +29,10 @@ export function usePeopleMembers(organizationId?: string) {
 export function useUpdateMemberRole(organizationId?: string) {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: async ({memberId, role}: { memberId: string; role: string }) => {
+        mutationFn: async ({memberId, role}: { memberId: string; role: 'admin' | 'member' | 'owner' }) => {
             const {data, error} = await authClient.organization.updateMemberRole({
                 memberId,
-                role: role as any,
+                role,
                 organizationId,
             });
             if (error) throw new Error(String(error));
@@ -68,13 +68,13 @@ export function useCreateUser() {
             name: string;
             email: string;
             password: string;
-            role: string;
+            role: 'admin' | 'user';
         }) => {
             const {data, error} = await authClient.admin.createUser({
                 name,
                 email,
                 password,
-                role: role as any,
+                role,
             });
             if (error) throw new Error(String(error));
             return data;
