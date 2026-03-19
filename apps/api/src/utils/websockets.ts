@@ -1,7 +1,7 @@
 import type {ServerWebSocket} from "bun";
 import type {User} from "better-auth/types";
 
-export function keepWebSocketAlive(user: User, ws: ServerWebSocket, onClose: () => void) {
+export function keepWebSocketAlive(user: User, ws: ServerWebSocket, onClose: () => void): ReturnType<typeof setInterval> {
     const pingInterval = setInterval(() => {
         if (ws.readyState === 1) { // OPEN
             try {
@@ -17,4 +17,5 @@ export function keepWebSocketAlive(user: User, ws: ServerWebSocket, onClose: () 
             onClose();
         }
     }, 15000);
+    return pingInterval;
 }
