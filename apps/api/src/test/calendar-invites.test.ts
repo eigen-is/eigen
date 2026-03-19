@@ -37,7 +37,7 @@ describe('Calendar Invites', () => {
         const from = Math.floor(Date.now() / 1000) - 86400;
         const to = Math.floor(Date.now() / 1000) + 86400 * 7;
         const eventsRes = await authedRequest(ctx.bob.user.sessionToken,
-            `/calendar/${ctx.bob.user.id}/events/${from}/${to}`);
+            `/calendar/${ctx.bob.user.id}/event-range/${from}/${to}`);
         return await eventsRes.json() as any[];
     }
 
@@ -85,7 +85,7 @@ describe('Calendar Invites', () => {
 
             // Check organizer's event reflects the RSVP
             const aliceRes = await authedRequest(ctx.alice.user.sessionToken,
-                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events/${Math.floor(Date.now() / 1000) - 86400}/${Math.floor(Date.now() / 1000) + 86400 * 7}`);
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/event-range/${Math.floor(Date.now() / 1000) - 86400}/${Math.floor(Date.now() / 1000) + 86400 * 7}`);
             const aliceEvents = await aliceRes.json() as any[];
             const orgEvent = aliceEvents.find((e: any) => e.title === 'Team Standup');
             expect(orgEvent.data.attendees[0].status).toBe('accepted');
@@ -191,7 +191,7 @@ describe('Calendar Invites', () => {
             const from = Math.floor(Date.now() / 1000) - 86400;
             const to = Math.floor(Date.now() / 1000) + 86400 * 7;
             const aliceRes = await authedRequest(ctx.alice.user.sessionToken,
-                `/calendar/${ctx.alice.user.id}/events/${from}/${to}`);
+                `/calendar/${ctx.alice.user.id}/event-range/${from}/${to}`);
             const aliceEvents = await aliceRes.json() as any[];
             const orgEvent = aliceEvents.find((e: any) => e.title === 'Optional Meeting');
             expect(orgEvent).toBeDefined();
@@ -234,7 +234,7 @@ describe('Calendar Invites', () => {
             const aliceFrom = Math.floor(Date.now() / 1000) - 86400;
             const aliceTo = Math.floor(Date.now() / 1000) + 86400 * 7;
             const aliceRes = await authedRequest(ctx.alice.user.sessionToken,
-                `/calendar/${ctx.alice.user.id}/events/${aliceFrom}/${aliceTo}`);
+                `/calendar/${ctx.alice.user.id}/event-range/${aliceFrom}/${aliceTo}`);
             const aliceEvents = await aliceRes.json() as any[];
             const selfInviteCopies = aliceEvents.filter(
                 (e: any) => e.title === 'Self-Invite Test' && e.data?.organizer
@@ -283,7 +283,7 @@ describe('Calendar Invites', () => {
         async function getEventsInRange(token: string, ownerId: string) {
             const from = baseTime - 86400;
             const to = baseTime + 86400 * 42;
-            const res = await authedRequest(token, `/calendar/${ownerId}/events/${from}/${to}`);
+            const res = await authedRequest(token, `/calendar/${ownerId}/event-range/${from}/${to}`);
             return await res.json() as any[];
         }
 

@@ -129,12 +129,12 @@ Tracking all findings from the [full code review](OVERVIEW.md). Phases match the
 
 ## Phase 4: Code Quality (ongoing)
 
-- [ ] `as any` removal: calendar (12), people/team/settings (7), mail, contacts (2), fortune-sheet (36)
+- [x] `as any` removal: 25 casts removed across calendar (12), people (2), team (2), settings (2), mail (1), contacts (2), people app (1). Route renamed `events` → `event-range` to fix Eden Treaty type collision. Mail wildcard → named param.
 - [ ] Extract duplicated collab utilities (`jsonToYType`, revision restore) to `packages/lib`
-- [ ] Remove `console.log` statements (sheets: 13, collab: 10+, space: 2, SSE: 1)
-- [ ] Translate Dutch comments to English
+- [x] `console.log` removal: 22 statements removed across collab (7), sheets (9), space (2), SSE (1), 2fa (1)
+- [x] Dutch comments → English: 7 comments translated across 4 files
 - [ ] Remove `"use client"` directives (~41 files)
 - [ ] Replace `interface` with `type` (~60+ instances)
-- [ ] Fortune-sheet: CSS files, `@ts-ignore` (81), Chinese comments
-- [ ] Hardcoded light-mode colors → theme tokens (Drive, Chat, Space, Calendar)
+- [ ] Fortune-sheet: `as any` (36), CSS files, `@ts-ignore` (81), Chinese comments
+- [x] Hardcoded light-mode colors → theme tokens: 10 files fixed (Drive, Chat, Space, Calendar, shared UI)
 - [x] `ownerId` URL param: documented as intentional routing key for future sharding (CLAUDE.md + TODO-SCALABILITY.md)

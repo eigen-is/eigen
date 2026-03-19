@@ -35,7 +35,6 @@ export function useSheet(
         const doc = docRef.current;
         const pending = pendingSnapshotRef.current;
         if (!doc || !pending) {
-            console.log('[sheet] flushSnapshot: skip (doc=%s, pending=%s)', !!doc, !!pending);
             return;
         }
         pendingSnapshotRef.current = null;
@@ -43,12 +42,10 @@ export function useSheet(
             clearTimeout(snapshotTimerRef.current);
             snapshotTimerRef.current = null;
         }
-        console.log('[sheet] flushSnapshot: writing %d bytes to Y.Map', pending.length);
         doc.transact(() => {
             doc.getMap('state').set('snapshot', pending);
         });
         hasFlushedRef.current = true;
-        console.log('[sheet] flushSnapshot: done');
     }, []);
 
     useEffect(() => {
@@ -61,7 +58,6 @@ export function useSheet(
         const opsArray = doc.getArray('ops');
 
         const wsUrl = getCollabWebSocketUrl(ownerId, mountId, pathId);
-        console.log('[sheet] connecting to', wsUrl);
         const wsProvider = new WebsocketProvider(wsUrl, '', doc, {
             resyncInterval: 5000,
             connect: true,
@@ -91,7 +87,6 @@ export function useSheet(
         wsProvider.on('sync', (isSynced: boolean) => {
             if (!isSynced) return;
             const snapshot = stateMap.get('snapshot') as string | undefined;
-            console.log('[sheet] sync: snapshot present=%s, length=%d', !!snapshot, snapshot?.length ?? 0);
 
             let data: SheetData[];
             if (snapshot) {
@@ -102,7 +97,6 @@ export function useSheet(
                     data = DEFAULT_SHEETS;
                 }
             } else {
-                console.log('[sheet] sync: no snapshot, initializing with defaults');
                 data = DEFAULT_SHEETS;
                 doc.transact(() => {
                     stateMap.set('snapshot', JSON.stringify(data));
@@ -116,7 +110,6 @@ export function useSheet(
         const handleBeforeUnload = () => {
             const pending = pendingSnapshotRef.current;
             if (pending && docRef.current) {
-                console.log('[sheet] beforeunload: flushing pending snapshot');
                 docRef.current.transact(() => {
                     docRef.current!.getMap('state').set('snapshot', pending);
                 });
@@ -155,7 +148,6 @@ export function useSheet(
             return;
         }
         pendingSnapshotRef.current = json;
-        console.log('[sheet] saveSnapshot: queued %d bytes (%d sheets)', json.length, data.length);
 
         if (snapshotTimerRef.current) clearTimeout(snapshotTimerRef.current);
         if (!hasFlushedRef.current) {
@@ -194,7 +186,6 @@ export function useSheet(
 
         const stateMap = doc.getMap('state');
         const snapshot = stateMap.get('snapshot') as string | undefined;
-        console.log('[sheet] handleRestore: snapshot present=%s', !!snapshot);
         if (snapshot) {
             try {
                 const data = JSON.parse(snapshot) as SheetData[];

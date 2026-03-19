@@ -69,10 +69,12 @@ export async function syncTeamCalendars(user: User) {
         }
     }
 
-    // Re-resolve permissions for user-owned shared calendars where the user
-    // may have both an individual share and a team share. The cached permission
-    // might be stale if a team share was added/removed after the individual share
-    // was propagated.
+    // Safety net: re-resolve permissions for user-owned shared calendars.
+    // propagateCalendarShare already resolves the max permission correctly at
+    // propagation time, but this loop catches two edge cases:
+    // 1. Team membership changes (user joins/leaves a team) don't trigger
+    //    propagateCalendarShare, so cached permissions may not reflect new team shares.
+    // 2. If propagation failed silently for a user, the stale cache is repaired here.
     const sharedCalendars = cal.getSharedCalendars();
     for (const sc of sharedCalendars) {
         const parsed = parseOwnerId(sc.ownerUserId);

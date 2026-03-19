@@ -118,9 +118,9 @@ export function TwoFactorSetup({
             {currentStep === "password" && (
                 <Form {...passwordForm}>
                     <form onSubmit={passwordForm.handleSubmit(onPasswordSubmit)} className="space-y-6">
-                        <div className="bg-blue-50 border border-blue-200 text-blue-800 rounded-md p-4">
+                        <div className="bg-accent border text-accent-foreground rounded-md p-4">
                             <div className="flex">
-                                <InfoIcon className="h-5 w-5 text-blue-500 mr-2"/>
+                                <InfoIcon className="h-5 w-5 text-primary mr-2"/>
                                 <div>
                                     <h3 className="font-medium">Important</h3>
                                     <p className="text-sm">
@@ -162,9 +162,9 @@ export function TwoFactorSetup({
 
             {currentStep === "qrcode" && totpUri && (
                 <div className="space-y-6">
-                    <div className="bg-blue-50 border border-blue-200 text-blue-800 rounded-md p-4">
+                    <div className="bg-accent border text-accent-foreground rounded-md p-4">
                         <div className="flex">
-                            <InfoIcon className="h-5 w-5 text-blue-500 mr-2"/>
+                            <InfoIcon className="h-5 w-5 text-primary mr-2"/>
                             <div>
                                 <h3 className="font-medium">Set up authenticator app</h3>
                                 <p className="text-sm">
@@ -230,9 +230,9 @@ export function TwoFactorSetup({
             {currentStep === "verification" && (
                 <Form {...verificationForm}>
                     <form onSubmit={verificationForm.handleSubmit(onVerificationSubmit)} className="space-y-6">
-                        <div className="bg-blue-50 border border-blue-200 text-blue-800 rounded-md p-4">
+                        <div className="bg-accent border text-accent-foreground rounded-md p-4">
                             <div className="flex">
-                                <InfoIcon className="h-5 w-5 text-blue-500 mr-2"/>
+                                <InfoIcon className="h-5 w-5 text-primary mr-2"/>
                                 <div>
                                     <h3 className="font-medium">Verify your setup</h3>
                                     <p className="text-sm">

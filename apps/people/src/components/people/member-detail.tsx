@@ -54,7 +54,7 @@ interface MemberDetailProps {
 export function MemberDetail({member, organizationId}: MemberDetailProps) {
     const updateRole = useUpdateMemberRole(organizationId);
 
-    const handleRoleChange = async (newRole: string) => {
+    const handleRoleChange = async (newRole: 'admin' | 'member' | 'owner') => {
         try {
             await updateRole.mutateAsync({memberId: member.id, role: newRole});
             toast.success(`Role updated to ${newRole}`);
@@ -79,7 +79,7 @@ export function MemberDetail({member, organizationId}: MemberDetailProps) {
                     {member.role === 'owner' ? (
                         <Badge variant="default">owner</Badge>
                     ) : (
-                        <Select value={member.role} onValueChange={handleRoleChange} disabled={updateRole.isPending}>
+                        <Select value={member.role} onValueChange={(v) => handleRoleChange(v as 'admin' | 'member' | 'owner')} disabled={updateRole.isPending}>
                             <SelectTrigger className="w-40">
                                 <SelectValue/>
                             </SelectTrigger>

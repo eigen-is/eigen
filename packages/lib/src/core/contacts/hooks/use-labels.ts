@@ -4,7 +4,7 @@ import type {Label} from "@workspace/lib/types/label";
 import {contactKeys} from './use-contacts';
 import {useAuth} from '@workspace/lib/auth';
 
-// Definieer query keys voor hergebruik
+// Define query keys for reuse
 export const labelKeys = {
     all: ['labels'] as const,
     lists: () => [...labelKeys.all, 'list'] as const,
@@ -37,7 +37,7 @@ export function useAddLabel() {
 
     return useMutation({
         mutationFn: async (labelData: Omit<Label, 'id'>) => {
-            const response = await contactsApi({ownerId}).labels.post(labelData as any);
+            const response = await contactsApi({ownerId}).labels.post(labelData);
             return response.data;
         },
         onSuccess: () => invalidateLabelCreated(queryClient),
@@ -54,8 +54,8 @@ export function useUpdateLabel() {
         mutationFn: async (updatedLabel: Label) => {
             const response = await contactsApi({ownerId}).labels({id: updatedLabel.id}).put({
                 name: updatedLabel.name,
-                color: updatedLabel.color
-            } as any);
+                color: updatedLabel.color,
+            });
             return response.data;
         },
         onSuccess: (_data, variables) => invalidateLabelUpdated(queryClient, variables.id),

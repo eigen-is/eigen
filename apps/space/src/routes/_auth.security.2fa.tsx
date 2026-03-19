@@ -29,7 +29,6 @@ function TwoFaComponent() {
                 setSetupStep("qrcode");
                 toast.success('Two-factor authentication initialized. Please scan the QR code.');
             } else {
-                console.log(result.error)
                 toast.error(result.error?.message ?? (result.error?.status + " - " + result.error?.statusText));
             }
         } catch (error) {

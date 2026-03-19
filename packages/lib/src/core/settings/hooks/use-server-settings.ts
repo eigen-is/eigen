@@ -22,8 +22,8 @@ export function useUpdateServerSettings() {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: async (body: Record<string, unknown>) => {
-            const res = await settingsApi.server.put(body as any);
+        mutationFn: async (body: Partial<ServerSettings>) => {
+            const res = await settingsApi.server.put(body);
             if (res.error) throw new Error(String(res.error));
             return res.data as ServerSettings;
         },

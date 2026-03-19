@@ -268,7 +268,7 @@ export function DriveAccessListEdit({
                             <p className="text-sm font-medium">
                                 {visibility !== 'private' ? "Unrestricted" : "Restricted"}
                             </p>
-                            <p className="text-xs text-gray-500">
+                            <p className="text-xs text-muted-foreground">
                                 {visibility !== 'private'
                                     ? "Anyone with the link can access"
                                     : "Only people with access can open with the link"}

@@ -268,7 +268,7 @@ describe('Team Calendar Share (push to existing members)', () => {
 
         // Bob reads events from Alice's shared calendar
         const eventsRes = await authedRequest(ctx.bob.user.sessionToken,
-            `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events/${now - 86400}/${now + 86400}`);
+            `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/event-range/${now - 86400}/${now + 86400}`);
         expect(eventsRes.status).toBe(200);
         const events = await eventsRes.json() as any[];
         const found = events.find((e: any) => e.title === 'Team Shared Event');
