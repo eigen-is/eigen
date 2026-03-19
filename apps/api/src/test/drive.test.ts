@@ -1,6 +1,13 @@
 import {beforeAll, describe, expect, test} from 'bun:test';
 import {authedRequest, driveDelete, driveGet, drivePost, drivePut, driveUpload, getTestContext} from './setup';
-import {DRIVE_TYPE_DOC, DRIVE_TYPE_SHEETS, DRIVE_TYPE_SLIDES, DRIVE_TYPE_STICKIES} from "@workspace/lib/types";
+import {
+    DRIVE_TYPE_DOC,
+    DRIVE_TYPE_SHEETS,
+    DRIVE_TYPE_SLIDES,
+    DRIVE_TYPE_STICKIES,
+    teamOwnerId
+} from "@workspace/lib/types";
+import {getServerConfig} from '../lib/config/server-config';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
 const BOB_EMAIL = 'bob@test.eigen.is';
@@ -1740,6 +1747,123 @@ describe('Drive', () => {
                     body: JSON.stringify({fileName: 'notes'}),
                 });
             expect(res.status).toBe(409);
+        });
+    });
+
+    describe('Regression: SharedDrive.createSlides/createSheets on team drive', () => {
+        let teamId: string;
+        let teamOwner: string;
+        let teamMountId: string;
+        let teamRootId: string;
+
+        beforeAll(async () => {
+            const config = getServerConfig();
+            const orgId = config!.orgId;
+
+            await authedRequest(ctx.alice.user.sessionToken,
+                '/auth/organization/set-active', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({organizationId: orgId}),
+                });
+
+            const teamRes = await authedRequest(ctx.alice.user.sessionToken,
+                '/auth/organization/create-team', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({name: 'Slides Sheets Team', organizationId: orgId}),
+                });
+            const team = await teamRes.json() as any;
+            teamId = team.id;
+            teamOwner = teamOwnerId(teamId);
+
+            await authedRequest(ctx.alice.user.sessionToken,
+                '/auth/organization/add-team-member', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({teamId, userId: ctx.alice.user.id}),
+                });
+
+            await authedRequest(ctx.alice.user.sessionToken, `/team/${teamId}/mount`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({name: 'Slides Sheets Drive', storageType: 'local', maxSizeMB: 500}),
+            });
+
+            const mountsRes = await authedRequest(ctx.alice.user.sessionToken,
+                `/drive/${teamOwner}/mounts`);
+            const mounts = await mountsRes.json() as any[];
+            teamMountId = mounts[0].id;
+
+            const root = await driveGet(ctx.alice.user.sessionToken, teamOwner, teamMountId, 'root');
+            teamRootId = root.id;
+        });
+
+        test('create slides on team drive returns 200', async () => {
+            const res = await authedRequest(ctx.alice.user.sessionToken,
+                `/drive/${teamOwner}/${teamMountId}/folder/${teamRootId}/slides`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({fileName: 'Team Presentation'}),
+                });
+            expect(res.status).toBe(200);
+            const data = await res.json() as any;
+            expect(data.name).toBe('Team Presentation.eigenslides');
+            expect(data.type).toBe(DRIVE_TYPE_SLIDES);
+            expect(data.ownerId).toBe(teamOwner);
+        });
+
+        test('create sheets on team drive returns 200', async () => {
+            const res = await authedRequest(ctx.alice.user.sessionToken,
+                `/drive/${teamOwner}/${teamMountId}/folder/${teamRootId}/sheets`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({fileName: 'Team Spreadsheet'}),
+                });
+            expect(res.status).toBe(200);
+            const data = await res.json() as any;
+            expect(data.name).toBe('Team Spreadsheet.eigensheets');
+            expect(data.type).toBe(DRIVE_TYPE_SHEETS);
+            expect(data.ownerId).toBe(teamOwner);
+        });
+    });
+
+    describe('Regression: Recursive folder ACL deletion cleans shared.db', () => {
+        let parentId: string;
+        let childId: string;
+
+        beforeAll(async () => {
+            const parent = await drivePost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `folder/${aliceRootId}`, {folderName: 'ACL Cleanup Parent'});
+            parentId = parent.id;
+
+            const child = await drivePost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `folder/${parentId}`, {folderName: 'ACL Cleanup Child'});
+            childId = child.id;
+        });
+
+        test('share child with Bob, Bob sees it in shared-with-me', async () => {
+            await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `path/${childId}/acl`, {
+                    acl: [{id: BOB_EMAIL, read: true, write: false}],
+                });
+
+            const res = await authedRequest(ctx.bob.user.sessionToken,
+                `/drive/${ctx.bob.user.id}/shared/with-me`);
+            const data = await res.json() as any[];
+            const shared = data.find(item => item.id === childId);
+            expect(shared).toBeDefined();
+        });
+
+        test('delete parent folder removes child from shared-with-me', async () => {
+            await driveDelete(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `folder/${parentId}`);
+
+            const res = await authedRequest(ctx.bob.user.sessionToken,
+                `/drive/${ctx.bob.user.id}/shared/with-me`);
+            const data = await res.json() as any[];
+            const shared = data.find(item => item.id === childId);
+            expect(shared).toBeUndefined();
         });
     });
 });

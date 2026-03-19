@@ -339,4 +339,65 @@ describe.skipIf(isWindows)('Mail', () => {
             expect(aliceMailboxes.find(mailbox => mailbox.path === 'BobOnlyMailbox')).toBeUndefined();
         });
     });
+
+    describe('Regression: Path traversal in mailbox names', () => {
+        test('create mailbox with .. traversal is rejected', async () => {
+            const res = await authedRequest(ctx.alice.user.sessionToken,
+                `/mail/${ctx.alice.user.id}/mailbox`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({mailbox: '../../etc'}),
+                });
+            expect(res.status).not.toBe(200);
+        });
+
+        test('create mailbox with path separator traversal is rejected', async () => {
+            const res = await authedRequest(ctx.alice.user.sessionToken,
+                `/mail/${ctx.alice.user.id}/mailbox`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({mailbox: '../../../etc/passwd'}),
+                });
+            expect(res.status).not.toBe(200);
+        });
+
+        test('mailbox-exists with traversal characters is rejected', async () => {
+            const res = await authedRequest(ctx.alice.user.sessionToken,
+                `/mail/${ctx.alice.user.id}/mailbox-exists/..%2F..%2Fetc%2Fpasswd`);
+            // Should either return false or error, not leak file information
+            if (res.status === 200) {
+                const data = await res.json();
+                expect(data).toBe(false);
+            } else {
+                expect(res.status).toBeGreaterThanOrEqual(400);
+            }
+        });
+
+        test('create mailbox with control characters is rejected', async () => {
+            const res = await authedRequest(ctx.alice.user.sessionToken,
+                `/mail/${ctx.alice.user.id}/mailbox`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({mailbox: 'test\x00mailbox'}),
+                });
+            expect(res.status).not.toBe(200);
+        });
+
+        test('valid mailbox still works after rejected traversal attempts', async () => {
+            const res = await authedRequest(ctx.alice.user.sessionToken,
+                `/mail/${ctx.alice.user.id}/mailbox`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({mailbox: 'ValidAfterTraversal'}),
+                });
+            expect(res.status).toBe(200);
+
+            const existsRes = await authedRequest(ctx.alice.user.sessionToken,
+                `/mail/${ctx.alice.user.id}/mailbox-exists/ValidAfterTraversal`);
+            expect(existsRes.status).toBe(200);
+            const data = await existsRes.json() as any;
+            expect(data).not.toBe(false);
+            expect(data.path).toBe('ValidAfterTraversal');
+        });
+    });
 });

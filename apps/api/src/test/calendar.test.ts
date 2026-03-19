@@ -1224,4 +1224,84 @@ describe('Calendar', () => {
                 `/calendar/${ctx.bob.user.id}/calendars/${sideCal.id}`, {method: 'DELETE'});
         });
     });
+
+    describe('Regression: Malformed RRULE validation', () => {
+        test('create event with invalid RRULE returns 400', async () => {
+            const res = await authedRequest(ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        title: 'Bad Recurrence',
+                        startTime: 1741773600,
+                        endTime: 1741777200,
+                        allDay: false,
+                        rrule: 'INVALID_RRULE_STRING',
+                    }),
+                });
+            expect(res.status).toBe(400);
+        });
+
+        test('create event with garbage RRULE returns 400', async () => {
+            const res = await authedRequest(ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        title: 'Garbage Recurrence',
+                        startTime: 1741773600,
+                        endTime: 1741777200,
+                        allDay: false,
+                        rrule: ';;;not-a-rule;;;',
+                    }),
+                });
+            expect(res.status).toBe(400);
+        });
+
+        test('update event with invalid RRULE returns 400', async () => {
+            // First create a valid event
+            const createRes = await authedRequest(ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        title: 'Valid Event For RRULE Update Test',
+                        startTime: 1741773600,
+                        endTime: 1741777200,
+                        allDay: false,
+                    }),
+                });
+            expect(createRes.status).toBe(200);
+            const event = await createRes.json() as any;
+
+            // Try to update with invalid RRULE
+            const updateRes = await authedRequest(ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events/${event.id}`, {
+                    method: 'PUT',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        rrule: 'NOT_VALID_AT_ALL',
+                    }),
+                });
+            expect(updateRes.status).toBe(400);
+        });
+
+        test('valid RRULE still works after rejection of invalid ones', async () => {
+            const res = await authedRequest(ctx.alice.user.sessionToken,
+                `/calendar/${ctx.alice.user.id}/calendars/${aliceCalendarId}/events`, {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        title: 'Valid After Invalid',
+                        startTime: 1741773600,
+                        endTime: 1741777200,
+                        allDay: false,
+                        rrule: 'FREQ=DAILY;COUNT=5',
+                    }),
+                });
+            expect(res.status).toBe(200);
+            const event = await res.json() as any;
+            expect(event.rrule).toBe('FREQ=DAILY;COUNT=5');
+        });
+    });
 });
