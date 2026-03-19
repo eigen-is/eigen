@@ -20,8 +20,8 @@ export function CreateUserDialog({open, onOpenChange}: CreateUserDialogProps) {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
     const [role, setRole] = useState<'user' | 'admin'>('user');
-    const createUser = useCreateUser();
     const {data: config} = usePublicConfig();
+    const createUser = useCreateUser(config?.orgId);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();

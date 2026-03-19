@@ -4,39 +4,39 @@ import {SSEventType} from '@workspace/lib/types/sse';
 import {invalidateContactCreated, invalidateContactDeleted, invalidateContactUpdated} from './hooks/use-contacts';
 import {invalidateLabelCreated, invalidateLabelDeleted, invalidateLabelUpdated} from './hooks/use-labels';
 
-export function handleContactsSSEvent(event: SSEvent, queryClient: QueryClient): boolean {
+export function handleContactsSSEvent(event: SSEvent, queryClient: QueryClient, userId: string): boolean {
     if (!event?.type?.startsWith('contacts:')) return false;
 
     switch (event.type) {
         case SSEventType.CONTACT_CREATED:
-            invalidateContactCreated(queryClient);
+            invalidateContactCreated(queryClient, userId);
             return true;
 
         case SSEventType.CONTACT_UPDATED: {
             if (!('contact' in event)) return false;
-            invalidateContactUpdated(queryClient, event.contact.contactId);
+            invalidateContactUpdated(queryClient, userId, event.contact.contactId);
             return true;
         }
 
         case SSEventType.CONTACT_DELETED: {
             if (!('contact' in event)) return false;
-            invalidateContactDeleted(queryClient, event.contact.contactId);
+            invalidateContactDeleted(queryClient, userId, event.contact.contactId);
             return true;
         }
 
         case SSEventType.LABEL_CREATED:
-            invalidateLabelCreated(queryClient);
+            invalidateLabelCreated(queryClient, userId);
             return true;
 
         case SSEventType.LABEL_UPDATED: {
             if (!('label' in event)) return false;
-            invalidateLabelUpdated(queryClient, event.label.labelId);
+            invalidateLabelUpdated(queryClient, userId, event.label.labelId);
             return true;
         }
 
         case SSEventType.LABEL_DELETED: {
             if (!('label' in event)) return false;
-            invalidateLabelDeleted(queryClient, event.label.labelId);
+            invalidateLabelDeleted(queryClient, userId, event.label.labelId);
             return true;
         }
 

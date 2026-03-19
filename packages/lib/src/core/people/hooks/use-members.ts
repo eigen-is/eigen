@@ -6,7 +6,7 @@ import {onMutationError} from '../../api-error';
 
 export function usePeopleMembers(organizationId?: string) {
     return useQuery({
-        queryKey: peopleKeys.members(),
+        queryKey: peopleKeys.members(organizationId ?? ''),
         queryFn: async (): Promise<OrgMember[]> => {
             const {data} = await authClient.organization.listMembers({
                 query: {organizationId: organizationId!},
@@ -40,7 +40,7 @@ export function useUpdateMemberRole(organizationId?: string) {
             return data;
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({queryKey: peopleKeys.members()});
+            queryClient.invalidateQueries({queryKey: peopleKeys.members(organizationId ?? '')});
         },
         onError: onMutationError,
     });
@@ -58,13 +58,13 @@ export function useRemoveMember(organizationId?: string) {
             return data;
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({queryKey: peopleKeys.members()});
+            queryClient.invalidateQueries({queryKey: peopleKeys.members(organizationId ?? '')});
         },
         onError: onMutationError,
     });
 }
 
-export function useCreateUser() {
+export function useCreateUser(organizationId?: string) {
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: async ({name, email, password, role}: {
@@ -83,7 +83,7 @@ export function useCreateUser() {
             return data;
         },
         onSuccess: () => {
-            queryClient.invalidateQueries({queryKey: peopleKeys.members()});
+            queryClient.invalidateQueries({queryKey: peopleKeys.members(organizationId ?? '')});
         },
         onError: onMutationError,
     });

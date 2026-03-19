@@ -48,8 +48,8 @@ export function useUpdateDraft() {
     return useMutation({
         mutationFn: (draft: EmailDraft) => updateDraftEmail(draft, ownerId),
         onSuccess: (data) => {
-            queryClient.invalidateQueries({queryKey: emailKeys.list('Drafts')});
-            if (data?.id) queryClient.invalidateQueries({queryKey: emailKeys.detail(data.id)});
+            queryClient.invalidateQueries({queryKey: emailKeys.list(ownerId, 'Drafts')});
+            if (data?.id) queryClient.invalidateQueries({queryKey: emailKeys.detail(ownerId, data.id)});
         },
         onError: onMutationError,
     });
@@ -63,9 +63,9 @@ export function useSendDraft() {
     return useMutation({
         mutationFn: (draft: EmailDraft) => sendDraftEmail(draft, ownerId),
         onSuccess: () => {
-            invalidateMailboxes(queryClient);
-            queryClient.invalidateQueries({queryKey: emailKeys.list('Drafts')});
-            invalidateHomeSize(queryClient);
+            invalidateMailboxes(queryClient, ownerId);
+            queryClient.invalidateQueries({queryKey: emailKeys.list(ownerId, 'Drafts')});
+            invalidateHomeSize(queryClient, ownerId);
             toast.success('Email sent');
         },
         onError: onMutationError,

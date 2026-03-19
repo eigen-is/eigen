@@ -15,7 +15,7 @@ import {invalidateHomeSize} from '../home';
 
 const normalizeMailbox = (mailbox: string) => mailbox === '' ? 'inbox' : mailbox;
 
-export function handleMailSSEvent(event: SSEvent, queryClient: QueryClient): boolean {
+export function handleMailSSEvent(event: SSEvent, queryClient: QueryClient, userId: string): boolean {
     if (!event?.type?.startsWith('mail:')) return false;
     if (!('mail' in event)) return false;
 
@@ -24,44 +24,44 @@ export function handleMailSSEvent(event: SSEvent, queryClient: QueryClient): boo
 
     switch (event.type) {
         case SSEventType.MAIL_RECEIVED:
-            invalidateMailReceived(queryClient);
-            invalidateMailboxes(queryClient);
-            invalidateHomeSize(queryClient);
+            invalidateMailReceived(queryClient, userId);
+            invalidateMailboxes(queryClient, userId);
+            invalidateHomeSize(queryClient, userId);
             if (mail.fromShort) toast('New email', {description: `From ${mail.fromShort}: ${mail.subject ?? ''}`});
             return true;
 
         case SSEventType.MAIL_DELETED:
-            invalidateMailDeleted(queryClient, mail.messageId, mailbox);
-            invalidateMailboxes(queryClient);
-            invalidateHomeSize(queryClient);
+            invalidateMailDeleted(queryClient, userId, mail.messageId, mailbox);
+            invalidateMailboxes(queryClient, userId);
+            invalidateHomeSize(queryClient, userId);
             return true;
 
         case SSEventType.MAIL_MOVED: {
             const toMailbox = mail.toMailbox != null ? normalizeMailbox(mail.toMailbox) : null;
-            invalidateMailMoved(queryClient, mail.messageId, mailbox, toMailbox);
-            invalidateMailboxes(queryClient);
+            invalidateMailMoved(queryClient, userId, mail.messageId, mailbox, toMailbox);
+            invalidateMailboxes(queryClient, userId);
             return true;
         }
 
         case SSEventType.MAIL_READ_CHANGED:
-            invalidateMailReadChanged(queryClient, mail.messageId, mailbox);
-            invalidateMailboxes(queryClient);
+            invalidateMailReadChanged(queryClient, userId, mail.messageId, mailbox);
+            invalidateMailboxes(queryClient, userId);
             return true;
 
         case SSEventType.MAIL_FLAGS_CHANGED:
-            invalidateMailFlagsChanged(queryClient, mail.messageId, mailbox);
-            invalidateMailboxes(queryClient);
+            invalidateMailFlagsChanged(queryClient, userId, mail.messageId, mailbox);
+            invalidateMailboxes(queryClient, userId);
             return true;
 
         case SSEventType.MAIL_DRAFT_UPDATED:
-            invalidateDraftUpdated(queryClient, mail.messageId);
-            invalidateMailboxes(queryClient);
-            invalidateHomeSize(queryClient);
+            invalidateDraftUpdated(queryClient, userId, mail.messageId);
+            invalidateMailboxes(queryClient, userId);
+            invalidateHomeSize(queryClient, userId);
             return true;
 
         case SSEventType.MAIL_SENT:
-            invalidateMailboxes(queryClient);
-            invalidateHomeSize(queryClient);
+            invalidateMailboxes(queryClient, userId);
+            invalidateHomeSize(queryClient, userId);
             return true;
 
         default:

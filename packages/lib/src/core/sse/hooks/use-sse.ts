@@ -15,14 +15,17 @@ export function useSSE() {
     const {isAuthenticated, user} = useAuth();
     const queryClient = useQueryClient();
     const eventSourceRef = useRef<EventSource | null>(null);
+    const userIdRef = useRef(user?.id || '');
+    userIdRef.current = user?.id || '';
 
     const handleEvent = useCallback((event: SSEvent) => {
+        const userId = userIdRef.current;
         handleDriveSSEvent(event, queryClient);
-        handleMailSSEvent(event, queryClient);
-        handleContactsSSEvent(event, queryClient);
+        handleMailSSEvent(event, queryClient, userId);
+        handleContactsSSEvent(event, queryClient, userId);
         handleChatSSEvent(event, queryClient);
         handleCalendarSSEvent(event, queryClient);
-        handleSpaceSSEvent(event, queryClient);
+        handleSpaceSSEvent(event, queryClient, userId);
         handleTeamSSEvent(event, queryClient);
     }, [queryClient]);
 
