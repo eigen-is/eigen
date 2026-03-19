@@ -3,7 +3,7 @@ import {AuthContextType, useAuth} from "@workspace/lib/auth";
 import {AppShell} from "@workspace/ui/components/layout/app/app-shell.tsx";
 import {SpaceSidebar} from "../components/space/space-sidebar";
 
-interface MyRouterContext {
+type MyRouterContext = {
     auth: AuthContextType;
 }
 

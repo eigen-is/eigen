@@ -3,8 +3,7 @@ import {useForm} from 'react-hook-form';
 import {zodResolver} from '@hookform/resolvers/zod';
 import {useEffect, useRef, useState} from 'react';
 import {Camera, InfoIcon} from 'lucide-react';
-import {Contact} from "@workspace/lib/types/contact";
-import {getMeContact, useUpdateContact} from '@workspace/lib/contacts';
+import {useMeContact, useUpdateContact} from '@workspace/lib/contacts';
 import {useAuth} from '@workspace/lib/auth';
 import {toast} from 'sonner';
 import {useUpload} from '@workspace/ui/components/layout/upload-provider/upload-provider';
@@ -22,7 +21,6 @@ import {
 } from "@workspace/ui/components/dropdown-menu";
 import {useNavigate} from '@tanstack/react-router';
 
-// Define the form schema - only include firstName, lastName
 const formSchema = z.object({
     firstName: z.string().min(1, "First name is required"),
     lastName: z.string().optional(),
@@ -32,39 +30,15 @@ export type ProfileFormValues = z.infer<typeof formSchema>;
 
 export function ProfileEditor() {
     const {user} = useAuth();
-    const [contact, setContact] = useState<Contact | null>(null);
-    const [isLoading, setIsLoading] = useState(true);
-    const [error, setError] = useState<string | null>(null);
+    const {data: contact, isLoading, error: fetchError} = useMeContact();
     const [avatar, setAvatar] = useState<string | null>(null);
+    const [submitError, setSubmitError] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const initializedRef = useRef(false);
 
-    // Upload context for tracking upload progress
     const upload = useUpload();
-
-    // Mutation for updating contact
     const updateContactMutation = useUpdateContact();
 
-    // Fetch the user's contact information
-    useEffect(() => {
-        const fetchContact = async () => {
-            if (!user?.id) return;
-            try {
-                setIsLoading(true);
-                const userContact = await getMeContact(user.id);
-                setContact(userContact);
-                setAvatar(userContact?.avatar || null);
-                setIsLoading(false);
-            } catch (err) {
-                console.error('Error fetching user contact:', err);
-                setError('Failed to load your profile information. Please try again.');
-                setIsLoading(false);
-            }
-        };
-
-        fetchContact();
-    }, [user?.id]);
-
-    // Set up react-hook-form
     const form = useForm<ProfileFormValues>({
         resolver: zodResolver(formSchema),
         defaultValues: {
@@ -73,47 +47,39 @@ export function ProfileEditor() {
         },
     });
 
-    // Update form values when contact data is loaded
     useEffect(() => {
-        if (contact) {
+        if (contact && !initializedRef.current) {
+            initializedRef.current = true;
             form.reset({
                 firstName: contact.firstName || "",
                 lastName: contact.lastName || "",
             });
+            setAvatar(contact.avatar || null);
         }
     }, [contact, form]);
 
     const navigate = useNavigate();
 
-    // Handle form submission
     const handleSubmit = form.handleSubmit(async (data) => {
         if (!contact) return;
 
         try {
-            setIsLoading(true);
-
-            // Create a proper contact update object
             const updateData = {
                 ...contact,
                 firstName: data.firstName,
-                lastName: data.lastName || "", // Ensure lastName is never undefined
-                avatar: avatar || "" // Ensure avatar is never undefined
+                lastName: data.lastName || "",
+                avatar: avatar || ""
             };
 
-            // Update the contact
             await updateContactMutation.mutateAsync(updateData);
 
-            setError(null);
-            setIsLoading(false);
-
+            setSubmitError(null);
             toast.success('Profile updated successfully');
 
-            // redirect to profile page
-            navigate({to: '/'});
+            await navigate({to: '/'});
         } catch (err) {
             console.error('Error updating profile:', err);
-            setError('Failed to update your profile. Please try again.');
-            setIsLoading(false);
+            setSubmitError('Failed to update your profile. Please try again.');
         }
     });
 
@@ -121,35 +87,33 @@ export function ProfileEditor() {
         return <div className="flex justify-center items-center h-64">Loading your profile...</div>;
     }
 
-    if (error && !contact) {
+    if (fetchError && !contact) {
         return (
             <div className="flex justify-center items-center h-64 text-destructive">
-                {error}
+                Failed to load your profile information. Please try again.
             </div>
         );
     }
 
     return (<>
-            {error && (
+            {submitError && (
                 <div className="mb-4 p-3 bg-destructive/10 border border-destructive/20 text-destructive rounded-md">
-                    {error}
+                    {submitError}
                 </div>
             )}
 
             <Form {...form}>
                 <form onSubmit={handleSubmit} className="space-y-8">
-                    {/* Avatar Section */}
                     <div className="flex justify-center mb-8">
                         <div className="h-32 w-32 relative group">
                             <UserAvatar
                                 name={contact ? `${contact.firstName} ${contact.lastName}` : ""}
                                 email={contact?.email?.[0]}
-                                imageUrl={avatar ?? undefined}
+                                imageUrl={avatar || ""}
                                 className="h-full w-full"
                                 size="lg"
                             />
 
-                            {/* Hidden file input element */}
                             <input
                                 ref={fileInputRef}
                                 type="file"
@@ -158,23 +122,16 @@ export function ProfileEditor() {
                                 onChange={async (e) => {
                                     const file = e.target.files?.[0];
                                     if (file) {
-                                        // Upload the file using the API and track progress
                                         const formData = new FormData();
                                         formData.append('file', file);
 
-                                        // Create upload tracking object with the methods returned by createUpload
                                         const uploadHandler = upload.createUpload(file.name);
 
                                         try {
-                                            // Use the uploadWithProgress helper with authentication
                                             await uploadWithProgress({
                                                 url: getContactsAvatarUploadUrl(user?.id || ''),
                                                 formData,
-                                                headers: {
-                                                    'credentials': 'include'
-                                                },
                                                 onProgress: (progress: number) => {
-                                                    // Update the progress in the UI
                                                     uploadHandler.updateProgress(progress);
                                                 },
                                                 onSuccess: (response: string) => {
@@ -182,7 +139,6 @@ export function ProfileEditor() {
                                                     setAvatar(response);
                                                 },
                                                 onError: (err) => {
-                                                    // Mark upload as failed
                                                     uploadHandler.error();
                                                     console.error('Upload error:', err);
                                                 }
@@ -193,13 +149,11 @@ export function ProfileEditor() {
                                             uploadHandler.error();
                                         }
 
-                                        // Clean up the file input value so the same file can be selected again if needed
                                         e.target.value = '';
                                     }
                                 }}
                             />
 
-                            {/* Camera icon with dropdown */}
                             <DropdownMenu>
                                 <DropdownMenuTrigger asChild>
                                     <Button
@@ -212,14 +166,12 @@ export function ProfileEditor() {
                                 </DropdownMenuTrigger>
                                 <DropdownMenuContent align="end">
                                     <DropdownMenuItem onSelect={() => {
-                                        // Trigger file input click when menu item is selected
                                         fileInputRef.current?.click();
                                     }}>
                                         Upload from files
                                     </DropdownMenuItem>
                                     {avatar && (
                                         <DropdownMenuItem onSelect={() => {
-                                            // Remove avatar
                                             setAvatar(null);
                                         }}>
                                             Remove avatar
@@ -230,9 +182,7 @@ export function ProfileEditor() {
                         </div>
                     </div>
 
-                    {/* Name Fields */}
                     <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
-                        {/* First Name */}
                         <FormField
                             control={form.control}
                             name="firstName"
@@ -247,7 +197,6 @@ export function ProfileEditor() {
                             )}
                         />
 
-                        {/* Last Name */}
                         <FormField
                             control={form.control}
                             name="lastName"
@@ -275,10 +224,9 @@ export function ProfileEditor() {
                             </div>
                         </div>
                     </div>
-                    {/* Save Button */}
                     <div className="flex justify-end">
-                        <Button type="submit" disabled={isLoading} className="w-full sm:w-auto">
-                            {isLoading ? "Saving..." : "Save Changes"}
+                        <Button type="submit" disabled={updateContactMutation.isPending} className="w-full sm:w-auto">
+                            {updateContactMutation.isPending ? "Saving..." : "Save Changes"}
                         </Button>
                     </div>
                 </form>

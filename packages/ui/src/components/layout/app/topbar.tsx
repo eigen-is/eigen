@@ -1,21 +1,5 @@
 import {useEffect, useState} from "react";
-import {
-    Calendar,
-    FileText,
-    HardDrive,
-    LayoutDashboard,
-    LogOut,
-    Mail,
-    Menu,
-    MessageSquare,
-    Palette,
-    Presentation,
-    Settings,
-    Sheet,
-    StickyNote,
-    UserRound,
-    UsersRound
-} from "lucide-react";
+import {LogOut, Menu, Palette, Settings, UserRound,} from "lucide-react";
 import {useRouter} from "@tanstack/react-router";
 import {Button} from "../../button.tsx";
 import {
@@ -112,19 +96,11 @@ function UserDropdown({rootRoute}: { rootRoute: TopbarProps['rootRoute'] }) {
                     <DropdownMenuSeparator/>
                     {apps.map(app => {
                         const isActive = app.name.toLowerCase() === appName.toLowerCase();
+                        const Icon = app.icon;
                         return (
                             <DropdownMenuItem key={app.name} asChild className={isActive ? "bg-muted font-medium" : ""}>
                                 <a href={app.href}>
-                                    {app.icon === 'layout-dashboard' && <LayoutDashboard/>}
-                                    {app.icon === 'mail' && <Mail/>}
-                                    {app.icon === 'calendar' && <Calendar/>}
-                                    {app.icon === 'users' && <UsersRound/>}
-                                    {app.icon === 'hard-drive' && <HardDrive/>}
-                                    {app.icon === 'file-text' && <FileText/>}
-                                    {app.icon === 'sticky-note' && <StickyNote/>}
-                                    {app.icon === 'message-square' && <MessageSquare/>}
-                                    {app.icon === 'presentation' && <Presentation/>}
-                                    {app.icon === 'sheet' && <Sheet/>}
+                                    <Icon/>
                                     {app.name}
                                 </a>
                             </DropdownMenuItem>

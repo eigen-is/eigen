@@ -7,24 +7,14 @@ export const Route = createFileRoute('/_auth/')({
     component: HomeComponent,
 })
 
-interface AppItem {
-    name: string;
-    description: string;
-    className: string;
-    href: string | undefined;
-    icon: string;
-}
-
 function HomeComponent() {
     return (
         <div className="flex flex-col h-full flex-1 overflow-y-auto">
             <div className="flex-1 flex flex-col items-center justify-center w-full px-4 py-8">
-                {/* Welcome Header */}
                 <div className="text-4xl mb-6">
-                    <span className="font-bold text-teal-600">eigen</span>
+                    <span className="font-bold text-primary">eigen</span>
                 </div>
 
-                {/* Main tagline */}
                 <div className="text-md text-center mb-10">
                     <p className="mb-4">
                         Your personal workspace in the cloud.
@@ -33,50 +23,37 @@ function HomeComponent() {
                     </p>
                 </div>
 
-                {/* Apps Grid */}
                 <div className="max-w-4xl mx-auto w-full overflow-auto">
-                    <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-3 gap-3 md:gap-4">
-                        {apps.map((app: AppItem) => (app.name !== 'Space' &&
-                            <Card key={app.name} className="overflow-hidden hover:shadow-md transition-shadow">
-                                <CardContent className="p-0">
-                                    <a href={app.href || '#'} className="block p-3 md:p-6">
-                                        <div className="flex items-center gap-2 md:gap-3">
-                                            <div className={`p-2 rounded-md ${app.className} bg-opacity-10`}>
-                                                <span className={`${app.className}`} aria-hidden="true">
-                                                    <svg
-                                                        xmlns="http://www.w3.org/2000/svg"
-                                                        width="20"
-                                                        height="20"
-                                                        viewBox="0 0 24 24"
-                                                        fill="none"
-                                                        stroke="currentColor"
-                                                        strokeWidth="2"
-                                                        strokeLinecap="round"
-                                                        strokeLinejoin="round"
-                                                        className="md:w-6 md:h-6"
-                                                    >
-                                                        <path d="m9 7-5 5 5 5"></path>
-                                                        <path d="m15 7 5 5-5 5"></path>
-                                                    </svg>
-                                                </span>
+                    <div className="grid grid-cols-2 md:grid-cols-3 gap-3 md:gap-4">
+                        {apps.map((app) => {
+                            if (app.name === 'Space') return null;
+                            const Icon = app.icon;
+                            return (
+                                <Card key={app.name} className="overflow-hidden hover:shadow-md transition-shadow">
+                                    <CardContent className="p-0">
+                                        <a href={app.href || '#'} className="block p-3 md:p-6">
+                                            <div className="flex items-center gap-2 md:gap-3">
+                                                <div className="p-2 rounded-md" style={{color: app.color}}>
+                                                    <Icon className="w-5 h-5 md:w-6 md:h-6"/>
+                                                </div>
+                                                <div>
+                                                    <h3 className="font-medium text-sm md:text-base"
+                                                        style={{color: app.color}}>{app.name}</h3>
+                                                    <p className="text-xs text-muted-foreground hidden md:block">{app.description}</p>
+                                                </div>
                                             </div>
-                                            <div>
-                                                <h3 className={`font-medium ${app.className} text-sm md:text-base`}>{app.name}</h3>
-                                                <p className="text-xs text-muted-foreground hidden md:block">{app.description}</p>
-                                            </div>
-                                        </div>
-                                    </a>
-                                </CardContent>
-                            </Card>
-                        ))}
+                                        </a>
+                                    </CardContent>
+                                </Card>
+                            );
+                        })}
                     </div>
                 </div>
             </div>
 
-            {/* Footer with European initiative */}
             <div className="text-center text-sm text-muted-foreground border-t w-full bg-background">
                 <div className="flex items-center justify-center m-2">
-                    <Shovel className="w-5 h-5 mr-2 text-yellow-600" aria-hidden="true"/>
+                    <Shovel className="w-5 h-5 mr-2" style={{color: 'var(--app-drive-color)'}} aria-hidden="true"/>
                     <span className="font-medium text-md">Under Construction</span>
                 </div>
                 <div className="m-2 text-xs">

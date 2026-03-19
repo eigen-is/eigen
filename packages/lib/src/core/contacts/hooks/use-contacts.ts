@@ -98,6 +98,20 @@ export async function getMeContact(ownerId: string) {
     return data;
 }
 
+export function useMeContact() {
+    const {user} = useAuth();
+    const ownerId = user?.id || '';
+
+    return useQuery({
+        queryKey: [...contactKeys.all, 'me'] as const,
+        queryFn: async () => {
+            const response = await contactsApi({ownerId}).me.get();
+            return response.data ?? null;
+        },
+        enabled: !!ownerId,
+    });
+}
+
 // SSE invalidation functions
 export function invalidateContactCreated(queryClient: QueryClient): void {
     queryClient.invalidateQueries({queryKey: contactKeys.lists()});
