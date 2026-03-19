@@ -3,7 +3,7 @@ import {betterAuth} from "./auth";
 import type {TeamHome} from "../lib/home";
 import {getHome} from "../lib/home";
 import {teamOwnerId} from "@workspace/lib/types";
-import {requireTeamAccess, requireTeamAdmin} from "../lib/core/errors";
+import {requireTeamAccess, requireTeamAdmin} from "../lib/core/access";
 
 async function getTeamHome(teamId: string): Promise<TeamHome> {
     return await getHome(teamOwnerId(teamId)) as TeamHome;

@@ -2,7 +2,7 @@ import {Elysia} from "elysia";
 import {betterAuth} from "./auth.ts";
 import {getHome} from "../lib/home";
 import {getMemberships} from "../lib/user";
-import {requireSelf} from "../lib/core/errors";
+import {requireSelf} from "../lib/core/access";
 
 // Home routes are personal-only (storage size, data export)
 export const homeRouter = new Elysia({name: "home"})
