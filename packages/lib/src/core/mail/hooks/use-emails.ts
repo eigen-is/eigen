@@ -7,10 +7,11 @@ import {invalidateMailboxes} from './use-mailboxes';
 
 export const emailKeys = {
     all: ['emails'] as const,
-    lists: () => [...emailKeys.all, 'list'] as const,
-    list: (mailbox: string) => [...emailKeys.lists(), {mailbox: mailbox.toLowerCase()}] as const,
-    details: () => [...emailKeys.all, 'detail'] as const,
-    detail: (id: string) => [...emailKeys.details(), id] as const,
+    owner: (ownerId: string) => [...emailKeys.all, ownerId] as const,
+    lists: (ownerId: string) => [...emailKeys.owner(ownerId), 'list'] as const,
+    list: (ownerId: string, mailbox: string) => [...emailKeys.lists(ownerId), {mailbox: mailbox.toLowerCase()}] as const,
+    details: (ownerId: string) => [...emailKeys.owner(ownerId), 'detail'] as const,
+    detail: (ownerId: string, id: string) => [...emailKeys.details(ownerId), id] as const,
 };
 
 export function useEmails(mailboxPath: string) {
@@ -18,7 +19,7 @@ export function useEmails(mailboxPath: string) {
     const ownerId = user?.id || '';
 
     return useQuery({
-        queryKey: emailKeys.list(mailboxPath),
+        queryKey: emailKeys.list(ownerId, mailboxPath),
         queryFn: async (): Promise<Email[]> => {
             const response = await mailApi({ownerId}).mailbox({mailboxPath: mailboxPath.toLowerCase()}).get();
             return (response.data || []) as Email[];
@@ -33,7 +34,7 @@ export function useEmail(messageId: string | undefined) {
     const ownerId = user?.id || '';
 
     return useQuery({
-        queryKey: emailKeys.detail(messageId || ''),
+        queryKey: emailKeys.detail(ownerId, messageId || ''),
         queryFn: async () => {
             if (!messageId) return null;
             const response = await mailApi({ownerId}).message({id: messageId}).get();
@@ -53,7 +54,7 @@ export function useEmailById() {
         if (!ownerId) return null;
         try {
             return await queryClient.fetchQuery({
-                queryKey: emailKeys.detail(messageId),
+                queryKey: emailKeys.detail(ownerId, messageId),
                 queryFn: async () => {
                     const response = await mailApi({ownerId}).message({id: messageId}).get();
                     return response.data || null;
@@ -84,11 +85,11 @@ export function useDeleteEmail() {
         },
         onSuccess: (email) => {
             if (email.mailbox === 'Trash') {
-                invalidateMailDeleted(queryClient, email.id, 'Trash');
+                invalidateMailDeleted(queryClient, ownerId, email.id, 'Trash');
             } else {
-                invalidateMailMoved(queryClient, email.id, email.mailbox, 'Trash');
+                invalidateMailMoved(queryClient, ownerId, email.id, email.mailbox, 'Trash');
             }
-            invalidateMailboxes(queryClient);
+            invalidateMailboxes(queryClient, ownerId);
         },
         onError: onMutationError,
     });
@@ -111,8 +112,8 @@ export function useToggleReadEmail() {
             return email;
         },
         onSuccess: (email) => {
-            invalidateMailReadChanged(queryClient, email.id, email.mailbox);
-            invalidateMailboxes(queryClient);
+            invalidateMailReadChanged(queryClient, ownerId, email.id, email.mailbox);
+            invalidateMailboxes(queryClient, ownerId);
         },
         onError: onMutationError,
     });
@@ -134,7 +135,7 @@ export function useToggleFlaggedEmail() {
             if (response.error) throw new AppError(response);
             return email;
         },
-        onSuccess: (email) => invalidateMailFlagsChanged(queryClient, email.id, email.mailbox),
+        onSuccess: (email) => invalidateMailFlagsChanged(queryClient, ownerId, email.id, email.mailbox),
         onError: onMutationError,
     });
 }
@@ -154,8 +155,8 @@ export function useMoveEmail() {
             return email;
         },
         onSuccess: (email, variables) => {
-            invalidateMailMoved(queryClient, email.id, email.mailbox, variables.mailbox);
-            invalidateMailboxes(queryClient);
+            invalidateMailMoved(queryClient, ownerId, email.id, email.mailbox, variables.mailbox);
+            invalidateMailboxes(queryClient, ownerId);
         },
         onError: onMutationError,
     });
@@ -167,35 +168,35 @@ export function useOpenWriteEmailTo() {
     }
 }
 
-// SSE invalidation functions
-export function invalidateMailReceived(queryClient: QueryClient): void {
-    queryClient.invalidateQueries({queryKey: emailKeys.list('inbox')});
+// Invalidation functions (ownerId-scoped, used from mutation onSuccess)
+export function invalidateMailReceived(queryClient: QueryClient, ownerId: string): void {
+    queryClient.invalidateQueries({queryKey: emailKeys.list(ownerId, 'inbox')});
 }
 
-export function invalidateMailDeleted(queryClient: QueryClient, messageId: string, mailbox: string): void {
-    queryClient.removeQueries({queryKey: emailKeys.detail(messageId)});
-    queryClient.invalidateQueries({queryKey: emailKeys.list(mailbox)});
+export function invalidateMailDeleted(queryClient: QueryClient, ownerId: string, messageId: string, mailbox: string): void {
+    queryClient.removeQueries({queryKey: emailKeys.detail(ownerId, messageId)});
+    queryClient.invalidateQueries({queryKey: emailKeys.list(ownerId, mailbox)});
 }
 
-export function invalidateMailMoved(queryClient: QueryClient, messageId: string, fromMailbox: string, toMailbox: string | null | undefined): void {
-    queryClient.invalidateQueries({queryKey: emailKeys.detail(messageId)});
-    queryClient.invalidateQueries({queryKey: emailKeys.list(fromMailbox)});
+export function invalidateMailMoved(queryClient: QueryClient, ownerId: string, messageId: string, fromMailbox: string, toMailbox: string | null | undefined): void {
+    queryClient.invalidateQueries({queryKey: emailKeys.detail(ownerId, messageId)});
+    queryClient.invalidateQueries({queryKey: emailKeys.list(ownerId, fromMailbox)});
     if (toMailbox) {
-        queryClient.invalidateQueries({queryKey: emailKeys.list(toMailbox)});
+        queryClient.invalidateQueries({queryKey: emailKeys.list(ownerId, toMailbox)});
     }
 }
 
-export function invalidateMailReadChanged(queryClient: QueryClient, messageId: string, mailbox: string): void {
-    queryClient.invalidateQueries({queryKey: emailKeys.detail(messageId)});
-    queryClient.invalidateQueries({queryKey: emailKeys.list(mailbox)});
+export function invalidateMailReadChanged(queryClient: QueryClient, ownerId: string, messageId: string, mailbox: string): void {
+    queryClient.invalidateQueries({queryKey: emailKeys.detail(ownerId, messageId)});
+    queryClient.invalidateQueries({queryKey: emailKeys.list(ownerId, mailbox)});
 }
 
-export function invalidateMailFlagsChanged(queryClient: QueryClient, messageId: string, mailbox: string): void {
-    queryClient.invalidateQueries({queryKey: emailKeys.detail(messageId)});
-    queryClient.invalidateQueries({queryKey: emailKeys.list(mailbox)});
+export function invalidateMailFlagsChanged(queryClient: QueryClient, ownerId: string, messageId: string, mailbox: string): void {
+    queryClient.invalidateQueries({queryKey: emailKeys.detail(ownerId, messageId)});
+    queryClient.invalidateQueries({queryKey: emailKeys.list(ownerId, mailbox)});
 }
 
-export function invalidateDraftUpdated(queryClient: QueryClient, messageId: string): void {
-    queryClient.invalidateQueries({queryKey: emailKeys.list('Drafts')});
-    queryClient.invalidateQueries({queryKey: emailKeys.detail(messageId)});
+export function invalidateDraftUpdated(queryClient: QueryClient, ownerId: string, messageId: string): void {
+    queryClient.invalidateQueries({queryKey: emailKeys.list(ownerId, 'Drafts')});
+    queryClient.invalidateQueries({queryKey: emailKeys.detail(ownerId, messageId)});
 }

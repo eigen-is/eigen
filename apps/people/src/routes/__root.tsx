@@ -12,7 +12,7 @@ interface MyRouterContext {
 function PeopleRoot() {
     const {data: config} = usePublicConfig();
     const {data: teams = []} = usePeopleTeams(config?.orgId);
-    const addMember = useAddTeamMember();
+    const addMember = useAddTeamMember(config?.orgId);
     const location = useLocation();
 
     // Check if we're on the teams route with a teamId selected

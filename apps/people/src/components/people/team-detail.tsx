@@ -181,11 +181,11 @@ export function TeamDetail({team, organizationId}: TeamDetailProps) {
     const [draftMailMax, setDraftMailMax] = useState('');
     const [draftMountMax, setDraftMountMax] = useState('');
 
-    const updateTeam = useUpdateTeam();
-    const {data: teamMembers = []} = useTeamMembers(team.id);
+    const updateTeam = useUpdateTeam(organizationId);
+    const {data: teamMembers = []} = useTeamMembers(organizationId, team.id);
     const {data: allMembers = []} = usePeopleMembers(organizationId);
-    const addMember = useAddTeamMember();
-    const removeMember = useRemoveTeamMember();
+    const addMember = useAddTeamMember(organizationId);
+    const removeMember = useRemoveTeamMember(organizationId);
 
     const ownerId = teamOwnerId(team.id);
     const {data: calendars = []} = useCalendars(ownerId);
