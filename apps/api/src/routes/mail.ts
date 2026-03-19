@@ -24,10 +24,12 @@ import {
 
 export const mailRouter = new Elysia({name: "mail"})
     .use(betterAuth)
-    // Public delivery endpoint (no auth, no ownerId) — used by SMTP relay
+    // Local delivery endpoint — called by Postfix (or compatible MTA) to deliver incoming mail.
+    // No auth: Postfix connects from localhost and is trusted.
+    // TODO: add IP allowlist (localhost-only) and rate limiting before exposing to the internet.
     .post("/mail/deliver/:to", async ({params, body}) => await mailboxDeliver(params.to, body as ArrayBuffer), {
         parse: 'arrayBuffer',
-        body: t.Any({maxLength: 25 * 1024 * 1024}),
+        body: t.Any({maxLength: 25 * 1024 * 1024}), // 25 MB per-message size limit
     })
     // All other routes use /:ownerId/ pattern
     .get("/mail/:ownerId/mailboxes", async ({user}) => await mailboxesList(user), {auth: true})
