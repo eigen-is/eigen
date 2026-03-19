@@ -24,7 +24,7 @@ function ResizableImageView({node, updateAttributes, selected, editor}: NodeView
 
     const width = node.attrs.width;
     const alignment = node.attrs.alignment || 'center';
-    const src = resolveMediaUrl(node.attrs.mediaName) || '';
+    const src = resolveMediaUrl(node.attrs.mediaName) || node.attrs.src || '';
     const alt = node.attrs.alt || '';
 
     const getMaxWidth = useCallback(() => {
@@ -122,6 +122,7 @@ export const ResizableImage = Node.create({
     addAttributes() {
         return {
             mediaName: {default: null},
+            src: {default: null},
             alt: {default: null},
             title: {default: null},
             width: {
@@ -139,7 +140,7 @@ export const ResizableImage = Node.create({
     },
 
     parseHTML() {
-        return [{tag: 'img[data-media-name]'}];
+        return [{tag: 'img[data-media-name]'}, {tag: 'img[src]'}];
     },
 
     renderHTML({HTMLAttributes}) {
