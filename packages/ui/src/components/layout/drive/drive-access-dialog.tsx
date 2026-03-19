@@ -17,7 +17,7 @@ export function DriveAccessDialog({
                                   }: DriveAccessDialogProps) {
     const [isSubmitting, setIsSubmitting] = useState(false)
 
-    const updateACL = useUpdateACL(path?.ownerId || '');
+    const updateACL = useUpdateACL(path?.ownerId || '', path?.mountId);
 
     if (!path) {
         return null
