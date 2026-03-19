@@ -127,6 +127,7 @@ type SSEventContacts = SSEventContactNotification | SSEventContactLabelNotificat
 
 // Calendar event data
 export type SSEventCalendarData = {
+    ownerId: string;
     calendarId: string;
     eventId?: string;
     title?: string;

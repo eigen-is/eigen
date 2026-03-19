@@ -24,7 +24,7 @@ export function useSSE() {
         handleMailSSEvent(event, queryClient, userId);
         handleContactsSSEvent(event, queryClient, userId);
         handleChatSSEvent(event, queryClient);
-        handleCalendarSSEvent(event, queryClient);
+        handleCalendarSSEvent(event, queryClient, userId);
         handleSpaceSSEvent(event, queryClient, userId);
         handleTeamSSEvent(event, queryClient);
     }, [queryClient]);

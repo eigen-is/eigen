@@ -58,7 +58,12 @@
       "Bash(done)",
       "Bash(do)",
       "Bash(sed -i '' \"/^import {toast} from [''\"\"]sonner[''\"\"];$/d\" \"$f\")",
-      "Bash(echo \"Cleaned: $f\")"
+      "Bash(echo \"Cleaned: $f\")",
+      "Bash(sed -i '' \"s/buildCalendarEvent\\(SSEventType\\\\.CALENDAR_INVITE_RECEIVED, {/buildCalendarEvent\\(SSEventType.CALENDAR_INVITE_RECEIVED, {ownerId: organizerHome.user.id, /g\" apps/api/src/lib/calendar/invite-propagation.ts)",
+      "Bash(sed -i '' \"s/buildCalendarEvent\\(SSEventType\\\\.CALENDAR_INVITE_CANCELLED, {/buildCalendarEvent\\(SSEventType.CALENDAR_INVITE_CANCELLED, {ownerId: organizerHome.user.id, /g\" apps/api/src/lib/calendar/invite-propagation.ts)",
+      "Bash(sed -i '' \"s/buildCalendarEvent\\(SSEventType\\\\.CALENDAR_INVITE_UPDATED, {/buildCalendarEvent\\(SSEventType.CALENDAR_INVITE_UPDATED, {ownerId: organizerHome.user.id, /g\" apps/api/src/lib/calendar/invite-propagation.ts)",
+      "Bash(sed -i '' \"s/buildCalendarEvent\\(SSEventType\\\\.CALENDAR_INVITE_RSVP, {/buildCalendarEvent\\(SSEventType.CALENDAR_INVITE_RSVP, {ownerId: organizerHome.user.id, /g\" apps/api/src/lib/calendar/invite-propagation.ts)",
+      "Bash(xargs sed:*)"
     ]
   },
   "bypassPermissions": "bypassPermissions"

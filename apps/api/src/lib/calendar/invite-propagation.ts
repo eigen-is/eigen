@@ -55,6 +55,7 @@ export async function propagateInvitation(
                 organizerUserId: organizerHome.user.id,
             });
             targetHome.notify(buildCalendarEvent(SSEventType.CALENDAR_INVITE_RECEIVED, {
+                ownerId: organizerHome.user.id,
                 calendarId: '', eventId: event.id, title: event.title,
             }));
         } catch (error) {
@@ -70,6 +71,7 @@ export async function propagateInvitation(
             const targetHome = await getHome(targetUser.id);
             targetHome.calendar.removeInvitation(event.id, organizerHome.user.id);
             targetHome.notify(buildCalendarEvent(SSEventType.CALENDAR_INVITE_CANCELLED, {
+                ownerId: organizerHome.user.id,
                 calendarId: '', eventId: event.id, title: event.title,
             }));
         } catch (error) {
@@ -97,6 +99,7 @@ export async function propagateInvitation(
                 attendees: newAttendees,
             });
             targetHome.notify(buildCalendarEvent(SSEventType.CALENDAR_INVITE_UPDATED, {
+                ownerId: organizerHome.user.id,
                 calendarId: '', eventId: event.id, title: event.title,
             }));
         } catch (error) {
@@ -119,6 +122,7 @@ export async function propagateRsvp(
         organizerHome.calendar.updateAttendeeStatus(organizerEventId, attendeeEmail, newStatus);
     }
     organizerHome.notify(buildCalendarEvent(SSEventType.CALENDAR_INVITE_RSVP, {
+        ownerId: organizerHome.user.id,
         calendarId: '', eventId: organizerEventId,
     }));
 }
@@ -135,6 +139,7 @@ export async function propagateCancellation(
             const targetHome = await getHome(targetUser.id);
             targetHome.calendar.removeInvitation(event.id, organizerHome.user.id);
             targetHome.notify(buildCalendarEvent(SSEventType.CALENDAR_INVITE_CANCELLED, {
+                ownerId: organizerHome.user.id,
                 calendarId: '', eventId: event.id, title: event.title,
             }));
         } catch (error) {
