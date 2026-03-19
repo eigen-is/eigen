@@ -1,54 +1,90 @@
 # Code Review Fix Progress
 
-Tracking fixes from the [2026-03-19 code review](OVERVIEW.md). Updated as work progresses.
+Tracking all critical issues from the [2026-03-19 code review](OVERVIEW.md). Numbers match the OVERVIEW's "All Critical
+Issues" section. Updated as work progresses.
 
 ---
 
-## Phase 1: Security (8 items)
+## Security and Access Control (#1-#6)
 
-| # | Issue                                            | Status       | Notes                                                                                                                                                                                                                                     |
-|---|--------------------------------------------------|--------------|-------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| 1 | Harden `/mail/deliver/:to`                       | **Deferred** | Postfix delivers locally. 25 MB size limit exists. TODO comment + IP allowlist/rate limit noted for pre-production.                                                                                                                       |
-| 2 | Validate `ownerId` in `getSharedDrive`           | **Partial**  | SharedDrive now blocks owner-only methods (`getMountConfig`, `addMount`, `removeMount`, `receiveACLChange`, shared-path queries). `getSharedDrive` itself still creates SharedDrive for any ownerId — ACL enforcement happens per-method. |
-| 3 | `SharedDrive.movePath` target-parent write check | **Fixed**    | Added `canWrite` check on `targetParentId` in `sharedDrive.ts`.                                                                                                                                                                           |
-| 4 | Chat `deleteMessage` SSE leaks content           | Open         |                                                                                                                                                                                                                                           |
-| 5 | Chat `editMessage` SSE leaks whisper content     | Open         |                                                                                                                                                                                                                                           |
-| 6 | Fix `parseOwnerId` regex `a-Z` → `a-f`           | Open         |                                                                                                                                                                                                                                           |
-| 7 | Gate calendar `access` endpoint                  | Open         | Needs verification — may be false positive.                                                                                                                                                                                               |
-| 8 | Team calendar permission hardcoding              | Open         | Needs verification — may be false positive.                                                                                                                                                                                               |
+| # | Issue                                                      | Status       | Notes                                                                                              |
+|---|------------------------------------------------------------|--------------|----------------------------------------------------------------------------------------------------|
+| 1 | Unauthenticated mail delivery — no rate limiting           | **Deferred** | Postfix delivers locally. 25 MB limit exists. TODO comment added for IP allowlist + rate limiting. |
+| 2 | `getSharedDrive` doesn't validate caller access to ownerId | **Partial**  | SharedDrive blocks owner-only methods. ACL enforcement per-method. `listMounts` still open.        |
+| 3 | `SharedDrive.movePath` skips target-parent write check     | **Fixed**    | Added `canWrite` on `targetParentId`.                                                              |
+| 4 | `ownerId` in mail routes never validated                   | **Fixed**    | `requireSelf` on all mail routes. Spoofing test expects 403.                                       |
+| 5 | Calendar `resolveCalendarForEvents` hardcodes `write`      | Open         | Needs verification — may be false positive.                                                        |
+| 6 | Calendar `access` endpoint leaks shares to free-busy users | Open         | Needs verification — may be false positive.                                                        |
 
-## Phase 2: Data Integrity (7 items)
+## SSE Content Leaks (#7-#8)
+
+| # | Issue                                          | Status | Notes |
+|---|------------------------------------------------|--------|-------|
+| 7 | `deleteMessage` SSE leaks pre-deletion content | Open   |       |
+| 8 | `editMessage` SSE leaks whisper content        | Open   |       |
+
+## Data Integrity and Core Bugs (#9-#13)
 
 | #  | Issue                                         | Status | Notes |
 |----|-----------------------------------------------|--------|-------|
-| 9  | Home cleanup race condition                   | Open   |       |
-| 10 | `Home.destruct()` opens unused databases      | Open   |       |
-| 11 | Await `closeCollabDocument` in unsubscribe    | Open   |       |
-| 12 | `deleteCalendar` orphans attendee invitations | Open   |       |
-| 13 | `readMessage()` stale file size               | Open   |       |
-| 14 | Revision restore Y.Array bug                  | Open   |       |
-| 15 | Unbounded `Y.Array('ops')` in sheets          | Open   |       |
+| 9  | Home cleanup/recreation race condition        | Open   |       |
+| 10 | `Home.destruct()` opens never-used databases  | Open   |       |
+| 11 | `deleteCalendar` orphans attendee invitations | Open   |       |
+| 12 | Missing `await` on `closeCollabDocument`      | Open   |       |
+| 13 | `readMessage()` returns stale file size       | Open   |       |
 
-## Phase 3: Broken Frontend Features (14 items)
+## Frontend — Broken Functionality (#14-#23)
 
-| #  | Issue                                      | Status    | Notes                                                  |
-|----|--------------------------------------------|-----------|--------------------------------------------------------|
-| 16 | Mail toolbar Send sends stale data         | Open      |                                                        |
-| 17 | Missing `await` on mail reply/forward      | Open      |                                                        |
-| 18 | Mail mutations lack error handling         | Open      |                                                        |
-| 19 | `RecurrencePicker` UTC date in edit dialog | Open      |                                                        |
-| 20 | "This and following" delete no-op          | Open      |                                                        |
-| 21 | Calendar query keys missing `ownerId`      | Open      |                                                        |
-| 22 | Mail query keys missing `ownerId`          | Open      |                                                        |
-| 23 | `useCreateChat` ownerId/mountId swap       | Open      |                                                        |
-| 24 | Setup wizard wrong env variable            | Open      |                                                        |
-| 25 | Contacts delete no confirmation            | Open      |                                                        |
-| 26 | Contacts batch operations fire-and-forget  | Open      |                                                        |
-| 27 | 2FA toggle cosmetic                        | **Fixed** | Removed toggle entirely — `verifyTotp` always enables. |
-| 28 | People keyboard nav ID mismatch            | Open      |                                                        |
-| 29 | Team calendar share cleanup on disable     | Open      |                                                        |
+| #  | Issue                                            | Status | Notes |
+|----|--------------------------------------------------|--------|-------|
+| 14 | Mail toolbar Send bypasses form inputs           | Open   |       |
+| 15 | Missing `await` on `handleNewDraftEmail`         | Open   |       |
+| 16 | Mail mutations have no error feedback            | Open   |       |
+| 17 | Contacts delete — no confirmation                | Open   |       |
+| 18 | Contacts batch delete — N parallel mutations     | Open   |       |
+| 19 | Contacts batch label — fire-and-forget           | Open   |       |
+| 20 | Contacts drag-and-drop label — fire-and-forget   | Open   |       |
+| 21 | `RecurrencePicker` UTC date in edit dialog       | Open   |       |
+| 22 | "This and following" delete no-op for exceptions | Open   |       |
+| 23 | Setup wizard wrong env variable                  | Open   |       |
 
-## Phase 4: Error Handling Sweep
+## Frontend — Type Safety and Cache Integrity (#24-#29)
+
+| #  | Issue                                                     | Status | Notes |
+|----|-----------------------------------------------------------|--------|-------|
+| 24 | `useCreateChat` passes `mountId` where `ownerId` expected | Open   |       |
+| 25 | `parseOwnerId` regex accepts non-hex (`a-Z`)              | Open   |       |
+| 26 | Calendar query keys omit `ownerId`                        | Open   |       |
+| 27 | Drive shared route `uid` not validated                    | Open   |       |
+| 28 | `markDirty` forward-reference in MarkdownEditor           | Open   |       |
+| 29 | `handleMovePath` has no error handling                    | Open   |       |
+
+## Frontend — Chat and Collab (#30-#33)
+
+| #  | Issue                                         | Status | Notes |
+|----|-----------------------------------------------|--------|-------|
+| 30 | Missing `error` case in chat command dispatch | Open   |       |
+| 31 | No error handling in `handleSendMessage`      | Open   |       |
+| 32 | Docs comment creation swallows errors         | Open   |       |
+| 33 | Revision restore pushes raw JSON into Y.Array | Open   |       |
+
+## Frontend — Space, People, Sheets (#34-#40)
+
+| #  | Issue                                              | Status    | Notes                                                  |
+|----|----------------------------------------------------|-----------|--------------------------------------------------------|
+| 34 | 2FA toggle is cosmetic                             | **Fixed** | Removed toggle entirely — `verifyTotp` always enables. |
+| 35 | People keyboard nav ID mismatch                    | Open      |                                                        |
+| 36 | Team calendar shares not cleaned up on disable     | Open      |                                                        |
+| 37 | Fortune-sheet stale closure in `onPaste`           | Open      |                                                        |
+| 38 | `deleteSheet` sets `currentSheetId` to `undefined` | Open      |                                                        |
+| 39 | Unbounded `Y.Array('ops')` growth in sheets        | Open      |                                                        |
+| 40 | Mail query keys missing `ownerId`                  | Open      |                                                        |
+
+---
+
+## Systemic Fixes (Phases 4-6 from OVERVIEW)
+
+### Phase 4: Error Handling Sweep
 
 | App      | Status | Notes                                             |
 |----------|--------|---------------------------------------------------|
@@ -59,7 +95,7 @@ Tracking fixes from the [2026-03-19 code review](OVERVIEW.md). Updated as work p
 | Drive    | Open   | `handleMovePath`                                  |
 | Collab   | Open   | Comment creation                                  |
 
-## Phase 5: Query Key and Cache Correctness
+### Phase 5: Query Key and Cache Correctness
 
 | App      | Status | Notes                                           |
 |----------|--------|-------------------------------------------------|
@@ -67,7 +103,7 @@ Tracking fixes from the [2026-03-19 code review](OVERVIEW.md). Updated as work p
 | Mail     | Open   | All mail query keys                             |
 | Contacts | Open   | Contact and label keys                          |
 
-## Phase 6: Ongoing Code Quality
+### Phase 6: Ongoing Code Quality
 
 | Task                           | Status      | Notes                                                                                                                      |
 |--------------------------------|-------------|----------------------------------------------------------------------------------------------------------------------------|
@@ -79,13 +115,12 @@ Tracking fixes from the [2026-03-19 code review](OVERVIEW.md). Updated as work p
 
 ---
 
-## Additional Fixes (not in original review)
-
-Fixes discovered and applied during this session that weren't in the original review:
+## Additional Fixes (discovered during this session)
 
 | Fix                                                                                         | Files                                                             |
 |---------------------------------------------------------------------------------------------|-------------------------------------------------------------------|
 | `useUpdateACL` missing `mountId` — ACL edits on team drives hit wrong mount                 | `drive-access-dialog.tsx`, `use-chat-room.ts`                     |
+| SharedDrive blocks owner-only methods + target-parent write check on `movePath`             | `sharedDrive.ts`                                                  |
 | App icons: shared `icon` component in `apps.ts`, deduplicated from topbar                   | `apps.ts`, `topbar.tsx`, `_auth.index.tsx`                        |
 | App colors: `style={{ color }}` with CSS variables instead of purged Tailwind classes       | `apps.ts`, `_auth.index.tsx`, `index/routes/index.tsx`            |
 | `useMeContact` hook replaces imperative fetch in profile editor                             | `use-contacts.ts`, `profile-editor.tsx`                           |
@@ -96,3 +131,4 @@ Fixes discovered and applied during this session that weren't in the original re
 | Editor route refactored — logic moved to `Drive.getEditableContent` / `saveEditableContent` | `editor.ts`, `drive.ts`, `inline-edit.ts`, `sharedDrive.ts`       |
 | Space routes now include `:ownerId` with `requireSelf`                                      | `space.ts`, `use-space-settings.ts`                               |
 | Spoofing tests updated to expect 403                                                        | `contacts.test.ts`, `mail.test.ts`, `home.test.ts`, `sse.test.ts` |
+| FE Space full cleanup (all C/I/M issues from review)                                        | All files in `apps/space/src/`                                    |
