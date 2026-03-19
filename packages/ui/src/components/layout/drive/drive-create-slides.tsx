@@ -1,4 +1,3 @@
-import {toast} from "sonner";
 import type {DrivePath} from "@workspace/lib/types/drive";
 import {useCreateSlides} from "@workspace/lib/drive";
 import {getSlideUrl} from "@workspace/lib/api";
@@ -29,26 +28,22 @@ export function DriveCreateSlides({
     };
 
     const handleCreateSlides = async (fileName: string) => {
-        try {
-            const newPath = await createSlidesMutation.mutateAsync({
-                parentId: path.id,
-                fileName: fileName,
-            });
-            onOpenChange(false);
+        const newPath = await createSlidesMutation.mutateAsync({
+            parentId: path.id,
+            fileName: fileName,
+        });
+        onOpenChange(false);
 
-            if (onAfterAction) {
-                onAfterAction('create', {name: fileName});
-            }
-
-            if (newPath) {
-                const url = getSlideUrl(path.ownerId, path.mountId, newPath.id);
-                window.open(url, '_blank');
-            }
-
-            if (onSave) onSave(newPath?.id || '');
-        } catch (error: unknown) {
-            toast.error(error instanceof Error ? error.message : "Failed to create slides");
+        if (onAfterAction) {
+            onAfterAction('create', {name: fileName});
         }
+
+        if (newPath) {
+            const url = getSlideUrl(path.ownerId, path.mountId, newPath.id);
+            window.open(url, '_blank');
+        }
+
+        if (onSave) onSave(newPath?.id || '');
     };
 
     return (

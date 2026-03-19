@@ -3,6 +3,7 @@ import {contactsApi} from "@workspace/lib/api.ts";
 import type {Label} from "@workspace/lib/types/label";
 import {contactKeys} from './use-contacts';
 import {useAuth} from '@workspace/lib/auth';
+import {AppError, onMutationError} from '../../api-error';
 
 // Define query keys for reuse
 export const labelKeys = {
@@ -38,9 +39,11 @@ export function useAddLabel() {
     return useMutation({
         mutationFn: async (labelData: Omit<Label, 'id'>) => {
             const response = await contactsApi({ownerId}).labels.post(labelData);
+            if (response.error) throw new AppError(response);
             return response.data;
         },
         onSuccess: () => invalidateLabelCreated(queryClient),
+        onError: onMutationError,
     });
 }
 
@@ -56,9 +59,11 @@ export function useUpdateLabel() {
                 name: updatedLabel.name,
                 color: updatedLabel.color,
             });
+            if (response.error) throw new AppError(response);
             return response.data;
         },
         onSuccess: (_data, variables) => invalidateLabelUpdated(queryClient, variables.id),
+        onError: onMutationError,
     });
 }
 
@@ -71,9 +76,11 @@ export function useDeleteLabel() {
     return useMutation({
         mutationFn: async (labelId: string) => {
             const response = await contactsApi({ownerId}).labels({id: labelId}).delete();
+            if (response.error) throw new AppError(response);
             return response.data;
         },
         onSuccess: (_data, labelId) => invalidateLabelDeleted(queryClient, labelId),
+        onError: onMutationError,
     });
 }
 

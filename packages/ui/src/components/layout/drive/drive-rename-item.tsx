@@ -1,4 +1,3 @@
-import {toast} from "sonner";
 import type {DrivePath} from "@workspace/lib/types/drive";
 import {useRenamePath} from "@workspace/lib/drive";
 import {DriveCreateItemDialog} from "./drive-create-folder-item";
@@ -30,36 +29,32 @@ export function DriveRenameItem({
     };
 
     const handleRename = async (newName: string) => {
-        try {
-            // Extract extension from original name
-            const original = path.name;
-            const dotIdx = original.lastIndexOf('.')
-            let base = newName;
-            let ext = '';
-            // Only append extension for files (not folders)
-            if (path.type !== 'folder' && dotIdx > 0) {
-                ext = original.substring(dotIdx);
-                // Remove any extension the user may have typed
-                if (base.endsWith(ext)) {
-                    base = base.slice(0, -ext.length);
-                }
-                newName = base + ext;
+        // Extract extension from original name
+        const original = path.name;
+        const dotIdx = original.lastIndexOf('.')
+        let base = newName;
+        let ext = '';
+        // Only append extension for files (not folders)
+        if (path.type !== 'folder' && dotIdx > 0) {
+            ext = original.substring(dotIdx);
+            // Remove any extension the user may have typed
+            if (base.endsWith(ext)) {
+                base = base.slice(0, -ext.length);
             }
-            await renamePathMutation.mutateAsync({
-                pathId: path.id,
-                newName,
-            });
-            onOpenChange(false);
-
-            // Call onAfterAction if provided
-            if (onAfterAction) {
-                onAfterAction('rename', {name: newName});
-            }
-
-            if (onSave) onSave(newName || '');
-        } catch (error: unknown) {
-            toast.error(error instanceof Error ? error.message : "Failed to rename");
+            newName = base + ext;
         }
+        await renamePathMutation.mutateAsync({
+            pathId: path.id,
+            newName,
+        });
+        onOpenChange(false);
+
+        // Call onAfterAction if provided
+        if (onAfterAction) {
+            onAfterAction('rename', {name: newName});
+        }
+
+        if (onSave) onSave(newName || '');
     };
 
     // Compute base name (without extension) for defaultValue

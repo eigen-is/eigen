@@ -67,8 +67,12 @@ bun run check          # typecheck + test
   file system paths or HTTP headers (e.g., `Content-Disposition`). Never interpolate raw user input into headers
 - **Use theme tokens, not hardcoded colors** — use `text-muted-foreground`, `bg-muted`, `border` etc. instead of
   `text-gray-500`, `bg-blue-50`. Hardcoded colors break dark mode
-- **Every mutation needs error feedback** — wrap `mutateAsync` in try/catch with `toast.error()`, or use the
-  `onError` callback. Never swallow errors by catching and returning null
+- **Mutation error/success handling lives in hooks, not in apps** — every `useMutation` in
+  `packages/lib/src/core/[domain]/hooks/` must have an `onError` callback using `onMutationError` from `api-error.ts`.
+  Add `onSuccess` toasts only for fire-and-forget operations where the UI doesn't visually reflect the result (e.g.,
+  "Email sent", "Settings saved"). Apps should never add their own `try/catch` + `toast.error()` around mutations.
+  Apps only need `try/catch` when they must do extra work on failure (e.g., reset UI state), and in that case they
+  must NOT show a toast. See [NOTIFICATIONS.md](docs/NOTIFICATIONS.md)
 - **Keep docs up to date** — when a task is fully completed, update relevant docs in `docs/` and this file if the
   change affects architecture patterns, file locations, or critical rules
 
@@ -143,7 +147,7 @@ These patterns have caused bugs across multiple domains:
 ### SSE Pattern
 
 Backend: mutation → `home.notify(buildEvent())` → SSE stream
-Frontend: `useSSE` → domain handler → `queryClient.invalidateQueries()` + toast
+Frontend: `useSSE` → domain handler → `queryClient.invalidateQueries()` (+ toast for curated remote events only)
 
 ### Eigen File Types
 
@@ -206,9 +210,10 @@ Detailed architecture docs in `docs/`:
 | [PREVIEWS.md](docs/PREVIEWS.md)                                 | File preview system, text/image/video previews  |
 | [PUBLIC-API.md](docs/PUBLIC-API.md)                             | Public endpoints, avatar resolution             |
 | [PEOPLE.md](docs/PEOPLE.md)                                     | Org/team management UI                          |
+| [NOTIFICATIONS.md](docs/NOTIFICATIONS.md)                       | Error/success toasts, SSE notification pattern  |
 | [TESTING.md](docs/TESTING.md)                                   | Test setup, patterns, test files                |
 | [DOCKER.md](docs/DOCKER.md)                                     | Docker deployment                               |
-| [IMAP.md](docs/PLAN_IMAP.md)                                         | IMAP/Dovecot Maildir compatibility plan         |
+| [IMAP.md](docs/PLAN_IMAP.md)                                    | IMAP/Dovecot Maildir compatibility plan         |
 
 | [Code Reviews](codereviews/OVERVIEW.md)                         | Full-stack code review findings + fix priorities |
 

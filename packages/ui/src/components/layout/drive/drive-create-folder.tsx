@@ -1,4 +1,3 @@
-import {toast} from "sonner";
 import type {DrivePath} from "@workspace/lib/types/drive";
 import {useCreateFolder} from "@workspace/lib/drive";
 import {DriveCreateItemDialog} from "./drive-create-folder-item";
@@ -28,22 +27,18 @@ export function DriveCreateFolder({
     };
 
     const handleCreateFolder = async (folderName: string) => {
-        try {
-            const newPath = await createFolderMutation.mutateAsync({
-                parentId: path.id,
-                folderName: folderName,
-            });
-            onOpenChange(false);
+        const newPath = await createFolderMutation.mutateAsync({
+            parentId: path.id,
+            folderName: folderName,
+        });
+        onOpenChange(false);
 
-            // Call onAfterAction if provided
-            if (onAfterAction) {
-                onAfterAction('create', {name: folderName});
-            }
-
-            if (onSave) onSave(newPath?.id || '');
-        } catch (error: unknown) {
-            toast.error(error instanceof Error ? error.message : "Failed to create folder");
+        // Call onAfterAction if provided
+        if (onAfterAction) {
+            onAfterAction('create', {name: folderName});
         }
+
+        if (onSave) onSave(newPath?.id || '');
     };
 
     return (

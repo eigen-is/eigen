@@ -48,10 +48,16 @@ Sheets. Incomplete coverage in: Mail, Calendar, Chat, Docs, Drive.
 | Chat     | 0                      | postMessage, uploadFile            |
 | Docs     | 0                      | Image upload, comment creation     |
 | Drive    | Partial                | handleMovePath, handleSave, doSave |
-| People   | Full                   | -- (good example to follow)        |
+| People   | Centralized in hooks   | -- (error handling moved to hooks) |
 
-**Fix**: Project-wide sweep. Add `onError` callbacks to all mutation hooks in `packages/lib`, or ensure every call site
-uses `try/catch` + `toast.error()`. People app is the gold standard.
+**Fix**: Centralize error handling in the hooks layer (`packages/lib/src/core/[domain]/hooks/`). Every `useMutation`
+hook
+gets an `onError` callback that calls `toast.error(getErrorMessage(error))`. A shared `getErrorMessage` utility extracts
+the error message + status code from Eden Treaty errors. Apps must NOT add their own `try/catch` + `toast.error()`
+around
+mutations — that would duplicate toasts (SSE provider already shows success notifications). The People app previously
+had
+error toasts in the app layer; these have been removed in favor of the centralized approach.
 
 **Relevant reviews
 **: [FE_CONTACTS](FE_CONTACTS.md), [FE_MAIL](FE_MAIL.md), [FE_CALENDAR](FE_CALENDAR.md), [FE_CHAT](FE_CHAT.md), [FE_DOCS](FE_DOCS.md), [FE_STICKIES](FE_STICKIES.md), [FE_SLIDES](FE_SLIDES.md), [FE_SHEETS](FE_SHEETS.md), [FE_DRIVE](FE_DRIVE.md), [FE_PACKAGES_LIB](FE_PACKAGES_LIB.md)

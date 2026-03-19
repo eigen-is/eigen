@@ -10,6 +10,7 @@ import type {
     UpdateSharedCalendarInput
 } from '@workspace/lib/types/calendar';
 import {invalidateHomeSize} from '../../home';
+import {AppError, onMutationError} from '../../api-error';
 
 export const calendarKeys = {
     all: ['calendar'] as const,
@@ -41,10 +42,11 @@ export function useCreateCalendar(ownerId: string) {
     return useMutation({
         mutationFn: async (data: {name: string; color: string}) => {
             const response = await calendarApi({ownerId}).calendars.post(data);
-            if (response.error) throw new Error(String(response.error));
+            if (response.error) throw new AppError(response);
             return response.data;
         },
         onSuccess: () => invalidateCalendarCreated(queryClient),
+        onError: onMutationError,
     });
 }
 
@@ -54,10 +56,11 @@ export function useUpdateCalendar(ownerId: string) {
     return useMutation({
         mutationFn: async ({id, ...data}: UpdateCalendarInput) => {
             const response = await calendarApi({ownerId}).calendars({calId: id}).put(data);
-            if (response.error) throw new Error(String(response.error));
+            if (response.error) throw new AppError(response);
             return response.data;
         },
         onSuccess: () => invalidateCalendarUpdated(queryClient),
+        onError: onMutationError,
     });
 }
 
@@ -67,10 +70,11 @@ export function useDeleteCalendar(ownerId: string) {
     return useMutation({
         mutationFn: async (id: string) => {
             const response = await calendarApi({ownerId}).calendars({calId: id}).delete();
-            if (response.error) throw new Error(String(response.error));
+            if (response.error) throw new AppError(response);
             return response.data;
         },
         onSuccess: () => invalidateCalendarDeleted(queryClient),
+        onError: onMutationError,
     });
 }
 
@@ -106,10 +110,11 @@ export function useCreateEvent(ownerId: string) {
     return useMutation({
         mutationFn: async ({calendarId, ...eventData}: CreateEventInput) => {
             const response = await calendarApi({ownerId}).calendars({calId: calendarId}).events.post(eventData);
-            if (response.error) throw new Error(String(response.error));
+            if (response.error) throw new AppError(response);
             return response.data;
         },
         onSuccess: () => invalidateEventCreated(queryClient),
+        onError: onMutationError,
     });
 }
 
@@ -119,10 +124,11 @@ export function useUpdateEvent(ownerId: string) {
     return useMutation({
         mutationFn: async ({calendarId, id, ...data}: UpdateEventInput) => {
             const response = await calendarApi({ownerId}).calendars({calId: calendarId}).events({id}).put(data);
-            if (response.error) throw new Error(String(response.error));
+            if (response.error) throw new AppError(response);
             return response.data;
         },
         onSuccess: () => invalidateEventUpdated(queryClient),
+        onError: onMutationError,
     });
 }
 
@@ -132,10 +138,11 @@ export function useDeleteEvent(ownerId: string) {
     return useMutation({
         mutationFn: async ({calendarId, id}: Pick<UpdateEventInput, 'id' | 'calendarId'>) => {
             const response = await calendarApi({ownerId}).calendars({calId: calendarId}).events({id}).delete();
-            if (response.error) throw new Error(String(response.error));
+            if (response.error) throw new AppError(response);
             return response.data;
         },
         onSuccess: () => invalidateEventDeleted(queryClient),
+        onError: onMutationError,
     });
 }
 
@@ -192,10 +199,11 @@ export function useUpdateSharedCalendar(ownerId: string) {
     return useMutation({
         mutationFn: async ({id, ...data}: UpdateSharedCalendarInput) => {
             const response = await calendarApi({ownerId}).shared({id}).put(data);
-            if (response.error) throw new Error(String(response.error));
+            if (response.error) throw new AppError(response);
             return response.data;
         },
         onSuccess: () => invalidateSharedCalendarUpdated(queryClient),
+        onError: onMutationError,
     });
 }
 
@@ -205,10 +213,11 @@ export function useDeleteSharedCalendar(ownerId: string) {
     return useMutation({
         mutationFn: async (id: string) => {
             const response = await calendarApi({ownerId}).shared({id}).delete();
-            if (response.error) throw new Error(String(response.error));
+            if (response.error) throw new AppError(response);
             return response.data;
         },
         onSuccess: () => invalidateSharedCalendarUpdated(queryClient),
+        onError: onMutationError,
     });
 }
 
@@ -226,10 +235,11 @@ export function useRsvp(ownerId: string) {
         }) => {
             const response = await calendarApi({ownerId}).calendars({calId: calendarId})
                 .events({id: eventId}).rsvp.put({status, scope, recurrenceDate, remove});
-            if (response.error) throw new Error(String(response.error));
+            if (response.error) throw new AppError(response);
             return response.data;
         },
         onSuccess: () => invalidateEventUpdated(queryClient),
+        onError: onMutationError,
     });
 }
 

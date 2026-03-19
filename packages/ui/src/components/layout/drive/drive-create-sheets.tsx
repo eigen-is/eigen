@@ -1,4 +1,3 @@
-import {toast} from "sonner";
 import type {DrivePath} from "@workspace/lib/types/drive";
 import {useCreateSheets} from "@workspace/lib/drive";
 import {getSheetUrl} from "@workspace/lib/api";
@@ -29,26 +28,22 @@ export function DriveCreateSheets({
     };
 
     const handleCreateSheets = async (fileName: string) => {
-        try {
-            const newPath = await createSheetsMutation.mutateAsync({
-                parentId: path.id,
-                fileName: fileName,
-            });
-            onOpenChange(false);
+        const newPath = await createSheetsMutation.mutateAsync({
+            parentId: path.id,
+            fileName: fileName,
+        });
+        onOpenChange(false);
 
-            if (onAfterAction) {
-                onAfterAction('create', {name: fileName});
-            }
-
-            if (newPath) {
-                const url = getSheetUrl(path.ownerId, path.mountId, newPath.id);
-                window.open(url, '_blank');
-            }
-
-            if (onSave) onSave(newPath?.id || '');
-        } catch (error: unknown) {
-            toast.error(error instanceof Error ? error.message : "Failed to create sheets");
+        if (onAfterAction) {
+            onAfterAction('create', {name: fileName});
         }
+
+        if (newPath) {
+            const url = getSheetUrl(path.ownerId, path.mountId, newPath.id);
+            window.open(url, '_blank');
+        }
+
+        if (onSave) onSave(newPath?.id || '');
     };
 
     return (

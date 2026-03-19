@@ -1,5 +1,4 @@
 import {useEffect, useMemo, useState} from 'react';
-import {toast} from 'sonner';
 import {AlignLeft, Calendar, Clock, MapPin, UsersRound} from 'lucide-react';
 import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle} from '@workspace/ui/components/dialog';
 import {Button} from '@workspace/ui/components/button';
@@ -155,8 +154,6 @@ export function CreateEventDialog({open, onOpenChange, defaultDate, defaultCalen
                 data: attendees.length > 0 ? {attendees} : undefined,
             });
             onOpenChange(false);
-        } catch (error) {
-            toast.error('Failed to create event');
         } finally {
             setTimeout(() => setIsLoading(false), 350);
         }

@@ -55,7 +55,10 @@
       "Bash(do echo:*)",
       "Read(//Users/reinder/Documents/GitHub/eigen/**)",
       "Read(//Users/reinder/Documents/GitHub/eigen/codereviews/**)",
-      "Bash(done)"
+      "Bash(done)",
+      "Bash(do)",
+      "Bash(sed -i '' \"/^import {toast} from [''\"\"]sonner[''\"\"];$/d\" \"$f\")",
+      "Bash(echo \"Cleaned: $f\")"
     ]
   },
   "bypassPermissions": "bypassPermissions"

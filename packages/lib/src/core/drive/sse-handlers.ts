@@ -1,6 +1,7 @@
 import type {QueryClient} from '@tanstack/react-query';
 import type {SSEvent} from '@workspace/lib/types/sse';
 import {SSEventType} from '@workspace/lib/types/sse';
+import {toast} from 'sonner';
 import {
     invalidateAclSharedOrUnshared,
     invalidateAclUpdated,
@@ -18,9 +19,15 @@ export function handleDriveSSEvent(event: SSEvent, queryClient: QueryClient): bo
 
     switch (event.type) {
         case SSEventType.DRIVE_ACL_SHARED:
+            invalidateAclSharedOrUnshared(queryClient, path.ownerId);
+            invalidateAclUpdated(queryClient, path.ownerId, path.mountId, path.id, path.parentId);
+            toast('Item shared with you', {description: `"${path.name}" was shared with you`});
+            return true;
+
         case SSEventType.DRIVE_ACL_UNSHARED:
             invalidateAclSharedOrUnshared(queryClient, path.ownerId);
             invalidateAclUpdated(queryClient, path.ownerId, path.mountId, path.id, path.parentId);
+            toast('Item unshared', {description: `"${path.name}" is no longer shared with you`});
             return true;
 
         case SSEventType.DRIVE_FOLDER_CREATED:

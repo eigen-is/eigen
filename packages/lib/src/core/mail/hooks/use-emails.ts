@@ -2,11 +2,13 @@ import {type QueryClient, useMutation, useQuery, useQueryClient} from '@tanstack
 import {getMailComposeUrl, mailApi} from '@workspace/lib/api.ts';
 import type {Email} from "@workspace/lib/types/mail";
 import {useAuth} from '@workspace/lib/auth';
+import {AppError, onMutationError} from '../../api-error';
+import {invalidateMailboxes} from './use-mailboxes';
 
 export const emailKeys = {
     all: ['emails'] as const,
     lists: () => [...emailKeys.all, 'list'] as const,
-    list: (mailbox: string) => [...emailKeys.lists(), {mailbox}] as const,
+    list: (mailbox: string) => [...emailKeys.lists(), {mailbox: mailbox.toLowerCase()}] as const,
     details: () => [...emailKeys.all, 'detail'] as const,
     detail: (id: string) => [...emailKeys.details(), id] as const,
 };
@@ -72,9 +74,11 @@ export function useDeleteEmail() {
     return useMutation({
         mutationFn: async (email: Email) => {
             if (email.mailbox === 'Trash') {
-                await mailApi({ownerId}).message({id: email.id}).delete();
+                const response = await mailApi({ownerId}).message({id: email.id}).delete();
+                if (response.error) throw new AppError(response);
             } else {
-                await mailApi({ownerId}).message["move-to-trash"].put({messageId: email.id});
+                const response = await mailApi({ownerId}).message["move-to-trash"].put({messageId: email.id});
+                if (response.error) throw new AppError(response);
             }
             return email;
         },
@@ -84,7 +88,9 @@ export function useDeleteEmail() {
             } else {
                 invalidateMailMoved(queryClient, email.id, email.mailbox, 'Trash');
             }
+            invalidateMailboxes(queryClient);
         },
+        onError: onMutationError,
     });
 }
 
@@ -98,12 +104,17 @@ export function useToggleReadEmail() {
             if (isRead === email.isRead) {
                 return email;
             }
-            await mailApi({ownerId}).message({id: email.id}).read.put({
+            const response = await mailApi({ownerId}).message({id: email.id}).read.put({
                 read: isRead
             });
+            if (response.error) throw new AppError(response);
             return email;
         },
-        onSuccess: (email) => invalidateMailReadChanged(queryClient, email.id, email.mailbox),
+        onSuccess: (email) => {
+            invalidateMailReadChanged(queryClient, email.id, email.mailbox);
+            invalidateMailboxes(queryClient);
+        },
+        onError: onMutationError,
     });
 }
 
@@ -117,12 +128,14 @@ export function useToggleFlaggedEmail() {
             if (isFlagged === email.isFlagged) {
                 return email;
             }
-            await mailApi({ownerId}).message({id: email.id}).flagged.put({
+            const response = await mailApi({ownerId}).message({id: email.id}).flagged.put({
                 flagged: isFlagged
             });
+            if (response.error) throw new AppError(response);
             return email;
         },
         onSuccess: (email) => invalidateMailFlagsChanged(queryClient, email.id, email.mailbox),
+        onError: onMutationError,
     });
 }
 
@@ -133,13 +146,18 @@ export function useMoveEmail() {
 
     return useMutation({
         mutationFn: async ({email, mailbox}: { email: Email, mailbox: string }) => {
-            await mailApi({ownerId}).message.move.put({
+            const response = await mailApi({ownerId}).message.move.put({
                 messageId: email.id,
                 targetMailbox: mailbox
             });
+            if (response.error) throw new AppError(response);
             return email;
         },
-        onSuccess: (email, variables) => invalidateMailMoved(queryClient, email.id, email.mailbox, variables.mailbox),
+        onSuccess: (email, variables) => {
+            invalidateMailMoved(queryClient, email.id, email.mailbox, variables.mailbox);
+            invalidateMailboxes(queryClient);
+        },
+        onError: onMutationError,
     });
 }
 

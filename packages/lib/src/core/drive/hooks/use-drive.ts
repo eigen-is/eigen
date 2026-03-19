@@ -3,6 +3,8 @@ import type {DriveACL, DrivePath, DriveVisibility} from "@workspace/lib/types/dr
 import {driveApi} from "@workspace/lib/api";
 import {invalidateHomeSize} from '../../home';
 import {DEFAULT_MOUNT_ID} from "@workspace/lib/types/mount";
+import {AppError, onMutationError} from '../../api-error';
+import {toast} from 'sonner';
 
 export {DEFAULT_MOUNT_ID};
 
@@ -60,7 +62,7 @@ export function useFolderContent(ownerId: string, mountId: string, pathId: strin
             if (!pathId) return [];
             const response = await driveApi({ownerId})({mountId}).folder({pathId}).get();
             if (response.error) {
-                throw new Error(String(response.error));
+                throw new AppError(response);
             }
             return response.data || [];
         },
@@ -78,7 +80,7 @@ export function useMimeContent(ownerId: string, mimeType: string) {
             if (!mimeType) return [];
             const response = await driveApi({ownerId}).mime({mimeType}).get();
             if (response.error) {
-                throw new Error(String(response.error));
+                throw new AppError(response);
             }
             return response.data || [];
         },
@@ -108,9 +110,11 @@ export function useCreateFolder(ownerId: string, mountId: string = DEFAULT_MOUNT
     return useMutation({
         mutationFn: async ({parentId, folderName}: { parentId: string, folderName: string }) => {
             const response = await driveApi({ownerId})({mountId}).folder({pathId: parentId}).post({folderName});
+            if (response.error) throw new AppError(response);
             return response.data;
         },
         onSuccess: (_data, variables) => invalidateItemCreated(queryClient, ownerId, mountId, variables.parentId),
+        onError: onMutationError,
     });
 }
 
@@ -120,9 +124,11 @@ export function useUploadFile(ownerId: string, mountId: string = DEFAULT_MOUNT_I
     return useMutation({
         mutationFn: async ({parentId, file}: { parentId: string, file: File }) => {
             const response = await driveApi({ownerId})({mountId}).file({pathId: parentId}).post({file});
+            if (response.error) throw new AppError(response);
             return response.data;
         },
         onSuccess: (_data, variables) => invalidateItemCreated(queryClient, ownerId, mountId, variables.parentId),
+        onError: onMutationError,
     });
 }
 
@@ -132,9 +138,11 @@ export function useUploadFiles(ownerId: string, mountId: string = DEFAULT_MOUNT_
     return useMutation({
         mutationFn: async ({parentId, files}: { parentId: string, files: File[] }) => {
             const response = await driveApi({ownerId})({mountId}).files({pathId: parentId}).post({files});
+            if (response.error) throw new AppError(response);
             return response.data;
         },
         onSuccess: (_data, variables) => invalidateItemCreated(queryClient, ownerId, mountId, variables.parentId),
+        onError: onMutationError,
     });
 }
 
@@ -144,9 +152,11 @@ export function useDeleteFolder(ownerId: string, mountId: string = DEFAULT_MOUNT
     return useMutation({
         mutationFn: async (pathId: string) => {
             const response = await driveApi({ownerId})({mountId}).folder({pathId}).delete();
+            if (response.error) throw new AppError(response);
             return response.data;
         },
         onSuccess: (_data, pathId) => invalidateItemDeleted(queryClient, ownerId, mountId, pathId, parentId, mimeType),
+        onError: onMutationError,
     });
 }
 
@@ -156,9 +166,11 @@ export function useDeleteFile(ownerId: string, mountId: string = DEFAULT_MOUNT_I
     return useMutation({
         mutationFn: async (pathId: string) => {
             const response = await driveApi({ownerId})({mountId}).file({pathId}).delete();
+            if (response.error) throw new AppError(response);
             return response.data;
         },
         onSuccess: (_data, pathId) => invalidateItemDeleted(queryClient, ownerId, mountId, pathId, parentId, mimeType),
+        onError: onMutationError,
     });
 }
 
@@ -167,9 +179,11 @@ export function useMovePath(ownerId: string, mountId: string = DEFAULT_MOUNT_ID,
     return useMutation({
         mutationFn: async ({pathId, targetParentId}: { pathId: string, targetParentId: string }) => {
             const response = await driveApi({ownerId})({mountId}).path({pathId}).move.put({targetParentId});
+            if (response.error) throw new AppError(response);
             return response.data;
         },
         onSuccess: (_data, variables) => invalidatePathMoved(queryClient, ownerId, mountId, variables.pathId, variables.targetParentId, currentParentId),
+        onError: onMutationError,
     });
 }
 
@@ -178,9 +192,11 @@ export function useRenamePath(ownerId: string, mountId: string = DEFAULT_MOUNT_I
     return useMutation({
         mutationFn: async ({pathId, newName}: { pathId: string, newName: string }) => {
             const response = await driveApi({ownerId})({mountId}).path({pathId}).rename.put({newName});
+            if (response.error) throw new AppError(response);
             return response.data;
         },
         onSuccess: (_data, variables) => invalidatePathRenamed(queryClient, ownerId, mountId, variables.pathId, parentId, mimeType),
+        onError: onMutationError,
     });
 }
 
@@ -194,9 +210,14 @@ export function useUpdateACL(ownerId: string, mountId: string = DEFAULT_MOUNT_ID
             visibility?: DriveVisibility
         }) => {
             const response = await driveApi({ownerId})({mountId}).path({pathId: path.id}).acl.put({acl, visibility});
+            if (response.error) throw new AppError(response);
             return response.data;
         },
-        onSuccess: (_data, variables) => invalidateAclUpdated(queryClient, ownerId, variables.path.mountId, variables.path.id, variables.path.parentId),
+        onSuccess: (_data, variables) => {
+            invalidateAclUpdated(queryClient, ownerId, variables.path.mountId, variables.path.id, variables.path.parentId);
+            toast.success('Sharing updated');
+        },
+        onError: onMutationError,
     });
 }
 
@@ -248,9 +269,11 @@ export function useCreateDoc(ownerId: string, mountId: string = DEFAULT_MOUNT_ID
     return useMutation({
         mutationFn: async ({parentId, fileName}: { parentId: string, fileName: string }) => {
             const response = await driveApi({ownerId})({mountId}).folder({pathId: parentId}).doc.post({fileName});
+            if (response.error) throw new AppError(response);
             return response.data;
         },
         onSuccess: (_data, variables) => invalidateItemCreated(queryClient, ownerId, mountId, variables.parentId, 'DRIVE_MIME_DOC'),
+        onError: onMutationError,
     });
 }
 
@@ -260,9 +283,11 @@ export function useCreateStickies(ownerId: string, mountId: string = DEFAULT_MOU
     return useMutation({
         mutationFn: async ({parentId, fileName}: { parentId: string, fileName: string }) => {
             const response = await driveApi({ownerId})({mountId}).folder({pathId: parentId}).stickies.post({fileName});
+            if (response.error) throw new AppError(response);
             return response.data;
         },
         onSuccess: (_data, variables) => invalidateItemCreated(queryClient, ownerId, mountId, variables.parentId, 'DRIVE_MIME_STICKIES'),
+        onError: onMutationError,
     });
 }
 
@@ -272,9 +297,11 @@ export function useCreateSlides(ownerId: string, mountId: string = DEFAULT_MOUNT
     return useMutation({
         mutationFn: async ({parentId, fileName}: { parentId: string, fileName: string }) => {
             const response = await driveApi({ownerId})({mountId}).folder({pathId: parentId}).slides.post({fileName});
+            if (response.error) throw new AppError(response);
             return response.data;
         },
         onSuccess: (_data, variables) => invalidateItemCreated(queryClient, ownerId, mountId, variables.parentId, 'DRIVE_MIME_SLIDES'),
+        onError: onMutationError,
     });
 }
 
@@ -284,9 +311,11 @@ export function useCreateSheets(ownerId: string, mountId: string = DEFAULT_MOUNT
     return useMutation({
         mutationFn: async ({parentId, fileName}: { parentId: string, fileName: string }) => {
             const response = await driveApi({ownerId})({mountId}).folder({pathId: parentId}).sheets.post({fileName});
+            if (response.error) throw new AppError(response);
             return response.data;
         },
         onSuccess: (_data, variables) => invalidateItemCreated(queryClient, ownerId, mountId, variables.parentId, 'DRIVE_MIME_SHEETS'),
+        onError: onMutationError,
     });
 }
 
@@ -312,7 +341,7 @@ export function useTextPreview(ownerId: string, mountId: string, pathId: string,
         queryKey: driveKeys.textPreview(ownerId, mountId, pathId),
         queryFn: async () => {
             const response = await driveApi({ownerId})({mountId}).file({pathId})['text-preview'].get();
-            if (response.error) throw new Error(String(response.error));
+            if (response.error) throw new AppError(response);
             return response.data as { body: string, mode: string } | null;
         },
         enabled: enabled && !!pathId && !!ownerId && !!mountId,

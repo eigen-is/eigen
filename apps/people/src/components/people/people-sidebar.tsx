@@ -14,7 +14,7 @@ import {Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle} from '@w
 import {Input} from '@workspace/ui/components/input';
 import {useCreateTeam} from '@workspace/lib/people';
 import {usePublicConfig} from '@workspace/lib/public';
-import {toast} from 'sonner';
+
 
 interface PeopleSidebarProps {
     condensed?: boolean;
@@ -39,14 +39,9 @@ export function PeopleSidebar({
     const handleCreate = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!newTeamName.trim()) return;
-        try {
-            await createTeam.mutateAsync(newTeamName.trim());
-            toast.success(`Team "${newTeamName.trim()}" created`);
-            setNewTeamName('');
-            setShowCreate(false);
-        } catch (error) {
-            toast.error(error instanceof Error ? error.message : 'Failed to create team');
-        }
+        await createTeam.mutateAsync(newTeamName.trim());
+        setNewTeamName('');
+        setShowCreate(false);
     };
 
     return (

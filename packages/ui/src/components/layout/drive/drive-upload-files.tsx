@@ -1,5 +1,4 @@
 import React, {useEffect, useRef} from 'react';
-import {toast} from "sonner";
 import type {DrivePath} from "@workspace/lib/types/drive";
 import {useUpload} from "../../layout/upload-provider/upload-provider";
 import {uploadWithProgress} from "../upload-provider/upload-with-progress";
@@ -113,15 +112,11 @@ export function DriveUploadFiles({
                     // Mark upload as failed
                     uploadHandler.error();
 
-                    // Show error message
-                    toast.error(`Failed to upload ${multipleFiles ? 'files' : `file "${name}"`}`);
-
                     return {success: false, fileName: name, error: err};
                 }
             });
         } catch (err: unknown) {
             uploadHandler.error();
-            toast.error(`Upload failed: ${err instanceof Error ? err.message : 'Unknown error'}`);
         }
     };
 

@@ -1,6 +1,8 @@
 import {type QueryClient, useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {settingsApi} from '@workspace/lib/api';
 import type {ServerSettings} from '@workspace/lib/types/settings';
+import {AppError, onMutationError} from '../../api-error';
+import {toast} from 'sonner';
 
 export const settingsKeys = {
     all: ['settings'] as const,
@@ -24,10 +26,14 @@ export function useUpdateServerSettings() {
     return useMutation({
         mutationFn: async (body: Partial<ServerSettings>) => {
             const res = await settingsApi.server.put(body);
-            if (res.error) throw new Error(String(res.error));
+            if (res.error) throw new AppError(res);
             return res.data as ServerSettings;
         },
-        onSuccess: () => invalidateServerSettings(queryClient),
+        onSuccess: () => {
+            invalidateServerSettings(queryClient);
+            toast.success('Server settings saved');
+        },
+        onError: onMutationError,
     });
 }
 

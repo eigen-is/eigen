@@ -1,6 +1,7 @@
 import type {QueryClient} from '@tanstack/react-query';
 import type {SSEvent} from '@workspace/lib/types/sse';
 import {SSEventType} from '@workspace/lib/types/sse';
+import {toast} from 'sonner';
 import {
     invalidateDraftUpdated,
     invalidateMailDeleted,
@@ -26,6 +27,7 @@ export function handleMailSSEvent(event: SSEvent, queryClient: QueryClient): boo
             invalidateMailReceived(queryClient);
             invalidateMailboxes(queryClient);
             invalidateHomeSize(queryClient);
+            if (mail.fromShort) toast('New email', {description: `From ${mail.fromShort}: ${mail.subject ?? ''}`});
             return true;
 
         case SSEventType.MAIL_DELETED:

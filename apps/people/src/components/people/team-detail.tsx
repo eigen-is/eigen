@@ -31,7 +31,7 @@ import {useCheckS3Connection, useServerSettings} from '@workspace/lib/settings';
 import {mapStorageType, type MountSettings} from '@workspace/lib/types/settings';
 import {teamOwnerId} from '@workspace/lib/types';
 import {useNavigate} from '@tanstack/react-router';
-import {toast} from 'sonner';
+
 import type {OrgMember, OrgTeam} from '@workspace/lib/types/people';
 
 type TeamDetailToolbarProps = {
@@ -45,13 +45,8 @@ export function TeamDetailToolbar({team, organizationId}: TeamDetailToolbarProps
     const navigate = useNavigate();
 
     const handleRemove = async () => {
-        try {
-            await removeTeam.mutateAsync(team.id);
-            toast.success(`Team "${team.name}" deleted`);
-            navigate({to: '/teams', search: {}});
-        } catch (error) {
-            toast.error(error instanceof Error ? error.message : 'Failed to delete team');
-        }
+        await removeTeam.mutateAsync(team.id);
+        navigate({to: '/teams', search: {}});
     };
 
     return (
@@ -235,75 +230,49 @@ export function TeamDetail({team, organizationId}: TeamDetailProps) {
     };
 
     const handleSaveSettings = async () => {
-        try {
-            if (draftName.trim() && draftName.trim() !== team.name) {
-                await updateTeam.mutateAsync({teamId: team.id, name: draftName.trim()});
-            }
-            await updateSettings.mutateAsync({
-                calendar: {enabled: draftCalEnabled},
-                memberOverrides: {
-                    mailAndContactsMaxMB: draftMailMax ? Number(draftMailMax) : undefined,
-                    defaultMountMaxSizeMB: draftMountMax ? Number(draftMountMax) : undefined,
-                },
-            });
-            if (defaultCal && draftCalEnabled) {
-                const existingShares = (defaultCal.shares || []).filter(s => s.targetId !== teamTarget);
-                const shares = draftCalPermission === 'read'
-                    ? (existingShares.length > 0 ? existingShares : null)
-                    : [...existingShares, {targetId: teamTarget, permission: draftCalPermission as 'free-busy' | 'write'}];
-                await updateCalendar.mutateAsync({id: defaultCal.id, shares});
-            }
-            toast.success('Team settings saved');
-            setShowSettingsForm(false);
-        } catch (error) {
-            toast.error(error instanceof Error ? error.message : 'Failed to save settings');
+        if (draftName.trim() && draftName.trim() !== team.name) {
+            await updateTeam.mutateAsync({teamId: team.id, name: draftName.trim()});
         }
+        await updateSettings.mutateAsync({
+            calendar: {enabled: draftCalEnabled},
+            memberOverrides: {
+                mailAndContactsMaxMB: draftMailMax ? Number(draftMailMax) : undefined,
+                defaultMountMaxSizeMB: draftMountMax ? Number(draftMountMax) : undefined,
+            },
+        });
+        if (defaultCal && draftCalEnabled) {
+            const existingShares = (defaultCal.shares || []).filter(s => s.targetId !== teamTarget);
+            const shares = draftCalPermission === 'read'
+                ? (existingShares.length > 0 ? existingShares : null)
+                : [...existingShares, {targetId: teamTarget, permission: draftCalPermission as 'free-busy' | 'write'}];
+            await updateCalendar.mutateAsync({id: defaultCal.id, shares});
+        }
+        setShowSettingsForm(false);
     };
 
     const handleAddMount = async (values: MountFormValues) => {
-        try {
-            await addMount.mutateAsync({
-                name: values.name,
-                storageType: values.storageType,
-                maxSizeMB: values.maxSizeMB,
-            });
-            toast.success(`Mount "${values.name}" created`);
-        } catch (err) {
-            toast.error(err instanceof Error ? err.message : 'Failed to add mount');
-        }
+        await addMount.mutateAsync({
+            name: values.name,
+            storageType: values.storageType,
+            maxSizeMB: values.maxSizeMB,
+        });
     };
 
     const handleEditMount = async (values: MountFormValues) => {
         if (!editingMount) return;
-        try {
-            await updateMount.mutateAsync({
-                mountId: editingMount.id,
-                maxSizeMB: values.maxSizeMB,
-                name: values.name,
-            });
-            toast.success('Mount updated');
-        } catch (err) {
-            toast.error(err instanceof Error ? err.message : 'Failed to update mount');
-        }
+        await updateMount.mutateAsync({
+            mountId: editingMount.id,
+            maxSizeMB: values.maxSizeMB,
+            name: values.name,
+        });
     };
 
     const handleAddMember = async (userId: string) => {
-        try {
-            await addMember.mutateAsync({teamId: team.id, userId});
-            const member = allMembers.find(m => m.userId === userId);
-            toast.success(`${member?.name ?? 'Member'} added to team`);
-        } catch (error) {
-            toast.error(error instanceof Error ? error.message : 'Failed to add member');
-        }
+        await addMember.mutateAsync({teamId: team.id, userId});
     };
 
     const handleRemoveMember = async (userId: string) => {
-        try {
-            await removeMember.mutateAsync({teamId: team.id, userId});
-            toast.success('Member removed from team');
-        } catch (error) {
-            toast.error(error instanceof Error ? error.message : 'Failed to remove member');
-        }
+        await removeMember.mutateAsync({teamId: team.id, userId});
     };
 
     const handleS3Check = (config: Parameters<NonNullable<MountFormProps['onS3Check']>>[0]) =>
@@ -449,12 +418,7 @@ export function TeamDetail({team, organizationId}: TeamDetailProps) {
                                 <Switch
                                     checked={mount.enabled}
                                     onCheckedChange={async (enabled) => {
-                                        try {
-                                            await updateMount.mutateAsync({mountId: id, enabled});
-                                            toast.success(enabled ? 'Mount enabled' : 'Mount disabled');
-                                        } catch (err) {
-                                            toast.error(err instanceof Error ? err.message : 'Failed to update mount');
-                                        }
+                                        await updateMount.mutateAsync({mountId: id, enabled});
                                     }}
                                 />
                             </div>

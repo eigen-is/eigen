@@ -3,6 +3,7 @@ import {contactsApi} from '@workspace/lib/api.ts';
 import {type Contact} from '@workspace/lib/types/contact';
 import {invalidateHomeSize} from '../../home';
 import {useAuth} from '@workspace/lib/auth';
+import {AppError, onMutationError} from '../../api-error';
 
 // Query keys for contacts
 export const contactKeys = {
@@ -55,10 +56,11 @@ export function useAddContact() {
     return useMutation({
         mutationFn: async (newContact: Omit<Contact, 'id'>) => {
             const response = await contactsApi({ownerId}).contacts.post(newContact);
-            if (response.error) throw new Error(String(response.error));
+            if (response.error) throw new AppError(response);
             return response.data;
         },
         onSuccess: () => invalidateContactCreated(queryClient),
+        onError: onMutationError,
     });
 }
 
@@ -71,10 +73,11 @@ export function useUpdateContact() {
     return useMutation({
         mutationFn: async ({id, ...data}: Contact) => {
             const response = await contactsApi({ownerId}).contacts({id}).put(data);
-            if (response.error) throw new Error(String(response.error));
+            if (response.error) throw new AppError(response);
             return response.data;
         },
         onSuccess: (_data, variables) => invalidateContactUpdated(queryClient, variables.id),
+        onError: onMutationError,
     });
 }
 
@@ -87,10 +90,11 @@ export function useDeleteContact() {
     return useMutation({
         mutationFn: async (id: string) => {
             const response = await contactsApi({ownerId}).contacts({id}).delete();
-            if (response.error) throw new Error(String(response.error));
+            if (response.error) throw new AppError(response);
             return response.data;
         },
         onSuccess: (_data, id) => invalidateContactDeleted(queryClient, id),
+        onError: onMutationError,
     });
 }
 
