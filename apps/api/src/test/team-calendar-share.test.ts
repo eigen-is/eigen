@@ -275,3 +275,148 @@ describe('Team Calendar Share (push to existing members)', () => {
         expect(found).toBeDefined();
     });
 });
+
+describe('Regression: Team calendar permission enforcement', () => {
+    let ctx: Awaited<ReturnType<typeof getTestContext>>;
+    let orgId: string;
+    let permTeamId: string;
+    let permTeamCalId: string;
+
+    beforeAll(async () => {
+        ctx = await getTestContext();
+        const config = getServerConfig();
+        orgId = config!.orgId;
+
+        await authedRequest(ctx.alice.user.sessionToken,
+            '/auth/organization/set-active', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({organizationId: orgId}),
+            });
+
+        // Create a dedicated team for permission tests
+        const teamRes = await authedRequest(ctx.alice.user.sessionToken,
+            '/auth/organization/create-team', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    name: 'Permission Enforcement Team',
+                    organizationId: orgId,
+                }),
+            });
+        const team = await teamRes.json() as any;
+        permTeamId = team.id;
+
+        // Add Bob to the team
+        await authedRequest(ctx.alice.user.sessionToken,
+            '/auth/organization/add-team-member', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({teamId: permTeamId, userId: ctx.bob.user.id}),
+            });
+
+        // Get the team's default calendar
+        const teamCalRes = await authedRequest(ctx.bob.user.sessionToken,
+            `/calendar/team_${permTeamId}/calendars`);
+        const teamCalendars = await teamCalRes.json() as any[];
+        permTeamCalId = teamCalendars[0].id;
+    });
+
+    test('team calendar defaults to read permission for members', async () => {
+        const sharedRes = await authedRequest(ctx.bob.user.sessionToken,
+            `/calendar/${ctx.bob.user.id}/shared`);
+        const shared = await sharedRes.json() as any[];
+        const teamCal = shared.find((s: any) =>
+            s.ownerUserId === `team_${permTeamId}` && s.calendarId === permTeamCalId);
+        expect(teamCal).toBeDefined();
+        expect(teamCal.permission).toBe('read');
+    });
+
+    test('Bob with read permission can read events', async () => {
+        const now = Math.floor(Date.now() / 1000);
+        const eventsRes = await authedRequest(ctx.bob.user.sessionToken,
+            `/calendar/team_${permTeamId}/calendars/${permTeamCalId}/event-range/${now - 86400}/${now + 86400}`);
+        expect(eventsRes.status).toBe(200);
+    });
+
+    test('Bob with read permission cannot create events', async () => {
+        const now = Math.floor(Date.now() / 1000);
+        const createRes = await authedRequest(ctx.bob.user.sessionToken,
+            `/calendar/team_${permTeamId}/calendars/${permTeamCalId}/events`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    title: 'Should Fail',
+                    startTime: now,
+                    endTime: now + 3600,
+                    allDay: false,
+                }),
+            });
+        expect(createRes.status).toBe(403);
+    });
+
+    test('upgrading to write permission allows event creation', async () => {
+        // Set write permission on the team calendar
+        await authedRequest(ctx.bob.user.sessionToken,
+            `/calendar/team_${permTeamId}/calendars/${permTeamCalId}`, {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    shares: [{targetId: `team_${permTeamId}`, permission: 'write'}],
+                }),
+            });
+
+        // Bob should now have write permission in shared list
+        const sharedRes = await authedRequest(ctx.bob.user.sessionToken,
+            `/calendar/${ctx.bob.user.id}/shared`);
+        const shared = await sharedRes.json() as any[];
+        const teamCal = shared.find((s: any) =>
+            s.ownerUserId === `team_${permTeamId}` && s.calendarId === permTeamCalId);
+        expect(teamCal).toBeDefined();
+        expect(teamCal.permission).toBe('write');
+
+        // Bob can now create events
+        const now = Math.floor(Date.now() / 1000);
+        const createRes = await authedRequest(ctx.bob.user.sessionToken,
+            `/calendar/team_${permTeamId}/calendars/${permTeamCalId}/events`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    title: 'Permitted Event',
+                    startTime: now,
+                    endTime: now + 3600,
+                    allDay: false,
+                }),
+            });
+        expect(createRes.status).toBe(200);
+        const event = await createRes.json() as any;
+        expect(event.title).toBe('Permitted Event');
+    });
+
+    test('downgrading back to read revokes write access', async () => {
+        // Set back to read permission
+        await authedRequest(ctx.bob.user.sessionToken,
+            `/calendar/team_${permTeamId}/calendars/${permTeamCalId}`, {
+                method: 'PUT',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    shares: [{targetId: `team_${permTeamId}`, permission: 'read'}],
+                }),
+            });
+
+        // Bob should be denied event creation again
+        const now = Math.floor(Date.now() / 1000);
+        const createRes = await authedRequest(ctx.bob.user.sessionToken,
+            `/calendar/team_${permTeamId}/calendars/${permTeamCalId}/events`, {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    title: 'Should Fail Again',
+                    startTime: now,
+                    endTime: now + 3600,
+                    allDay: false,
+                }),
+            });
+        expect(createRes.status).toBe(403);
+    });
+});
