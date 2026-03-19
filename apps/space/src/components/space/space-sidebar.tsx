@@ -5,7 +5,7 @@ import {SidebarItem, StorageUsage} from "@workspace/ui";
 import {Separator} from '@workspace/ui/components/separator';
 
 
-interface SpaceSidebarProps {
+type SpaceSidebarProps = {
     condensed?: boolean;
     onClose?: () => void;
     isMobile?: boolean;

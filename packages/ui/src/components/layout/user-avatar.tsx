@@ -40,7 +40,7 @@ export function UserAvatar({
     const contact = !isLoadingContacts && email && dataContacts ? dataContacts.find(c => c.email.includes(email)) : null;
     const publicUser = !isLoadingPublic ? dataPublic : null;
 
-    const url = imageUrl || (contact?.avatar) || (publicUser?.avatar) || null;
+    const url = imageUrl !== undefined ? (imageUrl || null) : (contact?.avatar) || (publicUser?.avatar) || null;
     const displayName = (parsed.type === 'team' ? teams?.find((t) => t.id === parsed.id)?.name : '') || (contact && `${contact.firstName} ${contact.lastName}`.trim()) || (publicUser && publicUser.name?.trim()) || name || email || "";
     const avatarSrc = url
         ? `${API_HOST}/${url}`

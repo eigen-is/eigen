@@ -1,5 +1,3 @@
-"use client"
-
 import * as React from "react"
 import {zodResolver} from "@hookform/resolvers/zod"
 import {useForm} from "react-hook-form"
@@ -11,39 +9,12 @@ import {Input} from "@workspace/ui/components/input"
 import {Progress} from "@workspace/ui/components/progress"
 import {InfoIcon} from "lucide-react"
 import {Label} from "@workspace/ui/components/label"
-
-/**
- * Validates password strength on a scale from 0 to 1.
- * Assumes password is always 8+ characters.
- * @param password The password to validate
- * @returns A score between 0 and 1 representing password strength
- */
-function validatePasswordStrength(password: string): number {
-    let score = 0.4 * Math.min((password.length - 1) / 8, 1.0);
-
-    // Check for uppercase letters
-    if (/[A-Z]/.test(password)) score += 0.1;
-
-    // Check for lowercase letters
-    if (/[a-z]/.test(password)) score += 0.1;
-
-    // Check for numbers
-    if (/\d/.test(password)) score += 0.1;
-
-    // Check for special characters
-    if (/[^A-Za-z0-9]/.test(password)) score += 0.1;
-
-    // Bonus for length beyond 8
-    score += Math.min(1, Math.max(password.length - 8, 0) * 0.03);
-
-    // Ensure score is between 0 and 1
-    return Math.min(1, Math.max(0, score));
-}
+import {validatePasswordStrength} from "@workspace/lib/validation"
 
 const getPasswordStrengthColor = (strength: number): string => {
-    if (strength < 0.4) return "bg-red-500";
-    if (strength < 0.7) return "bg-yellow-500";
-    return "bg-green-500";
+    if (strength < 0.4) return "bg-destructive";
+    if (strength < 0.7) return "bg-chart-4";
+    return "bg-chart-2";
 };
 
 const getPasswordStrengthLabel = (strength: number): string => {
@@ -52,7 +23,6 @@ const getPasswordStrengthLabel = (strength: number): string => {
     return "Strong";
 };
 
-// Define form schema with validation
 const formSchema = z.object({
     currentPassword: z.string().min(1, "Current password is required"),
     newPassword: z.string().min(8, "Password must be at least 8 characters"),
@@ -72,7 +42,6 @@ export function ChangePassword({onPasswordChange}: {
 }) {
     const [passwordStrength, setPasswordStrength] = React.useState(0);
 
-    // Initialize form
     const form = useForm<z.infer<typeof formSchema>>({
         resolver: zodResolver(formSchema),
         defaultValues: {
@@ -83,14 +52,12 @@ export function ChangePassword({onPasswordChange}: {
         },
     });
 
-    // Handle password change to update strength meter
     const handlePasswordChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const password = e.target.value;
         setPasswordStrength(validatePasswordStrength(password));
         form.setValue("newPassword", password);
     };
 
-    // Handle form submission
     async function onSubmit(values: z.infer<typeof formSchema>) {
         await onPasswordChange({
             currentPassword: values.currentPassword,

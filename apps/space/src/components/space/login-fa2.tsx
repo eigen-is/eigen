@@ -1,5 +1,3 @@
-"use client"
-
 import * as React from "react"
 import {zodResolver} from "@hookform/resolvers/zod"
 import {useForm} from "react-hook-form"
@@ -56,10 +54,7 @@ export function LoginFa2Form() {
             if (result.data) {
                 toast.success("Verification successful")
 
-                // Wait a short time before navigating to give the toast time to show
-                await new Promise(resolve => setTimeout(resolve, 350))
-
-                // TODO: Reinder, this might need a different approach
+                // Full reload needed because AuthProvider doesn't expose a session refresh method
                 window.location.reload();
             } else {
                 toast.error(result.error?.message || "Invalid verification code")

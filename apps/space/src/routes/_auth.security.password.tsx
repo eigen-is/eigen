@@ -13,22 +13,14 @@ function PasswordComponent() {
         const result = await authClient.changePassword(data);
         if (result.data) {
             toast.success('Password changed successfully');
-
-            // wait 350ms
-            await new Promise(resolve => setTimeout(resolve, 350));
-
-            // navigate to /
-            navigate({
-                to: '/',
-            });
-
+            await navigate({to: '/'});
         } else {
             toast.error(result.error?.message ?? 'Failed to change password');
         }
     }
 
     return (
-        <div className="flex flex-col min-h-screen m-8">
+        <div className="flex flex-col m-8">
             <div className="w-full max-w-3xl">
                 <h1 className="text-2xl font-semibold mb-6">Change Password</h1>
                 <ChangePassword onPasswordChange={handlePasswordChange}/>

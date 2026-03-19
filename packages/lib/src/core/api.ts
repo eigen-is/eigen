@@ -38,6 +38,7 @@ export const STICKIES_APP_URL = import.meta.env.VITE_APP_STICKIES_URL as string;
 export const CHAT_APP_URL = import.meta.env.VITE_APP_CHAT_URL as string;
 export const SLIDES_APP_URL = import.meta.env.VITE_APP_SLIDES_URL as string;
 export const SHEETS_APP_URL = import.meta.env.VITE_APP_SHEETS_URL as string;
+export const CALENDAR_APP_URL = import.meta.env.VITE_APP_CALENDAR_URL as string;
 export const PEOPLE_APP_URL = import.meta.env.VITE_APP_PEOPLE_URL as string;
 
 const trimTrailingSlash = (url: string) => url.replace(/\/+$/, '');
@@ -57,6 +58,7 @@ export const getStickiesAppUrl = (path?: string) => joinAppUrl(STICKIES_APP_URL,
 export const getChatAppUrl = (path?: string) => joinAppUrl(CHAT_APP_URL, path);
 export const getSlidesAppUrl = (path?: string) => joinAppUrl(SLIDES_APP_URL, path);
 export const getSheetsAppUrl = (path?: string) => joinAppUrl(SHEETS_APP_URL, path);
+export const getCalendarAppUrl = (path?: string) => joinAppUrl(CALENDAR_APP_URL, path);
 
 export const getChatRoomUrl = (ownerId: string, mountId: string, chatId: string) =>
     getChatAppUrl(`${ownerId}/${mountId}/${chatId}`);
