@@ -5,9 +5,9 @@ import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '@wo
 import {Trash2} from 'lucide-react';
 import {DeleteDialog} from '@workspace/ui/components/layout/delete/delete-dialog';
 import {TooltipButton} from '@workspace/ui/components/layout/toolbar/tooltip-button.tsx';
-import {useUpdateMemberRole, useRemoveMember} from '@workspace/lib/people';
+import {useRemoveMember, useUpdateMemberRole} from '@workspace/lib/people';
 import {useNavigate} from '@tanstack/react-router';
-import {toast} from 'sonner';
+
 import type {OrgMember} from '@workspace/lib/types/people';
 
 interface MemberDetailToolbarProps {
@@ -21,13 +21,8 @@ export function MemberDetailToolbar({member, organizationId}: MemberDetailToolba
     const navigate = useNavigate();
 
     const handleRemove = async () => {
-        try {
-            await removeMember.mutateAsync(member.id);
-            toast.success(`${member.name} removed from organization`);
-            navigate({to: '/members', search: {}});
-        } catch (error) {
-            toast.error(error instanceof Error ? error.message : 'Failed to remove member');
-        }
+        await removeMember.mutateAsync(member.id);
+        navigate({to: '/members', search: {}});
     };
 
     if (member.role === 'owner') return null;
@@ -55,12 +50,7 @@ export function MemberDetail({member, organizationId}: MemberDetailProps) {
     const updateRole = useUpdateMemberRole(organizationId);
 
     const handleRoleChange = async (newRole: 'admin' | 'member' | 'owner') => {
-        try {
-            await updateRole.mutateAsync({memberId: member.id, role: newRole});
-            toast.success(`Role updated to ${newRole}`);
-        } catch (error) {
-            toast.error(error instanceof Error ? error.message : 'Failed to update role');
-        }
+        await updateRole.mutateAsync({memberId: member.id, role: newRole});
     };
 
     return (

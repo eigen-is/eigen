@@ -1,5 +1,4 @@
 import {createContext, ReactNode, useContext} from 'react';
-import {toast} from 'sonner';
 import type {Label} from '@workspace/lib/types/label';
 
 // Define the shape of our context
@@ -43,38 +42,20 @@ export function LabelProvider({
     // and passed to the provider via props
 
     const addLabel = async (labelData: Omit<Label, 'id'>) => {
-        try {
-            if (onAddLabel) {
-                await onAddLabel(labelData);
-            }
-            toast.success(`Label "${labelData.name}" added`);
-        } catch (error) {
-            console.error('Failed to add label:', error);
-            toast.error('Failed to add label');
+        if (onAddLabel) {
+            await onAddLabel(labelData);
         }
     };
 
     const updateLabel = async (label: Label) => {
-        try {
-            if (onUpdateLabel) {
-                await onUpdateLabel(label);
-            }
-            toast.success(`Label "${label.name}" updated`);
-        } catch (error) {
-            console.error('Failed to update label:', error);
-            toast.error('Failed to update label');
+        if (onUpdateLabel) {
+            await onUpdateLabel(label);
         }
     };
 
     const deleteLabel = async (labelId: string) => {
-        try {
-            if (onDeleteLabel) {
-                await onDeleteLabel(labelId);
-            }
-            toast.success(`Label deleted`);
-        } catch (error) {
-            console.error('Failed to delete label:', error);
-            toast.error('Failed to delete label');
+        if (onDeleteLabel) {
+            await onDeleteLabel(labelId);
         }
     };
 

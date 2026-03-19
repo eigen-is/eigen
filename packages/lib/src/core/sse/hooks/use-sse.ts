@@ -2,7 +2,7 @@ import {useCallback, useEffect, useRef} from 'react';
 import {useQueryClient} from '@tanstack/react-query';
 import {useAuth} from '@workspace/lib/auth';
 import {getSSEEventsUrl} from '../../api';
-import {isSSEventNotification, type SSEvent, type SSEventNotification} from '@workspace/lib/types/sse';
+import type {SSEvent} from '@workspace/lib/types/sse';
 import {handleDriveSSEvent} from '@workspace/lib/drive';
 import {handleMailSSEvent} from '@workspace/lib/mail';
 import {handleContactsSSEvent} from '@workspace/lib/contacts';
@@ -11,21 +11,12 @@ import {handleCalendarSSEvent} from '@workspace/lib/calendar';
 import {handleSpaceSSEvent} from '@workspace/lib/space';
 import {handleTeamSSEvent} from '@workspace/lib/team';
 
-type UseSSEOptions = {
-    onNotification?: (event: SSEvent & SSEventNotification) => void;
-};
-
-export function useSSE(options: UseSSEOptions = {}) {
+export function useSSE() {
     const {isAuthenticated, user} = useAuth();
     const queryClient = useQueryClient();
     const eventSourceRef = useRef<EventSource | null>(null);
-    const {onNotification} = options;
 
     const handleEvent = useCallback((event: SSEvent) => {
-        if (isSSEventNotification(event)) {
-            onNotification?.(event);
-        }
-
         handleDriveSSEvent(event, queryClient);
         handleMailSSEvent(event, queryClient);
         handleContactsSSEvent(event, queryClient);
@@ -33,7 +24,7 @@ export function useSSE(options: UseSSEOptions = {}) {
         handleCalendarSSEvent(event, queryClient);
         handleSpaceSSEvent(event, queryClient);
         handleTeamSSEvent(event, queryClient);
-    }, [onNotification, queryClient]);
+    }, [queryClient]);
 
     useEffect(() => {
         if (!isAuthenticated || !user?.id) return;

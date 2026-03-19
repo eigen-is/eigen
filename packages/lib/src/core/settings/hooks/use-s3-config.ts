@@ -2,6 +2,8 @@ import {type QueryClient, useMutation, useQuery, useQueryClient} from '@tanstack
 import {settingsApi} from '@workspace/lib/api';
 import type {S3Config} from '@workspace/lib/types';
 import {settingsKeys} from './use-server-settings';
+import {AppError, onMutationError} from '../../api-error';
+import {toast} from 'sonner';
 
 const s3ConfigKeys = {
     all: [...settingsKeys.all, 's3config'] as const,
@@ -24,10 +26,14 @@ export function useUpdateServerS3Config() {
     return useMutation({
         mutationFn: async (body: S3Config) => {
             const res = await settingsApi.s3config.put(body);
-            if (res.error) throw new Error(String(res.error));
+            if (res.error) throw new AppError(res);
             return res.data as S3Config;
         },
-        onSuccess: () => invalidateServerS3Config(queryClient),
+        onSuccess: () => {
+            invalidateServerS3Config(queryClient);
+            toast.success('S3 configuration saved');
+        },
+        onError: onMutationError,
     });
 }
 

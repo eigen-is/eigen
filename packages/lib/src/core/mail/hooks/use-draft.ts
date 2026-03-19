@@ -5,6 +5,8 @@ import {useAuth} from '@workspace/lib/auth';
 import {invalidateMailboxes} from './use-mailboxes';
 import {emailKeys} from './use-emails';
 import {invalidateHomeSize} from '../../home';
+import {AppError, onMutationError} from '../../api-error';
+import {toast} from 'sonner';
 
 export function createDraftEmail(input: DraftInput): EmailDraft {
     const emailDraft: Partial<EmailDraft> = {
@@ -26,6 +28,7 @@ export async function updateDraftEmail(draft: EmailDraft, ownerId: string): Prom
     const response = await mailApi({ownerId}).message.draft.put({
         mail: draft
     });
+    if (response.error) throw new AppError(response);
     return response.data || null;
 }
 
@@ -33,6 +36,7 @@ export async function sendDraftEmail(draft: EmailDraft, ownerId: string): Promis
     const response = await mailApi({ownerId}).message.send.post({
         mail: draft
     });
+    if (response.error) throw new AppError(response);
     return response.data || null;
 }
 
@@ -47,6 +51,7 @@ export function useUpdateDraft() {
             queryClient.invalidateQueries({queryKey: emailKeys.list('Drafts')});
             if (data?.id) queryClient.invalidateQueries({queryKey: emailKeys.detail(data.id)});
         },
+        onError: onMutationError,
     });
 }
 
@@ -61,6 +66,8 @@ export function useSendDraft() {
             invalidateMailboxes(queryClient);
             queryClient.invalidateQueries({queryKey: emailKeys.list('Drafts')});
             invalidateHomeSize(queryClient);
+            toast.success('Email sent');
         },
+        onError: onMutationError,
     });
 }

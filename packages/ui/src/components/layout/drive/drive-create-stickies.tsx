@@ -1,4 +1,3 @@
-import {toast} from "sonner";
 import type {DrivePath} from "@workspace/lib/types/drive";
 import {useCreateStickies} from "@workspace/lib/drive";
 import {getStickiesBoardUrl} from "@workspace/lib/api";
@@ -29,28 +28,24 @@ export function DriveCreateStickies({
     };
 
     const handleCreateStickies = async (fileName: string) => {
-        try {
-            const newPath = await createStickiesMutation.mutateAsync({
-                parentId: path.id,
-                fileName: fileName,
-            });
-            onOpenChange(false);
+        const newPath = await createStickiesMutation.mutateAsync({
+            parentId: path.id,
+            fileName: fileName,
+        });
+        onOpenChange(false);
 
-            // Call onAfterAction if provided
-            if (onAfterAction) {
-                onAfterAction('create', {name: fileName});
-            }
-
-            // Open the stickies board in a new window
-            if (newPath) {
-                const url = getStickiesBoardUrl(path.ownerId, path.mountId, newPath.id);
-                window.open(url, '_blank');
-            }
-
-            if (onSave) onSave(newPath?.id || '');
-        } catch (error: unknown) {
-            toast.error(error instanceof Error ? error.message : "Failed to create stickies");
+        // Call onAfterAction if provided
+        if (onAfterAction) {
+            onAfterAction('create', {name: fileName});
         }
+
+        // Open the stickies board in a new window
+        if (newPath) {
+            const url = getStickiesBoardUrl(path.ownerId, path.mountId, newPath.id);
+            window.open(url, '_blank');
+        }
+
+        if (onSave) onSave(newPath?.id || '');
     };
 
     return (

@@ -2,6 +2,7 @@ import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {authClient} from '../../auth/hooks/use-auth-client';
 import {peopleKeys} from './keys.ts';
 import type {OrgMember} from '@workspace/lib/types/people';
+import {onMutationError} from '../../api-error';
 
 export function usePeopleMembers(organizationId?: string) {
     return useQuery({
@@ -41,6 +42,7 @@ export function useUpdateMemberRole(organizationId?: string) {
         onSuccess: () => {
             queryClient.invalidateQueries({queryKey: peopleKeys.members()});
         },
+        onError: onMutationError,
     });
 }
 
@@ -58,6 +60,7 @@ export function useRemoveMember(organizationId?: string) {
         onSuccess: () => {
             queryClient.invalidateQueries({queryKey: peopleKeys.members()});
         },
+        onError: onMutationError,
     });
 }
 
@@ -82,5 +85,6 @@ export function useCreateUser() {
         onSuccess: () => {
             queryClient.invalidateQueries({queryKey: peopleKeys.members()});
         },
+        onError: onMutationError,
     });
 }

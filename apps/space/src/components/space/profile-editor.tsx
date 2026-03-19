@@ -5,7 +5,6 @@ import {useEffect, useRef, useState} from 'react';
 import {Camera, InfoIcon} from 'lucide-react';
 import {useMeContact, useUpdateContact} from '@workspace/lib/contacts';
 import {useAuth} from '@workspace/lib/auth';
-import {toast} from 'sonner';
 import {useUpload} from '@workspace/ui/components/layout/upload-provider/upload-provider';
 import {uploadWithProgress} from "@workspace/ui/components/layout/upload-provider/upload-with-progress";
 import {getContactsAvatarUploadUrl} from "@workspace/lib/api";
@@ -74,7 +73,6 @@ export function ProfileEditor() {
             await updateContactMutation.mutateAsync(updateData);
 
             setSubmitError(null);
-            toast.success('Profile updated successfully');
 
             await navigate({to: '/'});
         } catch (err) {

@@ -2,6 +2,7 @@ import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {authClient} from '../../auth/hooks/use-auth-client';
 import {peopleKeys} from './keys.ts';
 import type {OrgTeam} from '@workspace/lib/types/people';
+import {onMutationError} from '../../api-error';
 
 export function usePeopleTeams(organizationId?: string) {
     return useQuery({
@@ -51,6 +52,7 @@ export function useCreateTeam(organizationId?: string) {
         onSuccess: () => {
             queryClient.invalidateQueries({queryKey: peopleKeys.teams()});
         },
+        onError: onMutationError,
     });
 }
 
@@ -68,6 +70,7 @@ export function useRemoveTeam(organizationId?: string) {
         onSuccess: () => {
             queryClient.invalidateQueries({queryKey: peopleKeys.teams()});
         },
+        onError: onMutationError,
     });
 }
 
@@ -85,6 +88,7 @@ export function useAddTeamMember() {
         onSuccess: (_data, variables) => {
             queryClient.invalidateQueries({queryKey: peopleKeys.teamMembers(variables.teamId)});
         },
+        onError: onMutationError,
     });
 }
 
@@ -102,6 +106,7 @@ export function useRemoveTeamMember() {
         onSuccess: (_data, variables) => {
             queryClient.invalidateQueries({queryKey: peopleKeys.teamMembers(variables.teamId)});
         },
+        onError: onMutationError,
     });
 }
 
@@ -119,5 +124,6 @@ export function useUpdateTeam() {
         onSuccess: () => {
             queryClient.invalidateQueries({queryKey: peopleKeys.teams()});
         },
+        onError: onMutationError,
     });
 }

@@ -1,6 +1,7 @@
 import type {QueryClient} from '@tanstack/react-query';
 import type {SSEvent} from '@workspace/lib/types/sse';
 import {SSEventType} from '@workspace/lib/types/sse';
+import {toast} from 'sonner';
 import {
     invalidateCalendarCreated,
     invalidateCalendarDeleted,
@@ -42,14 +43,17 @@ export function handleCalendarSSEvent(event: SSEvent, queryClient: QueryClient):
 
         case SSEventType.CALENDAR_SHARED:
             invalidateCalendarShared(queryClient);
+            if ('calendarShare' in event) toast('Calendar shared', {description: `"${event.calendarShare.calendarName}" was shared with you`});
             return true;
 
         case SSEventType.CALENDAR_UNSHARED:
             invalidateCalendarUnshared(queryClient);
+            if ('calendarShare' in event) toast('Calendar unshared', {description: `"${event.calendarShare.calendarName}" is no longer shared with you`});
             return true;
 
         case SSEventType.CALENDAR_INVITE_RECEIVED:
             invalidateEventCreated(queryClient);
+            if ('calendar' in event && event.calendar.title) toast('New invitation', {description: event.calendar.title});
             return true;
 
         case SSEventType.CALENDAR_INVITE_UPDATED:
