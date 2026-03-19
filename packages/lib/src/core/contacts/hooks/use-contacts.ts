@@ -11,6 +11,7 @@ export const contactKeys = {
     list: (filters: Record<string, unknown>) => [...contactKeys.lists(), {filters}] as const,
     details: () => [...contactKeys.all, 'detail'] as const,
     detail: (id: string) => [...contactKeys.details(), id] as const,
+    me: () => [...contactKeys.all, 'me'] as const,
 };
 
 // Fetch all contacts
@@ -93,17 +94,12 @@ export function useDeleteContact() {
     });
 }
 
-export async function getMeContact(ownerId: string) {
-    const {data} = await contactsApi({ownerId}).me.get();
-    return data;
-}
-
 export function useMeContact() {
     const {user} = useAuth();
     const ownerId = user?.id || '';
 
     return useQuery({
-        queryKey: [...contactKeys.all, 'me'] as const,
+        queryKey: contactKeys.me(),
         queryFn: async () => {
             const response = await contactsApi({ownerId}).me.get();
             return response.data ?? null;

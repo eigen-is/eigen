@@ -1,6 +1,6 @@
 import {Elysia, t} from "elysia";
 import {betterAuth} from "./auth";
-import {requireSelf} from "../lib/core/errors";
+import {requireSelf} from "../lib/core/access";
 import {
     mailboxCreate,
     mailboxDeliver,

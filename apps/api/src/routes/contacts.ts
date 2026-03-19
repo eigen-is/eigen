@@ -2,7 +2,7 @@ import {Elysia, t} from "elysia";
 import {betterAuth} from "./auth";
 import {getContacts} from "../lib/contacts/contacts";
 import {enforceAvatarUpload} from "../lib/config/enforcement";
-import {requireSelf} from "../lib/core/errors";
+import {requireSelf} from "../lib/core/access";
 
 const AddressSchema = t.Object({
     street: t.Optional(t.String()),
