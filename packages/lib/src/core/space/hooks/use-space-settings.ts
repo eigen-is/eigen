@@ -2,6 +2,8 @@ import {type QueryClient, useMutation, useQuery, useQueryClient} from '@tanstack
 import {spaceApi} from '@workspace/lib/api';
 import type {UserSettings} from '@workspace/lib/types/settings';
 import {useAuth} from '@workspace/lib/auth';
+import {AppError, onMutationError} from '../../api-error';
+import {toast} from 'sonner';
 
 export const spaceKeys = {
     all: ['space'] as const,
@@ -31,10 +33,14 @@ export function useUpdateSpaceSettings() {
     return useMutation({
         mutationFn: async (body: UserSettings) => {
             const res = await spaceApi({ownerId}).settings.put(body);
-            if (res.error) throw new Error(String(res.error));
+            if (res.error) throw new AppError(res);
             return res.data;
         },
-        onSuccess: () => invalidateSpaceSettings(queryClient),
+        onSuccess: () => {
+            invalidateSpaceSettings(queryClient);
+            toast.success('Settings saved');
+        },
+        onError: onMutationError,
     });
 }
 

@@ -7,7 +7,6 @@ import {MessageSquare, Plus} from "lucide-react";
 import {DriveCreateItemDialog} from "@workspace/ui/components/layout/drive/drive-create-folder-item";
 import {useEffect, useState} from "react";
 import type {DrivePath} from "@workspace/lib/types/drive";
-import {toast} from "sonner";
 
 function ChatIndex() {
     const {user} = useAuth();
@@ -36,24 +35,20 @@ function ChatIndex() {
 
     const handleCreateChat = async (fileName: string) => {
         if (!root) return;
-        try {
-            const newPath = await createChatMutation.mutateAsync({
-                parentId: root.id,
-                fileName,
+        const newPath = await createChatMutation.mutateAsync({
+            parentId: root.id,
+            fileName,
+        });
+        setCreateChatOpen(false);
+        if (newPath) {
+            navigate({
+                to: '/$ownerId/$mountId/$chatId',
+                params: {
+                    ownerId: user?.id || '',
+                    mountId: mountId,
+                    chatId: newPath.id
+                }
             });
-            setCreateChatOpen(false);
-            if (newPath) {
-                navigate({
-                    to: '/$ownerId/$mountId/$chatId',
-                    params: {
-                        ownerId: user?.id || '',
-                        mountId: mountId,
-                        chatId: newPath.id
-                    }
-                });
-            }
-        } catch (error: unknown) {
-            toast.error(error instanceof Error ? error.message : "Failed to create chat");
         }
     };
 

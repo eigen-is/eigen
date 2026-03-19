@@ -177,9 +177,6 @@ export function EmailDraft({
 
             // Send the email
             await sendDraft(updatedDraft);
-        } catch (error) {
-            console.error("Failed to send email:", error);
-            toast.error("Failed to send draft. Please try again.");
         } finally {
             setIsSending(false);
         }

@@ -12,7 +12,7 @@ import {
     useUpdateServerS3Config,
     useUpdateServerSettings
 } from '@workspace/lib/settings';
-import {toast} from 'sonner';
+
 import type {ServerSettings} from '@workspace/lib/types/settings';
 import type {S3Config} from '@workspace/lib/types';
 import {AlertTriangle, CheckCircle2, Loader2, Wifi} from 'lucide-react';
@@ -71,14 +71,9 @@ export function ServerSettingsPage() {
     };
 
     const handleSave = async () => {
-        try {
-            await updateSettings.mutateAsync(draft as Record<string, unknown>);
-            toast.success('Server settings saved');
-            setDraft({});
-            setDirty(false);
-        } catch (error) {
-            toast.error(error instanceof Error ? error.message : 'Failed to save settings');
-        }
+        await updateSettings.mutateAsync(draft as Record<string, unknown>);
+        setDraft({});
+        setDirty(false);
     };
 
     const handleReset = () => {
@@ -113,14 +108,9 @@ export function ServerSettingsPage() {
 
     const handleSaveS3 = async () => {
         if (!s3Draft) return;
-        try {
-            await updateS3Config.mutateAsync(s3Draft);
-            toast.success('S3 configuration saved');
-            setS3Draft(null);
-            setS3Dirty(false);
-        } catch (error) {
-            toast.error(error instanceof Error ? error.message : 'Failed to save S3 config');
-        }
+        await updateS3Config.mutateAsync(s3Draft);
+        setS3Draft(null);
+        setS3Dirty(false);
     };
 
     const handleResetS3 = () => {

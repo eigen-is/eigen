@@ -1,6 +1,8 @@
 import {type QueryClient, useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {teamApi} from '@workspace/lib/api';
 import type {TeamSettings} from '@workspace/lib/types/settings';
+import {AppError, onMutationError} from '../../api-error';
+import {toast} from 'sonner';
 
 export const teamKeys = {
     all: ['team'] as const,
@@ -25,10 +27,14 @@ export function useUpdateTeamSettings(teamId: string) {
     return useMutation({
         mutationFn: async (body: TeamSettings) => {
             const res = await teamApi({teamId}).settings.put(body);
-            if (res.error) throw new Error(String(res.error));
+            if (res.error) throw new AppError(res);
             return res.data;
         },
-        onSuccess: () => invalidateTeamSettings(queryClient, teamId),
+        onSuccess: () => {
+            invalidateTeamSettings(queryClient, teamId);
+            toast.success('Team settings saved');
+        },
+        onError: onMutationError,
     });
 }
 

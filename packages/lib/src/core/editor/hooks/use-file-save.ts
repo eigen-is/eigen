@@ -2,6 +2,7 @@ import {useMutation, useQueryClient} from "@tanstack/react-query";
 import {api} from "../../api";
 import {driveKeys} from "../../drive/hooks/use-drive";
 import {editorKeys} from "./use-file-content";
+import {AppError, onMutationError} from '../../api-error';
 
 type SaveParams = {
     content: string;
@@ -16,7 +17,8 @@ export function useFileSave(ownerId: string, mountId: string, pathId: string) {
     return useMutation({
         mutationFn: async (params: SaveParams) => {
             const res = await api.editor({ownerId})({mountId})({pathId}).content.put(params);
-            if (res.error || !res.data) throw new Error(String(res.error ?? 'Save failed'));
+            if (res.error) throw new AppError(res);
+            if (!res.data) throw new Error('Save failed: no data returned');
             return res.data;
         },
         onSuccess: (data) => {
@@ -25,5 +27,6 @@ export function useFileSave(ownerId: string, mountId: string, pathId: string) {
                 queryClient.invalidateQueries({queryKey: editorKeys.content(ownerId, mountId, pathId)});
             }
         },
+        onError: onMutationError,
     });
 }

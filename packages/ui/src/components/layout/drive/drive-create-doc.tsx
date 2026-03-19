@@ -1,4 +1,3 @@
-import {toast} from "sonner";
 import type {DrivePath} from "@workspace/lib/types/drive";
 import {useCreateDoc} from "@workspace/lib/drive";
 import {getDocUrl} from "@workspace/lib/api";
@@ -29,28 +28,24 @@ export function DriveCreateDoc({
     };
 
     const handleCreateDoc = async (fileName: string) => {
-        try {
-            const newPath = await createDocMutation.mutateAsync({
-                parentId: path.id,
-                fileName: fileName,
-            });
-            onOpenChange(false);
+        const newPath = await createDocMutation.mutateAsync({
+            parentId: path.id,
+            fileName: fileName,
+        });
+        onOpenChange(false);
 
-            // Call onAfterAction if provided
-            if (onAfterAction) {
-                onAfterAction('create', {name: fileName});
-            }
-
-            // Open the document in a new window
-            if (newPath) {
-                const url = getDocUrl(path.ownerId, path.mountId, newPath.id);
-                window.open(url, '_blank');
-            }
-
-            if (onSave) onSave(newPath?.id || '');
-        } catch (error: unknown) {
-            toast.error(error instanceof Error ? error.message : "Failed to create document");
+        // Call onAfterAction if provided
+        if (onAfterAction) {
+            onAfterAction('create', {name: fileName});
         }
+
+        // Open the document in a new window
+        if (newPath) {
+            const url = getDocUrl(path.ownerId, path.mountId, newPath.id);
+            window.open(url, '_blank');
+        }
+
+        if (onSave) onSave(newPath?.id || '');
     };
 
     return (

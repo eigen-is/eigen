@@ -7,7 +7,7 @@ import {InputGroup, InputGroupAddon, InputGroupInput, InputGroupText} from '@wor
 import {Field, FieldContent, FieldGroup, FieldLabel} from '@workspace/ui/components/field';
 import {useCreateUser} from '@workspace/lib/people';
 import {usePublicConfig} from '@workspace/lib/public';
-import {toast} from 'sonner';
+
 
 interface CreateUserDialogProps {
     open: boolean;
@@ -28,17 +28,12 @@ export function CreateUserDialog({open, onOpenChange}: CreateUserDialogProps) {
         const email = username.toLowerCase().split('@')[0] + '@' + (config?.domain ?? 'eigen.is');
         if (!name || !username || !password) return;
 
-        try {
-            await createUser.mutateAsync({name, email, password, role});
-            toast.success(`User ${name} created`);
-            onOpenChange(false);
-            setName('');
-            setUsername('');
-            setPassword('');
-            setRole('user');
-        } catch (error) {
-            toast.error(error instanceof Error ? error.message : 'Failed to create user');
-        }
+        await createUser.mutateAsync({name, email, password, role});
+        onOpenChange(false);
+        setName('');
+        setUsername('');
+        setPassword('');
+        setRole('user');
     };
 
     return (

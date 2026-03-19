@@ -3,6 +3,7 @@ import {chatApi, driveApi} from "@workspace/lib/api";
 import {driveKeys, invalidateItemCreated} from "../../drive/hooks/use-drive";
 import type {DrivePath} from "@workspace/lib/types/drive";
 import type {ChatMessage} from "@workspace/lib/types/chat";
+import {AppError, onMutationError} from '../../api-error';
 
 export const chatKeys = {
     all: ['chat'] as const,
@@ -45,11 +46,13 @@ export function usePostMessage(ownerId: string, mountId: string, chatId: string)
             attachments?: string[]
         }) => {
             const response = await chatApi({ownerId})({mountId})({chatId}).messages.post(body);
+            if (response.error) throw new AppError(response);
             return response.data;
         },
         onSuccess: () => {
             queryClient.invalidateQueries({queryKey: chatKeys.messages(ownerId, mountId, chatId)});
         },
+        onError: onMutationError,
     });
 }
 
@@ -58,9 +61,11 @@ export function useCreateChat(ownerId: string, mountId: string) {
     return useMutation({
         mutationFn: async ({parentId, fileName}: { parentId: string; fileName: string }) => {
             const response = await driveApi({ownerId})({mountId}).folder({pathId: parentId}).chat.post({fileName});
+            if (response.error) throw new AppError(response);
             return response.data;
         },
-        onSuccess: (_data, variables) => invalidateItemCreated(queryClient, mountId, variables.parentId, 'DRIVE_MIME_CHAT'),
+        onSuccess: (_data, variables) => invalidateItemCreated(queryClient, ownerId, mountId, variables.parentId, 'DRIVE_MIME_CHAT'),
+        onError: onMutationError,
     });
 }
 

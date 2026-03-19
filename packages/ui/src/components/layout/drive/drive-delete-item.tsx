@@ -1,4 +1,3 @@
-import {toast} from "sonner";
 import type {DrivePath} from "@workspace/lib/types/drive";
 import {DEFAULT_MOUNT_ID, useDeleteFile, useDeleteFolder} from "@workspace/lib/drive";
 import {DeleteDialog} from "@workspace/ui/components/layout/delete/delete-dialog";
@@ -33,9 +32,6 @@ export function DriveDeleteItem({
                     onAfterAction('delete', path);
                 }
             },
-            onError: () => {
-                toast.error(`Failed to delete ${path.type}`);
-            }
         });
     };
 

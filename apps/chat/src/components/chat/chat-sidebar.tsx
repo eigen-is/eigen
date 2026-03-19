@@ -9,7 +9,6 @@ import {EigenLoader} from "@workspace/ui";
 import {DriveCreateItemDialog} from "@workspace/ui/components/layout/drive/drive-create-folder-item";
 import {useState} from "react";
 import type {DrivePath} from "@workspace/lib/types/drive";
-import {toast} from "sonner";
 
 type ChatSidebarProps = {
     condensed?: boolean;
@@ -34,17 +33,13 @@ export function ChatSidebar({
 
     const handleCreateChat = async (fileName: string) => {
         if (!rootPath) return;
-        try {
-            const newPath = await createChatMutation.mutateAsync({
-                parentId: rootPath.id,
-                fileName,
-            });
-            setCreateChatOpen(false);
-            if (newPath) {
-                window.location.href = getChatRoomUrl(ownerId, mountId, newPath.id);
-            }
-        } catch (error: unknown) {
-            toast.error(error instanceof Error ? error.message : "Failed to create chat");
+        const newPath = await createChatMutation.mutateAsync({
+            parentId: rootPath.id,
+            fileName,
+        });
+        setCreateChatOpen(false);
+        if (newPath) {
+            window.location.href = getChatRoomUrl(ownerId, mountId, newPath.id);
         }
     };
 
