@@ -61,9 +61,8 @@ bun run check          # typecheck + test
   `packages/lib/src/core/[domain]/hooks/`
 - **Never use `as any`** — fix the type at the source (route schema, response type) instead of casting in hooks.
   Eden Treaty provides end-to-end safety; `as any` silently breaks it
-- **Always `await` async calls** — missing `await` is the #1 bug class in this codebase. A bare async call returns a
-  truthy Promise, silently skipping the intended logic. Especially dangerous in conditionals (`if (!asyncFn())` is
-  always false)
+- **Always `await` async calls**. A bare async call returns a truthy Promise, silently skipping the intended logic.
+  Especially dangerous in conditionals (`if (!asyncFn())` is always false)
 - **Sanitize user-provided paths and filenames** — validate against `..`, `/`, and control characters before using in
   file system paths or HTTP headers (e.g., `Content-Disposition`). Never interpolate raw user input into headers
 - **Use theme tokens, not hardcoded colors** — use `text-muted-foreground`, `bg-muted`, `border` etc. instead of
