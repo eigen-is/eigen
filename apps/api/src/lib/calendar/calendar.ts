@@ -207,7 +207,11 @@ export class Calendar {
             shares: null,
         }).run();
 
-        this.home.notify(buildCalendarEvent(SSEventType.CALENDAR_CREATED, {calendarId: id, title: input.name.trim()}));
+        this.home.notify(buildCalendarEvent(SSEventType.CALENDAR_CREATED, {
+            ownerId: this.home.user.id,
+            calendarId: id,
+            title: input.name.trim()
+        }));
         return this.getCalendarById(id)!;
     }
 
@@ -236,7 +240,7 @@ export class Calendar {
         }
 
         this.home.notify(buildCalendarEvent(SSEventType.CALENDAR_UPDATED, {
-            calendarId: id,
+            ownerId: this.home.user.id, calendarId: id,
             title: input.name ?? existing.name
         }));
         return this.getCalendarById(id)!;
@@ -252,7 +256,11 @@ export class Calendar {
         }
 
         this.db.delete(schema.calendars).where(eq(schema.calendars.id, id)).run();
-        this.home.notify(buildCalendarEvent(SSEventType.CALENDAR_DELETED, {calendarId: id, title: existing.name}));
+        this.home.notify(buildCalendarEvent(SSEventType.CALENDAR_DELETED, {
+            ownerId: this.home.user.id,
+            calendarId: id,
+            title: existing.name
+        }));
     }
 
     // --- Events ---
@@ -321,7 +329,7 @@ export class Calendar {
         const event = this.getEventById(id)!;
 
         const sseEvent = buildCalendarEvent(SSEventType.CALENDAR_EVENT_CREATED, {
-            calendarId,
+            ownerId: this.home.user.id, calendarId,
             eventId: id,
             title: input.title.trim()
         });
@@ -396,7 +404,7 @@ export class Calendar {
         const updated = this.getEventById(id)!;
 
         const sseEvent = buildCalendarEvent(SSEventType.CALENDAR_EVENT_UPDATED, {
-            calendarId: existing.calendarId, eventId: id, title,
+            ownerId: this.home.user.id, calendarId: existing.calendarId, eventId: id, title,
         });
         this.home.notify(sseEvent);
         const cal = this.getCalendarById(existing.calendarId);
@@ -427,7 +435,7 @@ export class Calendar {
         this.db.delete(schema.events).where(eq(schema.events.id, id)).run();
         this.incrementCtag(existing.calendarId);
         const sseEvent = buildCalendarEvent(SSEventType.CALENDAR_EVENT_DELETED, {
-            calendarId: existing.calendarId, eventId: id, title: existing.title,
+            ownerId: this.home.user.id, calendarId: existing.calendarId, eventId: id, title: existing.title,
         });
         this.home.notify(sseEvent);
         const cal = this.getCalendarById(existing.calendarId);
