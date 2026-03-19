@@ -323,20 +323,14 @@ describe.skipIf(isWindows)('Mail', () => {
             expect(data).toBeDefined();
         });
 
-        test('ownerId spoofing does not let Bob write mailboxes into Alice account', async () => {
+        test('ownerId spoofing is rejected with 403', async () => {
             const createRes = await authedRequest(ctx.bob.user.sessionToken,
                 `/mail/${ctx.alice.user.id}/mailbox`, {
                     method: 'POST',
                     headers: {'Content-Type': 'application/json'},
                     body: JSON.stringify({mailbox: 'BobOnlyMailbox'}),
                 });
-            expect(createRes.status).toBe(200);
-
-            // mailboxesList only returns standard mailboxes, so BobOnlyMailbox won't appear
-            const aliceRes = await authedRequest(ctx.alice.user.sessionToken,
-                `/mail/${ctx.alice.user.id}/mailboxes`);
-            const aliceMailboxes = await aliceRes.json() as any[];
-            expect(aliceMailboxes.find(mailbox => mailbox.path === 'BobOnlyMailbox')).toBeUndefined();
+            expect(createRes.status).toBe(403);
         });
     });
 

@@ -2,22 +2,8 @@ import {Elysia, t} from "elysia";
 import {betterAuth} from "./auth";
 import type {TeamHome} from "../lib/home";
 import {getHome} from "../lib/home";
-import {getMemberships, getOrgRole} from "../lib/user";
 import {teamOwnerId} from "@workspace/lib/types";
-import {ApiError} from "../lib/core";
-
-async function requireTeamAccess(userId: string, teamId: string): Promise<'admin' | 'member'> {
-    const role = await getOrgRole(userId);
-    if (role === 'admin' || role === 'owner') return 'admin';
-    const memberships = await getMemberships(userId);
-    if (!memberships.teamIds.includes(teamId)) throw new ApiError(403, 'Not a member of this team');
-    return 'member';
-}
-
-async function requireTeamAdmin(userId: string, teamId: string) {
-    const access = await requireTeamAccess(userId, teamId);
-    if (access !== 'admin') throw new ApiError(403, 'Admin or owner role required');
-}
+import {requireTeamAccess, requireTeamAdmin} from "../lib/core/errors";
 
 async function getTeamHome(teamId: string): Promise<TeamHome> {
     return await getHome(teamOwnerId(teamId)) as TeamHome;

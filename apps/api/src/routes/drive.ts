@@ -4,6 +4,8 @@ import {getSharedDrive} from "../lib/drive";
 import {getHome} from "../lib/home";
 import {enforceBatchUpload, enforceFileUpload} from "../lib/config/enforcement";
 
+// Drive routes allow cross-owner access (shared drives, team drives).
+// Access control is enforced by getSharedDrive() → SharedDrive ACL checks, not by ownerId === user.id.
 export const driveRouter = new Elysia({name: "drive"})
     .use(betterAuth)
     // Mount management

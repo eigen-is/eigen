@@ -39,18 +39,10 @@ describe('Home', () => {
         expect(typeof data!.total.used).toBe('number');
     });
 
-    test('ownerId spoofing on size endpoint still resolves authenticated user home', async () => {
+    test('ownerId spoofing on size endpoint is rejected with 403', async () => {
         const spoofed = await authedRequest(ctx.bob.user.sessionToken,
             `/home/${ctx.alice.user.id}/size`);
-        const spoofedData = await spoofed.json() as any;
-
-        const expected = await authedRequest(ctx.bob.user.sessionToken,
-            `/home/${ctx.bob.user.id}/size`);
-        const expectedData = await expected.json() as any;
-
-        expect(spoofed.status).toBe(200);
-        expect(expected.status).toBe(200);
-        expect(spoofedData).toEqual(expectedData);
+        expect(spoofed.status).toBe(403);
     });
 
     test('zip endpoint returns 500 when home zip is not implemented', async () => {
