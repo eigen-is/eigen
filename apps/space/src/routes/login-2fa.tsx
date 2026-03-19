@@ -2,7 +2,7 @@ import LoginFa2Page from '../components/space/login-fa2';
 import {createFileRoute, redirect} from '@tanstack/react-router';
 import {z} from 'zod';
 
-const fallback = '/login';
+const fallback = '/';
 
 export const Route = createFileRoute('/login-2fa')({
     component: LoginFa2Page,

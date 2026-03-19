@@ -68,8 +68,8 @@ export function HomeComponent() {
     return (
         <div className="flex flex-col items-center justify-center min-h-screen p-4">
             <div className="text-5xl mb-8">
-                <span className={`font-bold ${app.className}`}>eigen</span>
-                <span className={app.className}>|{app.name.toLowerCase()}&gt;</span>
+                <span className="font-bold" style={{color: app.color}}>eigen</span>
+                <span style={{color: app.color}}>|{app.name.toLowerCase()}&gt;</span>
             </div>
             <div className="text-lg text-center mb-8 max-w-md">
                 <div>

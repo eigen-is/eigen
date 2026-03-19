@@ -15,7 +15,6 @@ function TwoFaComponent() {
     const [secretKey, setSecretKey] = useState<string>("");
     const [setupStep, setSetupStep] = useState<"password" | "qrcode" | "verification">("password");
 
-    // Step 1: Initialize 2FA with password
     const handleInitialize2FA = async (password: string) => {
         try {
             const result = await authClient.twoFactor.enable({
@@ -23,7 +22,6 @@ function TwoFaComponent() {
             });
 
             if (result.data) {
-                // Get the TOTP URI from the response
                 setTotpUri(result.data.totpURI);
                 setSecretKey(new URL(result.data.totpURI).searchParams.get('secret') || '');
                 setSetupStep("qrcode");
@@ -37,23 +35,15 @@ function TwoFaComponent() {
         }
     };
 
-    // Step 2: Verify TOTP code to complete 2FA setup
-    const handleVerifyTotp = async (code: string, enableTwoFactor: boolean) => {
+    const handleVerifyTotp = async (code: string) => {
         try {
             const result = await authClient.twoFactor.verifyTotp({
                 code
             });
 
             if (result.data) {
-                toast.success('Two-factor authentication ' + (enableTwoFactor ? 'enabled' : 'disabled'));
-
-                // Wait 350ms before navigating
-                await new Promise(resolve => setTimeout(resolve, 350));
-
-                // Navigate back to the root
-                navigate({
-                    to: '/',
-                });
+                toast.success('Two-factor authentication enabled');
+                await navigate({to: '/'});
             } else {
                 toast.error(result.error?.message ?? 'Failed to verify verification code');
             }
@@ -63,7 +53,6 @@ function TwoFaComponent() {
         }
     };
 
-    // Handle back button in the flow
     const handleBack = () => {
         if (setupStep === "verification") {
             setSetupStep("qrcode");
@@ -73,7 +62,7 @@ function TwoFaComponent() {
     };
 
     return (
-        <div className="flex flex-col min-h-screen m-8">
+        <div className="flex flex-col m-8">
             <div className="w-full max-w-3xl">
                 <h1 className="text-2xl font-semibold mb-6">Two-Factor Authentication</h1>
 

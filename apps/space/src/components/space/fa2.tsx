@@ -1,5 +1,3 @@
-"use client"
-
 import * as React from "react"
 import {zodResolver} from "@hookform/resolvers/zod"
 import {useForm} from "react-hook-form"
@@ -20,19 +18,17 @@ import {Card, CardContent} from "@workspace/ui/components/card"
 import {Separator} from "@workspace/ui/components/separator"
 import QRCode from "react-qr-code"
 
-// Define form schemas with validation for each step
 const passwordFormSchema = z.object({
     password: z.string().min(1, "Password is required"),
 });
 
 const verificationFormSchema = z.object({
     verificationCode: z.string().min(6, "Verification code must be 6 digits").max(6, "Verification code must be 6 digits"),
-    enableTwoFactor: z.boolean(),
 });
 
 type TwoFactorSetupProps = {
     onInitialize2FA: (password: string) => Promise<void>;
-    onVerifyTotp: (code: string, enableTwoFactor: boolean) => Promise<void>;
+    onVerifyTotp: (code: string) => Promise<void>;
     onBack: () => void;
     totpUri: string | null;
     secretKey: string;
@@ -52,7 +48,6 @@ export function TwoFactorSetup({
     const [isLoading, setIsLoading] = React.useState<boolean>(false)
     const [isCopied, setIsCopied] = React.useState<boolean>(false)
 
-    // Initialize password form
     const passwordForm = useForm<z.infer<typeof passwordFormSchema>>({
         resolver: zodResolver(passwordFormSchema),
         defaultValues: {
@@ -60,12 +55,10 @@ export function TwoFactorSetup({
         },
     });
 
-    // Initialize verification form
     const verificationForm = useForm<z.infer<typeof verificationFormSchema>>({
         resolver: zodResolver(verificationFormSchema),
         defaultValues: {
             verificationCode: "",
-            enableTwoFactor: true,
         },
     });
 
@@ -81,7 +74,6 @@ export function TwoFactorSetup({
         setCurrentStep("verification");
     };
 
-    // Handle password form submission
     async function onPasswordSubmit(values: z.infer<typeof passwordFormSchema>) {
         try {
             setIsLoading(true);
@@ -93,11 +85,10 @@ export function TwoFactorSetup({
         }
     }
 
-    // Handle verification form submission
     async function onVerificationSubmit(values: z.infer<typeof verificationFormSchema>) {
         try {
             setIsLoading(true);
-            await onVerifyTotp(values.verificationCode, values.enableTwoFactor);
+            await onVerifyTotp(values.verificationCode);
         } catch (error) {
             console.error("Error verifying two-factor authentication:", error);
         } finally {
@@ -262,33 +253,6 @@ export function TwoFactorSetup({
                                         Enter the 6-digit code from your authentication app
                                     </FormDescription>
                                     <FormMessage/>
-                                </FormItem>
-                            )}
-                        />
-
-                        <FormField
-                            control={verificationForm.control}
-                            name="enableTwoFactor"
-                            render={({field}) => (
-                                <FormItem className="flex flex-row items-center justify-between rounded-lg border p-4">
-                                    <div className="space-y-0.5">
-                                        <FormLabel className="text-base">
-                                            Enable Two-Factor Authentication
-                                        </FormLabel>
-                                        <FormDescription>
-                                            Require a verification code when signing in
-                                        </FormDescription>
-                                    </div>
-                                    <FormControl>
-                                        <div
-                                            className="relative inline-flex h-[24px] w-[44px] shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors duration-200 ease-in-out focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50 data-[state=checked]:bg-primary data-[state=unchecked]:bg-input"
-                                            data-state={field.value ? "checked" : "unchecked"}
-                                            onClick={() => field.onChange(!field.value)}>
-                      <span
-                          className="pointer-events-none block h-5 w-5 rounded-full bg-background shadow-lg ring-0 transition-transform duration-200 ease-in-out data-[state=checked]:translate-x-5 data-[state=unchecked]:translate-x-0"
-                          data-state={field.value ? "checked" : "unchecked"}/>
-                                        </div>
-                                    </FormControl>
                                 </FormItem>
                             )}
                         />
