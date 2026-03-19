@@ -1,8 +1,8 @@
-// user middleware (compute user and session and pass to routes)
 import {Elysia, t} from "elysia";
 import {betterAuth} from "./auth";
 import {getContacts} from "../lib/contacts/contacts";
 import {enforceAvatarUpload} from "../lib/config/enforcement";
+import {requireSelf} from "../lib/core/errors";
 
 const AddressSchema = t.Object({
     street: t.Optional(t.String()),
@@ -34,57 +34,59 @@ const LabelSchema = t.Object({
     color: t.String()
 });
 
+// All contacts routes require ownerId === user.id (contacts are personal-only, no shared access)
 export const contactsRouter = new Elysia({name: "contacts"})
     .use(betterAuth)
-    .get("/contacts/:ownerId/contacts", async ({user}) => await (await getContacts(user)).getContacts(), {
-        auth: true
-    })
-    .get("/contacts/:ownerId/contacts/:id", async ({
-                                                       params,
-                                                       user
-                                                   }) => await (await getContacts(user)).getContactById(params.id), {
-        auth: true
-    })
-    .post("/contacts/:ownerId/contacts", async ({body, user}) => await (await getContacts(user)).addContact(body), {
+    .get("/contacts/:ownerId/contacts", async ({params, user}) => {
+        requireSelf(params.ownerId, user.id);
+        return await (await getContacts(user)).getContacts();
+    }, {auth: true})
+    .get("/contacts/:ownerId/contacts/:id", async ({params, user}) => {
+        requireSelf(params.ownerId, user.id);
+        return await (await getContacts(user)).getContactById(params.id);
+    }, {auth: true})
+    .post("/contacts/:ownerId/contacts", async ({params, body, user}) => {
+        requireSelf(params.ownerId, user.id);
+        return await (await getContacts(user)).addContact(body);
+    }, {
         body: ContactSchema,
         auth: true
     })
-    .put("/contacts/:ownerId/contacts/:id", async ({
-                                                       params,
-                                                       body,
-                                                       user
-                                                   }) => await (await getContacts(user)).updateContact(params.id, body), {
+    .put("/contacts/:ownerId/contacts/:id", async ({params, body, user}) => {
+        requireSelf(params.ownerId, user.id);
+        return await (await getContacts(user)).updateContact(params.id, body);
+    }, {
         body: ContactSchema,
         auth: true
     })
-    .delete("/contacts/:ownerId/contacts/:id", async ({
-                                                          params,
-                                                          user
-                                                      }) => await (await getContacts(user)).deleteContact(params.id), {
-        auth: true
-    })
-    .get("/contacts/:ownerId/labels", async ({user}) => await (await getContacts(user)).getLabels(), {
-        auth: true
-    })
-    .post("/contacts/:ownerId/labels", async ({body, user}) => await (await getContacts(user)).addLabel(body), {
+    .delete("/contacts/:ownerId/contacts/:id", async ({params, user}) => {
+        requireSelf(params.ownerId, user.id);
+        return await (await getContacts(user)).deleteContact(params.id);
+    }, {auth: true})
+    .get("/contacts/:ownerId/labels", async ({params, user}) => {
+        requireSelf(params.ownerId, user.id);
+        return await (await getContacts(user)).getLabels();
+    }, {auth: true})
+    .post("/contacts/:ownerId/labels", async ({params, body, user}) => {
+        requireSelf(params.ownerId, user.id);
+        return await (await getContacts(user)).addLabel(body);
+    }, {
         body: LabelSchema,
         auth: true
     })
-    .put("/contacts/:ownerId/labels/:id", async ({
-                                                     params,
-                                                     body,
-                                                     user
-                                                 }) => await (await getContacts(user)).updateLabel(params.id, body), {
+    .put("/contacts/:ownerId/labels/:id", async ({params, body, user}) => {
+        requireSelf(params.ownerId, user.id);
+        return await (await getContacts(user)).updateLabel(params.id, body);
+    }, {
         body: LabelSchema,
         auth: true
     })
-    .delete("/contacts/:ownerId/labels/:id", async ({
-                                                        params,
-                                                        user
-                                                    }) => await (await getContacts(user)).deleteLabel(params.id), {
-        auth: true
-    })
-    .post("/contacts/:ownerId/avatar", async ({body, user}) => {
+    .delete("/contacts/:ownerId/labels/:id", async ({params, user}) => {
+        requireSelf(params.ownerId, user.id);
+        return await (await getContacts(user)).deleteLabel(params.id);
+    }, {auth: true})
+    .post("/contacts/:ownerId/avatar", async ({params, body, user}) => {
+        requireSelf(params.ownerId, user.id);
         await enforceAvatarUpload(user.id, body.file.size);
         return await (await getContacts(user)).uploadAvatar(body.file);
     }, {
@@ -94,6 +96,7 @@ export const contactsRouter = new Elysia({name: "contacts"})
         auth: true
     })
     .get("/contacts/:ownerId/avatar/:filename", async ({params, user, set}) => {
+        requireSelf(params.ownerId, user.id);
         try {
             const data = await (await getContacts(user)).downloadAvatar(params.filename);
             set.headers['Cache-Control'] = 'public, max-age=900';
@@ -104,9 +107,8 @@ export const contactsRouter = new Elysia({name: "contacts"})
             set.status = 404;
             return null;
         }
-    }, {
-        auth: true
-    })
-    .get("/contacts/:ownerId/me", async ({user}) => await (await getContacts(user)).getMe(), {
-        auth: true
-    })
+    }, {auth: true})
+    .get("/contacts/:ownerId/me", async ({params, user}) => {
+        requireSelf(params.ownerId, user.id);
+        return await (await getContacts(user)).getMe();
+    }, {auth: true})

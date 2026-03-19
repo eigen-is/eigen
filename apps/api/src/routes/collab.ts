@@ -4,6 +4,8 @@ import {type ServerWebSocket} from "bun";
 import {getSharedDrive} from "../lib/drive";
 import {keepWebSocketAlive} from "../utils/websockets.ts";
 
+// Collab routes allow cross-owner access (collaborative editing on shared/team drives).
+// Access control is enforced by getSharedDrive() → SharedDrive ACL checks.
 export const collabRouter = new Elysia({
     name: "collab",
     websocket: {
