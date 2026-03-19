@@ -50,7 +50,12 @@
       "WebFetch(domain:raw.githubusercontent.com)",
       "WebFetch(domain:caniuse.com)",
       "WebFetch(domain:ollama.com)",
-      "Bash(for i:*)"
+      "Bash(for i:*)",
+      "Bash(for f:*)",
+      "Bash(do echo:*)",
+      "Read(//Users/reinder/Documents/GitHub/eigen/**)",
+      "Read(//Users/reinder/Documents/GitHub/eigen/codereviews/**)",
+      "Bash(done)"
     ]
   },
   "bypassPermissions": "bypassPermissions"

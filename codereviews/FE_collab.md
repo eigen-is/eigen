@@ -1,375 +1,478 @@
-# Frontend Review: Collab Apps (Docs, Stickies, Slides, Sheets)
+# Frontend Code Review: Collaborative Apps (Docs, Stickies, Slides, Sheets)
 
-**Scope:** `apps/{docs,stickies,slides,sheets}/`
-**Reviewed:** 2026-03-18
+> **Reviewer**: Claude Opus 4.6 (1M context)
+> **Scope**: `apps/docs/src/`, `apps/stickies/src/`, `apps/slides/src/`, `apps/sheets/src/`,
+> `packages/lib/src/core/collab/`, `packages/lib/src/core/editor/`
+> **Date**: 2026-03-19 (full re-review of all source files)
 
-## Critical Issues
+---
 
-1. **Slides and Sheets: MIME type strings are singular instead of plural, causing broken navigation**
+## 1. Architecture Overview
 
-   The slides app uses `application-eigenslide` (singular) in its route files, but the actual MIME type is
-   `application/eigenslides` (plural, defined as `DRIVE_MIME_SLIDES` in `packages/lib/src/types/drive.ts:18`).
-   Similarly, sheets uses `application-eigensheet` instead of `application-eigensheets`.
+All four collab apps follow a consistent structural pattern:
 
-   This means the index redirect, the `onAfterAction` navigations in the drive routes, and the shared routes all
-   navigate to a MIME filter URL with the wrong type string. The sidebar links use the correct plural forms, so
-   clicking sidebar items works, but the redirect after creating/deleting a document or the initial `/` redirect will
-   filter for a non-existent MIME type, showing an empty list.
+```
+App shell (__root.tsx)
+  -> Auth guard (_auth.tsx)
+     -> Sidebar routes (_auth._sidebar.tsx)
+        -> File list (mime.$mimeType.tsx, shared.$to.tsx)
+     -> Editor route (_auth.[type].$ownerId.$mountId.$pathId.tsx)
+        -> useCollabDocumentInfo() for access/path/folder-contents
+        -> Yjs Doc + WebsocketProvider for real-time sync
+        -> App-specific editor component
+```
 
-   - `apps/slides/src/routes/index.tsx:11` -- `'application-eigenslide'` should be `'application-eigenslides'`
-   - `apps/slides/src/routes/_auth._sidebar.mime.$mimeType.tsx:81` -- same
-   - `apps/slides/src/routes/_auth._sidebar.shared.$to.tsx:88` -- same
-   - `apps/sheets/src/routes/index.tsx:11` -- `'application-eigensheet'` should be `'application-eigensheets'`
-   - `apps/sheets/src/routes/_auth._sidebar.mime.$mimeType.tsx:81` -- same
-   - `apps/sheets/src/routes/_auth._sidebar.shared.$to.tsx:88` -- same
+### 1.1 Yjs Provider Setup
 
-   **Impact:** After the initial login redirect or post-action navigations, users see an empty file list.
-   **Fix:** Replace the 6 singular MIME strings with their plural equivalents. Consider importing and deriving these
-   from the shared `DRIVE_MIME_*` constants rather than hardcoding strings.
-   **Status:** New finding.
+Each app creates its own `Y.Doc` and `WebsocketProvider` directly (no shared abstraction). The WebSocket URL is
+constructed via `getCollabWebSocketUrl(ownerId, mountId, pathId)`. All four apps use `resyncInterval: 5000`.
 
-2. **Stickies/Slides: revision restore pushes raw JSON into Y.Array instead of Yjs types**
+| App      | Yjs Keys                          | Sync Model         | Undo/Redo              |
+|----------|-----------------------------------|--------------------|------------------------|
+| Docs     | `default` (Tiptap Collaboration)  | CRDT (Tiptap/Yjs)  | Tiptap history         |
+| Stickies | `columns`, `tasks`, `columnOrder` | CRDT (Y.Map/Array) | `Y.UndoManager`        |
+| Slides   | `slides`, `objects`, `slideOrder` | CRDT (Y.Map/Array) | `Y.UndoManager`        |
+| Sheets   | `state` (Y.Map), `ops` (Y.Array)  | Op-based           | fortune-sheet built-in |
 
-   In `handleRestore`, the `Y.Array` branch does:
-   ```
-   localType.push(json);
-   ```
-   where `json` is the result of `tempDoc.getArray(key).toJSON()` -- a plain JS array. For simple arrays of primitives
-   (like `columnOrder` or `slideOrder`), this works fine because `Y.Array.push()` accepts an array of primitives. But
-   for arrays whose elements are `Y.Map` instances (like the `ops` array in sheets which contains arrays of op objects),
-   the raw JSON objects are pushed as plain objects instead of `Y.Map` instances. This differs from the `Y.Map` branch
-   which correctly uses `jsonToYType()` to convert values.
+### 1.2 Revision Restore
 
-   - `apps/stickies/src/components/stickies/board.tsx:108`
-   - `apps/slides/src/components/slides/editor.tsx:359`
+All apps support revision history via the shared `<RevisionHistory>` component. Each implements a
+`handleRestore(state: Uint8Array)` callback that applies a historical Yjs update to the live document:
 
-   Stickies and Slides currently only store primitive strings in their Y.Arrays (`columnOrder` and `slideOrder`), so this
-   is not actively broken. But if a Y.Array ever contains nested maps/arrays, the restore will silently produce plain
-   objects instead of collaborative Yjs types. The sheets variant (`use-sheet.ts:189`) has the same issue and *does*
-   store complex data in its `ops` array.
+- **Docs**: Decodes the snapshot to ProseMirror JSON via `yDocToProsemirrorJSON`, then calls
+  `editor.commands.setContent(json)`. Clean and Tiptap-idiomatic.
+- **Stickies, Slides, Sheets**: Use a generic "clear all shared types + repopulate from temp doc" approach. This logic
+  is duplicated across all three apps.
 
-   **Impact:** Revision restore of sheets `ops` array produces non-Yjs objects that cannot be collaboratively edited.
-   For stickies/slides, latent risk only.
-   **Fix:** Use `jsonToYType(v)` for each element pushed to Y.Array in the restore logic, consistent with the Y.Map
-   branch.
-   **Status:** Expanded from previous review (was noted as "duplicated logic" but the actual bug was not identified).
+### 1.3 Media Resolution
 
-## Important Issues
+Docs, Stickies, and Slides wrap their editors in `<MediaResolverProvider>` from `@workspace/lib/drive`. This provider
+resolves file names to pathIds/URLs using the existing `useFolderContent` hook, following the name-based reference
+pattern documented in [MEDIA-REFERENCES.md](/docs/MEDIA-REFERENCES.md).
 
-3. **Stickies `useBoard` and Slides `useDeck` return stale `.current` values from refs**
+### 1.4 Clipboard
 
-   Both hooks return `docRef.current` and `undoManager.current` directly at the bottom of the hook. These are snapshot
-   reads of the ref at render time. The `useEffect` that creates the `Y.Doc` and `UndoManager` runs after the first
-   render, so on the initial render and until a re-render is triggered by Yjs observers, these values are `null`.
+Docs and Slides implement the Eigen clipboard protocol (`EigenClipboardData`) for cross-app copy/paste of images and
+text objects with re-upload detection via `needsReUpload()`.
 
-   - `apps/stickies/src/components/stickies/hooks/use-board.ts:218-219`
-   - `apps/slides/src/components/slides/hooks/use-deck.ts:452-453`
+---
 
-   The consumer code guards against null (e.g., `undoManager?.undo()`, `if (!yjsDoc) return`), so operations simply
-   fail silently during the race window. The window closes quickly when the first Yjs observer fires.
+## 2. Issues
 
-   **Impact:** Low probability in practice. User actions before the first Yjs sync event are silently dropped.
-   **Fix:** Store the `Y.Doc` and `UndoManager` in `useState` so setting them triggers a re-render, or add a
-   `connected`/`ready` boolean state.
-   **Status:** Previously identified; analysis unchanged.
+### 2.1 Critical
 
-4. **Sheets: 11 `console.log` statements left in production code**
+#### C1. Docs: Comment creation swallows errors silently
 
-   The `useSheet` hook contains console logging throughout the Yjs sync flow: connection, sync, snapshot parsing,
-   flush, restore, and error handling.
+**File**: `apps/docs/src/components/docs/comment-dialog.tsx`, lines 33-53
 
-   - `apps/sheets/src/components/sheets/hooks/use-sheet.ts` -- lines 38, 46, 51, 64, 94, 101, 105, 119, 158, 184, 197
+The `handleSubmit` function in `CreateCommentDialog` has a `try/finally` but no `catch` block and no `toast.error()`.
+If chat creation or message posting fails, the dialog closes silently with the user seeing no feedback. The comment mark
+may not be applied, but the user cannot tell.
 
-   **Impact:** Noisy browser console output in production. Some logs include byte counts of snapshot data.
-   **Fix:** Remove all `console.log` statements. Keep the `console.error` and `console.warn` calls.
-   **Status:** Previously identified; unchanged.
+```typescript
+try {
+    const result = await createChat.mutateAsync({parentId: chatFolderId, fileName});
+    const chatPath = result as DrivePath;
+    if (chatPath?.id) {
+        // ... post message ...
+        onCommentCreated(chatPath.name);
+    }
+} finally {
+    setIsSubmitting(false);
+    setComment('');
+    onOpenChange(false); // always closes, even on failure
+}
+```
 
-5. **Sheets: snapshot debounce + unreliable `beforeunload` creates a data-loss window**
+**Impact**: Silent failure on comment creation. User thinks comment was created but nothing happened.
+**Fix**: Add `catch` block with `toast.error()`. Only close/reset on success.
 
-   After the first flush, snapshots are debounced to 1 second (`use-sheet.ts:164`). If the user closes the tab during
-   that window, the `beforeunload` handler attempts a synchronous Yjs transaction. This is unreliable on mobile browsers
-   and may be skipped by browsers that throttle background tabs. While ops are synced immediately via Yjs, the snapshot
-   used to bootstrap new joiners will be stale.
+#### C2. Stickies/Slides: Revision restore pushes raw JSON into Y.Array instead of Yjs types
 
-   - `apps/sheets/src/components/sheets/hooks/use-sheet.ts:116-125` (beforeunload handler)
-   - `apps/sheets/src/components/sheets/hooks/use-sheet.ts:161-165` (debounce logic)
+In `handleRestore`, the `Y.Array` branch does:
 
-   **Impact:** New joiners may see a slightly outdated snapshot (they will catch up via ops replay, but the initial
-   render may flash old data).
-   **Fix:** Consider `navigator.sendBeacon()` or reducing the debounce interval.
-   **Status:** Previously identified; unchanged.
+```typescript
+localType.push(json);
+```
 
-6. **Stickies and Slides: `jsonToYType` utility duplicated verbatim**
+where `json` is the result of `tempDoc.getArray(key).toJSON()`. For simple arrays of primitives (like `columnOrder`
+or `slideOrder`), this works because `Y.Array.push()` accepts primitive arrays. But the `Y.Map` branch correctly uses
+`jsonToYType()` to convert nested structures. This inconsistency means if a Y.Array ever holds nested Y.Maps, the
+restore will silently produce plain objects instead of collaborative Yjs types.
 
-   The exact same function appears in both apps:
-   - `apps/stickies/src/components/stickies/board.tsx:20-34`
-   - `apps/slides/src/components/slides/editor.tsx:62-76`
+The sheets variant (`use-sheet.ts:176`) has a separate but related issue: it pushes plain JSON values into Y.Map with
+`localType.set(k, v as any)` without using `jsonToYType()` at all.
 
-   **Impact:** Maintenance burden; changes must be made in two places.
-   **Fix:** Extract to `packages/lib/src/utils/yjs.ts`.
-   **Status:** Previously identified; unchanged.
+- `apps/stickies/src/components/stickies/board.tsx:108`
+- `apps/slides/src/components/slides/editor.tsx:359`
+- `apps/sheets/src/components/sheets/hooks/use-sheet.ts:176`
 
-7. **Stickies, Slides, and Sheets: revision restore logic duplicated across 3 apps**
+**Impact**: For stickies/slides (string-only arrays) this is latent risk. For sheets, restoring the `ops` Y.Array
+produces non-Yjs objects. Restoring Y.Map values in sheets uses `as any` instead of `jsonToYType`.
+**Fix**: Use `jsonToYType(v)` consistently in both Y.Map and Y.Array restore branches across all three apps.
 
-   Nearly identical `handleRestore` implementations in:
-   - `apps/stickies/src/components/stickies/board.tsx:89-113`
-   - `apps/slides/src/components/slides/editor.tsx:340-364`
-   - `apps/sheets/src/components/sheets/hooks/use-sheet.ts:168-208`
+### 2.2 Important
 
-   All three iterate shared keys, clear Y.Map/Y.Array, and repopulate. The sheets version slightly differs (it does
-   not use `jsonToYType` for map values, using `v as any` instead, and it has extra logic to update the workbook). The
-   core transplant logic should be a shared function.
+#### I1. Stickies `useBoard` and Slides `useDeck` return stale `.current` from refs
 
-   **Impact:** Same as issue 6; also makes the Y.Array bug (issue 2) harder to fix consistently.
-   **Fix:** Extract `restoreYjsDocument(liveDoc, snapshotState)` into `packages/lib/src/utils/yjs.ts`.
-   **Status:** Previously identified; expanded with sheets-specific detail.
+Both hooks return `docRef.current` and `undoManager.current` at render time:
 
-8. **Slides: `getTextStyle` uses `vh` units for font size, wrong in editor canvas**
+- `apps/stickies/src/components/stickies/hooks/use-board.ts:218-219`
+- `apps/slides/src/components/slides/hooks/use-deck.ts:452-453`
 
-   Font size is `${obj.fontSize / 1080 * 100}vh`, which scales relative to the viewport height. In presentation mode
-   (fullscreen), the slide fills the viewport, so this is correct. But in the editor canvas, the slide is constrained
-   within a panel (toolbar + status bar + properties panel reduce available height), so text appears at incorrect sizes
-   relative to the slide.
+On the initial render (before `useEffect` runs), these are `null`. They only become non-null after a Yjs observer
+triggers a state update. Consumer code guards with `?.` and `if (!yjsDoc)`, so operations during the race window
+are silently dropped rather than crashing.
 
-   - `apps/slides/src/components/slides/slide-object.tsx:32`
+**Impact**: Low probability in practice; user actions before first Yjs sync are silently ignored.
+**Fix**: Store `Y.Doc` and `UndoManager` in `useState` so assignment triggers a re-render, or add a `connected` flag.
 
-   The same `getTextStyle` is used by `SlideObjectView` (editor) and `ReadOnlySlideObject` (presentation mode).
+#### I2. Hardcoded colors throughout docs and slides break dark mode
 
-   **Impact:** Text sizes in the editor do not match presentation mode. If the canvas is 70% of viewport height, text
-   is 70% of the expected size relative to the slide.
-   **Fix:** Use a container-relative approach: pass the canvas element's actual height and compute font size as a
-   proportion of that, or use CSS container query units (`cqh`).
-   **Status:** Previously identified; analysis confirmed.
+The project rule mandates theme tokens over hardcoded colors. Several violations:
 
-9. **Slides: no loading indicator before Yjs sync completes**
+| File                                                           | Line | Issue                                                        |
+|----------------------------------------------------------------|------|--------------------------------------------------------------|
+| `apps/docs/src/components/docs/editor.tsx`                     | 135  | `color: '#3b82f6'` dropcursor                                |
+| `apps/docs/src/components/docs/editor.tsx`                     | 156  | `class: 'text-blue-600 underline cursor-pointer'` link style |
+| `apps/docs/src/components/docs/editor.tsx`                     | 185  | `color: '#9810fa'` collaboration cursor                      |
+| `apps/docs/src/components/docs/extensions/resizable-image.tsx` | 72   | `border border-blue-500` selection                           |
+| `apps/docs/src/components/docs/extensions/resizable-image.tsx` | 81   | `bg-white` floating toolbar                                  |
+| `apps/slides/src/components/slides/slide-object.tsx`           | 219  | `bg-white border-2 border-blue-500` resize handles           |
+| `apps/slides/src/components/slides/slide-thumbnail.tsx`        | 39   | `border-blue-500` active indicator                           |
+| `apps/slides/src/components/slides/slide-panel.tsx`            | 88   | `border-blue-500` drag overlay                               |
+| `apps/slides/src/components/slides/slide-canvas.tsx`           | 141  | `backgroundColor: '#3b82f6'` snap lines                      |
 
-   Unlike the docs app which shows `<EigenLoader/>` until `connected` is true (`editor.tsx:69-71`), the slides app
-   renders the full editor immediately. The `useDeck` hook starts with empty state (`{slides: {}, objects: {},
-   slideOrder: []}`) and the UI shows "No slides yet" until the sync callback fires and populates the deck.
+**Impact**: All highlighted elements are invisible or clash in dark mode.
+**Fix**: Use `border-primary`, `ring-primary`, `bg-popover`, `text-primary` etc.
 
-   - `apps/slides/src/components/slides/hooks/use-deck.ts:23` (empty initial state)
-   - `apps/slides/src/components/slides/editor.tsx:492-494` ("No slides yet" fallback)
+Note: The collaboration cursor color (`#9810fa`) also means every user sees the same purple cursor, providing no way
+to distinguish multiple collaborators.
 
-   Stickies has a similar issue, using `visibility: hidden` as a workaround when `columnOrder.length <= 1`
-   (`board.tsx:176`).
+#### I3. Slides: `OBJECT_FIELDS` manually maintained, prone to desync with types
 
-   **Impact:** Brief flash of "No slides yet" / hidden content before sync completes, which could confuse users
-   on slow connections.
-   **Fix:** Add a `synced` state flag in `useDeck` and `useBoard`, show `<EigenLoader/>` until synced.
-   **Status:** Previously identified; unchanged.
+**File**: `apps/slides/src/components/slides/hooks/use-deck.ts`, line 11
 
-10. **Docs: `editorRef.current = editor` assigned during render**
+```typescript
+const OBJECT_FIELDS = ['id', 'slideId', 'type', 'x', 'y', 'w', 'h', 'rotation', 'shadowColor', ...] as const;
+```
 
-    - `apps/docs/src/components/docs/editor.tsx:270`
+This manually-maintained array includes `shadowColor`, `shadowBlur`, `shadowOffsetX`, `shadowOffsetY` -- fields that
+do not exist in the `SlideObject` type definition (`types.ts`). If a new field is added to the type but not this array,
+it will be silently dropped when reading from Yjs.
 
-    This is a side effect during render. The `editor` value from `useEditor` is written to a ref so that async
-    callbacks (`handleImageUpload`, `handleEigenImagePaste`) can access the latest instance. In React 19 strict mode,
-    render functions may be called twice, and side effects during render are discouraged.
+**Impact**: Phantom fields are harmlessly read; missing fields would silently cause data loss on Yjs->React sync.
+**Fix**: Derive field list from the type or use `yMap.toJSON()` instead.
 
-    **Impact:** No functional bug in practice, but violates React conventions and could break with future
-    React strict mode enforcement.
-    **Fix:** Move to `useEffect(() => { editorRef.current = editor; }, [editor])`.
-    **Status:** Previously identified; unchanged.
+#### I4. `jsonToYType` utility duplicated in stickies and slides
 
-11. **Slides: `handleDragOver` always shows copy cursor even when read-only**
+The exact same function appears in:
 
-    - `apps/slides/src/components/slides/slide-canvas.tsx:81-84`
+- `apps/stickies/src/components/stickies/board.tsx:20-34`
+- `apps/slides/src/components/slides/editor.tsx:62-76`
 
-    The `handleDragOver` callback unconditionally calls `e.preventDefault()` and sets `dropEffect = 'copy'`. When the
-    user is in read-only mode, `onDropImage` is not passed, so the actual drop is correctly blocked. But the cursor
-    provides misleading visual feedback that a drop will succeed.
+**Fix**: Extract to `packages/lib/src/utils/yjs.ts`.
 
-    **Fix:** Check `onDropImage` existence in `handleDragOver` before allowing the drop effect.
-    **Status:** Previously identified; unchanged.
+#### I5. Restore logic duplicated across three apps
 
-12. **Slides: `duplicateSlide` callback depends on `[deck]`, defeating memoization**
+Nearly identical `handleRestore` implementations:
 
-    - `apps/slides/src/components/slides/hooks/use-deck.ts:218`
+- `apps/stickies/src/components/stickies/board.tsx:89-113`
+- `apps/slides/src/components/slides/editor.tsx:340-364`
+- `apps/sheets/src/components/sheets/hooks/use-sheet.ts:160-199`
 
-    `useCallback` for `duplicateSlide` depends on `deck`, the full state object that changes on every Yjs observer
-    event. The callback is effectively recreated every render. It reads `deck.slides` and `deck.objects` to clone
-    a slide's content, but could instead read from the Yjs doc directly.
+All iterate shared Yjs keys, clear Y.Map/Y.Array, and repopulate. The core transplant logic should be a shared
+function.
 
-    The same applies to `moveObjectUp`, `moveObjectDown`, `moveObjectToFront`, `moveObjectToBack` (lines 311, 330,
-    349, 368), and `deleteSlide` (line 175) which all depend on `deck.objects` or `deck.slideOrder`.
+**Fix**: Extract `restoreYjsDocument(liveDoc, snapshotState)` to `packages/lib/src/utils/yjs.ts`.
 
-    **Impact:** Unnecessary re-renders of child components receiving these callbacks.
-    **Fix:** Read from `docRef.current` Yjs maps directly instead of the derived `deck` state.
-    **Status:** Previously identified; expanded scope.
+#### I6. Slides: `duplicateSlide` and several callbacks depend on `[deck]`, defeating memoization
 
-## Minor Issues
+**File**: `apps/slides/src/components/slides/hooks/use-deck.ts`
 
-13. **All four apps: root component named `DocsRoot` in stickies, slides, and sheets**
+| Callback            | Line | Dependency                         |
+|---------------------|------|------------------------------------|
+| `deleteSlide`       | 175  | `[activeSlideId, deck.slideOrder]` |
+| `duplicateSlide`    | 218  | `[deck]`                           |
+| `moveObjectUp`      | 311  | `[deck.objects]`                   |
+| `moveObjectDown`    | 330  | `[deck.objects]`                   |
+| `moveObjectToFront` | 349  | `[deck.objects]`                   |
+| `moveObjectToBack`  | 368  | `[deck.objects]`                   |
 
-    The `__root.tsx` component function is named `DocsRoot` in all four apps, clearly copy-pasted from docs.
-    - `apps/stickies/src/routes/__root.tsx:18`
-    - `apps/slides/src/routes/__root.tsx:18`
-    - `apps/sheets/src/routes/__root.tsx:18`
+`deck` changes on every Yjs observer event, so these callbacks are recreated every render, defeating `useCallback`.
 
-    **Fix:** Rename to `StickiesRoot`, `SlidesRoot`, `SheetsRoot`.
-    **Status:** Previously identified; unchanged.
+**Fix**: Read from `docRef.current` Yjs maps directly instead of the derived `deck` state.
 
-14. **All four apps: `interface MyRouterContext` instead of `type`**
+#### I7. Stickies/Slides: No loading indicator before Yjs sync
 
-    All `__root.tsx` files use `interface` (e.g., `apps/docs/src/routes/__root.tsx:14`), violating the project's
-    "type over interface" rule.
+Unlike docs (which shows `<EigenLoader/>` until `connected`), slides renders the full editor with empty state and shows
+"No slides yet" until sync fires. Stickies uses `visibility: hidden` when `columnOrder.length <= 1`
+(`board.tsx:176`).
 
-    **Status:** Previously identified; unchanged.
+**Impact**: Flash of "No slides yet" or hidden content before sync, confusing on slow connections.
+**Fix**: Add a `synced` state flag; show `<EigenLoader/>` until true.
 
-15. **Docs sidebar and Sheets sidebar: `interface` instead of `type`**
+#### I8. Docs: `editorRef.current = editor` assigned during render
 
-    - `apps/docs/src/components/docs/docs-sidebar.tsx:12` -- `interface DocsSidebarProps`
-    - `apps/sheets/src/components/sheets-sidebar.tsx:13` -- `interface SheetsSidebarProps`
-    - `apps/slides/src/components/slides-sidebar.tsx:17` -- `interface SlidesSidebarProps`
+**File**: `apps/docs/src/components/docs/editor.tsx:270`
 
-    **Status:** Previously identified; added slides-sidebar.
+Side effect during render. The `editor` from `useEditor` is written to a ref so async callbacks can access the latest
+instance. React 19 strict mode may call render twice.
 
-16. **Stickies: `any` type assertions throughout Yjs code**
+**Fix**: Move to `useEffect(() => { editorRef.current = editor; }, [editor])`.
 
-    Pervasive `as Y.Map<any>`, `as Y.Array<any>` casts in `use-board.ts`, `use-drag-and-drop.ts`,
-    `normalize-board.ts`, `card-settings-dialog.tsx`, `column-settings-dialog.tsx`. Yjs's type system makes this
-    somewhat unavoidable, but a typed wrapper would improve safety.
+#### I9. Docs: `useEditor` deps don't include `access.canWrite`
 
-    **Status:** Previously identified; unchanged.
+**File**: `apps/docs/src/components/docs/editor.tsx:268`
 
-17. **Stickies: `CardSettingsDialog` initial state from props without reset on prop change**
+The `useEditor` hook is configured with `editable: access.canWrite` (line 129), but the dependency array is
+`[handleCommentClick]`. If write permission is revoked while the document is open (e.g., ACL change by another user),
+the editor remains editable.
 
-    - `apps/stickies/src/components/stickies/card-settings-dialog.tsx:23-25`
+**Fix**: Call `editor.setEditable(access.canWrite)` in a `useEffect` watching `access.canWrite`.
 
-    `useState(cardTitle)`, `useState(cardDescription)`, and `useState(cardColor)` capture props at mount time. If
-    another collaborator edits the card while the dialog is open, or if the same dialog is reused for a different card,
-    the local state will not update.
+#### I10. Slides: Presentation mode missing keyboard navigation and has non-standard right-click
 
-    **Fix:** Use a `key` prop on `CardSettingsDialog` tied to `cardId`, or use `useEffect` to sync state when props
-    change.
-    **Status:** Previously identified; unchanged.
+**File**: `apps/slides/src/components/slides/editor.tsx:377-418`
 
-18. **Stickies: `ColumnSettingsDialog` has the same stale-state problem**
+- Navigation: Click = next slide, right-click (`onContextMenu`) = previous. No arrow key support.
+- The `Escape` hotkey (line 155) sets `isPresenting = false` but does not call `document.exitFullscreen()`, causing
+  state desynchronization.
 
-    - `apps/stickies/src/components/stickies/column-settings-dialog.tsx:18`
+**Fix**: Add `ArrowRight`/`Space` = next, `ArrowLeft` = previous, `Escape` = exit presentation + exit fullscreen.
 
-    `useState(columnTitle)` captures the title at mount time. If the column is renamed by another collaborator while
-    the dialog is open, the input shows stale data.
+#### I11. Slides: `handleDragOver` shows copy cursor even when read-only
 
-    **Status:** New finding; analogous to issue 17.
+**File**: `apps/slides/src/components/slides/slide-canvas.tsx:81-84`
 
-19. **Slides: `SortableSlide` has unused `isDragOverlay` prop**
+Always sets `dropEffect = 'copy'` regardless of whether `onDropImage` is provided. In read-only mode, the cursor
+misleads users into thinking drop will work.
 
-    - `apps/slides/src/components/slides/slide-panel.tsx:99`
+**Fix**: Guard with `if (!onDropImage) return;` before `preventDefault`.
 
-    The parameter is declared but always passed as `false` (line 52). The overlay uses a different element entirely
-    (lines 86-91).
+#### I12. Stickies: `CardSettingsDialog` initial state stale when card changes
 
-    **Status:** Previously identified; unchanged.
+**File**: `apps/stickies/src/components/stickies/card-settings-dialog.tsx:23-25`
 
-20. **Docs: dynamic import of `chatApi` in comment creation**
+`useState(cardTitle)`, `useState(cardDescription)`, `useState(cardColor)` capture props at mount time. If another
+collaborator edits the card while the dialog is open, the input shows stale data.
 
-    - `apps/docs/src/components/docs/comment-dialog.tsx:43`
+**Fix**: Use a `key` prop on `CardSettingsDialog` tied to `cardId`, or sync state with a `useEffect`.
 
-    `const {chatApi} = await import("@workspace/lib/api")` adds async overhead to every comment creation. Likely done
-    to break a circular import.
+Same issue for `ColumnSettingsDialog` (`column-settings-dialog.tsx:18`).
 
-    **Status:** Previously identified; unchanged.
+### 2.3 Minor
 
-21. **Stickies: `normalizeBoard` runs on every Yjs observer callback**
+#### M1. All four apps: Root component named `DocsRoot` in stickies, slides, and sheets
 
-    - `apps/stickies/src/components/stickies/hooks/use-board.ts:105`
+- `apps/stickies/src/routes/__root.tsx:18`
+- `apps/slides/src/routes/__root.tsx:18`
+- `apps/sheets/src/routes/__root.tsx:18`
 
-    `normalizeBoard(doc)` is called inside `updateReactState`, which runs on every deep observation of tasks, columns,
-    and columnOrder. Since `normalizeBoard` itself modifies the Yjs doc (deleting duplicate task references, adopting
-    orphan tasks), calling it from an observer can trigger recursive observer calls. Yjs suppresses infinite recursion
-    within a transaction, but this pattern creates unnecessary work on every keystroke or minor update.
+Copy-paste artifact. Should be `StickiesRoot`, `SlidesRoot`, `SheetsRoot`.
 
-    The same applies to `normalizeDeck` in slides (`use-deck.ts:83`).
+#### M2. All four apps: `interface MyRouterContext` instead of `type`
 
-    **Fix:** Only normalize on sync or when specific structural changes are detected, not on every observer callback.
-    **Status:** New finding.
+All `__root.tsx` files use `interface` (`apps/docs/src/routes/__root.tsx:14`, etc.), violating the project's "type
+over interface" convention.
 
-22. **Stickies: `CardSettingsDialog` delete uses `return` inside `for...of` loop to skip columns**
+Additional `interface` violations:
 
-    - `apps/stickies/src/components/stickies/card-settings-dialog.tsx:53`
+- `apps/docs/src/components/docs/docs-sidebar.tsx:12` -- `interface DocsSidebarProps`
+- `apps/slides/src/components/slides-sidebar.tsx:12` -- `interface SlidesSidebarProps`
 
-    Inside the transact block's `for...of` loop, `if (!(columnMapValue instanceof Y.Map)) return;` uses `return`
-    instead of `continue`. This exits the entire `transact` callback early if any column entry is not a `Y.Map`,
-    potentially leaving the task in `tasksMap` without being removed.
+#### M3. Stickies: `normalizeBoard` runs on every Yjs observer callback
 
-    **Impact:** If any column value is corrupt, the card delete fails to remove the card from `tasksMap`.
-    **Fix:** Replace `return` with `continue`.
-    **Status:** New finding.
+**File**: `apps/stickies/src/components/stickies/hooks/use-board.ts:105`
 
-23. **Slides: presentation mode navigation uses `onContextMenu` for going back**
+Called inside `updateReactState` which fires on every deep observation. Since `normalizeBoard` modifies the Yjs doc
+(deleting duplicates, adopting orphans), this can trigger recursive observer calls. Yjs handles recursion, but it
+creates unnecessary work.
 
-    - `apps/slides/src/components/slides/editor.tsx:391-397`
+Same for `normalizeDeck` in slides (`use-deck.ts:83`).
 
-    Right-click navigates to the previous slide. This is unconventional and not discoverable. There is no keyboard
-    navigation (arrow keys) in presentation mode.
+**Fix**: Only normalize on sync or structural changes.
 
-    **Impact:** Users familiar with presentation software expect arrow keys and may not discover right-click navigation.
-    **Fix:** Add arrow key handlers (Left = previous, Right/Space = next, Escape = exit).
-    **Status:** New finding.
+#### M4. Stickies: `CardSettingsDialog` delete uses `return` instead of `continue`
 
-24. **Slides: presentation mode does not exit fullscreen when `Escape` is pressed from hotkey**
+**File**: `apps/stickies/src/components/stickies/card-settings-dialog.tsx:53`
 
-    - `apps/slides/src/components/slides/editor.tsx:154-155`
+```typescript
+for (const [, columnMapValue] of columnsMap) {
+    if (!(columnMapValue instanceof Y.Map)) return; // BUG: exits transact callback
+    // ...
+}
+```
 
-    The `Escape` hotkey sets `setIsPresenting(false)` but does not call `document.exitFullscreen()`. The browser's
-    native Escape handling may exit fullscreen separately, but the state desynchronizes: `isPresenting` becomes false
-    while still in fullscreen, or fullscreen exits while `isPresenting` is still true.
+If any column value is not a Y.Map, the entire transaction callback exits early, potentially leaving the task in
+`tasksMap`.
 
-    The `onClick` handler at line 388 does call `document.exitFullscreen()` when exiting at the end, but the Escape
-    hotkey does not.
+**Fix**: Replace `return` with `continue`.
 
-    **Fix:** In the Escape handler, check `document.fullscreenElement` and call `document.exitFullscreen()` if needed.
-    **Status:** New finding.
+#### M5. Stickies: `DeleteDialog` nested inside `Dialog` in `ColumnSettingsDialog`
 
-25. **Docs: `useEditor` dependency array only contains `[handleCommentClick]`**
+**File**: `apps/stickies/src/components/stickies/column-settings-dialog.tsx:99-105`
 
-    - `apps/docs/src/components/docs/editor.tsx:268`
+The `DeleteDialog` is inside the parent `Dialog`'s content tree. This can cause z-index and focus trap issues.
+`card-settings-dialog.tsx` correctly renders it as a sibling using `<>`.
 
-    The `useEditor` hook is configured with extensions that reference `yDoc`, `provider`, `auth.user`, and
-    `mediaFolderId`, but the dependency array is `[handleCommentClick]`. Tiptap's `useEditor` recreates the editor
-    when deps change. If `handleCommentClick` is stable (it is, via `useCallback` with empty deps at line 124),
-    the editor is never recreated, which is correct for the collaboration setup. However, if `access.canWrite` changes
-    (e.g., ACL update while the document is open), the `editable` option will not update because the editor is not
-    recreated.
+**Fix**: Move `DeleteDialog` outside the parent `Dialog`, matching the pattern in `card-settings-dialog.tsx`.
 
-    **Impact:** If write permission is revoked while the document is open, the editor remains editable until the
-    component remounts.
-    **Fix:** Call `editor.setEditable(access.canWrite)` in a `useEffect` when `access.canWrite` changes.
-    **Status:** New finding.
+#### M6. All apps: Shared route files (`mime.$mimeType.tsx`, `shared.$to.tsx`) heavily duplicated
 
-26. **Sheets: `useSheet` does not provide undo/redo support**
+Each app has nearly identical file-list route files. The only differences are MIME type filters, navigation targets,
+and which `allowCreate*` props are set. These could be extracted to a shared route factory.
 
-    Unlike docs (Tiptap has built-in collab undo), stickies, and slides (both create `Y.UndoManager`), sheets has no
-    undo/redo integration. The fortune-sheet toolbar includes undo/redo buttons, but they operate on fortune-sheet's
-    internal undo stack which is not synced with Yjs.
+#### M7. Docs: Dynamic import of `chatApi` in comment creation
 
-    **Impact:** Undo/redo may produce inconsistent state between collaborators.
-    **Status:** New finding; may be intentional due to fortune-sheet architecture limitations.
+**File**: `apps/docs/src/components/docs/comment-dialog.tsx:43`
 
-## Observations
+```typescript
+const {chatApi} = await import("@workspace/lib/api");
+```
 
-- **Architecture compliance is solid across all four apps.** All use `useCollabDocumentInfo` from `@workspace/lib/collab`,
-  `MediaResolverProvider` wrapping (where applicable), `AppShell` + `DriveContext`, and the shared `RevisionHistory`
-  component. No app makes direct `useQuery`/`useMutation` calls.
+Adds async overhead to every comment. Likely to break circular imports.
 
-- **Docs is the most mature app.** It has proper sync waiting (EigenLoader), clipboard support (copy/paste images
-  between documents), comment threads, and a well-structured Tiptap extension system.
+#### M8. Sheets: `SheetData` type is too loose
 
-- **Stickies has good conflict resolution.** The `normalizeBoard` function handles duplicate task references and orphan
-  tasks, which is a real concern in collaborative Kanban boards with concurrent drag-and-drop.
+**File**: `apps/sheets/src/components/sheets/hooks/use-sheet.ts:7`
 
-- **Slides has a rich feature set.** Snap lines, z-ordering, multi-select, clipboard integration, background images,
-  and presentation mode. The `useObjectDrag` hook is well-designed with canvas-relative coordinate conversion.
+```typescript
+export type SheetData = Record<string, any> & { name: string };
+```
 
-- **Sheets has the thinnest integration layer.** It delegates almost everything to fortune-sheet, with Yjs providing
-  op-based sync. This is appropriate given the complexity of the spreadsheet engine.
+This effectively opts out of type safety and cascades `as any` usage throughout the sheets code.
 
-- **All four apps share the same sidebar/drive-list pattern** for browsing documents, including shared-by-me and
-  shared-with-me views. The routes are nearly identical across apps (with appropriate MIME type filters).
+#### M9. Sheets: Snapshot debounce + unreliable `beforeunload` creates data-loss window
 
-- **The `WebsocketProvider` configuration is consistent**: `resyncInterval: 5000` and `connect: true` in all four
-  apps. No app shows connection status (connected/disconnected/reconnecting) in the UI.
+After the first flush, snapshots are debounced to 1 second (`use-sheet.ts:156`). The `beforeunload` handler
+attempts a synchronous Yjs transaction, which is unreliable on mobile browsers. While ops are synced immediately,
+the snapshot for new joiners will be stale.
 
-- **No accessibility attributes (ARIA)** are present on the interactive elements in stickies (drag handles, cards) or
-  slides (canvas objects, thumbnails). The drag-and-drop implementations rely entirely on mouse events.
+---
+
+## 3. Strengths
+
+### 3.1 Consistent Architecture
+
+All four apps follow the same structural pattern: AppShell wrapping, auth guards, DriveContext for root path, sidebar
+with MIME-filtered file listing, and a full-screen editor route. This makes the codebase predictable and navigable.
+
+### 3.2 Name-Based Media References
+
+Docs, stickies, and slides correctly use name-based references (e.g., `mediaName`, `chatName`) stored in Yjs. The
+`MediaResolverProvider` pattern provides clean resolution at render time, making document copy trivial (no Yjs
+rewriting needed).
+
+### 3.3 Clipboard Protocol
+
+The Eigen clipboard in docs and slides supports cross-app image paste with automatic re-upload detection via
+`needsReUpload(sourceParentId, targetFolderId)`. The clipboard data format includes source coordinates and style
+metadata, enabling faithful reproduction of objects across documents.
+
+### 3.4 Yjs Data Normalization
+
+Both `normalizeBoard` (stickies) and `normalizeDeck` (slides) handle CRDT convergence edge cases: deduplicating
+items that appear in multiple containers and adopting orphaned items. This is thoughtful defense against concurrent
+editing conflicts.
+
+### 3.5 `validateSearch` Correctly Extracts `uid`
+
+All `shared.$to.tsx` and `mime.$mimeType.tsx` routes extract both `pid` and `uid` from search params. This avoids
+the documented pitfall of shared item detail panes breaking when `uid` is missing.
+
+### 3.6 Op-Based Sheets Sync
+
+The sheets Yjs integration pushes individual cell operations to a Y.Array rather than full JSON snapshots. This
+provides good conflict resolution for concurrent edits on different cells.
+
+### 3.7 Slides Snap Lines
+
+The `useSnapTargets` + `snapRect` system computes alignment snaps from other objects, slide edges, and center lines.
+Both move and resize modes are supported, with visual feedback via rendered snap lines.
+
+### 3.8 Proper Access Control Propagation
+
+All editor routes check `docInfo.canWrite` and propagate it through to toolbars (conditionally showing edit controls),
+canvas interactions (disabling drag/resize), and `DocumentModeButton` (showing read-only indicator).
+
+---
+
+## 4. Coverage Analysis
+
+| Feature                     | Docs | Stickies  | Slides  | Sheets  |
+|-----------------------------|------|-----------|---------|---------|
+| Yjs real-time sync          | Yes  | Yes       | Yes     | Yes     |
+| Revision history            | Yes  | Yes       | Yes     | Yes     |
+| Undo/redo                   | Yes  | Yes       | Yes     | Yes*    |
+| Media references            | Yes  | Yes(chat) | Yes     | No      |
+| Clipboard (Eigen format)    | Yes  | No        | Yes     | No      |
+| Access control (read/write) | Yes  | Yes       | Yes     | Yes     |
+| Drag-and-drop               | N/A  | Yes       | Yes     | N/A     |
+| Mobile support              | Yes  | Yes       | Partial | Partial |
+| Print support               | Yes  | No        | No      | No      |
+| Error feedback on mutations | No   | Partial   | Partial | No      |
+| Connection status UI        | No   | No        | No      | No      |
+| Accessibility (ARIA)        | No   | No        | No      | N/A     |
+
+\* Sheets undo/redo is handled by fortune-sheet internally, not by `Y.UndoManager`.
+
+---
+
+## 5. Relevant Files
+
+### Shared Libraries
+
+- `/packages/lib/src/core/collab/hooks/use-collab.ts` -- `useCollabDocumentInfo`, `useCollabRevisions`, query keys
+- `/packages/lib/src/core/editor/hooks/use-file-content.ts` -- `useFileContent` (for inline text editing, not collab)
+- `/packages/lib/src/core/editor/hooks/use-file-save.ts` -- `useFileSave` (for inline text editing, not collab)
+
+### Docs
+
+- `/apps/docs/src/components/docs/editor.tsx` -- Main Tiptap editor with Yjs collaboration
+- `/apps/docs/src/components/docs/editor-toolbar.tsx` -- Full formatting toolbar (715 lines)
+- `/apps/docs/src/components/docs/extensions/resizable-image.tsx` -- Drag-resizable image node
+- `/apps/docs/src/components/docs/extensions/comment-mark.ts` -- Inline comment mark
+- `/apps/docs/src/components/docs/comment-dialog.tsx` -- Comment create/view dialogs
+
+### Stickies
+
+- `/apps/stickies/src/components/stickies/hooks/use-board.ts` -- Yjs board management + card/column CRUD
+- `/apps/stickies/src/components/stickies/hooks/use-drag-and-drop.ts` -- DnD with Yjs sync
+- `/apps/stickies/src/components/stickies/normalize-board.ts` -- CRDT normalization
+- `/apps/stickies/src/components/stickies/board.tsx` -- Main board with DnD context + restore logic
+
+### Slides
+
+- `/apps/slides/src/components/slides/hooks/use-deck.ts` -- Yjs deck management (455 lines)
+- `/apps/slides/src/components/slides/hooks/use-object-drag.ts` -- Canvas drag/resize
+- `/apps/slides/src/components/slides/hooks/use-snap-lines.ts` -- Alignment snapping
+- `/apps/slides/src/components/slides/editor.tsx` -- Main editor + clipboard + presentation mode (509 lines)
+- `/apps/slides/src/components/slides/slide-object.tsx` -- Object rendering + shared style helpers
+- `/apps/slides/src/components/slides/slide-properties-panel.tsx` -- Properties panel (575 lines)
+
+### Sheets
+
+- `/apps/sheets/src/components/sheets/hooks/use-sheet.ts` -- Op-based Yjs sync (209 lines)
+- `/apps/sheets/src/components/sheets/editor.tsx` -- Fortune-sheet workbook wrapper
+
+### Documentation
+
+- `/docs/STICKIES.md`, `/docs/SLIDES.md`, `/docs/SHEETS.md` -- Architecture docs
+- `/docs/MEDIA-REFERENCES.md` -- Name-based reference system
+
+---
+
+## 6. Summary
+
+The collab apps are architecturally sound with a consistent pattern across all four apps. The Yjs integration is
+well-structured with CRDT normalization for conflict resolution, and the media reference system is elegantly designed.
+
+**Priority fixes:**
+
+1. **Error feedback** (C1) -- Comment creation and other mutations lack `toast.error()` or `catch` blocks
+2. **Restore consistency** (C2) -- Y.Array restore branches should use `jsonToYType()` like the Y.Map branches
+3. **Hardcoded colors** (I2) -- Multiple `border-blue-500`, `bg-white`, `text-blue-600` violations need theme tokens
+4. **Stale ref returns** (I1) -- `useBoard`/`useDeck` should use state instead of returning ref snapshots
+5. **Code deduplication** (I4, I5) -- Extract `jsonToYType` and `restoreYjsDocument` to shared utility
+6. **Slides presentation mode** (I10) -- Add keyboard navigation and fix Escape/fullscreen desync

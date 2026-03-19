@@ -1,7 +1,7 @@
 # Frontend Review: Chat App
 
 **Scope:** `apps/chat/`, `packages/lib/src/core/chat/`, `packages/ui/src/components/layout/chat/`
-**Reviewed:** 2026-03-18
+**Reviewed:** 2026-03-19
 
 ---
 
@@ -10,21 +10,25 @@
 ### 1. Missing `error` case in command dispatch causes malformed commands to be sent as messages
 
 **File:** `packages/lib/src/core/chat/hooks/use-chat-room.ts:89-137`
-**Previous review:** Identified as Important #5, upgraded to Critical after deeper analysis.
 
 `getLocalCommand()` can return `{kind: 'error', error: string}` (line 47 of `commands.ts`) when
 `validateCommand()` detects a malformed command -- e.g., `/me` without arguments, `/whisper` without
 a target, `/invite` with an invalid email. The `switch` statement in `handleSendMessage` has no
-`case 'error'` and no `default`. When the error kind is returned, execution falls through the entire
-`if (local) { switch ... }` block and reaches line 140:
+`case 'error'` and no `default`. When the error kind is returned, the switch body has no matching
+case, so execution exits the `if (local)` block and reaches line 140:
 
-```
+```typescript
 await postMessage.mutateAsync({content: rawContent, attachments});
 ```
 
 This sends the raw malformed command text (e.g., `/me`, `/whisper badformat`) as a regular message
 visible to all room participants. The validation exists specifically to prevent this, but its output
 is silently ignored.
+
+Separately, the `isUnknownCommand` check on line 83 only catches commands whose first word is not in
+`SLASH_COMMANDS`. But a known command with bad arguments (like bare `/me`) passes `isUnknownCommand`
+(returns false because `/me` is in the list), gets to `getLocalCommand` which returns `{kind: 'error'}`,
+which the switch does not handle, and falls through to `postMessage`.
 
 **Impact:** User-facing bug. Invalid slash commands produce visible garbage messages in the chat room
 instead of showing the validation error. For whisper commands with malformed targets, this leaks the
@@ -37,16 +41,20 @@ intended private content as a public message.
 ### 2. No error handling in `handleSendMessage` -- unhandled Promise rejections
 
 **File:** `packages/lib/src/core/chat/hooks/use-chat-room.ts:69-141`
-**Status:** New finding.
 
 The entire `handleSendMessage` async function has zero `try/catch` blocks. It calls three different
 `.mutateAsync()` operations: `uploadFile` (line 77), `postMessage` (lines 112, 140), and
 `updateACL` (line 133). Any of these can throw (network error, 403, quota exceeded, etc.).
 
 Because `ChatMessageInput` calls `onSend` without awaiting it (the prop type is
-`(rawContent: string, files?: File[]) => void`, not `Promise<void>`), every rejection becomes an
-unhandled Promise rejection. The user sees no feedback -- the input is already cleared (line 54 of
-`chat-message-input.tsx`), files are already removed, and focus is already reset.
+`(rawContent: string, files?: File[]) => void`, not `Promise<void>` -- see
+`chat-message-input.tsx:11`), every rejection becomes an unhandled Promise rejection. The user sees
+no feedback -- the input is already cleared (line 54 of `chat-message-input.tsx`), files are already
+removed, and focus is already reset.
+
+Per the project rule "Every mutation needs error feedback -- wrap `mutateAsync` in try/catch with
+`toast.error()`, or use the `onError` callback", and `usePostMessage` has no `onError` callback
+either (`use-chat.ts:37-54`).
 
 **Impact:** Messages silently fail to send with no user feedback. File uploads can fail mid-batch
 via `Promise.all` causing partial uploads with no recovery. The input is cleared so the user loses
@@ -61,55 +69,12 @@ content on failure.
 
 ## Important Issues
 
-### 3. 5-second polling redundant with SSE -- only domain using `refetchInterval`
-
-**File:** `packages/lib/src/core/chat/hooks/use-chat.ts:34`
-**Previous review:** Identified as Important #1, analysis confirmed and refined.
-
-`useMessages` sets `refetchInterval: 5000`. A codebase-wide search confirms this is the only hook
-in the entire project that uses `refetchInterval`. Every other domain (Drive, Mail, Contacts,
-Calendar) relies exclusively on SSE for real-time updates. The SSE handler
-`handleChatSSEvent` already handles `CHAT_MESSAGE_POSTED`, `CHAT_MESSAGE_EDITED`, and
-`CHAT_MESSAGE_DELETED` and invalidates the correct query key.
-
-**Impact:** Each open chat tab generates a GET request every 5 seconds unconditionally. With N users
-each with M open chat tabs, this creates N * M requests every 5 seconds. The polling also triggers
-the auto-scroll `useEffect` in `ChatMessageList` on every refetch that changes the data reference
-(even without new messages), which can cause unwanted scroll jumps when the user is reading history.
-
-**Fix:** Remove `refetchInterval` entirely and rely on SSE, consistent with all other domains. If a
-fallback is needed, increase to 60s or condition on SSE connection status via `useSSE` context.
-
----
-
-### 4. `useChats` query key does not include `ownerId` -- stale data on user switch
-
-**File:** `packages/lib/src/core/chat/hooks/use-chat.ts:14-15`
-**Status:** New finding.
-
-The query key is `[...driveKeys.mime('application-eigenchat'), 'own']` which resolves to
-`['drive', 'mime', 'application-eigenchat', 'own']`. The `ownerId` parameter is used in the
-`queryFn` (to call the API and to filter results) but is not part of the query key. If a different
-user logs in within the same browser session (without a full page reload), TanStack Query will serve
-the cached result from the previous user since the key is identical.
-
-The client-side `filter(p => p.ownerId === ownerId)` on line 19 would return an empty array if the
-API correctly scopes by auth session, but the query itself would not refetch until something
-invalidates the mime query key.
-
-**Impact:** Potential data leakage or stale sidebar list after user switch within the same tab.
-
-**Fix:** Include `ownerId` in the query key: `[...driveKeys.mime('application-eigenchat'), 'own', ownerId]`.
-
----
-
-### 5. `window.location.href` navigation in sidebar causes full page reload
+### 3. `window.location.href` navigation in sidebar causes full page reload
 
 **File:** `apps/chat/src/components/chat/chat-sidebar.tsx:44`
-**Previous review:** Identified as Important #3, confirmed.
 
 After creating a chat, the sidebar navigates with `window.location.href = getChatRoomUrl(...)`.
-This destroys the entire React tree, all client state, and SSE connection. The index page
+This destroys the entire React tree, all client state, and the SSE connection. The index page
 (`_auth.index.tsx:46-48`) uses TanStack Router `navigate()` for the exact same purpose. The sidebar
 component does not have access to the router's `useNavigate` since it is rendered outside the route
 tree (via `AppShell`'s sidebar render prop), which is likely why `window.location.href` was used.
@@ -122,10 +87,9 @@ prop.
 
 ---
 
-### 6. File uploads silently dropped when media folder is missing
+### 4. File uploads silently dropped when media folder is missing
 
 **File:** `packages/lib/src/core/chat/hooks/use-chat-room.ts:73-81`
-**Status:** New finding.
 
 When a user attaches files, the code looks for a folder named `media` within the chat contents
 (line 74). If no media folder exists (e.g., if the chat was created by an older version, or the
@@ -143,10 +107,9 @@ while files are present.
 
 ---
 
-### 7. Auto-scroll fires unconditionally on every message count change
+### 5. Auto-scroll fires unconditionally on every message count change
 
 **File:** `packages/ui/src/components/layout/chat/chat-message-list.tsx:136-138`
-**Status:** New finding.
 
 ```typescript
 useEffect(() => {
@@ -156,8 +119,8 @@ useEffect(() => {
 
 This scrolls to the bottom whenever `messages.length` changes. Issues:
 
-1. When the user is scrolled up reading history and a new message arrives (via SSE or polling), they
-   are forcibly scrolled to the bottom, losing their place.
+1. When the user is scrolled up reading history and a new message arrives via SSE, they are forcibly
+   scrolled to the bottom, losing their place.
 2. The initial render also triggers this, which is correct, but there is no distinction between
    "user sent a message" (should scroll) and "someone else sent a message while I'm reading old
    messages" (should not scroll, should show a "new messages" indicator instead).
@@ -170,12 +133,45 @@ auto-scroll if they are. Show a "new messages" badge when new messages arrive wh
 
 ---
 
+### 6. No read state tracking -- backend endpoint unused
+
+**File:** `packages/lib/src/core/chat/hooks/use-chat.ts` (missing), `apps/api/src/routes/chat.ts`
+
+The backend provides a `POST /chat/:ownerId/:mountId/:chatId/read` endpoint and a `read_state`
+table in the schema, but no frontend hook calls this endpoint. There is no `useMarkAsRead` hook,
+no unread badge on the sidebar, and no indication of which messages are new.
+
+**Impact:** Users have no way to know which chats have unread messages. This is a functional gap
+rather than a bug, but the backend infrastructure exists and is simply not wired up.
+
+**Fix:** Add a `useMarkAsRead` mutation hook that calls the read endpoint when a chat is opened.
+Add unread counts to the sidebar chat list items.
+
+---
+
+### 7. No pagination support -- all messages loaded at once
+
+**File:** `packages/lib/src/core/chat/hooks/use-chat.ts:25-35`
+
+The backend supports cursor-based pagination via `before` and `limit` query parameters
+(see `apps/api/src/routes/chat.ts:12-17`), defaulting to 50 messages. The frontend `useMessages`
+hook calls `messages.get()` with no parameters, so it always receives the latest 50 messages only.
+There is no "load more" / infinite scroll mechanism to retrieve older messages.
+
+**Impact:** Chat history beyond the last 50 messages is inaccessible. Users cannot scroll up to
+read older messages. For long-lived chat rooms this is a significant data loss from the user's
+perspective.
+
+**Fix:** Switch to `useInfiniteQuery` with the `before` cursor, or add a "load earlier messages"
+button that fetches the next page.
+
+---
+
 ## Minor Issues
 
 ### 8. `console.log` left in production code
 
 **File:** `apps/chat/src/routes/_auth.index.tsx:25`
-**Previous review:** Identified as Minor #1, confirmed.
 
 `console.log('redirecting to chat', chat)` inside the `useEffect` auto-redirect. Debug logging.
 
@@ -187,13 +183,12 @@ auto-scroll if they are. Show a "new messages" badge when new messages arrive wh
 
 **File:** `packages/lib/src/core/chat/hooks/use-chat-room.ts:10-13` and
 `packages/ui/src/components/layout/chat/chat-utils.ts:13-16`
-**Status:** New finding.
 
 Identical `RoomMember` type is defined in two locations:
 - `packages/lib/src/core/chat/hooks/use-chat-room.ts:10` (exported)
 - `packages/ui/src/components/layout/chat/chat-utils.ts:13` (exported, used by `ChatMessageInput` and `ChatPlayerSuggest`)
 
-Both define `{ email: string; displayName: string; }`. This could diverge over time.
+Both define `{ email: string; displayName: string; }`. These can diverge independently.
 
 **Fix:** Define in one place (e.g., `packages/lib/src/types/chat.ts`) and import in both.
 
@@ -202,7 +197,6 @@ Both define `{ email: string; displayName: string; }`. This could diverge over t
 ### 10. Redundant `beforeLoad` auth check in `_auth.index.tsx`
 
 **File:** `apps/chat/src/routes/_auth.index.tsx:90-98`
-**Previous review:** Identified as Minor #3, confirmed.
 
 The `_auth.index.tsx` child route has its own `beforeLoad` auth redirect, but the parent
 `_auth.tsx` layout route already handles this at lines 4-12. The child check is redundant. The
@@ -215,7 +209,6 @@ The `_auth.index.tsx` child route has its own `beforeLoad` auth redirect, but th
 ### 11. SSE handler swallows presence/typing events with no UI consumer
 
 **File:** `packages/lib/src/core/chat/sse-handlers.ts:19-22`
-**Previous review:** Identified as Minor #5, confirmed.
 
 `CHAT_TYPING`, `CHAT_MEMBER_ENTERED`, and `CHAT_MEMBER_LEFT` events are matched and return `true`
 (indicating the event was handled) but trigger no cache invalidation or UI update. The comment says
@@ -230,39 +223,21 @@ are intentionally swallowed pending future UI work.
 
 ---
 
-### 12. Whisper messages use hardcoded `orange-50` which is invisible in dark mode
-
-**File:** `packages/ui/src/components/layout/chat/chat-message-list.tsx:205-207`
-**Status:** New finding.
-
-Whisper messages use `bg-orange-50/30` and `hover:bg-orange-50/50` -- Tailwind orange-50 is a very
-light color (`#fff7ed`). In dark mode, this produces a nearly invisible off-white tint against the
-dark background. The project uses `dark:` variant support (`@custom-variant dark` in globals.css),
-but no `dark:` variants are applied anywhere in the chat message list component.
-
-**Impact:** Whisper messages lose their visual distinction in dark mode.
-
-**Fix:** Add dark mode variants, e.g., `dark:bg-orange-950/30 dark:hover:bg-orange-950/50`.
-
----
-
-### 13. `interface` instead of `type` in `__root.tsx`
+### 12. `interface` instead of `type` in `__root.tsx`
 
 **File:** `apps/chat/src/routes/__root.tsx:7`
-**Previous review:** Identified as Minor #2, confirmed.
 
 `interface MyRouterContext` should be `type MyRouterContext = { auth: AuthContextType }` per the
-project's coding standard. This pattern exists in all apps' `__root.tsx` files (inherited from
-TanStack Router examples).
+project's coding standard ("Always `type` over `interface` -- except when methods are needed").
+This pattern exists in all apps' `__root.tsx` files (inherited from TanStack Router examples).
 
 **Fix:** Change to `type`. Low priority since it appears across all apps.
 
 ---
 
-### 14. `onSend` prop typed as synchronous but receives async handler
+### 13. `onSend` prop typed as synchronous but receives async handler
 
 **File:** `packages/ui/src/components/layout/chat/chat-message-input.tsx:11`
-**Status:** New finding.
 
 The prop is `onSend: (rawContent: string, files?: File[]) => void` but the actual handler
 (`handleSendMessage` in `use-chat-room.ts:69`) is `async` and returns `Promise<void>`. The
@@ -281,10 +256,9 @@ consider awaiting before clearing, or implement optimistic state restoration.
 
 ---
 
-### 15. Textarea does not auto-grow with content
+### 14. Textarea does not auto-grow with content
 
 **File:** `packages/ui/src/components/layout/chat/chat-message-input.tsx:264-265`
-**Status:** New finding.
 
 The textarea has `rows={1}` and `resize-none` with `min-h-[40px] max-h-[120px]`, but there is no
 auto-resize logic. The textarea remains a single row regardless of content length. Multi-line input
@@ -298,6 +272,36 @@ within a 40px-high box until the content exceeds `max-h-[120px]`.
 
 ---
 
+### 15. `currentUserId` prop accepted but unused in `ChatMessageList`
+
+**File:** `packages/ui/src/components/layout/chat/chat-message-list.tsx:20`
+
+The `ChatMessageListProps` type declares `currentUserId: string` and the prop is passed from
+`_auth.$ownerId.$mountId.$chatId.tsx:49`, but the component body never references it. This is
+likely a remnant from planned features (e.g., right-aligning own messages, showing edit/delete
+controls for own messages).
+
+**Fix:** Either implement the feature that needs it, or remove the prop from the type and the
+call site.
+
+---
+
+### 16. `data: any` in `DriveCreateChatProps` callback
+
+**File:** `packages/ui/src/components/layout/drive/drive-create-chat.tsx:13`
+
+```typescript
+onAfterAction?: (actionType: string, data: any) => void;
+```
+
+Per the project rule "Never use `as any` -- fix the type at the source", this `data: any` parameter
+should be typed. The call site passes `{name: fileName}` (line 41).
+
+**Fix:** Type as `(actionType: string, data: { name: string }) => void` or use a discriminated
+union if multiple action types are planned.
+
+---
+
 ## Observations
 
 These are architectural notes and patterns worth documenting, not bugs.
@@ -307,13 +311,41 @@ These are architectural notes and patterns worth documenting, not bugs.
 The chat app follows project conventions well:
 - All data hooks (`useChats`, `useMessages`, `usePostMessage`, `useCreateChat`, `useChatRoom`) are
   in `packages/lib/src/core/chat/hooks/` -- no direct `useQuery`/`useMutation` in app code.
-- SSE handler is correctly registered in `use-sse.ts` and invalidates the right query keys.
+- SSE handler is correctly registered and invalidates the right query keys for message events.
 - Query keys follow the hierarchical pattern (`chatKeys.all`, `chatKeys.messages(...)`).
+- `chatKeys.messages` includes `ownerId`, `mountId`, and `chatId` -- correctly scoped.
+- `useChats` query key includes `ownerId` via `driveKeys.mime(ownerId, ...)` -- correctly scoped.
 - Auth guard in `_auth.tsx` uses the standard `beforeLoad` redirect.
 - Uses `EigenApp` provider stack and `AppShell` wrapper correctly.
 - Shared types imported from `@workspace/lib/types/chat`.
 - Slash commands are correctly split between frontend-only (local system messages) and
-  backend-processed.
+  backend-processed (emotes, whispers sent via POST).
+- Error handling in `ChatSidebar.handleCreateChat` and `ChatIndex.handleCreateChat` both use
+  try/catch with `toast.error()` -- compliant with project rules.
+- Whisper messages now have proper dark mode variants (`dark:bg-orange-950/20`).
+- Polling (`refetchInterval`) has been removed; chat relies purely on SSE, consistent with all other
+  domains.
+
+### Strengths
+
+- **Command system**: The slash command architecture is well-designed with clean separation between
+  `validateCommand` (shared validation), `getLocalCommand` (frontend-only dispatch),
+  `isUnknownCommand` (guard), and the backend command processor. The help text is maintained in one
+  place (`COMMANDS_HELP`) and rendered both in the help command output and the slash suggest dropdown.
+- **@ mention suggest**: The player suggestion system handles edge cases well -- only triggers after
+  whitespace/start-of-line, merges room members with contact suggestions, deduplicates, and handles
+  keyboard navigation (arrow keys, Tab, Enter, Escape) cleanly.
+- **Slash suggest**: Similarly well-implemented with deduplicated results, keyboard navigation, and
+  correct handling of commands that need arguments (adds trailing space) vs those that don't.
+- **Attachment preview**: Inline image thumbnails in attachment chips with click-to-preview
+  integration via `usePreview`.
+- **Message grouping**: The `isSameAuthorAndClose` function provides clean message grouping within
+  5-minute windows, hiding redundant avatars and headers for consecutive messages from the same
+  author.
+- **Rich content rendering**: `RichContent` component replaces inline email addresses with avatar +
+  name links using `EMAIL_FIND_REGEX` -- elegant inline enrichment.
+- **Inspect card**: The `/inspect` command renders a rich contact card with avatar, company, job
+  title, and phone number pulled from the user's contacts database. Nice MUD-inspired touch.
 
 ### `localIdCounter` module-level variable
 
@@ -321,15 +353,15 @@ The chat app follows project conventions well:
 module-level mutable variable for generating local message IDs. This accumulates across navigation
 and never resets. During HMR in development, the counter resets to 0, potentially causing ID
 collisions with existing local messages in React's virtual DOM. Not a practical bug since local
-messages are ephemeral and IDs only need session uniqueness, but worth noting as an unconventional
-pattern. Previous review flagged this; assessment unchanged.
+messages are ephemeral and IDs only need session uniqueness.
 
 ### Local messages grow without bound
 
 `localMessages` state in `useChatRoom` (line 29) accumulates every system message from slash
 commands and never clears. Over very long sessions this array grows, and the `allMessages` memo
 (line 143) sorts the entire combined array on every change. Not a practical performance issue for
-realistic usage. Previous review flagged this; assessment unchanged.
+realistic usage, but the state persists within the hook's lifecycle (i.e., while the chat room
+is mounted).
 
 ### No `mobileColumn`/`onBack` in `ColumnLayout` -- single-column layout
 
@@ -354,3 +386,35 @@ shared chats) and filters client-side with `p.ownerId === ownerId`. This means s
 are fetched but discarded. The sidebar only shows the user's own chats. This may be intentional
 (simplicity over optimization) but means the chat app currently has no way to access team chats or
 chats shared by others, except by direct URL.
+
+---
+
+## Files Reviewed
+
+| File                                                             | Purpose                                                                            |
+|------------------------------------------------------------------|------------------------------------------------------------------------------------|
+| `apps/chat/src/main.tsx`                                         | App entry point, router setup                                                      |
+| `apps/chat/src/routes/__root.tsx`                                | Root layout with AppShell + sidebar                                                |
+| `apps/chat/src/routes/_auth.tsx`                                 | Auth guard layout                                                                  |
+| `apps/chat/src/routes/_auth.index.tsx`                           | Index page with auto-redirect + create chat                                        |
+| `apps/chat/src/routes/_auth.$ownerId.$mountId.$chatId.tsx`       | Chat room view                                                                     |
+| `apps/chat/src/routes/login.tsx`                                 | Login route                                                                        |
+| `apps/chat/src/components/chat/chat-sidebar.tsx`                 | Sidebar with chat list + create button                                             |
+| `apps/chat/src/routeTree.gen.ts`                                 | Generated route tree                                                               |
+| `apps/chat/css/globals.css`                                      | App-specific CSS (2 classes)                                                       |
+| `packages/lib/src/core/chat/hooks/use-chat.ts`                   | `useChats`, `useMessages`, `usePostMessage`, `useCreateChat`, `invalidateMessages` |
+| `packages/lib/src/core/chat/hooks/use-chat-room.ts`              | `useChatRoom` -- room state, command dispatch, message send                        |
+| `packages/lib/src/core/chat/commands.ts`                         | `getLocalCommand`, `isUnknownCommand`, `COMMANDS_HELP`, `SLASH_COMMANDS`           |
+| `packages/lib/src/core/chat/sse-handlers.ts`                     | `handleChatSSEvent`                                                                |
+| `packages/lib/src/core/chat/index.ts`                            | Barrel export                                                                      |
+| `packages/lib/src/core/chat/hooks/index.ts`                      | Barrel export                                                                      |
+| `packages/lib/src/types/chat.ts`                                 | `ChatMessage`, `ChatReadState` types                                               |
+| `packages/lib/src/validation/command.ts`                         | `validateCommand`                                                                  |
+| `packages/lib/src/validation/email.ts`                           | `validateEmailTarget`, `EMAIL_REGEX`                                               |
+| `packages/ui/src/components/layout/chat/chat-message-list.tsx`   | Message rendering, grouping, attachments, inspect cards                            |
+| `packages/ui/src/components/layout/chat/chat-message-input.tsx`  | Input with file attach, @ mention suggest, slash suggest                           |
+| `packages/ui/src/components/layout/chat/chat-slash-suggest.tsx`  | Slash command autocomplete dropdown                                                |
+| `packages/ui/src/components/layout/chat/chat-player-suggest.tsx` | @ mention autocomplete dropdown                                                    |
+| `packages/ui/src/components/layout/chat/chat-utils.ts`           | `getAtSuggestQuery`, `RoomMember` type                                             |
+| `packages/ui/src/components/layout/chat/index.ts`                | Barrel export                                                                      |
+| `packages/ui/src/components/layout/drive/drive-create-chat.tsx`  | Drive-integrated chat creation dialog                                              |
