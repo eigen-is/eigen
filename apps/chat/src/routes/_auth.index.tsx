@@ -21,7 +21,6 @@ function ChatIndex() {
     useEffect(() => {
         if (data && data.length > 0) {
             const chat = data[0];
-            console.log('redirecting to chat', chat);
             navigate({
                 to: '/$ownerId/$mountId/$chatId',
                 params: {

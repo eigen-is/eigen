@@ -362,7 +362,7 @@ export function invalidateItemCreated(queryClient: QueryClient, ownerId: string,
         const normalizedMimeType = mimeType.replace('/', '-');
         queryClient.invalidateQueries({queryKey: driveKeys.mime(ownerId, normalizedMimeType)});
     }
-    invalidateHomeSize(queryClient);
+    invalidateHomeSize(queryClient, ownerId);
 }
 
 export function invalidateItemDeleted(queryClient: QueryClient, ownerId: string, mountId: string, pathId: string, parentId: string | null | undefined, mimeType: string | null | undefined): void {
@@ -374,7 +374,7 @@ export function invalidateItemDeleted(queryClient: QueryClient, ownerId: string,
         const normalizedMimeType = mimeType.replace('/', '-');
         queryClient.invalidateQueries({queryKey: driveKeys.mime(ownerId, normalizedMimeType)});
     }
-    invalidateHomeSize(queryClient);
+    invalidateHomeSize(queryClient, ownerId);
 }
 
 export function invalidatePathRenamed(queryClient: QueryClient, ownerId: string, mountId: string, pathId: string, parentId: string | null | undefined, mimeType: string | null | undefined): void {

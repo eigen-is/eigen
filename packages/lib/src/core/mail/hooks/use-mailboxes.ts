@@ -4,11 +4,12 @@ import {useAuth} from '@workspace/lib/auth';
 
 export const mailboxKeys = {
     all: ['mailboxes'] as const,
-    lists: () => [...mailboxKeys.all, 'list'] as const,
-    list: (filters: Record<string, any>) => [...mailboxKeys.lists(), {filters}] as const,
-    details: () => [...mailboxKeys.all, 'detail'] as const,
-    detail: (id: string) => [...mailboxKeys.details(), id] as const,
-    exists: (id: string) => [...mailboxKeys.detail(id), 'exists'] as const,
+    owner: (ownerId: string) => [...mailboxKeys.all, ownerId] as const,
+    lists: (ownerId: string) => [...mailboxKeys.owner(ownerId), 'list'] as const,
+    list: (ownerId: string, filters: Record<string, any>) => [...mailboxKeys.lists(ownerId), {filters}] as const,
+    details: (ownerId: string) => [...mailboxKeys.owner(ownerId), 'detail'] as const,
+    detail: (ownerId: string, id: string) => [...mailboxKeys.details(ownerId), id] as const,
+    exists: (ownerId: string, id: string) => [...mailboxKeys.detail(ownerId, id), 'exists'] as const,
 };
 
 export function useMailboxes() {
@@ -16,7 +17,7 @@ export function useMailboxes() {
     const ownerId = user?.id || '';
 
     return useQuery({
-        queryKey: mailboxKeys.lists(),
+        queryKey: mailboxKeys.lists(ownerId),
         queryFn: async () => {
             const response = await mailApi({ownerId}).mailboxes.get();
             return response.data || [];
@@ -28,7 +29,7 @@ export function useMailboxes() {
     });
 }
 
-// SSE invalidation function
-export function invalidateMailboxes(queryClient: QueryClient): void {
-    queryClient.invalidateQueries({queryKey: mailboxKeys.lists()});
+// Invalidation function (ownerId-scoped)
+export function invalidateMailboxes(queryClient: QueryClient, ownerId: string): void {
+    queryClient.invalidateQueries({queryKey: mailboxKeys.lists(ownerId)});
 }

@@ -2,70 +2,67 @@ import type {QueryClient} from '@tanstack/react-query';
 import type {SSEvent} from '@workspace/lib/types/sse';
 import {SSEventType} from '@workspace/lib/types/sse';
 import {toast} from 'sonner';
-import {
-    invalidateCalendarCreated,
-    invalidateCalendarDeleted,
-    invalidateCalendarShared,
-    invalidateCalendarUnshared,
-    invalidateCalendarUpdated,
-    invalidateEventCreated,
-    invalidateEventDeleted,
-    invalidateEventUpdated,
-} from './hooks/use-calendar';
+import {calendarKeys} from './hooks/use-calendar';
+import {homeKeys} from '../home';
+
+function invalidateAllCalendar(queryClient: QueryClient): void {
+    queryClient.invalidateQueries({queryKey: calendarKeys.all});
+    queryClient.invalidateQueries({queryKey: homeKeys.all});
+}
 
 export function handleCalendarSSEvent(event: SSEvent, queryClient: QueryClient): boolean {
     if (!event?.type?.startsWith('calendar:')) return false;
 
     switch (event.type) {
         case SSEventType.CALENDAR_CREATED:
-            invalidateCalendarCreated(queryClient);
+            invalidateAllCalendar(queryClient);
             return true;
 
         case SSEventType.CALENDAR_UPDATED:
-            invalidateCalendarUpdated(queryClient);
+            invalidateAllCalendar(queryClient);
             return true;
 
         case SSEventType.CALENDAR_DELETED:
-            invalidateCalendarDeleted(queryClient);
+            invalidateAllCalendar(queryClient);
             return true;
 
         case SSEventType.CALENDAR_EVENT_CREATED:
-            invalidateEventCreated(queryClient);
+            invalidateAllCalendar(queryClient);
             return true;
 
         case SSEventType.CALENDAR_EVENT_UPDATED:
-            invalidateEventUpdated(queryClient);
+            invalidateAllCalendar(queryClient);
             return true;
 
         case SSEventType.CALENDAR_EVENT_DELETED:
-            invalidateEventDeleted(queryClient);
+            invalidateAllCalendar(queryClient);
             return true;
 
         case SSEventType.CALENDAR_SHARED:
-            invalidateCalendarShared(queryClient);
+            invalidateAllCalendar(queryClient);
             if ('calendarShare' in event) toast('Calendar shared', {description: `"${event.calendarShare.calendarName}" was shared with you`});
             return true;
 
         case SSEventType.CALENDAR_UNSHARED:
-            invalidateCalendarUnshared(queryClient);
+            invalidateAllCalendar(queryClient);
             if ('calendarShare' in event) toast('Calendar unshared', {description: `"${event.calendarShare.calendarName}" is no longer shared with you`});
             return true;
 
         case SSEventType.CALENDAR_INVITE_RECEIVED:
-            invalidateEventCreated(queryClient);
+            invalidateAllCalendar(queryClient);
             if ('calendar' in event && event.calendar.title) toast('New invitation', {description: event.calendar.title});
             return true;
 
         case SSEventType.CALENDAR_INVITE_UPDATED:
-            invalidateEventUpdated(queryClient);
+            invalidateAllCalendar(queryClient);
             return true;
 
         case SSEventType.CALENDAR_INVITE_CANCELLED:
-            invalidateEventDeleted(queryClient);
+            invalidateAllCalendar(queryClient);
             return true;
 
         case SSEventType.CALENDAR_INVITE_RSVP:
-            invalidateEventUpdated(queryClient);
+            invalidateAllCalendar(queryClient);
             return true;
 
         default:

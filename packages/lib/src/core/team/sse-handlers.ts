@@ -10,7 +10,7 @@ export function handleTeamSSEvent(event: SSEvent, queryClient: QueryClient): boo
     switch (event.type) {
         case SSEventType.TEAM_SETTINGS_UPDATED:
             invalidateAllTeamSettings(queryClient);
-            queryClient.invalidateQueries({queryKey: calendarKeys.sharedCalendars()});
+            queryClient.invalidateQueries({queryKey: calendarKeys.all});
             return true;
 
         default:

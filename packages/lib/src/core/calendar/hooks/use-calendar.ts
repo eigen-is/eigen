@@ -14,19 +14,23 @@ import {AppError, onMutationError} from '../../api-error';
 
 export const calendarKeys = {
     all: ['calendar'] as const,
-    calendars: () => [...calendarKeys.all, 'calendars'] as const,
-    calendarList: () => [...calendarKeys.calendars(), 'list'] as const,
-    events: () => [...calendarKeys.all, 'events'] as const,
-    eventRange: (from: number, to: number) => [...calendarKeys.events(), {from, to}] as const,
-    calendarEvents: (ownerId: string, calendarId: string, from: number, to: number) => [...calendarKeys.events(), ownerId, calendarId, {from, to}] as const,
-    sharedCalendars: () => [...calendarKeys.all, 'shared'] as const,
+    owner: (ownerId: string) => [...calendarKeys.all, ownerId] as const,
+    calendars: (ownerId: string) => [...calendarKeys.owner(ownerId), 'calendars'] as const,
+    calendarList: (ownerId: string) => [...calendarKeys.calendars(ownerId), 'list'] as const,
+    events: (ownerId: string) => [...calendarKeys.owner(ownerId), 'events'] as const,
+    eventRange: (ownerId: string, from: number, to: number) => [...calendarKeys.events(ownerId), {from, to}] as const,
+    calendarEvents: (ownerId: string, calendarId: string, from: number, to: number) => [...calendarKeys.events(ownerId), calendarId, {
+        from,
+        to
+    }] as const,
+    sharedCalendars: (ownerId: string) => [...calendarKeys.owner(ownerId), 'shared'] as const,
 };
 
 // --- Calendar CRUD ---
 
 export function useCalendars(ownerId: string) {
     return useQuery({
-        queryKey: calendarKeys.calendarList(),
+        queryKey: calendarKeys.calendarList(ownerId),
         queryFn: async () => {
             const response = await calendarApi({ownerId}).calendars.get();
             return (response.data || []) as CalendarItem[];
@@ -45,7 +49,7 @@ export function useCreateCalendar(ownerId: string) {
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        onSuccess: () => invalidateCalendarCreated(queryClient),
+        onSuccess: () => invalidateCalendarCreated(queryClient, ownerId),
         onError: onMutationError,
     });
 }
@@ -59,7 +63,7 @@ export function useUpdateCalendar(ownerId: string) {
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        onSuccess: () => invalidateCalendarUpdated(queryClient),
+        onSuccess: () => invalidateCalendarUpdated(queryClient, ownerId),
         onError: onMutationError,
     });
 }
@@ -73,7 +77,7 @@ export function useDeleteCalendar(ownerId: string) {
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        onSuccess: () => invalidateCalendarDeleted(queryClient),
+        onSuccess: () => invalidateCalendarDeleted(queryClient, ownerId),
         onError: onMutationError,
     });
 }
@@ -82,7 +86,7 @@ export function useDeleteCalendar(ownerId: string) {
 
 export function useEvents(ownerId: string, from: number, to: number, enabled = true) {
     return useQuery({
-        queryKey: calendarKeys.eventRange(from, to),
+        queryKey: calendarKeys.eventRange(ownerId, from, to),
         queryFn: async (): Promise<CalendarEventOccurrence[]> => {
             const response = await calendarApi({ownerId})["event-range"]({from: String(from)})({to: String(to)}).get();
             return (response.data || []) as CalendarEventOccurrence[];
@@ -113,7 +117,7 @@ export function useCreateEvent(ownerId: string) {
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        onSuccess: () => invalidateEventCreated(queryClient),
+        onSuccess: () => invalidateEventCreated(queryClient, ownerId),
         onError: onMutationError,
     });
 }
@@ -127,7 +131,7 @@ export function useUpdateEvent(ownerId: string) {
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        onSuccess: () => invalidateEventUpdated(queryClient),
+        onSuccess: () => invalidateEventUpdated(queryClient, ownerId),
         onError: onMutationError,
     });
 }
@@ -141,14 +145,14 @@ export function useDeleteEvent(ownerId: string) {
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        onSuccess: () => invalidateEventDeleted(queryClient),
+        onSuccess: () => invalidateEventDeleted(queryClient, ownerId),
         onError: onMutationError,
     });
 }
 
 export function useCalendarAccess(ownerId: string, calendarId: string, enabled = true) {
     return useQuery({
-        queryKey: [...calendarKeys.all, 'access', ownerId, calendarId],
+        queryKey: [...calendarKeys.owner(ownerId), 'access', calendarId],
         queryFn: async (): Promise<{ownerUserId: string; shares: Array<{targetId: string; permission: string}>}> => {
             const response = await calendarApi({ownerId}).calendars({calId: calendarId}).access.get();
             return response.data as {ownerUserId: string; shares: Array<{targetId: string; permission: string}>};
@@ -183,7 +187,7 @@ export function useAllSharedCalendarEvents(sharedCalendars: SharedCalendar[], fr
 
 export function useSharedCalendars(ownerId: string) {
     return useQuery({
-        queryKey: calendarKeys.sharedCalendars(),
+        queryKey: calendarKeys.sharedCalendars(ownerId),
         queryFn: async () => {
             const response = await calendarApi({ownerId}).shared.get();
             return (response.data || []) as SharedCalendar[];
@@ -202,7 +206,7 @@ export function useUpdateSharedCalendar(ownerId: string) {
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        onSuccess: () => invalidateSharedCalendarUpdated(queryClient),
+        onSuccess: () => invalidateSharedCalendarUpdated(queryClient, ownerId),
         onError: onMutationError,
     });
 }
@@ -216,7 +220,7 @@ export function useDeleteSharedCalendar(ownerId: string) {
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        onSuccess: () => invalidateSharedCalendarUpdated(queryClient),
+        onSuccess: () => invalidateSharedCalendarUpdated(queryClient, ownerId),
         onError: onMutationError,
     });
 }
@@ -238,50 +242,50 @@ export function useRsvp(ownerId: string) {
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        onSuccess: () => invalidateEventUpdated(queryClient),
+        onSuccess: () => invalidateEventUpdated(queryClient, ownerId),
         onError: onMutationError,
     });
 }
 
-// --- SSE invalidation functions ---
+// --- Invalidation functions (ownerId-scoped, used from mutation onSuccess) ---
 
-export function invalidateCalendarCreated(queryClient: QueryClient): void {
-    queryClient.invalidateQueries({queryKey: calendarKeys.calendarList()});
-    invalidateHomeSize(queryClient);
+export function invalidateCalendarCreated(queryClient: QueryClient, ownerId: string): void {
+    queryClient.invalidateQueries({queryKey: calendarKeys.calendarList(ownerId)});
+    invalidateHomeSize(queryClient, ownerId);
 }
 
-export function invalidateCalendarUpdated(queryClient: QueryClient): void {
-    queryClient.invalidateQueries({queryKey: calendarKeys.calendarList()});
+export function invalidateCalendarUpdated(queryClient: QueryClient, ownerId: string): void {
+    queryClient.invalidateQueries({queryKey: calendarKeys.calendarList(ownerId)});
 }
 
-export function invalidateCalendarDeleted(queryClient: QueryClient): void {
-    queryClient.invalidateQueries({queryKey: calendarKeys.calendarList()});
-    queryClient.invalidateQueries({queryKey: calendarKeys.events()});
-    invalidateHomeSize(queryClient);
+export function invalidateCalendarDeleted(queryClient: QueryClient, ownerId: string): void {
+    queryClient.invalidateQueries({queryKey: calendarKeys.calendarList(ownerId)});
+    queryClient.invalidateQueries({queryKey: calendarKeys.events(ownerId)});
+    invalidateHomeSize(queryClient, ownerId);
 }
 
-export function invalidateEventCreated(queryClient: QueryClient): void {
-    queryClient.invalidateQueries({queryKey: calendarKeys.events()});
+export function invalidateEventCreated(queryClient: QueryClient, ownerId: string): void {
+    queryClient.invalidateQueries({queryKey: calendarKeys.events(ownerId)});
 }
 
-export function invalidateEventUpdated(queryClient: QueryClient): void {
-    queryClient.invalidateQueries({queryKey: calendarKeys.events()});
+export function invalidateEventUpdated(queryClient: QueryClient, ownerId: string): void {
+    queryClient.invalidateQueries({queryKey: calendarKeys.events(ownerId)});
 }
 
-export function invalidateEventDeleted(queryClient: QueryClient): void {
-    queryClient.invalidateQueries({queryKey: calendarKeys.events()});
+export function invalidateEventDeleted(queryClient: QueryClient, ownerId: string): void {
+    queryClient.invalidateQueries({queryKey: calendarKeys.events(ownerId)});
 }
 
-export function invalidateSharedCalendarUpdated(queryClient: QueryClient): void {
-    queryClient.invalidateQueries({queryKey: calendarKeys.sharedCalendars()});
+export function invalidateSharedCalendarUpdated(queryClient: QueryClient, ownerId: string): void {
+    queryClient.invalidateQueries({queryKey: calendarKeys.sharedCalendars(ownerId)});
 }
 
-export function invalidateCalendarShared(queryClient: QueryClient): void {
-    queryClient.invalidateQueries({queryKey: calendarKeys.sharedCalendars()});
-    queryClient.invalidateQueries({queryKey: calendarKeys.events()});
+export function invalidateCalendarShared(queryClient: QueryClient, ownerId: string): void {
+    queryClient.invalidateQueries({queryKey: calendarKeys.sharedCalendars(ownerId)});
+    queryClient.invalidateQueries({queryKey: calendarKeys.events(ownerId)});
 }
 
-export function invalidateCalendarUnshared(queryClient: QueryClient): void {
-    queryClient.invalidateQueries({queryKey: calendarKeys.sharedCalendars()});
-    queryClient.invalidateQueries({queryKey: calendarKeys.events()});
+export function invalidateCalendarUnshared(queryClient: QueryClient, ownerId: string): void {
+    queryClient.invalidateQueries({queryKey: calendarKeys.sharedCalendars(ownerId)});
+    queryClient.invalidateQueries({queryKey: calendarKeys.events(ownerId)});
 }

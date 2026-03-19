@@ -8,10 +8,11 @@ import {AppError, onMutationError} from '../../api-error';
 // Define query keys for reuse
 export const labelKeys = {
     all: ['labels'] as const,
-    lists: () => [...labelKeys.all, 'list'] as const,
-    list: (filters: string) => [...labelKeys.lists(), {filters}] as const,
-    details: () => [...labelKeys.all, 'detail'] as const,
-    detail: (id: string) => [...labelKeys.details(), id] as const,
+    owner: (ownerId: string) => [...labelKeys.all, ownerId] as const,
+    lists: (ownerId: string) => [...labelKeys.owner(ownerId), 'list'] as const,
+    list: (ownerId: string, filters: string) => [...labelKeys.lists(ownerId), {filters}] as const,
+    details: (ownerId: string) => [...labelKeys.owner(ownerId), 'detail'] as const,
+    detail: (ownerId: string, id: string) => [...labelKeys.details(ownerId), id] as const,
 };
 
 // Hook to fetch all labels
@@ -20,7 +21,7 @@ export function useLabels() {
     const ownerId = user?.id || '';
 
     return useQuery({
-        queryKey: labelKeys.lists(),
+        queryKey: labelKeys.lists(ownerId),
         queryFn: async () => {
             const response = await contactsApi({ownerId}).labels.get();
             return response.data || [];
@@ -42,7 +43,7 @@ export function useAddLabel() {
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        onSuccess: () => invalidateLabelCreated(queryClient),
+        onSuccess: () => invalidateLabelCreated(queryClient, ownerId),
         onError: onMutationError,
     });
 }
@@ -62,7 +63,7 @@ export function useUpdateLabel() {
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        onSuccess: (_data, variables) => invalidateLabelUpdated(queryClient, variables.id),
+        onSuccess: (_data, variables) => invalidateLabelUpdated(queryClient, ownerId, variables.id),
         onError: onMutationError,
     });
 }
@@ -79,24 +80,24 @@ export function useDeleteLabel() {
             if (response.error) throw new AppError(response);
             return response.data;
         },
-        onSuccess: (_data, labelId) => invalidateLabelDeleted(queryClient, labelId),
+        onSuccess: (_data, labelId) => invalidateLabelDeleted(queryClient, ownerId, labelId),
         onError: onMutationError,
     });
 }
 
-// SSE invalidation functions
-export function invalidateLabelCreated(queryClient: QueryClient): void {
-    queryClient.invalidateQueries({queryKey: labelKeys.lists()});
+// Invalidation functions (ownerId-scoped, used from mutation onSuccess)
+export function invalidateLabelCreated(queryClient: QueryClient, ownerId: string): void {
+    queryClient.invalidateQueries({queryKey: labelKeys.lists(ownerId)});
 }
 
-export function invalidateLabelUpdated(queryClient: QueryClient, labelId: string): void {
-    queryClient.invalidateQueries({queryKey: labelKeys.detail(labelId)});
-    queryClient.invalidateQueries({queryKey: labelKeys.lists()});
-    queryClient.invalidateQueries({queryKey: contactKeys.lists()});
+export function invalidateLabelUpdated(queryClient: QueryClient, ownerId: string, labelId: string): void {
+    queryClient.invalidateQueries({queryKey: labelKeys.detail(ownerId, labelId)});
+    queryClient.invalidateQueries({queryKey: labelKeys.lists(ownerId)});
+    queryClient.invalidateQueries({queryKey: contactKeys.lists(ownerId)});
 }
 
-export function invalidateLabelDeleted(queryClient: QueryClient, labelId: string): void {
-    queryClient.removeQueries({queryKey: labelKeys.detail(labelId)});
-    queryClient.invalidateQueries({queryKey: labelKeys.lists()});
-    queryClient.invalidateQueries({queryKey: contactKeys.lists()});
+export function invalidateLabelDeleted(queryClient: QueryClient, ownerId: string, labelId: string): void {
+    queryClient.removeQueries({queryKey: labelKeys.detail(ownerId, labelId)});
+    queryClient.invalidateQueries({queryKey: labelKeys.lists(ownerId)});
+    queryClient.invalidateQueries({queryKey: contactKeys.lists(ownerId)});
 }

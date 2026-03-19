@@ -7,7 +7,8 @@ import {toast} from 'sonner';
 
 export const spaceKeys = {
     all: ['space'] as const,
-    settings: () => [...spaceKeys.all, 'settings'] as const,
+    owner: (ownerId: string) => [...spaceKeys.all, ownerId] as const,
+    settings: (ownerId: string) => [...spaceKeys.owner(ownerId), 'settings'] as const,
 };
 
 export function useSpaceSettings() {
@@ -15,7 +16,7 @@ export function useSpaceSettings() {
     const ownerId = user?.id || '';
 
     return useQuery({
-        queryKey: spaceKeys.settings(),
+        queryKey: spaceKeys.settings(ownerId),
         queryFn: async () => {
             const res = await spaceApi({ownerId}).settings.get();
             return (res.data || {}) as UserSettings;
@@ -37,13 +38,13 @@ export function useUpdateSpaceSettings() {
             return res.data;
         },
         onSuccess: () => {
-            invalidateSpaceSettings(queryClient);
+            invalidateSpaceSettings(queryClient, ownerId);
             toast.success('Settings saved');
         },
         onError: onMutationError,
     });
 }
 
-export function invalidateSpaceSettings(queryClient: QueryClient): void {
-    queryClient.invalidateQueries({queryKey: spaceKeys.settings()});
+export function invalidateSpaceSettings(queryClient: QueryClient, ownerId: string): void {
+    queryClient.invalidateQueries({queryKey: spaceKeys.settings(ownerId)});
 }
