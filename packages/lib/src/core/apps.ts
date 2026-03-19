@@ -40,7 +40,7 @@ const apps = [
     },
     {
         name: 'Chat',
-        color: 'var(--app-admin-color)',
+        color: 'var(--app-chat-color)',
         href: getChatAppUrl(),
         icon: MessageSquare,
         description: 'Chat with your team',

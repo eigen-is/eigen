@@ -2,7 +2,7 @@ import Elysia, {t} from "elysia";
 import {betterAuth} from "./auth";
 import type {UserHome} from "../lib/home";
 import {getHome} from "../lib/home";
-import {requireSelf} from "../lib/core/errors";
+import {requireSelf} from "../lib/core/access";
 
 // Space routes are personal-only (user settings)
 export const spaceRouter = new Elysia({name: "space"})

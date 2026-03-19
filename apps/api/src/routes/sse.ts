@@ -2,7 +2,7 @@ import {Elysia, sse} from "elysia";
 import {betterAuth} from "./auth";
 import {getHome} from "../lib/home";
 import type {SSEvent} from "@workspace/lib/types/sse";
-import {requireSelf} from "../lib/core/errors";
+import {requireSelf} from "../lib/core/access";
 
 // SSE is personal-only — each user subscribes to their own Home's event stream.
 // TODO: to support team SSE, add a separate /sse/team/:teamId/events route with team membership check.
@@ -10,10 +10,6 @@ export const sseRouter = new Elysia({name: "sse"})
     .use(betterAuth)
     .get('/sse/:ownerId/events', async ({params, user}) => {
         requireSelf(params.ownerId, user.id);
-        if (!user) {
-            return new Response('Unauthorized', {status: 401});
-        }
-
         const home = await getHome(user.id);
 
         let keepalive: Timer | null = null;
