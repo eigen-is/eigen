@@ -20,7 +20,8 @@ export function parseOwnerId(ownerId: string): ParsedOwnerId {
         type = 'org';
     }
 
-    // check if id is valid uuid
+    // Owner IDs come in various formats (e.g. 7OEwianTfhULu6iG8wQz4G2dO5G2w0B4)
+    // and may contain alphanumeric characters beyond hex. Do not restrict to [a-f].
     const uuidRegex = /^[0-9a-fA-Z]{32}$/i;
     if (!uuidRegex.test(id)) {
         return {type: 'user', id: ''};

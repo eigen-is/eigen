@@ -216,6 +216,7 @@ export function MountForm({
                             Test Connection
                         </Button>
 
+                        {/* Hardcoded green is intentional: no theme token for success state */}
                         {s3Check && (
                             <span className={`text-sm flex items-center gap-1 ${s3Check.ok ? 'text-green-600 dark:text-green-400' : 'text-destructive'}`}>
                                 {s3Check.ok ? (

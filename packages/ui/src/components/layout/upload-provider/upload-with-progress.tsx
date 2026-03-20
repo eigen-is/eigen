@@ -2,7 +2,7 @@
 export type {UploadItem} from "./upload-provider"
 
 // Helper function for handling file upload with progress tracking
-interface UploadWithProgressOptions {
+type UploadWithProgressOptions = {
     url: string
     formData: FormData
     onProgress?: (progress: number) => void
@@ -17,17 +17,16 @@ export async function uploadWithProgress({
                                              onProgress,
                                              onSuccess,
                                              onError,
-                                             headers: _headers = {}
+                                             headers = {}
                                          }: UploadWithProgressOptions): Promise<Response> {
     return new Promise((resolve, reject) => {
         const xhr = new XMLHttpRequest();
         xhr.withCredentials = true;
         xhr.open("POST", url);
 
-        // Set authentication and other headers
-        // Object.entries(headers).forEach(([key, value]) => {
-        //     xhr.setRequestHeader(key, value)
-        // })
+        // Custom headers are NOT applied here: setting them triggers a CORS preflight
+        // (OPTIONS) request that the server does not allow. Authentication is handled
+        // via xhr.withCredentials (cookies) instead.
 
         xhr.upload.onprogress = (event) => {
             if (event.lengthComputable && onProgress) {

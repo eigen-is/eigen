@@ -6,7 +6,6 @@ export * from "./components/layout/toolbar";
 export * from './components/layout/shadow-content';
 export * from './components/layout/user-item';
 export * from './components/layout/user-avatar';
-export * from './components/layout/user-item';
 export * from './components/layout/drive';
 export * from './components/layout/home';
 export * from './components/layout/contacts';

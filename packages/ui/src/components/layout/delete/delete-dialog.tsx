@@ -22,18 +22,15 @@ export function DeleteDialog({
                                  cancelText = "Cancel",
                                  deleteText = "Delete"
                              }: DeleteDialogProps) {
-    // Format description with item name if provided
-    const formattedDescription = itemName
-        ? `${description} <b>${itemName}</b>?<br />This action cannot be undone.`
-        : `${description}? This action cannot be undone.`;
-
     return (
         <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent>
                 <DialogHeader>
                     <DialogTitle>{title}</DialogTitle>
                     <DialogDescription>
-                        <span dangerouslySetInnerHTML={{__html: formattedDescription}}></span>
+                        {itemName
+                            ? <>{description} <strong>{itemName}</strong>? This action cannot be undone.</>
+                            : <>{description}? This action cannot be undone.</>}
                     </DialogDescription>
                 </DialogHeader>
                 <DialogFooter>

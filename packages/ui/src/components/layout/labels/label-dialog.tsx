@@ -33,7 +33,7 @@ const labelFormSchema = z.object({
 
 type LabelFormValues = z.infer<typeof labelFormSchema>;
 
-interface LabelDialogProps {
+type LabelDialogProps = {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     selectedLabel: Label | null;
