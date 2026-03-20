@@ -1,4 +1,5 @@
 import {type QueryClient, useMutation, useQuery, useQueryClient} from "@tanstack/react-query";
+import {useCallback, useEffect, useRef, useState} from 'react';
 import type {DriveACL, DrivePath, DriveVisibility} from "@workspace/lib/types/drive";
 import {driveApi} from "@workspace/lib/api";
 import {invalidateHomeSize} from '../../home';
@@ -70,6 +71,38 @@ export function useFolderContent(ownerId: string, mountId: string, pathId: strin
         retry: 1,
         staleTime: 1000 * 60 * 5 // 5 minutes
     });
+}
+
+// FOLDER LOOKUP — wraps useFolderContent with refetch-on-miss for name-based lookups.
+// When a collaborator uploads a file, Yjs propagates the name before our cache updates.
+// findByName() triggers a single refetch per unknown name, preventing infinite loops.
+export function useFolderLookup(ownerId: string, mountId: string, folderId: string | null) {
+    const {data = [], refetch} = useFolderContent(ownerId, mountId, folderId || '');
+    const attemptedRef = useRef(new Set<string>());
+    const [refetchToken, setRefetchToken] = useState(0);
+
+    useEffect(() => {
+        for (const name of attemptedRef.current) {
+            if (data.some(f => f.name === name)) {
+                attemptedRef.current.delete(name);
+            }
+        }
+    }, [data]);
+
+    useEffect(() => {
+        if (refetchToken > 0) refetch();
+    }, [refetchToken, refetch]);
+
+    const findByName = useCallback((name: string): DrivePath | undefined => {
+        const item = data.find(f => f.name === name);
+        if (!item && name && folderId && !attemptedRef.current.has(name)) {
+            attemptedRef.current.add(name);
+            setRefetchToken(c => c + 1);
+        }
+        return item;
+    }, [data, folderId]);
+
+    return {contents: data, findByName};
 }
 
 // GET MIME CONTENTS (aggregates over all mounts)

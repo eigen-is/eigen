@@ -5,7 +5,7 @@ import {cn} from "../../../lib/utils";
 import {usePublicUser} from "@workspace/lib/public";
 import {useContacts} from "@workspace/lib/contacts";
 import {Paperclip} from "lucide-react";
-import {useFolderContent} from "@workspace/lib/drive";
+import {useFolderLookup} from "@workspace/lib/drive";
 import {getDriveDownloadUrl, getDriveThumbnailUrl, getMailComposeUrl} from "@workspace/lib/api";
 import {usePreview} from "../preview-provider";
 import {formatTime} from "@workspace/lib/date";
@@ -32,8 +32,8 @@ function isSameAuthorAndClose(prev: ChatMessage, curr: ChatMessage): boolean {
 }
 
 function AttachmentChip({fileName, ownerId, mountId, mediaFolderId}: { fileName: string; ownerId: string; mountId: string; mediaFolderId: string }) {
-    const {data: mediaContents = []} = useFolderContent(ownerId, mountId, mediaFolderId);
-    const fileInfo = mediaContents.find(f => f.name === fileName);
+    const {findByName} = useFolderLookup(ownerId, mountId, mediaFolderId);
+    const fileInfo = findByName(fileName);
     const {openPreview} = usePreview();
 
     const name = fileInfo?.details?.originalName || fileInfo?.name || fileName;
