@@ -1,18 +1,6 @@
 import {useEffect, useState} from 'react';
 import {formatForDisplay} from '@tanstack/react-hotkeys';
-import {
-    FileText,
-    Folder,
-    ImagePlus,
-    Pencil,
-    Play,
-    Plus,
-    Redo,
-    Trash2,
-    Type,
-    Undo,
-    UserRoundPlus
-} from 'lucide-react';
+import {FileText, Folder, ImagePlus, Pencil, Play, Plus, Redo, Trash2, Type, Undo, UserRoundPlus} from 'lucide-react';
 import {Button} from '@workspace/ui/components/button';
 import {
     DropdownMenu,
@@ -181,7 +169,7 @@ export function Toolbar({
             )}
             {path && (
                 <DriveDeleteItem
-                    path={path}
+                    paths={[path]}
                     open={deleteDialogOpen}
                     onOpenChange={setDeleteDialogOpen}
                     onAfterAction={(actionType) => {

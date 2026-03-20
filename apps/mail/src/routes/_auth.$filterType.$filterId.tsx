@@ -54,7 +54,7 @@ function MailRoute() {
 
     const [searchQuery, setSearchQuery] = useState('');
     const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-    const [pendingDeleteMail, setPendingDeleteMail] = useState<Email | null>(null);
+    const [pendingDeleteEmails, setPendingDeleteEmails] = useState<Email[]>([]);
 
     const {data: emails = [], isLoading: isEmailsLoading, error: isEmailsError} = useEmails(filterId);
     const {data: selectedEmail = null} = useEmail(mailId);
@@ -84,7 +84,7 @@ function MailRoute() {
 
     const handleDeleteEmail = async (mail: Email) => {
         if (mail.mailbox === 'Trash') {
-            setPendingDeleteMail(mail);
+            setPendingDeleteEmails([mail]);
             setDeleteDialogOpen(true);
         } else {
             await deleteMail.mutateAsync(mail);
@@ -92,11 +92,11 @@ function MailRoute() {
         }
     };
 
-    const confirmDeleteEmail = async () => {
-        if (pendingDeleteMail) {
-            await deleteMail.mutateAsync(pendingDeleteMail);
+    const confirmDeleteEmails = async () => {
+        if (pendingDeleteEmails.length > 0) {
+            await Promise.allSettled(pendingDeleteEmails.map(mail => deleteMail.mutateAsync(mail)));
             setDeleteDialogOpen(false);
-            setPendingDeleteMail(null);
+            setPendingDeleteEmails([]);
             navigateToList();
         }
     };
@@ -128,7 +128,20 @@ function MailRoute() {
     };
 
     const handleDeleteEmailsByIds = async (emailIds: string[]) => {
-        for (const id of emailIds) await handleDeleteEmailById(id);
+        const emails = (await Promise.all(emailIds.map(id => getEmailById(id)))).filter((e): e is Email => !!e);
+        const trashEmails = emails.filter(e => e.mailbox === 'Trash');
+        const nonTrashEmails = emails.filter(e => e.mailbox !== 'Trash');
+
+        if (nonTrashEmails.length > 0) {
+            await Promise.allSettled(nonTrashEmails.map(mail => deleteMail.mutateAsync(mail)));
+        }
+        if (trashEmails.length > 0) {
+            setPendingDeleteEmails(trashEmails);
+            setDeleteDialogOpen(true);
+        }
+        if (nonTrashEmails.length > 0 && trashEmails.length === 0) {
+            navigateToList();
+        }
     };
 
     const handleMoveEmailToFolderById = async (emailId: string, folderId: string) => {
@@ -137,7 +150,9 @@ function MailRoute() {
     };
 
     const handleMoveEmailsToFolderByIds = async (emailIds: string[], folderId: string) => {
-        for (const id of emailIds) await handleMoveEmailToFolderById(id, folderId);
+        const emails = (await Promise.all(emailIds.map(id => getEmailById(id)))).filter((e): e is Email => !!e);
+        await Promise.allSettled(emails.map(mail => moveMail.mutateAsync({email: mail, mailbox: folderId})));
+        navigateToList();
     };
 
     const handleArchiveEmailById = async (emailId: string) => {
@@ -146,7 +161,9 @@ function MailRoute() {
     };
 
     const handleArchiveEmailsByIds = async (emailIds: string[]) => {
-        for (const id of emailIds) await handleArchiveEmailById(id);
+        const emails = (await Promise.all(emailIds.map(id => getEmailById(id)))).filter((e): e is Email => !!e);
+        await Promise.allSettled(emails.map(mail => moveMail.mutateAsync({email: mail, mailbox: 'Archive'})));
+        navigateToList();
     };
 
     const handleReportSpamById = async (emailId: string) => {
@@ -155,7 +172,9 @@ function MailRoute() {
     };
 
     const handleReportSpamByIds = async (emailIds: string[]) => {
-        for (const id of emailIds) await handleReportSpamById(id);
+        const emails = (await Promise.all(emailIds.map(id => getEmailById(id)))).filter((e): e is Email => !!e);
+        await Promise.allSettled(emails.map(mail => moveMail.mutateAsync({email: mail, mailbox: 'Junk'})));
+        navigateToList();
     };
 
     const handleReplyEmail = async (emailId: string) => {
@@ -250,12 +269,14 @@ function MailRoute() {
                 open={deleteDialogOpen}
                 onOpenChange={(open) => {
                     setDeleteDialogOpen(open);
-                    if (!open) setPendingDeleteMail(null);
+                    if (!open) setPendingDeleteEmails([]);
                 }}
-                title="Delete Email"
-                description="Are you sure you want to permanently delete this email"
-                itemName={pendingDeleteMail?.subject || undefined}
-                onDelete={confirmDeleteEmail}
+                title={pendingDeleteEmails.length === 1 ? "Delete Email" : `Delete ${pendingDeleteEmails.length} Emails`}
+                description={pendingDeleteEmails.length === 1
+                    ? "Are you sure you want to permanently delete this email"
+                    : `Are you sure you want to permanently delete ${pendingDeleteEmails.length} emails`}
+                itemName={pendingDeleteEmails.length === 1 ? pendingDeleteEmails[0]?.subject || undefined : undefined}
+                onDelete={confirmDeleteEmails}
             />
             <ColumnLayout mobileColumn={showDetail ? 'detail' : 'list'}>
                 <Column id="list" width={listWidth} toolbar={listToolbar}>

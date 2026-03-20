@@ -207,6 +207,30 @@ export function useDeleteFile(ownerId: string, mountId: string = DEFAULT_MOUNT_I
     });
 }
 
+// DELETE MULTIPLE PATHS
+export function useDeletePaths(ownerId: string, mountId: string = DEFAULT_MOUNT_ID) {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async (paths: DrivePath[]) => {
+            const results = await Promise.allSettled(paths.map(async (path) => {
+                const response = path.type === 'folder'
+                    ? await driveApi({ownerId})({mountId}).folder({pathId: path.id}).delete()
+                    : await driveApi({ownerId})({mountId}).file({pathId: path.id}).delete();
+                if (response.error) throw new AppError(response);
+                return path;
+            }));
+            const succeeded = results.filter((r): r is PromiseFulfilledResult<DrivePath> => r.status === 'fulfilled').map(r => r.value);
+            for (const path of succeeded) {
+                invalidateItemDeleted(queryClient, ownerId, mountId, path.id, path.parentId, path.mimeType);
+            }
+            const failedCount = results.filter(r => r.status === 'rejected').length;
+            if (failedCount > 0) throw new Error(`Failed to delete ${failedCount} of ${paths.length} items`);
+            return succeeded;
+        },
+        onError: onMutationError,
+    });
+}
+
 export function useMovePath(ownerId: string, mountId: string = DEFAULT_MOUNT_ID, currentParentId?: string) {
     const queryClient = useQueryClient();
     return useMutation({

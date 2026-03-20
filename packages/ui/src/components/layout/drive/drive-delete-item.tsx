@@ -1,47 +1,58 @@
 import type {DrivePath} from "@workspace/lib/types/drive";
-import {DEFAULT_MOUNT_ID, useDeleteFile, useDeleteFolder} from "@workspace/lib/drive";
+import {DEFAULT_MOUNT_ID, useDeleteFile, useDeleteFolder, useDeletePaths} from "@workspace/lib/drive";
 import {DeleteDialog} from "@workspace/ui/components/layout/delete/delete-dialog";
 
 export type DriveDeleteItemProps = {
-    path: DrivePath | null;
+    paths: DrivePath[];
     open: boolean;
     onOpenChange: (open: boolean) => void;
     onAfterAction?: (actionType: string, data: any) => void;
 }
 
 export function DriveDeleteItem({
-                                    path,
+                                    paths,
                                     open,
                                     onOpenChange,
                                     onAfterAction,
                                 }: DriveDeleteItemProps) {
-    const deleteFileMutation = useDeleteFile(path?.ownerId || '', path?.mountId || DEFAULT_MOUNT_ID, path?.parentId || undefined, path?.mimeType || undefined);
-    const deleteFolderMutation = useDeleteFolder(path?.ownerId || '', path?.mountId || DEFAULT_MOUNT_ID, path?.parentId || undefined, path?.mimeType || undefined);
+    const first = paths[0] ?? null;
+    const isSingle = paths.length === 1;
+    const deleteFileMutation = useDeleteFile(first?.ownerId || '', first?.mountId || DEFAULT_MOUNT_ID, first?.parentId || undefined, first?.mimeType || undefined);
+    const deleteFolderMutation = useDeleteFolder(first?.ownerId || '', first?.mountId || DEFAULT_MOUNT_ID, first?.parentId || undefined, first?.mimeType || undefined);
+    const deletePathsMutation = useDeletePaths(first?.ownerId || '', first?.mountId || DEFAULT_MOUNT_ID);
 
     const handleDelete = () => {
-        if (!path) return;
+        if (paths.length === 0) return;
 
-        // Use the appropriate mutation based on item type
-        const mutation = path.type === 'folder' ? deleteFolderMutation : deleteFileMutation;
-
-        mutation.mutate(path.id, {
-            onSuccess: () => {
-                onOpenChange(false);
-
-                if (onAfterAction) {
-                    onAfterAction('delete', path);
-                }
-            },
-        });
+        if (isSingle && first) {
+            const mutation = first.type === 'folder' ? deleteFolderMutation : deleteFileMutation;
+            mutation.mutate(first.id, {
+                onSuccess: () => {
+                    onOpenChange(false);
+                    onAfterAction?.('delete', first);
+                },
+            });
+        } else {
+            deletePathsMutation.mutate(paths, {
+                onSuccess: () => {
+                    onOpenChange(false);
+                    for (const path of paths) onAfterAction?.('delete', path);
+                },
+            });
+        }
     };
+
+    const description = isSingle
+        ? "Are you sure you want to delete"
+        : `Are you sure you want to delete ${paths.length} items`;
 
     return (
         <DeleteDialog
             open={open}
             onOpenChange={onOpenChange}
-            title="Delete Item"
-            description="Are you sure you want to delete"
-            itemName={path?.name}
+            title={isSingle ? "Delete Item" : `Delete ${paths.length} Items`}
+            description={description}
+            itemName={isSingle ? first?.name : undefined}
             onDelete={handleDelete}
         />
     );
