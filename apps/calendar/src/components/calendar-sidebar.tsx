@@ -276,6 +276,7 @@ export function CalendarSidebar({
                 open={createCalendarOpen}
                 onOpenChange={setCreateCalendarOpen}
                 calendar={null}
+                calendarCount={calendars.length + sharedCalendars.length}
             />
 
             <SharedCalendarConfigDialog

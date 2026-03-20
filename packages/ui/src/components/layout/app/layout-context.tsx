@@ -3,6 +3,8 @@ import {createContext, useContext} from 'react';
 export type LayoutContextType = {
     appName: string;
     setAppName: (name: string) => void;
+    documentTitle: string;
+    setDocumentTitle: (title: string) => void;
     sidebarOpen: boolean;
     setSidebarOpen: (open: boolean) => void;
     sidebarMode: 'collapsible' | 'hidden' | 'none';
@@ -13,6 +15,9 @@ export type LayoutContextType = {
 export const LayoutContext = createContext<LayoutContextType>({
     appName: '',
     setAppName: () => {
+    },
+    documentTitle: '',
+    setDocumentTitle: () => {
     },
     sidebarOpen: false,
     setSidebarOpen: () => {
