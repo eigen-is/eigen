@@ -12,7 +12,13 @@ let localIdCounter = 0;
 export function useChatRoom(ownerId: string, mountId: string, chatId: string) {
     const {user} = useAuth();
 
-    const {data: messages = [], isLoading} = useMessages(ownerId, mountId, chatId);
+    const messagesQuery = useMessages(ownerId, mountId, chatId);
+    // Pages are [latest, older, oldest...] — reverse then flatten for chronological order
+    const messages = useMemo(() => {
+        const pages = messagesQuery.data?.pages ?? [];
+        return [...pages].reverse().flat();
+    }, [messagesQuery.data]);
+    const isLoading = messagesQuery.isLoading;
     const postMessage = usePostMessage(ownerId, mountId, chatId);
     const uploadFile = useUploadFile(ownerId, mountId);
     const {data: chatPath} = usePathInfo(ownerId, mountId, chatId);
@@ -154,5 +160,8 @@ export function useChatRoom(ownerId: string, mountId: string, chatId: string) {
         currentUserId: user?.id || '',
         mediaFolderId,
         handleSendMessage,
+        hasOlderMessages: messagesQuery.hasNextPage,
+        isFetchingOlderMessages: messagesQuery.isFetchingNextPage,
+        fetchOlderMessages: messagesQuery.fetchNextPage,
     };
 }

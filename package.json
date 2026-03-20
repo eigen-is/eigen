@@ -29,22 +29,22 @@
     "apps/*"
   ],
   "dependencies": {
-    "react": "^19.2.4",
-    "react-dom": "^19.2.4",
-    "@tanstack/react-router": "^1.163.2",
-    "@tanstack/react-table": "^8.21.3",
+    "@hookform/resolvers": "^5.2.2",
     "@tanstack/react-query": "^5.90.21",
     "@tanstack/react-query-devtools": "^5.91.3",
-    "lucide-react": "^0.575.0",
-    "zod": "^3.24.2",
-    "react-hook-form": "^7.71.2",
-    "@hookform/resolvers": "^5.2.2",
+    "@tanstack/react-router": "^1.163.2",
+    "@tanstack/react-table": "^8.21.3",
+    "class-variance-authority": "^0.7.1",
+    "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
+    "lucide-react": "^0.575.0",
+    "react": "^19.2.4",
+    "react-dom": "^19.2.4",
+    "react-hook-form": "^7.71.2",
+    "sonner": "^2.0.7",
     "tailwind-merge": "^3.5.0",
     "tailwindcss-animate": "^1.0.7",
-    "sonner": "^2.0.7",
-    "clsx": "^2.1.1",
-    "class-variance-authority": "^0.7.1"
+    "zod": "^3.24.2"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4.2.1",
