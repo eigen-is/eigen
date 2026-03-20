@@ -2,7 +2,7 @@ import {useEffect, useMemo} from 'react';
 import {useContactSuggestions} from "../contacts/use-contact-suggestions";
 import {UserItem} from "../user-item";
 import type {ContactSuggestion} from "../contacts/types";
-import type {RoomMember} from "./chat-utils";
+import type {RoomMember} from "@workspace/lib/types/chat";
 
 type ChatPlayerSuggestProps = {
     query: string;

@@ -12,23 +12,23 @@ export const chatKeys = {
 };
 
 export function useChats(ownerId: string) {
-    return useQuery({
+    return useQuery<DrivePath[]>({
         queryKey: driveKeys.mime(ownerId, 'application-eigenchat'),
         queryFn: async () => {
             const response = await driveApi({ownerId}).mime({mimeType: 'application-eigenchat'}).get();
-            return (response.data || []) as DrivePath[];
+            return response.data || [];
         },
         enabled: !!ownerId,
     });
 }
 
 export function useMessages(ownerId: string, mountId: string, chatId: string | undefined) {
-    return useQuery({
+    return useQuery<ChatMessage[]>({
         queryKey: chatKeys.messages(ownerId, mountId, chatId || ''),
         queryFn: async () => {
             if (!chatId) return [];
             const response = await chatApi({ownerId})({mountId})({chatId}).messages.get();
-            return (response.data || []) as ChatMessage[];
+            return response.data || [];
         },
         enabled: !!chatId && !!ownerId && !!mountId,
     });
@@ -58,7 +58,7 @@ export function usePostMessage(ownerId: string, mountId: string, chatId: string)
 export function useCreateChat(ownerId: string, mountId: string) {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: async ({parentId, fileName}: { parentId: string; fileName: string }) => {
+        mutationFn: async ({parentId, fileName}: { parentId: string; fileName: string }): Promise<DrivePath> => {
             const response = await driveApi({ownerId})({mountId}).folder({pathId: parentId}).chat.post({fileName});
             if (response.error) throw new AppError(response);
             return response.data;

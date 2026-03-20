@@ -6,7 +6,6 @@ import {Button} from "@workspace/ui/components/button";
 import {MessageSquare, Plus} from "lucide-react";
 import {DriveCreateItemDialog} from "@workspace/ui/components/layout/drive/drive-create-folder-item";
 import {useEffect, useState} from "react";
-import type {DrivePath} from "@workspace/lib/types/drive";
 
 function ChatIndex() {
     const {user} = useAuth();
@@ -67,7 +66,7 @@ function ChatIndex() {
                         onCreateItem={handleCreateChat}
                         isPending={createChatMutation.isPending}
                         type="Chat"
-                        path={root as DrivePath}
+                        path={root}
                     />
                 )}
             </div>

@@ -132,9 +132,18 @@ export function ChatMessageList({
                                     emptyMessage = 'No messages yet. Start the conversation!',
                                 }: ChatMessageListProps) {
     const bottomRef = useRef<HTMLDivElement>(null);
+    const scrollContainerRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
-        bottomRef.current?.scrollIntoView({behavior: 'smooth'});
+        const container = scrollContainerRef.current;
+        if (!container) {
+            bottomRef.current?.scrollIntoView({behavior: 'smooth'});
+            return;
+        }
+        const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 100;
+        if (isNearBottom) {
+            bottomRef.current?.scrollIntoView({behavior: 'smooth'});
+        }
     }, [messages.length]);
 
     if (isLoading) {
@@ -154,7 +163,7 @@ export function ChatMessageList({
     }
 
     return (
-        <div className={cn("flex-1 overflow-y-auto", className)}>
+        <div ref={scrollContainerRef} className={cn("flex-1 overflow-y-auto", className)}>
             {messages.map((message, i) => {
                 const isWhisper = message.type === 'whisper';
                 const isEmote = message.type === 'emote';
@@ -202,9 +211,9 @@ export function ChatMessageList({
                         <div
                             key={message.id}
                             className={cn(
-                                "flex gap-3 px-5 hover:bg-orange-50/50 dark:hover:bg-orange-950/30 transition-colors",
+                                "flex gap-3 px-5 hover:bg-primary/10 transition-colors",
                                 grouped ? "pt-0.5" : "pt-3",
-                                "bg-orange-50/30 dark:bg-orange-950/20"
+                                "bg-primary/5"
                             )}
                         >
                             <div className="w-9 shrink-0 pt-0.5">
@@ -223,7 +232,7 @@ export function ChatMessageList({
                                         <span className="text-sm font-bold text-foreground">{displayName}</span>
                                         <span
                                             className="text-xs text-muted-foreground">{formatTime(message.createdAt)}</span>
-                                        <span className="text-xs text-orange-500 font-medium italic">whisper</span>
+                                        <span className="text-xs text-primary font-medium italic">whisper</span>
                                     </div>
                                 )}
                                 <RichContent

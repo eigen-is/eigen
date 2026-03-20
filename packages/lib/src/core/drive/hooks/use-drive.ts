@@ -44,7 +44,7 @@ export function useMounts(ownerId: string) {
 
 // GET ROOT FOLDER
 export function useRootFolder(ownerId: string, mountId: string = DEFAULT_MOUNT_ID) {
-    return useQuery({
+    return useQuery<DrivePath | null>({
         queryKey: driveKeys.root(ownerId, mountId),
         queryFn: async () => {
             const response = await driveApi({ownerId})({mountId}).root.get();
@@ -57,7 +57,7 @@ export function useRootFolder(ownerId: string, mountId: string = DEFAULT_MOUNT_I
 
 // GET FOLDER CONTENTS
 export function useFolderContent(ownerId: string, mountId: string, pathId: string) {
-    return useQuery({
+    return useQuery<DrivePath[]>({
         queryKey: driveKeys.folder(ownerId, mountId, pathId),
         queryFn: async () => {
             if (!pathId) return [];
@@ -107,7 +107,7 @@ export function useFolderLookup(ownerId: string, mountId: string, folderId: stri
 
 // GET MIME CONTENTS (aggregates over all mounts)
 export function useMimeContent(ownerId: string, mimeType: string) {
-    return useQuery({
+    return useQuery<DrivePath[]>({
         queryKey: driveKeys.mime(ownerId, mimeType),
         queryFn: async () => {
             if (!mimeType) return [];
@@ -125,7 +125,7 @@ export function useMimeContent(ownerId: string, mimeType: string) {
 
 // GET PATH INFO
 export function usePathInfo(ownerId: string, mountId: string, pathId: string | undefined) {
-    return useQuery({
+    return useQuery<DrivePath | null>({
         queryKey: driveKeys.path(ownerId, mountId, pathId || ''),
         queryFn: async () => {
             if (!pathId) return null;
@@ -155,7 +155,7 @@ export function useCreateFolder(ownerId: string, mountId: string = DEFAULT_MOUNT
 export function useUploadFile(ownerId: string, mountId: string = DEFAULT_MOUNT_ID) {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: async ({parentId, file}: { parentId: string, file: File }) => {
+        mutationFn: async ({parentId, file}: { parentId: string, file: File }): Promise<DrivePath> => {
             const response = await driveApi({ownerId})({mountId}).file({pathId: parentId}).post({file});
             if (response.error) throw new AppError(response);
             return response.data;
@@ -314,7 +314,7 @@ export function useCheckWritePermission(ownerId: string, mountId: string, pathId
 
 // GET BREADCRUMB PATH
 export function useBreadcrumb(ownerId: string, mountId: string, pathId: string | undefined) {
-    return useQuery({
+    return useQuery<DrivePath[]>({
         queryKey: [...driveKeys.path(ownerId, mountId, pathId || ''), 'breadcrumb'],
         queryFn: async () => {
             if (!pathId) return [];
@@ -330,7 +330,7 @@ export function useBreadcrumb(ownerId: string, mountId: string, pathId: string |
 export function useCreateDoc(ownerId: string, mountId: string = DEFAULT_MOUNT_ID) {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: async ({parentId, fileName}: { parentId: string, fileName: string }) => {
+        mutationFn: async ({parentId, fileName}: { parentId: string, fileName: string }): Promise<DrivePath> => {
             const response = await driveApi({ownerId})({mountId}).folder({pathId: parentId}).doc.post({fileName});
             if (response.error) throw new AppError(response);
             return response.data;
@@ -344,7 +344,7 @@ export function useCreateDoc(ownerId: string, mountId: string = DEFAULT_MOUNT_ID
 export function useCreateStickies(ownerId: string, mountId: string = DEFAULT_MOUNT_ID) {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: async ({parentId, fileName}: { parentId: string, fileName: string }) => {
+        mutationFn: async ({parentId, fileName}: { parentId: string, fileName: string }): Promise<DrivePath> => {
             const response = await driveApi({ownerId})({mountId}).folder({pathId: parentId}).stickies.post({fileName});
             if (response.error) throw new AppError(response);
             return response.data;
@@ -358,7 +358,7 @@ export function useCreateStickies(ownerId: string, mountId: string = DEFAULT_MOU
 export function useCreateSlides(ownerId: string, mountId: string = DEFAULT_MOUNT_ID) {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: async ({parentId, fileName}: { parentId: string, fileName: string }) => {
+        mutationFn: async ({parentId, fileName}: { parentId: string, fileName: string }): Promise<DrivePath> => {
             const response = await driveApi({ownerId})({mountId}).folder({pathId: parentId}).slides.post({fileName});
             if (response.error) throw new AppError(response);
             return response.data;
@@ -372,7 +372,7 @@ export function useCreateSlides(ownerId: string, mountId: string = DEFAULT_MOUNT
 export function useCreateSheets(ownerId: string, mountId: string = DEFAULT_MOUNT_ID) {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: async ({parentId, fileName}: { parentId: string, fileName: string }) => {
+        mutationFn: async ({parentId, fileName}: { parentId: string, fileName: string }): Promise<DrivePath> => {
             const response = await driveApi({ownerId})({mountId}).folder({pathId: parentId}).sheets.post({fileName});
             if (response.error) throw new AppError(response);
             return response.data;
@@ -383,15 +383,15 @@ export function useCreateSheets(ownerId: string, mountId: string = DEFAULT_MOUNT
 }
 
 export function useSharedPaths(ownerId: string, to: 'by-me' | 'with-me') {
-    return useQuery({
+    return useQuery<DrivePath[]>({
         queryKey: driveKeys.shared(ownerId, to),
         queryFn: async () => {
             if (to === 'by-me') {
                 const response = await driveApi({ownerId}).shared['by-me'].get();
-                return response.data;
+                return response.data || [];
             } else {
                 const response = await driveApi({ownerId}).shared['with-me'].get();
-                return response.data;
+                return response.data || [];
             }
         },
         enabled: !!ownerId,

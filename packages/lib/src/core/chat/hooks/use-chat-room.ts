@@ -4,13 +4,8 @@ import {useMessages, usePostMessage} from './use-chat';
 import {useCheckWritePermission, useFolderContent, usePathInfo, useUpdateACL, useUploadFile} from '../../drive';
 import {COMMANDS_HELP, getLocalCommand, isUnknownCommand} from '../commands';
 import {validateEmailTarget} from '../../../validation';
-import type {ChatMessage} from '../../../types/chat';
-import type {DriveACL, DrivePath} from '../../../types/drive';
-
-export type RoomMember = {
-    email: string;
-    displayName: string;
-}
+import type {ChatMessage, RoomMember} from '../../../types/chat';
+import type {DriveACL} from '../../../types/drive';
 
 let localIdCounter = 0;
 
@@ -76,7 +71,7 @@ export function useChatRoom(ownerId: string, mountId: string, chatId: string) {
                 const uploaded = await Promise.all(
                     files.map(file => uploadFile.mutateAsync({parentId: mediaFolder.id, file}))
                 );
-                attachments = uploaded.filter(Boolean).map(u => (u as DrivePath).name);
+                attachments = uploaded.filter(Boolean).map(u => u.name);
             }
         }
 
@@ -130,7 +125,7 @@ export function useChatRoom(ownerId: string, mountId: string, chatId: string) {
                         return;
                     }
                     const newAcl: DriveACL[] = [...currentAcl, {id: local.target, read: true, write: true}];
-                    await updateACL.mutateAsync({path: chatPath as DrivePath, acl: newAcl});
+                    await updateACL.mutateAsync({path: chatPath, acl: newAcl});
                     addLocalMessage(`You invited ${local.target} to the room.`);
                     return;
                 }
@@ -152,7 +147,7 @@ export function useChatRoom(ownerId: string, mountId: string, chatId: string) {
         messages: allMessages,
         isLoading,
         chatName,
-        chatPath: chatPath as DrivePath | undefined,
+        chatPath,
         roomMembers,
         readOnly,
         disabled: postMessage.isPending || uploadFile.isPending,

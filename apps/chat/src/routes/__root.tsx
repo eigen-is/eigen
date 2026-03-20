@@ -4,7 +4,7 @@ import {AppShell} from "@workspace/ui/components/layout/app/app-shell.tsx";
 import {ChatSidebar} from "../components/chat/chat-sidebar";
 import {DEFAULT_MOUNT_ID, useRootFolder} from '@workspace/lib/drive';
 
-interface MyRouterContext {
+type MyRouterContext = {
     auth: AuthContextType
 }
 
