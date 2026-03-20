@@ -64,7 +64,11 @@
       "Bash(sed -i '' \"s/buildCalendarEvent\\(SSEventType\\\\.CALENDAR_INVITE_UPDATED, {/buildCalendarEvent\\(SSEventType.CALENDAR_INVITE_UPDATED, {ownerId: organizerHome.user.id, /g\" apps/api/src/lib/calendar/invite-propagation.ts)",
       "Bash(sed -i '' \"s/buildCalendarEvent\\(SSEventType\\\\.CALENDAR_INVITE_RSVP, {/buildCalendarEvent\\(SSEventType.CALENDAR_INVITE_RSVP, {ownerId: organizerHome.user.id, /g\" apps/api/src/lib/calendar/invite-propagation.ts)",
       "Bash(xargs sed:*)",
-      "WebFetch(domain:tanstack.com)"
+      "WebFetch(domain:tanstack.com)",
+      "Bash(for app:*)",
+      "Bash(cp /tmp/favicon.svg \"/Users/reinder/Documents/GitHub/eigen/apps/$app/public/favicon.svg\")",
+      "Bash(cp /tmp/favicon.svg \"/Users/reinder/Documents/GitHub/eigen/apps/index/public/favicon.svg\")",
+      "Bash(cp /tmp/favicon.svg \"/Users/reinder/Documents/GitHub/eigen/apps/people/public/favicon.svg\")"
     ]
   },
   "bypassPermissions": "bypassPermissions"
