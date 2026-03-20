@@ -100,12 +100,3 @@ export const DEFAULT_IMAGE_OBJECT: Omit<ImageObject, 'id' | 'slideId' | 'mediaNa
     objectFit: 'contain',
     ...DEFAULT_BORDER,
 };
-
-export const SLIDE_BACKGROUNDS = [
-    {label: 'White', value: '#ffffff'},
-    {label: 'Light gray', value: '#f3f4f6'},
-    {label: 'Dark', value: '#1e293b'},
-    {label: 'Black', value: '#000000'},
-    {label: 'Blue', value: '#1e3a5f'},
-    {label: 'Red', value: '#7f1d1d'},
-] as const;
