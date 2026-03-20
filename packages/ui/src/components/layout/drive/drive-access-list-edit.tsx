@@ -156,7 +156,7 @@ export function DriveAccessListEdit({
             return item
         }))
         setPendingChanges(true)
-    }, [])
+    }, [baseDirectList])
 
     const handleVisibilityChange = useCallback((newVisibility: DriveVisibility) => {
         setVisibility(newVisibility)
