@@ -1,9 +1,11 @@
-import {type QueryClient, useMutation, useQuery, useQueryClient} from "@tanstack/react-query";
+import {type QueryClient, useInfiniteQuery, useMutation, useQuery, useQueryClient} from "@tanstack/react-query";
 import {chatApi, driveApi} from "@workspace/lib/api";
 import {driveKeys, invalidateItemCreated} from "../../drive/hooks/use-drive";
 import type {DrivePath} from "@workspace/lib/types/drive";
 import type {ChatMessage} from "@workspace/lib/types/chat";
 import {AppError, onMutationError} from '../../api-error';
+
+const MESSAGE_PAGE_SIZE = 50;
 
 export const chatKeys = {
     all: ['chat'] as const,
@@ -23,12 +25,19 @@ export function useChats(ownerId: string) {
 }
 
 export function useMessages(ownerId: string, mountId: string, chatId: string | undefined) {
-    return useQuery<ChatMessage[]>({
+    return useInfiniteQuery({
         queryKey: chatKeys.messages(ownerId, mountId, chatId || ''),
-        queryFn: async () => {
-            if (!chatId) return [];
-            const response = await chatApi({ownerId})({mountId})({chatId}).messages.get();
-            return response.data || [];
+        queryFn: async ({pageParam}: { pageParam: string | undefined }) => {
+            if (!chatId) return [] as ChatMessage[];
+            const query: { before?: string; limit?: string } = {limit: String(MESSAGE_PAGE_SIZE)};
+            if (pageParam) query.before = pageParam;
+            const response = await chatApi({ownerId})({mountId})({chatId}).messages.get({query});
+            return (response.data || []) as ChatMessage[];
+        },
+        initialPageParam: undefined as string | undefined,
+        getNextPageParam: (lastPage: ChatMessage[]) => {
+            if (lastPage.length < MESSAGE_PAGE_SIZE) return undefined;
+            return lastPage[0]?.id;
         },
         enabled: !!chatId && !!ownerId && !!mountId,
     });
