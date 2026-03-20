@@ -1828,6 +1828,77 @@ describe('Drive', () => {
         });
     });
 
+    describe('Regression: Self-downgrade ACL preserves sharing', () => {
+        let stickiesId: string;
+
+        beforeAll(async () => {
+            const data = await drivePost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `folder/${aliceRootId}/stickies`, {fileName: 'ACL Self Downgrade Test'});
+            stickiesId = data.id;
+        });
+
+        test('Alice shares stickies with Bob (write)', async () => {
+            const result = await drivePut(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `path/${stickiesId}/acl`, {
+                    acl: [{id: BOB_EMAIL, read: true, write: true}],
+                });
+            expect(result.success).toBe(true);
+        });
+
+        test('Bob sees stickies in shared-with-me', async () => {
+            const res = await authedRequest(ctx.bob.user.sessionToken,
+                `/drive/${ctx.bob.user.id}/shared/with-me`);
+            const data = await res.json() as any[];
+            const shared = data.find((item: any) => item.id === stickiesId);
+            expect(shared).toBeDefined();
+            expect(shared.acl).toEqual([{id: BOB_EMAIL, read: true, write: true}]);
+        });
+
+        test('Bob downgrades own ACL to read-only', async () => {
+            const result = await drivePut(ctx.bob.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `path/${stickiesId}/acl`, {
+                    acl: [{id: BOB_EMAIL, read: true, write: false}],
+                });
+            expect(result.success).toBe(true);
+        });
+
+        test('stickies ACL is preserved (not cleared)', async () => {
+            const path = await driveGet(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `path/${stickiesId}`);
+            expect(path.acl).toEqual([{id: BOB_EMAIL, read: true, write: false}]);
+        });
+
+        test('Bob still has read access', async () => {
+            const read = await driveGet(ctx.bob.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `path/${stickiesId}/permissions/read`);
+            expect(read.canRead).toBe(true);
+        });
+
+        test('Bob no longer has write access', async () => {
+            const write = await driveGet(ctx.bob.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `path/${stickiesId}/permissions/write`);
+            expect(write.canWrite).toBe(false);
+        });
+
+        test('Bob still sees stickies in shared-with-me with downgraded ACL', async () => {
+            const res = await authedRequest(ctx.bob.user.sessionToken,
+                `/drive/${ctx.bob.user.id}/shared/with-me`);
+            const data = await res.json() as any[];
+            const shared = data.find((item: any) => item.id === stickiesId);
+            expect(shared).toBeDefined();
+            expect(shared.acl).toEqual([{id: BOB_EMAIL, read: true, write: false}]);
+        });
+
+        test('propagated shared path has up-to-date metadata', async () => {
+            const res = await authedRequest(ctx.bob.user.sessionToken,
+                `/drive/${ctx.bob.user.id}/shared/with-me`);
+            const data = await res.json() as any[];
+            const shared = data.find((item: any) => item.id === stickiesId);
+            expect(shared).toBeDefined();
+            expect(shared.name).toBe('ACL Self Downgrade Test.eigenstickies');
+        });
+    });
+
     describe('Regression: Recursive folder ACL deletion cleans shared.db', () => {
         let parentId: string;
         let childId: string;

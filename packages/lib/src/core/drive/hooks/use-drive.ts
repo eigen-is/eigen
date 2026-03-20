@@ -258,7 +258,7 @@ export function useRenamePath(ownerId: string, mountId: string = DEFAULT_MOUNT_I
 }
 
 // UPDATE ACL
-export function useUpdateACL(ownerId: string, mountId: string = DEFAULT_MOUNT_ID) {
+export function useUpdateACL(ownerId: string, mountId: string = DEFAULT_MOUNT_ID, currentUserId?: string) {
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: async ({path, acl, visibility}: {
@@ -272,6 +272,12 @@ export function useUpdateACL(ownerId: string, mountId: string = DEFAULT_MOUNT_ID
         },
         onSuccess: (_data, variables) => {
             invalidateAclUpdated(queryClient, ownerId, variables.path.mountId, variables.path.id, variables.path.parentId);
+            // Invalidate the current user's shared-with-me (ownerId is the document owner, not the current user)
+            if (currentUserId && currentUserId !== ownerId) {
+                invalidateAclSharedOrUnshared(queryClient, currentUserId);
+            }
+            // Invalidate collab info so canWrite refreshes in document views
+            queryClient.invalidateQueries({queryKey: ['collab', 'info', ownerId, variables.path.mountId, variables.path.id]});
             toast.success('Sharing updated');
         },
         onError: onMutationError,
