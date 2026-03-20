@@ -1,5 +1,3 @@
-"use client"
-
 import {X} from "lucide-react"
 import {Card, CardContent} from "@workspace/ui/components/card"
 import {Progress} from "@workspace/ui/components/progress"

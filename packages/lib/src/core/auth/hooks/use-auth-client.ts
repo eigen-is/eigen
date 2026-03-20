@@ -1,5 +1,4 @@
 import {createAuthClient} from "better-auth/client";
-import {useQuery} from '@tanstack/react-query';
 import {adminClient, organizationClient, twoFactorClient} from "better-auth/client/plugins";
 
 export const authClient = createAuthClient({
@@ -23,13 +22,6 @@ export const authClient = createAuthClient({
         }),
     ],
 });
-
-export function useAuthClient() {
-    return useQuery({
-        queryKey: ['auth-client'],
-        queryFn: () => authClient
-    })
-}
 
 type ErrorTypes = Partial<
     Record<

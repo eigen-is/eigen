@@ -1,12 +1,7 @@
 import {useEffect, useState} from 'react';
 
-/**
- * Hook to simplify working with media queries
- * @param query Media query string to evaluate
- * @returns boolean indicating if the media query matches
- */
 export function useMediaQuery(query: string) {
-    const [matches, setMatches] = useState(false);
+    const [matches, setMatches] = useState(() => window.matchMedia(query).matches);
 
     useEffect(() => {
         // Set initial value

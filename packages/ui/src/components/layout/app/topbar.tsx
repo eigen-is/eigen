@@ -25,9 +25,10 @@ import {AppLogo} from "./app-logo.tsx";
 import {UserAvatar} from "../user-avatar.tsx";
 import {useLayout} from "./layout-context.tsx";
 
+// eslint-disable-next-line @typescript-eslint/no-explicit-any -- TanStack Router's useNavigate has app-specific types
 type NavigateFunction = (...args: any[]) => any;
 
-interface TopbarProps {
+type TopbarProps = {
     rootRoute: {
         useNavigate: () => NavigateFunction;
     };

@@ -1,6 +1,4 @@
-"use client"
-
-import React from "react"
+import React, {useState} from "react"
 import {Toaster} from "../../sonner.tsx"
 import {UploadProvider} from "../upload-provider/upload-provider.tsx"
 import {PreviewProvider} from "../preview-provider/preview-provider.tsx"
@@ -13,12 +11,9 @@ import {HotkeysProvider, useHotkey} from "@tanstack/react-hotkeys"
 import {printDocument} from "../../../lib/printElement.ts"
 import {ThemeProvider} from "./theme-provider.tsx"
 
-interface EigenAppProps {
+type EigenAppProps = {
     children: React.ReactNode;
 }
-
-// Create a QueryClient instance
-const queryClient = new QueryClient();
 
 function GlobalHotkeys() {
     useHotkey('Mod+P', (e) => {
@@ -29,6 +24,8 @@ function GlobalHotkeys() {
 }
 
 export function EigenApp({children}: EigenAppProps) {
+    const [queryClient] = useState(() => new QueryClient());
+
     return (
         <HotkeysProvider>
             <TooltipProvider>

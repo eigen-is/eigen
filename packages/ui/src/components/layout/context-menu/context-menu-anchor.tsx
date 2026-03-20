@@ -1,7 +1,7 @@
 import {ReactNode} from 'react';
 import {DropdownMenu, DropdownMenuTrigger} from '@workspace/ui/components/dropdown-menu';
 
-interface ContextMenuAnchorProps {
+type ContextMenuAnchorProps = {
     isOpen: boolean;
     onClose: () => void;
     children: ReactNode;

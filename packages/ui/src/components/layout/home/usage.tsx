@@ -16,6 +16,7 @@ type StorageUsageProps = {
     condensed?: boolean;
 }
 
+// Hardcoded colors are intentional: red/yellow for storage warning thresholds (no theme token for warning)
 const getStorageUsageColor = (storageUsed: number): string => {
     if (!storageUsed || isNaN(storageUsed) || storageUsed === Infinity) return "";
     else if (storageUsed > 0.85) return "bg-red-500";
