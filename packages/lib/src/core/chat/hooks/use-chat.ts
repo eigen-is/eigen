@@ -13,11 +13,10 @@ export const chatKeys = {
 
 export function useChats(ownerId: string) {
     return useQuery({
-        queryKey: [...driveKeys.mime(ownerId, 'application-eigenchat'), 'own'],
+        queryKey: driveKeys.mime(ownerId, 'application-eigenchat'),
         queryFn: async () => {
             const response = await driveApi({ownerId}).mime({mimeType: 'application-eigenchat'}).get();
-            const all = (response.data || []) as DrivePath[];
-            return all.filter(p => p.ownerId === ownerId);
+            return (response.data || []) as DrivePath[];
         },
         enabled: !!ownerId,
     });
