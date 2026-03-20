@@ -49,6 +49,9 @@ function ChatView() {
                             ownerId={ownerId}
                             mountId={mountId}
                             mediaFolderId={chat.mediaFolderId}
+                            hasOlderMessages={chat.hasOlderMessages}
+                            isFetchingOlderMessages={chat.isFetchingOlderMessages}
+                            onLoadMore={chat.fetchOlderMessages}
                         />
                         <ChatMessageInput
                             onSend={chat.handleSendMessage}

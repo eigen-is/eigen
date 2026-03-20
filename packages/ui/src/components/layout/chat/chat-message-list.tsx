@@ -1,4 +1,4 @@
-import {type ReactNode, useEffect, useRef} from 'react';
+import {type ReactNode, useCallback, useEffect, useRef} from 'react';
 import {UserAvatar} from "../user-avatar";
 import {EigenLoader} from "../braket/eigen-loader.tsx";
 import {cn} from "../../../lib/utils";
@@ -23,6 +23,9 @@ type ChatMessageListProps = {
     mediaFolderId?: string | null;
     className?: string;
     emptyMessage?: string;
+    hasOlderMessages?: boolean;
+    isFetchingOlderMessages?: boolean;
+    onLoadMore?: () => void;
 }
 
 function isSameAuthorAndClose(prev: ChatMessage, curr: ChatMessage): boolean {
@@ -130,21 +133,63 @@ export function ChatMessageList({
                                     mediaFolderId,
                                     className,
                                     emptyMessage = 'No messages yet. Start the conversation!',
+                                    hasOlderMessages,
+                                    isFetchingOlderMessages,
+                                    onLoadMore,
                                 }: ChatMessageListProps) {
-    const bottomRef = useRef<HTMLDivElement>(null);
-    const scrollContainerRef = useRef<HTMLDivElement>(null);
+    const scrollRef = useRef<HTMLDivElement>(null);
+    const prevMessageCountRef = useRef(0);
+    const isInitialLoadRef = useRef(true);
 
+    const scrollToBottom = useCallback(() => {
+        requestAnimationFrame(() => {
+            const container = scrollRef.current;
+            if (container) container.scrollTop = container.scrollHeight;
+        });
+    }, []);
+
+    // Scroll to bottom on initial load
     useEffect(() => {
-        const container = scrollContainerRef.current;
-        if (!container) {
-            bottomRef.current?.scrollIntoView({behavior: 'smooth'});
-            return;
+        if (messages.length > 0 && isInitialLoadRef.current) {
+            isInitialLoadRef.current = false;
+            scrollToBottom();
         }
+    }, [messages.length, scrollToBottom]);
+
+    // Handle new messages or older messages loaded
+    useEffect(() => {
+        const prevCount = prevMessageCountRef.current;
+        prevMessageCountRef.current = messages.length;
+        if (prevCount === 0 || messages.length <= prevCount) return;
+
+        const container = scrollRef.current;
+        if (!container) return;
+
         const isNearBottom = container.scrollHeight - container.scrollTop - container.clientHeight < 100;
         if (isNearBottom) {
-            bottomRef.current?.scrollIntoView({behavior: 'smooth'});
+            scrollToBottom();
         }
-    }, [messages.length]);
+        // If not near bottom, don't scroll — user is reading history
+    }, [messages.length, scrollToBottom]);
+
+    // Load more when scrolling near the top
+    const onLoadMoreRef = useRef(onLoadMore);
+    onLoadMoreRef.current = onLoadMore;
+
+    const handleScroll = useCallback(() => {
+        if (!onLoadMoreRef.current || !hasOlderMessages || isFetchingOlderMessages) return;
+        const container = scrollRef.current;
+        if (container && container.scrollTop < 200) {
+            onLoadMoreRef.current();
+        }
+    }, [hasOlderMessages, isFetchingOlderMessages]);
+
+    useEffect(() => {
+        const container = scrollRef.current;
+        if (!container) return;
+        container.addEventListener('scroll', handleScroll, {passive: true});
+        return () => container.removeEventListener('scroll', handleScroll);
+    }, [handleScroll]);
 
     if (isLoading) {
         return (
@@ -163,7 +208,12 @@ export function ChatMessageList({
     }
 
     return (
-        <div ref={scrollContainerRef} className={cn("flex-1 overflow-y-auto", className)}>
+        <div ref={scrollRef} className={cn("flex-1 overflow-y-auto", className)}>
+            {isFetchingOlderMessages && (
+                <div className="flex justify-center py-3">
+                    <EigenLoader/>
+                </div>
+            )}
             {messages.map((message, i) => {
                 const isWhisper = message.type === 'whisper';
                 const isEmote = message.type === 'emote';
@@ -295,7 +345,7 @@ export function ChatMessageList({
                     </div>
                 );
             })}
-            <div ref={bottomRef} className="h-3"/>
+            <div className="h-3"/>
         </div>
     );
 }
