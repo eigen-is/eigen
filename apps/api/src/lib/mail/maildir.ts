@@ -262,7 +262,7 @@ export default class Maildir {
         const mail = await this.messageHandleDraft(mailToSend)
         try {
             const mailOptions = draftToMailOptions(mail, this.home.user.email)
-            const isDev = Bun.env['PRODUCTION'] !== '1'
+            const isDev = process.env['PRODUCTION'] !== '1' && process.env['NODE_ENV'] !== 'production'
 
             let sent: boolean
             if (isDev) {
