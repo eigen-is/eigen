@@ -68,7 +68,7 @@ function CollaborativeTextEditor() {
                 path={docInfo.path}
             />
             <DriveDeleteItem
-                path={docInfo.path}
+                paths={docInfo.path ? [docInfo.path] : []}
                 open={deleteDialogOpen}
                 onOpenChange={setDeleteDialogOpen}
                 onAfterAction={() => {
