@@ -4,10 +4,10 @@ import {SidebarSection} from '@workspace/ui/components/layout/sidebar/sidebar-se
 import {SidebarItem} from '@workspace/ui/components/layout/sidebar/sidebar-item';
 import {SidebarHeader} from '@workspace/ui/components/layout/sidebar/sidebar-header';
 import {useChats, useCreateChat} from '@workspace/lib/chat';
-import {getChatRoomUrl} from "@workspace/lib/api";
 import {EigenLoader} from "@workspace/ui";
 import {DriveCreateItemDialog} from "@workspace/ui/components/layout/drive/drive-create-folder-item";
 import {useState} from "react";
+import {useNavigate} from "@tanstack/react-router";
 import type {DrivePath} from "@workspace/lib/types/drive";
 
 type ChatSidebarProps = {
@@ -30,6 +30,7 @@ export function ChatSidebar({
     const {data: chats, isLoading} = useChats(ownerId);
     const [createChatOpen, setCreateChatOpen] = useState(false);
     const createChatMutation = useCreateChat(ownerId, mountId);
+    const navigate = useNavigate();
 
     const handleCreateChat = async (fileName: string) => {
         if (!rootPath) return;
@@ -39,7 +40,10 @@ export function ChatSidebar({
         });
         setCreateChatOpen(false);
         if (newPath) {
-            window.location.href = getChatRoomUrl(ownerId, mountId, newPath.id);
+            navigate({
+                to: '/$ownerId/$mountId/$chatId',
+                params: {ownerId, mountId, chatId: newPath.id}
+            });
         }
     };
 

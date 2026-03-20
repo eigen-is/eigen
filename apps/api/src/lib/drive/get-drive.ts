@@ -9,7 +9,7 @@ export async function getDrive(user: User): Promise<Drive> {
     return home.drive;
 }
 
-export async function getSharedDrive(ownerId: string, user: User) {
+export async function getSharedDrive(ownerId: string, user: User): Promise<Drive> {
     if (!user?.id) {
         throw new ApiError(401, 'User is required');
     }

@@ -14,6 +14,11 @@ export type ChatMessage = {
     createdAt: Date;
 }
 
+export type RoomMember = {
+    email: string;
+    displayName: string;
+}
+
 export type ChatReadState = {
     userId: string;
     lastReadMessageId: string | null;

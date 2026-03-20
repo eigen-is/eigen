@@ -2,7 +2,8 @@ import {useCallback, useEffect, useRef, useState} from 'react';
 import {Button} from "../../button";
 import {Paperclip, Send, X} from "lucide-react";
 import {cn} from "../../../lib/utils";
-import {getAtSuggestQuery, type RoomMember} from "./chat-utils";
+import {getAtSuggestQuery} from "./chat-utils";
+import type {RoomMember} from "@workspace/lib/types/chat";
 import {ChatPlayerSuggest} from "./chat-player-suggest";
 import {ChatSlashSuggest} from "./chat-slash-suggest";
 import {COMMANDS_HELP, SLASH_COMMANDS} from "@workspace/lib/chat";
@@ -53,6 +54,7 @@ export function ChatMessageInput({
         onSend(content.trim(), files.length > 0 ? files : undefined);
         setContent('');
         setFiles([]);
+        if (textareaRef.current) textareaRef.current.style.height = 'auto';
         setTimeout(focusTextarea, 0);
     };
 
@@ -257,7 +259,11 @@ export function ChatMessageInput({
                     <textarea
                         ref={textareaRef}
                         value={content}
-                        onChange={(e) => setContent(e.target.value)}
+                        onChange={(e) => {
+                            setContent(e.target.value);
+                            e.target.style.height = 'auto';
+                            e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px';
+                        }}
                         onKeyDown={handleKeyDown}
                         placeholder={placeholder}
                         disabled={disabled}

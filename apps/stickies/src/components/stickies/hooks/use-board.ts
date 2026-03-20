@@ -7,7 +7,6 @@ import {normalizeBoard} from '../normalize-board';
 import {getCollabWebSocketUrl} from '@workspace/lib/api';
 import {useAuth} from '@workspace/lib/auth';
 import {useCreateChat} from '@workspace/lib/chat';
-import type {DrivePath} from '@workspace/lib/types/drive';
 import {toast} from 'sonner';
 
 const DEFAULT_COLUMNS = ['To Do', 'In Progress', 'Done'];
@@ -41,7 +40,7 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
                 parentId: folderId,
                 fileName: `task-${nanoid(10)}`
             });
-            return (result as DrivePath)?.name;
+            return result?.name;
         } catch (e) {
             toast.error('Failed to create chat for card');
             return undefined;
