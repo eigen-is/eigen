@@ -4,17 +4,12 @@ import {getUserById} from './user';
 import {getUserHomePath} from '../config/paths';
 import {evictHome} from '../home/get-home';
 import {removeEntriesForTarget} from '../share/registry';
-import {getAuthDrizzleDb} from '../auth/auth';
+import {auth} from '../auth/auth';
 import {ApiError} from '../core';
 import {shareRegistry} from '../share/schema';
 import {getEigenDb} from '../share/db';
-import {user as userTable} from '../../../auth-schema';
 
-export async function deleteUserCompletely(userId: string, requestingUserId: string): Promise<void> {
-    if (userId === requestingUserId) {
-        throw new ApiError(400, 'Cannot delete your own account');
-    }
-
+export async function deleteUserCompletely(userId: string, requestHeaders: Headers): Promise<void> {
     const user = await getUserById(userId);
     if (!user) {
         throw new ApiError(404, 'User not found');
@@ -36,7 +31,6 @@ export async function deleteUserCompletely(userId: string, requestingUserId: str
         .run();
     await removeEntriesForTarget(user.email);
 
-    // 4. Delete user from auth DB (cascades to sessions, accounts, org/team memberships, 2FA)
-    const authDb = getAuthDrizzleDb();
-    authDb.delete(userTable).where(eq(userTable.id, userId)).run();
+    // 4. Delete user via better-auth (handles sessions, accounts, memberships, 2FA)
+    await auth.api.removeUser({body: {userId}, headers: requestHeaders});
 }

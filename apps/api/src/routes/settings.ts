@@ -73,9 +73,12 @@ export const settingsRouter = new Elysia({name: "settings"})
         auth: true,
     })
 
-    .delete("/settings/user/:userId", async ({params, user}) => {
+    .delete("/settings/user/:userId", async ({params, user, request}) => {
         await requireAdmin(user.id);
-        await deleteUserCompletely(params.userId, user.id);
+        if (params.userId === user.id) {
+            throw new ApiError(400, 'Cannot delete your own account');
+        }
+        await deleteUserCompletely(params.userId, request.headers);
         return {success: true};
     }, {auth: true})
 
