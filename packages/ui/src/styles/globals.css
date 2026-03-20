@@ -174,15 +174,19 @@
     }
 
     .eigen-list-item {
-        @apply bg-background cursor-pointer select-none;
+        @apply bg-background cursor-pointer select-none transition-all duration-150;
+        box-shadow: inset 2px 0 0 0 transparent;
     }
 
     .eigen-list-item:hover {
         @apply bg-muted/50;
+        box-shadow: inset 2px 0 0 0 var(--color-muted-foreground);
+        opacity: 0.85;
     }
 
     .eigen-list-item-active {
-        @apply bg-muted text-primary;
+        @apply bg-background text-primary;
+        box-shadow: inset 2px 0 0 0 var(--color-primary);
     }
 
     .eigen-list-item.eigen-list-item-selected {
@@ -190,11 +194,13 @@
     }
 
     .eigen-list-item.eigen-list-item-selected:hover {
-        background-color: var(--color-selected-hover);
+        background-color: var(--color-selected);
+        box-shadow: inset 2px 0 0 0 var(--color-muted-foreground);
     }
 
     .eigen-list-item-selected.eigen-list-item-active {
-        background-color: var(--color-selected-hover);
+        background-color: var(--color-selected);
+        box-shadow: inset 2px 0 0 0 var(--color-primary);
     }
 
     .eigen-list-item-unread {
