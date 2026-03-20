@@ -42,8 +42,13 @@ type DatabaseConfig<S> = {
 ### Lifecycle
 
 1. `open(autoSyncMs)` — opens DB, runs pending migrations, starts sync timer
-2. `sync()` — runs `onSync` callback + WAL checkpoint
-3. `close()` — flushes, closes, cleans up WAL/SHM files
+2. `sync()` — runs `onSync` callback + `PRAGMA wal_checkpoint(PASSIVE)` (non-blocking)
+3. `close()` — syncs, then `PRAGMA wal_checkpoint(TRUNCATE)` to clean WAL/SHM files, closes DB
+
+### Migrations
+
+Each migration runs in a transaction (`BEGIN`/`COMMIT`/`ROLLBACK`). If a migration fails partway through, all
+changes are rolled back and the version is not updated.
 
 ### Pragmas
 

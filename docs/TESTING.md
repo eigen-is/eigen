@@ -24,22 +24,32 @@ Test → Eden Treaty / authedRequest() → app.handle() → Real business logic 
 
 ## Test Files
 
-| File                | Tests                                                |
-|---------------------|------------------------------------------------------|
-| `auth.test.ts`      | Health, auth required, user access                   |
-| `drive.test.ts`     | Mounts, folders, files, sharing, ACL, docs, stickies |
-| `home.test.ts`      | Size, isolation                                      |
-| `contacts.test.ts`  | CRUD, labels, isolation                              |
-| `mail.test.ts`      | Mailboxes, drafts, moves, deletes, isolation         |
-| `mail-imap.test.ts` | Maildir format, flags, sync, simulated Dovecot       |
-| `chat.test.ts`      | Messages, whispers, commands, read-only ACL          |
-| `collab.test.ts`    | Yjs operations, storage                              |
-| `calendar.test.ts`           | Calendars, events, recurrence, sharing                             |
-| `calendar-invites.test.ts`  | Invite propagation, RSVP, cancellation, linked event guard         |
-| `org.test.ts`       | Org, teams, roles                                    |
-| `org-drive.test.ts` | Team drives, team ACL                                |
-| `sse.test.ts`       | SSE endpoint, events                                 |
-| `setup.test.ts`     | Setup wizard                                         |
+| File                          | Tests                                                      |
+|-------------------------------|------------------------------------------------------------|
+| `auth.test.ts`                | Health, auth required, user access                         |
+| `drive.test.ts`               | Mounts, folders, files, sharing, ACL, docs, stickies       |
+| `home.test.ts`                | Size, isolation                                            |
+| `contacts.test.ts`            | CRUD, labels, isolation                                    |
+| `mail.test.ts`                | Mailboxes, drafts, moves, deletes, isolation               |
+| `mail-imap.test.ts`           | Maildir format, flags, sync, simulated Dovecot             |
+| `chat.test.ts`                | Messages, whispers, commands, read-only ACL                |
+| `collab.test.ts`              | Yjs operations, storage                                    |
+| `calendar.test.ts`            | Calendars, events, recurrence, sharing                     |
+| `calendar-invites.test.ts`    | Invite propagation, RSVP, cancellation, linked event guard |
+| `org.test.ts`                 | Org, teams, roles                                          |
+| `org-drive.test.ts`           | Team drives, team ACL                                      |
+| `sse.test.ts`                 | SSE endpoint, events                                       |
+| `setup.test.ts`               | Setup wizard                                               |
+| `delete-user.test.ts`         | User deletion, admin permissions, data cleanup             |
+| `settings.test.ts`            | Server settings, admin access control                      |
+| `share-registry.test.ts`      | Share registry push/pull, reconciliation                   |
+| `team-calendar-share.test.ts` | Team calendar sharing                                      |
+| `integration.test.ts`         | Cross-domain integration                                   |
+| `preview.test.ts`             | File preview endpoints                                     |
+| `public.test.ts`              | Public routes, avatars                                     |
+| `editor.test.ts`              | Inline text editing                                        |
+| `mount.test.ts`               | Mount storage backends                                     |
+| `org-home.test.ts`            | Org/team Home lifecycle                                    |
 
 ## Key Details
 
