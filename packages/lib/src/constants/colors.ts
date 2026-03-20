@@ -59,7 +59,9 @@ export const EIGEN_COLORS_MAP = [
 ] as const;
 
 export const EIGEN_ACCENT_COLOR_ROW = 5;
+export const EIGEN_STICKIES_COLOR_ROW = 1;
 
 export const EIGEN_COLORS = EIGEN_COLORS_MAP.map((col, i) => col.map((hex, s) => ({label: `${EIGEN_COLOR_NAMES[i]}-${EIGEN_COLOR_STEPS[s]}`, value: hex}))) as EigenColor[][];
 export const EIGEN_ACCENT_COLORS = EIGEN_COLORS.map(col => col[EIGEN_ACCENT_COLOR_ROW]) as EigenColor[];
 export const EIGEN_ACCENT_COLORS_SHUFFLED = goldenRatioShuffle(EIGEN_ACCENT_COLORS);
+export const EIGEN_STICKIES_COLORS = [EIGEN_STICKIES_COLOR_ROW].map(ri => [1, 3, 5, 7, 9, 11, 13, 15].map(ci => EIGEN_COLORS[ci][ri]));

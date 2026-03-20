@@ -8,6 +8,7 @@ import {getCollabWebSocketUrl} from '@workspace/lib/api';
 import {useAuth} from '@workspace/lib/auth';
 import {useCreateChat} from '@workspace/lib/chat';
 import {toast} from 'sonner';
+import {EIGEN_STICKIES_COLORS} from "@workspace/lib/constants";
 
 const DEFAULT_COLUMNS = ['To Do', 'In Progress', 'Done'];
 const WELCOME_CARD = {
@@ -67,6 +68,7 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
             taskYMap.set('description', WELCOME_CARD.description);
             taskYMap.set('creator', userEmail);
             taskYMap.set('createdAt', now);
+            taskYMap.set('color', EIGEN_STICKIES_COLORS[0][1].value);
             if (chatName) taskYMap.set('chatName', chatName);
             tasksMap.set(taskId, taskYMap);
 
