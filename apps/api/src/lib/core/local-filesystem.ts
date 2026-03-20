@@ -131,9 +131,14 @@ export class LocalFilesystem {
         return totalSize;
     }
 
-    async readdir(dirPath: string, options?: { withFileTypes?: boolean }): Promise<any[]> {
+    async readdir(dirPath: string): Promise<string[]>;
+    async readdir(dirPath: string, options: { withFileTypes: true }): Promise<fs.Dirent[]>;
+    async readdir(dirPath: string, options?: { withFileTypes?: boolean }): Promise<string[] | fs.Dirent[]> {
         const fullPath = this.getFilePath(dirPath);
-        return await fsPromises.readdir(fullPath, options as any);
+        if (options?.withFileTypes) {
+            return await fsPromises.readdir(fullPath, {withFileTypes: true});
+        }
+        return await fsPromises.readdir(fullPath);
     }
 
     async stat(filePath: string) {

@@ -38,6 +38,9 @@ export class S3Storage implements StorageBackend {
     }
 
     private getKey(key: string): string {
+        if (key.split('/').some(seg => seg === '..')) {
+            throw new Error(`Path traversal blocked: ${key}`);
+        }
         return this.prefix ? `${this.prefix}/${key}` : key;
     }
 

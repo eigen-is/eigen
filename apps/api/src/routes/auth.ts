@@ -1,5 +1,6 @@
 import {type Context, Elysia} from "elysia";
 import {auth} from "../lib/auth/auth";
+import {ApiError} from "../lib/core";
 
 export const betterAuthView = (context: Context) => {
     const BETTER_AUTH_ACCEPT_METHODS = ["GET", "POST", "PUT", "DELETE", "OPTIONS"]
@@ -22,7 +23,7 @@ export const betterAuth = new Elysia({name: "better-auth"})
                 });
 
                 if (!session) {
-                    throw new Error("Unauthorized");
+                    throw new ApiError(401, "Unauthorized");
                 }
 
                 return {
