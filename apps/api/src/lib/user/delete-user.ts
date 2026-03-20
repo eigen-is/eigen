@@ -4,10 +4,11 @@ import {getUserById} from './user';
 import {getUserHomePath} from '../config/paths';
 import {evictHome} from '../home/get-home';
 import {removeEntriesForTarget} from '../share/registry';
-import {auth} from '../auth/auth';
+import {auth, getAuthDrizzleDb} from '../auth/auth';
 import {ApiError} from '../core';
 import {shareRegistry} from '../share/schema';
 import {getEigenDb} from '../share/db';
+import {member, teamMember} from '../../../auth-schema';
 
 export async function deleteUserCompletely(userId: string, requestHeaders: Headers): Promise<void> {
     const user = await getUserById(userId);
@@ -31,6 +32,13 @@ export async function deleteUserCompletely(userId: string, requestHeaders: Heade
         .run();
     await removeEntriesForTarget(user.email);
 
-    // 4. Delete user via better-auth (handles sessions, accounts, memberships, 2FA)
+    // 4. Remove org/team memberships explicitly (PRAGMA foreign_keys is OFF by default
+    //    in SQLite, so CASCADE from user deletion won't clean these up, and orphaned
+    //    member rows crash better-auth's listMembers)
+    const authDb = getAuthDrizzleDb();
+    authDb.delete(teamMember).where(eq(teamMember.userId, userId)).run();
+    authDb.delete(member).where(eq(member.userId, userId)).run();
+
+    // 5. Delete user via better-auth (handles sessions, accounts, 2FA)
     await auth.api.removeUser({body: {userId}, headers: requestHeaders});
 }
