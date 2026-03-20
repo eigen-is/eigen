@@ -1,4 +1,3 @@
-import {useState} from 'react';
 import {Building, Calendar, Edit, Mail, MapPin, MoreVertical, Phone, Printer, Trash2} from 'lucide-react';
 import {type Address, type Contact} from "@workspace/lib/types/contact";
 import {type Label} from "@workspace/lib/types/label";
@@ -12,7 +11,6 @@ import {
 } from "@workspace/ui/components/dropdown-menu";
 import {Badge} from "@workspace/ui/components/badge";
 import {Link} from '@tanstack/react-router';
-import {DeleteDialog} from "@workspace/ui/components/layout/delete/delete-dialog";
 import {useLabels} from '@workspace/lib/contacts';
 import {Toolbar, TooltipButton, UserAvatar} from "@workspace/ui";
 import {EigenLoader} from '@workspace/ui/components/layout/braket/eigen-loader.tsx';
@@ -20,7 +18,7 @@ import {useOpenWriteEmailTo} from "@workspace/lib/mail";
 import {printDocument} from '@workspace/ui/lib/printElement';
 import {getMailComposeUrl} from "@workspace/lib/api";
 
-interface ContactDetailToolbarProps {
+type ContactDetailToolbarProps = {
     contact: Contact;
     filterType?: string;
     filterId?: string;
@@ -103,26 +101,17 @@ export function ContactDetailToolbar({contact, filterType, filterId, onDeleteCli
     );
 }
 
-interface ContactDetailProps {
+type ContactDetailProps = {
     contact: Contact;
     onDelete: (id: string) => void;
-    filterType?: string;
-    filterId?: string;
 }
 
 export function ContactDetail({contact, onDelete}: ContactDetailProps) {
-    const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-
     const {
         data: labels = [],
         isLoading: labelsLoading,
         error: labelsError
     } = useLabels();
-
-    const handleDelete = () => {
-        onDelete(contact.id);
-        setDeleteDialogOpen(false);
-    };
 
     const formatPhoneNumber = (phone: string) => {
         return phone; // You might want to add formatting logic here
@@ -188,8 +177,8 @@ export function ContactDetail({contact, onDelete}: ContactDetailProps) {
                                 contactLabels.map((label: Label) => (
                                     <Badge
                                         key={label.id}
-                                        style={{backgroundColor: label.color, color: '#fff'}}
-                                        className="px-2 py-1"
+                                        style={{backgroundColor: label.color}}
+                                        className="px-2 py-1 text-primary-foreground"
                                     >
                                         {label.name}
                                     </Badge>
@@ -212,7 +201,7 @@ export function ContactDetail({contact, onDelete}: ContactDetailProps) {
                                     </h4>
                                     {contact.email.map((email: string, index: number) => (
                                         <div key={index} className="pl-6">
-                                            <a className="text-blue-600 hover:underline"
+                                            <a className="text-primary hover:underline"
                                                href={getMailComposeUrl(email)}>
                                                 {email}
                                             </a>
@@ -229,7 +218,7 @@ export function ContactDetail({contact, onDelete}: ContactDetailProps) {
                                     </h4>
                                     {contact.phone.map((phone: string, index: number) => (
                                         <div key={index} className="pl-6">
-                                            <a href={`tel:${phone}`} className="text-blue-600 hover:underline">
+                                            <a href={`tel:${phone}`} className="text-primary hover:underline">
                                                 {formatPhoneNumber(phone)}
                                             </a>
                                         </div>
@@ -293,14 +282,6 @@ export function ContactDetail({contact, onDelete}: ContactDetailProps) {
                 </div>
             </div>
 
-            <DeleteDialog
-                open={deleteDialogOpen}
-                onOpenChange={setDeleteDialogOpen}
-                title="Delete Contact"
-                description="Are you sure you want to delete"
-                itemName={`${contact.firstName} ${contact.lastName}`}
-                onDelete={handleDelete}
-            />
         </div>
     );
 }

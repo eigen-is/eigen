@@ -1,8 +1,8 @@
 import {createFileRoute, useNavigate} from '@tanstack/react-router';
 import {ContactEdit, ContactEditToolbar, type ContactFormValues} from '../components/contacts/contact-edit';
-import {type Contact} from "@workspace/lib/types/contact";
 import {useAddContact} from '@workspace/lib/contacts';
 import {Column, ColumnLayout} from "@workspace/ui/components/layout/app/column-layout.tsx";
+import {emptyContact} from '@workspace/lib/constants/contact';
 
 export const Route = createFileRoute('/_auth/new')({
     component: NewContactRoute,
@@ -12,49 +12,28 @@ function NewContactRoute() {
     const navigate = useNavigate();
     const addContactMutation = useAddContact();
 
-    // Empty contact object for new contacts
-    const emptyContact: Contact = {
-        id: '',
-        firstName: '',
-        lastName: '',
-        email: [''],
-        phone: [''],
-        address: [{}],
-        labels: [],
-    };
-
-    // Handle form submission
     const handleSave = async (data: ContactFormValues) => {
-        try {
-            // Transform the data for API compatibility (avatar is added by ContactEdit component)
-            const formData = data as ContactFormValues & { avatar?: string | null };
-            const contactData = {
-                ...formData,
-                firstName: formData.firstName || '',
-                lastName: formData.lastName || '',
-                birthday: formData.birthday?.toISOString(),
-                labels: formData.labels || [],
-                avatar: formData.avatar || undefined
-            };
+        const contactData = {
+            ...data,
+            firstName: data.firstName || '',
+            lastName: data.lastName || '',
+            birthday: data.birthday?.toISOString(),
+            labels: data.labels || [],
+            avatar: data.avatar ?? ''
+        };
 
-            // Save the contact data
-            await addContactMutation.mutateAsync(contactData);
+        const newId = await addContactMutation.mutateAsync(contactData);
 
-            // Navigate back to the contacts list after saving
-            navigate({
-                to: '/$filterType/$filterId',
-                params: {
-                    filterType: 'book',
-                    filterId: 'all'
-                }
-            });
-        } catch (error) {
-            console.error("Error saving contact:", error);
-            // Error is handled in the ContactEdit component
-        }
+        navigate({
+            to: '/$filterType/$filterId',
+            params: {
+                filterType: 'book',
+                filterId: 'all'
+            },
+            search: newId && typeof newId === 'string' ? {contactId: newId} : {},
+        });
     };
 
-    // Cancel button navigates back to contacts list
     const handleCancel = () => {
         navigate({
             to: '/$filterType/$filterId',
@@ -72,8 +51,6 @@ function NewContactRoute() {
                     contact={emptyContact}
                     onSave={handleSave}
                     onCancel={handleCancel}
-                    filterType="book"
-                    filterId="all"
                 />
             </Column>
         </ColumnLayout>
