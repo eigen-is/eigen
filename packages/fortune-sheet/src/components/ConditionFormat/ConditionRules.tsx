@@ -19,7 +19,7 @@ export function ConditionRules({type}: { type: string }) {
     const [colorRules, setColorRules] = useState<{
         textColor: string;
         cellColor: string;
-    }>({textColor: "#000000", cellColor: "#000000"});
+    }>({textColor: "#009966", cellColor: "#d0fae5"});
 
     const close = useCallback(
         (closeType: string) => {
@@ -40,8 +40,8 @@ export function ConditionRules({type}: { type: string }) {
                 ctx.conditionRules = {
                     rulesType: "",
                     rulesValue: "",
-                    textColor: {check: true, color: "#000000"},
-                    cellColor: {check: true, color: "#000000"},
+                    textColor: {check: false, color: "#009966"},
+                    cellColor: {check: true, color: "#d0fae5"},
                     betweenValue: {value1: "", value2: ""},
                     dateValue: "",
                     repeatValue: "0",
@@ -77,8 +77,8 @@ export function ConditionRules({type}: { type: string }) {
                 ctx.conditionRules = {
                     rulesType: type,
                     rulesValue: "",
-                    textColor: {check: true, color: "#000000"},
-                    cellColor: {check: true, color: "#000000"},
+                    textColor: {check: false, color: "#009966"},
+                    cellColor: {check: true, color: "#d0fae5"},
                     betweenValue: {value1: "", value2: ""},
                     dateValue: "",
                     repeatValue: "0",
