@@ -2,7 +2,7 @@ import {EmailDraft as EmailDraftType} from "@workspace/lib/types/mail";
 import {ContactAutosuggest, Toolbar, TooltipButton} from "@workspace/ui";
 import {Input} from "@workspace/ui/components/input";
 import {Textarea} from "@workspace/ui/components/textarea";
-import {useEffect, useMemo, useRef, useState} from "react";
+import {useCallback, useEffect, useMemo, useRef, useState} from "react";
 import {toast} from "sonner";
 import {createDraftEmail} from "@workspace/lib/mail";
 import {useAuth} from "@workspace/lib/auth";
@@ -57,11 +57,12 @@ export function EmailDraftToolbar({onSend, onDelete, isSending, hasId}: {
     );
 }
 
-interface EmailDraftProps {
+type EmailDraftProps = {
     email: EmailDraftType | null;
     to?: string;
     onDelete: (mail: EmailDraftType) => void;
     sendDraft: (mail: EmailDraftType) => Promise<any>;
+    onAutoSave?: (mail: EmailDraftType) => Promise<any>;
 }
 
 export function EmailDraft({
@@ -69,6 +70,7 @@ export function EmailDraft({
                                to,
                                onDelete,
                                sendDraft,
+                               onAutoSave,
                            }: EmailDraftProps) {
     // Create refs for the input fields
     const toFieldRef = useRef<HTMLInputElement>(null);
@@ -113,7 +115,7 @@ export function EmailDraft({
     }, [draft]);
 
     // Create a function to get the current draft values
-    const getCurrentDraft = useMemo(() => () => {
+    const getCurrentDraft = useCallback(() => {
         const convertStringToEmailAddressArray = (field: string) => {
             if (!field || field.trim() === '') {
                 return [];
@@ -156,6 +158,29 @@ export function EmailDraft({
             text: textareaRef.current?.value || ''
         };
     }, [draft]);
+
+    // Auto-save existing drafts every 3s if content changed
+    const lastSavedRef = useRef<string>('');
+    useEffect(() => {
+        if (!email?.id || !onAutoSave) return;
+        const timer = setInterval(() => {
+            const current = getCurrentDraft();
+            const snapshot = JSON.stringify({
+                to: current.to,
+                cc: current.cc,
+                bcc: current.bcc,
+                subject: current.subject,
+                text: current.text
+            });
+            if (snapshot !== lastSavedRef.current) {
+                lastSavedRef.current = snapshot;
+                onAutoSave(current).catch(() => {
+                });
+            }
+        }, 3000);
+        return () => clearInterval(timer);
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- getCurrentDraft and onAutoSave read from refs; email.id is the stable key
+    }, [email?.id]);
 
     // Handle send email functionality
     const handleSendEmail = async () => {

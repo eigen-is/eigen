@@ -24,7 +24,7 @@ export function handleMailSSEvent(event: SSEvent, queryClient: QueryClient, user
 
     switch (event.type) {
         case SSEventType.MAIL_RECEIVED:
-            invalidateMailReceived(queryClient, userId);
+            invalidateMailReceived(queryClient, userId, mailbox);
             invalidateMailboxes(queryClient, userId);
             invalidateHomeSize(queryClient, userId);
             if (mail.fromShort) toast('New email', {description: `From ${mail.fromShort}: ${mail.subject ?? ''}`});

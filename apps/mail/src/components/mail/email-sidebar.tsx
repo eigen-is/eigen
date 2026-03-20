@@ -82,7 +82,7 @@ function getStandardMailboxFlag(flags: string[] = []): string | null {
     return flags.find(flag => standardFlags.includes(flag)) || null;
 }
 
-interface AppSidebarProps {
+type AppSidebarProps = {
     condensed?: boolean;
     onClose?: () => void;
     isMobile?: boolean;
@@ -143,7 +143,7 @@ export function EmailSidebar({
 
 
         return standardMailboxList;
-    }, [mailboxes]);
+    }, [mailboxes, isLoading, error]);
 
     return (
         <div className="flex h-full min-h-[calc(100vh-3.5rem)] flex-col">
@@ -189,39 +189,6 @@ export function EmailSidebar({
                     })
                 )}
             </SidebarSection>
-
-            {/* Custom mailboxes section */}
-            {/* {customMailboxes.length > 0 && (
-                <>
-                    <Separator className="my-2"/>
-                    <SidebarSection
-                        title="Folders"
-                        condensed={condensed}
-                    >
-                        {customMailboxes.map((item) => (
-                            <SidebarItem
-                                key={item.path || item.name}
-                                icon={item.icon}
-                                label={item.unread > 0 ? `${item.name} (${item.unread})` : item.name}
-                                to={item.href}
-                                condensed={condensed}
-                            />
-                        ))}
-                    </SidebarSection>
-                </>
-            )} */}
-
-            {/* Create new folder button */}
-            {/*<div className="px-3 mt-4">*/}
-            {/*    <Button*/}
-            {/*        variant="outline"*/}
-            {/*        size="sm"*/}
-            {/*        className="w-full justify-start"*/}
-            {/*    >*/}
-            {/*        <Plus className="mr-2 h-4 w-4"/>*/}
-            {/*        {!condensed && "New Folder"}*/}
-            {/*    </Button>*/}
-            {/*</div>*/}
 
             {/* Storage usage indicator at the bottom of sidebar */}
             <StorageUsage

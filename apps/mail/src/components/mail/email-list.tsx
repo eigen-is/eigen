@@ -10,7 +10,7 @@ import {useKeyboardListNavigation} from "@workspace/ui/hooks/use-keyboard-list-n
 import {useListSelection} from "@workspace/ui/hooks/use-list-selection";
 import {useListDrag} from "@workspace/ui/hooks/use-list-drag";
 
-interface EmailListToolbarProps {
+type EmailListToolbarProps = {
     searchQuery: string;
     onSearchChange: (query: string) => void;
 }
@@ -27,7 +27,7 @@ export function EmailListToolbar({searchQuery, onSearchChange}: EmailListToolbar
     );
 }
 
-interface EmailListProps {
+type EmailListProps = {
     emails: EmailSummary[];
     searchQuery: string;
     onRowClick: (emailId: string) => void;
