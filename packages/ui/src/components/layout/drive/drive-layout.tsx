@@ -96,8 +96,8 @@ export function DriveLayout({
     };
 
     const handleDeletePaths = (paths: DrivePath[]) => {
-        if (allowDelete) {
-            for (const path of paths) dialogs.delete.openDialog(path);
+        if (allowDelete && paths.length > 0) {
+            dialogs.delete.openDialog(paths);
         }
     };
 
@@ -317,7 +317,7 @@ export function DriveLayout({
 
             {allowDelete && (
                 <DriveDeleteItem
-                    path={dialogs.delete.item}
+                    paths={dialogs.delete.items}
                     open={dialogs.delete.open}
                     onOpenChange={dialogs.delete.setOpen}
                     onAfterAction={onAfterAction}

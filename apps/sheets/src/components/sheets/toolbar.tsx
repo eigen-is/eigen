@@ -74,7 +74,7 @@ export function ToolbarLeftItems({path, onAccessDialogOpen, canWrite}: ToolbarIt
             )}
             {path && (
                 <DriveDeleteItem
-                    path={path}
+                    paths={[path]}
                     open={deleteDialogOpen}
                     onOpenChange={setDeleteDialogOpen}
                     onAfterAction={(actionType) => {

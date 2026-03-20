@@ -143,7 +143,7 @@ export function Toolbar({canWrite, undoManager, onAccessDialogOpen, onRestore, o
 
             {path && (
                 <DriveDeleteItem
-                    path={path}
+                    paths={[path]}
                     open={deleteDialogOpen}
                     onOpenChange={setDeleteDialogOpen}
                     onAfterAction={(actionType) => {

@@ -5,7 +5,7 @@ export type DriveDialogsState = {
     createFolder: { open: boolean };
     createDoc: { open: boolean };
     createStickies: { open: boolean };
-    delete: { open: boolean; item: DrivePath | null };
+    delete: { open: boolean; items: DrivePath[] };
     rename: { open: boolean; item: DrivePath | null };
     share: { open: boolean; item: DrivePath | null };
     upload: { open: boolean; files: File[] };
@@ -20,7 +20,7 @@ export function useDriveDialogs() {
     const [createSheetsOpen, setCreateSheetsOpen] = useState(false);
 
     const [deleteOpen, setDeleteOpen] = useState(false);
-    const [deleteItem, setDeleteItem] = useState<DrivePath | null>(null);
+    const [deleteItems, setDeleteItems] = useState<DrivePath[]>([]);
 
     const [renameOpen, setRenameOpen] = useState(false);
     const [renameItem, setRenameItem] = useState<DrivePath | null>(null);
@@ -49,13 +49,13 @@ export function useDriveDialogs() {
     const openCreateSheets = useCallback(() => setCreateSheetsOpen(true), []);
     const closeCreateSheets = useCallback(() => setCreateSheetsOpen(false), []);
 
-    const openDelete = useCallback((item: DrivePath) => {
-        setDeleteItem(item);
+    const openDelete = useCallback((items: DrivePath | DrivePath[]) => {
+        setDeleteItems(Array.isArray(items) ? items : [items]);
         setDeleteOpen(true);
     }, []);
     const closeDelete = useCallback(() => {
         setDeleteOpen(false);
-        setDeleteItem(null);
+        setDeleteItems([]);
     }, []);
 
     const openRename = useCallback((item: DrivePath) => {
@@ -124,7 +124,7 @@ export function useDriveDialogs() {
         },
         delete: {
             open: deleteOpen,
-            item: deleteItem,
+            items: deleteItems,
             setOpen: setDeleteOpen,
             openDialog: openDelete,
             closeDialog: closeDelete,
