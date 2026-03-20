@@ -1,5 +1,5 @@
 import {useCallback, useMemo, useRef} from 'react';
-import {Workbook, type WorkbookInstance} from '@workspace/fortune-sheet';
+import {type Sheet, Workbook, type WorkbookInstance} from '@workspace/fortune-sheet';
 import {useSheet} from './hooks/use-sheet';
 import {ToolbarLeftItems, ToolbarRightItems} from './toolbar';
 import {EigenLoader} from '@workspace/ui';
@@ -38,17 +38,13 @@ export function SheetEditor({ownerId, path, canWrite, onAccessDialogOpen}: Sheet
         handleRestore,
     } = useSheet(ownerId, path.mountId, path.id, workbookRef);
 
-    const onOp = useCallback((ops: any[]) => {
-        handleOp(ops);
-    }, [handleOp]);
-
-    const onChange = useCallback((data: Record<string, any>[]) => {
-        saveSnapshot(data as any);
+    const onChange = useCallback((data: Sheet[]) => {
+        saveSnapshot(data);
     }, [saveSnapshot]);
 
     const leftItems = useMemo(() => (
-        <ToolbarLeftItems path={path} canWrite={canWrite} onAccessDialogOpen={onAccessDialogOpen} onRestore={handleRestore}/>
-    ), [path, canWrite, onAccessDialogOpen, handleRestore]);
+        <ToolbarLeftItems path={path} canWrite={canWrite} onAccessDialogOpen={onAccessDialogOpen}/>
+    ), [path, canWrite, onAccessDialogOpen]);
 
     const rightItems = useMemo(() => (
         <ToolbarRightItems path={path} canWrite={canWrite} onAccessDialogOpen={onAccessDialogOpen} onRestore={handleRestore}/>
@@ -65,7 +61,7 @@ export function SheetEditor({ownerId, path, canWrite, onAccessDialogOpen}: Sheet
                     ref={workbookRef}
                     data={initialData}
                     onChange={onChange}
-                    onOp={onOp}
+                    onOp={handleOp}
                     showToolbar={true}
                     showFormulaBar={true}
                     showSheetTabs={true}
