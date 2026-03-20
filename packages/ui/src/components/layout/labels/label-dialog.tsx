@@ -20,6 +20,7 @@ import {Popover, PopoverContent, PopoverTrigger} from "@workspace/ui/components/
 import {ColorPicker} from "@workspace/ui/components/layout/media/color-picker";
 import {DeleteDialog} from "@workspace/ui/components/layout/delete/delete-dialog";
 import type {Label} from "@workspace/lib/types/label";
+import {EIGEN_ACCENT_COLORS_SHUFFLED} from "@workspace/lib/constants";
 
 // Form schema for label management
 const labelFormSchema = z.object({
@@ -39,6 +40,7 @@ type LabelDialogProps = {
     selectedLabel: Label | null;
     onSubmit: (data: LabelFormValues) => Promise<void>;
     onDelete: () => void;
+    labelCount?: number;
 }
 
 export function LabelDialog({
@@ -47,6 +49,7 @@ export function LabelDialog({
                                 selectedLabel,
                                 onSubmit,
                                 onDelete,
+                                labelCount = 0,
                             }: LabelDialogProps) {
     const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
     const [colorPickerOpen, setColorPickerOpen] = useState(false);
@@ -58,10 +61,11 @@ export function LabelDialog({
         resolver: zodResolver(labelFormSchema),
         defaultValues: selectedLabel
             ? {name: selectedLabel.name, color: selectedLabel.color}
-            : {name: "", color: "#3b82f6"}, // Default blue color
+            : {name: "", color: EIGEN_ACCENT_COLORS_SHUFFLED[labelCount % EIGEN_ACCENT_COLORS_SHUFFLED.length].value},
     });
 
-    // Reset form values when selectedLabel changes
+    const defaultColor = EIGEN_ACCENT_COLORS_SHUFFLED[labelCount % EIGEN_ACCENT_COLORS_SHUFFLED.length].value;
+
     useEffect(() => {
         if (selectedLabel) {
             form.reset({
@@ -69,10 +73,9 @@ export function LabelDialog({
                 color: selectedLabel.color
             });
         } else if (open) {
-            // Reset to default values when opening for a new label
             form.reset({
                 name: "",
-                color: "#3b82f6"
+                color: defaultColor
             });
         }
     }, [selectedLabel, form, open]);

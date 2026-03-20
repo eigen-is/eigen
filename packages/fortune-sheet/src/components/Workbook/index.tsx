@@ -49,6 +49,7 @@ type AdditionalProps = {
     onChange?: (data: SheetType[]) => void;
     onOp?: (op: Op[]) => void;
     toolbarLeftItems?: React.ReactNode;
+    toolbarCenterItems?: React.ReactNode;
     toolbarRightItems?: React.ReactNode;
 };
 
@@ -67,7 +68,7 @@ const concatProducer = (...producers: ((ctx: Context) => void)[]) => {
 };
 
 export const Workbook = React.forwardRef<WorkbookInstance, Settings & AdditionalProps>(
-    ({onChange, onOp, toolbarLeftItems, toolbarRightItems, data: originalData, ...props}, ref) => {
+    ({onChange, onOp, toolbarLeftItems, toolbarCenterItems, toolbarRightItems, data: originalData, ...props}, ref) => {
         const scrollListeners = useRef(new Set<() => void>());
         const globalCache = useRef<GlobalCache>({
             undoList: [],
@@ -860,6 +861,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                             {mergedSettings.showToolbar && (
                                 <Toolbar
                                     leftItems={toolbarLeftItems}
+                                    centerItems={toolbarCenterItems}
                                     rightItems={toolbarRightItems}
                                 />
                             )}

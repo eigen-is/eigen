@@ -18,6 +18,7 @@ import type {ManagedDatabase} from '../core/';
 import {ApiError, PATHS} from '../core';
 import {SSEventType} from '@workspace/lib/types/sse';
 import {buildCalendarEvent, buildCalendarShareEvent} from './sse-events';
+import {EIGEN_ACCENT_COLORS_SHUFFLED} from '@workspace/lib/constants/colors';
 import {notifySharedCalendarUsers, propagateCalendarShare} from './share-propagation';
 import {propagateCancellation, propagateDecline, propagateInvitation, propagateRsvp} from './invite-propagation';
 import {createHash} from 'crypto';
@@ -176,7 +177,7 @@ export class Calendar {
             this.db.insert(schema.calendars).values({
                 id: uuidv4(),
                 name: this.home.user.name || 'Personal',
-                color: '#4285f4',
+                color: EIGEN_ACCENT_COLORS_SHUFFLED[0].value,
                 isDefault: true,
                 ctag: 0,
                 shares: null,
@@ -556,7 +557,7 @@ export class Calendar {
         this.db.delete(schema.sharedCalendars).where(eq(schema.sharedCalendars.id, id)).run();
     }
 
-    public receiveShare(ownerUserId: string, calendarId: string, calendarName: string, calendarColor: string, permission: CalendarShare['permission']): void {
+    public receiveShare(ownerUserId: string, calendarId: string, calendarName: string, _calendarColor: string, permission: CalendarShare['permission']): void {
         const existing = this.db.select().from(schema.sharedCalendars).where(
             and(
                 eq(schema.sharedCalendars.ownerUserId, ownerUserId),
@@ -567,17 +568,19 @@ export class Calendar {
         if (existing) {
             this.db.update(schema.sharedCalendars).set({
                 calendarName,
-                calendarColor,
                 permission,
                 updatedAt: sql`unixepoch()`,
             }).where(eq(schema.sharedCalendars.id, existing.id)).run();
         } else {
+            const ownCalendarCount = this.db.select().from(schema.calendars).all().length;
+            const sharedCount = this.db.select().from(schema.sharedCalendars).all().length;
+            const localColor = EIGEN_ACCENT_COLORS_SHUFFLED[(ownCalendarCount + sharedCount) % EIGEN_ACCENT_COLORS_SHUFFLED.length].value;
             this.db.insert(schema.sharedCalendars).values({
                 id: uuidv4(),
                 ownerUserId,
                 calendarId,
                 calendarName,
-                calendarColor,
+                calendarColor: localColor,
                 permission,
                 visible: true,
             }).run();
@@ -609,7 +612,7 @@ export class Calendar {
         }
     }
 
-    public ensureSharedEntry(ownerUserId: string, calendarId: string, calendarName: string, calendarColor: string, permission: CalendarShare['permission']): void {
+    public ensureSharedEntry(ownerUserId: string, calendarId: string, calendarName: string, _calendarColor: string, permission: CalendarShare['permission']): void {
         const existing = this.db.select().from(schema.sharedCalendars).where(
             and(
                 eq(schema.sharedCalendars.ownerUserId, ownerUserId),
@@ -618,21 +621,23 @@ export class Calendar {
         ).get();
 
         if (existing) {
-            if (existing.calendarName !== calendarName || existing.calendarColor !== calendarColor || existing.permission !== permission) {
+            if (existing.calendarName !== calendarName || existing.permission !== permission) {
                 this.db.update(schema.sharedCalendars).set({
                     calendarName,
-                    calendarColor,
                     permission,
                     updatedAt: sql`unixepoch()`,
                 }).where(eq(schema.sharedCalendars.id, existing.id)).run();
             }
         } else {
+            const ownCalendarCount = this.db.select().from(schema.calendars).all().length;
+            const sharedCount = this.db.select().from(schema.sharedCalendars).all().length;
+            const localColor = EIGEN_ACCENT_COLORS_SHUFFLED[(ownCalendarCount + sharedCount) % EIGEN_ACCENT_COLORS_SHUFFLED.length].value;
             this.db.insert(schema.sharedCalendars).values({
                 id: uuidv4(),
                 ownerUserId,
                 calendarId,
                 calendarName,
-                calendarColor,
+                calendarColor: localColor,
                 permission,
                 visible: true,
             }).run();

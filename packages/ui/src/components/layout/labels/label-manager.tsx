@@ -131,6 +131,7 @@ export function LabelManager({
                 selectedLabel={selectedLabel}
                 onSubmit={handleSubmit}
                 onDelete={handleDeleteLabel}
+                labelCount={labels.length}
             />
         </div>
     );
