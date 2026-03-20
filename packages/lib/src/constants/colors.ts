@@ -65,3 +65,17 @@ export const EIGEN_COLORS = EIGEN_COLORS_MAP.map((col, i) => col.map((hex, s) =>
 export const EIGEN_ACCENT_COLORS = EIGEN_COLORS.map(col => col[EIGEN_ACCENT_COLOR_ROW]) as EigenColor[];
 export const EIGEN_ACCENT_COLORS_SHUFFLED = goldenRatioShuffle(EIGEN_ACCENT_COLORS);
 export const EIGEN_STICKIES_COLORS = [EIGEN_STICKIES_COLOR_ROW].map(ri => [1, 3, 5, 7, 9, 11, 13, 15].map(ci => EIGEN_COLORS[ci][ri]));
+
+export function hexToRgba(hex: string, alpha: number): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+export function lightenColor(hex: string, amount: number): string {
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `#${[r, g, b].map(c => Math.round(c + (255 - c) * amount).toString(16).padStart(2, '0')).join('')}`;
+}

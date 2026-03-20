@@ -9,6 +9,7 @@ import {AddColumnDialog} from './add-column-dialog';
 import {ColumnSettingsDialog} from './column-settings-dialog';
 import {Card, CardContent} from '@workspace/ui/components/card';
 import {isLightColor} from '@workspace/ui/components/layout/media/color-picker';
+import {lightenColor} from '@workspace/lib/constants';
 import {useIsMobile} from '@workspace/lib/media';
 import {useBoard} from './hooks/use-board';
 import {useDragAndDrop} from './hooks/use-drag-and-drop';
@@ -80,6 +81,7 @@ export function StickiesBoard({ownerId, path, canWrite, chatFolderId, onAccessDi
     const isMobile = useIsMobile();
     const [editColumnId, setEditColumnId] = useState<string | null>(null);
     const [isColumnSettingsOpen, setIsColumnSettingsOpen] = useState(false);
+    const [colorFilter, setColorFilter] = useState<Set<string>>(new Set());
 
     const handleEditColumn = (columnId: string) => {
         setEditColumnId(columnId);
@@ -125,9 +127,9 @@ export function StickiesBoard({ownerId, path, canWrite, chatFolderId, onAccessDi
             const card = dragState.activeItem as CardItem;
             return (
                 <Card
-                    className={`${isMobile ? 'w-full p-0' : 'w-[256px] p-0'} rounded-none ${!card.color ? 'border' : 'border-0'}`}
+                    className={`${isMobile ? 'w-full p-0' : 'w-[256px] p-0'} shadow-md rounded-none ${!card.color ? 'border' : 'border-0'}`}
                       style={{
-                          backgroundColor: card.color || undefined,
+                          backgroundColor: card.color ? lightenColor(card.color, 0.25) : undefined,
                           color: card.color ? (isLightColor(card.color) ? '#000' : '#fff') : undefined,
                       }}>
                     <CardContent className={`p-3 text-sm ${!card.color ? 'bg-accent' : ''}`}>
@@ -166,7 +168,8 @@ export function StickiesBoard({ownerId, path, canWrite, chatFolderId, onAccessDi
         <div className="flex flex-col h-full w-full">
             <Toolbar path={path} canWrite={canWrite} undoManager={undoManager}
                      onAccessDialogOpen={onAccessDialogOpen} onRestore={handleRestore}
-                     onAddColumn={() => setIsAddColumnDialogOpen(true)}/>
+                     onAddColumn={() => setIsAddColumnDialogOpen(true)}
+                     colorFilter={colorFilter} onColorFilterChange={setColorFilter}/>
             <div className="flex-1 w-full flex overflow-hidden">
                 <div
                     className="overflow-x-auto overflow-y-hidden flex-1"
@@ -194,7 +197,9 @@ export function StickiesBoard({ownerId, path, canWrite, chatFolderId, onAccessDi
                             <SortableContext items={board.columnOrder} strategy={horizontalListSortingStrategy}>
                                 {board.columnOrder.map((columnId) => {
                                     const column = board.columns[columnId];
-                                    const columnCards = column.taskIds.map((taskId) => board.tasks[taskId]);
+                                    const columnCards = column.taskIds
+                                        .map((taskId) => board.tasks[taskId])
+                                        .filter((card) => colorFilter.size === 0 || colorFilter.has(card.color || ''));
                                     return (
                                         <Column
                                             key={column.id}
