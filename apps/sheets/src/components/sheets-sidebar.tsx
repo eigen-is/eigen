@@ -9,7 +9,7 @@ import {useNavigate} from '@tanstack/react-router';
 
 import {DriveCreateSheets} from '@workspace/ui/components/layout/drive/drive-create-sheets';
 
-interface SheetsSidebarProps {
+type SheetsSidebarProps = {
     condensed?: boolean;
     onClose?: () => void;
     isMobile?: boolean;
@@ -84,8 +84,6 @@ export function SheetsSidebar({
                     path={targetPath}
                     open={createSheetsOpen}
                     onOpenChange={setCreateSheetsOpen}
-                    onSave={() => {
-                    }}
                     onCancel={() => setCreateSheetsOpen(false)}
                     onAfterAction={handleAfterAction}
                 />
