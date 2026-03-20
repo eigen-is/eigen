@@ -2,7 +2,18 @@ import * as path from "path";
 import * as fs from "node:fs";
 
 function getDataRoot(): string {
-    return process.env['EIGEN_DATA_ROOT'] || './../../data';
+    const envRoot = process.env['EIGEN_DATA_ROOT'];
+    if (envRoot) return envRoot;
+
+    const isProduction = process.env['PRODUCTION'] === '1' || process.env['NODE_ENV'] === 'production';
+    if (isProduction) {
+        throw new Error(
+            'EIGEN_DATA_ROOT environment variable is required in production. ' +
+            'Set it to the absolute path of your data directory (e.g. /home/user/eigen/data).'
+        );
+    }
+
+    return './../../data';
 }
 
 export function getServerDataPath(filename?: string): string {
