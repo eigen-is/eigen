@@ -29,8 +29,8 @@ export function DeleteDialog({
                     <DialogTitle>{title}</DialogTitle>
                     <DialogDescription>
                         {itemName
-                            ? <>{description} <strong>{itemName}</strong>? This action cannot be undone.</>
-                            : <>{description}? This action cannot be undone.</>}
+                            ? <>{description} <strong>{itemName}</strong></>
+                            : <>{description}</>}
                     </DialogDescription>
                 </DialogHeader>
                 <DialogFooter>
