@@ -4,8 +4,8 @@ import {Button} from "@workspace/ui/components/button";
 import {Textarea} from "@workspace/ui/components/textarea";
 import {useChatRoom, useCreateChat} from "@workspace/lib/chat";
 import {ChatMessageInput, ChatMessageList} from "@workspace/ui";
-import type {DrivePath} from "@workspace/lib/types/drive";
 import {useMediaResolver} from "@workspace/lib/drive";
+import {chatApi} from "@workspace/lib/api";
 
 type CreateCommentDialogProps = {
     open: boolean;
@@ -37,10 +37,10 @@ export function CreateCommentDialog({
         try {
             const fileName = `comment-${Date.now()}`;
             const result = await createChat.mutateAsync({parentId: chatFolderId, fileName});
-            const chatPath = result as DrivePath;
+            const chatPath = result as { id: string; name: string } | undefined;
 
             if (chatPath?.id) {
-                const {chatApi} = await import("@workspace/lib/api");
+                // Direct API call: chatId is only known after creation, so usePostMessage can't be used here
                 await chatApi({ownerId})({mountId})({chatId: chatPath.id}).messages.post({
                     content: comment.trim(),
                 });
