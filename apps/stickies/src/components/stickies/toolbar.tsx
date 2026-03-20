@@ -1,6 +1,6 @@
 import {useEffect, useState} from 'react';
 import {formatForDisplay} from '@tanstack/react-hotkeys';
-import {FileText, Folder, Pencil, Plus, Redo, Trash2, Undo, UserPlus, UserRoundPlus} from 'lucide-react';
+import {Check, FileText, Folder, Pencil, Plus, Redo, Trash2, Undo, UserPlus, UserRoundPlus} from 'lucide-react';
 import {Button} from '@workspace/ui/components/button';
 import {
     DropdownMenu,
@@ -11,6 +11,7 @@ import {
 } from '@workspace/ui/components/dropdown-menu';
 import {Separator} from '@workspace/ui/components/separator';
 import {TooltipButton} from '@workspace/ui';
+import {isLightColor} from '@workspace/ui/components/layout/media/color-picker';
 import {DocumentModeButton} from '@workspace/ui/components/layout/toolbar/document-mode-button';
 import {RevisionHistory} from '@workspace/ui/components/layout/collab/revision-history';
 import * as Y from 'yjs';
@@ -20,6 +21,7 @@ import {useRootFolder} from '@workspace/lib/drive';
 import {DriveCreateStickies} from '@workspace/ui/components/layout/drive/drive-create-stickies';
 import {DriveDeleteItem} from '@workspace/ui/components/layout/drive/drive-delete-item';
 import {DriveRenameItem} from '@workspace/ui/components/layout/drive/drive-rename-item';
+import {EIGEN_STICKIES_COLORS} from '@workspace/lib/constants';
 import type {DrivePath} from '@workspace/lib/types/drive';
 
 type ToolbarProps = {
@@ -29,9 +31,20 @@ type ToolbarProps = {
     onRestore: (state: Uint8Array) => void;
     onAddColumn: () => void;
     path: DrivePath;
+    colorFilter: Set<string>;
+    onColorFilterChange: (filter: Set<string>) => void;
 }
 
-export function Toolbar({canWrite, undoManager, onAccessDialogOpen, onRestore, onAddColumn, path}: ToolbarProps) {
+export function Toolbar({
+                            canWrite,
+                            undoManager,
+                            onAccessDialogOpen,
+                            onRestore,
+                            onAddColumn,
+                            path,
+                            colorFilter,
+                            onColorFilterChange
+                        }: ToolbarProps) {
     const [canUndo, setCanUndo] = useState(false);
     const [canRedo, setCanRedo] = useState(false);
     const [createStickiesOpen, setCreateStickiesOpen] = useState(false);
@@ -117,6 +130,36 @@ export function Toolbar({canWrite, undoManager, onAccessDialogOpen, onRestore, o
                             onClick={onAddColumn}
                         />
                     </>
+                )}
+            </div>
+
+            <div className="flex items-center gap-1.5">
+                {EIGEN_STICKIES_COLORS[0].map((c) => {
+                    const active = colorFilter.has(c.value);
+                    return (
+                        <button
+                            key={c.value}
+                            className={`h-4 w-4 rounded-full border border-border/50 transition-transform hover:scale-125 flex items-center justify-center ${active ? 'ring-2 ring-ring ring-offset-1' : ''}`}
+                            style={{backgroundColor: c.value}}
+                            title={c.label}
+                            onClick={() => {
+                                const next = new Set(colorFilter);
+                                if (active) next.delete(c.value);
+                                else next.add(c.value);
+                                onColorFilterChange(next);
+                            }}
+                        >
+                            {active && (
+                                <Check className="h-2 w-2" style={{color: isLightColor(c.value) ? '#000' : '#fff'}}/>
+                            )}
+                        </button>
+                    );
+                })}
+                {colorFilter.size > 0 && (
+                    <Button variant="ghost" size="sm" className="h-5 text-xs px-1.5"
+                            onClick={() => onColorFilterChange(new Set())}>
+                        Reset
+                    </Button>
                 )}
             </div>
 
