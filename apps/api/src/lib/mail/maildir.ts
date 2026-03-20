@@ -261,10 +261,10 @@ export default class Maildir {
     async messageSend(mailToSend: EmailDraft): Promise<EmailDraft | null> {
         const mail = await this.messageHandleDraft(mailToSend)
         try {
-            const mailOptions = draftToMailOptions(mail, this.home.user.email)
-            const isDev = process.env['PRODUCTION'] !== '1' && process.env['NODE_ENV'] !== 'production'
+            const mailOptions = draftToMailOptions(mail, this.home.user.email);
+            const isDev = Bun.env['PRODUCTION'] != '1';
 
-            let sent: boolean
+            let sent: boolean;
             if (isDev) {
                 console.log('[DEV MODE] Would send email:', {
                     from: mailOptions.from,
@@ -272,13 +272,13 @@ export default class Maildir {
                     subject: mailOptions.subject,
                     text: mailOptions.text?.substring(0, 200) + '...'
                 })
-                sent = true
+                sent = true;
             } else {
-                sent = await sendMail(mailOptions)
+                sent = await sendMail(mailOptions);
             }
 
             if (sent) {
-                await this.messageMove(mail.id, 'Sent')
+                await this.messageMove(mail.id, 'Sent');
                 this.emit(SSEventType.MAIL_SENT, {
                     messageId: mail.id,
                     mailbox: 'Sent',
