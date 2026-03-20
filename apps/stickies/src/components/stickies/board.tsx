@@ -124,7 +124,8 @@ export function StickiesBoard({ownerId, path, canWrite, chatFolderId, onAccessDi
         if (dragState.activeType === 'task') {
             const card = dragState.activeItem as CardItem;
             return (
-                <Card className={`${isMobile ? 'w-full p-0' : 'w-[260px] p-0'}`}
+                <Card
+                    className={`${isMobile ? 'w-full p-0' : 'w-[256px] p-0'} rounded-none ${!card.color ? 'border' : 'border-0'}`}
                       style={{
                           backgroundColor: card.color || undefined,
                           color: card.color ? (isLightColor(card.color) ? '#000' : '#fff') : undefined,

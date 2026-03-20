@@ -43,7 +43,7 @@ export function StickyCard({card, canWrite = true, isMobile, yjsDoc, ownerId, mo
         <>
             <Card
                 ref={setNodeRef}
-                className={`mb-2 p-0 w-full select-none ${canWrite ? 'cursor-grab touch-none' : 'cursor-pointer'} ${isDragging ? 'opacity-50' : ''}`}
+                className={`mb-2 p-0 w-full select-none rounded-none ${!card.color ? 'border' : 'border-0'} ${canWrite ? 'cursor-grab touch-none' : 'cursor-pointer'} ${isDragging ? 'opacity-50' : ''}`}
                 style={{
                     transform: CSS.Transform.toString(transform),
                     transition,

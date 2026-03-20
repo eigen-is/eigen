@@ -79,7 +79,7 @@ export function CardDialog({isOpen, onClose, card, canWrite = true, yjsDoc, owne
                     </DialogHeader>
 
                     {card.description && (
-                        <div className="px-4 text-sm text-foreground">
+                        <div className="px-4 py-3 text-sm text-foreground">
                             <p className="whitespace-pre-line">{card.description}</p>
                         </div>
                     )}
