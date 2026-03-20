@@ -31,8 +31,7 @@ export function getEmailDraftStatus(draft: EmailDraftType) {
     return {isSendable, isSaveable};
 }
 
-export function EmailDraftToolbar({onSend, onDelete, isSending, hasId}: {
-    onSend: () => void;
+export function EmailDraftToolbar({onDelete, isSending, hasId}: {
     onDelete: () => void;
     isSending: boolean;
     hasId: boolean;
@@ -42,7 +41,8 @@ export function EmailDraftToolbar({onSend, onDelete, isSending, hasId}: {
             <TooltipButton
                 icon={Send}
                 tooltipText="Send"
-                onClick={onSend}
+                type="submit"
+                form="draft-form"
                 disabled={isSending}
             />
             {hasId && (
@@ -209,7 +209,7 @@ export function EmailDraft({
         <div className="flex flex-col h-full w-full">
             {/* Email Form */}
             <div className="flex-1 overflow-auto">
-                <form className="flex flex-col h-full" onSubmit={(e) => {
+                <form id="draft-form" className="flex flex-col h-full" onSubmit={(e) => {
                     e.preventDefault();
                     handleSendEmail();
                 }}>
