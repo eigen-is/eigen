@@ -23,6 +23,7 @@ export async function waitlist(email: string, notes: string) {
         // Send mail with defined transport object
         const info = await transporter.sendMail({
             from: `noreply-signup@${getDomain()}`,
+            // TODO: make recipient configurable via server settings
             to: 'reinder@infi.nl',
             subject: 'New Eigen Waitlist Signup',
             text: `New waitlist signup:

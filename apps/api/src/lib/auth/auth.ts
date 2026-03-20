@@ -95,6 +95,8 @@ export const auth = betterAuth({
     appName: "eigen",
     baseURL: process.env["API_URL"],
     basePath: "/auth",
+    // Falls back to random UUID before setup is completed — intentional since sessions don't
+    // need to persist across restarts during the pre-setup phase.
     secret: getServerConfig()?.secret || crypto.randomUUID(),
 });
 
@@ -117,6 +119,8 @@ export async function authAddUserToDefaultOrg(user: User): Promise<void> {
     }
 }
 
+// Separate Drizzle instance from better-auth's internal one — better-auth controls its own
+// connection lifecycle, so we can't safely share the instance it creates via drizzleAdapter().
 let authDrizzleDb: ReturnType<typeof drizzle> | undefined;
 
 export function getAuthDrizzleDb() {

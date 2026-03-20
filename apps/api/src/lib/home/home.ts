@@ -80,8 +80,7 @@ export class Home {
             clearTimeout(this.timeout);
         }
         this.timeout = setTimeout(() => {
-            this.cleanUp && this.cleanUp();
-            return this.destruct();
+            this.destruct().finally(() => this.cleanUp?.());
         }, 1000 * 60 * 5);
         return this;
     }

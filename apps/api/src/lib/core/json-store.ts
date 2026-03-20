@@ -56,8 +56,14 @@ export class JsonStore<T extends Record<string, unknown>> {
     }
 
     async set(update: DeepPartial<T>): Promise<T> {
+        const prev = this.data;
         this.data = deepMerge(this.data, update);
-        await this.save();
+        try {
+            await this.save();
+        } catch (e) {
+            this.data = prev;
+            throw e;
+        }
         return this.data;
     }
 

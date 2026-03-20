@@ -90,8 +90,15 @@ export class ManagedDatabase<S extends SchemaType> {
 
         for (const migration of pending) {
             console.log(`[${this.config.name}] Migrating v${currentVersion} → v${migration.version}`);
-            migration.up(this.rawDb);
-            this.rawDb.run('UPDATE __schema_version SET version = ? WHERE id = 1', [migration.version]);
+            this.rawDb.run('BEGIN');
+            try {
+                migration.up(this.rawDb);
+                this.rawDb.run('UPDATE __schema_version SET version = ? WHERE id = 1', [migration.version]);
+                this.rawDb.run('COMMIT');
+            } catch (e) {
+                this.rawDb.run('ROLLBACK');
+                throw e;
+            }
             currentVersion = migration.version;
         }
     }
@@ -109,7 +116,7 @@ export class ManagedDatabase<S extends SchemaType> {
     async sync(): Promise<void> {
         if (!this.isDirty || !this.callbacks.onSync) return;
 
-        this.rawDb?.run('PRAGMA wal_checkpoint(TRUNCATE);');
+        this.rawDb?.run('PRAGMA wal_checkpoint(PASSIVE);');
         await this.callbacks.onSync();
         this.lastSyncedChanges = this.getTotalChanges();
         console.log(`[${this.config.name}] Synced`);
