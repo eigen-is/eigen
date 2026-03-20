@@ -4,6 +4,7 @@ import {Input} from '@workspace/ui/components/input'
 import {Label} from '@workspace/ui/components/label'
 import {RadioGroup, RadioGroupItem} from '@workspace/ui/components/radio-group'
 import {Card, CardContent, CardDescription, CardHeader, CardTitle} from '@workspace/ui/components/card'
+import {setupApi} from '@workspace/lib/core/api'
 
 type StorageType = 'local-id' | 'local-fullnames' | 's3'
 
@@ -21,24 +22,17 @@ interface SetupData {
     adminName: string
 }
 
-const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
-
 async function checkSetupStatus() {
-    const response = await fetch(`${API_URL}/setup/status`)
-    return response.json()
+    const res = await setupApi.status.get()
+    return res.data as { setupRequired: boolean; domain?: string }
 }
 
 async function completeSetup(data: SetupData) {
-    const submitData = {
+    const res = await setupApi.complete.post({
         ...data,
         adminEmail: `${data.adminUsername}@${data.domain}`
-    }
-    const response = await fetch(`${API_URL}/setup/complete`, {
-        method: 'POST',
-        headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify(submitData)
     })
-    return response.json()
+    return res.data as { success: boolean; error?: string; message?: string }
 }
 
 export function SetupWizard() {
