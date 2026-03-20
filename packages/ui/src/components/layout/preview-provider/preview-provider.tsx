@@ -1,5 +1,3 @@
-"use client"
-
 import React, {createContext, useCallback, useContext, useMemo, useState} from "react"
 import type {DrivePath} from "@workspace/lib/types/drive"
 import {isFolderType} from "@workspace/lib/types/drive"

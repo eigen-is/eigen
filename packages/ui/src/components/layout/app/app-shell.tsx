@@ -9,6 +9,7 @@ import {SidebarContainer, SidebarProps} from '../sidebar/sidebar-container.tsx';
 type AppShellProps = {
     appName: string;
     rootRoute: {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TanStack Router's useNavigate has app-specific types
         useNavigate: () => (...args: any[]) => any;
     };
     sidebar?: ReactNode | ((props: SidebarProps) => ReactNode);

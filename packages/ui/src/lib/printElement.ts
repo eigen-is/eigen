@@ -17,6 +17,7 @@ export function printElement(el: HTMLElement) {
     let cloned = el.cloneNode(true) as HTMLElement;
     document.body.appendChild(cloned);
     cloned.classList.add("printable");
+    // Delay to allow the browser to finish layout recalculation of the cloned element before printing
     setTimeout(() => {
         window.print();
         document.body.removeChild(cloned);

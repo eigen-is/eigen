@@ -1,5 +1,3 @@
-"use client"
-
 import React, {createContext, useContext, useState} from "react"
 import {UploadContainer} from "./upload-container.tsx"
 

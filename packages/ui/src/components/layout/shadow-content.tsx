@@ -1,17 +1,14 @@
 import React, {useEffect, useRef} from "react";
 import {cn} from "../../lib/utils";
 
-interface ShadowContentProps {
+type ShadowContentProps = {
     content: string;
     className?: string;
     contentType?: "html" | "text";
 }
 
-/**
- * ShadowContent - Renders content within a Shadow DOM to isolate
- * styles and prevent them from affecting the rest of the application.
- * Uses 'closed' mode for better security when rendering untrusted content.
- */
+// HTML content is sanitized server-side using DOMPurify before storage.
+// Shadow DOM provides style isolation; script isolation is handled by BE sanitization.
 export function ShadowContent({
                                   content,
                                   className,
@@ -19,28 +16,19 @@ export function ShadowContent({
                                   ...props
                               }: ShadowContentProps & React.HTMLAttributes<HTMLDivElement>) {
     const shadowHostRef = useRef<HTMLDivElement>(null);
+    const shadowRootRef = useRef<ShadowRoot | null>(null);
 
     useEffect(() => {
         const hostElement = shadowHostRef.current;
         if (!hostElement) return;
 
-        // Store reference to shadow root in a closure since we can't access it
-        // after creation when using 'closed' mode
-        let shadowRoot: ShadowRoot;
-
-        // Check if we need to create a new shadow root
-        if ((hostElement as any)._shadowRoot) {
-            // We stored the reference in a property as we can't access it via shadowRoot in closed mode
-            shadowRoot = (hostElement as any)._shadowRoot;
-            // Clear previous content
-            shadowRoot.innerHTML = "";
+        if (shadowRootRef.current) {
+            shadowRootRef.current.innerHTML = "";
         } else {
-            // Create new shadow root with "closed" mode for better security
-            // @ts-ignore
-            shadowRoot = hostElement.attachShadow({mode: "closed", clonable: true});
-            // Store reference to the shadow root since we can't access it later with mode: "closed"
-            (hostElement as any)._shadowRoot = shadowRoot;
+            shadowRootRef.current = hostElement.attachShadow({mode: "closed", clonable: true} as ShadowRootInit);
         }
+
+        const shadowRoot = shadowRootRef.current;
 
         // Create container for content
         const contentContainer = document.createElement("div");

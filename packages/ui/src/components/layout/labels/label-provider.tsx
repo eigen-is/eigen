@@ -1,8 +1,7 @@
 import {createContext, ReactNode, useContext} from 'react';
 import type {Label} from '@workspace/lib/types/label';
 
-// Define the shape of our context
-interface LabelContextType {
+type LabelContextType = {
     addLabel: (labelData: Omit<Label, 'id'>) => Promise<void>;
     updateLabel: (label: Label) => Promise<void>;
     deleteLabel: (labelId: string) => Promise<void>;
@@ -24,7 +23,7 @@ const LabelContext = createContext<LabelContextType>({
 // Hook for consuming the context
 export const useLabels = () => useContext(LabelContext);
 
-interface LabelProviderProps {
+type LabelProviderProps = {
     children: ReactNode;
     onAddLabel?: (labelData: Omit<Label, 'id'>) => Promise<void>;
     onUpdateLabel?: (label: Label) => Promise<void>;
