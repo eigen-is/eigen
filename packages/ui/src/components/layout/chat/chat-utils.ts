@@ -9,8 +9,3 @@ export function getAtSuggestQuery(text: string): string | null {
     if (after.includes(' ')) return null;
     return after;
 }
-
-export type RoomMember = {
-    email: string;
-    displayName: string;
-}

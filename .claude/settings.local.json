@@ -63,7 +63,8 @@
       "Bash(sed -i '' \"s/buildCalendarEvent\\(SSEventType\\\\.CALENDAR_INVITE_CANCELLED, {/buildCalendarEvent\\(SSEventType.CALENDAR_INVITE_CANCELLED, {ownerId: organizerHome.user.id, /g\" apps/api/src/lib/calendar/invite-propagation.ts)",
       "Bash(sed -i '' \"s/buildCalendarEvent\\(SSEventType\\\\.CALENDAR_INVITE_UPDATED, {/buildCalendarEvent\\(SSEventType.CALENDAR_INVITE_UPDATED, {ownerId: organizerHome.user.id, /g\" apps/api/src/lib/calendar/invite-propagation.ts)",
       "Bash(sed -i '' \"s/buildCalendarEvent\\(SSEventType\\\\.CALENDAR_INVITE_RSVP, {/buildCalendarEvent\\(SSEventType.CALENDAR_INVITE_RSVP, {ownerId: organizerHome.user.id, /g\" apps/api/src/lib/calendar/invite-propagation.ts)",
-      "Bash(xargs sed:*)"
+      "Bash(xargs sed:*)",
+      "WebFetch(domain:tanstack.com)"
     ]
   },
   "bypassPermissions": "bypassPermissions"
