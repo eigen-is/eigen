@@ -62,3 +62,15 @@ export async function getHome(ownerId: string): Promise<Home> {
 export function cleanupHomeFactory(ownerId: string): void {
     homeFactories.delete(ownerId);
 }
+
+export async function evictHome(ownerId: string): Promise<void> {
+    const factory = homeFactories.get(ownerId);
+    if (factory) {
+        try {
+            const home = await factory();
+            await home.shutdown();
+        } catch { /* Home may not be initialized */
+        }
+        homeFactories.delete(ownerId);
+    }
+}
