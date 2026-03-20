@@ -15,9 +15,16 @@ Home (per-user singleton)
 ```
 
 **Home** (`apps/api/src/lib/home/home.ts`): Manages DB connections, SSE notifications, domain class lifecycle.
-Lazy-initializes services. Auto-destructs after 5min inactivity.
+Lazy-initializes services via `init()`. Auto-destructs after 5min inactivity via `touch()` — awaits graceful
+shutdown before removing from factory cache.
 
 **Subclasses**: `UserHome` (full services), `TeamHome` (Drive + Calendar only), `OrgHome` (minimal).
+
+**Lifecycle** (`apps/api/src/lib/home/get-home.ts`):
+
+- `getHome(ownerId)` — lazily constructs and caches Home instances as async singletons
+- `evictHome(ownerId)` — explicitly shuts down a cached Home and removes it (used for user deletion)
+- `shutdown()` — public method to gracefully close all databases and clear the inactivity timer
 
 ## Storage Backends
 
@@ -28,6 +35,9 @@ All in `apps/api/src/lib/storage/`:
 | `LocalKeyStorage` | `local-key-storage.ts` | Drive mounts (local-id)        | Flat `data/{uuid}.ext`   |
 | `LocalStorage`    | `local-storage.ts`     | Drive mounts (local-fullnames) | Full directory hierarchy |
 | `S3Storage`       | `s3-storage.ts`        | Remote storage                 | S3-compatible objects    |
+
+**Path safety**: All local backends validate paths against traversal (`..`). `S3Storage` also validates keys
+to prevent escaping the configured prefix.
 
 **Interface** (`types.ts`): `read`, `write`, `delete`, `exists`, `size`. LocalStorage adds `mkdir`, `rename`,
 `deleteDir`.

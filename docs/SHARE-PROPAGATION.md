@@ -45,9 +45,15 @@ PK: `(fromUserId, targetIdentifier)`. No share data — just the pair. Pull rout
 ## Reconciliation Actions
 
 On new user/team member, `reconcileSharesForNewUser()` runs:
-1. `pullCalendarShares()` — shared calendar entries
-2. `pullDriveShares()` — shared drive paths
-3. `pullPendingInvitations()` — calendar invites (creates linked event copies for pending attendees)
+
+1. `pullCalendarShares()` — shared calendar entries (synchronous)
+2. `pullDriveShares()` — shared drive paths (async, queries drive DB)
+3. `pullPendingInvitations()` — calendar invites (synchronous, creates linked event copies)
+
+On user deletion (`deleteUserCompletely`), share registry entries are cleaned up:
+
+- Entries FROM the deleted user (shares they created)
+- Entries TO the deleted user's email (shares targeting them)
 
 ## Pull Routes
 

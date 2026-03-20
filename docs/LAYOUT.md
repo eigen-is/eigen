@@ -82,9 +82,11 @@ PreviewProvider → GlobalHotkeys → Toaster → ReactQueryDevtools
 
 ## LayoutContext
 
-`useLayout()` provides: `appName`, `sidebarOpen`, `setSidebarOpen`, `sidebarMode`, `isMobile`, `isTablet`.
+`useLayout()` provides: `documentTitle`, `setDocumentTitle`, `sidebarOpen`, `setSidebarOpen`, `sidebarMode`,
+`isMobile`, `isTablet`.
 
-Convenience hooks: `useApp()` → `{appName, setAppName}`, `useSidebar()` → `{sidebarOpen, setSidebarOpen}`.
+Convenience hooks: `useSidebar()` → `{sidebarOpen, setSidebarOpen}`. Use `setDocumentTitle()` to update the
+browser tab title dynamically (e.g., showing the current document name).
 
 ## DriveLayout (Shared)
 

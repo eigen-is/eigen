@@ -97,12 +97,24 @@ See [TODO-CHAT-ACL.md](TODO-CHAT-ACL.md) for design discussion.
 
 Typing `@` (after whitespace/start of line) opens player suggestion dropdown. Mid-word `@` (in emails) does not trigger.
 
+## Message Pagination
+
+Messages use `useInfiniteQuery` with cursor-based pagination:
+
+- **Page size**: 50 messages
+- **Cursor**: `before` param (oldest message ID in current page)
+- **Direction**: Newest page first — reversed in `useChatRoom` for chronological display
+- **Infinite scroll**: `ChatMessageList` triggers `onLoadMore` when user scrolls within 200px of top
+- **Auto-scroll**: Scrolls to bottom on initial load and on new messages (only if already near bottom)
+
 ## Message Display
 
 - **Emotes**: Italic with marker. Built-ins show first/third person text
-- **Whispers**: Orange background. Author sees "whispers to X", recipient sees "whispers to you"
+- **Whispers**: Primary-tinted background with "whisper" label
 - **Deleted**: Content cleared, shown as "This message was deleted"
 - **Email rendering**: Emails in content replaced with inline avatar + name
+- **Loading**: `EigenLoader` shown during initial load and while fetching older messages
+- **Grouping**: Consecutive messages from the same author within 5 minutes are grouped (no repeated avatar/name)
 
 ## Files
 
