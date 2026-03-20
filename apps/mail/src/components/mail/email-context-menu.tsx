@@ -13,7 +13,7 @@ import {getMailMessageDownloadUrl} from "@workspace/lib/api";
 import {CSSProperties} from "react";
 import {useAuth} from "@workspace/lib/auth";
 
-interface EmailContextMenuProps {
+type EmailContextMenuProps = {
     style: CSSProperties;
     messageIds: string[];
     isSingleSelect: boolean;
@@ -121,7 +121,8 @@ export function EmailContextMenu({
             {isSingleSelect && (
                 <>
                     <DropdownMenuItem onClick={() => {
-                        const url = getMailMessageDownloadUrl(user!.id, firstId);
+                        if (!user) return;
+                        const url = getMailMessageDownloadUrl(user.id, firstId);
                         window.open(url, "_blank");
                         onClose();
                     }}>
