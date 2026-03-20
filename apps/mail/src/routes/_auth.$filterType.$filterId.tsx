@@ -90,7 +90,6 @@ function MailRoute() {
 
     const detailToolbar = isDraft ? (
         <EmailDraftToolbar
-            onSend={() => actions.handleSendEmail(selectedEmail as EmailDraftType)}
             onDelete={() => handleDeleteEmail(selectedEmail as EmailDraftType)}
             isSending={actions.isSendPending}
             hasId={!!selectedEmail?.id}
