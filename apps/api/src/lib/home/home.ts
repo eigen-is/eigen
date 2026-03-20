@@ -85,6 +85,11 @@ export class Home {
         return this;
     }
 
+    public async shutdown() {
+        if (this.timeout) clearTimeout(this.timeout);
+        await this.destruct();
+    }
+
     public async getLocalDatabase<S extends SchemaType>(
         config: DatabaseConfig<S>,
         relativePath: string

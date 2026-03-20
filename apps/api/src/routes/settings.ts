@@ -1,6 +1,7 @@
 import {Elysia, t} from "elysia";
 import {betterAuth} from "./auth";
 import {getOrgRole} from "../lib/user";
+import {deleteUserCompletely} from "../lib/user/delete-user";
 import {ApiError} from "../lib/core";
 import {getServerSettings, updateServerSettings} from "../lib/config/server-settings";
 import {checkS3Connection} from "../lib/storage/s3-storage";
@@ -71,6 +72,12 @@ export const settingsRouter = new Elysia({name: "settings"})
         }),
         auth: true,
     })
+
+    .delete("/settings/user/:userId", async ({params, user}) => {
+        await requireAdmin(user.id);
+        await deleteUserCompletely(params.userId, user.id);
+        return {success: true};
+    }, {auth: true})
 
     .post("/settings/s3check", async ({body, user}) => {
         await requireAdmin(user.id);
