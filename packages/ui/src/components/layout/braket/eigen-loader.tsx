@@ -1,66 +1,31 @@
 import {cn} from '../../../lib/utils.ts';
-import {useEffect, useState} from 'react';
-import {Bra} from "./bra.tsx";
-import {Ket} from "./ket.tsx";
 
-type EigenLoadingScreenProps = {
+type EigenLoaderProps = {
     className?: string;
-    children?: React.ReactNode;
 };
 
-const animationStyles = {
-    moveLeftChevron: `
-    @keyframes moveLeftChevron {
-      0%, 100% { transform: translateX(0px); }
-      50% { transform: translateX(-6px); }
-    }
-  `,
-    moveRightChevron: `
-    @keyframes moveRightChevron {
-      0%, 100% { transform: translateX(0px); }
-      50% { transform: translateX(6px); }
-    }
-  `
-};
-
-export function EigenLoader({className, children}: EigenLoadingScreenProps) {
-    const [animationStarted, setAnimationStarted] = useState(false);
-
-    useEffect(() => {
-        const timer = setTimeout(() => {
-            setAnimationStarted(true);
-        }, 300);
-
-        return () => clearTimeout(timer);
-    }, []);
-
+export function EigenLoader({className}: EigenLoaderProps) {
     return (
-        <>
-            <style>
-                {animationStyles.moveLeftChevron}
-                {animationStyles.moveRightChevron}
-            </style>
-
-            <div className={cn("text-muted-foreground",
-                className
-            )}>
-                {/* Left Chevron */}
-                <Bra
-                    style={{
-                        animation: animationStarted ? 'moveLeftChevron 1.5s infinite ease-in-out' : 'none'
-                    }}
-                />
-                {/* Optional Text */}
-                {children && (
-                    <span className="px-2">{children}</span>
-                )}
-                {/* Right Chevron */}
-                <Ket
-                    style={{
-                        animation: animationStarted ? 'moveRightChevron 1.5s infinite ease-in-out' : 'none'
-                    }}
-                />
-            </div>
-        </>
+        <svg
+            className={cn("inline text-muted-foreground", className)}
+            height="1em"
+            viewBox="0 -8 28 22"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="1.25"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+        >
+            <g>
+                <path d="m9 0 -4 7.5 4 7.5"/>
+                <animateTransform attributeName="transform" type="translate" values="0,0;-6,0;0,0" dur="1.5s"
+                                  begin="0.3s" repeatCount="indefinite"/>
+            </g>
+            <g>
+                <path d="m17 0 4 7.5 -4 7.5"/>
+                <animateTransform attributeName="transform" type="translate" values="0,0;6,0;0,0" dur="1.5s"
+                                  begin="0.3s" repeatCount="indefinite"/>
+            </g>
+        </svg>
     );
 }
