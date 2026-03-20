@@ -11,10 +11,20 @@ type ColumnSettingsDialogProps = {
     onClose: () => void;
     columnId: string | null;
     columnTitle: string;
+    cardCount?: number;
+    canWrite?: boolean;
     yjsDoc: Y.Doc | null;
 }
 
-export function ColumnSettingsDialog({isOpen, onClose, columnId, columnTitle, yjsDoc}: ColumnSettingsDialogProps) {
+export function ColumnSettingsDialog({
+                                         isOpen,
+                                         onClose,
+                                         columnId,
+                                         columnTitle,
+                                         cardCount = 0,
+                                         canWrite = true,
+                                         yjsDoc
+                                     }: ColumnSettingsDialogProps) {
     const [title, setTitle] = useState(columnTitle);
     const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
 
@@ -74,24 +84,29 @@ export function ColumnSettingsDialog({isOpen, onClose, columnId, columnTitle, yj
                                 id="title"
                                 value={title}
                                 onChange={(e) => setTitle(e.target.value)}
+                                readOnly={!canWrite}
                             />
                         </div>
                     </div>
                     <DialogFooter>
-                        <Button
-                            type="button"
-                            variant="destructive"
-                            className="mr-auto"
-                            onClick={() => setIsDeleteDialogOpen(true)}
-                        >
-                            Delete Column
-                        </Button>
+                        {canWrite && (
+                            <Button
+                                type="button"
+                                variant="destructive"
+                                className="mr-auto"
+                                onClick={() => setIsDeleteDialogOpen(true)}
+                            >
+                                Delete Column
+                            </Button>
+                        )}
                         <Button type="button" variant="outline" onClick={onClose}>
-                            Cancel
+                            {canWrite ? 'Cancel' : 'Close'}
                         </Button>
-                        <Button type="submit" disabled={!title.trim()}>
-                            Save Changes
-                        </Button>
+                        {canWrite && (
+                            <Button type="submit" disabled={!title.trim()}>
+                                Save Changes
+                            </Button>
+                        )}
                     </DialogFooter>
                 </form>
             </DialogContent>
@@ -100,7 +115,9 @@ export function ColumnSettingsDialog({isOpen, onClose, columnId, columnTitle, yj
                 open={isDeleteDialogOpen}
                 onOpenChange={setIsDeleteDialogOpen}
                 title="Delete Column"
-                description="This will permanently delete the column and all cards within it. This action cannot be undone."
+                description={cardCount > 0
+                    ? `This will permanently delete the column and ${cardCount} ${cardCount === 1 ? 'card' : 'cards'} within it. This action cannot be undone.`
+                    : 'This will permanently delete the column. This action cannot be undone.'}
                 onDelete={handleDelete}
             />
         </Dialog>

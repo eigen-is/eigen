@@ -8,6 +8,7 @@ import {getCollabWebSocketUrl} from '@workspace/lib/api';
 import {useAuth} from '@workspace/lib/auth';
 import {useCreateChat} from '@workspace/lib/chat';
 import type {DrivePath} from '@workspace/lib/types/drive';
+import {toast} from 'sonner';
 
 const DEFAULT_COLUMNS = ['To Do', 'In Progress', 'Done'];
 const WELCOME_CARD = {
@@ -36,10 +37,13 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
         const folderId = chatFolderIdRef.current;
         if (!folderId) return undefined;
         try {
-            const result = await createChatRef.current.mutateAsync({parentId: folderId, fileName: `task-${Date.now()}`});
+            const result = await createChatRef.current.mutateAsync({
+                parentId: folderId,
+                fileName: `task-${nanoid(10)}`
+            });
             return (result as DrivePath)?.name;
         } catch (e) {
-            console.error('Failed to create chat for card:', e);
+            toast.error('Failed to create chat for card');
             return undefined;
         }
     }, []);
@@ -49,13 +53,15 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
         if (columnsMap.size > 0) return;
 
         const chatName = await createCardChat();
+
+        if (columnsMap.size > 0) return;
         const now = Date.now();
 
         doc.transact(() => {
             const tasksMap = doc.getMap('tasks');
             const columnOrderArray = doc.getArray('columnOrder');
 
-            const taskId = `task-${nanoid(6)}`;
+            const taskId = `task-${nanoid(10)}`;
             const taskYMap = new Y.Map();
             taskYMap.set('id', taskId);
             taskYMap.set('title', WELCOME_CARD.title);
@@ -67,7 +73,7 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
 
             const columnIds: string[] = [];
             for (const [index, title] of DEFAULT_COLUMNS.entries()) {
-                const columnId = `column-${nanoid(6)}`;
+                const columnId = `column-${nanoid(10)}`;
                 columnIds.push(columnId);
                 const columnYMap = new Y.Map();
                 columnYMap.set('id', columnId);
@@ -102,7 +108,6 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
         providerRef.current = wsProvider;
 
         const updateReactState = () => {
-            normalizeBoard(doc);
             const newState: BoardData = {
                 tasks: {},
                 columns: {},
@@ -140,9 +145,15 @@ export const useBoard = (ownerId: string, mountId: string, pathId: string, chatF
         columnOrderArray.observe(updateReactState);
         updateReactState();
 
+        let initialized = false;
         wsProvider.on('sync', (isSynced: boolean) => {
-            if (isSynced && columnsMap.size === 0) {
-                initializeDefaultBoard(doc, user?.email || 'user@localhost');
+            if (isSynced && !initialized) {
+                initialized = true;
+                normalizeBoard(doc);
+                if (columnsMap.size === 0) {
+                    initializeDefaultBoard(doc, user?.email || 'user@localhost')
+                        .catch(e => toast.error('Failed to initialize board'));
+                }
             }
         });
 
