@@ -1,5 +1,5 @@
-import {createContext, type ReactNode, useContext, useEffect, useMemo, useRef, useState} from 'react';
-import {useFolderContent} from './hooks/use-drive';
+import {createContext, type ReactNode, useContext, useMemo} from 'react';
+import {useFolderLookup} from './hooks/use-drive';
 import {getDrivePreviewUrl} from '../api';
 import type {DrivePath} from '../../types/drive';
 
@@ -28,43 +28,18 @@ export function MediaResolverProvider({ownerId, mountId, mediaFolderId, chatFold
     chatFolderId: string | null;
     children: ReactNode;
 }) {
-    const {data: mediaContents = [], refetch: refetchMedia} = useFolderContent(ownerId, mountId, mediaFolderId || '');
-    const {data: chatContents = []} = useFolderContent(ownerId, mountId, chatFolderId || '');
-    const attemptedNames = useRef(new Set<string>());
-    const [needsRefetch, setNeedsRefetch] = useState(false);
-
-    // Clear resolved names when contents update
-    useEffect(() => {
-        for (const name of attemptedNames.current) {
-            if (mediaContents.some(f => f.name === name)) {
-                attemptedNames.current.delete(name);
-            }
-        }
-    }, [mediaContents]);
-
-    // Refetch media folder when an unresolved name is detected
-    useEffect(() => {
-        if (needsRefetch) {
-            setNeedsRefetch(false);
-            refetchMedia();
-        }
-    }, [needsRefetch, refetchMedia]);
+    const media = useFolderLookup(ownerId, mountId, mediaFolderId);
+    const chat = useFolderLookup(ownerId, mountId, chatFolderId);
 
     const value = useMemo<MediaResolverValue>(() => ({
         resolveMediaUrl: (name: string) => {
-            const file = mediaContents.find(f => f.name === name);
-            if (file) return getDrivePreviewUrl(ownerId, mountId, file.id);
-            // File not in cache — a collaborator may have uploaded it; schedule refetch once per name
-            if (name && mediaFolderId && !attemptedNames.current.has(name)) {
-                attemptedNames.current.add(name);
-                setNeedsRefetch(true);
-            }
-            return null;
+            const file = media.findByName(name);
+            return file ? getDrivePreviewUrl(ownerId, mountId, file.id) : null;
         },
-        resolveMediaPath: (name: string) => mediaContents.find(f => f.name === name),
-        resolveChatId: (name: string) => chatContents.find(f => f.name === name)?.id ?? null,
+        resolveMediaPath: (name: string) => media.findByName(name),
+        resolveChatId: (name: string) => chat.findByName(name)?.id ?? null,
         mediaFolderId,
-    }), [mediaContents, chatContents, ownerId, mountId, mediaFolderId]);
+    }), [media, chat, ownerId, mountId, mediaFolderId]);
 
     return <MediaResolverContext value={value}>{children}</MediaResolverContext>;
 }
