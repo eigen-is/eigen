@@ -9,6 +9,7 @@ import * as Y from 'yjs';
 type ColumnProps = {
     column: ColumnItem;
     cards: CardItem[];
+    canWrite?: boolean;
     isDropAnimating?: boolean;
     onAddCard: (columnId: string) => void;
     onEditColumn: (columnId: string) => void;
@@ -18,7 +19,18 @@ type ColumnProps = {
     mountId: string;
 }
 
-export function Column({column, cards, isDropAnimating, onAddCard, onEditColumn, isMobile, yjsDoc, ownerId, mountId}: ColumnProps) {
+export function Column({
+                           column,
+                           cards,
+                           canWrite = true,
+                           isDropAnimating,
+                           onAddCard,
+                           onEditColumn,
+                           isMobile,
+                           yjsDoc,
+                           ownerId,
+                           mountId
+                       }: ColumnProps) {
     const {
         attributes,
         listeners,
@@ -29,6 +41,7 @@ export function Column({column, cards, isDropAnimating, onAddCard, onEditColumn,
     } = useSortable({
         id: column.id,
         data: {type: 'column', column},
+        disabled: !canWrite,
     });
 
     const cardIds = cards.map(c => c.id);
@@ -47,25 +60,26 @@ export function Column({column, cards, isDropAnimating, onAddCard, onEditColumn,
             }}
         >
             <div
-                className="h-10 pl-3 cursor-grab touch-none font-medium text-sm bg-muted flex-shrink-0 flex items-center justify-between"
-                {...attributes}
-                {...listeners}
+                className={`h-10 pl-3 font-medium text-sm bg-muted flex-shrink-0 flex items-center justify-between ${canWrite ? 'cursor-grab touch-none' : ''}`}
+                {...(canWrite ? {...attributes, ...listeners} : {})}
             >
                 <span className="truncate flex-1">{column.title}</span>
-                <div className="flex items-center">
-                    <TooltipButton
-                        icon={Plus}
-                        tooltipText="Add a sticky"
-                        onClick={() => onAddCard(column.id)}
-                        className="h-6 w-6 opacity-50 hover:opacity-100 mr-1"
-                    />
-                    <TooltipButton
-                        icon={Pencil}
-                        tooltipText="Edit Column"
-                        onClick={() => onEditColumn(column.id)}
-                        className="h-6 w-6 opacity-50 hover:opacity-100"
-                    />
-                </div>
+                {canWrite && (
+                    <div className="flex items-center">
+                        <TooltipButton
+                            icon={Plus}
+                            tooltipText="Add a sticky"
+                            onClick={() => onAddCard(column.id)}
+                            className="h-6 w-6 opacity-50 hover:opacity-100 mr-1"
+                        />
+                        <TooltipButton
+                            icon={Pencil}
+                            tooltipText="Edit Column"
+                            onClick={() => onEditColumn(column.id)}
+                            className="h-6 w-6 opacity-50 hover:opacity-100"
+                        />
+                    </div>
+                )}
             </div>
 
             <div
@@ -85,6 +99,7 @@ export function Column({column, cards, isDropAnimating, onAddCard, onEditColumn,
                                 <StickyCard
                                     key={card.id}
                                     card={card}
+                                    canWrite={canWrite}
                                     isMobile={isMobile}
                                     yjsDoc={yjsDoc}
                                     ownerId={ownerId}
@@ -95,13 +110,15 @@ export function Column({column, cards, isDropAnimating, onAddCard, onEditColumn,
                     </div>
                 )}
 
-                <button
-                    onClick={() => onAddCard(column.id)}
-                    className="mt-2 flex items-center gap-1 text-sm text-muted-foreground hover:bg-muted px-2 py-1.5 rounded-sm w-full"
-                >
-                    <Plus size={16}/>
-                    <span>Add a sticky</span>
-                </button>
+                {canWrite && (
+                    <button
+                        onClick={() => onAddCard(column.id)}
+                        className="mt-2 flex items-center gap-1 text-sm text-muted-foreground hover:bg-muted px-2 py-1.5 rounded-sm w-full"
+                    >
+                        <Plus size={16}/>
+                        <span>Add a sticky</span>
+                    </button>
+                )}
             </div>
         </div>
     );

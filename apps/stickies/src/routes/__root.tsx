@@ -11,11 +11,11 @@ export const DriveContext = createContext<DriveContextType>({
     mountId: DEFAULT_MOUNT_ID
 });
 
-interface MyRouterContext {
+type MyRouterContext = {
     auth: AuthContextType
 }
 
-function DocsRoot() {
+function StickiesRoot() {
     const {user} = useAuth();
     const mountId = DEFAULT_MOUNT_ID;
     const {data: root} = useRootFolder(user?.id || '', mountId);
@@ -58,5 +58,5 @@ function DocsRoot() {
 }
 
 export const Route = createRootRouteWithContext<MyRouterContext>()({
-    component: DocsRoot,
+    component: StickiesRoot,
 });

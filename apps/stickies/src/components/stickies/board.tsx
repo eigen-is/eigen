@@ -146,6 +146,7 @@ export function StickiesBoard({ownerId, path, canWrite, chatFolderId, onAccessDi
                 <Column
                     column={column}
                     cards={columnCards}
+                    canWrite={canWrite}
                     onAddCard={handleAddCardClick}
                     onEditColumn={handleEditColumn}
                     isMobile={isMobile}
@@ -168,7 +169,7 @@ export function StickiesBoard({ownerId, path, canWrite, chatFolderId, onAccessDi
             <div className="flex-1 w-full flex overflow-hidden">
                 <div
                     className="overflow-x-auto overflow-y-hidden flex-1"
-                    style={board.columnOrder.length > 1 ? {
+                    style={board.columnOrder.length > 0 ? {
                         padding: 0,
                         scrollSnapType: 'x mandatory',
                         scrollBehavior: 'smooth',
@@ -177,7 +178,7 @@ export function StickiesBoard({ownerId, path, canWrite, chatFolderId, onAccessDi
                     }}
                 >
                     <DndContext
-                        sensors={sensors}
+                        sensors={canWrite ? sensors : []}
                         onDragStart={handleDragStart}
                         onDragEnd={handleDragEnd}
                         autoScroll={{
@@ -198,6 +199,7 @@ export function StickiesBoard({ownerId, path, canWrite, chatFolderId, onAccessDi
                                             key={column.id}
                                             column={column}
                                             cards={columnCards}
+                                            canWrite={canWrite}
                                             onAddCard={handleAddCardClick}
                                             onEditColumn={handleEditColumn}
                                             isMobile={isMobile}
@@ -230,10 +232,13 @@ export function StickiesBoard({ownerId, path, canWrite, chatFolderId, onAccessDi
 
                     {editColumnId && (
                         <ColumnSettingsDialog
+                            key={editColumnId}
                             isOpen={isColumnSettingsOpen}
                             onClose={() => setIsColumnSettingsOpen(false)}
                             columnId={editColumnId}
                             columnTitle={board.columns[editColumnId]?.title || ''}
+                            cardCount={board.columns[editColumnId]?.taskIds.length || 0}
+                            canWrite={canWrite}
                             yjsDoc={yjsDoc}
                         />
                     )}
