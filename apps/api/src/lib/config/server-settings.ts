@@ -1,6 +1,6 @@
 import {getServerDataPath} from './paths';
 import {type DeepPartial, JsonStore, LocalFilesystem} from '../core';
-import {getStorageType} from './server-config';
+import {getStorageType, isSetupCompleted} from './server-config';
 import type {ServerSettings} from '@workspace/lib/types/settings';
 
 export {mapStorageType} from '@workspace/lib/types/settings';
@@ -26,7 +26,7 @@ async function ensureLoaded() {
     if (!loaded) {
         const exists = await serverFs.file('settings.json').exists();
         await settingsStore.load();
-        if (!exists) {
+        if (!exists && isSetupCompleted()) {
             const configType = getStorageType();
             if (configType !== 'local-fullnames') {
                 await settingsStore.set({defaults: {mount: {storageType: configType}}});
