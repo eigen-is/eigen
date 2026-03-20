@@ -46,13 +46,14 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
             }
             objYMap.set('text', 'Welcome to Slides');
             objYMap.set('fontSize', 64);
+            objYMap.set('color', '#ffffff');
             objYMap.set('y', 378);
             objYMap.set('h', 324);
             objectsMap.set(objId, objYMap);
 
             const slideYMap = new Y.Map();
             slideYMap.set('id', slideId);
-            slideYMap.set('backgroundColor', '#ffffff');
+            slideYMap.set('backgroundColor', '#e60076');
             const objectIds = new Y.Array();
             objectIds.push([objId]);
             slideYMap.set('objectIds', objectIds);
