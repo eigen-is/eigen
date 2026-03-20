@@ -19,7 +19,7 @@ type AddCardDialogProps = {
 export function AddCardDialog({isOpen, onClose, onAddCard, columnId}: AddCardDialogProps) {
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
-    const [color, setColor] = useState('');
+    const [color, setColor] = useState(EIGEN_STICKIES_COLORS[0][1].value);
     const [isSubmitting, setIsSubmitting] = useState(false);
     const {user} = useAuth();
 
@@ -41,7 +41,7 @@ export function AddCardDialog({isOpen, onClose, onAddCard, columnId}: AddCardDia
 
         setTitle('');
         setDescription('');
-        setColor('');
+        setColor(EIGEN_STICKIES_COLORS[0][1].value);
         onClose();
     };
 
