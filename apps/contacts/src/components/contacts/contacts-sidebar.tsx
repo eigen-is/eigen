@@ -1,4 +1,4 @@
-import {Clock, Star, UserRoundPlus, UsersRound} from 'lucide-react';
+import {UserRoundPlus, UsersRound} from 'lucide-react';
 import {Link} from '@tanstack/react-router';
 import {Button} from "@workspace/ui/components/button";
 import {LabelManager} from '@workspace/ui/components/layout/labels/label-manager';
@@ -10,7 +10,7 @@ import {type Label} from "@workspace/lib/types/label";
 import {useLabels} from '@workspace/lib/contacts';
 import {EigenLoader, StorageUsage} from "@workspace/ui";
 
-interface ContactsSidebarProps {
+type ContactsSidebarProps = {
     condensed?: boolean;
     onClose?: () => void;
     isMobile?: boolean;
@@ -47,22 +47,6 @@ export function ContactsSidebar({condensed = false, onClose, isMobile = false, o
                         label="All contacts"
                         to="/$filterType/$filterId"
                         params={{filterType: 'book', filterId: 'all'}}
-                        condensed={condensed}
-                    />
-
-                    <SidebarItem
-                        icon={<Star className="h-4 w-4"/>}
-                        label="Frequent"
-                        to="/$filterType/$filterId"
-                        params={{filterType: 'book', filterId: 'frequent'}}
-                        condensed={condensed}
-                    />
-
-                    <SidebarItem
-                        icon={<Clock className="h-4 w-4"/>}
-                        label="Recent"
-                        to="/$filterType/$filterId"
-                        params={{filterType: 'book', filterId: 'recent'}}
                         condensed={condensed}
                     />
                 </SidebarSection>

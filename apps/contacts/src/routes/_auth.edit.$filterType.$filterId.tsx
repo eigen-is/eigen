@@ -1,10 +1,11 @@
 import {createFileRoute, redirect, useNavigate} from '@tanstack/react-router';
 import {z} from 'zod';
-import {ContactEdit, ContactEditToolbar, ContactFormValues} from '../components/contacts/contact-edit';
+import {ContactEdit, ContactEditToolbar, type ContactFormValues} from '../components/contacts/contact-edit';
 import {useAddContact, useContacts, useUpdateContact} from '@workspace/lib/contacts';
 import {type Contact} from "@workspace/lib/types/contact";
 import {EigenLoader} from "@workspace/ui";
 import {Column, ColumnLayout} from "@workspace/ui/components/layout/app/column-layout.tsx";
+import {emptyContact} from '@workspace/lib/constants/contact';
 
 // Define search params type with Zod schema
 const searchSchema = z.object({
@@ -44,44 +45,38 @@ function EditContactRoute() {
     const addContactMutation = useAddContact();
 
     const handleSave = async (data: ContactFormValues) => {
-        try {
-            const formData = data as ContactFormValues & { avatar?: string | null };
-            const contactData: Omit<Contact, 'id'> = {
-                ...formData,
-                firstName: formData.firstName || '',
-                lastName: formData.lastName || '',
-                birthday: formData.birthday?.toISOString(),
-                labels: formData.labels || [],
-                avatar: formData.avatar ?? ''
-            };
+        const contactData: Omit<Contact, 'id'> = {
+            ...data,
+            firstName: data.firstName || '',
+            lastName: data.lastName || '',
+            birthday: data.birthday?.toISOString(),
+            labels: data.labels || [],
+            avatar: data.avatar ?? ''
+        };
 
-            if (contactId) {
-                await updateContactMutation.mutateAsync({
-                    id: contactId,
-                    ...contactData
-                } as Contact);
-            } else {
-                const result = await addContactMutation.mutateAsync(contactData);
-                const newContact = typeof result === 'object' && result !== null ? result as Contact : null;
-
-                if (newContact && newContact.id) {
-                    navigate({
-                        to: Route.fullPath,
-                        params: {filterType, filterId},
-                        search: {contactId: newContact.id},
-                    });
-                    return;
-                }
-            }
-
-            navigate({
-                to: '/$filterType/$filterId',
-                params: {filterType, filterId},
-                search: contactId ? {contactId} : {},
+        if (contactId) {
+            await updateContactMutation.mutateAsync({
+                id: contactId,
+                ...contactData
             });
-        } catch (error) {
-            console.error('Error saving contact:', error);
+        } else {
+            const newId = await addContactMutation.mutateAsync(contactData);
+
+            if (newId && typeof newId === 'string') {
+                navigate({
+                    to: '/$filterType/$filterId',
+                    params: {filterType, filterId},
+                    search: {contactId: newId},
+                });
+                return;
+            }
         }
+
+        navigate({
+            to: '/$filterType/$filterId',
+            params: {filterType, filterId},
+            search: contactId ? {contactId} : {},
+        });
     };
 
     const handleCancel = () => {
@@ -109,16 +104,6 @@ function EditContactRoute() {
         return null;
     }
 
-    const emptyContact: Contact = {
-        id: '',
-        firstName: '',
-        lastName: '',
-        email: [''],
-        phone: [''],
-        address: [{}],
-        labels: [],
-    };
-
     const isNew = !contactId;
 
     return (
@@ -128,8 +113,6 @@ function EditContactRoute() {
                     contact={contact || emptyContact}
                     onSave={handleSave}
                     onCancel={handleCancel}
-                    filterType={filterType}
-                    filterId={filterId}
                 />
             </Column>
         </ColumnLayout>

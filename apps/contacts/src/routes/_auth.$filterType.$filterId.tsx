@@ -2,10 +2,11 @@ import {createFileRoute, useNavigate} from '@tanstack/react-router';
 import {ContactsList, ContactsListToolbar} from '../components/contacts/contacts-list';
 import {ContactDetail, ContactDetailToolbar} from '../components/contacts/contact-detail';
 import {useContacts, useDeleteContact, useLabels, useUpdateContact} from '@workspace/lib/contacts';
-import {Contact} from '@workspace/lib/types/contact';
+import {type Contact} from '@workspace/lib/types/contact';
 import {EigenLoader} from '@workspace/ui/components/layout/braket/eigen-loader.tsx';
 import {LabelFilterHeader} from "@workspace/ui/components/layout/labels/label-filter-header";
 import {Column, ColumnLayout} from "@workspace/ui/components/layout/app/column-layout.tsx";
+import {DeleteDialog} from "@workspace/ui/components/layout/delete/delete-dialog";
 import {useEffect, useState} from 'react';
 
 export type ContactsSearchParams = {
@@ -33,17 +34,17 @@ function ContactsRoute() {
     const deleteMutation = useDeleteContact();
     const updateContactMutation = useUpdateContact();
 
-    const handleDeleteContact = async (id: string) => {
-        try {
-            await deleteMutation.mutateAsync(id);
-            navigate({
-                to: Route.fullPath,
-                params: {filterType, filterId},
-                search: {},
-            });
-        } catch (error) {
-            console.error('Failed to delete contact:', error);
-        }
+    const [deleteTargets, setDeleteTargets] = useState<Contact[]>([]);
+    const deleteDialogOpen = deleteTargets.length > 0;
+
+    const handleConfirmDelete = async () => {
+        await Promise.allSettled(deleteTargets.map(c => deleteMutation.mutateAsync(c.id)));
+        setDeleteTargets([]);
+        navigate({
+            to: Route.fullPath,
+            params: {filterType, filterId},
+            search: {},
+        });
     };
 
     const handleBackToList = () => {
@@ -88,7 +89,7 @@ function ContactsRoute() {
             contact={contact}
             filterType={filterType}
             filterId={filterId}
-            onDeleteClick={() => handleDeleteContact(contact.id)}
+            onDeleteClick={() => setDeleteTargets([contact])}
         />
     ) : null;
 
@@ -101,6 +102,7 @@ function ContactsRoute() {
     }
 
     return (
+        <>
         <ColumnLayout mobileColumn={contactId ? 'detail' : 'list'}>
             <Column id="list" width="350px" toolbar={listToolbar}>
                 <div className="flex h-full flex-col border-r overflow-y-auto">
@@ -126,24 +128,25 @@ function ContactsRoute() {
                             });
                         }}
                         onDelete={(selectedContacts) => {
-                            for (const c of selectedContacts) handleDeleteContact(c.id);
+                            setDeleteTargets(selectedContacts);
                         }}
-                        onToggleLabel={(selectedContacts, labelId) => {
+                        onToggleLabel={async (selectedContacts, labelId) => {
                             const allHaveLabel = selectedContacts.every(c => (c.labels || []).includes(labelId));
-                            for (const c of selectedContacts) {
+                            await Promise.allSettled(selectedContacts.map(c => {
                                 const currentLabels = c.labels || [];
                                 if (allHaveLabel) {
-                                    updateContactMutation.mutate({
+                                    return updateContactMutation.mutateAsync({
                                         ...c,
                                         labels: currentLabels.filter(id => id !== labelId)
-                                    } as Contact);
+                                    });
                                 } else if (!currentLabels.includes(labelId)) {
-                                    updateContactMutation.mutate({
+                                    return updateContactMutation.mutateAsync({
                                         ...c,
                                         labels: [...currentLabels, labelId]
-                                    } as Contact);
+                                    });
                                 }
-                            }
+                                return Promise.resolve();
+                            }));
                         }}
                     />
                 </div>
@@ -152,9 +155,7 @@ function ContactsRoute() {
                 {contact ? (
                     <ContactDetail
                         contact={contact}
-                        onDelete={handleDeleteContact}
-                        filterType={filterType}
-                        filterId={filterId}
+                        onDelete={(id) => setDeleteTargets([contact])}
                     />
                 ) : (
                     <div className="h-full w-full flex items-center justify-center">
@@ -163,5 +164,17 @@ function ContactsRoute() {
                 )}
             </Column>
         </ColumnLayout>
+
+            <DeleteDialog
+                open={deleteDialogOpen}
+                onOpenChange={(open) => {
+                    if (!open) setDeleteTargets([]);
+                }}
+                title="Delete Contact"
+                description={deleteTargets.length > 1 ? `Are you sure you want to delete ${deleteTargets.length} contacts` : "Are you sure you want to delete"}
+                itemName={deleteTargets.length === 1 ? `${deleteTargets[0].firstName} ${deleteTargets[0].lastName}` : undefined}
+                onDelete={handleConfirmDelete}
+            />
+        </>
     );
 }

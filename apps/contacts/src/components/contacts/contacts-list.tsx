@@ -2,7 +2,7 @@ import {useMemo, useRef} from 'react';
 import {cn} from '@workspace/ui/lib/utils';
 import {SearchBar} from '@workspace/ui/components/layout/search-bar/search-bar';
 import {useContacts} from '@workspace/lib/contacts';
-import {Contact} from '@workspace/lib/types/contact';
+import {type Contact} from '@workspace/lib/types/contact';
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -24,7 +24,7 @@ import type {Label} from '@workspace/lib/types/label';
 import {useAuth} from '@workspace/lib/auth';
 import {Toolbar} from '@workspace/ui/index';
 
-interface ContactsListToolbarProps {
+type ContactsListToolbarProps = {
     searchQuery: string;
     onSearchChange: (query: string) => void;
     sortBy: 'firstName' | 'lastName';
@@ -60,7 +60,7 @@ export function ContactsListToolbar({searchQuery, onSearchChange, onSortChange}:
     );
 }
 
-interface ContactsListProps {
+type ContactsListProps = {
     filterType?: string;
     filterId?: string;
     searchQuery: string;
