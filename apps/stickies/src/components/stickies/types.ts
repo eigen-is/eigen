@@ -22,11 +22,6 @@ export type BoardData = {
     columnOrder: string[];
 }
 
-export type BoardProps = {
-    ownerId: string;
-    pathId: string;
-}
-
 export const STICKY_COLORS = [
     [
         {label: 'Yellow', value: '#fef9c3'},

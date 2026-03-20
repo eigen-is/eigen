@@ -14,6 +14,7 @@ type CardDialogProps = {
     isOpen: boolean;
     onClose: () => void;
     card: CardItem | null;
+    canWrite?: boolean;
     yjsDoc: Y.Doc | null;
     ownerId: string;
     mountId: string;
@@ -54,7 +55,7 @@ function CardChatInner({ownerId, mountId, chatId}: {ownerId: string; mountId: st
     );
 }
 
-export function CardDialog({isOpen, onClose, card, yjsDoc, ownerId, mountId}: CardDialogProps) {
+export function CardDialog({isOpen, onClose, card, canWrite = true, yjsDoc, ownerId, mountId}: CardDialogProps) {
     const [isSettingsOpen, setIsSettingsOpen] = useState(false);
 
     if (!card) return null;
@@ -66,12 +67,14 @@ export function CardDialog({isOpen, onClose, card, yjsDoc, ownerId, mountId}: Ca
                     <DialogHeader className="flex flex-row items-center gap-2 px-4 pt-4 pb-2">
                         <DialogTitle className="flex-1">
                             {card.title}
-                            <TooltipButton
-                                icon={Pencil}
-                                tooltipText="Edit Card"
-                                onClick={() => setIsSettingsOpen(true)}
-                                className="h-7 w-7 -mt-1"
-                            />
+                            {canWrite && (
+                                <TooltipButton
+                                    icon={Pencil}
+                                    tooltipText="Edit Card"
+                                    onClick={() => setIsSettingsOpen(true)}
+                                    className="h-7 w-7 -mt-1"
+                                />
+                            )}
                         </DialogTitle>
                     </DialogHeader>
 
@@ -93,8 +96,9 @@ export function CardDialog({isOpen, onClose, card, yjsDoc, ownerId, mountId}: Ca
                 </DialogContent>
             </Dialog>
 
-            {card && (
+            {card && canWrite && (
                 <CardSettingsDialog
+                    key={card.id}
                     isOpen={isSettingsOpen}
                     onClose={() => setIsSettingsOpen(false)}
                     cardId={card.id}

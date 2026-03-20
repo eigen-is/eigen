@@ -9,13 +9,14 @@ import * as Y from 'yjs';
 
 type CardProps = {
     card: CardItem;
+    canWrite?: boolean;
     isMobile: boolean;
     yjsDoc: Y.Doc | null;
     ownerId: string;
     mountId: string;
 }
 
-export function StickyCard({card, isMobile, yjsDoc, ownerId, mountId}: CardProps) {
+export function StickyCard({card, canWrite = true, isMobile, yjsDoc, ownerId, mountId}: CardProps) {
     const [isDialogOpen, setIsDialogOpen] = useState(false);
 
     const {
@@ -28,6 +29,7 @@ export function StickyCard({card, isMobile, yjsDoc, ownerId, mountId}: CardProps
     } = useSortable({
         id: card.id,
         data: {type: 'task', task: card},
+        disabled: !canWrite,
     });
 
     const handleClick = (e: React.MouseEvent) => {
@@ -41,7 +43,7 @@ export function StickyCard({card, isMobile, yjsDoc, ownerId, mountId}: CardProps
         <>
             <Card
                 ref={setNodeRef}
-                className={`mb-2 p-0 w-full select-none cursor-grab touch-none ${isDragging ? 'opacity-50' : ''}`}
+                className={`mb-2 p-0 w-full select-none ${canWrite ? 'cursor-grab touch-none' : 'cursor-pointer'} ${isDragging ? 'opacity-50' : ''}`}
                 style={{
                     transform: CSS.Transform.toString(transform),
                     transition,
@@ -49,8 +51,7 @@ export function StickyCard({card, isMobile, yjsDoc, ownerId, mountId}: CardProps
                     backgroundColor: card.color || undefined,
                     color: card.color ? (isLightColor(card.color) ? '#000' : '#fff') : undefined,
                 }}
-                {...attributes}
-                {...listeners}
+                {...(canWrite ? {...attributes, ...listeners} : {})}
                 onClick={handleClick}
             >
                 <CardContent className={`p-3 text-sm ${isDragging && !card.color ? 'bg-accent' : ''}`}>
@@ -65,6 +66,7 @@ export function StickyCard({card, isMobile, yjsDoc, ownerId, mountId}: CardProps
                 isOpen={isDialogOpen}
                 onClose={() => setIsDialogOpen(false)}
                 card={card}
+                canWrite={canWrite}
                 yjsDoc={yjsDoc}
                 ownerId={ownerId}
                 mountId={mountId}
