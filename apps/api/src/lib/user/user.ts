@@ -5,7 +5,7 @@ import {getAuthDrizzleDb} from "../auth/auth.ts";
 
 export async function getUserByEmail(email: string) {
     const db = getAuthDrizzleDb();
-    return await db.select().from(user).where(eq(user.email, email.toLocaleLowerCase())).get() as User | null;
+    return await db.select().from(user).where(eq(user.email, email.toLowerCase())).get() as User | null;
 }
 
 export async function getUserById(id: string) {

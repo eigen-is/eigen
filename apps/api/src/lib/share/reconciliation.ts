@@ -47,12 +47,12 @@ export async function reconcileSharesForNewTeamMember(userId: string, teamId: st
     // Don't delete team entries — future members still need them
 }
 
-async function pullCalendarShares(
+function pullCalendarShares(
     ownerHome: Awaited<ReturnType<typeof getHome>>,
     targetHome: Awaited<ReturnType<typeof getHome>>,
     userEmail: string,
     teamIds: string[],
-): Promise<void> {
+): void {
     const results = ownerHome.calendar.getSharedWith(userEmail, teamIds);
     for (const result of results) {
         targetHome.calendar.receiveShare(
@@ -65,11 +65,11 @@ async function pullCalendarShares(
     }
 }
 
-async function pullPendingInvitations(
+function pullPendingInvitations(
     ownerHome: Awaited<ReturnType<typeof getHome>>,
     targetHome: Awaited<ReturnType<typeof getHome>>,
     userEmail: string,
-): Promise<void> {
+): void {
     const events = ownerHome.calendar.getEventsWithAttendee(userEmail);
     for (const event of events) {
         targetHome.calendar.receiveInvitation({
