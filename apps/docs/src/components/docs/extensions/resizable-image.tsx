@@ -69,7 +69,7 @@ function ResizableImageView({node, updateAttributes, selected, editor}: NodeView
                     ref={imageRef}
                     src={src}
                     alt={alt}
-                    className={`max-w-full block ${selected ? 'border border-blue-500' : ''}`}
+                    className={`max-w-full block ${selected ? 'border border-ring' : ''}`}
                     style={{
                         width: width ? `${width}px` : undefined,
                         aspectRatio: aspectRatio ?? undefined,

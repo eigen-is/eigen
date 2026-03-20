@@ -21,9 +21,9 @@ function DriveRoute() {
     const {mimeType} = Route.useParams();
     const navigate = useNavigate();
     const {pid} = Route.useSearch();
-    const auth = useAuth();
-    const ownerId = auth.user!.id;
+    const {user} = useAuth();
     const {rootPath, mountId} = useContext(DriveContext);
+    const ownerId = user?.id ?? '';
     const {data: selectedPath = null} = usePathInfo(ownerId, mountId, pid);
     const {isMobile} = useLayout();
 

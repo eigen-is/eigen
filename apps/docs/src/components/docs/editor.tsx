@@ -28,6 +28,7 @@ import {EditorToolbar} from "./editor-toolbar";
 import {Column, EigenLoader} from "@workspace/ui";
 import {DrivePath} from "@workspace/lib/types/drive";
 import {getCollabWebSocketUrl} from "@workspace/lib/api";
+import {EIGEN_ACCENT_COLORS_SHUFFLED} from "@workspace/lib/constants/colors";
 import {MediaResolverProvider, useMediaResolver, useUploadFile} from "@workspace/lib/drive";
 import {EIGEN_CLIPBOARD_MIME, needsReUpload, readEigenClipboard, reUploadImage,} from '@workspace/lib/clipboard';
 import type {EigenClipboardData, EigenClipboardImageItem} from '@workspace/lib/types/clipboard';
@@ -113,6 +114,8 @@ const TiptapEditor = ({
     const [viewCommentChatName, setViewCommentChatName] = useState<string | null>(null);
     const documentRef = useRef<HTMLDivElement>(null);
     const editorRef = useRef<ReturnType<typeof useEditor>>(null);
+    const mediaFolderIdRef = useRef(mediaFolderId);
+    mediaFolderIdRef.current = mediaFolderId;
 
     const getEditorMaxWidth = useCallback(() => {
         const el = documentRef.current;
@@ -132,7 +135,7 @@ const TiptapEditor = ({
                 history: false,
                 codeBlock: false,
                 dropcursor: {
-                    color: '#3b82f6',
+                    color: 'var(--color-primary)',
                     width: 2,
                 },
             }),
@@ -157,6 +160,7 @@ const TiptapEditor = ({
                     target: '_blank',
                     rel: 'noopener noreferrer',
                 },
+                validate: (href) => /^(https?:|mailto:|tel:|\/)/i.test(href),
             }),
             ResizableImage,
             Highlight.configure({
@@ -181,7 +185,7 @@ const TiptapEditor = ({
                 provider,
                 user: {
                     name: auth.user!.name,
-                    color: '#9810fa',
+                    color: EIGEN_ACCENT_COLORS_SHUFFLED[Math.abs([...auth.user!.id].reduce((h, c) => (h << 5) - h + c.charCodeAt(0), 0)) % EIGEN_ACCENT_COLORS_SHUFFLED.length].value,
                 },
                 render: (user: Record<string, string>) => {
                     const cursor = document.createElement('span');
@@ -234,7 +238,7 @@ const TiptapEditor = ({
                 if (!event.dataTransfer) return false;
                 const files = Array.from(event.dataTransfer.files);
                 const imageFile = files.find(f => f.type.startsWith('image/'));
-                if (imageFile && mediaFolderId) {
+                if (imageFile && mediaFolderIdRef.current) {
                     event.preventDefault();
                     handleImageUpload(imageFile);
                     return true;
@@ -257,7 +261,7 @@ const TiptapEditor = ({
 
                 const files = Array.from(event.clipboardData.files);
                 const imageFile = files.find(f => f.type.startsWith('image/'));
-                if (imageFile && mediaFolderId) {
+                if (imageFile && mediaFolderIdRef.current) {
                     event.preventDefault();
                     handleImageUpload(imageFile);
                     return true;
@@ -270,7 +274,8 @@ const TiptapEditor = ({
     editorRef.current = editor;
 
     const handleImageUpload = async (file: File) => {
-        if (!mediaFolderId || !file.type.startsWith('image/')) return;
+        if (!mediaFolderIdRef.current || !file.type.startsWith('image/')) return;
+        const mediaFolderId = mediaFolderIdRef.current;
 
         const result = await uploadFile.mutateAsync({parentId: mediaFolderId, file});
         if (result && editorRef.current) {
@@ -279,10 +284,11 @@ const TiptapEditor = ({
     };
 
     const handleEigenImagePaste = async (item: EigenClipboardImageItem, width?: number) => {
-        if (needsReUpload(item.sourceParentId, mediaFolderId) && mediaFolderId) {
+        const currentMediaFolderId = mediaFolderIdRef.current;
+        if (needsReUpload(item.sourceParentId, currentMediaFolderId) && currentMediaFolderId) {
             const result = await reUploadImage(
                 item.sourcePathId, item.sourceOwnerId, item.sourceMountId,
-                mediaFolderId, uploadFile.mutateAsync, path.ownerId, path.mountId, item.mediaName,
+                currentMediaFolderId, uploadFile.mutateAsync, path.ownerId, path.mountId, item.mediaName,
             );
             if (result && editorRef.current) {
                 editorRef.current.chain().focus().setResizableImage({mediaName: result.mediaName, width}).run();
