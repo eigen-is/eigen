@@ -43,6 +43,7 @@ export const formSchema = z.object({
     birthday: z.date().nullable(),
     notes: z.string().optional(),
     labels: z.array(z.string()).optional(),
+    avatar: z.string().nullable().optional(),
 }).refine(
     (data) => (data.firstName ? data.firstName.trim().length > 0 : false) || (data.lastName ? data.lastName.trim().length > 0 : false),
     {
@@ -53,7 +54,7 @@ export const formSchema = z.object({
 
 export type ContactFormValues = z.infer<typeof formSchema>;
 
-interface ContactEditToolbarProps {
+type ContactEditToolbarProps = {
     isNew: boolean;
 }
 
@@ -65,12 +66,10 @@ export function ContactEditToolbar({isNew}: ContactEditToolbarProps) {
     );
 }
 
-interface ContactEditProps {
+type ContactEditProps = {
     contact: Contact;
     onSave: (data: ContactFormValues) => void;
     onCancel: () => void;
-    filterType: string;
-    filterId: string;
 }
 
 export function ContactEdit({
@@ -82,7 +81,7 @@ export function ContactEdit({
 
     const {data: labels = [], error: labelsError} = useLabels();
     const [error, setError] = useState<string | null>(null);
-    const [avatar, setAvatar] = useState<string | null>(contact?.avatar || null);
+    const [avatar, setAvatar] = useState<string | null>(contact?.avatar ?? null);
     const fileInputRef = React.useRef<HTMLInputElement>(null);
 
     const upload = useUpload();
@@ -106,12 +105,7 @@ export function ContactEdit({
     const handleSubmit = hookFormSubmit(async (data) => {
         setError(null);
         try {
-            const formData = {
-                ...data,
-                avatar: avatar
-            };
-
-            await onSave(formData);
+            await onSave({...data, avatar});
         } catch (e) {
             console.error("Error saving contact:", e);
             setError("An error occurred while saving the contact.");
@@ -143,7 +137,7 @@ export function ContactEdit({
                                     <UserAvatar
                                         name={`${contact.firstName} ${contact.lastName}`}
                                         email={contact.email?.[0]}
-                                        imageUrl={avatar ?? undefined}
+                                        imageUrl={avatar ?? ""}
                                         className="h-full w-full"
                                         size="lg"
                                     />
@@ -155,6 +149,7 @@ export function ContactEdit({
                                         className="hidden"
                                         onChange={async (e) => {
                                             const file = e.target.files?.[0];
+                                            if (!user) return;
                                             if (file) {
                                                 const formData = new FormData();
                                                 formData.append('file', file);
@@ -163,11 +158,8 @@ export function ContactEdit({
 
                                                 try {
                                                     await uploadWithProgress({
-                                                        url: getContactsAvatarUploadUrl(user?.id || ''),
+                                                        url: getContactsAvatarUploadUrl(user.id),
                                                         formData,
-                                                        headers: {
-                                                            'credentials': 'include'
-                                                        },
                                                         onProgress: (progress: number) => {
                                                             uploadHandler.updateProgress(progress);
                                                         },
@@ -301,10 +293,9 @@ export function ContactEdit({
                                                         const labelObj = labels.find(l => l.id === labelId);
                                                         return (
                                                             <Badge key={index}
-                                                                   className="px-3 py-1"
+                                                                   className="px-3 py-1 text-primary-foreground"
                                                                    style={{
                                                                        backgroundColor: labelObj?.color || '#3b82f6',
-                                                                       color: '#fff'
                                                                    }}
                                                             >
                                                                 {labelObj?.name}
