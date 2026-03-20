@@ -9,7 +9,7 @@ import {useNavigate} from '@tanstack/react-router';
 
 import {DriveCreateDoc} from '@workspace/ui/components/layout/drive/drive-create-doc';
 
-interface DocsSidebarProps {
+type DocsSidebarProps = {
     condensed?: boolean;
     onClose?: () => void;
     isMobile?: boolean;

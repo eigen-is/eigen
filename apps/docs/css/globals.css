@@ -10,6 +10,49 @@
 /* Prose, code blocks, and syntax highlighting are in @workspace/ui eigen-prose.css */
 /* Below: editor-specific styles only */
 
+/* The document canvas is always white (print fidelity). In dark mode, override theme
+   variables and prose styles back to their light values so content remains readable. */
+.dark [data-document] {
+    --primary: oklch(0.208 0.042 265.755);
+    --foreground: oklch(0.129 0.042 264.695);
+    --muted-foreground: oklch(0.554 0.046 257.417);
+    --selected: oklch(0.932 0.032 255);
+    --border: oklch(0.929 0.013 255.508);
+    --ring: oklch(0.704 0.04 256.788);
+}
+
+/* Override eigen-prose dark mode styles inside the document canvas */
+.dark [data-document] .eigen-prose {
+    color: #1a1a2e;
+}
+
+.dark [data-document] .eigen-prose a {
+    color: #2563eb;
+}
+
+.dark [data-document] .eigen-prose blockquote {
+    color: #6b7280;
+    border-color: #d1d5db;
+}
+
+.dark [data-document] .eigen-prose hr {
+    border-color: #e5e7eb;
+}
+
+.dark [data-document] .eigen-prose code {
+    background-color: #f9fafb;
+    color: #dc2626;
+}
+
+.dark [data-document] .eigen-prose th,
+.dark [data-document] .eigen-prose td {
+    border-color: #e5e7eb;
+}
+
+.dark [data-document] .eigen-prose th {
+    background-color: #f9fafb;
+}
+
 .tiptap {
     outline: none;
     min-height: 100%;
@@ -31,7 +74,7 @@
 }
 
 .tiptap a:hover {
-    color: #1d4ed8;
+    color: var(--color-primary);
 }
 
 /* Task Lists */
@@ -58,7 +101,7 @@
 .tiptap ul[data-type="taskList"] li > label input[type="checkbox"] {
     width: 1em;
     height: 1em;
-    accent-color: #7c3aed;
+    accent-color: var(--color-primary);
     cursor: pointer;
 }
 
@@ -69,7 +112,7 @@
 
 .tiptap ul[data-type="taskList"] li[data-checked="true"] > div {
     text-decoration: line-through;
-    color: #9ca3af;
+    color: var(--color-muted-foreground);
 }
 
 /* Nested task lists */
@@ -79,7 +122,7 @@
 
 /* Table editor features */
 .tiptap table .selectedCell {
-    background-color: #dbeafe;
+    background-color: var(--color-selected);
 }
 
 .tiptap table .column-resize-handle {
@@ -88,7 +131,7 @@
     top: 0;
     bottom: 0;
     width: 4px;
-    background-color: #3b82f6;
+    background-color: var(--color-primary);
     pointer-events: none;
     z-index: 20;
 }
@@ -108,8 +151,8 @@
 
 /* Comment highlights */
 .tiptap .comment-highlight {
-    background-color: #fef08a;
-    border-bottom: 2px solid #eab308;
+    background-color: oklch(0.94 0.15 95);
+    border-bottom: 2px solid oklch(0.75 0.15 85);
     padding: 0.05em 0;
     cursor: pointer;
     transition: background-color 150ms;
@@ -117,7 +160,7 @@
 }
 
 .tiptap .comment-highlight:hover {
-    background-color: #fde047;
+    background-color: oklch(0.90 0.18 90);
 }
 
 /* Collaboration Cursors */
@@ -165,7 +208,7 @@
 
 /* Selection when editor is focused */
 .tiptap ::selection {
-    background-color: #bfdbfe;
+    background-color: var(--color-selected);
 }
 
 /* Color picker dropdown */
@@ -187,10 +230,10 @@
 
 .color-picker-grid button:hover {
     transform: scale(1.15);
-    border-color: #6b7280;
+    border-color: var(--color-muted-foreground);
 }
 
 .color-picker-grid button.active {
-    border-color: #1f2937;
-    box-shadow: 0 0 0 1px #1f2937;
+    border-color: var(--color-foreground);
+    box-shadow: 0 0 0 1px var(--color-foreground);
 }

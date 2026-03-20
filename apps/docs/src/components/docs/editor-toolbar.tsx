@@ -413,7 +413,7 @@ export const EditorToolbar = ({editor, path, canWrite, onAccessDialogOpen, onDel
                                         <div className="flex flex-col items-center">
                                             <Baseline className="h-4 w-4" />
                                             <div className="h-0.5 w-4 rounded-full mt-px"
-                                                 style={{backgroundColor: editor.getAttributes('textStyle').color || '#000'}} />
+                                                 style={{backgroundColor: editor.getAttributes('textStyle').color || 'currentColor'}}/>
                                         </div>
                                     </TooltipTrigger>
                                     <TooltipContent>Text color</TooltipContent>
