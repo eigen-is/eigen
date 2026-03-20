@@ -84,14 +84,6 @@ const existingEmails = new Set(
     (newDb.query("SELECT email FROM user").all() as { email: string }[]).map(r => r.email.toLowerCase())
 );
 
-const existingUserIds = new Set(
-    (newDb.query("SELECT id FROM user").all() as { id: string }[]).map(r => r.id)
-);
-
-const existingAccountIds = new Set(
-    (newDb.query("SELECT id FROM account").all() as { id: string }[]).map(r => r.id)
-);
-
 let migrated = 0;
 let skipped = 0;
 
@@ -118,13 +110,7 @@ const existingMembers = new Set(
 
 for (const user of oldUsers) {
     if (existingEmails.has(user.email.toLowerCase())) {
-        console.log(`  SKIP (email exists): ${user.email}`);
-        skipped++;
-        continue;
-    }
-
-    if (existingUserIds.has(user.id)) {
-        console.log(`  SKIP (user id collision): ${user.email} (id: ${user.id})`);
+        console.log(`  SKIP (exists): ${user.email}`);
         skipped++;
         continue;
     }
@@ -139,10 +125,6 @@ for (const user of oldUsers) {
         );
 
         for (const acc of accounts) {
-            if (existingAccountIds.has(acc.id)) {
-                console.log(`    WARN: skipping account ${acc.id} (id collision)`);
-                continue;
-            }
             insertAccount.run(
                 acc.id, acc.account_id, acc.provider_id, acc.user_id,
                 acc.access_token, acc.refresh_token, acc.id_token,
