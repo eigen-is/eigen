@@ -25,6 +25,7 @@ export function AppShell({
                              children
                          }: AppShellProps) {
     const [appName, setAppName] = useState(initialAppName);
+    const [documentTitle, setDocumentTitle] = useState('');
     const [sidebarOpen, setSidebarOpen] = useState(false);
 
     const isMobile = useIsMobile();
@@ -36,6 +37,8 @@ export function AppShell({
         <LayoutContext.Provider value={{
             appName,
             setAppName,
+            documentTitle,
+            setDocumentTitle,
             sidebarOpen,
             setSidebarOpen,
             sidebarMode: effectiveSidebarMode,

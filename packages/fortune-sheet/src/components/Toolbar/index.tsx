@@ -56,9 +56,11 @@ import {
 
 export function Toolbar({
                             leftItems,
+                            centerItems,
                             rightItems,
                         }: {
     leftItems?: React.ReactNode;
+    centerItems?: React.ReactNode;
     rightItems?: React.ReactNode;
 }) {
     const {context, setContext, refs, settings, handleUndo, handleRedo} =
@@ -912,6 +914,7 @@ export function Toolbar({
                     {getToolbarItem("undo", -1)}
                     {getToolbarItem("redo", -2)}
                 </div>
+                {centerItems}
                 <div className="flex items-center">
                     {settings.customToolbarItems.length > 0 && (
                         <>
@@ -935,6 +938,6 @@ export function Toolbar({
                 </div>
             </SharedToolbar>
         </div>
-    ), [getToolbarItem, leftItems, rightItems, settings.customToolbarItems, settings.toolbarItems]);
+    ), [getToolbarItem, leftItems, centerItems, rightItems, settings.customToolbarItems, settings.toolbarItems]);
 }
 

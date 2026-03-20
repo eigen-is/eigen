@@ -2,8 +2,8 @@ import {createFileRoute, useNavigate} from '@tanstack/react-router'
 import {CollaborativeEditor} from '../components/docs/editor'
 import {useCollabDocumentInfo} from '@workspace/lib/collab'
 import {EigenLoader} from '@workspace/ui'
-import {useApp} from '@workspace/ui/components/layout/app/layout-context.tsx'
 import {useCallback, useEffect, useMemo, useState} from 'react'
+import {useLayout} from '@workspace/ui/components/layout/app/layout-context'
 import {DriveAccessDialog} from '@workspace/ui/components/layout/drive/drive-access-dialog'
 import {DriveDeleteItem} from '@workspace/ui/components/layout/drive/drive-delete-item'
 
@@ -14,20 +14,16 @@ export const Route = createFileRoute('/_auth/doc/$ownerId/$mountId/$pathId')({
 function CollaborativeTextEditor() {
     const {ownerId, mountId, pathId} = Route.useParams();
     const {data: docInfo, isLoading} = useCollabDocumentInfo(ownerId, mountId, pathId);
-    const {appName, setAppName} = useApp();
-    const [originalAppName] = useState(appName);
+    const {setDocumentTitle} = useLayout();
     const [accessDialogOpen, setAccessDialogOpen] = useState(false);
-    const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-    const navigate = useNavigate();
 
     useEffect(() => {
-        if (docInfo?.path?.name) {
-            setAppName?.(docInfo.path.name.replace('.eigendoc', ''));
-        }
-        return () => {
-            setAppName?.(originalAppName);
-        };
-    }, [docInfo?.path, originalAppName, setAppName]);
+        const title = docInfo?.path?.name?.replace(/\.eigen\w+$/, '') || '';
+        setDocumentTitle(title);
+        return () => setDocumentTitle('');
+    }, [docInfo?.path?.name, setDocumentTitle]);
+    const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+    const navigate = useNavigate();
 
     const handleAccessDialogOpen = useCallback(() => {
         setAccessDialogOpen(true);

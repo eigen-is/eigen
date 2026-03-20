@@ -148,11 +148,11 @@ function UserDropdown({rootRoute}: { rootRoute: TopbarProps['rootRoute'] }) {
 }
 
 export function Topbar({rootRoute}: TopbarProps) {
-    const {appName, isMobile, sidebarMode, setSidebarOpen} = useLayout();
+    const {appName, documentTitle, isMobile, sidebarMode, setSidebarOpen} = useLayout();
 
     useEffect(() => {
-        document.title = `eigen|${appName}>`;
-    }, [appName]);
+        document.title = documentTitle ? `${documentTitle} — eigen|${appName}>` : `eigen|${appName}>`;
+    }, [appName, documentTitle]);
 
     const showBurger = isMobile && sidebarMode !== 'none';
 
@@ -174,7 +174,11 @@ export function Topbar({rootRoute}: TopbarProps) {
                     <AppLogo appName={appName.toLowerCase()}/>
                 </div>
 
-                <div className="flex-1"/>
+                <div className="flex-1 flex justify-center min-w-0">
+                    {documentTitle && !isMobile && (
+                        <span className="text-white/70 truncate max-w-[400px]">{documentTitle}</span>
+                    )}
+                </div>
 
                 <div className="flex items-center px-4 shrink-0">
                     <UserDropdown rootRoute={rootRoute}/>

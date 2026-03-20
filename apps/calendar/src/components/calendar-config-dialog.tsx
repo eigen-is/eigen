@@ -21,6 +21,7 @@ import {useCreateCalendar, useDeleteCalendar, useUpdateCalendar} from '@workspac
 import {useAuth} from '@workspace/lib/auth';
 import type {CalendarItem, CalendarShare} from '@workspace/lib/types/calendar';
 import {CalendarShareEditor} from './calendar-share-editor';
+import {EIGEN_ACCENT_COLORS_SHUFFLED} from '@workspace/lib/constants/colors';
 
 const calendarFormSchema = z.object({
     name: z.string().min(1, {message: 'Calendar name is required.'}),
@@ -33,9 +34,10 @@ type CalendarConfigDialogProps = {
     open: boolean;
     onOpenChange: (open: boolean) => void;
     calendar: CalendarItem | null;
+    calendarCount?: number;
 }
 
-export function CalendarConfigDialog({open, onOpenChange, calendar}: CalendarConfigDialogProps) {
+export function CalendarConfigDialog({open, onOpenChange, calendar, calendarCount = 0}: CalendarConfigDialogProps) {
     const {user} = useAuth();
     const ownerId = user?.id || '';
     const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
@@ -52,18 +54,23 @@ export function CalendarConfigDialog({open, onOpenChange, calendar}: CalendarCon
         resolver: zodResolver(calendarFormSchema),
         defaultValues: calendar
             ? {name: calendar.name, color: calendar.color}
-            : {name: '', color: '#4285f4'},
+            : {
+                name: '',
+                color: EIGEN_ACCENT_COLORS_SHUFFLED[calendarCount % EIGEN_ACCENT_COLORS_SHUFFLED.length].value
+            },
     });
+
+    const defaultColor = EIGEN_ACCENT_COLORS_SHUFFLED[calendarCount % EIGEN_ACCENT_COLORS_SHUFFLED.length].value;
 
     useEffect(() => {
         if (calendar) {
             form.reset({name: calendar.name, color: calendar.color});
             setShares(calendar.shares);
         } else if (open) {
-            form.reset({name: '', color: '#4285f4'});
+            form.reset({name: '', color: defaultColor});
             setShares(null);
         }
-    }, [calendar, form, open]);
+    }, [calendar, form, open, defaultColor]);
 
     const handleSubmit = async (data: CalendarFormValues) => {
         try {
