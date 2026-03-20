@@ -22,8 +22,11 @@ import type {DrivePath} from '@workspace/lib/types/drive';
 type ToolbarItemsProps = {
     canWrite: boolean;
     onAccessDialogOpen: () => void;
-    onRestore: (state: Uint8Array) => void;
     path: DrivePath;
+}
+
+type ToolbarRightItemsProps = ToolbarItemsProps & {
+    onRestore: (state: Uint8Array) => void;
 }
 
 export function ToolbarLeftItems({path, onAccessDialogOpen, canWrite}: ToolbarItemsProps) {
@@ -93,7 +96,7 @@ export function ToolbarLeftItems({path, onAccessDialogOpen, canWrite}: ToolbarIt
     );
 }
 
-export function ToolbarRightItems({path, canWrite, onAccessDialogOpen, onRestore}: ToolbarItemsProps) {
+export function ToolbarRightItems({path, canWrite, onAccessDialogOpen, onRestore}: ToolbarRightItemsProps) {
     return (
         <>
             <RevisionHistory path={path} onRestore={onRestore}/>
