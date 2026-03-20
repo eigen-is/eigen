@@ -519,10 +519,13 @@ export default class Drive {
 
         const updates: Partial<DrivePath> = {acl: normalizedACL};
         if (visibility !== undefined) updates.visibility = visibility;
+        const oldACL = item.acl;
         await mount.updatePath(pathId, updates);
-        await propagateACLChange(item, item.acl, normalizedACL);
         const updatedItem = await mount.getPath(pathId);
-        if (updatedItem) this.emit(SSEventType.DRIVE_ACL_UPDATED, updatedItem);
+        if (updatedItem) {
+            await propagateACLChange(updatedItem, oldACL, normalizedACL);
+            this.emit(SSEventType.DRIVE_ACL_UPDATED, updatedItem);
+        }
     }
 
     async canRead(mountId: string, pathId: string, user: User): Promise<boolean> {

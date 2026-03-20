@@ -20,7 +20,7 @@ export function useSSE() {
 
     const handleEvent = useCallback((event: SSEvent) => {
         const userId = userIdRef.current;
-        handleDriveSSEvent(event, queryClient);
+        handleDriveSSEvent(event, queryClient, userId);
         handleMailSSEvent(event, queryClient, userId);
         handleContactsSSEvent(event, queryClient, userId);
         handleChatSSEvent(event, queryClient);
