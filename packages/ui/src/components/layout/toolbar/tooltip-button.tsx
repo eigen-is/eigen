@@ -14,6 +14,8 @@ export type TooltipButtonProps = {
     label?: string;
     active?: boolean;
     preventFocusLoss?: boolean;
+    type?: "button" | "submit" | "reset";
+    form?: string;
 }
 
 export const TooltipButton = ({
@@ -27,6 +29,8 @@ export const TooltipButton = ({
                                   label = undefined,
                                   active = false,
                                   preventFocusLoss = false,
+                                  type,
+                                  form,
                               }: TooltipButtonProps) => {
     const resolvedVariant = active ? "secondary" : variant;
 
@@ -38,6 +42,8 @@ export const TooltipButton = ({
                     size={size}
                     className={cn('cursor-pointer', className)}
                     disabled={disabled}
+                    type={type}
+                    form={form}
                     {...(preventFocusLoss
                         ? {
                             onMouseDown: (e: React.MouseEvent) => {
