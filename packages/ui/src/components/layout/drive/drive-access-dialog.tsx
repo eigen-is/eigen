@@ -3,6 +3,7 @@ import {Dialog, DialogContent, DialogHeader, DialogTitle} from "@workspace/ui/co
 import {DriveAccessListEdit} from "@workspace/ui/components/layout/drive/drive-access-list-edit"
 import type {DriveACL, DrivePath, DriveVisibility} from "@workspace/lib/types/drive"
 import {useUpdateACL} from "@workspace/lib/drive";
+import {useAuth} from "@workspace/lib/auth";
 
 export type DriveAccessDialogProps = {
     open: boolean
@@ -16,8 +17,9 @@ export function DriveAccessDialog({
                                       path
                                   }: DriveAccessDialogProps) {
     const [isSubmitting, setIsSubmitting] = useState(false)
+    const {user} = useAuth();
 
-    const updateACL = useUpdateACL(path?.ownerId || '', path?.mountId);
+    const updateACL = useUpdateACL(path?.ownerId || '', path?.mountId, user?.id);
 
     if (!path) {
         return null

@@ -11,7 +11,7 @@ import {
     invalidatePathRenamed
 } from './hooks/use-drive';
 
-export function handleDriveSSEvent(event: SSEvent, queryClient: QueryClient): boolean {
+export function handleDriveSSEvent(event: SSEvent, queryClient: QueryClient, userId?: string): boolean {
     if (!event?.type?.startsWith('drive:')) return false;
     if (!('path' in event)) return false;
 
@@ -19,13 +19,13 @@ export function handleDriveSSEvent(event: SSEvent, queryClient: QueryClient): bo
 
     switch (event.type) {
         case SSEventType.DRIVE_ACL_SHARED:
-            invalidateAclSharedOrUnshared(queryClient, path.ownerId);
+            if (userId) invalidateAclSharedOrUnshared(queryClient, userId);
             invalidateAclUpdated(queryClient, path.ownerId, path.mountId, path.id, path.parentId);
             toast('Item shared with you', {description: `"${path.name}" was shared with you`});
             return true;
 
         case SSEventType.DRIVE_ACL_UNSHARED:
-            invalidateAclSharedOrUnshared(queryClient, path.ownerId);
+            if (userId) invalidateAclSharedOrUnshared(queryClient, userId);
             invalidateAclUpdated(queryClient, path.ownerId, path.mountId, path.id, path.parentId);
             toast('Item unshared', {description: `"${path.name}" is no longer shared with you`});
             return true;
@@ -50,6 +50,7 @@ export function handleDriveSSEvent(event: SSEvent, queryClient: QueryClient): bo
             return true;
 
         case SSEventType.DRIVE_ACL_UPDATED:
+            if (userId) invalidateAclSharedOrUnshared(queryClient, userId);
             invalidateAclUpdated(queryClient, path.ownerId, path.mountId, path.id, path.parentId);
             return true;
 
