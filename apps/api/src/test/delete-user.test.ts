@@ -33,6 +33,11 @@ describe('Delete user', () => {
         expect(sizeRes.status).toBe(200);
     });
 
+    test('admin can read settings before deletion', async () => {
+        const res = await authedRequest(ctx.alice.user.sessionToken, '/settings/server');
+        expect(res.status).toBe(200);
+    });
+
     test('non-admin cannot delete a user', async () => {
         const res = await authedRequest(ctx.bob.user.sessionToken,
             `/settings/user/${deleteTarget.id}`,
@@ -74,6 +79,85 @@ describe('Delete user', () => {
         const authRes = await authedRequest(deleteTarget.sessionToken,
             `/home/${deleteTarget.id}/size`);
         expect(authRes.status).toBe(401);
+    });
+
+    test('admin retains admin rights after deleting a user', async () => {
+        // Admin can still read settings (requireAdmin check)
+        const settingsRes = await authedRequest(ctx.alice.user.sessionToken, '/settings/server');
+        expect(settingsRes.status).toBe(200);
+    });
+
+    test('admin org membership is intact after deletion', async () => {
+        const {getOrgRole, getMemberships} = await import('../lib/user/user');
+        const role = await getOrgRole(ctx.alice.user.id);
+        expect(role).toBe('owner');
+
+        const memberships = await getMemberships(ctx.alice.user.id);
+        expect(memberships.orgIds.length).toBeGreaterThan(0);
+    });
+
+    test('active organization survives user deletion', async () => {
+        const {getPublicConfig} = await import('../lib/config/server-config');
+        const pubConfig = await getPublicConfig();
+        const orgId = pubConfig.orgId;
+        expect(orgId).toBeTruthy();
+        const aliceHeaders = new Headers({cookie: `better-auth.session_token=${ctx.alice.user.sessionToken}`});
+
+        // Set active org on admin session (like the frontend does)
+        const setActiveRes = await authedRequest(ctx.alice.user.sessionToken,
+            '/auth/organization/set-active', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({organizationId: orgId}),
+            });
+        expect(setActiveRes.status).toBe(200);
+
+        // Verify it's set
+        const {auth} = await import('../lib/auth/auth');
+        const sessionBefore = await auth.api.getSession({headers: aliceHeaders});
+        expect(sessionBefore!.session.activeOrganizationId).toBe(orgId);
+
+        // Create and delete another user
+        const signUp2 = await auth.api.signUpEmail({
+            body: {email: 'deleteme2@test.eigen.is', password: 'testpassword123', name: 'Delete Me 2'},
+        });
+        const signIn2 = await auth.api.signInEmail({
+            returnHeaders: true,
+            body: {email: 'deleteme2@test.eigen.is', password: 'testpassword123'},
+        });
+        const setCookie2 = signIn2.headers.get('set-cookie') || '';
+        const match2 = setCookie2.match(/better-auth\.session_token=([^;]+)/);
+
+        // Initialize home
+        await authedRequest(match2![1], `/home/${signUp2.user.id}/size`);
+
+        // Delete the user
+        const delRes = await authedRequest(ctx.alice.user.sessionToken,
+            `/settings/user/${signUp2.user.id}`,
+            {method: 'DELETE'});
+        expect(delRes.status).toBe(200);
+
+        // Check: does admin still have activeOrganizationId?
+        const sessionAfter = await auth.api.getSession({headers: aliceHeaders});
+        expect(sessionAfter!.session.activeOrganizationId).toBe(orgId);
+
+        // Check: can admin still list members?
+        const listRes = await authedRequest(ctx.alice.user.sessionToken,
+            `/auth/organization/list-members?organizationId=${orgId}`);
+        expect(listRes.status).toBe(200);
+        const data = await listRes.json() as any;
+        expect(data.members.find((m: any) => m.userId === ctx.alice.user.id)).toBeDefined();
+    });
+
+    test('other users retain their membership after deletion', async () => {
+        // Bob can still authenticate and access his own data
+        const bobRes = await authedRequest(ctx.bob.user.sessionToken,
+            `/home/${ctx.bob.user.id}/size`);
+        expect(bobRes.status).toBe(200);
+
+        const {getOrgRole} = await import('../lib/user/user');
+        const bobRole = await getOrgRole(ctx.bob.user.id);
+        expect(bobRole).toBe('member');
     });
 
     test('deleting same user again returns 404', async () => {
