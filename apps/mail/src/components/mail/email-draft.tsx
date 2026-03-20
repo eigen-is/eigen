@@ -184,8 +184,6 @@ export function EmailDraft({
 
     // Handle send email functionality
     const handleSendEmail = async () => {
-        if (!email) return;
-
         // Validate the form
         const toValue = toFieldRef.current?.value.trim();
         if (!toValue) {
