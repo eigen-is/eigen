@@ -1,11 +1,12 @@
 import {useState} from 'react';
 import {UserAvatar} from '@workspace/ui/components/layout/user-avatar';
 import {Badge} from '@workspace/ui/components/badge';
+import {Button} from '@workspace/ui/components/button';
 import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '@workspace/ui/components/select';
 import {Trash2} from 'lucide-react';
 import {DeleteDialog} from '@workspace/ui/components/layout/delete/delete-dialog';
 import {TooltipButton} from '@workspace/ui/components/layout/toolbar/tooltip-button.tsx';
-import {useRemoveMember, useUpdateMemberRole} from '@workspace/lib/people';
+import {useDeleteUser, useRemoveMember, useUpdateMemberRole} from '@workspace/lib/people';
 import {useNavigate} from '@tanstack/react-router';
 
 import type {OrgMember} from '@workspace/lib/types/people';
@@ -16,7 +17,7 @@ interface MemberDetailToolbarProps {
 }
 
 export function MemberDetailToolbar({member, organizationId}: MemberDetailToolbarProps) {
-    const [showDelete, setShowDelete] = useState(false);
+    const [showRemove, setShowRemove] = useState(false);
     const removeMember = useRemoveMember(organizationId);
     const navigate = useNavigate();
 
@@ -29,12 +30,12 @@ export function MemberDetailToolbar({member, organizationId}: MemberDetailToolba
 
     return (
         <div className="flex items-center gap-1 ml-auto">
-            <TooltipButton icon={Trash2} tooltipText="Remove member" onClick={() => setShowDelete(true)}/>
+            <TooltipButton icon={Trash2} tooltipText="Remove from organization" onClick={() => setShowRemove(true)}/>
             <DeleteDialog
-                open={showDelete}
-                onOpenChange={setShowDelete}
+                open={showRemove}
+                onOpenChange={setShowRemove}
                 title="Remove Member"
-                description={`Remove ${member.name} from the organization? This cannot be undone.`}
+                description={`Remove ${member.name} from the organization? The user account and data will be preserved.`}
                 onDelete={handleRemove}
             />
         </div>
@@ -47,10 +48,18 @@ interface MemberDetailProps {
 }
 
 export function MemberDetail({member, organizationId}: MemberDetailProps) {
+    const [showDelete, setShowDelete] = useState(false);
     const updateRole = useUpdateMemberRole(organizationId);
+    const deleteUser = useDeleteUser(organizationId);
+    const navigate = useNavigate();
 
     const handleRoleChange = async (newRole: 'admin' | 'member' | 'owner') => {
         await updateRole.mutateAsync({memberId: member.id, role: newRole});
+    };
+
+    const handleDelete = async () => {
+        await deleteUser.mutateAsync(member.userId);
+        navigate({to: '/members', search: {}});
     };
 
     return (
@@ -86,6 +95,25 @@ export function MemberDetail({member, organizationId}: MemberDetailProps) {
                     <p className="text-sm">{member.createdAt.toLocaleDateString()}</p>
                 </div>
             </div>
+
+            {member.role !== 'owner' && (
+                <div className="border-t pt-6">
+                    <h3 className="text-sm font-medium text-destructive mb-2">Danger zone</h3>
+                    <p className="text-sm text-muted-foreground mb-3">
+                        Permanently delete this user account and all associated data.
+                    </p>
+                    <Button variant="destructive" size="sm" onClick={() => setShowDelete(true)}>
+                        Delete user
+                    </Button>
+                    <DeleteDialog
+                        open={showDelete}
+                        onOpenChange={setShowDelete}
+                        title="Delete User"
+                        description={`Permanently delete ${member.name} and all their data? This removes the user account, files, emails, contacts, and calendars. This cannot be undone.`}
+                        onDelete={handleDelete}
+                    />
+                </div>
+            )}
         </div>
     );
 }
