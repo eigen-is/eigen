@@ -5,7 +5,7 @@ import {useMatch, useNavigate} from "@tanstack/react-router";
 // Import route to get correct path information
 import {Route as FilterRoute} from '../../routes/_auth.$filterType.$filterId';
 
-interface EmailComposeButtonProps {
+type EmailComposeButtonProps = {
     condensed: boolean;
 }
 

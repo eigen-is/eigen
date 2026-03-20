@@ -14,7 +14,7 @@ import {printDocument} from "@workspace/ui/lib/printElement";
 import {Table, TableBody, TableCell, TableRow} from "@workspace/ui/components/table";
 import {useEffect, useRef} from "react";
 
-interface EmailDetailToolbarProps {
+type EmailDetailToolbarProps = {
     email: Email;
     onReply?: (emailId: string) => void;
     onReplyAll?: (emailId: string) => void;
@@ -106,7 +106,7 @@ export function EmailDetailToolbar({
     );
 }
 
-interface EmailDetailProps {
+type EmailDetailProps = {
     email: Email | null;
     toggleMailRead: (mail: Email, isRead: boolean) => void;
 }
@@ -145,7 +145,8 @@ export function EmailDetail({email, toggleMailRead}: EmailDetailProps) {
             hasMarkedAsRead.current = email.id;
             toggleMailRead(email, true);
         }
-    }, [email, toggleMailRead]);
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- toggleMailRead is an unstable prop reference; hasMarkedAsRead ref prevents re-marking
+    }, [email]);
 
     if (!email) {
         return (
@@ -185,9 +186,10 @@ export function EmailDetail({email, toggleMailRead}: EmailDetailProps) {
     };
 
     const formatContactObject = (contact: AddressObject, compact: boolean = false) => {
-        return contact.value.map((address, idx, arr) => (<><MailLink email={address.address} name={address.name}
+        return contact.value.map((address, idx, arr) => (
+            <span key={address.address || idx}><MailLink email={address.address} name={address.name}
                                                                      mailLink={!compact}
-                                                                     compact={compact}/>{idx < arr.length - 1 ? ', ' : ''}</>));
+                                                         compact={compact}/>{idx < arr.length - 1 ? ', ' : ''}</span>));
     };
 
     return (
@@ -291,7 +293,8 @@ export function EmailDetail({email, toggleMailRead}: EmailDetailProps) {
                                         className="flex items-center p-3 border rounded-md hover:bg-muted/50 cursor-pointer select-none"
                                         onClick={() => {
                                             const fileName = attachment.filename || `Attachment ${index + 1}`;
-                                            const downloadUrl = getMailAttachmentUrl(user!.id, email.id, index, fileName);
+                                            if (!user) return;
+                                            const downloadUrl = getMailAttachmentUrl(user.id, email.id, index, fileName);
 
                                             // Create a temporary anchor element to trigger the download
                                             const a = document.createElement('a');

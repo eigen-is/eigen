@@ -3,8 +3,9 @@ import {AuthContextType, useAuth} from "@workspace/lib/auth";
 import {AppShell} from "@workspace/ui/components/layout/app/app-shell.tsx";
 import {EmailSidebar} from "../components/mail/email-sidebar";
 import {useEmailById, useMailboxes, useMoveEmail} from '@workspace/lib/mail';
+import type {Email} from '@workspace/lib/types/mail';
 
-interface MyRouterContext {
+type MyRouterContext = {
     auth: AuthContextType
 }
 
@@ -28,10 +29,8 @@ function AuthenticatedMailRoot() {
     const getEmailById = useEmailById();
 
     const handleMoveByDrop = async (emailIds: string[], folderId: string) => {
-        for (const id of emailIds) {
-            const email = await getEmailById(id);
-            if (email) await moveMail.mutateAsync({email, mailbox: folderId});
-        }
+        const emails = (await Promise.all(emailIds.map(id => getEmailById(id)))).filter((e): e is Email => !!e);
+        await Promise.allSettled(emails.map(email => moveMail.mutateAsync({email, mailbox: folderId})));
     };
 
     return (

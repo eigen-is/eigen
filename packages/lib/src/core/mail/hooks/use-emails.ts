@@ -1,6 +1,6 @@
 import {type QueryClient, useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {getMailComposeUrl, mailApi} from '@workspace/lib/api.ts';
-import type {Email} from "@workspace/lib/types/mail";
+import type {Email, EmailSummary} from "@workspace/lib/types/mail";
 import {useAuth} from '@workspace/lib/auth';
 import {AppError, onMutationError} from '../../api-error';
 import {invalidateMailboxes} from './use-mailboxes';
@@ -9,6 +9,9 @@ export const emailKeys = {
     all: ['emails'] as const,
     owner: (ownerId: string) => [...emailKeys.all, ownerId] as const,
     lists: (ownerId: string) => [...emailKeys.owner(ownerId), 'list'] as const,
+    // toLowerCase() ensures query key consistency: sidebar URLs are lowercase (e.g. /box/sent)
+    // but SSE events use canonical case (e.g. 'Sent'). Without normalization, SSE invalidation
+    // would miss the cached query key, causing silent cache staleness.
     list: (ownerId: string, mailbox: string) => [...emailKeys.lists(ownerId), {mailbox: mailbox.toLowerCase()}] as const,
     details: (ownerId: string) => [...emailKeys.owner(ownerId), 'detail'] as const,
     detail: (ownerId: string, id: string) => [...emailKeys.details(ownerId), id] as const,
@@ -20,9 +23,9 @@ export function useEmails(mailboxPath: string) {
 
     return useQuery({
         queryKey: emailKeys.list(ownerId, mailboxPath),
-        queryFn: async (): Promise<Email[]> => {
+        queryFn: async (): Promise<EmailSummary[]> => {
             const response = await mailApi({ownerId}).mailbox({mailboxPath: mailboxPath.toLowerCase()}).get();
-            return (response.data || []) as Email[];
+            return (response.data || []) as EmailSummary[];
         },
         staleTime: 1 * 60 * 1000,
         enabled: !!ownerId,
@@ -169,8 +172,8 @@ export function useOpenWriteEmailTo() {
 }
 
 // Invalidation functions (ownerId-scoped, used from mutation onSuccess)
-export function invalidateMailReceived(queryClient: QueryClient, ownerId: string): void {
-    queryClient.invalidateQueries({queryKey: emailKeys.list(ownerId, 'inbox')});
+export function invalidateMailReceived(queryClient: QueryClient, ownerId: string, mailbox: string = 'inbox'): void {
+    queryClient.invalidateQueries({queryKey: emailKeys.list(ownerId, mailbox)});
 }
 
 export function invalidateMailDeleted(queryClient: QueryClient, ownerId: string, messageId: string, mailbox: string): void {
