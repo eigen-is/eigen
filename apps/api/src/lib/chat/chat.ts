@@ -9,12 +9,14 @@ import type {ManagedDatabase} from '../core/managed-database';
 import {CHAT_ROOM_DB_CONFIG} from './db-config';
 import * as schema from './schema';
 import {buildChatEvent} from './sse-events';
-import {SSEventType} from '@workspace/lib/types/sse';
+import {type SSEvent, SSEventType} from '@workspace/lib/types/sse';
 import type {Home} from '../home';
+import {getHome} from '../home';
 import {formatEmoteForViewer, parseCommand} from './commands';
 import {validateEmailAddress} from '@workspace/lib/validation';
 import {getUserByEmail} from '../user/';
 import {ApiError} from '../core/errors';
+import {resolveACLUserIds} from '../drive/acl-propagation';
 
 export class ChatRoom {
     private drive: Drive;
@@ -116,12 +118,14 @@ export class ChatRoom {
         const sseMessage = type === 'whisper'
             ? {...message, content: '', whisperTo: null}
             : message;
-        this.home.notify(buildChatEvent(SSEventType.CHAT_MESSAGE_POSTED, {
+        const event = buildChatEvent(SSEventType.CHAT_MESSAGE_POSTED, {
             chatId: this.path.id,
             ownerId: this.path.ownerId,
             mountId: this.path.mountId,
             message: sseMessage,
-        }));
+        });
+        this.home.notify(event);
+        this.notifySharedUsers(event);
 
         return message;
     }
@@ -187,12 +191,14 @@ export class ChatRoom {
 
         const updated = this.toMessage({...existing, content, editedAt: now});
 
-        this.home.notify(buildChatEvent(SSEventType.CHAT_MESSAGE_EDITED, {
+        const event = buildChatEvent(SSEventType.CHAT_MESSAGE_EDITED, {
             chatId: this.path.id,
             ownerId: this.path.ownerId,
             mountId: this.path.mountId,
             message: updated,
-        }));
+        });
+        this.home.notify(event);
+        this.notifySharedUsers(event);
 
         return updated;
     }
@@ -217,12 +223,14 @@ export class ChatRoom {
             }
         }
 
-        this.home.notify(buildChatEvent(SSEventType.CHAT_MESSAGE_DELETED, {
+        const event = buildChatEvent(SSEventType.CHAT_MESSAGE_DELETED, {
             chatId: this.path.id,
             ownerId: this.path.ownerId,
             mountId: this.path.mountId,
             message: this.toMessage({...existing, deletedAt: now}),
-        }));
+        });
+        this.home.notify(event);
+        this.notifySharedUsers(event);
 
         return true;
     }
@@ -240,6 +248,18 @@ export class ChatRoom {
                 lastReadMessageId: messageId,
                 lastReadAt: now,
             });
+        }
+    }
+
+    private async notifySharedUsers(event: SSEvent) {
+        if (!this.path.acl?.length) return;
+        const userIds = await resolveACLUserIds(this.path.ownerId, this.path.acl);
+        for (const userId of userIds) {
+            try {
+                const home = await getHome(userId);
+                home.notify(event);
+            } catch { /* user home may not exist */
+            }
         }
     }
 
