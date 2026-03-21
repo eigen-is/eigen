@@ -70,7 +70,8 @@
       "Bash(cp /tmp/favicon.svg \"/Users/reinder/Documents/GitHub/eigen/apps/index/public/favicon.svg\")",
       "Bash(cp /tmp/favicon.svg \"/Users/reinder/Documents/GitHub/eigen/apps/people/public/favicon.svg\")",
       "mcp__plugin_context7_context7__resolve-library-id",
-      "mcp__plugin_context7_context7__query-docs"
+      "mcp__plugin_context7_context7__query-docs",
+      "Bash(do sed:*)"
     ]
   },
   "bypassPermissions": "bypassPermissions"
