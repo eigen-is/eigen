@@ -1,4 +1,4 @@
-import * as React from "react"
+import {useState} from "react"
 import {zodResolver} from "@hookform/resolvers/zod"
 import {useForm} from "react-hook-form"
 import {z} from "zod"
@@ -51,9 +51,9 @@ export function TwoFactorSetup({
                                    currentStep,
                                    setCurrentStep
                                }: TwoFactorSetupProps) {
-    const [isLoading, setIsLoading] = React.useState<boolean>(false)
-    const [isCopied, setIsCopied] = React.useState<boolean>(false)
-    const [codesCopied, setCodesCopied] = React.useState<boolean>(false)
+    const [isLoading, setIsLoading] = useState<boolean>(false)
+    const [isCopied, setIsCopied] = useState<boolean>(false)
+    const [codesCopied, setCodesCopied] = useState<boolean>(false)
 
     const passwordForm = useForm<z.infer<typeof passwordFormSchema>>({
         resolver: zodResolver(passwordFormSchema),

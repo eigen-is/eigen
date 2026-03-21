@@ -33,6 +33,8 @@ function TwoFaComponent() {
     useEffect(() => {
         authClient.getSession().then(({data}) => {
             setTwoFactorEnabled(data?.user?.twoFactorEnabled ?? false);
+        }).catch(() => {
+            setTwoFactorEnabled(false);
         });
     }, []);
 
@@ -54,7 +56,7 @@ function TwoFaComponent() {
                 setSetupStep("qrcode");
                 toast.success('Two-factor authentication initialized. Please scan the QR code.');
             } else {
-                toast.error(result.error?.message ?? (result.error?.status + " - " + result.error?.statusText));
+                toast.error(result.error?.message ?? 'Failed to initialize two-factor authentication');
             }
         } catch (error) {
             console.error('Error initializing 2FA:', error);
@@ -124,7 +126,7 @@ function TwoFaComponent() {
 
                     <div className="space-y-6">
                         <div className="flex items-center gap-3 text-sm">
-                            <ShieldCheck className="h-5 w-5 text-green-600"/>
+                            <ShieldCheck className="h-5 w-5 text-primary"/>
                             <span>Two-factor authentication is enabled on your account.</span>
                         </div>
 
