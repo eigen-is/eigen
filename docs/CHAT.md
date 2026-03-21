@@ -81,6 +81,7 @@ See [TODO-CHAT-ACL.md](TODO-CHAT-ACL.md) for design discussion.
 |-----------------------------------------------------------------------------------------|---------|-----------------|
 | `/dance`, `/cheer`, `/taunt`, `/greet`, `/allthethings`, `/facepalm`, `/shrug`, `/flip` | emote   | Built-in emotes |
 | `/me [action]`                                                                          | emote   | Custom emote    |
+| `/trout [email]`                                                                        | emote   | Targeted emote  |
 | `/whisper [email] [msg]` (aliases: `/w`, `/tell`, `/t`, `/send`)                        | whisper | Private message |
 
 ### Frontend-only (local system messages)

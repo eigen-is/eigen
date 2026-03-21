@@ -187,8 +187,9 @@ export function ChatMessageInput({
     };
 
     const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (e.target.files) {
-            setFiles(prev => [...prev, ...Array.from(e.target.files!)]);
+        const newFiles = e.target.files ? Array.from(e.target.files) : [];
+        if (newFiles.length > 0) {
+            setFiles(prev => [...prev, ...newFiles]);
         }
         if (fileInputRef.current) fileInputRef.current.value = '';
     };
