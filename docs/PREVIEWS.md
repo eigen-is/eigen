@@ -55,7 +55,7 @@ Used by both upload thumbnails (512px) and screen previews (max 2560px).
 FilePreview (fixed, z-[100])
   Header   — filename, ← → nav, close ✕
   Content  — dispatch by previewMode:
-    image:    <img src={previewUrl}>
+    image:    ProgressiveImage (thumbnail → full preview)
     video:    <video src={embedUrl} controls>
     audio:    <audio src={embedUrl} controls>
     pdf:      <iframe src={embedUrl}>
@@ -65,6 +65,11 @@ FilePreview (fixed, z-[100])
 ```
 
 **Keyboard:** Escape = close, ArrowLeft/ArrowRight = prev/next sibling.
+
+**Progressive image loading:** For images with thumbnails, `ProgressiveImage` stacks two `<img>` elements — the 512px
+thumbnail renders instantly while the screen-resolution preview (max 2560px) loads on top. Both use `object-contain`
+within a fixed-size container so there's no size change when the preview loads. Images without thumbnails load the
+preview directly.
 
 **PreviewProvider** stores `DrivePath` + `siblings[]`, exposes `openPreview(path, siblings?)`.
 
