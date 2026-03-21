@@ -14,9 +14,12 @@ API Mutation → home.notify(event) → SSE Stream → Client
                                                                     → toast (only for curated remote events)
 ```
 
-SSE is personal-only — each user subscribes to their own Home's event stream. The SSE keepalive (every 30s) also
-calls `home.touch()`, preventing the Home from being destructed while a client is connected. Events fall into two
-categories:
+SSE is personal-only — each user subscribes to their own Home's event stream. The SSE keepalive (every 30s)
+re-acquires the Home via `getHome()` (which calls `touch()`), preventing idle destruction and self-healing if the
+Home was destructed externally. An initial keepalive is sent immediately in `start()` to prevent Apache proxy
+timeouts. The frontend `useSSE` hook auto-reconnects after HTTP errors (e.g. 502) with a 5-second retry.
+
+Events fall into two categories:
 
 - **Self-triggered**: your own action bounces back for cache invalidation. No toast needed — the UI already reflects
   the change
