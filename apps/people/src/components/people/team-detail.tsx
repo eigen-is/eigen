@@ -72,9 +72,10 @@ function AddMemberDialog({open, onOpenChange, availableMembers, onAdd}: {
     const [search, setSearch] = useState('');
 
     const filtered = useMemo(() => {
-        if (!search) return availableMembers;
+        const sorted = [...availableMembers].sort((a, b) => a.name.localeCompare(b.name));
+        if (!search) return sorted;
         const q = search.toLowerCase();
-        return availableMembers.filter(m =>
+        return sorted.filter(m =>
             m.name.toLowerCase().includes(q) || m.email.toLowerCase().includes(q)
         );
     }, [availableMembers, search]);
@@ -279,7 +280,7 @@ export function TeamDetail({team, organizationId}: TeamDetailProps) {
         s3Check.mutateAsync(config);
 
     return (
-        <div className="p-6 space-y-6">
+        <div className="p-6 space-y-6 h-full overflow-y-auto">
             {/* Header */}
             <div className="flex items-center justify-between">
                 <h2 className="text-xl font-semibold truncate">{team.name}</h2>
@@ -449,9 +450,13 @@ export function TeamDetail({team, organizationId}: TeamDetailProps) {
                     <p className="text-sm text-muted-foreground py-4 text-center">No members in this team yet.</p>
                 ) : (
                     <div className="divide-y">
-                        {teamMembers.map((tm: {userId: string}) => {
-                            const member = allMembers.find(m => m.userId === tm.userId);
-                            return (
+                        {teamMembers
+                            .map((tm: { userId: string }) => ({
+                                tm,
+                                member: allMembers.find(m => m.userId === tm.userId)
+                            }))
+                            .sort((a, b) => (a.member?.name ?? '').localeCompare(b.member?.name ?? ''))
+                            .map(({tm, member}) => (
                                 <div key={tm.userId} className="flex items-center gap-3 py-2">
                                     <UserItem
                                         name={member?.name ?? 'Unknown'}
@@ -468,8 +473,7 @@ export function TeamDetail({team, organizationId}: TeamDetailProps) {
                                         <X className="h-3.5 w-3.5"/>
                                     </Button>
                                 </div>
-                            );
-                        })}
+                            ))}
                     </div>
                 )}
             </div>
