@@ -11346,8 +11346,8 @@ export default {
     fontFamily: {
         MicrosoftYaHei: "YaHei",
     },
-    fontarray: ["Arial", "Helvetica", "Verdana", "Tahoma"],
-    fontjson: {arial: 0, helvetica: 1, verdana: 2, tahoma: 3},
+    fontarray: ["Inter", "Source Serif 4", "JetBrains Mono", "Excalifont"],
+    fontjson: {inter: 0, "source serif 4": 1, "jetbrains mono": 2, excalifont: 3},
     border: {
         borderTop: "Top border",
         borderBottom: "Bottom border",

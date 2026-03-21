@@ -502,7 +502,7 @@ export const Workbook = React.forwardRef<WorkbookInstance, Settings & Additional
                     draftCtx.lang = mergedSettings.lang;
                     draftCtx.allowEdit = mergedSettings.allowEdit;
                     draftCtx.hooks = mergedSettings.hooks;
-                    // draftCtx.fontList = mergedSettings.fontList;
+                    draftCtx.fontList = mergedSettings.fontList;
                     if (!draftCtx.currentSheetId) {
                         initSheetIndex(draftCtx);
                     }

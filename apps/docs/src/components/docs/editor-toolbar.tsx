@@ -16,6 +16,7 @@ import {
     Heading1,
     Heading2,
     Heading3,
+    Heading4,
     Highlighter,
     ImagePlus,
     Italic,
@@ -59,6 +60,8 @@ import {Tooltip, TooltipContent, TooltipTrigger} from "@workspace/ui/components/
 import {Popover, PopoverContent, PopoverTrigger} from "@workspace/ui/components/popover";
 import {Toolbar, TooltipButton} from "@workspace/ui";
 import {ColorPicker} from "@workspace/ui/components/layout/media/color-picker";
+import {FontPicker} from "@workspace/ui/components/layout/media/font-picker";
+import {EIGEN_FONTS, getFontFamily} from "@workspace/lib/constants/fonts";
 import {RevisionHistory} from "@workspace/ui/components/layout/collab/revision-history";
 import {printDocument} from "@workspace/ui/lib/printElement";
 import {DocumentModeButton} from "@workspace/ui/components/layout/toolbar/document-mode-button";
@@ -67,7 +70,7 @@ import {useRootFolder} from "@workspace/lib/drive";
 import {useAuth} from "@workspace/lib/auth";
 import {DrivePath} from "@workspace/lib/types/drive";
 import {useNavigate} from '@tanstack/react-router';
-import {useIsMobile} from "@workspace/lib/media";
+import {useMediaQuery} from "@workspace/lib/media";
 import {DriveRenameItem} from "@workspace/ui/components/layout/drive/drive-rename-item";
 import {Label} from "@workspace/ui/components/label";
 import {yDocToProsemirrorJSON} from "y-prosemirror";
@@ -97,7 +100,7 @@ export const EditorToolbar = ({editor, path, canWrite, onAccessDialogOpen, onDel
     const {user} = useAuth();
     const {data: rootFolder} = useRootFolder(user?.id || '');
     const navigate = useNavigate();
-    const isMobile = useIsMobile();
+    const isMobile = useMediaQuery('(max-width: 1200px)');
 
     const handleRestore = (state: Uint8Array) => {
         const tempDoc = new Y.Doc();
@@ -140,7 +143,9 @@ export const EditorToolbar = ({editor, path, canWrite, onAccessDialogOpen, onDel
             ? 'Heading 2'
             : editor.isActive('heading', {level: 3})
                 ? 'Heading 3'
-                : 'Normal';
+                : editor.isActive('heading', {level: 4})
+                    ? 'Heading 4'
+                    : 'Normal';
 
     return (
         <Toolbar>
@@ -202,6 +207,20 @@ export const EditorToolbar = ({editor, path, canWrite, onAccessDialogOpen, onDel
                             <DropdownMenuContent align="start">
                                 <DropdownMenuSub>
                                     <DropdownMenuSubTrigger><Type
+                                        className="h-4 w-4 mr-2"/> Font</DropdownMenuSubTrigger>
+                                    <DropdownMenuSubContent>
+                                        {EIGEN_FONTS.map((font) => (
+                                            <DropdownMenuItem
+                                                key={font.name}
+                                                onClick={() => editor.chain().focus().setFontFamily(getFontFamily(font.name)).run()}
+                                            >
+                                                <span style={{fontFamily: getFontFamily(font.name)}}>{font.name}</span>
+                                            </DropdownMenuItem>
+                                        ))}
+                                    </DropdownMenuSubContent>
+                                </DropdownMenuSub>
+                                <DropdownMenuSub>
+                                    <DropdownMenuSubTrigger><Type
                                         className="h-4 w-4 mr-2"/> Text</DropdownMenuSubTrigger>
                                     <DropdownMenuSubContent>
                                         <DropdownMenuItem onClick={() => editor.chain().focus().toggleBold().run()}>
@@ -238,6 +257,10 @@ export const EditorToolbar = ({editor, path, canWrite, onAccessDialogOpen, onDel
                                         <DropdownMenuItem
                                             onClick={() => editor.chain().focus().toggleHeading({level: 3}).run()}>
                                             <Heading3 className="mr-2 h-4 w-4"/> Heading 3
+                                        </DropdownMenuItem>
+                                        <DropdownMenuItem
+                                            onClick={() => editor.chain().focus().toggleHeading({level: 4}).run()}>
+                                            <Heading4 className="mr-2 h-4 w-4"/> Heading 4
                                         </DropdownMenuItem>
                                     </DropdownMenuSubContent>
                                 </DropdownMenuSub>
@@ -320,13 +343,25 @@ export const EditorToolbar = ({editor, path, canWrite, onAccessDialogOpen, onDel
 
                     <ToolbarSeparator />
 
+                    {/* Font family selector */}
+                    <FontPicker
+                        value={(() => {
+                            const ff = editor.getAttributes('textStyle').fontFamily || '';
+                            const match = ff.match(/^'([^']+)'/);
+                            return match ? match[1] : 'Inter';
+                        })()}
+                        onChange={(f) => editor.chain().focus().setFontFamily(getFontFamily(f)).run()}
+                    />
+
+                    <ToolbarSeparator/>
+
                     {/* Heading / paragraph selector */}
                     <DropdownMenu>
                         <DropdownMenuTrigger asChild>
-                            <Button variant="ghost" 
+                            <Button variant="ghost" size="sm" className="h-8 px-2 gap-1"
                                     onMouseDown={(e) => e.preventDefault()}>
-                                {activeHeadingLabel}
-                                <ChevronDown className="h-3 w-3" />
+                                <span className="text-xs whitespace-nowrap">{activeHeadingLabel}</span>
+                                <ChevronDown className="h-3 w-3"/>
                             </Button>
                         </DropdownMenuTrigger>
                         <DropdownMenuContent>
@@ -342,6 +377,10 @@ export const EditorToolbar = ({editor, path, canWrite, onAccessDialogOpen, onDel
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => editor.chain().focus().toggleHeading({level: 3}).run()}>
                                 <Heading3 className="mr-2 h-4 w-4" /> <span className="text-base font-semibold">Heading 3</span>
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => editor.chain().focus().toggleHeading({level: 4}).run()}>
+                                <Heading4 className="mr-2 h-4 w-4"/> <span
+                                className="text-sm font-semibold">Heading 4</span>
                             </DropdownMenuItem>
                         </DropdownMenuContent>
                     </DropdownMenu>

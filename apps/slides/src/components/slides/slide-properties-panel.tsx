@@ -21,6 +21,7 @@ import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '@wo
 import {Toggle} from '@workspace/ui/components/toggle';
 import {Popover, PopoverContent, PopoverTrigger} from '@workspace/ui/components/popover';
 import {ColorPicker} from '@workspace/ui/components/layout/media/color-picker';
+import {FontPicker} from '@workspace/ui/components/layout/media/font-picker';
 import type {ImageObject, SlideObject, TextObject} from './types';
 import {BORDER_RADIUS_ROUND} from './types';
 import {useMediaResolver} from '@workspace/lib/drive';
@@ -137,6 +138,7 @@ function TextProperties({objects, onUpdate}: {
     const [highlightOpen, setHighlightOpen] = useState(false);
     const [bgOpen, setBgOpen] = useState(false);
 
+    const fontFamily = getMergedValue(objects, o => o.fontFamily);
     const fontSize = getMergedValue(objects, o => o.fontSize);
     const fontWeight = getMergedValue(objects, o => o.fontWeight);
     const fontStyle = getMergedValue(objects, o => o.fontStyle);
@@ -152,6 +154,13 @@ function TextProperties({objects, onUpdate}: {
     return (
         <>
             <PropertySection title="Text">
+                <PropertyRow label="Font">
+                    <FontPicker
+                        value={isMixed(fontFamily) ? 'Inter' : (fontFamily || 'Inter')}
+                        onChange={(f) => onUpdate({fontFamily: f})}
+                        className="h-7 w-full text-xs"
+                    />
+                </PropertyRow>
                 <PropertyRow label="Size">
                     <MergedNumberInput value={fontSize} onChange={v => onUpdate({fontSize: v})} min={12} max={200}
                                        step={1}/>

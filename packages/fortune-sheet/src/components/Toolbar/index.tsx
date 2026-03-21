@@ -229,7 +229,7 @@ export function Toolbar({
                                     });
                                 }}
                             >
-                                {o}
+                                <span style={{fontFamily: `'${o}', sans-serif`}}>{o}</span>
                             </DropdownMenuItem>
                         ))}
                     </ToolbarDropdown>

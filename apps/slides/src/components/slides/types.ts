@@ -14,6 +14,7 @@ type BaseObject = {
 export type TextObject = BaseObject & {
     type: 'text';
     text: string;
+    fontFamily: string;
     fontSize: number;
     fontWeight: 'normal' | 'bold';
     fontStyle: 'normal' | 'italic';
@@ -76,6 +77,7 @@ export const DEFAULT_TEXT_OBJECT: Omit<TextObject, 'id' | 'slideId'> = {
     h: 162,
     rotation: 0,
     text: 'New text',
+    fontFamily: 'Inter',
     fontSize: 48,
     fontWeight: 'normal',
     fontStyle: 'normal',

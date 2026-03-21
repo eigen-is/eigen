@@ -1,242 +1,401 @@
-/* Shared prose + code styles for rendered HTML content (previews, docs editor, etc.) */
-/* Scoped to .eigen-prose — add this class to the container element */
+/* Shared prose + code styles for rendered HTML content and TipTap editors */
+/* Used via .eigen-prose class (previews, rendered content) and .tiptap class (editors) */
 
+/* Base font — eigen-prose containers only (editors inherit from app) */
 .eigen-prose {
-    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-family: var(--font-sans);
     font-size: 15px;
     line-height: 1.7;
     color: #1a1a2e;
 }
 
-/* Headings */
-.eigen-prose h1,
-.eigen-prose h2,
-.eigen-prose h3,
-.eigen-prose h4,
-.eigen-prose h5,
-.eigen-prose h6 {
-    margin-top: 1.5em;
-    margin-bottom: 0.5em;
-    font-weight: 500;
-    line-height: 1.3;
+/* ===== Shared rules: headings, code, formatting, tables, images ===== */
+.eigen-prose, .tiptap {
+    /* Headings */
+
+    h1, h2, h3, h4, h5, h6 {
+        margin-top: 1.5em;
+        margin-bottom: 0.5em;
+        font-weight: 600;
+    }
+
+    h1 {
+        font-size: 1.75rem;
+        line-height: 1.2;
+        letter-spacing: -0.02em;
+    }
+
+    h2 {
+        font-size: 1.375rem;
+        line-height: 1.25;
+        letter-spacing: -0.015em;
+    }
+
+    h3 {
+        font-size: 1.125rem;
+        line-height: 1.3;
+        letter-spacing: -0.01em;
+    }
+
+    h4 {
+        font-size: 1rem;
+        line-height: 1.4;
+    }
+
+    h1:first-child, h2:first-child, h3:first-child, h4:first-child {
+        margin-top: 0;
+    }
+
+    /* Inline text */
+
+    strong {
+        font-weight: 700;
+    }
+
+    em {
+        font-style: italic;
+    }
+
+    s {
+        text-decoration: line-through;
+    }
+
+    u {
+        text-decoration: underline;
+    }
+
+    sup {
+        vertical-align: super;
+        font-size: 0.75em;
+    }
+
+    sub {
+        vertical-align: sub;
+        font-size: 0.75em;
+    }
+
+    /* Lists */
+
+    ul {
+        list-style-type: disc;
+        padding-left: 1.5em;
+    }
+
+    ol {
+        list-style-type: decimal;
+        padding-left: 1.5em;
+    }
+
+    li {
+        line-height: 1.7;
+    }
+
+    li > p {
+        margin: 0;
+    }
+
+    ul ul, ol ol, ul ol, ol ul {
+        margin: 0.2em 0;
+    }
+
+    /* Blockquote */
+
+    blockquote {
+        border-left: 3px solid #d1d5db;
+        padding-left: 1em;
+        color: #6b7280;
+        font-style: italic;
+    }
+
+    blockquote p {
+        margin: 0;
+    }
+
+    /* Horizontal rule */
+
+    hr {
+        border: none;
+        border-top: 1px solid #e0e0e6;
+        margin: 1.5em 0;
+    }
+
+    /* Images */
+
+    img {
+        max-width: 100%;
+        height: auto;
+        display: block;
+        margin: 0.75em 0;
+    }
+
+    /* Tables */
+
+    table {
+        border-collapse: collapse;
+        width: 100%;
+        margin: 0.75em 0;
+    }
+
+    th, td {
+        border: 1px solid #d1d5db;
+        padding: 0.4em 0.8em;
+        text-align: left;
+        vertical-align: top;
+    }
+
+    th {
+        background-color: #f9fafb;
+        font-weight: 600;
+    }
+
+    table td > p, table th > p {
+        margin: 0;
+    }
+
+    /* Highlight / Mark */
+
+    mark {
+        border-radius: 0.15em;
+        padding: 0.1em 0.15em;
+        box-decoration-break: clone;
+        -webkit-box-decoration-break: clone;
+    }
+
+    /* Inline code */
+
+    code {
+        font-family: var(--font-mono);
+        font-size: 0.9em;
+        background-color: #f3f4f6;
+        color: #dc2626;
+        padding: 0.15em 0.35em;
+        border-radius: 3px;
+    }
+
+    /* Code blocks — always dark (Catppuccin) */
+
+    pre {
+        background-color: #1e1e2e;
+        border-radius: 0.5em;
+        padding: 1em 1.25em;
+        overflow-x: auto;
+        margin: 0.75em 0;
+        line-height: 1.6;
+    }
+
+    pre code {
+        background: none;
+        color: #cdd6f4;
+        padding: 0;
+        border-radius: 0;
+        font-size: 0.85em;
+    }
+
+    /* Syntax highlighting (Catppuccin) */
+
+    pre .hljs-keyword, pre .hljs-selector-tag, pre .hljs-tag {
+        color: #cba6f7;
+    }
+
+    pre .hljs-addition, pre .hljs-string, pre .hljs-doctag,
+    pre .hljs-regexp, pre .hljs-selector-class, pre .hljs-attribute {
+        color: #a6e3a1;
+    }
+
+    pre .hljs-number, pre .hljs-literal, pre .hljs-selector-id {
+        color: #fab387;
+    }
+
+    pre .hljs-comment, pre .hljs-quote {
+        color: #6c7086;
+        font-style: italic;
+    }
+
+    pre .hljs-title, pre .hljs-function, pre .hljs-name, pre .hljs-section {
+        color: #89b4fa;
+    }
+
+    pre .hljs-type {
+        color: #f9e2af;
+    }
+
+    pre .hljs-built_in {
+        color: #f2cdcd;
+    }
+
+    pre .hljs-variable, pre .hljs-template-variable, pre .hljs-deletion {
+        color: #f38ba8;
+    }
+
+    pre .hljs-attr, pre .hljs-symbol, pre .hljs-bullet {
+        color: #89dceb;
+    }
+
+    pre .hljs-params {
+        color: #cdd6f4;
+    }
+
+    pre .hljs-meta {
+        color: #f5c2e7;
+    }
 }
 
-.eigen-prose h1 { font-size: 1.75em; }
-.eigen-prose h2 { font-size: 1.4em; }
-.eigen-prose h3 { font-size: 1.15em; }
+/* ===== TipTap editor-specific overrides ===== */
+/* Shared between all apps that use TipTap (docs, drive) */
+.tiptap {
+    outline: none;
+    min-height: 100%;
 
-.eigen-prose h1:first-child,
-.eigen-prose h2:first-child,
-.eigen-prose h3:first-child {
-    margin-top: 0;
+    /* Tighter paragraph spacing for editors (vs wider prose spacing) */
+
+    p {
+        line-height: 1.7;
+        margin: 0;
+    }
+
+    p + p {
+        margin-top: 0.5em;
+    }
+
+    /* Links — editors use underline + cursor by default */
+
+    a {
+        color: var(--color-primary);
+        text-decoration: underline;
+        cursor: pointer;
+    }
+
+    a:hover {
+        opacity: 0.8;
+    }
+
+    /* Task Lists */
+
+    ul[data-type="taskList"] {
+        list-style: none;
+        padding-left: 0;
+    }
+
+    ul[data-type="taskList"] li {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.5em;
+        margin: 0.3em 0;
+    }
+
+    ul[data-type="taskList"] li > label {
+        display: flex;
+        align-items: center;
+        flex-shrink: 0;
+        margin-top: 0.3em;
+        user-select: none;
+    }
+
+    ul[data-type="taskList"] li > label input[type="checkbox"] {
+        width: 1em;
+        height: 1em;
+        accent-color: var(--color-primary);
+        cursor: pointer;
+    }
+
+    ul[data-type="taskList"] li > div {
+        flex: 1;
+        min-width: 0;
+    }
+
+    ul[data-type="taskList"] li[data-checked="true"] > div {
+        text-decoration: line-through;
+        color: var(--color-muted-foreground);
+    }
+
+    ul[data-type="taskList"] ul[data-type="taskList"] {
+        padding-left: 1.5em;
+    }
+
+    /* Table editor */
+
+    table .selectedCell {
+        background-color: var(--color-selected);
+    }
+
+    .tableWrapper {
+        overflow-x: auto;
+        margin: 0.75em 0;
+    }
+
+    /* Selection */
+
+    ::selection {
+        background-color: var(--color-selected);
+    }
 }
 
-/* Paragraphs */
-.eigen-prose p {
-    line-height: 1.7;
-    margin-bottom: 1em;
+/* ===== Prose-specific spacing (wider margins for reading) ===== */
+.eigen-prose {
+    p {
+        line-height: 1.7;
+        margin-bottom: 1em;
+    }
+
+    & > * + * {
+        margin-top: 0.75em;
+    }
+
+    a {
+        color: #2563eb;
+        text-decoration: none;
+    }
+
+    a:hover {
+        text-decoration: underline;
+    }
+
+    ul, ol {
+        margin-bottom: 1em;
+    }
+
+    li {
+        margin-bottom: 0.25em;
+    }
+
+    blockquote {
+        margin-bottom: 1em;
+    }
+
+    small {
+        font-size: 0.75rem;
+        letter-spacing: 0.01em;
+    }
 }
 
-.eigen-prose > * + * {
-    margin-top: 0.75em;
-}
-
-/* Links */
-.eigen-prose a {
-    color: #2563eb;
-    text-decoration: none;
-}
-
-.eigen-prose a:hover {
-    text-decoration: underline;
-}
-
-/* Inline text */
-.eigen-prose strong { font-weight: 700; }
-.eigen-prose em { font-style: italic; }
-.eigen-prose s { text-decoration: line-through; }
-.eigen-prose u { text-decoration: underline; }
-.eigen-prose sup { vertical-align: super; font-size: 0.75em; }
-.eigen-prose sub { vertical-align: sub; font-size: 0.75em; }
-
-/* Lists */
-.eigen-prose ul {
-    list-style-type: disc;
-    padding-left: 1.5em;
-    margin-bottom: 1em;
-}
-
-.eigen-prose ol {
-    list-style-type: decimal;
-    padding-left: 1.5em;
-    margin-bottom: 1em;
-}
-
-.eigen-prose li {
-    margin-bottom: 0.25em;
-    line-height: 1.7;
-}
-
-.eigen-prose li > p {
-    margin: 0;
-}
-
-.eigen-prose ul ul,
-.eigen-prose ol ol,
-.eigen-prose ul ol,
-.eigen-prose ol ul {
-    margin: 0.2em 0;
-}
-
-/* Blockquote */
-.eigen-prose blockquote {
-    border-left: 3px solid #d1d5db;
-    padding-left: 1em;
-    margin-bottom: 1em;
-    color: #6b7280;
-    font-style: italic;
-}
-
-.eigen-prose blockquote p {
-    margin: 0;
-}
-
-/* Horizontal rule */
-.eigen-prose hr {
-    border: none;
-    border-top: 1px solid #e0e0e6;
-    margin: 1.5em 0;
-}
-
-/* Images */
-.eigen-prose img {
-    max-width: 100%;
-    height: auto;
-    border-radius: 4px;
-    display: block;
-    margin: 0.75em 0;
-}
-
-/* Tables */
-.eigen-prose table {
-    border-collapse: collapse;
-    width: 100%;
-    margin-bottom: 1em;
-}
-
-.eigen-prose th,
-.eigen-prose td {
-    border: 1px solid #d1d5db;
-    padding: 0.4em 0.8em;
-    text-align: left;
-    vertical-align: top;
-}
-
-.eigen-prose th {
-    background-color: #f9fafb;
-    font-weight: 600;
-}
-
-.eigen-prose table td > p,
-.eigen-prose table th > p {
-    margin: 0;
-}
-
-/* Highlight / Mark */
-.eigen-prose mark {
-    border-radius: 0.15em;
-    padding: 0.1em 0.15em;
-    box-decoration-break: clone;
-    -webkit-box-decoration-break: clone;
-}
-
-/* Inline code */
-.eigen-prose code {
-    font-family: 'SF Mono', 'Fira Code', 'Cascadia Code', Consolas, monospace;
-    font-size: 0.9em;
-    background-color: #f3f4f6;
-    color: #dc2626;
-    padding: 0.15em 0.35em;
-    border-radius: 3px;
-}
-
-/* Code blocks — always dark (Catppuccin) */
-.eigen-prose pre {
-    background-color: #1e1e2e;
-    border-radius: 0.5em;
-    padding: 1em 1.25em;
-    overflow-x: auto;
-    margin-bottom: 1em;
-    line-height: 1.6;
-}
-
-.eigen-prose pre code {
-    background: none;
-    color: #cdd6f4;
-    padding: 0;
-    border-radius: 0;
-    font-size: 0.85em;
-}
-
-/* Syntax highlighting (Catppuccin) */
-.eigen-prose pre .hljs-keyword { color: #cba6f7; }
-.eigen-prose pre .hljs-selector-tag { color: #cba6f7; }
-.eigen-prose pre .hljs-tag { color: #cba6f7; }
-.eigen-prose pre .hljs-addition { color: #a6e3a1; }
-.eigen-prose pre .hljs-string { color: #a6e3a1; }
-.eigen-prose pre .hljs-doctag { color: #a6e3a1; }
-.eigen-prose pre .hljs-regexp { color: #a6e3a1; }
-.eigen-prose pre .hljs-selector-class { color: #a6e3a1; }
-.eigen-prose pre .hljs-attribute { color: #a6e3a1; }
-.eigen-prose pre .hljs-number { color: #fab387; }
-.eigen-prose pre .hljs-literal { color: #fab387; }
-.eigen-prose pre .hljs-selector-id { color: #fab387; }
-.eigen-prose pre .hljs-comment { color: #6c7086; font-style: italic; }
-.eigen-prose pre .hljs-quote { color: #6c7086; font-style: italic; }
-.eigen-prose pre .hljs-title { color: #89b4fa; }
-.eigen-prose pre .hljs-function { color: #89b4fa; }
-.eigen-prose pre .hljs-name { color: #89b4fa; }
-.eigen-prose pre .hljs-section { color: #89b4fa; }
-.eigen-prose pre .hljs-type { color: #f9e2af; }
-.eigen-prose pre .hljs-built_in { color: #f2cdcd; }
-.eigen-prose pre .hljs-variable { color: #f38ba8; }
-.eigen-prose pre .hljs-template-variable { color: #f38ba8; }
-.eigen-prose pre .hljs-deletion { color: #f38ba8; }
-.eigen-prose pre .hljs-attr { color: #89dceb; }
-.eigen-prose pre .hljs-params { color: #cdd6f4; }
-.eigen-prose pre .hljs-meta { color: #f5c2e7; }
-.eigen-prose pre .hljs-symbol { color: #89dceb; }
-.eigen-prose pre .hljs-bullet { color: #89dceb; }
-
-/* Dark mode adjustments — follows app theme (.dark class), not OS preference */
-/* For shadow DOM usage: won't apply (which is correct — preview has its own white container) */
+/* ===== Dark mode — follows app theme (.dark class), not OS preference ===== */
+/* For shadow DOM usage: won't apply (correct — preview has its own white container) */
 .dark .eigen-prose {
     color: #e4e4e7;
-}
 
-.dark .eigen-prose a {
-    color: #60a5fa;
-}
+    a {
+        color: #60a5fa;
+    }
 
-.dark .eigen-prose blockquote {
-    color: #a1a1aa;
-    border-color: #3f3f46;
-}
+    blockquote {
+        color: #a1a1aa;
+        border-color: #3f3f46;
+    }
 
-.dark .eigen-prose hr {
-    border-color: #3f3f46;
-}
+    hr {
+        border-color: #3f3f46;
+    }
 
-.dark .eigen-prose code {
-    background-color: #27272a;
-    color: #f87171;
-}
+    code {
+        background-color: #27272a;
+        color: #f87171;
+    }
 
-.dark .eigen-prose th,
-.dark .eigen-prose td {
-    border-color: #3f3f46;
-}
+    th, td {
+        border-color: #3f3f46;
+    }
 
-.dark .eigen-prose th {
-    background-color: #27272a;
+    th {
+        background-color: #27272a;
+    }
 }

@@ -18,6 +18,7 @@ import TableCell from "@tiptap/extension-table-cell";
 import TableHeader from "@tiptap/extension-table-header";
 import TextStyle from "@tiptap/extension-text-style";
 import Color from "@tiptap/extension-color";
+import FontFamily from "@tiptap/extension-font-family";
 import CharacterCount from "@tiptap/extension-character-count";
 import CodeBlockLowlight from "@tiptap/extension-code-block-lowlight";
 import {common, createLowlight} from "lowlight";
@@ -145,6 +146,7 @@ const TiptapEditor = ({
             Typography,
             TextStyle,
             Color,
+            FontFamily,
             CharacterCount,
             TextAlign.configure({
                 types: ['heading', 'paragraph'],
@@ -213,8 +215,24 @@ const TiptapEditor = ({
                 const maxWidth = getEditorMaxWidth();
                 const doc = new DOMParser().parseFromString(html, 'text/html');
 
+                const fontMap: Record<string, string> = {
+                    'Times New Roman': "'Source Serif 4', serif",
+                    'Georgia': "'Source Serif 4', serif",
+                    'Palatino': "'Source Serif 4', serif",
+                    'Palatino Linotype': "'Source Serif 4', serif",
+                    'Courier New': "'JetBrains Mono', monospace",
+                    'Consolas': "'JetBrains Mono', monospace",
+                    'Comic Sans MS': "'Excalifont', cursive",
+                };
                 doc.querySelectorAll('[style]').forEach((el) => {
-                    (el as HTMLElement).style.fontFamily = '';
+                    const htmlEl = el as HTMLElement;
+                    const ff = htmlEl.style.fontFamily.replace(/['"]/g, '').trim();
+                    const mapped = fontMap[ff];
+                    if (mapped) {
+                        htmlEl.style.fontFamily = mapped;
+                    } else {
+                        htmlEl.style.fontFamily = '';
+                    }
                 });
 
                 doc.querySelectorAll('img, table').forEach((el) => {

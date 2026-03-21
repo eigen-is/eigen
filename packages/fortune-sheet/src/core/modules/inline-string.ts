@@ -65,14 +65,13 @@ export function convertCssToStyleList(cssText: string, originCell: Cell) {
     const cssTextArray = cssText.split(";");
 
     const styleList: CellStyle = {
-        // ff: locale_fontarray[0], // font family
-        fc: originCell.fc || "#000000", // font color
-        fs: originCell.fs || 10, // font size
-        cl: originCell.cl || 0, // strike
-        un: originCell.un || 0, // underline
-        bl: originCell.bl || 0, // blod
-        it: originCell.it || 0, // italic
-        ff: originCell.ff || 0, // font family
+        fc: originCell.fc || "#000000",
+        fs: originCell.fs || 10,
+        cl: originCell.cl || 0,
+        un: originCell.un || 0,
+        bl: originCell.bl || 0,
+        it: originCell.it || 0,
+        ff: originCell.ff || 0,
     };
     cssTextArray.forEach((s) => {
         s = s.toLowerCase();
@@ -90,14 +89,9 @@ export function convertCssToStyleList(cssText: string, originCell: Cell) {
             }
         }
 
-        // if (key === "font-family") {
-        //   const ff = locale_fontjson[value];
-        //   if (ff === null) {
-        //     styleList.ff = value;
-        //   } else {
-        //     styleList.ff = ff;
-        //   }
-        // }
+        if (key === "font-family") {
+            styleList.ff = value;
+        }
 
         if (key === "font-size") {
             styleList.fs = parseInt(value, 10);

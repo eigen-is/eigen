@@ -71,7 +71,22 @@
       "Bash(cp /tmp/favicon.svg \"/Users/reinder/Documents/GitHub/eigen/apps/people/public/favicon.svg\")",
       "mcp__plugin_context7_context7__resolve-library-id",
       "mcp__plugin_context7_context7__query-docs",
-      "Bash(do sed:*)"
+      "Bash(do sed:*)",
+      "Bash(python3 -c \"import sys,json; r=json.load\\(sys.stdin\\); print\\(r[''''tag_name'''']\\); [print\\(a[''''name''''], a[''''browser_download_url'''']\\) for a in r[''''assets'''']]\")",
+      "Bash(unzip -l /tmp/Inter-4.1.zip)",
+      "Bash(unzip -l /tmp/source-serif-woff2.zip)",
+      "Bash(unzip -jo /tmp/Inter-4.1.zip \"web/InterVariable.woff2\" \"web/InterVariable-Italic.woff2\" -d /tmp/inter-fonts/)",
+      "Bash(mv /tmp/inter-fonts/InterVariable.woff2 /Users/reinder/Documents/GitHub/eigen/packages/ui/src/assets/fonts/inter/Inter-Variable.woff2)",
+      "Bash(mv /tmp/inter-fonts/InterVariable-Italic.woff2 /Users/reinder/Documents/GitHub/eigen/packages/ui/src/assets/fonts/inter/Inter-Variable-Italic.woff2)",
+      "Bash(rm -rf /tmp/inter-fonts /tmp/Inter-4.1.zip)",
+      "Bash(unzip -l /tmp/jetbrains-mono.zip)",
+      "Bash(python3 -c \"import fontTools; print\\(fontTools.__version__\\)\")",
+      "Bash(pip3 install:*)",
+      "Bash(unzip:*)",
+      "Bash(python3:*)",
+      "Bash(cp /tmp/source-serif-extract/source-serif-4.005_WOFF2/VAR/SourceSerif4Variable-Roman.ttf.woff2 /Users/reinder/Documents/GitHub/eigen/packages/ui/src/assets/fonts/source-serif/SourceSerif4-Variable.woff2)",
+      "Bash(cp /tmp/source-serif-extract/source-serif-4.005_WOFF2/VAR/SourceSerif4Variable-Italic.ttf.woff2 /Users/reinder/Documents/GitHub/eigen/packages/ui/src/assets/fonts/source-serif/SourceSerif4-Variable-Italic.woff2)",
+      "Bash(xxd /Users/reinder/Documents/GitHub/eigen/packages/ui/src/assets/fonts/excalifont/Excalifont-Regular.woff2)"
     ]
   },
   "bypassPermissions": "bypassPermissions"
