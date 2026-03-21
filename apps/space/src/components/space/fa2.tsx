@@ -26,27 +26,34 @@ const verificationFormSchema = z.object({
     verificationCode: z.string().min(6, "Verification code must be 6 digits").max(6, "Verification code must be 6 digits"),
 });
 
+type SetupStep = "password" | "qrcode" | "verification" | "recoverycodes";
+
 type TwoFactorSetupProps = {
     onInitialize2FA: (password: string) => Promise<void>;
-    onVerifyTotp: (code: string) => Promise<void>;
+    onVerifyTotp: (code: string) => Promise<boolean>;
+    onComplete: () => void;
     onBack: () => void;
     totpUri: string | null;
     secretKey: string;
-    currentStep: "password" | "qrcode" | "verification";
-    setCurrentStep: (step: "password" | "qrcode" | "verification") => void;
+    backupCodes: string[];
+    currentStep: SetupStep;
+    setCurrentStep: (step: SetupStep) => void;
 }
 
 export function TwoFactorSetup({
                                    onInitialize2FA,
                                    onVerifyTotp,
+                                   onComplete,
                                    onBack,
                                    totpUri,
                                    secretKey,
+                                   backupCodes,
                                    currentStep,
                                    setCurrentStep
                                }: TwoFactorSetupProps) {
     const [isLoading, setIsLoading] = React.useState<boolean>(false)
     const [isCopied, setIsCopied] = React.useState<boolean>(false)
+    const [codesCopied, setCodesCopied] = React.useState<boolean>(false)
 
     const passwordForm = useForm<z.infer<typeof passwordFormSchema>>({
         resolver: zodResolver(passwordFormSchema),
@@ -70,8 +77,11 @@ export function TwoFactorSetup({
         }
     };
 
-    const proceedToVerification = () => {
-        setCurrentStep("verification");
+    const copyBackupCodes = () => {
+        const text = backupCodes.join('\n');
+        navigator.clipboard.writeText(text);
+        setCodesCopied(true);
+        setTimeout(() => setCodesCopied(false), 2000);
     };
 
     async function onPasswordSubmit(values: z.infer<typeof passwordFormSchema>) {
@@ -88,7 +98,10 @@ export function TwoFactorSetup({
     async function onVerificationSubmit(values: z.infer<typeof verificationFormSchema>) {
         try {
             setIsLoading(true);
-            await onVerifyTotp(values.verificationCode);
+            const success = await onVerifyTotp(values.verificationCode);
+            if (success) {
+                setCurrentStep("recoverycodes");
+            }
         } catch (error) {
             console.error("Error verifying two-factor authentication:", error);
         } finally {
@@ -211,7 +224,7 @@ export function TwoFactorSetup({
                         >
                             Back
                         </Button>
-                        <Button onClick={proceedToVerification}>
+                        <Button onClick={() => setCurrentStep("verification")}>
                             Continue
                         </Button>
                     </div>
@@ -257,16 +270,6 @@ export function TwoFactorSetup({
                             )}
                         />
 
-                        <div className="flex items-start gap-2 text-sm text-muted-foreground">
-                            <InfoIcon className="h-4 w-4 mt-0.5 flex-shrink-0"/>
-                            <p>
-                                After enabling two-factor authentication, you'll need both your password and a
-                                verification code to sign in.
-                                Make sure to save your recovery codes in a safe place in case you lose access to your
-                                authentication app.
-                            </p>
-                        </div>
-
                         <div className="flex justify-between gap-3">
                             <Button
                                 type="button"
@@ -281,6 +284,55 @@ export function TwoFactorSetup({
                         </div>
                     </form>
                 </Form>
+            )}
+
+            {currentStep === "recoverycodes" && (
+                <div className="space-y-6">
+                    <div className="bg-accent border text-accent-foreground rounded-md p-4">
+                        <div className="flex">
+                            <InfoIcon className="h-5 w-5 text-primary mr-2"/>
+                            <div>
+                                <h3 className="font-medium">Save your recovery codes</h3>
+                                <p className="text-sm">
+                                    Save these codes in a safe place. If you lose access to your authenticator app,
+                                    you can use one of these codes to sign in. Each code can only be used once.
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <Card>
+                        <CardContent className="p-4">
+                            <div className="grid grid-cols-2 gap-2 font-mono text-sm">
+                                {backupCodes.map((code, i) => (
+                                    <div key={i} className="px-3 py-2 bg-muted rounded-md text-center">
+                                        {code}
+                                    </div>
+                                ))}
+                            </div>
+                        </CardContent>
+                    </Card>
+
+                    <Button
+                        variant="outline"
+                        className="w-full"
+                        onClick={copyBackupCodes}
+                    >
+                        {codesCopied ? (
+                            <><Check className="h-4 w-4 mr-2"/>Copied!</>
+                        ) : (
+                            <><ClipboardCopy className="h-4 w-4 mr-2"/>Copy all codes</>
+                        )}
+                    </Button>
+
+                    <p className="text-sm text-muted-foreground text-center">
+                        Store these codes somewhere safe, like a password manager. You won't be able to see them again.
+                    </p>
+
+                    <Button className="w-full" onClick={onComplete}>
+                        I've saved my recovery codes
+                    </Button>
+                </div>
             )}
         </div>
     );
