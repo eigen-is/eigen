@@ -16,16 +16,18 @@ export const sseRouter = new Elysia({name: "sse"})
         let listener: ((event: SSEvent) => void) | null = null;
         let isClosed = false;
 
+        function enqueue(controller: ReadableStreamDefaultController, data: SSEvent | { event: string }) {
+            if (isClosed || controller.desiredSize === null) return;
+            try {
+                controller.enqueue(data);
+            } catch {
+                isClosed = true;
+            }
+        }
+
         const stream = new ReadableStream({
             start(controller) {
-                listener = (event: SSEvent) => {
-                    if (isClosed) return;
-                    try {
-                        controller.enqueue(event);
-                    } catch {
-                        isClosed = true;
-                    }
-                };
+                listener = (event: SSEvent) => enqueue(controller, event);
 
                 home.subscribeSSE(listener);
 
@@ -35,11 +37,7 @@ export const sseRouter = new Elysia({name: "sse"})
                         home.touch();
                     } catch { /* Home may have been destructed */
                     }
-                    try {
-                        controller.enqueue({event: 'keepalive'});
-                    } catch {
-                        isClosed = true;
-                    }
+                    enqueue(controller, {event: 'keepalive'});
                 }, 30000);
             },
             cancel() {
