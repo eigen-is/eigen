@@ -662,6 +662,10 @@ export default class Drive {
     }
 
     async destruct(): Promise<void> {
+        // Order matters: Yjs documents must be destructed before their underlying mount
+        // databases are closed. Yjs may flush pending changes during destruct(), which
+        // requires the database to still be open. This mirrors closeCollabDocument() which
+        // calls doc.destruct() then mount.closeDatabase().
         for (const [key, getter] of this.documents) {
             try {
                 const doc = await getter();
@@ -671,6 +675,16 @@ export default class Drive {
             }
         }
         this.documents.clear();
+
+        // Close remaining mount databases (chat rooms, plus any collab databases whose
+        // Yjs documents were already destructed above). Triggers onClose → cleanupTemp.
+        for (const [, mount] of this.mounts) {
+            try {
+                await mount.closeAllDatabases();
+            } catch (error) {
+                console.error(`Failed to close mount databases:`, error);
+            }
+        }
     }
 
     private async createCollabDoc(mountId: string, parentId: string, name: string, type: DriveCollabType): Promise<DrivePath> {
