@@ -25,21 +25,17 @@ export function FormatSearch({
     const {button, format, currencyDetail, dateFmtList, numberFmtList} =
         locale(context);
     const {showDialog} = useDialog();
-    const toolbarFormatAll = useMemo(
-        () => ({
-            currency: currencyDetail,
-            date: dateFmtList,
-            number: numberFmtList,
-        }),
-        [currencyDetail, dateFmtList, numberFmtList]
-    );
-
     type ToolbarFormatType = { name: string; pos?: string; value: string };
 
-    const toolbarFormat: ToolbarFormatType[] = useMemo(
-        () => toolbarFormatAll[type],
-        [toolbarFormatAll, type]
-    );
+    const toolbarFormat: ToolbarFormatType[] = useMemo(() => {
+        const list = type === "currency" ? currencyDetail : type === "date" ? dateFmtList : numberFmtList;
+        if (type !== "currency") return list;
+        return [...list].sort((a, b) => {
+            if (a.name === "EUR") return -1;
+            if (b.name === "EUR") return 1;
+            return a.name.localeCompare(b.name);
+        });
+    }, [type, currencyDetail, dateFmtList, numberFmtList]);
 
     const title = type === "currency" ? format.titleCurrency : format.titleNumber;
 
