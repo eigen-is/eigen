@@ -1,8 +1,9 @@
 # Unified Search
 
 > **TLDR**: Single search field across all apps. SQLite FTS5 per-user search index at
-> `data/home/{userId}/eigen.search/search.db`. Indexes mail, docs, chat, stickies, contacts, calendar, drive metadata.
-> Shared data searched via ACL-aware cross-home queries. Future: hybrid FTS5 + vector search.
+> `data/home/{userId}/eigen.search/search.db`. Content table + FTS5 virtual table with auto-sync triggers. Indexes mail,
+> docs, chat, stickies, contacts, calendar, drive metadata. Shared data searched via existing `shared.db` and
+> `shared_calendars` tables. Future: hybrid FTS5 + vector search.
 
 ## Problem Statement
 
@@ -26,25 +27,24 @@
 
 ### Current Data Available in SQLite (no extraction needed)
 
-- **Mail**: `emails.subject`, `emails.fromShort`, `emails.textShort` -- already stored as text columns
-- **Chat**: `messages.content`, `messages.authorEmail` -- plain text in SQLite
+- **Mail**: `emails.subject`, `emails.fromShort`, `emails.textShort`
+- **Chat**: `messages.content`, `messages.authorEmail`
 - **Contacts**: `contacts.firstName`, `contacts.lastName`, `contacts.data` (JSON with email, company, notes)
 - **Calendar**: `events.title`, `events.description`, `events.location`
 - **Drive**: `paths.name` (file/folder names)
 
 ### Requires Yjs Text Extraction
 
-- **Docs/Stickies/Slides/Sheets**: Binary Yjs state in `doc_snapshots.stateData`. Must decode Yjs doc, extract text
-  nodes, index as plain text. Extract on snapshot creation (every 100 updates, see `CollabDocument.DbProvider`).
+- **Docs/Stickies/Slides/Sheets**: Binary Yjs state in `doc_snapshots.stateData`. Decode Yjs doc, walk XML/Map tree,
+  extract plain text. Runs on snapshot creation (every 100 updates, see `CollabDocument.DbProvider`).
 
 ## Approach: SQLite FTS5
 
 ### Why FTS5
 
-- Already using SQLite everywhere -- zero new dependencies
+- Already using SQLite everywhere — zero new dependencies
 - FTS5 is built into Bun's SQLite (compiled with `-DSQLITE_ENABLE_FTS5`)
 - Fast: sub-millisecond queries on moderate data
-- Self-hosted, no external service
 - Supports ranking (`bm25()`), snippet extraction, prefix queries
 - Per-user isolation matches existing data layout
 
@@ -59,29 +59,67 @@ Teams: `data/team/{teamId}/eigen.search/search.db` (Drive + Calendar only, match
 
 ### Schema
 
+Uses the FTS5 **external content table** pattern: a regular `search_entries` table holds all data (domain, metadata,
+etc.), while FTS5 only indexes `title` and `body`. SQLite triggers keep FTS in sync automatically.
+
 ```sql
--- FTS5 virtual table for full-text search
-CREATE VIRTUAL TABLE search_index USING fts5(
-    domain,           -- 'mail' | 'doc' | 'chat' | 'stickies' | 'contacts' | 'calendar' | 'drive'
-    item_id,          -- domain-specific ID (email id, pathId, contact id, event id)
-    title,            -- primary searchable text (subject, name, title)
-    body,             -- secondary searchable text (email body, doc content, message)
-    metadata UNINDEXED, -- JSON: { mountId, mailbox, mimeType, authorEmail, ... }
-    updated_at UNINDEXED,
+CREATE TABLE search_entries (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    domain TEXT NOT NULL,        -- 'mail' | 'doc' | 'chat' | 'stickies' | 'contacts' | 'calendar' | 'drive'
+    item_id TEXT NOT NULL,       -- domain-specific ID (email id, pathId, contact id, event id)
+    mount_id TEXT,               -- NULL for non-drive domains (mail, contacts, calendar)
+    title TEXT NOT NULL,         -- primary searchable text (subject, name, title)
+    body TEXT NOT NULL DEFAULT '',-- secondary searchable text (email body, doc content, message)
+    metadata TEXT,               -- JSON: { mailbox, mimeType, authorEmail, ... }
+    updated_at INTEGER DEFAULT (unixepoch()),
+    UNIQUE(domain, item_id)
+);
+
+CREATE VIRTUAL TABLE search_fts USING fts5(
+    title, body,
+    content='search_entries',
+    content_rowid='id',
     tokenize='unicode61'
 );
 
--- Mapping table for deduplication and deletion
-CREATE TABLE search_entries (
-    domain TEXT NOT NULL,
-    item_id TEXT NOT NULL,
-    mount_id TEXT,        -- NULL for non-drive domains
-    PRIMARY KEY (domain, item_id)
-);
+-- Triggers to keep FTS in sync with content table
+CREATE TRIGGER search_ai AFTER INSERT ON search_entries BEGIN
+    INSERT INTO search_fts(rowid, title, body) VALUES (new.id, new.title, new.body);
+END;
+
+CREATE TRIGGER search_ad AFTER DELETE ON search_entries BEGIN
+    INSERT INTO search_fts(search_fts, rowid, title, body) VALUES('delete', old.id, old.title, old.body);
+END;
+
+CREATE TRIGGER search_au AFTER UPDATE ON search_entries BEGIN
+    INSERT INTO search_fts(search_fts, rowid, title, body) VALUES('delete', old.id, old.title, old.body);
+    INSERT INTO search_fts(rowid, title, body) VALUES (new.id, new.title, new.body);
+END;
 ```
 
-Single FTS5 table with domain column. Filter by domain at query time:
-`WHERE domain MATCH 'mail' AND search_index MATCH ?`.
+This avoids indexing non-searchable columns (domain, item_id, metadata) in FTS5 while keeping domain filtering via
+a simple JOIN on the content table.
+
+### Drizzle Schema
+
+```typescript
+// apps/api/src/lib/search/schema.ts
+import {sql} from 'drizzle-orm';
+import {integer, sqliteTable, text, uniqueIndex} from 'drizzle-orm/sqlite-core';
+
+export const searchEntries = sqliteTable('search_entries', {
+    id: integer('id').primaryKey({autoIncrement: true}),
+    domain: text('domain').notNull(),
+    itemId: text('item_id').notNull(),
+    mountId: text('mount_id'),
+    title: text('title').notNull(),
+    body: text('body').notNull().default(''),
+    metadata: text('metadata'),
+    updatedAt: integer('updated_at').default(sql`(unixepoch())`),
+}, (table) => ({
+    domainItem: uniqueIndex('idx_domain_item').on(table.domain, table.itemId),
+}));
+```
 
 ### DatabaseConfig
 
@@ -94,50 +132,156 @@ export const SEARCH_DB_CONFIG: DatabaseConfig<typeof schema> = {
     migrations: [{
         version: 1,
         up: (db) => db.exec(`
-            CREATE VIRTUAL TABLE IF NOT EXISTS search_index USING fts5(
-                domain, item_id, title, body,
-                metadata UNINDEXED, updated_at UNINDEXED,
+            CREATE TABLE IF NOT EXISTS search_entries (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                domain TEXT NOT NULL,
+                item_id TEXT NOT NULL,
+                mount_id TEXT,
+                title TEXT NOT NULL,
+                body TEXT NOT NULL DEFAULT '',
+                metadata TEXT,
+                updated_at INTEGER DEFAULT (unixepoch()),
+                UNIQUE(domain, item_id)
+            );
+            CREATE VIRTUAL TABLE IF NOT EXISTS search_fts USING fts5(
+                title, body,
+                content='search_entries', content_rowid='id',
                 tokenize='unicode61'
             );
-            CREATE TABLE IF NOT EXISTS search_entries (
-                domain TEXT NOT NULL, item_id TEXT NOT NULL,
-                mount_id TEXT,
-                PRIMARY KEY (domain, item_id)
-            );
+            CREATE TRIGGER IF NOT EXISTS search_ai AFTER INSERT ON search_entries BEGIN
+                INSERT INTO search_fts(rowid, title, body) VALUES (new.id, new.title, new.body);
+            END;
+            CREATE TRIGGER IF NOT EXISTS search_ad AFTER DELETE ON search_entries BEGIN
+                INSERT INTO search_fts(search_fts, rowid, title, body) VALUES('delete', old.id, old.title, old.body);
+            END;
+            CREATE TRIGGER IF NOT EXISTS search_au AFTER UPDATE ON search_entries BEGIN
+                INSERT INTO search_fts(search_fts, rowid, title, body) VALUES('delete', old.id, old.title, old.body);
+                INSERT INTO search_fts(rowid, title, body) VALUES (new.id, new.title, new.body);
+            END;
         `)
     }]
 };
 ```
 
+### SearchIndex Class
+
+Lazy-initialized domain service on `Home`, like `Contacts`, `Calendar`, etc. Accessed via `home.searchIndex`.
+
+```typescript
+// apps/api/src/lib/search/search-index.ts
+export class SearchIndex {
+    private home: Home;
+    private managedDb!: ManagedDatabase<typeof schema>;
+    private db!: BunSQLiteDatabase<typeof schema>;
+
+    constructor(home: Home) {
+        this.home = home;
+    }
+
+    async init() {
+        this.managedDb = await this.home.getLocalDatabase(SEARCH_DB_CONFIG, 'eigen.search/search.db');
+        this.db = this.managedDb.db;
+    }
+
+    upsert(domain: string, itemId: string, title: string, body: string, metadata?: Record<string, unknown>, mountId?: string) {
+        // INSERT OR REPLACE triggers search_ad + search_ai, keeping FTS in sync
+        this.db.insert(schema.searchEntries).values({
+            domain, itemId, mountId: mountId ?? null,
+            title, body, metadata: metadata ? JSON.stringify(metadata) : null,
+        }).onConflictDoUpdate({
+            target: [schema.searchEntries.domain, schema.searchEntries.itemId],
+            set: { title, body, metadata: metadata ? JSON.stringify(metadata) : null, updatedAt: sql`(unixepoch())` },
+        }).run();
+    }
+
+    delete(domain: string, itemId: string) {
+        this.db.delete(schema.searchEntries)
+            .where(and(eq(schema.searchEntries.domain, domain), eq(schema.searchEntries.itemId, itemId)))
+            .run();
+    }
+
+    deleteByMount(mountId: string) {
+        this.db.delete(schema.searchEntries)
+            .where(eq(schema.searchEntries.mountId, mountId))
+            .run();
+    }
+
+    query(q: string, options?: { domain?: string; limit?: number; offset?: number }) {
+        const limit = Math.min(options?.limit ?? 20, 100);
+        const offset = options?.offset ?? 0;
+        const ftsQuery = sanitizeFtsQuery(q);
+
+        const domainFilter = options?.domain
+            ? sql`AND e.domain IN (${sql.raw(options.domain.split(',').map(d => `'${d.trim()}'`).join(','))})`
+            : sql``;
+
+        const results = this.db.all(sql`
+            SELECT e.domain, e.item_id, e.title,
+                   snippet(search_fts, 1, '<mark>', '</mark>', '...', 30) AS snippet,
+                   e.metadata, e.updated_at,
+                   bm25(search_fts) AS rank
+            FROM search_fts f
+            JOIN search_entries e ON e.id = f.rowid
+            WHERE search_fts MATCH ${ftsQuery}
+            ${domainFilter}
+            ORDER BY rank
+            LIMIT ${limit} OFFSET ${offset}
+        `);
+
+        return results;
+    }
+
+    async destruct() {
+        if (this.managedDb) await this.managedDb.close();
+    }
+}
+```
+
 ### Indexing Strategy
 
-Index on write -- each domain hooks into its existing mutation/SSE flow:
+Index on write — each domain hooks into its existing mutation flow. The `SearchIndex` is passed to domain classes
+that call `upsert()` / `delete()` after their own DB writes.
 
-| Domain   | Trigger                                                | What Happens                    |
-|----------|--------------------------------------------------------|---------------------------------|
-| Mail     | `MailDB.addEmail()` / `deleteEmail()`                  | Upsert/delete from search index |
-| Chat     | `ChatRoom.postMessage()` / `editMessage()`             | Upsert message                  |
-| Contacts | `Contacts.createContact()` / `updateContact()`         | Upsert contact fields           |
-| Calendar | `Calendar.createEvent()` / `updateEvent()`             | Upsert event title/desc         |
-| Drive    | `Drive.createPath()` / `renamePath()` / `deletePath()` | Upsert/delete file name         |
-| Docs     | `CollabDocument.DbProvider.createSnapshot()`           | Extract Yjs text, upsert        |
-| Stickies | Same as Docs                                           | Extract Yjs text, upsert        |
+| Domain   | Trigger                                              | What Happens                    |
+|----------|------------------------------------------------------|---------------------------------|
+| Mail     | `MailDB.addEmail()` / `deleteEmail()`                | Upsert/delete from search index |
+| Chat     | `ChatRoom.postMessage()` / `editMessage()`           | Upsert message                  |
+| Contacts | `Contacts.addContact()` / `updateContact()`          | Upsert contact fields           |
+| Calendar | `Calendar.createEvent()` / `updateEvent()`           | Upsert event title/desc         |
+| Drive    | `Drive.createFolder()` / `renamePath()` / `deleteFile()` | Upsert/delete file name    |
+| Docs     | `DbProvider.createSnapshot()`                        | Extract Yjs text, upsert        |
+| Stickies | `DbProvider.createSnapshot()`                        | Extract Yjs text, upsert        |
+| Slides   | `DbProvider.createSnapshot()`                        | Extract Yjs text, upsert        |
+| Sheets   | `DbProvider.createSnapshot()`                        | Extract Yjs text, upsert        |
 
 ### Yjs Text Extraction
 
+Bun has no DOM, so `.toDOM().textContent` cannot be used. Walk the Yjs XML tree directly instead.
+
 ```typescript
+// apps/api/src/lib/search/yjs-extract.ts
 import * as Y from 'yjs';
 
-function extractTextFromYjs(stateData: Uint8Array, docType: string): string {
+function extractXmlText(element: Y.XmlElement | Y.XmlFragment): string {
+    const parts: string[] = [];
+    for (const child of element.toArray()) {
+        if (child instanceof Y.XmlText) {
+            parts.push(child.toJSON());
+        } else if (child instanceof Y.XmlElement || child instanceof Y.XmlFragment) {
+            parts.push(extractXmlText(child));
+        }
+    }
+    return parts.join(' ');
+}
+
+export function extractTextFromYjs(stateData: Uint8Array, docType: string): string {
     const doc = new Y.Doc();
     Y.applyUpdate(doc, stateData);
 
     switch (docType) {
         case 'doc':
-            // Tiptap stores content in Y.XmlFragment('default')
-            return doc.getXmlFragment('default').toDOM().textContent ?? '';
+            return extractXmlText(doc.getXmlFragment('default'));
         case 'stickies':
-            // Cards stored in Y.Map -- iterate and extract text fields
             return extractStickiesText(doc);
         case 'slides':
             return extractSlidesText(doc);
@@ -149,8 +293,8 @@ function extractTextFromYjs(stateData: Uint8Array, docType: string): string {
 }
 ```
 
-Run extraction in `DbProvider.createSnapshot()` -- happens every 100 Yjs updates, so indexing stays reasonably current
-without per-keystroke overhead.
+Extraction runs inside `DbProvider.createSnapshot()` (every 100 Yjs updates). The `SearchIndex` reference is passed
+through `CollabDocument` → `DbProvider` at construction time.
 
 ## Search API
 
@@ -169,11 +313,12 @@ GET /search/:ownerId?q=<query>&domain=<domain>&limit=<n>&offset=<n>
 ### Response
 
 ```typescript
+// packages/lib/src/types/search.ts
 type SearchResult = {
     domain: string;
     itemId: string;
     title: string;
-    snippet: string;    // FTS5 snippet() with highlight markers
+    snippet: string;
     metadata: Record<string, unknown>;
     updatedAt: number;
 };
@@ -181,89 +326,90 @@ type SearchResult = {
 type SearchResponse = {
     results: SearchResult[];
     total: number;
-    grouped: Record<string, SearchResult[]>; // grouped by domain
 };
 ```
 
-### Query Implementation
+### Route
 
-```sql
-SELECT domain, item_id, title,
-       snippet(search_index, 3, '<mark>', '</mark>', '...', 30) AS snippet,
-       metadata, updated_at,
-       bm25(search_index) AS rank
-FROM search_index
-WHERE search_index MATCH ?
-ORDER BY rank
-LIMIT ? OFFSET ?
-```
-
-### Route File
+Follows existing route patterns. Uses `parseOwnerId` + access checks matching `drive` and `calendar` routes.
 
 ```typescript
 // apps/api/src/routes/search.ts
-export const searchRouter = new Elysia({ name: 'search' })
+import {Elysia, t} from 'elysia';
+import {betterAuth} from './auth';
+import {getHome} from '../lib/home';
+import {requireSelf} from '../lib/core/access';
+import {parseOwnerId} from '@workspace/lib/types';
+import {requireTeamAccess} from '../lib/core/access';
+
+export const searchRouter = new Elysia({name: 'search'})
     .use(betterAuth)
-    .get('/search/:ownerId', async ({ params, query, user }) => {
-        requireSelfOrTeamMember(params.ownerId, user);
+    .get('/search/:ownerId', async ({params, query, user}) => {
+        const parsed = parseOwnerId(params.ownerId);
+        if (parsed.type === 'user') requireSelf(params.ownerId, user.id);
+        else if (parsed.type === 'team') await requireTeamAccess(user.id, parsed.id);
+
         const home = await getHome(params.ownerId);
-        return home.search(query.q, {
+        return home.searchIndex.query(query.q, {
             domain: query.domain,
-            limit: query.limit,
-            offset: query.offset,
+            limit: query.limit ? Number(query.limit) : undefined,
+            offset: query.offset ? Number(query.offset) : undefined,
         });
-    }, { auth: true });
+    }, {auth: true});
 ```
 
 ### Searching Shared Data
 
-User searches their own index first. For shared items:
+No cross-home DB access needed. The user's own databases already contain shared item metadata:
 
-1. Query `shared.db` (`shared_paths` table) to get list of `ownerId`s who shared with this user
-2. Query team memberships to get `team_{teamId}` owner IDs
-3. For each remote ownerId, search their `search.db` with domain filter limited to `drive` (shared items are Drive
-   paths)
-4. Merge results by rank, deduplicate
+- **Shared Drive paths**: Query `shared.db` → `shared_paths` table (has `name`, `ownerId`, `mountId`, `mimeType`).
+  Filter by name using SQL `LIKE` or index shared paths into the user's own `search.db` at share-receive time
+  (in `Drive.receiveACLChange()`).
+- **Shared calendars**: Query `calendar.db` → `shared_calendars` table (has `calendarName`, `ownerUserId`). Shared
+  calendar events are fetched on-demand via the existing `resolveCalendarForEvents()` pattern.
 
-Shared calendar events: query `shared_calendars` table for `ownerUserId`s, search their calendar domain.
-
-This is O(number of unique sharers), but sharers are typically few. Cache the list of sharing owners.
+For v1, shared Drive path names are searchable via the user's index (indexed on `receiveACLChange`). Shared document
+*content* search is deferred to a later phase.
 
 ## Frontend
 
 ### Search UI
 
-- **Trigger**: Cmd+K / Ctrl+K hotkey, search icon in Topbar
+- **Trigger**: `Mod+K` hotkey via `@tanstack/react-hotkeys` (see `docs/HOTKEYS.md`)
 - **Component**: `packages/ui/src/components/layout/app/search-dialog.tsx`
-- **Pattern**: Dialog/command palette (similar to VS Code / Spotlight)
+- **Pattern**: Dialog/command palette, rendered inside `EigenApp` provider stack
 - **Debounce**: 200ms on input before API call
-- **Display**: Results grouped by domain, each with icon + title + snippet
-- **Navigation**: Click result -> navigate to item in correct app via app URL helpers (`getMailAppUrl`,
-  `getDriveAppUrl`, etc.)
-- **Hook**: `packages/lib/src/core/search/hooks/use-search.ts` with TanStack Query
+- **Display**: Results grouped by domain, each with app icon + title + snippet with `<mark>` highlights
+- **Navigation**: Click result → cross-app navigation via URL helpers from `packages/lib/src/core/api.ts`
+- **Hook**: `packages/lib/src/core/search/hooks/use-search.ts`
 
 ### Query Keys
 
 ```typescript
+// packages/lib/src/core/search/keys.ts
 export const searchKeys = {
     all: ['search'] as const,
-    query: (q: string, domain?: string) => [...searchKeys.all, q, domain] as const,
+    query: (ownerId: string, q: string, domain?: string) =>
+        [...searchKeys.all, ownerId, q, domain] as const,
 };
 ```
 
 ### Result Navigation
 
-| Domain   | Navigate To                                   |
-|----------|-----------------------------------------------|
-| Mail     | `getMailAppUrl(ownerId, mailbox, messageId)`  |
-| Drive    | `getDriveAppUrl(ownerId, mountId, pathId)`    |
-| Docs     | `getDocsAppUrl(ownerId, mountId, pathId)`     |
-| Stickies | `getStickiesAppUrl(ownerId, mountId, pathId)` |
-| Slides   | `getSlidesAppUrl(ownerId, mountId, pathId)`   |
-| Sheets   | `getSheetsAppUrl(ownerId, mountId, pathId)`   |
-| Chat     | `getChatAppUrl(ownerId, mountId, pathId)`     |
-| Contacts | `getContactsAppUrl(ownerId, contactId)`       |
-| Calendar | `getCalendarAppUrl(ownerId, eventId)`         |
+Each result's `metadata` JSON contains the IDs needed to construct the target URL. The helpers are path-based
+(see `packages/lib/src/core/api.ts`):
+
+| Domain   | URL Construction                                                      |
+|----------|-----------------------------------------------------------------------|
+| Mail     | `getMailAppUrl(`box/${metadata.mailbox}/${itemId}`)`                  |
+| Drive    | `getDriveAppUrl(`fs/${ownerId}/${metadata.mountId}/${itemId}`)`       |
+| Docs     | `getDocUrl(ownerId, metadata.mountId, itemId)`                        |
+| Stickies | `getStickiesBoardUrl(ownerId, metadata.mountId, itemId)`              |
+| Slides   | `getSlideUrl(ownerId, metadata.mountId, itemId)`                      |
+| Sheets   | `getSheetUrl(ownerId, metadata.mountId, itemId)`                      |
+| Chat     | `getChatRoomUrl(ownerId, metadata.mountId, itemId)`                   |
+| Contacts | `getContactsAppUrl(itemId)`                                           |
+| Calendar | `getCalendarAppUrl(itemId)`                                           |
 
 ## Future: Semantic Search
 
@@ -281,7 +427,7 @@ export const searchKeys = {
 | gte-small             | ~60MB  | 384        | Good quality/size tradeoff  |
 | nomic-embed-text-v1.5 | ~260MB | 768        | Best quality, larger        |
 
-Run via `@xenova/transformers` (transformers.js) in Bun -- WASM/ONNX backend, no native dependencies.
+Run via `@xenova/transformers` (transformers.js) in Bun — WASM/ONNX backend, no native dependencies.
 Alternatively, `onnxruntime-node` for faster native inference.
 
 ### Hybrid Search
@@ -297,42 +443,47 @@ similarity.
 
 - Large mailboxes (> 10K messages) where keyword search misses semantic matches
 - Natural language queries ("meeting notes from last week about the budget")
-- Not needed for v1 -- FTS5 keyword search covers 90% of use cases
+- Not needed for v1 — FTS5 keyword search covers 90% of use cases
 
 ## Implementation Plan
 
-| Phase | Scope                                                                                               | Effort |
-|-------|-----------------------------------------------------------------------------------------------------|--------|
-| 1     | `search.db` schema + `SearchIndex` class + indexing hooks for mail, chat, contacts, calendar, drive | M      |
-| 2     | Yjs text extraction for docs, stickies, slides, sheets                                              | S      |
-| 3     | Search API endpoint + frontend Cmd+K dialog                                                         | M      |
-| 4     | Shared data search (cross-home queries via ACL)                                                     | M      |
-| 5     | Full re-index command (backfill existing data)                                                      | S      |
-| 6     | Semantic/vector search (future)                                                                     | L      |
+| Phase | Scope                                                                                                           | Effort |
+|-------|-----------------------------------------------------------------------------------------------------------------|--------|
+| 1     | `search.db` schema + `SearchIndex` class + wire into `Home` (lazy init) + indexing hooks for mail, contacts, calendar, drive | M |
+| 2     | Chat message indexing (requires opening per-room DBs)                                                           | S      |
+| 3     | Yjs text extraction for docs, stickies, slides, sheets (hook into `DbProvider.createSnapshot`)                  | M      |
+| 4     | Search API endpoint (`apps/api/src/routes/search.ts`)                                                           | S      |
+| 5     | Frontend Cmd+K dialog + `useSearch` hook + result navigation                                                    | M      |
+| 6     | Shared data: index shared paths on `receiveACLChange`, search `shared_calendars`                                | S      |
+| 7     | Full re-index command (backfill existing data by walking all domain DBs)                                        | S      |
+| 8     | Semantic/vector search (future)                                                                                 | L      |
 
 ### File Structure
 
 ```
 apps/api/src/lib/search/
   schema.ts           # Drizzle schema (search_entries table)
-  db-config.ts        # SEARCH_DB_CONFIG with FTS5 migration
+  db-config.ts        # SEARCH_DB_CONFIG with FTS5 + triggers migration
   search-index.ts     # SearchIndex class (upsert, delete, query)
-  yjs-extract.ts      # Yjs text extraction helpers
-  sse-events.ts       # SSE events for search index updates (optional)
+  yjs-extract.ts      # Yjs text extraction helpers (server-safe, no DOM)
 
 apps/api/src/routes/search.ts   # Search endpoint
 
-packages/lib/src/types/search.ts           # SearchResult, SearchResponse types
-packages/lib/src/core/search/hooks/        # useSearch hook
+packages/lib/src/types/search.ts              # SearchResult, SearchResponse types
+packages/lib/src/core/search/keys.ts          # Query key factory
+packages/lib/src/core/search/hooks/           # useSearch hook
 packages/ui/src/components/layout/app/search-dialog.tsx  # Cmd+K UI
 ```
 
 ### Key Decisions
 
-- **Per-user index** (not global) -- matches existing data isolation model, avoids ACL filtering at query time for
+- **Per-user index** (not global) — matches existing data isolation model, avoids ACL filtering at query time for
   owned data
-- **Single FTS5 table** (not per-domain) -- simpler schema, single query with optional domain filter
-- **Index on write** (not batch) -- keeps index current, leverages existing mutation flow
-- **Yjs extraction on snapshot** (every ~100 updates) -- acceptable staleness, avoids per-keystroke overhead
-- **FTS5 first, vectors later** -- FTS5 is sufficient for v1, semantic search adds complexity with diminishing returns
+- **Content table + FTS5** (not bare FTS5) — domain, item_id, metadata stay in a regular table; only title/body are
+  full-text indexed. Triggers keep FTS in sync. Enables efficient domain filtering via JOIN
+- **Index on write** (not batch) — keeps index current, leverages existing mutation flow
+- **Yjs extraction on snapshot** (every ~100 updates) — acceptable staleness, avoids per-keystroke overhead
+- **No cross-home search for v1** — shared data searched via user's own `shared.db` and `shared_calendars`, not by
+  opening remote search indexes. Simpler and avoids concurrent DB access issues
+- **FTS5 first, vectors later** — FTS5 is sufficient for v1, semantic search adds complexity with diminishing returns
   for typical self-hosted deployments
