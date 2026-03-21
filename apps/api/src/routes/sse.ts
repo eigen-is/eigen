@@ -32,6 +32,7 @@ export const sseRouter = new Elysia({name: "sse"})
                 keepalive = setInterval(() => {
                     if (isClosed) return;
                     try {
+                        home.touch();
                         controller.enqueue({event: 'keepalive'});
                     } catch {
                         isClosed = true;
