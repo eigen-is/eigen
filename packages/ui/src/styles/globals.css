@@ -220,7 +220,7 @@
         top: -9999px;
         padding: 4px 12px;
         background: var(--color-primary);
-        color: white;
+        color: var(--color-primary-foreground);
         border-radius: 9999px;
         font-size: 13px;
         font-weight: 500;
