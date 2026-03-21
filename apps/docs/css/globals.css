@@ -43,6 +43,12 @@
     color: #dc2626;
 }
 
+/* Code blocks are always dark (Catppuccin) — prevent the inline code override above from affecting them */
+.dark [data-document] .eigen-prose pre code {
+    background: none;
+    color: #cdd6f4;
+}
+
 .dark [data-document] .eigen-prose th,
 .dark [data-document] .eigen-prose td {
     border-color: #e5e7eb;

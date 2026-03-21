@@ -410,27 +410,8 @@ export const useDeck = (ownerId: string, mountId: string, pathId: string) => {
     }, []);
 
     const deleteObject = useCallback((objId: string) => {
-        const doc = docRef.current;
-        if (!doc) return;
-        doc.transact(() => {
-            const objectsMap = doc.getMap('objects');
-            const slidesMap = doc.getMap('slides');
-            const obj = objectsMap.get(objId) as Y.Map<any> | undefined;
-            if (obj) {
-                const slideId = obj.get('slideId') as string;
-                const slideMap = slidesMap.get(slideId) as Y.Map<any> | undefined;
-                if (slideMap) {
-                    const objIdsArr = slideMap.get('objectIds') as Y.Array<any>;
-                    if (objIdsArr) {
-                        const arr = objIdsArr.toArray() as string[];
-                        const idx = arr.indexOf(objId);
-                        if (idx !== -1) objIdsArr.delete(idx, 1);
-                    }
-                }
-            }
-            objectsMap.delete(objId);
-        });
-    }, []);
+        deleteObjects([objId]);
+    }, [deleteObjects]);
 
     return {
         deck,
