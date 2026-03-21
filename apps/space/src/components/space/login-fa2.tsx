@@ -31,7 +31,7 @@ const backupSchema = z.object({
     trustDevice: z.boolean(),
 });
 
-export default function LoginFa2Page() {
+export default function LoginFa2Page({redirect}: { redirect?: string }) {
     const {appName} = useApp();
     const [mode, setMode] = useState<"totp" | "backup">("totp");
     const [isLoading, setIsLoading] = useState(false);
@@ -55,7 +55,7 @@ export default function LoginFa2Page() {
             });
             if (result.data) {
                 toast.success("Verification successful");
-                window.location.reload();
+                window.location.href = redirect || '/';
             } else {
                 toast.error(result.error?.message || "Invalid verification code");
             }
@@ -75,7 +75,7 @@ export default function LoginFa2Page() {
             });
             if (result.data) {
                 toast.success("Verification successful");
-                window.location.reload();
+                window.location.href = redirect || '/';
             } else {
                 toast.error(result.error?.message || "Invalid backup code");
             }
