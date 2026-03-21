@@ -88,8 +88,8 @@ function cmThemeExtensions(isDark: boolean) {
         EditorView.theme({
             '&': {height: '100%'},
             '.cm-scroller': {overflow: 'auto'},
-            '.cm-content': {padding: '16px 0'},
-            '.cm-gutters': {paddingRight: '8px'},
+            '.cm-content': {padding: '16px 0', fontFamily: 'var(--font-mono)'},
+            '.cm-gutters': {paddingRight: '8px', fontFamily: 'var(--font-mono)'},
         }),
         ...(isDark ? [oneDark] : []),
     ];

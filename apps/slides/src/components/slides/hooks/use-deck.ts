@@ -8,7 +8,7 @@ import {getCollabWebSocketUrl} from '@workspace/lib/api';
 
 type ApplyTo = 'this' | 'this-and-following' | 'all';
 
-const OBJECT_FIELDS = ['id', 'slideId', 'type', 'x', 'y', 'w', 'h', 'rotation', 'shadowColor', 'shadowBlur', 'shadowOffsetX', 'shadowOffsetY', 'borderColor', 'borderWidth', 'borderRadius', 'text', 'fontSize', 'fontWeight', 'fontStyle', 'textDecoration', 'textAlign', 'verticalAlign', 'color', 'letterSpacing', 'lineHeight', 'highlightColor', 'backgroundColor', 'mediaName', 'objectFit'] as const;
+const OBJECT_FIELDS = ['id', 'slideId', 'type', 'x', 'y', 'w', 'h', 'rotation', 'borderColor', 'borderWidth', 'borderRadius', 'text', 'fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'textDecoration', 'textAlign', 'verticalAlign', 'color', 'letterSpacing', 'lineHeight', 'highlightColor', 'backgroundColor', 'mediaName', 'objectFit'] as const;
 
 function yMapToObject(yMap: Y.Map<any>): Record<string, any> {
     const obj: Record<string, any> = {};

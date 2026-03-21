@@ -15,6 +15,10 @@ type SheetEditorProps = {
 const TOOLBAR_ITEMS = [
     'undo', 'redo', 'format-painter', 'clear-format',
     '|',
+    'font',
+    '|',
+    'font-size',
+    '|',
     'format',
     '|',
     'bold', 'italic', 'strike-through', 'underline',

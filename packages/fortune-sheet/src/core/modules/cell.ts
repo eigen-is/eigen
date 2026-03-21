@@ -1280,15 +1280,9 @@ export function getFontStyleByCell(
             style.fontStyle = "italic";
         }
 
-        // if (key === "ff") {
-        //   let f = value;
-        //   if (!Number.isNaN(valueNum)) {
-        //     f = locale_fontarray[parseInt(value)];
-        //   } else {
-        //     f = value;
-        //   }
-        //   style += "font-family: " + f + ";";
-        // }
+        if (key === "ff" && typeof value === "string" && value) {
+            style.fontFamily = `'${value}', sans-serif`;
+        }
 
         if (key === "fs" && valueNum !== 10) {
             style.fontSize = `${valueNum}pt`;

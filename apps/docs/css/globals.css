@@ -6,9 +6,9 @@
     color: var(--app-docs-color);
 }
 
-/* ===== TipTap Editor Styles ===== */
-/* Prose, code blocks, and syntax highlighting are in @workspace/ui eigen-prose.css */
-/* Below: editor-specific styles only */
+/* ===== Docs-specific TipTap overrides ===== */
+/* Shared tiptap editor + prose rules are in @workspace/ui eigen-prose.css */
+/* Below: docs-only styles (dark mode canvas, table resize, comments, cursors) */
 
 /* The document canvas is always white (print fidelity). In dark mode, override theme
    variables and prose styles back to their light values so content remains readable. */
@@ -21,7 +21,6 @@
     --ring: oklch(0.704 0.04 256.788);
 }
 
-/* Override eigen-prose dark mode styles inside the document canvas */
 .dark [data-document] .eigen-prose {
     color: #1a1a2e;
 }
@@ -53,78 +52,7 @@
     background-color: #f9fafb;
 }
 
-.tiptap {
-    outline: none;
-    min-height: 100%;
-}
-
-/* Editor-specific paragraph spacing (tighter than prose default) */
-.tiptap p {
-    margin: 0;
-}
-
-.tiptap p + p {
-    margin-top: 0.5em;
-}
-
-/* Links — editor uses underline by default + darker hover */
-.tiptap a {
-    text-decoration: underline;
-    cursor: pointer;
-}
-
-.tiptap a:hover {
-    color: var(--color-primary);
-}
-
-/* Task Lists */
-.tiptap ul[data-type="taskList"] {
-    list-style: none;
-    padding-left: 0;
-}
-
-.tiptap ul[data-type="taskList"] li {
-    display: flex;
-    align-items: flex-start;
-    gap: 0.5em;
-    margin: 0.3em 0;
-}
-
-.tiptap ul[data-type="taskList"] li > label {
-    display: flex;
-    align-items: center;
-    flex-shrink: 0;
-    margin-top: 0.3em;
-    user-select: none;
-}
-
-.tiptap ul[data-type="taskList"] li > label input[type="checkbox"] {
-    width: 1em;
-    height: 1em;
-    accent-color: var(--color-primary);
-    cursor: pointer;
-}
-
-.tiptap ul[data-type="taskList"] li > div {
-    flex: 1;
-    min-width: 0;
-}
-
-.tiptap ul[data-type="taskList"] li[data-checked="true"] > div {
-    text-decoration: line-through;
-    color: var(--color-muted-foreground);
-}
-
-/* Nested task lists */
-.tiptap ul[data-type="taskList"] ul[data-type="taskList"] {
-    padding-left: 1.5em;
-}
-
-/* Table editor features */
-.tiptap table .selectedCell {
-    background-color: var(--color-selected);
-}
-
+/* Table column resize handle (docs-specific: resizable tables) */
 .tiptap table .column-resize-handle {
     position: absolute;
     right: -2px;
@@ -136,11 +64,6 @@
     z-index: 20;
 }
 
-.tiptap .tableWrapper {
-    overflow-x: auto;
-    margin: 0.75em 0;
-}
-
 .tiptap .tableWrapper table {
     table-layout: auto;
 }
@@ -149,7 +72,7 @@
     cursor: col-resize;
 }
 
-/* Comment highlights */
+/* Comment highlights (docs-specific) */
 .tiptap .comment-highlight {
     background-color: oklch(0.94 0.15 95);
     border-bottom: 2px solid oklch(0.75 0.15 85);
@@ -163,7 +86,7 @@
     background-color: oklch(0.90 0.18 90);
 }
 
-/* Collaboration Cursors */
+/* Collaboration Cursors (docs-specific) */
 .collaboration-cursor__caret {
     position: relative;
     border-left: 2px solid;
@@ -193,7 +116,7 @@
     pointer-events: none;
 }
 
-/* Text alignment */
+/* Text alignment (tiptap extension) */
 .tiptap .has-text-align-center {
     text-align: center;
 }
@@ -204,36 +127,4 @@
 
 .tiptap .has-text-align-left {
     text-align: left;
-}
-
-/* Selection when editor is focused */
-.tiptap ::selection {
-    background-color: var(--color-selected);
-}
-
-/* Color picker dropdown */
-.color-picker-grid {
-    display: grid;
-    grid-template-columns: repeat(8, 1fr);
-    gap: 2px;
-    padding: 4px;
-}
-
-.color-picker-grid button {
-    width: 24px;
-    height: 24px;
-    border-radius: 4px;
-    border: 1px solid transparent;
-    cursor: pointer;
-    transition: transform 100ms, border-color 100ms;
-}
-
-.color-picker-grid button:hover {
-    transform: scale(1.15);
-    border-color: var(--color-muted-foreground);
-}
-
-.color-picker-grid button.active {
-    border-color: var(--color-foreground);
-    box-shadow: 0 0 0 1px var(--color-foreground);
 }

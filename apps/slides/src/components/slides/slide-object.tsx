@@ -1,6 +1,7 @@
 import {memo, useEffect, useRef} from 'react';
 import {ArrowDownToLine, ArrowUpToLine, ChevronDown, ChevronUp, Copy, Trash2,} from 'lucide-react';
 import {BORDER_RADIUS_ROUND, pxToPercent, SLIDE_BASE_HEIGHT, SLIDE_BASE_WIDTH, SlideObject} from './types';
+import {getFontFamily} from '@workspace/lib/constants/fonts';
 import {useMediaResolver} from '@workspace/lib/drive';
 import {
     ContextMenu,
@@ -37,6 +38,7 @@ export function getObjectPositionStyle(obj: SlideObject): React.CSSProperties {
 
 export function getTextStyle(obj: SlideObject & { type: 'text' }): React.CSSProperties {
     return {
+        fontFamily: obj.fontFamily ? getFontFamily(obj.fontFamily) : undefined,
         fontSize: pxToPercentHeight(obj.fontSize),
         fontWeight: obj.fontWeight,
         fontStyle: obj.fontStyle,

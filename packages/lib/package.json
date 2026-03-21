@@ -50,6 +50,8 @@
     "./types/people": "./src/types/people.ts",
     "./types/clipboard": "./src/types/clipboard.ts",
     "./types/settings": "./src/types/settings.ts",
-    "./constants": "./src/constants/index.ts"
+    "./constants": "./src/constants/index.ts",
+    "./constants/fonts": "./src/constants/fonts.ts",
+    "./constants/colors": "./src/constants/colors.ts"
   }
 }

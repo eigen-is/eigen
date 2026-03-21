@@ -46,7 +46,7 @@ export function ShadowContent({
         const styleElement = document.createElement("style");
         styleElement.textContent = `
       .shadow-content-container {
-        font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+        font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
         color: #333;
         line-height: 1.5;
       }
