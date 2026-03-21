@@ -84,7 +84,7 @@ export function PeopleSidebar({
                     </div>
                     {teams.length > 0 && (
                         <div className="space-y-1">
-                            {teams.map(team => (
+                            {[...teams].sort((a, b) => a.name.localeCompare(b.name)).map(team => (
                                 <DroppableSidebarItem
                                     key={team.id}
                                     icon={<UserAvatar userId={teamOwnerId(team.id)}/>}
