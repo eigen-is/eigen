@@ -25,41 +25,32 @@ export function useSheet(
     const providerRef = useRef<WebsocketProvider | null>(null);
     const isLocalOpRef = useRef(false);
     const readyForOpsRef = useRef(false);
-    const snapshotTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-    const pendingSnapshotRef = useRef<string | null>(null);
-    const hasFlushedRef = useRef(false);
+    const latestDataRef = useRef<Sheet[] | null>(null);
 
-    // First call flushes immediately; subsequent calls are debounced at 1s.
-    // This ensures the initial state is persisted without delay while avoiding
-    // excessive Yjs transactions during active editing.
     const flushSnapshot = useCallback(() => {
         const doc = docRef.current;
-        const pending = pendingSnapshotRef.current;
-        if (!doc || !pending) {
+        const data = latestDataRef.current;
+        if (!doc || !data) return;
+        let json: string;
+        try {
+            json = JSON.stringify(data);
+        } catch {
             return;
         }
-        pendingSnapshotRef.current = null;
-        if (snapshotTimerRef.current) {
-            clearTimeout(snapshotTimerRef.current);
-            snapshotTimerRef.current = null;
-        }
         doc.transact(() => {
-            doc.getMap('state').set('snapshot', pending);
-            // Compact: the snapshot captures full state, so historical ops are no longer needed.
-            // Remote clients joining after this point will get the snapshot instead of replaying ops.
+            doc.getMap('state').set('snapshot', json);
             const opsArray = doc.getArray('ops');
             if (opsArray.length > 0) {
                 opsArray.delete(0, opsArray.length);
             }
         });
-        hasFlushedRef.current = true;
     }, []);
 
     useEffect(() => {
         const doc = new Y.Doc();
         docRef.current = doc;
         readyForOpsRef.current = false;
-        hasFlushedRef.current = false;
+        latestDataRef.current = null;
 
         const stateMap = doc.getMap('state');
         const opsArray = doc.getArray('ops');
@@ -105,37 +96,27 @@ export function useSheet(
                 }
             } else {
                 data = DEFAULT_SHEETS;
-                doc.transact(() => {
-                    stateMap.set('snapshot', JSON.stringify(data));
-                });
             }
+
+            latestDataRef.current = data;
             setInitialData(data);
             setSynced(true);
             readyForOpsRef.current = true;
         });
 
-        const handleBeforeUnload = () => {
-            const pending = pendingSnapshotRef.current;
-            if (pending && docRef.current) {
-                docRef.current.transact(() => {
-                    docRef.current!.getMap('state').set('snapshot', pending);
-                });
-                pendingSnapshotRef.current = null;
-            }
-        };
+        const handleBeforeUnload = () => flushSnapshot();
         window.addEventListener('beforeunload', handleBeforeUnload);
 
         return () => {
             window.removeEventListener('beforeunload', handleBeforeUnload);
-            handleBeforeUnload();
-            if (snapshotTimerRef.current) clearTimeout(snapshotTimerRef.current);
+            flushSnapshot();
             readyForOpsRef.current = false;
             wsProvider.disconnect();
             doc.destroy();
             docRef.current = null;
             providerRef.current = null;
         };
-    }, [ownerId, mountId, pathId, workbookRef]);
+    }, [ownerId, mountId, pathId, workbookRef, flushSnapshot]);
 
     const handleOp = useCallback((ops: Op[]) => {
         const doc = docRef.current;
@@ -151,23 +132,9 @@ export function useSheet(
         }
     }, []);
 
-    const saveSnapshot = useCallback((data: Sheet[]) => {
-        let json: string;
-        try {
-            json = JSON.stringify(data);
-        } catch (e) {
-            console.error('[sheet] saveSnapshot: JSON.stringify failed:', e);
-            return;
-        }
-        pendingSnapshotRef.current = json;
-
-        if (snapshotTimerRef.current) clearTimeout(snapshotTimerRef.current);
-        if (!hasFlushedRef.current) {
-            flushSnapshot();
-        } else {
-            snapshotTimerRef.current = setTimeout(flushSnapshot, 1000);
-        }
-    }, [flushSnapshot]);
+    const onDataChange = useCallback((data: Sheet[]) => {
+        latestDataRef.current = data;
+    }, []);
 
     const handleRestore = useCallback((state: Uint8Array) => {
         const doc = docRef.current;
@@ -185,7 +152,6 @@ export function useSheet(
                     const json = tempDoc.getMap(key).toJSON();
                     for (const k of [...localType.keys()]) localType.delete(k);
                     for (const [k, v] of Object.entries(json)) {
-                        // Yjs toJSON() returns Record<string, any>; no narrower type available
                         // eslint-disable-next-line @typescript-eslint/no-explicit-any
                         localType.set(k, v as any);
                     }
@@ -195,12 +161,6 @@ export function useSheet(
                     localType.push(json);
                 }
             }
-            // Clear ops array: the restored snapshot is the new source of truth.
-            // Stale ops from before the restore must not be replayed by remote clients.
-            const opsArray = doc.getArray('ops');
-            if (opsArray.length > 0) {
-                opsArray.delete(0, opsArray.length);
-            }
         });
         tempDoc.destroy();
 
@@ -209,6 +169,7 @@ export function useSheet(
         if (snapshot) {
             try {
                 const data = JSON.parse(snapshot) as Sheet[];
+                latestDataRef.current = data;
                 setInitialData(data);
                 if (workbookRef.current) {
                     workbookRef.current.updateSheet(data);
@@ -223,7 +184,7 @@ export function useSheet(
         initialData,
         synced,
         handleOp,
-        saveSnapshot,
+        onDataChange,
         handleRestore,
     };
 }
