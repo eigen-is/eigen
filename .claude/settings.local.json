@@ -86,7 +86,8 @@
       "Bash(python3:*)",
       "Bash(cp /tmp/source-serif-extract/source-serif-4.005_WOFF2/VAR/SourceSerif4Variable-Roman.ttf.woff2 /Users/reinder/Documents/GitHub/eigen/packages/ui/src/assets/fonts/source-serif/SourceSerif4-Variable.woff2)",
       "Bash(cp /tmp/source-serif-extract/source-serif-4.005_WOFF2/VAR/SourceSerif4Variable-Italic.ttf.woff2 /Users/reinder/Documents/GitHub/eigen/packages/ui/src/assets/fonts/source-serif/SourceSerif4-Variable-Italic.woff2)",
-      "Bash(xxd /Users/reinder/Documents/GitHub/eigen/packages/ui/src/assets/fonts/excalifont/Excalifont-Regular.woff2)"
+      "Bash(xxd /Users/reinder/Documents/GitHub/eigen/packages/ui/src/assets/fonts/excalifont/Excalifont-Regular.woff2)",
+      "WebFetch(domain:better-auth.com)"
     ]
   },
   "bypassPermissions": "bypassPermissions"
