@@ -10,40 +10,65 @@ export const sseRouter = new Elysia({name: "sse"})
     .use(betterAuth)
     .get('/sse/:ownerId/events', async ({params, user}) => {
         requireSelf(params.ownerId, user.id);
-        const home = await getHome(user.id);
+        let home = await getHome(user.id);
 
         let keepalive: Timer | null = null;
         let listener: ((event: SSEvent) => void) | null = null;
         let isClosed = false;
 
-        function enqueue(controller: ReadableStreamDefaultController, data: SSEvent | { event: string }) {
-            if (isClosed || controller.desiredSize === null) return;
-            try {
-                controller.enqueue(data);
-            } catch {
-                isClosed = true;
-            }
-        }
-
         const stream = new ReadableStream({
             start(controller) {
-                listener = (event: SSEvent) => enqueue(controller, event);
+                listener = (event: SSEvent) => {
+                    if (isClosed || controller.desiredSize === null) return;
+                    try {
+                        controller.enqueue(event);
+                    } catch {
+                        isClosed = true;
+                    }
+                };
 
                 home.subscribeSSE(listener);
 
-                keepalive = setInterval(() => {
+                keepalive = setInterval(async () => {
                     if (isClosed) return;
+
+                    // Keep Home alive — re-acquire if it was destructed externally
                     try {
-                        home.touch();
-                    } catch { /* Home may have been destructed */
+                        const currentHome = await getHome(user.id);
+                        if (currentHome !== home) {
+                            console.log(`[SSE] Home recreated for ${user.id}, re-subscribing`);
+                            try {
+                                home.unsubscribeSSE(listener!);
+                            } catch {
+                            }
+                            currentHome.subscribeSSE(listener!);
+                            home = currentHome;
+                        }
+                    } catch (e) {
+                        console.error(`[SSE] Failed to get Home for ${user.id}:`, e);
                     }
-                    enqueue(controller, {event: 'keepalive'});
+
+                    // Send keepalive to keep HTTP connection alive
+                    if (controller.desiredSize === null) {
+                        isClosed = true;
+                        return;
+                    }
+                    try {
+                        controller.enqueue({event: 'keepalive'});
+                    } catch {
+                        isClosed = true;
+                    }
                 }, 30000);
             },
             cancel() {
                 isClosed = true;
                 if (keepalive) clearInterval(keepalive);
-                if (listener) home.unsubscribeSSE(listener);
+                if (listener) {
+                    try {
+                        home.unsubscribeSSE(listener);
+                    } catch {
+                    }
+                }
             }
         });
 
