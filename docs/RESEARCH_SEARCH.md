@@ -411,39 +411,237 @@ Each result's `metadata` JSON contains the IDs needed to construct the target UR
 | Contacts | `getContactsAppUrl(itemId)`                                           |
 | Calendar | `getCalendarAppUrl(itemId)`                                           |
 
-## Future: Semantic Search
+## Research: Self-Hosted AI for Search (2026 Landscape)
 
-### SQLite Vector Extensions
+### Do Embeddings Make Sense for Eigen?
 
-- **sqlite-vec**: Pure C, no dependencies, works with Bun's SQLite. Stores float32/int8 vectors. Brute-force KNN
-  (fine for per-user indexes < 100K rows).
-- Alternative: store vectors in a separate table alongside FTS5
+FTS5 keyword search handles the majority of search use cases well. Embeddings add value in specific scenarios:
 
-### Lightweight Embedding Models
+**Where embeddings help:**
+- Semantic matching without keyword overlap ("firearm courtroom" → finds "gun trial")
+- Natural language queries across domains ("meeting notes about the budget from last week")
+- Cross-language retrieval (query in English, find Dutch documents)
+- Finding related content (similar emails, related docs)
 
-| Model                 | Size   | Dimensions | Notes                       |
-|-----------------------|--------|------------|-----------------------------|
-| all-MiniLM-L6-v2      | ~80MB  | 384        | ONNX available, widely used |
-| gte-small             | ~60MB  | 384        | Good quality/size tradeoff  |
-| nomic-embed-text-v1.5 | ~260MB | 768        | Best quality, larger        |
+**Where FTS5 is sufficient:**
+- Exact keyword search, subject/name lookup
+- Known-item search ("find the invoice from Acme Corp")
+- Small corpora (typical self-hosted deployment: < 50K indexed items per user)
 
-Run via `@xenova/transformers` (transformers.js) in Bun — WASM/ONNX backend, no native dependencies.
-Alternatively, `onnxruntime-node` for faster native inference.
+**Verdict**: FTS5 is the right v1. Embeddings are a compelling v2 enhancement for users with large mailboxes
+(> 10K messages), multilingual content, or natural-language search habits. The self-hosted AI ecosystem in 2026 makes
+this feasible without cloud dependencies — but it adds deployment complexity that should be opt-in.
 
-### Hybrid Search
+### Embedding Models (2026 State of the Art)
 
+The embedding model landscape has matured significantly. Several models now run efficiently on CPU with minimal RAM,
+making them viable for self-hosted deployments.
+
+| Model                    | Params | Dims         | Context | RAM (q8) | License    | Notes                                             |
+|--------------------------|--------|--------------|---------|----------|------------|----------------------------------------------------|
+| **EmbeddingGemma-300M**  | 308M   | 768 (MRL→128)| 2K      | ~200MB   | Gemma      | Google. Best-in-class <500M on MMTEB. ONNX available. Encoder architecture (not decoder). 100+ languages. Transformers.js compatible. |
+| **Qwen3-Embedding-0.6B** | 0.6B   | 1024 (MRL→32)| 32K     | ~400MB   | Apache 2.0 | Alibaba. Instruction-aware. Flexible output dims 32–1024. GGUF available. 100+ languages. Long context for chunked docs. |
+| **Nomic Embed Text v2**  | 475M (305M active) | 768 (MRL→256) | 512 | ~300MB | Open source | First MoE embedding model. Strong on BEIR/MIRACL. GGUF available. 100+ languages. |
+| **all-MiniLM-L6-v2**    | 22M    | 384          | 256     | ~80MB    | Apache 2.0 | Sentence-transformers classic. Tiny, fast, well-understood. Good baseline. ONNX available. |
+| **snowflake-arctic-embed-s** | 33M | 384         | 512     | ~60MB    | Apache 2.0 | Strong retrieval for its size. Optimized for search. |
+| **BGE-M3**               | 568M   | 1024         | 8K      | ~600MB   | MIT        | Multi-functionality (dense + sparse + multi-vector). 100+ languages. Overkill for most Eigen deployments. |
+
+**Recommendation for Eigen**: **EmbeddingGemma-300M** offers the best balance of quality, size, and ecosystem support.
+At ~200MB quantized it fits comfortably alongside the Eigen server. ONNX format works directly with Transformers.js
+in the Bun process — no sidecar service needed. Falls back to **all-MiniLM-L6-v2** (~80MB) for minimal-resource
+deployments.
+
+### Small Language Models (2026 State of the Art)
+
+Beyond embeddings, small LLMs could power features like query expansion, search result summarization, or AI-assisted
+email triage. The 2026 landscape has capable models that run on CPU or a single consumer GPU.
+
+| Model                    | Params | Context | VRAM/RAM  | License    | Notes                                             |
+|--------------------------|--------|---------|-----------|------------|----------------------------------------------------|
+| **Qwen3.5-0.8B**        | 0.8B   | 262K    | ~1GB q4   | Apache 2.0 | Multimodal (text+image). 200+ languages. Smallest viable instruct model. Thinking mode can be unstable. |
+| **SmolLM3-3B**           | 3B     | 64K→128K| ~2GB q4   | Apache 2.0 | HuggingFace. Dual-mode reasoning (/think, /no_think). Fully open training recipe. Best transparency. |
+| **Phi-4-mini (3.8B)**    | 3.8B   | 128K    | ~2.5GB q4 | MIT        | Microsoft. Strong reasoning for its size. Comparable to 7–9B models. Multilingual (20+ languages). |
+| **Gemma-3n-E2B**         | ~5B (2B effective) | 32K | ~2GB | Gemma | Google. Selective parameter activation. Multimodal (text+image+audio+video). Mobile-first. |
+| **Ministral-3-3B**       | 3.4B   | 256K    | ~2.5GB q4 | Apache 2.0 | Mistral. Agent-ready (function calling, JSON output). Vision encoder included. |
+
+**For Eigen search specifically**, LLMs are not needed for v1 or v2. They become relevant if Eigen adds broader AI
+features (email drafting, document summarization, meeting prep). If added, **Ollama as a sidecar** is the most
+practical deployment model — users configure an Ollama endpoint, Eigen calls it via HTTP API.
+
+### Runtime Options for Embedding Inference
+
+Four viable paths for running embedding models in a Bun/TypeScript server:
+
+#### 1. Transformers.js (`@huggingface/transformers`) — Recommended for Eigen
+
+In-process ONNX inference via WASM backend. No native dependencies, no sidecar.
+
+```typescript
+import { AutoModel, AutoTokenizer } from '@huggingface/transformers';
+
+const model = await AutoModel.from_pretrained('onnx-community/embeddinggemma-300m-ONNX', {
+    dtype: 'q8',  // quantized: smaller, faster
+});
+const tokenizer = await AutoTokenizer.from_pretrained('onnx-community/embeddinggemma-300m-ONNX');
+
+function embed(text: string): Promise<Float32Array> {
+    const inputs = await tokenizer(text, { padding: true, truncation: true });
+    const { sentence_embedding } = await model(inputs);
+    return sentence_embedding.data;
+}
 ```
-Score = alpha * FTS5_bm25_score + (1 - alpha) * cosine_similarity
+
+- **Pros**: Zero external dependencies. Runs in the Bun process. ~50–200ms per embedding on modern CPU. Model files
+  cached locally after first download (or bundled in Docker image). Supports EmbeddingGemma, all-MiniLM, and most
+  ONNX models.
+- **Cons**: WASM is slower than native. First load downloads model files (~200MB). Memory overhead for model in
+  process. Not suitable for LLMs (too slow for generation).
+- **Bun compatibility**: Transformers.js v3 officially supports Node.js server-side. Bun compatibility is functional
+  with WASM backend (no WebGPU on server). May need `node_compat` flag in Bun for some ONNX runtime features.
+
+#### 2. Ollama (sidecar service)
+
+Separate process running llama.cpp under the hood. HTTP API for embeddings and chat.
+
+```typescript
+const response = await fetch('http://localhost:11434/api/embed', {
+    method: 'POST',
+    body: JSON.stringify({ model: 'nomic-embed-text', input: text }),
+});
+const { embeddings } = await response.json();
 ```
 
-Index embeddings on snapshot/write alongside FTS5. Query: run FTS5 first for candidate set, re-rank with vector
-similarity.
+- **Pros**: Mature, well-tested. Supports both embedding and LLM models. GPU acceleration. Easy model management
+  (`ollama pull nomic-embed-text`). Already common in self-hosted setups.
+- **Cons**: Requires separate process/container. Network hop latency (~5–20ms overhead). Another moving part in
+  deployment. Users must install and configure Ollama.
+- **Best for**: Deployments that already run Ollama, or when LLM features are also needed.
 
-### When It Makes Sense
+#### 3. sqlite-lembed + sqlite-vec (SQL-native)
 
-- Large mailboxes (> 10K messages) where keyword search misses semantic matches
-- Natural language queries ("meeting notes from last week about the budget")
-- Not needed for v1 — FTS5 keyword search covers 90% of use cases
+SQLite extensions that generate embeddings and store/query vectors directly in SQL. Powered by llama.cpp.
+
+```sql
+-- Load extensions
+.load ./lembed0
+.load ./vec0
+
+-- Register model
+INSERT INTO temp.lembed_models(name, model)
+    SELECT 'embed', lembed_model_from_file('embeddinggemma-300m.q8_0.gguf');
+
+-- Generate embedding + store in vector table
+INSERT INTO search_vectors(rowid, embedding)
+    SELECT id, lembed('embed', title || ' ' || body)
+    FROM search_entries;
+
+-- KNN query
+SELECT rowid, distance
+FROM search_vectors
+WHERE embedding MATCH lembed('embed', 'firearm courtroom')
+ORDER BY distance LIMIT 10;
+```
+
+- **Pros**: Elegant — embedding + vector search in pure SQL. No HTTP calls. Fast (llama.cpp native). Pairs perfectly
+  with sqlite-vec. GGUF models from Ollama/HuggingFace work directly.
+- **Cons**: Native SQLite extensions need to be compiled per platform. May conflict with Bun's built-in SQLite (Bun
+  uses its own SQLite build). Docker image must include the `.so`/`.dylib` files. Pre-v1 maturity for sqlite-lembed.
+- **Best for**: If the native extension compatibility with Bun's SQLite can be confirmed.
+
+#### 4. llama.cpp server (standalone)
+
+Dedicated C++ inference server with OpenAI-compatible API, including `/v1/embeddings` endpoint.
+
+- **Pros**: Maximum performance. GPU support. Can serve both embeddings and chat completions.
+- **Cons**: Another binary to deploy. More operational complexity than Ollama.
+- **Best for**: High-throughput or GPU-accelerated deployments.
+
+### Recommended Approach for Eigen
+
+**Embedding inference**: Use **Transformers.js** with **EmbeddingGemma-300M** (ONNX, q8) for zero-dependency
+in-process embedding. This keeps deployment simple — no sidecar, no native extensions. The model file (~200MB) ships
+in the Docker image or is downloaded on first use.
+
+**Vector storage**: Use **sqlite-vec** (`npm install sqlite-vec`) for KNN search. Pure C extension with npm package,
+loads via `Database.loadExtension()`. Store vectors in a `vec0` virtual table alongside the existing `search_entries`
+content table.
+
+**Configuration**: Make embedding optional and configurable. Users can:
+- Disable it entirely (FTS5-only, default)
+- Use built-in Transformers.js (opt-in, downloads model on first use)
+- Point to an Ollama endpoint (for users who already run Ollama)
+
+### Vector Storage Schema
+
+Extends the existing `search.db` with a `vec0` virtual table:
+
+```sql
+-- Requires sqlite-vec extension loaded
+CREATE VIRTUAL TABLE IF NOT EXISTS search_vectors USING vec0(
+    embedding float[768]  -- EmbeddingGemma-300M output dims (or 384 for MiniLM)
+);
+```
+
+The `search_vectors` rowid maps 1:1 to `search_entries.id`. Insert embeddings alongside FTS content:
+
+```typescript
+// In SearchIndex.upsert(), after writing to search_entries:
+if (this.embeddingEnabled) {
+    const vector = await this.embedder.embed(title + ' ' + body);
+    this.db.run(sql`INSERT OR REPLACE INTO search_vectors(rowid, embedding) VALUES (${entryId}, ${vector})`);
+}
+```
+
+### Hybrid Search Query
+
+When embeddings are available, combine FTS5 keyword scores with vector similarity:
+
+```sql
+-- Step 1: FTS5 candidate retrieval (fast, narrows to ~100 candidates)
+WITH fts_matches AS (
+    SELECT e.id, e.domain, e.item_id, e.title, e.metadata, e.updated_at,
+           bm25(search_fts) AS fts_rank,
+           snippet(search_fts, 1, '<mark>', '</mark>', '...', 30) AS snippet
+    FROM search_fts f
+    JOIN search_entries e ON e.id = f.rowid
+    WHERE search_fts MATCH ?
+    LIMIT 100
+)
+-- Step 2: Re-rank with vector similarity
+SELECT m.*, v.distance AS vec_distance,
+       (m.fts_rank * 0.7 + v.distance * 0.3) AS hybrid_rank
+FROM fts_matches m
+LEFT JOIN search_vectors v ON v.rowid = m.id
+WHERE v.embedding MATCH ? -- query embedding
+ORDER BY hybrid_rank
+LIMIT 20;
+```
+
+FTS5 acts as a fast first-pass filter. Vector similarity re-ranks the candidates. The `alpha` weighting (0.7/0.3)
+can be tuned. When embeddings are disabled, the query falls back to pure FTS5 ranking.
+
+### Use Cases Beyond Search
+
+If Eigen adds LLM support (via Ollama sidecar), several features become possible:
+
+| Feature              | Model needed        | Description                                                    |
+|----------------------|---------------------|----------------------------------------------------------------|
+| Query expansion      | Small LLM (0.8–3B) | Rewrite "budget meeting" → "financial planning discussion meeting notes quarterly review" for better FTS5 recall |
+| Result summarization | Small LLM (0.8–3B) | Summarize top-N search results into a concise answer           |
+| Email triage         | Small LLM (3B+)    | Auto-categorize incoming mail (urgent, newsletter, receipt)    |
+| Document Q&A         | Small LLM (3B+)    | RAG: retrieve relevant chunks, answer questions about own docs |
+| Smart compose        | Small LLM (3B+)    | Draft email replies based on conversation context              |
+
+These are future features beyond search. They all benefit from the same Ollama sidecar architecture — Eigen
+communicates via HTTP, the user chooses which model to run. No Eigen code changes needed when better models release.
+
+### What Not to Do
+
+- **Don't bundle an LLM in the Docker image** — too large (2–8GB), not everyone wants it
+- **Don't make embeddings mandatory** — FTS5 must work standalone, embeddings are an enhancement
+- **Don't run LLM inference in the Bun process** — too slow via WASM, blocks the event loop. Ollama sidecar only
+- **Don't build a custom embedding pipeline** — use Transformers.js or Ollama, both are battle-tested
+- **Don't store vectors in a separate database** — keep them in `search.db` alongside FTS5 for atomic operations
 
 ## Implementation Plan
 
