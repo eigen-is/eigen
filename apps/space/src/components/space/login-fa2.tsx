@@ -20,6 +20,7 @@ import {Checkbox} from "@workspace/ui/components/checkbox"
 import {Bar} from "@workspace/ui/components/layout/braket/bar"
 import {Ket} from "@workspace/ui/components/layout/braket/ket"
 import {useApp} from "@workspace/ui/components/layout/app/layout-context"
+import {getRouteApi} from "@tanstack/react-router"
 
 const totpSchema = z.object({
     code: z.string().min(6, "Code must be 6 digits").max(6, "Code must be 6 digits"),
@@ -31,8 +32,11 @@ const backupSchema = z.object({
     trustDevice: z.boolean(),
 });
 
-export default function LoginFa2Page({redirect}: { redirect?: string }) {
+const route = getRouteApi('/login-2fa');
+
+export default function LoginFa2Page() {
     const {appName} = useApp();
+    const {redirect} = route.useSearch();
     const [mode, setMode] = useState<"totp" | "backup">("totp");
     const [isLoading, setIsLoading] = useState(false);
 
@@ -46,18 +50,18 @@ export default function LoginFa2Page({redirect}: { redirect?: string }) {
         defaultValues: {code: "", trustDevice: false},
     });
 
-    async function onTotpSubmit(values: z.infer<typeof totpSchema>) {
+    async function handleVerify(
+        apiCall: () => Promise<{ data: unknown; error?: { message?: string } | null }>,
+        fallbackError: string,
+    ) {
         try {
             setIsLoading(true);
-            const result = await authClient.twoFactor.verifyTotp({
-                code: values.code,
-                trustDevice: values.trustDevice,
-            });
+            const result = await apiCall();
             if (result.data) {
                 toast.success("Verification successful");
                 window.location.href = redirect || '/';
             } else {
-                toast.error(result.error?.message || "Invalid verification code");
+                toast.error(result.error?.message || fallbackError);
             }
         } catch {
             toast.error("Verification failed");
@@ -66,24 +70,18 @@ export default function LoginFa2Page({redirect}: { redirect?: string }) {
         }
     }
 
+    async function onTotpSubmit(values: z.infer<typeof totpSchema>) {
+        await handleVerify(
+            () => authClient.twoFactor.verifyTotp({code: values.code, trustDevice: values.trustDevice}),
+            "Invalid verification code",
+        );
+    }
+
     async function onBackupSubmit(values: z.infer<typeof backupSchema>) {
-        try {
-            setIsLoading(true);
-            const result = await authClient.twoFactor.verifyBackupCode({
-                code: values.code,
-                trustDevice: values.trustDevice,
-            });
-            if (result.data) {
-                toast.success("Verification successful");
-                window.location.href = redirect || '/';
-            } else {
-                toast.error(result.error?.message || "Invalid backup code");
-            }
-        } catch {
-            toast.error("Verification failed");
-        } finally {
-            setIsLoading(false);
-        }
+        await handleVerify(
+            () => authClient.twoFactor.verifyBackupCode({code: values.code, trustDevice: values.trustDevice}),
+            "Invalid backup code",
+        );
     }
 
     return (
