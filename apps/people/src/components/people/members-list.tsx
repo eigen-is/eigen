@@ -64,9 +64,10 @@ export function MembersList({members, searchQuery, activeMemberId, onRowClick}: 
     const listRef = useRef<HTMLDivElement>(null);
 
     const filteredMembers = useMemo(() => {
-        if (!searchQuery) return members;
+        const sorted = [...members].sort((a, b) => a.name.localeCompare(b.name));
+        if (!searchQuery) return sorted;
         const q = searchQuery.toLowerCase();
-        return members.filter(m =>
+        return sorted.filter(m =>
             m.name.toLowerCase().includes(q) ||
             m.email.toLowerCase().includes(q)
         );

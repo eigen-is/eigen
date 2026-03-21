@@ -84,17 +84,46 @@ function InlineEmail({email}: { email: string }) {
     );
 }
 
+const URL_REGEX = /https?:\/\/[^\s<>'")\]]+[^\s<>'")\].,;:!?]/g;
+
+type RichToken = { index: number; end: number; type: 'email' | 'url'; value: string };
+
+function tokenize(text: string): RichToken[] {
+    const tokens: RichToken[] = [];
+    const emailRegex = new RegExp(EMAIL_FIND_REGEX);
+    const urlRegex = new RegExp(URL_REGEX);
+
+    let match: RegExpExecArray | null;
+    while ((match = emailRegex.exec(text)) !== null) {
+        tokens.push({index: match.index, end: match.index + match[0].length, type: 'email', value: match[0]});
+    }
+    while ((match = urlRegex.exec(text)) !== null) {
+        tokens.push({index: match.index, end: match.index + match[0].length, type: 'url', value: match[0]});
+    }
+
+    tokens.sort((a, b) => a.index - b.index);
+    return tokens;
+}
+
 function RichContent({text, className}: { text: string; className?: string }) {
     const parts: ReactNode[] = [];
+    const tokens = tokenize(text);
+
     let lastIdx = 0;
-    let match: RegExpExecArray | null;
-    const regex = new RegExp(EMAIL_FIND_REGEX);
-    while ((match = regex.exec(text)) !== null) {
-        if (match.index > lastIdx) {
-            parts.push(text.slice(lastIdx, match.index));
+    for (const token of tokens) {
+        if (token.index < lastIdx) continue;
+        if (token.index > lastIdx) {
+            parts.push(text.slice(lastIdx, token.index));
         }
-        parts.push(<InlineEmail key={match.index} email={match[0]}/>);
-        lastIdx = regex.lastIndex;
+        if (token.type === 'email') {
+            parts.push(<InlineEmail key={token.index} email={token.value}/>);
+        } else {
+            parts.push(
+                <a key={token.index} href={token.value} target="_blank" rel="noopener noreferrer"
+                   className="text-primary hover:underline break-all">{token.value}</a>
+            );
+        }
+        lastIdx = token.end;
     }
     if (lastIdx < text.length) {
         parts.push(text.slice(lastIdx));
