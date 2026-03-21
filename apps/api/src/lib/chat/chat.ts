@@ -174,7 +174,7 @@ export class ChatRoom {
             if (msg.type === 'emote' && !msg.deletedAt) {
                 return {
                     ...msg,
-                    content: formatEmoteForViewer(msg.content, msg.authorEmail, msg.authorId, userId),
+                    content: formatEmoteForViewer(msg.content, msg.authorEmail, msg.authorId, userId, userEmail),
                 };
             }
             return msg;

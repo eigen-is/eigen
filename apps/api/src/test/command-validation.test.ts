@@ -49,6 +49,11 @@ describe('Command Validation', () => {
             expect(validateCommand('/look user@domain.com'))
                 .toEqual({valid: true, kind: 'inspect'});
         });
+
+        test('accepts trout with valid email', () => {
+            expect(validateCommand('/trout test@example.com'))
+                .toEqual({valid: true, kind: 'trout'});
+        });
     });
 
     describe('Invalid Commands', () => {
@@ -141,6 +146,20 @@ describe('Command Validation', () => {
 
         test('rejects inspect with invalid email', () => {
             expect(validateCommand('/look invalid-email')).toEqual({
+                valid: false,
+                error: "'invalid-email' is not a valid email address"
+            });
+        });
+
+        test('rejects trout without target', () => {
+            expect(validateCommand('/trout')).toEqual({
+                valid: false,
+                error: '/trout requires a target'
+            });
+        });
+
+        test('rejects trout with invalid email', () => {
+            expect(validateCommand('/trout invalid-email')).toEqual({
                 valid: false,
                 error: "'invalid-email' is not a valid email address"
             });

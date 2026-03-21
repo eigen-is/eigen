@@ -2,20 +2,21 @@ import {validateCommand} from '../../validation';
 
 export const COMMANDS_HELP = [
     {cmd: '/?, /h, /help', desc: 'List of available slash commands'},
-    {cmd: '/time', desc: 'Provides server as well as local time'},
-    {cmd: '/inspect, /look, /finger [User]', desc: 'Inspects the user'},
-    {cmd: '/dance', desc: 'Performs the dance emote'},
-    {cmd: '/cheer', desc: 'Performs the cheer emote'},
-    {cmd: '/taunt', desc: 'Performs the taunt emote'},
-    {cmd: '/greet', desc: 'Performs the greet emote'},
     {cmd: '/allthethings', desc: 'ALL THE THINGS! \\o/'},
+    {cmd: '/cheer', desc: 'Performs the cheer emote'},
+    {cmd: '/dance', desc: 'Performs the dance emote'},
     {cmd: '/facepalm', desc: 'Drags hand down face'},
-    {cmd: '/shrug', desc: '¯\\_(ツ)_/¯'},
     {cmd: '/flip', desc: '(╯°□°)╯︵ ┻━┻'},
-    {cmd: '/me [action]', desc: 'Performs a custom emote'},
+    {cmd: '/greet', desc: 'Performs the greet emote'},
     {cmd: '/i, /inv, /invite [User]', desc: 'Invites user to the room'},
-    {cmd: '/send, /t, /tell, /w, /whisper [User] [Message]', desc: 'Send private message'},
+    {cmd: '/inspect, /look, /finger [User]', desc: 'Inspects the user'},
+    {cmd: '/me [action]', desc: 'Performs a custom emote'},
     {cmd: '/reply, /r [Message]', desc: 'Reply to the last whisper'},
+    {cmd: '/send, /t, /tell, /w, /whisper [User] [Message]', desc: 'Send private message'},
+    {cmd: '/shrug', desc: '¯\\_(ツ)_/¯'},
+    {cmd: '/taunt', desc: 'Performs the taunt emote'},
+    {cmd: '/time', desc: 'Provides server as well as local time'},
+    {cmd: '/trout [User]', desc: 'Slaps user around a bit with a large trout'},
 ];
 
 export const SLASH_COMMANDS = [
@@ -25,6 +26,7 @@ export const SLASH_COMMANDS = [
     '/dance', '/cheer', '/taunt', '/greet',
     '/allthethings', '/facepalm', '/shrug', '/flip',
     '/me',
+    '/trout',
     '/i', '/inv', '/invite',
     '/send', '/t', '/tell', '/w', '/whisper',
     '/reply', '/r'
