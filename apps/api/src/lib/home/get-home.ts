@@ -11,6 +11,10 @@ import {getOrgExists} from "../org/org.ts";
 
 const homeFactories: Map<string, () => Promise<Home>> = new Map();
 
+export function atHome(ownerId: string): boolean {
+    return homeFactories.has(ownerId);
+}
+
 export async function getHome(ownerId: string): Promise<Home> {
     if (!homeFactories.has(ownerId)) {
         homeFactories.set(ownerId, createAsyncSingleton(async () => {

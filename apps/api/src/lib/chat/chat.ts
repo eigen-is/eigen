@@ -17,6 +17,7 @@ import {validateEmailAddress} from '@workspace/lib/validation';
 import {getUserByEmail} from '../user/';
 import {ApiError} from '../core/errors';
 import {resolveACLUserIds} from '../drive/acl-propagation';
+import {atHome} from "../home/get-home.ts";
 
 export class ChatRoom {
     private drive: Drive;
@@ -256,8 +257,11 @@ export class ChatRoom {
         const userIds = await resolveACLUserIds(this.path.ownerId, this.path.acl);
         for (const userId of userIds) {
             try {
-                const home = await getHome(userId);
-                home.notify(event);
+                // only notify when the user is at home
+                if (atHome(userId)) {
+                    const home = await getHome(userId);
+                    home.notify(event);
+                }
             } catch { /* user home may not exist */
             }
         }
