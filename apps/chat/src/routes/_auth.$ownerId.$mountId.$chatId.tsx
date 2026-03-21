@@ -43,6 +43,7 @@ function ChatView() {
                 <Column id="messages" width="flex" toolbar={toolbar}>
                     <div className="flex flex-col h-full bg-background">
                         <ChatMessageList
+                            key={chatId}
                             messages={chat.messages}
                             isLoading={chat.isLoading}
                             currentUserId={chat.currentUserId}

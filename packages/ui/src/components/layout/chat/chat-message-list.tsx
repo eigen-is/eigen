@@ -152,11 +152,15 @@ export function ChatMessageList({
     useEffect(() => {
         if (messages.length > 0 && isInitialLoadRef.current) {
             isInitialLoadRef.current = false;
-            scrollToBottom();
+            // setTimeout gives the browser time to compute layout after React commits
+            setTimeout(() => {
+                const container = scrollRef.current;
+                if (container) container.scrollTop = container.scrollHeight;
+            }, 50);
         }
-    }, [messages.length, scrollToBottom]);
+    }, [messages.length]);
 
-    // Handle new messages or older messages loaded
+    // Auto-scroll when new messages arrive and user is near bottom
     useEffect(() => {
         const prevCount = prevMessageCountRef.current;
         prevMessageCountRef.current = messages.length;
@@ -169,7 +173,6 @@ export function ChatMessageList({
         if (isNearBottom) {
             scrollToBottom();
         }
-        // If not near bottom, don't scroll — user is reading history
     }, [messages.length, scrollToBottom]);
 
     // Load more when scrolling near the top
