@@ -5,7 +5,7 @@ import {z} from 'zod';
 const fallback = '/';
 
 export const Route = createFileRoute('/login-2fa')({
-    component: LoginFa2Page,
+    component: () => <LoginFa2Page redirect={Route.useSearch().redirect}/>,
     validateSearch: z.object({
         redirect: z.string().optional().catch(''),
     }),
