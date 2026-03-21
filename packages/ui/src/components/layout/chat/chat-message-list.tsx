@@ -138,7 +138,7 @@ export function ChatMessageList({
                                     onLoadMore,
                                 }: ChatMessageListProps) {
     const scrollRef = useRef<HTMLDivElement>(null);
-    const prevMessageCountRef = useRef(0);
+    const lastMessageIdRef = useRef('');
     const isInitialLoadRef = useRef(true);
 
     const scrollToBottom = useCallback(() => {
@@ -156,11 +156,13 @@ export function ChatMessageList({
         }
     }, [messages.length, scrollToBottom]);
 
-    // Handle new messages or older messages loaded
+    // Auto-scroll when a new message appears at the end
     useEffect(() => {
-        const prevCount = prevMessageCountRef.current;
-        prevMessageCountRef.current = messages.length;
-        if (prevCount === 0 || messages.length <= prevCount) return;
+        const lastId = messages[messages.length - 1]?.id ?? '';
+        const prevLastId = lastMessageIdRef.current;
+        lastMessageIdRef.current = lastId;
+
+        if (!prevLastId || lastId === prevLastId) return;
 
         const container = scrollRef.current;
         if (!container) return;
@@ -169,8 +171,7 @@ export function ChatMessageList({
         if (isNearBottom) {
             scrollToBottom();
         }
-        // If not near bottom, don't scroll — user is reading history
-    }, [messages.length, scrollToBottom]);
+    }, [messages, scrollToBottom]);
 
     // Load more when scrolling near the top
     const onLoadMoreRef = useRef(onLoadMore);
