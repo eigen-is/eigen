@@ -73,6 +73,12 @@ export function parseCommand(raw: string): ParsedCommand {
         return {kind: 'emote', content: trimmed.slice(4)};
     }
 
+    // Trout: /trout [email] → targeted emote
+    if (trimmed.startsWith('/trout ')) {
+        const target = trimmed.slice(7).trim();
+        return {kind: 'emote', content: `$trout:${target}`};
+    }
+
     // Whisper commands: /whisper [email] [message]
     for (const cmd of ['/whisper ', '/w ', '/tell ', '/t ', '/send ']) {
         if (trimmed.startsWith(cmd)) {
@@ -102,8 +108,19 @@ export function parseCommand(raw: string): ParsedCommand {
     return {kind: 'error', error: 'Unknown command'};
 }
 
-export function formatEmoteForViewer(content: string, authorEmail: string, authorId: string, viewerId: string): string {
+export function formatEmoteForViewer(content: string, authorEmail: string, authorId: string, viewerId: string, viewerEmail?: string): string {
     const authorName = authorEmail.split('@')[0] || authorEmail;
+
+    if (content.startsWith('$trout:')) {
+        const targetEmail = content.slice(7);
+        const targetName = targetEmail.split('@')[0] || targetEmail;
+        const isAuthor = authorId === viewerId;
+        const isTarget = viewerEmail?.toLowerCase() === targetEmail.toLowerCase();
+
+        if (isAuthor) return `You slap ${targetName} around a bit with a large trout.`;
+        if (isTarget) return `${authorName} slaps you around a bit with a large trout.`;
+        return `${authorName} slaps ${targetName} around a bit with a large trout.`;
+    }
 
     if (content.startsWith('$')) {
         const emoteKey = content.slice(1);

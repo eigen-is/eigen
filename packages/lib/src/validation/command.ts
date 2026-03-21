@@ -1,7 +1,10 @@
 import {validateEmailTarget} from './email';
 
 export type CommandValidationResult =
-    | { valid: true; kind: 'builtin-emote' | 'emote' | 'whisper' | 'reply' | 'invite' | 'help' | 'time' | 'inspect' }
+    | {
+    valid: true;
+    kind: 'builtin-emote' | 'emote' | 'whisper' | 'reply' | 'invite' | 'help' | 'time' | 'inspect' | 'trout'
+}
     | { valid: false; error: string };
 
 export function validateCommand(raw: string): CommandValidationResult {
@@ -110,6 +113,19 @@ export function validateCommand(raw: string): CommandValidationResult {
         if (trimmed === cmd) {
             return {valid: false, error: 'inspect target cannot be empty'};
         }
+    }
+
+    // Trout command: /trout [email]
+    if (trimmed.startsWith('/trout ')) {
+        const target = trimmed.slice(7).trim();
+        const emailError = validateEmailTarget(target, 'trout target');
+        if (emailError) {
+            return {valid: false, error: emailError};
+        }
+        return {valid: true, kind: 'trout'};
+    }
+    if (trimmed === '/trout') {
+        return {valid: false, error: '/trout requires a target'};
     }
 
     // Unknown command
