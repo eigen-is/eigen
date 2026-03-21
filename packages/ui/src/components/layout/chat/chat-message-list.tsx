@@ -152,15 +152,11 @@ export function ChatMessageList({
     useEffect(() => {
         if (messages.length > 0 && isInitialLoadRef.current) {
             isInitialLoadRef.current = false;
-            // setTimeout gives the browser time to compute layout after React commits
-            setTimeout(() => {
-                const container = scrollRef.current;
-                if (container) container.scrollTop = container.scrollHeight;
-            }, 50);
+            scrollToBottom();
         }
-    }, [messages.length]);
+    }, [messages.length, scrollToBottom]);
 
-    // Auto-scroll when new messages arrive and user is near bottom
+    // Handle new messages or older messages loaded
     useEffect(() => {
         const prevCount = prevMessageCountRef.current;
         prevMessageCountRef.current = messages.length;
@@ -173,6 +169,7 @@ export function ChatMessageList({
         if (isNearBottom) {
             scrollToBottom();
         }
+        // If not near bottom, don't scroll — user is reading history
     }, [messages.length, scrollToBottom]);
 
     // Load more when scrolling near the top
@@ -247,14 +244,34 @@ export function ChatMessageList({
 
                 if (isEmote && !isDeleted) {
                     return (
-                        <div key={message.id} className="flex gap-3 px-5 py-1">
-                            <div className="w-9 shrink-0 flex items-start justify-center pt-0.5">
-                                <span className="text-muted-foreground text-xs">✦</span>
+                        <div key={message.id} className={cn("flex gap-3 px-5", grouped ? "py-1" : "pt-3")}>
+                            <div className="w-9 shrink-0 pt-0.5">
+                                {!grouped ? (
+                                    <UserAvatar
+                                        name={message.authorEmail}
+                                        email={message.authorEmail}
+                                        userId={message.authorEmail}
+                                        size="sm"
+                                    />
+                                ) : (
+                                    <div className="flex items-start justify-center">
+                                        <span className="text-muted-foreground text-xs">✦</span>
+                                    </div>
+                                )}
                             </div>
-                            <RichContent
-                                text={message.content}
-                                className="text-sm text-muted-foreground italic whitespace-pre-wrap"
-                            />
+                            <div className="flex-1 min-w-0 pb-1">
+                                {!grouped && (
+                                    <div className="flex items-baseline gap-2">
+                                        <span className="text-sm font-bold text-foreground">{displayName}</span>
+                                        <span
+                                            className="text-xs text-muted-foreground">{formatTime(message.createdAt)}</span>
+                                    </div>
+                                )}
+                                <RichContent
+                                    text={message.content}
+                                    className="text-sm text-muted-foreground italic whitespace-pre-wrap"
+                                />
+                            </div>
                         </div>
                     );
                 }
