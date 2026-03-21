@@ -296,7 +296,7 @@ export const EditorToolbar = ({editor, path, canWrite, onAccessDialogOpen, onDel
                         </DropdownMenu>
                     </>
                 )}
-                {canWrite && (
+                {canWrite && !isMobile && (
                     <div className="flex items-center">
                         <TooltipButton
                             icon={Undo}
