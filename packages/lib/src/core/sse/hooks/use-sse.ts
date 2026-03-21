@@ -33,21 +33,41 @@ export function useSSE() {
         if (!isAuthenticated || !user?.id) return;
 
         const url = getSSEEventsUrl(user.id);
+        let retryTimer: ReturnType<typeof setTimeout>;
+        let stopped = false;
 
-        const eventSource = new EventSource(url, {withCredentials: true});
-        eventSourceRef.current = eventSource;
+        function connect() {
+            if (stopped) return;
 
-        eventSource.onmessage = (event) => {
-            try {
-                const sseEvent = JSON.parse(event.data) as SSEvent;
-                handleEvent(sseEvent);
-            } catch (e) {
-                console.error('Failed to parse SSE event', e);
-            }
-        };
+            const es = new EventSource(url, {withCredentials: true});
+            eventSourceRef.current = es;
+
+            es.onmessage = (event) => {
+                try {
+                    const sseEvent = JSON.parse(event.data) as SSEvent;
+                    handleEvent(sseEvent);
+                } catch (e) {
+                    console.error('Failed to parse SSE event', e);
+                }
+            };
+
+            es.onerror = () => {
+                if (stopped) return;
+                // EventSource won't auto-reconnect after HTTP errors (e.g. 502)
+                if (es.readyState === EventSource.CLOSED) {
+                    es.close();
+                    eventSourceRef.current = null;
+                    retryTimer = setTimeout(connect, 5000);
+                }
+            };
+        }
+
+        connect();
 
         return () => {
-            eventSource.close();
+            stopped = true;
+            clearTimeout(retryTimer);
+            eventSourceRef.current?.close();
             eventSourceRef.current = null;
         };
     }, [isAuthenticated, user?.id, handleEvent]);
