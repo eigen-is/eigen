@@ -1,5 +1,5 @@
-import {useCallback, useMemo, useRef} from 'react';
-import {type Sheet, Workbook, type WorkbookInstance} from '@workspace/fortune-sheet';
+import {useMemo, useRef} from 'react';
+import {Workbook, type WorkbookInstance} from '@workspace/fortune-sheet';
 import {useSheet} from './hooks/use-sheet';
 import {ToolbarLeftItems, ToolbarRightItems} from './toolbar';
 import {EigenLoader} from '@workspace/ui';
@@ -34,13 +34,9 @@ export function SheetEditor({ownerId, path, canWrite, onAccessDialogOpen}: Sheet
         initialData,
         synced,
         handleOp,
-        saveSnapshot,
+        onDataChange,
         handleRestore,
     } = useSheet(ownerId, path.mountId, path.id, workbookRef);
-
-    const onChange = useCallback((data: Sheet[]) => {
-        saveSnapshot(data);
-    }, [saveSnapshot]);
 
     const leftItems = useMemo(() => (
         <ToolbarLeftItems path={path} canWrite={canWrite} onAccessDialogOpen={onAccessDialogOpen}/>
@@ -60,7 +56,7 @@ export function SheetEditor({ownerId, path, canWrite, onAccessDialogOpen}: Sheet
                 <Workbook
                     ref={workbookRef}
                     data={initialData}
-                    onChange={onChange}
+                    onChange={onDataChange}
                     onOp={handleOp}
                     showToolbar={true}
                     showFormulaBar={true}
