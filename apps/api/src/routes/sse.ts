@@ -33,6 +33,9 @@ export const sseRouter = new Elysia({name: "sse"})
                     if (isClosed) return;
                     try {
                         home.touch();
+                    } catch { /* Home may have been destructed */
+                    }
+                    try {
                         controller.enqueue({event: 'keepalive'});
                     } catch {
                         isClosed = true;
