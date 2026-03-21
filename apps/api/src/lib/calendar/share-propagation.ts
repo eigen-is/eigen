@@ -3,7 +3,7 @@ import type {SSEvent} from '@workspace/lib/types/sse';
 import {parseOwnerId} from '@workspace/lib/types';
 import {getMemberships, getUserByEmail} from '../user/';
 import type {Home} from '../home';
-import {getHome} from '../home';
+import {atHome, getHome} from '../home';
 import {getTeamMembers} from '../team';
 import {addRegistryEntry} from '../share';
 
@@ -34,8 +34,10 @@ export async function notifySharedCalendarUsers(
 
     for (const userId of userIds) {
         try {
-            const targetHome = await getHome(userId);
-            targetHome.notify(event);
+            if (atHome(userId)) {
+                const targetHome = await getHome(userId);
+                targetHome.notify(event);
+            }
         } catch (error) {
             console.error('Failed to notify shared calendar user:', error);
         }
