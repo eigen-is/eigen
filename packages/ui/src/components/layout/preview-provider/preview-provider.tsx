@@ -1,7 +1,7 @@
 import React, {createContext, useCallback, useContext, useMemo, useState} from "react"
 import type {DrivePath} from "@workspace/lib/types/drive"
 import {isFolderType} from "@workspace/lib/types/drive"
-import {getDriveDownloadUrl, getDriveEmbedUrl, getDrivePreviewUrl} from "@workspace/lib/api"
+import {getDriveDownloadUrl, getDriveEmbedUrl, getDrivePreviewUrl, getDriveThumbnailUrl} from "@workspace/lib/api"
 import {getTextPreviewMode, isExiftoolExtension} from "@workspace/lib/constants"
 import {FilePreview} from "../drive/file-preview"
 
@@ -71,6 +71,9 @@ export function PreviewProvider({children}: {children: React.ReactNode}) {
         const previewUrl = `${getDrivePreviewUrl(path.ownerId, path.mountId, path.id)}?v=${v}`;
         const embedUrl = `${getDriveEmbedUrl(path.ownerId, path.mountId, path.id, path.name)}?v=${v}`;
         const downloadUrl = isFolderType(path.type) ? undefined : getDriveDownloadUrl(path.ownerId, path.mountId, path.id);
+        const thumbnailUrl = path.thumbnail
+            ? `${getDriveThumbnailUrl(path.ownerId, path.mountId, path.thumbnail)}?v=${v}`
+            : undefined;
         const aspectRatio = path.details?.width && path.details?.height
             ? path.details.width / path.details.height
             : undefined;
@@ -82,6 +85,7 @@ export function PreviewProvider({children}: {children: React.ReactNode}) {
         return {
             previewMode: mode,
             previewUrl,
+            thumbnailUrl,
             embedUrl,
             downloadUrl,
             fileName: path.name,
