@@ -33,6 +33,15 @@ export function normalizeDeck(yjsDoc: Y.Doc) {
         }
     }
 
+    for (const objId of objectIds) {
+        const objValue = objectsMap.get(objId);
+        if (!objValue) continue;
+        const obj = objValue as Y.Map<any>;
+        if (obj.get('type') === 'text' && !obj.get('fontFamily')) {
+            obj.set('fontFamily', 'Inter');
+        }
+    }
+
     if (slideIds.length > 0) {
         const firstSlideValue = slidesMap.get(slideIds[0]);
         if (firstSlideValue) {

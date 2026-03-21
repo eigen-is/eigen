@@ -156,6 +156,7 @@ export type Settings = {
         onClick?: (e: React.MouseEvent<HTMLDivElement, MouseEvent>) => void;
     }[];
     currency?: string;
+    fontList?: any[];
 };
 
 export const defaultSettings: Required<Settings> = {
@@ -288,4 +289,5 @@ export const defaultSettings: Required<Settings> = {
     hooks: {},
     customToolbarItems: [],
     currency: "€",
+    fontList: [],
 };

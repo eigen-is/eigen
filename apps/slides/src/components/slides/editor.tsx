@@ -43,6 +43,7 @@ function buildClipboardItem(obj: SlideObject, resolveMediaPath: (name: string) =
         meta: {
             ...rect,
             ...border,
+            fontFamily: obj.fontFamily,
             fontSize: obj.fontSize,
             fontWeight: obj.fontWeight,
             fontStyle: obj.fontStyle,
@@ -186,9 +187,8 @@ function SlideEditorInner({ownerId, path, canWrite, mediaFolderId, onAccessDialo
             if (items.length === 0) return;
             e.preventDefault();
             const data: EigenClipboardData = {version: 1, items};
-            const textPreview = selectedObjectIds.length === 1 && deck.objects[selectedObjectIds[0]]?.type === 'text'
-                ? (deck.objects[selectedObjectIds[0]] as any).text as string
-                : undefined;
+            const firstObj = selectedObjectIds.length === 1 ? deck.objects[selectedObjectIds[0]] : undefined;
+            const textPreview = firstObj?.type === 'text' ? firstObj.text : undefined;
             writeEigenClipboard(e, data, textPreview);
         };
         const handlePaste = (e: ClipboardEvent) => {
@@ -212,7 +212,7 @@ function SlideEditorInner({ownerId, path, canWrite, mediaFolderId, onAccessDialo
                         const overrides: Record<string, unknown> = {};
                         if (m.x != null) overrides.x = m.x;
                         if (m.y != null) overrides.y = m.y;
-                        for (const k of ['w', 'h', 'rotation', 'borderColor', 'borderWidth', 'borderRadius', 'fontSize', 'fontWeight', 'fontStyle', 'textDecoration', 'textAlign', 'verticalAlign', 'color', 'letterSpacing', 'lineHeight', 'highlightColor', 'backgroundColor'] as const) {
+                        for (const k of ['w', 'h', 'rotation', 'borderColor', 'borderWidth', 'borderRadius', 'fontFamily', 'fontSize', 'fontWeight', 'fontStyle', 'textDecoration', 'textAlign', 'verticalAlign', 'color', 'letterSpacing', 'lineHeight', 'highlightColor', 'backgroundColor'] as const) {
                             if (m[k] != null) overrides[k] = m[k];
                         }
                         addObject(activeSlideId, {

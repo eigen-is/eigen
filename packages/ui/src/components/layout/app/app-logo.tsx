@@ -82,9 +82,9 @@ export function AppLogo({appName = "Mail", className, linkable = true}: AppLogoP
                         eigen
                     </span>
                     <span className="text-white">
-                        <span className="p-0.5">|</span>
+                        <Bar/>
                         {appName.toLowerCase()}
-                        &gt;
+                        <Ket/>
                     </span>
                 </Link>
             )}
