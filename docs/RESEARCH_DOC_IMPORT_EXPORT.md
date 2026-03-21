@@ -1,27 +1,11 @@
-# Research: Document Import/Export for Eigen Docs
+# Proposal: Document Import/Export for Eigen Docs
 
-> **TLDR**: Add import (DOCX/Markdown/TXT/HTML -> eigendoc) and export (eigendoc -> PDF/DOCX/Markdown/HTML/TXT)
-> capabilities. Export happens server-side via `@tiptap/html` for HTML generation, then format-specific converters.
-> PDF generation uses a **tiered approach**: `pdfkit` for simple documents (fast, no external dependency), with
-> Puppeteer (headless Chromium) as a configurable option for highest fidelity. DOCX export uses the `docx` npm
-> package to build Open XML from ProseMirror JSON. Import uses mammoth.js (DOCX) with known limitations, plus
-> `tiptap-markdown` (Markdown) and direct HTML parsing. A lightweight SQLite-based job queue backed by Bun Workers
-> handles slow exports with progress tracking via SSE. UI surfaces export in the docs toolbar File menu and Drive
-> context menu; import via an explicit "Import as Eigen Doc" action.
-
-## Table of Contents
-
-1. [Current State Analysis](#1-current-state-analysis)
-2. [Content Model Inventory](#2-content-model-inventory)
-3. [Export Format Coverage Matrix](#3-export-format-coverage-matrix)
-4. [Import Format Coverage Matrix](#4-import-format-coverage-matrix)
-5. [Export Architecture](#5-export-architecture)
-6. [Import Architecture](#6-import-architecture)
-7. [Server-Side Tiptap Rendering](#7-server-side-tiptap-rendering)
-8. [PDF Generation Deep Dive](#8-pdf-generation-deep-dive)
-9. [DOCX Export Deep Dive](#9-docx-export-deep-dive)
-10. [Markdown Export/Import](#10-markdown-exportimport)
-11. [Queue System Design](#11-queue-system-design)
+> **TLDR**: Add import (DOCX/Markdown/HTML/TXT → eigendoc) and export (eigendoc → PDF/DOCX/Markdown/HTML/TXT).
+> Phase 1 exports client-side (Markdown, HTML, TXT, PDF via browser print) from the open editor. Phase 2 adds
+> server-side export (DOCX, Puppeteer PDF) and import (DOCX, Markdown, HTML, TXT → eigendoc). No custom PDF
+> layout engine — PDF uses browser print or opt-in Puppeteer. Self-hosted fonts from `RESEARCH_TYPOGRAPHY.md`
+> (Inter, Source Serif 4, JetBrains Mono, Excalifont) are embedded in export templates for consistent output.
+> Estimated total: ~8 weeks across 4 phases.
 12. [Image and Media Handling](#12-image-and-media-handling)
 13. [Security Considerations](#13-security-considerations)
 14. [UI/UX Design](#14-uiux-design)
