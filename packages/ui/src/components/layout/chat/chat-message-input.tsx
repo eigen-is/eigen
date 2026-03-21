@@ -222,7 +222,7 @@ export function ChatMessageInput({
                     ))}
                 </div>
             )}
-            <div className="flex items-center gap-2 relative">
+            <div className="flex items-end gap-2 relative">
                 <input
                     ref={fileInputRef}
                     type="file"
@@ -239,38 +239,36 @@ export function ChatMessageInput({
                 >
                     <Paperclip className="h-4 w-4"/>
                 </Button>
-                <div className="flex-1 relative">
-                    <ChatPlayerSuggest
-                        query={atQuery || ''}
-                        roomMembers={roomMembers}
-                        onSelect={handlePlayerSelect}
-                        visible={atQuery !== null}
-                        selectedIndex={selectedSuggestIdx}
-                        onItemsChange={handleSuggestItemsChange}
-                    />
-                    <ChatSlashSuggest
-                        query={slashQuery || ''}
-                        commandsHelp={COMMANDS_HELP}
-                        onSelect={handleSlashSelect}
-                        visible={slashSuggestOpen}
-                        selectedIndex={selectedSlashIdx}
-                        onItemsChange={handleSlashItemsChange}
-                    />
-                    <textarea
-                        ref={textareaRef}
-                        value={content}
-                        onChange={(e) => {
-                            setContent(e.target.value);
-                            e.target.style.height = 'auto';
-                            e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px';
-                        }}
-                        onKeyDown={handleKeyDown}
-                        placeholder={placeholder}
-                        disabled={disabled}
-                        rows={1}
-                        className="w-full resize-none rounded-lg border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring min-h-[40px] max-h-[120px] leading-[1.125]"
-                    />
-                </div>
+                <ChatPlayerSuggest
+                    query={atQuery || ''}
+                    roomMembers={roomMembers}
+                    onSelect={handlePlayerSelect}
+                    visible={atQuery !== null}
+                    selectedIndex={selectedSuggestIdx}
+                    onItemsChange={handleSuggestItemsChange}
+                />
+                <ChatSlashSuggest
+                    query={slashQuery || ''}
+                    commandsHelp={COMMANDS_HELP}
+                    onSelect={handleSlashSelect}
+                    visible={slashSuggestOpen}
+                    selectedIndex={selectedSlashIdx}
+                    onItemsChange={handleSlashItemsChange}
+                />
+                <textarea
+                    ref={textareaRef}
+                    value={content}
+                    onChange={(e) => {
+                        setContent(e.target.value);
+                        e.target.style.height = 'auto';
+                        e.target.style.height = Math.min(e.target.scrollHeight, 120) + 'px';
+                    }}
+                    onKeyDown={handleKeyDown}
+                    placeholder={placeholder}
+                    disabled={disabled}
+                    rows={1}
+                    className="flex-1 min-w-0 resize-none rounded-lg border bg-background px-3 py-2.5 text-sm focus:outline-none focus:ring-1 focus:ring-ring min-h-[40px] max-h-[120px] leading-[1.125]"
+                />
                 <Button
                     size="icon"
                     onClick={handleSend}
