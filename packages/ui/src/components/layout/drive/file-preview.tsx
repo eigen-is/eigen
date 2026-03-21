@@ -10,6 +10,7 @@ import type {PreviewMode} from "../preview-provider/preview-provider";
 interface FilePreviewProps {
     previewMode: PreviewMode;
     previewUrl: string;
+    thumbnailUrl?: string;
     embedUrl: string;
     downloadUrl?: string;
     fileName: string;
@@ -23,7 +24,7 @@ interface FilePreviewProps {
 }
 
 export function FilePreview({
-                                previewMode, previewUrl, embedUrl, downloadUrl,
+                                previewMode, previewUrl, thumbnailUrl, embedUrl, downloadUrl,
                                 fileName, aspectRatio, hasPrev, hasNext, path,
                                 onClose, onPrev, onNext,
                             }: FilePreviewProps) {
@@ -79,11 +80,10 @@ export function FilePreview({
                     style={{cursor: "default"}}
                 >
                     {previewMode === 'image' && (
-                        <img
-                            src={previewUrl}
+                        <ProgressiveImage
+                            thumbnailUrl={thumbnailUrl}
+                            previewUrl={previewUrl}
                             alt={fileName}
-                            className="max-w-full max-h-[calc(100vh-7rem)] rounded object-contain"
-                            style={aspectRatio ? {aspectRatio: `${aspectRatio}`} : undefined}
                         />
                     )}
                     {previewMode === 'video' && (
@@ -180,6 +180,35 @@ function NavButton({onClick, disabled, title, children}: {
         >
             {children}
         </button>
+    );
+}
+
+function ProgressiveImage({thumbnailUrl, previewUrl, alt}: {
+    thumbnailUrl?: string; previewUrl: string; alt: string;
+}) {
+    if (!thumbnailUrl) {
+        return (
+            <img
+                src={previewUrl}
+                alt={alt}
+                className="w-[90vw] h-[calc(100vh-7rem)] rounded object-contain"
+            />
+        );
+    }
+
+    return (
+        <div className="relative w-[90vw] h-[calc(100vh-7rem)]">
+            <img
+                src={thumbnailUrl}
+                alt={alt}
+                className="w-full h-full rounded object-contain"
+            />
+            <img
+                src={previewUrl}
+                alt={alt}
+                className="absolute inset-0 w-full h-full rounded object-contain"
+            />
+        </div>
     );
 }
 
