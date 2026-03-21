@@ -8,6 +8,7 @@ import {Card, CardContent, CardFooter, CardHeader, CardTitle} from "@workspace/u
 import {Label} from '@workspace/ui/components/label';
 import {publicApi} from '@workspace/lib/api';
 import {toast} from "sonner";
+import {Bar, Ket} from "@workspace/ui/components/layout/braket";
 
 export const Route = createFileRoute('/')({
     component: HomeComponent,
@@ -67,9 +68,9 @@ export function HomeComponent() {
 
     return (
         <div className="flex flex-col items-center justify-center min-h-screen p-4">
-            <div className="text-5xl mb-8">
-                <span className="font-bold" style={{color: app.color}}>eigen</span>
-                <span style={{color: app.color}}>|{app.name.toLowerCase()}&gt;</span>
+            <div className="text-5xl mb-8" style={{color: app.color}}>
+                <span className="font-bold">eigen</span>
+                <span className="font-normal"><Bar/>{app.name.toLowerCase()}<Ket/></span>
             </div>
             <div className="text-lg text-center mb-8 max-w-md">
                 <div>
