@@ -14,7 +14,9 @@ API Mutation → home.notify(event) → SSE Stream → Client
                                                                     → toast (only for curated remote events)
 ```
 
-SSE is personal-only — each user subscribes to their own Home's event stream. Events fall into two categories:
+SSE is personal-only — each user subscribes to their own Home's event stream. The SSE keepalive (every 30s) also
+calls `home.touch()`, preventing the Home from being destructed while a client is connected. Events fall into two
+categories:
 
 - **Self-triggered**: your own action bounces back for cache invalidation. No toast needed — the UI already reflects
   the change
