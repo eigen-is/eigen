@@ -68,6 +68,7 @@ export class Home {
         await this._calendar?.init();
 
         this.initialized = true;
+        console.log(`[Home] Initialized for ${this.user.id}`);
         for (const resolve of this.initWaiters) {
             resolve(this);
         }
@@ -80,6 +81,7 @@ export class Home {
             clearTimeout(this.timeout);
         }
         this.timeout = setTimeout(() => {
+            console.log(`[Home] Idle timeout for ${this.user.id}, destructing`);
             this.destruct().finally(() => this.cleanUp?.());
         }, 1000 * 60 * 5);
         return this;

@@ -29,6 +29,13 @@ export const sseRouter = new Elysia({name: "sse"})
 
                 home.subscribeSSE(listener);
 
+                // Send initial keepalive immediately to prevent Apache proxy timeout
+                try {
+                    controller.enqueue({event: 'keepalive'});
+                } catch {
+                    isClosed = true;
+                }
+
                 keepalive = setInterval(async () => {
                     if (isClosed) return;
 
