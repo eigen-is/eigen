@@ -42,6 +42,8 @@ Strips entries already granted by ancestors or by ownership.
 - **No deny**: No `{read: false}` mechanism
 - **External emails**: Any valid email can be in ACLs
 - **Team ACL**: Additive with user ACL
+- **No org-level ACL**: `parseOwnerId` recognises the `org_` prefix but `matchesACL` only handles `user` and `team`.
+  Org-wide sharing is not implemented; use teams instead
 
 ## Visibility
 
