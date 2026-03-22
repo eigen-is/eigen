@@ -7,7 +7,7 @@ import {isExiftoolCandidate} from './exiftool-preview';
 import {generateTextPreview, isTextPreviewSupported, type TextPreviewResult} from './text-preview';
 
 type PreviewResult =
-    | { type: 'image'; data: Buffer; contentType: 'image/webp' }
+    | { type: 'image'; data: Buffer; contentType: string }
     | { type: 'redirect'; url: string }
     | null;
 
@@ -32,6 +32,25 @@ export async function getScreenPreview(mount: Mount, drivePath: DrivePath, embed
     // PDF → redirect to embed
     if (mime === 'application/pdf') {
         return {type: 'redirect', url: embedUrl};
+    }
+
+    // SVG → serve as-is (no rasterisation to WebP), cached locally for S3 mounts
+    if (mime === 'image/svg+xml') {
+        const cacheFile = path.join(mount.previewsDir, getScreenCacheKey(drivePath.id, drivePath.updatedAt).replace('.webp', '.svg'));
+
+        if (fs.existsSync(cacheFile)) {
+            return {
+                type: 'image',
+                data: Buffer.from(await Bun.file(cacheFile).arrayBuffer()),
+                contentType: 'image/svg+xml'
+            };
+        }
+
+        const fileData = await mount.readFile(drivePath.id);
+        if (!fileData) return null;
+        const data = Buffer.from(fileData);
+        await Bun.write(cacheFile, data);
+        return {type: 'image', data, contentType: 'image/svg+xml'};
     }
 
     // Image (any format — sharp first, exiftool fallback)

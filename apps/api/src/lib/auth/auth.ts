@@ -4,8 +4,10 @@ import {drizzleAdapter} from "better-auth/adapters/drizzle";
 import {getServerDataPath} from "../config/paths";
 import {getServerConfig} from "../config/server-config";
 import {admin, organization, twoFactor} from "better-auth/plugins"
+import {apiKey} from "@better-auth/api-key"
 import {
     account as accountScheme,
+    apikey as apikeyScheme,
     invitation as invitationScheme,
     member as memberScheme,
     organization as organizationScheme,
@@ -52,6 +54,7 @@ export const auth = betterAuth({
             invitation: invitationScheme,
             team: teamScheme,
             teamMember: teamMemberScheme,
+            apikey: apikeyScheme,
         },
     }),
     databaseHooks: {
@@ -90,6 +93,7 @@ export const auth = betterAuth({
                 },
             },
         }),
+        apiKey(),
     ],
     trustedOrigins,
     appName: "eigen",
@@ -137,6 +141,7 @@ export function getAuthDrizzleDb() {
                 invitation: invitationScheme,
                 team: teamScheme,
                 teamMember: teamMemberScheme,
+                apikey: apikeyScheme,
             },
         });
     }
