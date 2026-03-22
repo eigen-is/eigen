@@ -1,175 +1,232 @@
 # Re-Share Prevention
 
-> **TLDR**: Anyone with write access can currently modify ACLs and share with others. Add an owner-controlled
-> `sharingRestricted` flag on paths that limits ACL modifications to the owner (or team owners for team drives).
+> **TLDR**: Any editor can currently modify ACLs, change visibility, and share with others. Add a per-path
+> `sharingRestricted` flag that limits ACL and visibility changes to the owner (or team members for team drives).
+> ~80 lines of backend changes, ~30 lines of UI changes, 2 schema migrations.
 
-## Problem
+## Is This Needed?
 
-`SharedDrive.updateACL()` gates on `withWritePermission` — the same check as editing content. This means any editor can:
+**Yes.** The current model treats "can edit content" and "can manage access" as the same permission. This means
+sharing a document with a contractor gives them full sharing power — they can add anyone, change others'
+permissions, flip visibility to public, or remove people. Google Drive has had the "Editors can share" toggle
+since 2015. For a self-hosted workspace handling sensitive org data, this is a real gap.
 
-1. Add new users or teams to the ACL (escalate access).
-2. Change existing entries from viewer to editor.
-3. Change visibility to `public-read` or `public-write`.
-4. Remove other users from the ACL.
+The implementation is small (~80 lines of backend logic) and well-scoped — it doesn't require a new permission
+level or changes to the read/write model.
 
-In practice, sharing a document with a contractor gives them the same sharing power as the owner. Google Drive solves
-this with an "Editors can share and change permissions" toggle (on by default, owner can turn it off).
+## Current State
 
-## Proposed Solution
-
-### Data Model
-
-Add a `sharingRestricted` boolean to `DrivePath`:
+`SharedDrive.updateACL()` delegates to `withWritePermission()`:
 
 ```typescript
-type DrivePath = {
-    // ... existing fields
-    sharingRestricted: boolean;  // default: false
+// sharedDrive.ts:185-186
+public async updateACL(mountId: string, pathId: string, acl: DriveACL[], visibility?: DriveVisibility) {
+    return this.withWritePermission(mountId, pathId,
+        () => this.sharedDrive.updateACL(mountId, pathId, acl, visibility));
 }
 ```
 
-When `false` (default), behaviour is unchanged — any editor can share. When `true`, only the owner (or team members for
-team-owned paths) can modify ACLs and visibility.
+Any user with write access (direct ACL entry, inherited from parent, team membership, or `public-write` visibility)
+can call this route. There is no distinction between "can edit" and "can manage sharing."
 
-Store as an integer column in the drive paths table, default `0`.
+The ACL route (`PUT /drive/:ownerId/:mountId/path/:pathId/acl`) accepts `{acl, visibility}`. Both are
+modifiable by any editor.
 
-### Backend Enforcement
+The `/invite` chat command builds ACL client-side (`use-chat-room.ts:133-134`) and calls the same ACL route.
+It would be blocked by the same backend check.
 
-In `Drive.updateACL()`, after the existing write-permission check, add:
+## Implementation
 
+### 1. Add `sharingRestricted` to `DrivePath` type
+
+`packages/lib/src/types/drive.ts`:
+
+```typescript
+export type DrivePath = {
+    // ... existing fields
+    sharingRestricted: boolean;
+}
 ```
-if sharingRestricted AND caller is not owner/team-member → throw 403 "Sharing is restricted by the owner"
+
+Default: `false` (editors can share, current behaviour preserved).
+
+### 2. Add column to mount paths table
+
+`apps/api/src/lib/mount/db-config.ts` — add migration v2:
+
+```typescript
+{
+    version: 2,
+    up: (db) => db.exec(`
+        ALTER TABLE paths ADD COLUMN sharingRestricted INTEGER NOT NULL DEFAULT 0;
+    `)
+}
 ```
 
-The check applies to `SharedDrive` callers only. The owner's own `Drive` instance always permits ACL changes (the
-owner check at the top of `canWrite` already grants this).
+Update `currentVersion` to `2`.
 
-Concretely, `SharedDrive.updateACL()` currently delegates to `withWritePermission`. Change it to a dedicated
-permission check:
+### 3. Add column to shared_paths mirror
+
+`apps/api/src/lib/drive/db-config.ts` — add migration v2:
+
+```typescript
+{
+    version: 2,
+    up: (db) => db.exec(`
+        ALTER TABLE shared_paths ADD COLUMN sharingRestricted INTEGER NOT NULL DEFAULT 0;
+    `)
+}
+```
+
+Update `currentVersion` to `2`.
+
+Add the column to `sharedschema.ts`:
+
+```typescript
+sharingRestricted: integer('sharingRestricted').notNull().default(0),
+```
+
+### 4. Enforce in `SharedDrive.updateACL()`
+
+Replace the current one-liner with:
 
 ```typescript
 public async updateACL(mountId: string, pathId: string, acl: DriveACL[], visibility?: DriveVisibility) {
-    const path = await this.sharedDrive.getPath(mountId, pathId);
+    const path = await this.withWritePermission(mountId, pathId,
+        () => this.sharedDrive.getPath(mountId, pathId));
     if (!path) throw new ApiError(404, 'Path not found');
 
     if (path.sharingRestricted) {
         throw new ApiError(403, 'Sharing is restricted by the owner');
     }
 
-    return this.withWritePermission(mountId, pathId,
-        () => this.sharedDrive.updateACL(mountId, pathId, acl, visibility));
+    return this.sharedDrive.updateACL(mountId, pathId, acl, visibility);
 }
 ```
 
-No changes needed to `canRead` or `canWrite` — this only affects who can modify the ACL, not who can access the file.
+Order matters: check write permission first (editors get 403 "no write permission"), then check restriction
+(editors with write get 403 "sharing restricted"). Viewers never see the restriction error.
 
-### Changing the Flag
+The owner's own `Drive.updateACL()` is unaffected — it checks `canWrite(mountId, pathId, this.owner)` which
+always returns true for the owner. Team members also pass `canWrite` for team-owned paths.
 
-Add a separate route or extend the existing ACL route:
+### 5. Add `sharingRestricted` to the ACL route
 
-```
-PUT /drive/:ownerId/:mountId/path/:pathId/acl
-  body: { acl, visibility?, sharingRestricted?: boolean }
-```
+`apps/api/src/routes/drive.ts` — extend the body schema:
 
-Only the owner (or team member for team-owned paths) can set `sharingRestricted`. If a non-owner tries to set it,
-ignore it silently or return 403.
-
-### Inheritance
-
-`sharingRestricted` does NOT inherit. A restricted parent folder does not automatically restrict children. Rationale:
-
-- Inheritance would be surprising — creating a subfolder inside a restricted folder would silently lock out editors
-  from sharing it.
-- The owner can set the flag on individual paths where it matters.
-- This matches Google Drive's behaviour (the toggle is per-item, not inherited).
-
-### Chat `/invite` Command
-
-The `/invite` slash command in chat adds ACL entries. When `sharingRestricted` is true, `/invite` must fail with a
-message like "Sharing is restricted by the owner. Ask the owner to invite this person." This is enforced by the same
-backend check — the invite command calls `updateACL` internally.
-
-### UI Changes
-
-#### Share Dialog (`drive-access-list-edit.tsx`)
-
-Add a toggle at the bottom of the "General access" section, visible only to the owner:
-
-```
-┌─────────────────────────────────────────────────┐
-│ General access                                  │
-│ 🔒 Restricted / 🔓 Unrestricted    [Can view ▾] │
-│                                                 │
-│ ☐ Editors can share                             │
-│   When off, only the owner can add or           │
-│   remove people                                 │
-└─────────────────────────────────────────────────┘
+```typescript
+.put("/drive/:ownerId/:mountId/path/:pathId/acl", async ({params, body, user}) => {
+    const drive = await getSharedDrive(params.ownerId, user);
+    await drive.updateACL(params.mountId, params.pathId, body.acl, body.visibility, body.sharingRestricted);
+    return {success: true};
+}, {
+    body: t.Object({
+        acl: t.Array(t.Object({
+            id: t.String(),
+            read: t.Boolean(),
+            write: t.Boolean(),
+        })),
+        visibility: t.Optional(t.Union([
+            t.Literal('private'),
+            t.Literal('public-read'),
+            t.Literal('public-write'),
+        ])),
+        sharingRestricted: t.Optional(t.Boolean()),
+    }),
+    auth: true
+})
 ```
 
-- Default: checked (editors can share, `sharingRestricted: false`).
-- Unchecked: `sharingRestricted: true`.
-- Only shown to the owner. Non-owners don't see the toggle.
+Only the owner (or team member) can set `sharingRestricted`. In `Drive.updateACL()`, add:
 
-#### Non-Owner Editor View
+```typescript
+if (sharingRestricted !== undefined) {
+    updates.sharingRestricted = sharingRestricted;
+}
+```
 
-When `sharingRestricted` is true and the caller is not the owner, the share dialog should:
+In `SharedDrive.updateACL()`, the `sharingRestricted` parameter is silently ignored (non-owners cannot change it).
+This avoids a separate route.
 
-- Show the current access list (read-only, no edit controls).
-- Hide the "add contact" input, "Share with team" button, visibility toggle, and permission dropdowns.
-- Show a muted note: "Sharing is restricted by the owner."
+### 6. Include flag in ACL propagation
 
-This means `DriveAccessListEdit` needs a `readonly` mode, or the dialog falls back to `DriveAccessList` (the
-read-only component that already exists).
+`receiveACLChange()` in `drive.ts` already mirrors all `DrivePath` fields to `shared_paths`. Add
+`sharingRestricted` to the insert and update calls alongside the existing fields.
 
-## Edge Cases
+### 7. UI: owner toggle in share dialog
 
-### Editor removes themselves
+`packages/ui/src/components/layout/drive/drive-access-list-edit.tsx`:
 
-An editor with `write` access can currently remove their own ACL entry (effectively "leaving" the share). This should
-remain allowed even when `sharingRestricted` is true — restricting self-removal would trap users in shares they don't
-want.
+Add a checkbox below the "General access" section, visible only when `path.ownerId === currentUserId`
+(or team member for team paths):
 
-Implementation: allow `updateACL` when the only change is removing the caller's own entry.
+```
+☐ Editors can share
+  When off, only the owner can add or remove people
+```
+
+- Checked (default) → `sharingRestricted: false`
+- Unchecked → `sharingRestricted: true`
+- Hidden for non-owners
+
+### 8. UI: readonly mode for restricted non-owners
+
+When `path.sharingRestricted === true` and the caller is not the owner, the share dialog should show the
+existing read-only `DriveAccessList` component instead of `DriveAccessListEdit`. The dialog component
+(`drive-access-dialog.tsx`) already selects between these — add the restriction as a condition.
+
+Show a muted note: "Sharing is restricted by the owner."
+
+## Design Decisions
+
+### No inheritance
+
+`sharingRestricted` does NOT inherit from parent folders. Rationale:
+- Inheritance would be surprising — creating a subfolder inside a restricted folder silently restricts it
+- The owner can set the flag on individual paths where it matters
+- Matches Google Drive's behaviour (per-item, not inherited)
+
+### No self-removal exception
+
+The original proposal suggested allowing editors to remove their own ACL entry ("leave share") even when
+restricted. This adds complexity: you'd need to diff old vs new ACL arrays to detect "only change is
+self-removal."
+
+Instead: when `sharingRestricted` is true, editors cannot modify the ACL at all. To "leave" a share, the
+user can hide it from their shared-with-me view (client-side only) or ask the owner to remove them. This
+keeps the backend simple. If self-removal becomes a real need, add a dedicated `DELETE /drive/:ownerId/:mountId/path/:pathId/acl/me` endpoint later.
 
 ### Team-owned paths
 
-For team-owned paths, any team member acts as "owner" for the purposes of this flag. This is consistent with how
-team ownership already works — all team members have full read/write and are treated as co-owners.
+For team-owned paths, any team member acts as "owner" for this flag. This is consistent with how team
+ownership already works — `canWrite()` in `acl.ts` returns true for team members via `parseOwnerId()` +
+`getMemberships()`. The same check applies: `SharedDrive` is only created when `ownerId !== user.id`, so
+team members accessing their own team drive go through `Drive` (not `SharedDrive`) and are never restricted.
 
-### Inherited access + restricted child
+### Visibility changes blocked too
 
-A folder shared with Alice (editor) contains a file with `sharingRestricted: true`. Alice can edit the file (inherited
-write) but cannot change who else has access to it. This is the intended behaviour.
-
-### Visibility changes
-
-`sharingRestricted` blocks visibility changes too. An editor cannot flip a restricted file to `public-read`. Only the
-owner can change visibility on restricted items.
-
-### Move into restricted folder
-
-Moving a file into a folder does not change the file's `sharingRestricted` flag. The flag stays with the file wherever
-it moves.
+`sharingRestricted` blocks both ACL changes and visibility changes. An editor cannot flip a restricted file
+to `public-read`. Both go through the same `updateACL` route and the same `SharedDrive.updateACL()` check.
 
 ## Files to Modify
 
-| File                                                                 | Change                                  |
-|----------------------------------------------------------------------|-----------------------------------------|
-| `apps/api/src/lib/drive/schema.ts`                                   | Add `sharingRestricted` column          |
-| `apps/api/src/lib/drive/drive.ts`                                    | Pass flag in `updateACL`, store in path |
-| `apps/api/src/lib/drive/sharedDrive.ts`                              | Check flag before allowing ACL changes  |
-| `apps/api/src/routes/drive.ts`                                       | Accept `sharingRestricted` in body      |
-| `packages/lib/src/types/drive.ts`                                    | Add `sharingRestricted` to `DrivePath`  |
-| `packages/ui/src/components/layout/drive/drive-access-list-edit.tsx` | Owner toggle + readonly mode            |
-| `apps/api/src/lib/drive/sharedschema.ts`                             | Add column to shared_paths mirror       |
-| `apps/api/src/lib/drive/acl-propagation.ts`                          | Include flag in propagated data         |
+| File | Change |
+|---|---|
+| `packages/lib/src/types/drive.ts` | Add `sharingRestricted: boolean` to `DrivePath` |
+| `apps/api/src/lib/mount/db-config.ts` | Migration v2: add `sharingRestricted` column to `paths` |
+| `apps/api/src/lib/mount/schema.ts` | Add `sharingRestricted` column to Drizzle schema |
+| `apps/api/src/lib/drive/db-config.ts` | Migration v2: add `sharingRestricted` column to `shared_paths` |
+| `apps/api/src/lib/drive/sharedschema.ts` | Add `sharingRestricted` column to Drizzle schema |
+| `apps/api/src/lib/drive/sharedDrive.ts` | Check flag in `updateACL()` |
+| `apps/api/src/lib/drive/drive.ts` | Store flag in `updateACL()`, include in `receiveACLChange()` and `sharedRowToDrivePath()` |
+| `apps/api/src/routes/drive.ts` | Accept `sharingRestricted` in ACL route body |
+| `packages/ui/src/components/layout/drive/drive-access-list-edit.tsx` | Owner toggle checkbox |
+| `packages/ui/src/components/layout/drive/drive-access-dialog.tsx` | Show read-only view when restricted |
 
 ## Not in Scope
 
-- **Per-entry re-share control** (e.g., "Alice can share, Bob cannot"): Too complex, not worth it. The flag is
-  all-or-nothing per path.
-- **Cascading restrict** (set once on a folder, applies to all descendants): Surprising behaviour, hard to reason
-  about. Keep it per-item.
-- **Separate "can manage" permission**: Would require a third permission level beyond read/write. The current binary
-  model is simpler and the restricted flag covers the main use case.
+- **Per-entry re-share control** (e.g., "Alice can share, Bob cannot"): Too complex. The flag is all-or-nothing
+  per path.
+- **Cascading restrict** (set once on folder, applies to descendants): Surprising behaviour, hard to reason about.
+- **Separate "can manage" permission level**: Would require a third permission beyond read/write. The binary model
+  with a restriction flag covers the use case without adding complexity.
