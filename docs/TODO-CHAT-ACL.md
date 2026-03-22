@@ -32,7 +32,7 @@ path would be required.
 
 ### 2. `/invite` Command Modifies ACL
 
-Typing `/invite bob@example.com` creates a new ACL entry `{email: 'bob@example.com', read: true, write: true}`.
+Typing `/invite bob@example.com` creates a new ACL entry `{id: 'bob@example.com', read: true, write: true}`.
 
 - Invites are permanent until revoked by someone with write access.
 - No "pending invite" concept.

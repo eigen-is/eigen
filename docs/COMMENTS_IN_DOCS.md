@@ -134,10 +134,13 @@ export const COMMENT_INDEX_DB_CONFIG: DatabaseConfig<typeof commentSchema> = {
 
 ## ChatRoom: Container Discovery
 
-Add a `containerPath` field to `ChatRoom`, resolved during `init()`:
+Add a `containerPath` field to `ChatRoom`, resolved during `init()` using the shared `findContainerPath()` utility
+from `acl.ts` (see [ACL_BUBBLING.md](ACL_BUBBLING.md)):
 
 ```typescript
 // apps/api/src/lib/chat/chat.ts — modifications
+import {findContainerPath} from '../drive/acl';
+
 export class ChatRoom {
     private drive: Drive;
     private home: Home;
@@ -150,20 +153,11 @@ export class ChatRoom {
         // ... existing data.db init ...
 
         // Discover container (2 hops: chat → chat/ folder → container)
-        this.containerPath = await this.findContainer();
+        this.containerPath = await this.drive.findContainerPath(
+            this.path.mountId, this.path.parentId ?? ''
+        );
 
         return this;
-    }
-
-    private async findContainer(): Promise<DrivePath | null> {
-        let currentId = this.path.parentId;
-        while (currentId) {
-            const parent = await this.drive.getPath(this.path.mountId, currentId);
-            if (!parent) break;
-            if (isCollabType(parent.type)) return parent;
-            currentId = parent.parentId;
-        }
-        return null;
     }
 
     get isEmbedded(): boolean {
@@ -172,8 +166,9 @@ export class ChatRoom {
 }
 ```
 
-`Drive.getPath()` is a single SQLite lookup by primary key. The walk is exactly 2 hops for embedded chats (chat/ folder
-→ container). For standalone chats it's 1-2 hops to root. Negligible cost, done once per `ChatRoom.init()`.
+`Drive.findContainerPath()` delegates to the shared `findContainerPath()` in `acl.ts`, which walks the `parentId` chain
+and returns the outermost collab ancestor. The walk is exactly 2 hops for embedded chats (chat/ folder → container).
+For standalone chats it's 1-2 hops to root. Negligible cost, done once per `ChatRoom.init()`.
 
 ## CommentIndex Service
 
@@ -525,7 +520,7 @@ SSE handler invalidates `commentKeys.container(...)`.
 | **New** `apps/api/src/lib/chat/comment-index.ts` | `CommentIndex` class + `openCommentIndex()` |
 | **New** `apps/api/src/lib/chat/mentions.ts` | `extractMentionedEmails()` |
 | **New** `packages/lib/src/core/chat/hooks/use-comments.ts` | Query hooks + keys |
-| `apps/api/src/lib/chat/chat.ts` | Add `containerPath`, `findContainer()`, index updates in `postMessage()` |
+| `apps/api/src/lib/chat/chat.ts` | Add `containerPath` (using shared `findContainerPath()` from `acl.ts`), index updates in `postMessage()` |
 | `apps/api/src/routes/collab.ts` | Add comment list/mentions/status routes |
 | `packages/lib/src/types/sse.ts` | Add `COMMENT_INDEX_UPDATED` |
 | `apps/api/src/lib/chat/sse-events.ts` | Add `buildCommentIndexUpdatedEvent()` |
