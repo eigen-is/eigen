@@ -185,35 +185,36 @@ Resolution: `parseOwnerId()` in `packages/lib/src/types/owner.ts`
 
 Detailed architecture docs in `docs/`:
 
-| Doc                                                             | Topic                                           |
-|-----------------------------------------------------------------|-------------------------------------------------|
-| [CONTRIBUTING.md](docs/CONTRIBUTING.md)                         | Code style, patterns, development workflow      |
-| [DATABASE.md](docs/DATABASE.md)                                 | SQLite databases, ManagedDatabase, migrations   |
-| [STORAGE.md](docs/STORAGE.md)                                   | Storage backends, mount system, Home singleton  |
-| [SSE.md](docs/SSE.md)                                           | Real-time events, adding SSE to new domains     |
-| [ACL.md](docs/ACL.md)                                           | Additive ACL inheritance, visibility            |
-| [ORGANISATIONS-AND-TEAMS.md](docs/ORGANISATIONS-AND-TEAMS.md)   | Org/team model, team drives, prefixed owner IDs |
-| [LAYOUT.md](docs/LAYOUT.md)                                     | AppShell, ColumnLayout, responsive patterns     |
-| [LAYOUT-SHARED-COMPONENTS.md](docs/LAYOUT-SHARED-COMPONENTS.md) | UI component lookup reference                   |
-| [LAYOUT-UI-LIST.md](docs/LAYOUT-UI-LIST.md)                     | List hooks and patterns                         |
-| [LAYOUT-UI-DRIVE.md](docs/LAYOUT-UI-DRIVE.md)                   | Drive UI component reference                    |
-| [CHAT.md](docs/CHAT.md)                                         | Chat rooms, slash commands, embedded chats      |
-| [CALENDAR.md](docs/CALENDAR.md)                                 | Calendar, RRULE, sharing, team calendars        |
-| [SHARE-PROPAGATION.md](docs/SHARE-PROPAGATION.md)               | Push-based sharing, share registry              |
-| [STICKIES.md](docs/STICKIES.md)                                 | Kanban board, Yjs data model                    |
-| [SLIDES.md](docs/SLIDES.md)                                     | Presentation editor, percentage coordinates     |
-| [SHEETS.md](docs/SHEETS.md)                                     | Spreadsheet, op-based Yjs sync                  |
-| [CLIPBOARD.md](docs/CLIPBOARD.md)                               | Inter-app copy-paste                            |
-| [MEDIA-REFERENCES.md](docs/MEDIA-REFERENCES.md)                 | Name-based media/chat references in eigendocs   |
-| [HOTKEYS.md](docs/HOTKEYS.md)                                   | Keyboard shortcuts                              |
-| [INLINE-EDITING.md](docs/INLINE-EDITING.md)                     | Inline text file editing in Drive               |
-| [PREVIEWS.md](docs/PREVIEWS.md)                                 | File preview system, text/image/video previews  |
-| [PUBLIC-API.md](docs/PUBLIC-API.md)                             | Public endpoints, avatar resolution             |
-| [PEOPLE.md](docs/PEOPLE.md)                                     | Org/team management UI                          |
-| [NOTIFICATIONS.md](docs/NOTIFICATIONS.md)                       | Error/success toasts, SSE notification pattern  |
-| [TESTING.md](docs/TESTING.md)                                   | Test setup, patterns, test files                |
-| [DOCKER.md](docs/DOCKER.md)                                     | Docker deployment                               |
-| [IMAP.md](docs/PLAN_IMAP.md)                                    | IMAP/Dovecot Maildir compatibility plan         |
+| Doc                                                             | Topic                                                   |
+|-----------------------------------------------------------------|---------------------------------------------------------|
+| [CONTRIBUTING.md](docs/CONTRIBUTING.md)                         | Code style, patterns, development workflow              |
+| [DATABASE.md](docs/DATABASE.md)                                 | SQLite databases, ManagedDatabase, migrations           |
+| [STORAGE.md](docs/STORAGE.md)                                   | Storage backends, mount system, Home singleton          |
+| [SSE.md](docs/SSE.md)                                           | Real-time events, adding SSE to new domains             |
+| [ACL.md](docs/ACL.md)                                           | Additive ACL inheritance, visibility, effective members |
+| [ORGANISATIONS-AND-TEAMS.md](docs/ORGANISATIONS-AND-TEAMS.md)   | Org/team model, team drives, prefixed owner IDs         |
+| [LAYOUT.md](docs/LAYOUT.md)                                     | AppShell, ColumnLayout, responsive patterns             |
+| [LAYOUT-SHARED-COMPONENTS.md](docs/LAYOUT-SHARED-COMPONENTS.md) | UI component lookup reference                           |
+| [LAYOUT-UI-LIST.md](docs/LAYOUT-UI-LIST.md)                     | List hooks and patterns                                 |
+| [LAYOUT-UI-DRIVE.md](docs/LAYOUT-UI-DRIVE.md)                   | Drive UI component reference                            |
+| [CHAT.md](docs/CHAT.md)                                         | Chat rooms, slash commands, embedded chats              |
+| [COMMENTS_IN_DOCS.md](docs/COMMENTS_IN_DOCS.md)                 | Comment index, mentions, resolution tracking            |
+| [CALENDAR.md](docs/CALENDAR.md)                                 | Calendar, RRULE, sharing, team calendars                |
+| [SHARE-PROPAGATION.md](docs/SHARE-PROPAGATION.md)               | Push-based sharing, share registry                      |
+| [STICKIES.md](docs/STICKIES.md)                                 | Kanban board, Yjs data model                            |
+| [SLIDES.md](docs/SLIDES.md)                                     | Presentation editor, percentage coordinates             |
+| [SHEETS.md](docs/SHEETS.md)                                     | Spreadsheet, op-based Yjs sync                          |
+| [CLIPBOARD.md](docs/CLIPBOARD.md)                               | Inter-app copy-paste                                    |
+| [MEDIA-REFERENCES.md](docs/MEDIA-REFERENCES.md)                 | Name-based media/chat references in eigendocs           |
+| [HOTKEYS.md](docs/HOTKEYS.md)                                   | Keyboard shortcuts                                      |
+| [INLINE-EDITING.md](docs/INLINE-EDITING.md)                     | Inline text file editing in Drive                       |
+| [PREVIEWS.md](docs/PREVIEWS.md)                                 | File preview system, text/image/video previews          |
+| [PUBLIC-API.md](docs/PUBLIC-API.md)                             | Public endpoints, avatar resolution                     |
+| [PEOPLE.md](docs/PEOPLE.md)                                     | Org/team management UI                                  |
+| [NOTIFICATIONS.md](docs/NOTIFICATIONS.md)                       | Error/success toasts, SSE notification pattern          |
+| [TESTING.md](docs/TESTING.md)                                   | Test setup, patterns, test files                        |
+| [DOCKER.md](docs/DOCKER.md)                                     | Docker deployment                                       |
+| [IMAP.md](docs/PLAN_IMAP.md)                                    | IMAP/Dovecot Maildir compatibility plan                 |
 
 | [Code Reviews](codereviews/OVERVIEW.md)                         | Full-stack code review findings + fix priorities |
 

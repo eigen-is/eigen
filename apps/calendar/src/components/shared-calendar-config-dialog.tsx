@@ -133,7 +133,7 @@ export function SharedCalendarConfigDialog({open, onOpenChange, sharedCalendar}:
                         )}
                     </div>
 
-                    <DialogFooter className="flex justify-end">
+                    <DialogFooter>
                         {!isTeamCalendar && (
                             <Button
                                 type="button"
@@ -146,7 +146,7 @@ export function SharedCalendarConfigDialog({open, onOpenChange, sharedCalendar}:
                             </Button>
                         )}
                         <Button type="button" variant="outline" onClick={() => onOpenChange(false)}
-                                className="mr-2" disabled={isLoading}>
+                                disabled={isLoading}>
                             Cancel
                         </Button>
                         <Button onClick={handleSave} disabled={isLoading}>

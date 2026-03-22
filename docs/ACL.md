@@ -57,13 +57,32 @@ Strips entries already granted by ancestors or by ownership.
 
 When ACLs change, `apps/api/src/lib/drive/acl-propagation.ts` updates each affected user's `shared.db`.
 
+## Effective Members
+
+`Drive.getEffectiveMembers(mountId, pathId)` resolves all users with effective access to a path by walking the
+breadcrumb and collecting ACL entries from all ancestors. Teams are expanded to individual members via
+`resolveACLToEmails()`. The owner is always included with full permissions. Deduplicated by email (most permissive
+wins). Returns `{email: string, read: boolean, write: boolean}[]`.
+
+```
+GET /drive/:ownerId/:mountId/path/:pathId/effective-members
+```
+
+Used by:
+
+- `useChatRoom` — resolves room members for embedded chats (where the chat has no direct ACL)
+- `ChatRoom.notifySharedUsers()` — determines which users to send SSE events to
+
 ## Files
 
-| File                                                                 | Purpose                                                   |
-|----------------------------------------------------------------------|-----------------------------------------------------------|
-| `packages/lib/src/types/drive.ts`                                    | `DriveACL`, `DriveVisibility` types                       |
-| `apps/api/src/lib/drive/acl.ts`                                      | `canRead`, `canWrite`, `matchesACL`, `filterRedundantACL` |
-| `apps/api/src/lib/drive/acl-propagation.ts`                          | Propagate to shared DBs                                   |
-| `packages/ui/src/components/layout/drive/drive-access-list-edit.tsx` | Share dialog UI                                           |
+| File                                                                 | Purpose                                                                 |
+|----------------------------------------------------------------------|-------------------------------------------------------------------------|
+| `packages/lib/src/types/drive.ts`                                    | `DriveACL`, `DriveVisibility` types                                     |
+| `apps/api/src/lib/drive/acl.ts`                                      | `canRead`, `canWrite`, `matchesACL`, `filterRedundantACL`               |
+| `apps/api/src/lib/drive/acl-propagation.ts`                          | Propagate to shared DBs, `resolveACLToEmails()`, `EffectiveMember` type |
+| `apps/api/src/lib/drive/drive.ts`                                    | `getEffectiveMembers()`                                                 |
+| `apps/api/src/lib/drive/sharedDrive.ts`                              | `getEffectiveMembers()` override (with read permission check)           |
+| `packages/lib/src/core/drive/hooks/use-drive.ts`                     | `useEffectiveMembers()` hook                                            |
+| `packages/ui/src/components/layout/drive/drive-access-list-edit.tsx` | Share dialog UI                                                         |
 
 See: [ORGANISATIONS-AND-TEAMS.md](ORGANISATIONS-AND-TEAMS.md) for team ACL details

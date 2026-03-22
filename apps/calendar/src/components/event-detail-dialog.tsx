@@ -329,19 +329,17 @@ export function EventDetailDialog({open, onOpenChange, event, calendar, sharedCa
                         )}
                     </div>
 
-                    <DialogFooter className="flex justify-between">
-                        <div className="flex gap-1">
-                            {canEdit && (
-                                <>
-                                    <Button variant="ghost" size="icon" onClick={() => setEditOpen(true)}>
-                                        <Pencil className="h-4 w-4"/>
-                                    </Button>
-                                    <Button variant="ghost" size="icon" onClick={handleDeleteClick}>
-                                        <Trash2 className="h-4 w-4"/>
-                                    </Button>
-                                </>
-                            )}
-                        </div>
+                    <DialogFooter>
+                        {canEdit && (
+                            <div className="flex gap-1 mr-auto">
+                                <Button variant="ghost" size="icon" onClick={() => setEditOpen(true)}>
+                                    <Pencil className="h-4 w-4"/>
+                                </Button>
+                                <Button variant="ghost" size="icon" onClick={handleDeleteClick}>
+                                    <Trash2 className="h-4 w-4"/>
+                                </Button>
+                            </div>
+                        )}
                         <Button variant="outline" onClick={() => onOpenChange(false)}>
                             Close
                         </Button>
