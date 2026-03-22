@@ -88,27 +88,42 @@ sharingRestricted: integer('sharingRestricted').notNull().default(0),
 
 ### 4. Enforce in `SharedDrive.updateACL()`
 
+**Key insight**: team members always go through `SharedDrive` because `getSharedDrive("team_xyz", user)` sees
+`"team_xyz" !== user.id` and creates a `SharedDrive`. There is no team user that logs in — teams use a synthetic
+`TeamHome`. So the restriction check must explicitly bypass team members of the owning team.
+
 Replace the current one-liner with:
 
 ```typescript
-public async updateACL(mountId: string, pathId: string, acl: DriveACL[], visibility?: DriveVisibility) {
+public async updateACL(mountId: string, pathId: string, acl: DriveACL[], visibility?: DriveVisibility, sharingRestricted?: boolean) {
     const path = await this.withWritePermission(mountId, pathId,
         () => this.sharedDrive.getPath(mountId, pathId));
     if (!path) throw new ApiError(404, 'Path not found');
 
-    if (path.sharingRestricted) {
+    const isEffectiveOwner = await this.isEffectiveOwner(path.ownerId);
+
+    if (path.sharingRestricted && !isEffectiveOwner) {
         throw new ApiError(403, 'Sharing is restricted by the owner');
     }
 
-    return this.sharedDrive.updateACL(mountId, pathId, acl, visibility);
+    // Only effective owners can change the restriction flag
+    return this.sharedDrive.updateACL(mountId, pathId, acl, visibility,
+        isEffectiveOwner ? sharingRestricted : undefined);
+}
+
+private async isEffectiveOwner(ownerId: string): Promise<boolean> {
+    const parsed = parseOwnerId(ownerId);
+    if (parsed.type !== 'team') return false;
+    const memberships = await getMemberships(this.user.id);
+    return memberships.teamIds.includes(parsed.id);
 }
 ```
 
-Order matters: check write permission first (editors get 403 "no write permission"), then check restriction
-(editors with write get 403 "sharing restricted"). Viewers never see the restriction error.
+Order matters: check write permission first (non-editors get 403 "no write permission"), then check restriction
+(editors without ownership get 403 "sharing restricted"). Viewers never see the restriction error.
 
-The owner's own `Drive.updateACL()` is unaffected — it checks `canWrite(mountId, pathId, this.owner)` which
-always returns true for the owner. Team members also pass `canWrite` for team-owned paths.
+The owner's own `Drive.updateACL()` is unaffected — it checks `canWrite(mountId, pathId, this.owner)` where
+`this.owner` is the Home's synthetic user, and `path.ownerId === user.id` is always true for own paths.
 
 ### 5. Add `sharingRestricted` to the ACL route
 
@@ -145,8 +160,8 @@ if (sharingRestricted !== undefined) {
 }
 ```
 
-In `SharedDrive.updateACL()`, the `sharingRestricted` parameter is silently ignored (non-owners cannot change it).
-This avoids a separate route.
+`SharedDrive.updateACL()` passes `sharingRestricted` through to `Drive.updateACL()` only when the caller is an
+effective owner (team member for team-owned paths). For all other callers the parameter is dropped. See step 4.
 
 ### 6. Include flag in ACL propagation
 
@@ -198,10 +213,14 @@ keeps the backend simple. If self-removal becomes a real need, add a dedicated `
 
 ### Team-owned paths
 
-For team-owned paths, any team member acts as "owner" for this flag. This is consistent with how team
-ownership already works — `canWrite()` in `acl.ts` returns true for team members via `parseOwnerId()` +
-`getMemberships()`. The same check applies: `SharedDrive` is only created when `ownerId !== user.id`, so
-team members accessing their own team drive go through `Drive` (not `SharedDrive`) and are never restricted.
+Team members always go through `SharedDrive` — there is no team user that logs in. `getSharedDrive("team_xyz",
+user)` always creates a `SharedDrive` because `"team_xyz" !== user.id`. Team members pass the `withWritePermission`
+check because `canWrite()` in `acl.ts` grants write access to team members via `parseOwnerId()` +
+`getMemberships()`.
+
+The `sharingRestricted` check in `SharedDrive.updateACL()` explicitly bypasses team members via
+`isEffectiveOwner()` (see step 4). This means team members can both modify ACLs on restricted team paths and
+toggle the `sharingRestricted` flag itself — consistent with their co-owner role.
 
 ### Visibility changes blocked too
 
