@@ -306,6 +306,12 @@ export class Mount {
     }
 
     async updatePath(pathId: string, updates: Partial<Omit<DrivePath, 'id' | 'ownerId' | 'createdAt'>>): Promise<void> {
+        // DrivePath uses boolean, Drizzle column uses integer
+        const dbUpdates: any = {...updates};
+        if (updates.sharingRestricted !== undefined) {
+            dbUpdates.sharingRestricted = updates.sharingRestricted ? 1 : 0;
+        }
+
         if (updates.name !== undefined) {
             validateName(updates.name);
         }
@@ -324,10 +330,10 @@ export class Mount {
                         const oldPath = await this.resolveStoragePath(pathId);
                         if (oldPath) {
                             if (updates.name !== undefined) {
-                                updates = {...updates, file: targetName} as any;
+                                dbUpdates.file = targetName;
                             }
                             await this.db.update(paths)
-                                .set({...updates, updatedAt: new Date()})
+                                .set({...dbUpdates, updatedAt: new Date()})
                                 .where(eq(paths.id, pathId));
                             const newPath = await this.resolveStoragePath(pathId);
                             if (oldPath !== newPath) {
@@ -342,7 +348,7 @@ export class Mount {
 
         await this.db.update(paths)
             .set({
-                ...updates,
+                ...dbUpdates,
                 updatedAt: new Date()
             })
             .where(eq(paths.id, pathId));
@@ -701,6 +707,7 @@ export class Mount {
             thumbnail: row.thumbnail,
             acl: row.acl,
             visibility: (row.visibility ?? 'private') as DriveVisibility,
+            sharingRestricted: !!row.sharingRestricted,
             details: row.details ?? null,
             createdAt: row.createdAt ?? new Date(),
             updatedAt: row.updatedAt ?? new Date()

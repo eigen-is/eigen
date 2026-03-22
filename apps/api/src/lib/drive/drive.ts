@@ -487,7 +487,7 @@ export default class Drive {
         return await mount.getBreadcrumb(pathId);
     }
 
-    async updateACL(mountId: string, pathId: string, acl: DriveACL[] | null, visibility?: DriveVisibility): Promise<void> {
+    async updateACL(mountId: string, pathId: string, acl: DriveACL[] | null, visibility?: DriveVisibility, sharingRestricted?: boolean): Promise<void> {
         const mount = this.getMount(mountId);
         const item = await mount.getPath(pathId);
         if (!item) {
@@ -519,6 +519,7 @@ export default class Drive {
 
         const updates: Partial<DrivePath> = {acl: normalizedACL};
         if (visibility !== undefined) updates.visibility = visibility;
+        if (sharingRestricted !== undefined) updates.sharingRestricted = sharingRestricted;
         const oldACL = item.acl;
         await mount.updatePath(pathId, updates);
         const updatedItem = await mount.getPath(pathId);
@@ -631,6 +632,7 @@ export default class Drive {
             this.sharedDb.update(sharedSchema.sharedPaths).set({
                 acl: newACL,
                 visibility: path.visibility,
+                sharingRestricted: path.sharingRestricted ? 1 : 0,
                 name: path.name,
                 size: path.size,
                 thumbnail: path.thumbnail,
@@ -651,6 +653,7 @@ export default class Drive {
                 thumbnail: path.thumbnail,
                 acl: newACL,
                 visibility: path.visibility,
+                sharingRestricted: path.sharingRestricted ? 1 : 0,
                 createdAt: new Date(),
                 updatedAt: new Date()
             }).run();
@@ -715,6 +718,7 @@ export default class Drive {
             thumbnail: r.thumbnail,
             acl: r.acl as DriveACL[] | null,
             visibility: (r.visibility ?? 'private') as DriveVisibility,
+            sharingRestricted: !!r.sharingRestricted,
             details: r.details ?? null,
             createdAt: r.createdAt ?? new Date(),
             updatedAt: r.updatedAt ?? new Date()

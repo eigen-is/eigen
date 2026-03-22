@@ -3,10 +3,12 @@ import Drive from "./drive";
 import type {Home} from "../home";
 import type {DriveACL, DrivePath, DriveVisibility} from "@workspace/lib/types/drive";
 import type {MountInfo} from "@workspace/lib/types";
+import {parseOwnerId} from "@workspace/lib/types";
 import CollabDocument from "../collab/collabDocument.ts";
 import type {ChatRoom} from "../chat";
 import type {DatabaseConfig, ManagedDatabase, SchemaType} from "../core";
 import {ApiError} from "../core";
+import {getMemberships} from "../user/";
 
 export default class SharedDrive extends Drive {
     private sharedDrive: Drive;
@@ -182,8 +184,21 @@ export default class SharedDrive extends Drive {
         return this.sharedDrive.getChat(mountId, chatId);
     }
 
-    public async updateACL(mountId: string, pathId: string, acl: DriveACL[], visibility?: DriveVisibility) {
-        return this.withWritePermission(mountId, pathId, () => this.sharedDrive.updateACL(mountId, pathId, acl, visibility));
+    public async updateACL(mountId: string, pathId: string, acl: DriveACL[], visibility?: DriveVisibility, sharingRestricted?: boolean) {
+        const path = await this.withWritePermission(mountId, pathId,
+            () => this.sharedDrive.getPath(mountId, pathId));
+        if (!path) throw new ApiError(404, 'Path not found');
+
+        // Team members are effective owners — they bypass sharing restrictions
+        // and can toggle the flag. All other editors are blocked when restricted.
+        const effectiveOwner = await this.isEffectiveOwner(path.ownerId);
+
+        if (path.sharingRestricted && !effectiveOwner) {
+            throw new ApiError(403, 'Sharing is restricted by the owner');
+        }
+
+        return this.sharedDrive.updateACL(mountId, pathId, acl, visibility,
+            effectiveOwner ? sharingRestricted : undefined);
     }
 
     public async deleteFolder(mountId: string, pathId: string) {
@@ -232,6 +247,15 @@ export default class SharedDrive extends Drive {
 
     public async closeDatabase(mountId: string, pathId: string): Promise<void> {
         return this.sharedDrive.closeDatabase(mountId, pathId);
+    }
+
+    // Team members always go through SharedDrive (no team user logs in),
+    // but they are co-owners and should bypass sharing restrictions.
+    private async isEffectiveOwner(ownerId: string): Promise<boolean> {
+        const parsed = parseOwnerId(ownerId);
+        if (parsed.type !== 'team') return false;
+        const memberships = await getMemberships(this.user.id);
+        return memberships.teamIds.includes(parsed.id);
     }
 
     // Methods below must not be called on a SharedDrive. They are owner-only operations

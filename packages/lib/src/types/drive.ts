@@ -124,6 +124,7 @@ export type DrivePath = {
     thumbnail: string | null;
     acl: DriveACL[] | null;
     visibility: DriveVisibility;
+    sharingRestricted: boolean;
     details: DrivePathDetails;
     createdAt: Date;
     updatedAt: Date;

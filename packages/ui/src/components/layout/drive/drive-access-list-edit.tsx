@@ -4,7 +4,7 @@ import {useCallback, useEffect, useRef, useState} from "react"
 import {UserItem} from "../user-item"
 import type {DriveACL, DrivePath, DriveVisibility} from "@workspace/lib/types/drive"
 import {cn} from "@workspace/ui/lib/utils"
-import {type DirectAccessItem, useDriveAccess} from "@workspace/lib/drive"
+import {type DirectAccessItem, useDriveAccess, useIsEffectiveOwner} from "@workspace/lib/drive"
 import {Lock, Plus, Unlock, Users} from "lucide-react"
 import {AvatarIcon} from "@workspace/ui/components/avatar"
 import {Separator} from "@workspace/ui/components/separator"
@@ -22,10 +22,11 @@ import {validateEmailAddress} from "@workspace/lib/validation"
 import {usePublicConfig} from "@workspace/lib/public"
 import {usePeopleTeams} from "@workspace/lib/people"
 import {teamOwnerId} from "@workspace/lib/types"
+import {Checkbox} from "@workspace/ui/components/checkbox"
 
 export type DriveAccessListEditProps = {
     path: DrivePath
-    onSave: (updatedAcl: DriveACL[], visibility: DriveVisibility) => void
+    onSave: (updatedAcl: DriveACL[], visibility: DriveVisibility, sharingRestricted?: boolean) => void
     onCancel?: () => void
     className?: string
 }
@@ -49,14 +50,18 @@ export function DriveAccessListEdit({
     } = useDriveAccess(path, directListOverride)
 
     const [visibility, setVisibility] = useState<DriveVisibility>(path.visibility ?? 'private')
+    const [sharingRestricted, setSharingRestricted] = useState(path.sharingRestricted ?? false)
 
     // Fetch org and teams for the team sharing picker
     const {data: config} = usePublicConfig()
     const {data: teams} = usePeopleTeams(config?.orgId)
 
+    const isEffectiveOwner = useIsEffectiveOwner(path.ownerId)
+
     useEffect(() => {
         setDirectListOverride(undefined)
         setVisibility(path.visibility ?? 'private')
+        setSharingRestricted(path.sharingRestricted ?? false)
     }, [path])
 
     const handleAddUser = useCallback((suggestion: ContactSuggestion) => {
@@ -163,6 +168,11 @@ export function DriveAccessListEdit({
         setPendingChanges(true)
     }, [])
 
+    const handleSharingRestrictedChange = useCallback((checked: boolean | "indeterminate") => {
+        setSharingRestricted(!checked)
+        setPendingChanges(true)
+    }, [])
+
     const handleSave = useCallback(() => {
         const updatedAcl: DriveACL[] = []
 
@@ -176,8 +186,8 @@ export function DriveAccessListEdit({
             }
         }
 
-        onSave(updatedAcl, visibility)
-    }, [directList, visibility, onSave])
+        onSave(updatedAcl, visibility, isEffectiveOwner ? sharingRestricted : undefined)
+    }, [directList, visibility, sharingRestricted, isEffectiveOwner, onSave])
 
     return (
         <div className={cn("space-y-4", className)}>
@@ -291,6 +301,21 @@ export function DriveAccessListEdit({
                         </Select>
                     )}
                 </div>
+
+                {isEffectiveOwner && (
+                    <label className="flex items-center gap-2 mt-3 cursor-pointer">
+                        <Checkbox
+                            checked={!sharingRestricted}
+                            onCheckedChange={handleSharingRestrictedChange}
+                        />
+                        <div>
+                            <p className="text-sm">Editors can share</p>
+                            <p className="text-xs text-muted-foreground">
+                                When off, only the owner can add or remove people
+                            </p>
+                        </div>
+                    </label>
+                )}
             </div>
 
             <Separator/>

@@ -27,13 +27,13 @@ export function DriveAccessList({
         <div className={cn("space-y-4", className)}>
             <div className="flex items-center justify-between h-12 border-t border-b">
                 <h3 className="text-base font-medium">People with access</h3>
-                <TooltipButton
-                    icon={UserRoundPlus}
-                    tooltipText="Edit Access"
-                    onClick={() => {
-                        onShareClick?.(path);
-                    }}
-                />
+                {onShareClick && (
+                    <TooltipButton
+                        icon={UserRoundPlus}
+                        tooltipText="Edit Access"
+                        onClick={() => onShareClick(path)}
+                    />
+                )}
             </div>
 
             <div className="space-y-2">
