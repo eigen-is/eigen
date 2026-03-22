@@ -184,7 +184,7 @@ export function CalendarConfigDialog({open, onOpenChange, calendar, calendarCoun
                                 </>
                             )}
 
-                            <DialogFooter className="flex justify-end">
+                            <DialogFooter>
                                 {isEditMode && !calendar.isDefault && (
                                     <Button
                                         type="button"
@@ -197,7 +197,7 @@ export function CalendarConfigDialog({open, onOpenChange, calendar, calendarCoun
                                     </Button>
                                 )}
                                 <Button type="button" variant="outline" onClick={() => onOpenChange(false)}
-                                        className="mr-2" disabled={isLoading}>
+                                        disabled={isLoading}>
                                     Cancel
                                 </Button>
                                 <Button type="submit" disabled={isLoading || form.formState.isSubmitting}>

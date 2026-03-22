@@ -9,6 +9,7 @@ import {Lock, Plus, Unlock, Users} from "lucide-react"
 import {AvatarIcon} from "@workspace/ui/components/avatar"
 import {Separator} from "@workspace/ui/components/separator"
 import {Button} from "@workspace/ui/components/button"
+import {DialogFooter} from "@workspace/ui/components/dialog"
 import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from "@workspace/ui/components/select"
 import {
     DropdownMenu,
@@ -270,7 +271,7 @@ export function DriveAccessListEdit({
                 <h4 className="text-sm font-medium mb-2">General access</h4>
                 <div className="flex items-center justify-between mb-2">
                     <div className="flex items-center">
-                        <AvatarIcon className="w-10 h-10 cursor-pointer"
+                        <AvatarIcon className="w-8 h-8 cursor-pointer"
                                     onClick={() => handleVisibilityChange(visibility === 'private' ? 'public-read' : 'private')}>
                             {visibility !== 'private' ? <Unlock/> : <Lock/>}
                         </AvatarIcon>
@@ -291,7 +292,7 @@ export function DriveAccessListEdit({
                             value={visibility === 'public-write' ? "editor" : "viewer"}
                             onValueChange={(v) => handleVisibilityChange(v === 'editor' ? 'public-write' : 'public-read')}
                         >
-                            <SelectTrigger className="h-8 w-28">
+                            <SelectTrigger className="h-7 w-28">
                                 <SelectValue/>
                             </SelectTrigger>
                             <SelectContent>
@@ -303,12 +304,14 @@ export function DriveAccessListEdit({
                 </div>
 
                 {isEffectiveOwner && (
-                    <label className="flex items-center gap-2 mt-3 cursor-pointer">
-                        <Checkbox
-                            checked={!sharingRestricted}
-                            onCheckedChange={handleSharingRestrictedChange}
-                        />
-                        <div>
+                    <label className="flex items-center cursor-pointer">
+                        <div className="w-8 h-8 flex items-center justify-center shrink-0">
+                            <Checkbox
+                                checked={!sharingRestricted}
+                                onCheckedChange={handleSharingRestrictedChange}
+                            />
+                        </div>
+                        <div className="ml-3">
                             <p className="text-sm">Editors can share</p>
                             <p className="text-xs text-muted-foreground">
                                 When off, only the owner can add or remove people
@@ -320,45 +323,41 @@ export function DriveAccessListEdit({
 
             <Separator/>
 
-            <div className="flex justify-between">
-                <div>
-                    {teams && teams.length > 0 && (
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <Button variant="outline" className="gap-2">
-                                    <Users className="h-4 w-4"/>
-                                    Share with team
-                                </Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="start">
-                                {teams.map((team) => (
-                                    <DropdownMenuItem
-                                        key={team.id}
-                                        onClick={() => handleAddTeam(team.id)}
-                                        disabled={directList.some((i: DirectAccessItem) => i.id === teamOwnerId(team.id))}
-                                    >
-                                        <Users className="h-4 w-4 mr-2"/>
-                                        {team.name}
-                                    </DropdownMenuItem>
-                                ))}
-                            </DropdownMenuContent>
-                        </DropdownMenu>
-                    )}
-                </div>
-                <div className="flex space-x-4">
-                    {onCancel && (
-                        <Button variant="outline" onClick={onCancel}>
-                            Cancel
-                        </Button>
-                    )}
-                    <Button
-                        onClick={handleSave}
-                        disabled={!pendingChanges}
-                    >
-                        {pendingChanges ? "Save" : "Done"}
+            <DialogFooter>
+                {teams && teams.length > 0 && (
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button variant="outline" className="mr-auto gap-2">
+                                <Users className="h-4 w-4"/>
+                                Share with team
+                            </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start">
+                            {teams.map((team) => (
+                                <DropdownMenuItem
+                                    key={team.id}
+                                    onClick={() => handleAddTeam(team.id)}
+                                    disabled={directList.some((i: DirectAccessItem) => i.id === teamOwnerId(team.id))}
+                                >
+                                    <Users className="h-4 w-4 mr-2"/>
+                                    {team.name}
+                                </DropdownMenuItem>
+                            ))}
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                )}
+                {onCancel && (
+                    <Button variant="outline" onClick={onCancel}>
+                        Cancel
                     </Button>
-                </div>
-            </div>
+                )}
+                <Button
+                    onClick={handleSave}
+                    disabled={!pendingChanges}
+                >
+                    {pendingChanges ? "Save" : "Done"}
+                </Button>
+            </DialogFooter>
         </div>
     )
 }

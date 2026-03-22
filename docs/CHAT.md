@@ -119,14 +119,20 @@ Messages use `useInfiniteQuery` with cursor-based pagination:
 
 ## Files
 
-| File                                      | Purpose                   |
-|-------------------------------------------|---------------------------|
-| `apps/api/src/lib/chat/chat.ts`           | ChatRoom class            |
-| `apps/api/src/lib/chat/schema.ts`         | Drizzle schemas           |
-| `apps/api/src/lib/chat/db-config.ts`      | DB config + migrations    |
-| `apps/api/src/lib/chat/commands.ts`       | Backend slash commands    |
-| `apps/api/src/lib/chat/sse-events.ts`     | SSE builders              |
-| `apps/api/src/routes/chat.ts`             | API routes                |
-| `packages/lib/src/types/chat.ts`          | Shared types              |
-| `packages/lib/src/core/chat/`             | FE hooks + SSE handlers   |
-| `packages/ui/src/components/layout/chat/` | Shared chat UI components |
+| File                                         | Purpose                                      |
+|----------------------------------------------|----------------------------------------------|
+| `apps/api/src/lib/chat/chat.ts`              | ChatRoom class                               |
+| `apps/api/src/lib/chat/schema.ts`            | Drizzle schemas (messages + read_state)      |
+| `apps/api/src/lib/chat/db-config.ts`         | DB config + migrations                       |
+| `apps/api/src/lib/chat/commands.ts`          | Backend slash commands                       |
+| `apps/api/src/lib/chat/mentions.ts`          | `extractMentionedEmails()` for comment index |
+| `apps/api/src/lib/chat/comment-schema.ts`    | Comment index Drizzle schema                 |
+| `apps/api/src/lib/chat/comment-db-config.ts` | Comment index DB config                      |
+| `apps/api/src/lib/chat/comment-index.ts`     | CommentIndex class + helpers                 |
+| `apps/api/src/lib/chat/sse-events.ts`        | SSE builders                                 |
+| `apps/api/src/routes/chat.ts`                | API routes                                   |
+| `packages/lib/src/types/chat.ts`             | Shared types                                 |
+| `packages/lib/src/core/chat/`                | FE hooks + SSE handlers                      |
+| `packages/ui/src/components/layout/chat/`    | Shared chat UI components                    |
+
+See [COMMENTS_IN_DOCS.md](COMMENTS_IN_DOCS.md) for the comment index system.
