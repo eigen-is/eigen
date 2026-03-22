@@ -149,27 +149,29 @@ import { apiKey } from "@better-auth/api-key"
 
 plugins: [
     // ...existing plugins...
-    apiKey({
-        defaultPrefix: "eigen_",
-    }),
+   apiKey(),
 ]
 ```
 
 User creates a key via the settings UI:
 
 ```typescript
-authClient.apiKey.create({ name: "MacBook Calendar", prefix: "eigen_" })
-// returns { key: "eigen_xxxxxxxxxxxxxxxx" } — shown once, user copies it
+const {data} = await authClient.apiKey.create({
+   name: "MacBook Calendar",
+   prefix: "eigen_",          // per-key prefix
+})
+// data.key = "eigen_xxxxxxxxxxxxxxxx" — shown once, user copies it
 ```
+
+Management: `authClient.apiKey.list()`, `authClient.apiKey.delete({ keyId })`.
 
 CalDAV Basic Auth flow:
 
 1. Decode `Authorization: Basic <base64>` → `email:key`
-2. Call `auth.api.verifyApiKey({ body: { key } })` → `{ valid, key: { userId } }`
-3. Look up user by `userId`, verify email matches (safety check)
-4. Attach `userId` to request context
-
-Fallback: if `key` doesn't look like an API key (no `eigen_` prefix), try primary credential validation.
+2. Call `auth.api.verifyApiKey({ body: { key } })` → `{ valid, error, key: ApiKeyRecord | null }`
+3. If `valid`: extract `key.userId`, look up user, verify email matches (safety check)
+4. If not valid: try primary credential validation as fallback
+5. Attach `userId` to request context
 
 Benefits: user's primary password never exposed to CalDAV clients, individually revocable, standard practice
 (Google, Apple, Fastmail all use them). UI: settings page with "App Passwords" section — generate, name, revoke.
