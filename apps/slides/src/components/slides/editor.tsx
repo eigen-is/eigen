@@ -397,7 +397,7 @@ function SlideEditorInner({ownerId, path, canWrite, mediaFolderId, onAccessDialo
                 }}
             >
                 <div
-                    className="relative w-full"
+                    className="relative w-full overflow-hidden"
                     style={{
                         aspectRatio: '16/9',
                         maxHeight: '100%',
