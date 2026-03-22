@@ -1,5 +1,5 @@
 import type {User} from 'better-auth/types';
-import {type DriveACL, type DrivePath} from '@workspace/lib/types/drive';
+import {type DriveACL, type DrivePath, isCollabType} from '@workspace/lib/types/drive';
 import {parseOwnerId} from '@workspace/lib/types';
 import {getMemberships} from '../user/';
 
@@ -98,6 +98,30 @@ export function normalizeACL(acl: DriveACL[] | null): DriveACL[] | null {
             id: parsed && parsed.type === 'user' ? a.id.toLowerCase() : a.id,
         };
     });
+}
+
+/**
+ * Walk up the parentId chain to find the outermost collab container
+ * (doc/stickies/slides/sheets). Returns null for standalone chats that
+ * are not inside a container.
+ */
+export async function findContainerPath(
+    getPath: PathGetter,
+    startPathId: string
+): Promise<DrivePath | null> {
+    let currentId: string | null = startPathId;
+    let container: DrivePath | null = null;
+
+    while (currentId) {
+        const path = await getPath(currentId);
+        if (!path) break;
+        if (isCollabType(path.type)) {
+            container = path;
+        }
+        currentId = path.parentId;
+    }
+
+    return container;
 }
 
 /**
