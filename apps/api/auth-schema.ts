@@ -102,3 +102,28 @@ export const teamMember = sqliteTable("team_member", {
     userId: text('user_id').notNull().references(() => user.id, {onDelete: 'cascade'}),
     createdAt: integer('created_at', {mode: 'timestamp'})
 });
+
+export const apikey = sqliteTable("apikey", {
+    id: text("id").primaryKey(),
+    configId: text('config_id').notNull(),
+    name: text('name'),
+    start: text('start'),
+    referenceId: text('reference_id').notNull(),
+    prefix: text('prefix'),
+    key: text('key').notNull(),
+    refillInterval: integer('refill_interval'),
+    refillAmount: integer('refill_amount'),
+    lastRefillAt: integer('last_refill_at', {mode: 'timestamp'}),
+    enabled: integer('enabled', {mode: 'boolean'}),
+    rateLimitEnabled: integer('rate_limit_enabled', {mode: 'boolean'}),
+    rateLimitTimeWindow: integer('rate_limit_time_window'),
+    rateLimitMax: integer('rate_limit_max'),
+    requestCount: integer('request_count'),
+    remaining: integer('remaining'),
+    lastRequest: integer('last_request', {mode: 'timestamp'}),
+    expiresAt: integer('expires_at', {mode: 'timestamp'}),
+    createdAt: integer('created_at', {mode: 'timestamp'}).notNull(),
+    updatedAt: integer('updated_at', {mode: 'timestamp'}).notNull(),
+    permissions: text('permissions'),
+    metadata: text('metadata'),
+});
