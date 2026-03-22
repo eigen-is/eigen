@@ -184,6 +184,33 @@ export default class SharedDrive extends Drive {
         return this.sharedDrive.getChat(mountId, chatId);
     }
 
+    public async findContainerPath(mountId: string, pathId: string): Promise<DrivePath | null> {
+        return this.sharedDrive.findContainerPath(mountId, pathId);
+    }
+
+    public async inviteToChat(mountId: string, chatId: string, email: string) {
+        if (!(await this.canWrite(mountId, chatId, this.user))) {
+            throw new ApiError(403, 'No write permission');
+        }
+
+        const chatPath = await this.sharedDrive.getPath(mountId, chatId);
+        if (!chatPath) throw new ApiError(404, 'Chat not found');
+
+        const container = await this.sharedDrive.findContainerPath(mountId, chatPath.parentId ?? '');
+        const targetPath = container ?? chatPath;
+
+        if (container && !(await this.canWrite(mountId, targetPath.id, this.user))) {
+            throw new ApiError(403, 'No write permission on container document');
+        }
+
+        if (targetPath.sharingRestricted && !(await this.isEffectiveOwner(targetPath.ownerId))) {
+            throw new ApiError(403, 'Sharing is restricted by the owner');
+        }
+
+        // Delegate directly — Drive.inviteToChat would resolve the container again
+        return this.sharedDrive.inviteToChat(mountId, chatId, email);
+    }
+
     public async updateACL(mountId: string, pathId: string, acl: DriveACL[], visibility?: DriveVisibility, sharingRestricted?: boolean) {
         const path = await this.withWritePermission(mountId, pathId,
             () => this.sharedDrive.getPath(mountId, pathId));

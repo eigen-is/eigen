@@ -1,11 +1,10 @@
 import {useCallback, useMemo, useRef, useState} from 'react';
 import {useAuth} from '../../auth';
-import {useMessages, usePostMessage} from './use-chat';
-import {useCheckWritePermission, useFolderContent, usePathInfo, useUpdateACL, useUploadFile} from '../../drive';
+import {useInviteToChat, useMessages, usePostMessage} from './use-chat';
+import {useCheckWritePermission, useFolderContent, usePathInfo, useUploadFile} from '../../drive';
 import {COMMANDS_HELP, getLocalCommand, isUnknownCommand} from '../commands';
 import {validateEmailTarget} from '../../../validation';
 import type {ChatMessage, RoomMember} from '../../../types/chat';
-import type {DriveACL} from '../../../types/drive';
 
 let localIdCounter = 0;
 
@@ -22,7 +21,7 @@ export function useChatRoom(ownerId: string, mountId: string, chatId: string) {
     const postMessage = usePostMessage(ownerId, mountId, chatId);
     const uploadFile = useUploadFile(ownerId, mountId);
     const {data: chatPath} = usePathInfo(ownerId, mountId, chatId);
-    const updateACL = useUpdateACL(ownerId, mountId);
+    const inviteToChat = useInviteToChat(ownerId, mountId, chatId);
     const {data: writePermission} = useCheckWritePermission(ownerId, mountId, chatId);
     const readOnly = writePermission ? !writePermission.canWrite : false;
     const {data: chatContents = []} = useFolderContent(ownerId, mountId, chatId);
@@ -125,21 +124,23 @@ export function useChatRoom(ownerId: string, mountId: string, chatId: string) {
                         addLocalMessage(inviteError);
                         return;
                     }
-                    const currentAcl = chatPath.acl || [];
-                    if (currentAcl.some(a => a.id.toLowerCase() === local.target.toLowerCase())) {
-                        addLocalMessage(`${local.target} already has access to this room.`);
-                        return;
+                    try {
+                        const result = await inviteToChat.mutateAsync({email: local.target});
+                        if (result?.alreadyHasAccess) {
+                            addLocalMessage(`${local.target} already has access.`);
+                        } else {
+                            addLocalMessage(`You invited ${local.target}.`);
+                        }
+                    } catch {
+                        addLocalMessage(`Failed to invite ${local.target}.`);
                     }
-                    const newAcl: DriveACL[] = [...currentAcl, {id: local.target, read: true, write: true}];
-                    await updateACL.mutateAsync({path: chatPath, acl: newAcl});
-                    addLocalMessage(`You invited ${local.target} to the room.`);
                     return;
                 }
             }
         }
 
         await postMessage.mutateAsync({content: rawContent, attachments});
-    }, [ownerId, mountId, chatId, chatPath, chatContents, uploadFile, postMessage, updateACL, addLocalMessage, findLastWhisperFrom]);
+    }, [ownerId, mountId, chatId, chatPath, chatContents, uploadFile, postMessage, inviteToChat, addLocalMessage, findLastWhisperFrom]);
 
     const allMessages = useMemo(() => {
         return [...messages, ...localMessages].sort(
