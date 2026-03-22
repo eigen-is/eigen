@@ -229,4 +229,4 @@ Detailed architecture docs in `docs/`:
 | [TODO-CALENDAR-TIMEZONE.md](docs/TODO-CALENDAR-TIMEZONE.md)   | Timezone-aware recurrence expansion      |
 | [FORTUNE-SHEETS-TODO.md](docs/FORTUNE-SHEETS-TODO.md)         | Fortune-sheet refactoring audit          |
 | [RESEARCH_AI.md](docs/RESEARCH_AI.md)                         | Local/private AI integration research    |
-| [RESEARCH_CALDAV.md](docs/RESEARCH_CALDAV.md)                 | CalDAV backend feasibility research      |
+| [RESEARCH_CALDAV.md](docs/RESEARCH_CALDAV.md)                 | CalDAV implementation plan               |

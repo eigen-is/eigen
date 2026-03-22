@@ -1,133 +1,160 @@
-# CalDAV Backend Research
+# CalDAV Implementation Plan
 
-Research into adding CalDAV support to Eigen's calendar, allowing users to sync with Apple Calendar, Thunderbird,
-DAVx5 (Android), GNOME Calendar, and other standards-compliant clients.
+CalDAV (RFC 4791) server for Eigen's calendar. Enables sync with Apple Calendar, Thunderbird, DAVx5, GNOME Calendar.
+Thin adapter layer on top of the existing `Calendar` class — same Elysia server, `/dav/*` prefix, HTTP Basic Auth.
 
-## TL;DR
+## Overview
 
-Eigen's calendar schema is already ~70% CalDAV-ready (`ctag`, `etag`, `uid`, `uri`, `sequence`, `rrule`, timezone
-support). The main work is building the WebDAV/XML request/response layer, iCalendar serialization, and
-authentication. Estimated effort: **2-4 weeks** using a library for XML plumbing, or **3-6 months** from scratch.
-Recommended approach: thin CalDAV adapter layer on top of the existing Calendar class.
+CalDAV extends WebDAV (RFC 4918) to provide calendar access using iCalendar format (RFC 5545). Clients interact via:
 
----
+1. Discovery — PROPFIND chain from `/.well-known/caldav` to calendar-home-set
+2. Sync — REPORT queries (calendar-query, sync-collection) or ctag polling
+3. CRUD — PUT/DELETE with ETag conflict detection
+4. XML everywhere — multistatus responses, multi-namespace (`DAV:`, `urn:ietf:params:xml:ns:caldav`, Apple extensions)
 
-## What CalDAV Is
+CalDAV clients are native apps (not browsers) — CORS does not apply. Auth is HTTP Basic, not cookie/session.
 
-CalDAV (RFC 4791) extends WebDAV (RFC 4918) to provide calendar access using the iCalendar data format (RFC 5545).
-Clients interact with a CalDAV server by:
+## Schema Changes
 
-1. Discovering the user's calendar home via PROPFIND
-2. Listing calendars in the home (PROPFIND Depth:1)
-3. Syncing events via REPORT queries or sync-token
-4. Creating/updating/deleting events via PUT/DELETE with ETags for conflict detection
+Eigen's schema is ~70% CalDAV-ready. Fields that map directly:
 
-The protocol is XML-heavy. Every request/response uses WebDAV's multistatus XML format with multiple namespaces
-(`DAV:`, `urn:ietf:params:xml:ns:caldav`, Apple extensions).
+| Eigen Field             | CalDAV Equivalent          |
+|-------------------------|----------------------------|
+| `calendars.ctag`        | `CS:getctag`               |
+| `events.etag`           | `DAV:getetag`              |
+| `events.uid`            | `VEVENT UID`               |
+| `events.uri`            | Resource URL               |
+| `events.sequence`       | `VEVENT SEQUENCE`          |
+| `events.rrule`          | `VEVENT RRULE`             |
+| `events.timezone`       | `VTIMEZONE TZID`           |
+| `events.status`         | `VEVENT STATUS`            |
+| `events.title`          | `VEVENT SUMMARY`           |
+| `events.description`    | `VEVENT DESCRIPTION`       |
+| `events.location`       | `VEVENT LOCATION`          |
+| `events.startTime`      | `VEVENT DTSTART`           |
+| `events.endTime`        | `VEVENT DTEND`             |
+| `events.allDay`         | `DTSTART;VALUE=DATE`       |
+| `events.parentEventId`  | `RECURRENCE-ID`            |
+| `events.recurrenceDate` | `RECURRENCE-ID` value      |
+| `calendars.name`        | `DAV:displayname`          |
+| `calendars.color`       | `ICAL:calendar-color`      |
+| `data.attendees`        | `VEVENT ATTENDEE`          |
+| `data.organizer`        | `VEVENT ORGANIZER`         |
+| `data.reminders`        | `VEVENT VALARM`            |
 
----
+### New columns
 
-## Current Schema Alignment
+```sql
+-- events table
+ALTER TABLE events ADD COLUMN icsBlob TEXT;       -- raw .ics for round-trip fidelity
+ALTER TABLE events ADD COLUMN eventCtag INTEGER;   -- ctag snapshot at time of last change
 
-Fields Eigen already has that map directly to CalDAV:
+-- new table: deletion tombstones for sync-collection
+CREATE TABLE event_tombstones (
+  uri TEXT NOT NULL,
+  calendarId TEXT NOT NULL,
+  deletedAtCtag INTEGER NOT NULL
+);
+CREATE INDEX idx_tombstones_cal_ctag ON event_tombstones(calendarId, deletedAtCtag);
+```
 
-| Eigen Field             | CalDAV Equivalent          | Status |
-|-------------------------|----------------------------|--------|
-| `calendars.ctag`        | `CS:getctag`               | Ready  |
-| `events.etag`           | `DAV:getetag`              | Ready  |
-| `events.uid`            | `VEVENT UID`               | Ready  |
-| `events.uri`            | Resource URL (`{uid}.ics`) | Ready  |
-| `events.sequence`       | `VEVENT SEQUENCE`          | Ready  |
-| `events.rrule`          | `VEVENT RRULE`             | Ready  |
-| `events.timezone`       | `VTIMEZONE TZID`           | Ready  |
-| `events.status`         | `VEVENT STATUS`            | Ready  |
-| `events.title`          | `VEVENT SUMMARY`           | Ready  |
-| `events.description`    | `VEVENT DESCRIPTION`       | Ready  |
-| `events.location`       | `VEVENT LOCATION`          | Ready  |
-| `events.startTime`      | `VEVENT DTSTART`           | Ready  |
-| `events.endTime`        | `VEVENT DTEND`             | Ready  |
-| `events.allDay`         | `DTSTART;VALUE=DATE`       | Ready  |
-| `events.parentEventId`  | `RECURRENCE-ID`            | Ready  |
-| `events.recurrenceDate` | `RECURRENCE-ID` value      | Ready  |
-| `calendars.name`        | `DAV:displayname`          | Ready  |
-| `calendars.color`       | `ICAL:calendar-color`      | Ready  |
-| `data.attendees`        | `VEVENT ATTENDEE`          | Ready  |
-| `data.organizer`        | `VEVENT ORGANIZER`         | Ready  |
-| `data.reminders`        | `VEVENT VALARM`            | Ready  |
+### New indexes
 
-**What's missing:**
+```sql
+CREATE UNIQUE INDEX idx_events_uri_calendar ON events(calendarId, uri);
+CREATE UNIQUE INDEX idx_events_uid_calendar ON events(calendarId, uid);
+```
 
-| Need                    | Purpose                                               | Effort |
-|-------------------------|-------------------------------------------------------|--------|
-| iCalendar blob column   | Round-trip fidelity (preserve unknown properties)     | Small  |
-| Deletion tombstones     | sync-collection REPORT needs to report deleted events | Small  |
-| VTIMEZONE generation    | iCalendar requires full timezone definitions          | Small  |
-| XML request/response    | WebDAV multistatus parsing and generation             | Large  |
-| iCalendar serialization | Convert JSON schema <-> `.ics` text                   | Medium |
-| Discovery endpoints     | `.well-known/caldav`, principal, calendar-home-set    | Small  |
-| Basic Auth endpoint     | CalDAV clients cannot use cookie/session auth         | Small  |
+CalDAV addresses resources by URI (`{uid}.ics`). The current schema has no uniqueness constraint on `uri` or `uid`
+per calendar, and no `getEventByUri()` method exists. Both are required — CalDAV PUT/GET/DELETE all use the URI as
+the resource identifier.
 
----
+### ETag fix
 
-## Protocol Requirements
+The current `computeEtag()` is content-based (MD5 of event fields). Two identical updates produce the same ETag,
+which can confuse sync clients that rely on ETag changes for change detection. Fix: include `updatedAt` (or a
+monotonic counter) in the hash input. Alternatively, use `"${calendarCtag}-${eventId}"` as the ETag — simple,
+guaranteed unique per change, and trivially derived.
 
-### HTTP Methods Needed
+## Architecture
 
-| Method          | Purpose                                                       | Priority               |
-|-----------------|---------------------------------------------------------------|------------------------|
-| `OPTIONS`       | Advertise CalDAV capabilities                                 | Required               |
-| `PROPFIND`      | Property discovery (calendars, user)                          | Required               |
-| `PROPPATCH`     | Modify calendar properties                                    | Required               |
-| `REPORT`        | calendar-query, calendar-multiget, sync-collection, free-busy | Required               |
-| `GET`           | Retrieve single `.ics` resource                               | Required               |
-| `PUT`           | Create/update event (with `If-Match`)                         | Required               |
-| `DELETE`        | Delete event                                                  | Required               |
-| `MKCALENDAR`    | Create new calendar collection                                | Required               |
-| `MKCOL`         | Create collection (generic WebDAV)                            | Nice-to-have           |
-| `COPY`/`MOVE`   | Move events between calendars                                 | Rarely used            |
-| `LOCK`/`UNLOCK` | Concurrency (WebDAV)                                          | Not needed in practice |
+### Same Elysia server, `/dav/*` prefix
 
-### REPORT Queries
+```
+Port 8000:
+  /auth/*         -> better-auth (cookie/session)
+  /calendar/*     -> existing REST API (cookie auth)
+  /dav/*          -> CalDAV routes (Basic Auth, XML bodies)
+  /.well-known/*  -> CalDAV discovery redirects
+```
 
-Three mandatory reports, all returning `207 Multi-Status` XML:
+Elysia supports custom HTTP methods via `.route()`:
 
-- **calendar-query**: Filter events by component type, time range, and property values. This is the main sync
-  mechanism for clients that don't support sync-token
-- **calendar-multiget**: Batch-fetch specific events by URL (used after sync-token reveals changed URLs)
-- **free-busy-query**: Aggregate busy times for a time range (returns `VFREEBUSY` iCalendar, not XML)
-- **sync-collection** (RFC 6578): Incremental sync -- client sends previous sync-token, server returns only
-  changes since that token. Preferred by modern clients (DAVx5, Apple Calendar)
+```typescript
+app.route('PROPFIND', '/dav/*', handler)
+app.route('REPORT', '/dav/*', handler)
+app.route('MKCALENDAR', '/dav/*', handler)
+app.route('PROPPATCH', '/dav/*', handler)
+```
 
-### Properties Required
+**CORS note**: The current CORS config in `app.ts` only allows `GET/POST/PUT/DELETE/OPTIONS`. CalDAV methods
+(PROPFIND, REPORT, etc.) are not in this list. This is fine — CalDAV clients are native apps, not browsers, so CORS
+does not apply. But the Elysia CORS middleware must not reject requests with unknown methods on `/dav/*`. Either
+exclude `/dav/*` from CORS or add WebDAV methods to the allowed list.
 
-**On calendar collections (PROPFIND Depth:0):**
+**Body parsing note**: Elysia parses JSON by default. CalDAV sends `application/xml` bodies. The `/dav/*` routes
+must read the raw request body as text (`await request.text()`) and parse XML manually. Use `parse: 'text'` or
+access `request.text()` directly.
 
-- `DAV:resourcetype` -- `<collection/>` + `<calendar/>`
-- `DAV:displayname` -- calendar name
-- `CALDAV:calendar-description`
-- `CALDAV:calendar-timezone` -- default VTIMEZONE
-- `CALDAV:supported-calendar-component-set` -- `VEVENT` (and optionally `VTODO`)
-- `CS:getctag` -- Apple extension, all clients expect it
-- `DAV:sync-token` -- RFC 6578
-- `ICAL:calendar-color` -- Apple extension
+### File structure
 
-**On the user principal:**
+```
+apps/api/src/lib/caldav/
+├── caldav-router.ts      -- Elysia route group with Basic Auth
+├── auth.ts               -- Basic Auth extraction + validation
+├── discovery.ts          -- .well-known, principal, calendar-home-set
+├── propfind.ts           -- PROPFIND handler (Depth 0/1)
+├── proppatch.ts          -- PROPPATCH handler (calendar name/color)
+├── report.ts             -- calendar-query, calendar-multiget, sync-collection
+├── resource.ts           -- GET/PUT/DELETE on individual .ics resources
+├── ical-serialize.ts     -- CalendarEvent -> iCalendar text
+├── ical-parse.ts         -- iCalendar text -> CalendarEvent fields
+├── xml-builder.ts        -- Multistatus XML response generation
+├── xml-parser.ts         -- PROPFIND/REPORT XML request parsing
+└── vtimezone.ts          -- VTIMEZONE component generation
+```
 
-- `DAV:current-user-principal` -- who is logged in
-- `CALDAV:calendar-home-set` -- URL of the calendar collection parent
-- `DAV:principal-URL`
+## Authentication
 
-**On calendar objects:**
+CalDAV clients only support HTTP-level auth. Cookie/session auth does not work.
 
-- `DAV:getetag`
-- `DAV:getcontenttype` -- `text/calendar; charset=utf-8`
-- `CALDAV:calendar-data` -- the iCalendar content
+### HTTP Basic Auth
 
----
+1. Extract `Authorization: Basic <base64>` header on all `/dav/*` requests
+2. Decode to `email:password`
+3. Validate against better-auth's credential store
+
+### App-specific passwords (recommended)
+
+Add an `app_passwords` table:
+
+```sql
+CREATE TABLE app_passwords (
+  id TEXT PRIMARY KEY,
+  userId TEXT NOT NULL,
+  name TEXT NOT NULL,          -- "MacBook Calendar", "DAVx5"
+  passwordHash TEXT NOT NULL,  -- bcrypt/argon2 hash
+  createdAt INTEGER DEFAULT (unixepoch()),
+  lastUsedAt INTEGER
+);
+```
+
+Benefits: user's primary password never exposed to CalDAV clients, individually revocable, standard practice
+(Google, Apple, Fastmail all use them). UI: settings page with "App Passwords" section — generate, name, revoke.
+
+Validation order: try app-specific passwords first, fall back to primary credential if none match.
 
 ## Discovery Flow
-
-Every CalDAV client performs this sequence on initial setup:
 
 ```
 1. GET /.well-known/caldav
@@ -142,131 +169,216 @@ Every CalDAV client performs this sequence on initial setup:
 4. PROPFIND /dav/calendars/{userId}/  (Depth: 1)
    <- List of calendar collections with displayname, color, ctag, etc.
 
-5. REPORT on each calendar for events (calendar-query or sync-collection)
+5. REPORT on each calendar (calendar-query or sync-collection)
 ```
 
-Apple Calendar and iOS **require** the `/.well-known/caldav` redirect. Thunderbird does not support auto-discovery --
-users enter the full calendar URL manually.
+Apple Calendar **requires** `/.well-known/caldav`. Thunderbird does not auto-discover — users enter the full URL.
 
----
+### OPTIONS response
 
-## Authentication
+Every `/dav/*` request should respond to OPTIONS with:
 
-CalDAV clients only support HTTP-level authentication:
+```
+DAV: 1, 2, 3, calendar-access, extended-mkcol
+Allow: OPTIONS, GET, PUT, DELETE, PROPFIND, PROPPATCH, REPORT, MKCALENDAR
+```
 
-- **HTTP Basic Auth** -- universally supported, simplest to implement
-- **HTTP Digest Auth** -- supported by most clients, more complex server-side
-- **Bearer tokens** -- not supported by most native CalDAV clients
+The `DAV:` header is required — clients use it to detect CalDAV capability.
 
-Cookie/session auth (what Eigen uses via better-auth) **does not work** with CalDAV clients.
+## HTTP Methods
 
-### Recommended approach
+| Method       | Path Pattern                                      | Purpose                              |
+|--------------|---------------------------------------------------|--------------------------------------|
+| OPTIONS      | `/dav/*`                                          | Advertise DAV capabilities           |
+| PROPFIND     | `/dav/`                                           | current-user-principal               |
+| PROPFIND     | `/dav/principals/{userId}/`                       | calendar-home-set                    |
+| PROPFIND     | `/dav/calendars/{userId}/`                        | List calendars (Depth: 1)            |
+| PROPFIND     | `/dav/calendars/{userId}/{calendarId}/`           | Calendar properties (Depth: 0 or 1)  |
+| PROPPATCH    | `/dav/calendars/{userId}/{calendarId}/`           | Update calendar name/color           |
+| MKCALENDAR   | `/dav/calendars/{userId}/{calendarId}/`           | Create calendar                      |
+| DELETE       | `/dav/calendars/{userId}/{calendarId}/`           | Delete calendar                      |
+| REPORT       | `/dav/calendars/{userId}/{calendarId}/`           | calendar-query, multiget, sync       |
+| GET          | `/dav/calendars/{userId}/{calendarId}/{uri}`      | Retrieve single .ics                 |
+| PUT          | `/dav/calendars/{userId}/{calendarId}/{uri}`      | Create/update event                  |
+| DELETE       | `/dav/calendars/{userId}/{calendarId}/{uri}`      | Delete event                         |
 
-Add a `/dav/*` route prefix to Elysia that:
+### REPORT types
 
-1. Extracts `Authorization: Basic <base64>` header
-2. Validates against better-auth's credential store (email + password)
-3. Or supports app-specific passwords (a separate password table for CalDAV access, better security practice)
+- **calendar-query** — filter by component type and time range, return matching events as iCalendar
+- **calendar-multiget** — batch-fetch specific events by URL (after sync-token reveals changed URIs)
+- **sync-collection** (RFC 6578) — incremental sync, client sends previous token, server returns changes
+- **free-busy-query** — aggregate busy times, returns `VFREEBUSY` iCalendar (not XML)
 
-App-specific passwords are worth considering since they:
+### Properties
 
-- Don't expose the user's primary password to every CalDAV client
-- Can be individually revoked
-- Are standard practice (Google, Apple, Fastmail all use them for CalDAV)
+**Calendar collection (PROPFIND Depth: 0):**
+`DAV:resourcetype`, `DAV:displayname`, `CALDAV:calendar-description`, `CALDAV:calendar-timezone`,
+`CALDAV:supported-calendar-component-set`, `CS:getctag`, `DAV:sync-token`, `ICAL:calendar-color`
 
-### HTTPS
+**Calendar object (PROPFIND Depth: 1 on collection):**
+`DAV:getetag`, `DAV:getcontenttype` (`text/calendar; charset=utf-8`), `CALDAV:calendar-data`
 
-Eigen requires HTTPS for all instances, so this is already satisfied. CalDAV over HTTPS (sometimes called CalDAVS)
-is the standard transport -- all major clients expect it, and iOS/DAVx5 refuse plain HTTP. Basic Auth credentials
-are transmitted securely over TLS, so no additional transport-layer concerns.
+**User principal:**
+`DAV:current-user-principal`, `CALDAV:calendar-home-set`, `DAV:principal-URL`
 
-DNS SRV auto-discovery (optional) uses the `_caldavs._tcp` record type (the `s` suffix denotes TLS).
+## Calendar Class Changes
 
----
+### New methods needed
+
+```typescript
+// Lookup by URI — CalDAV addresses resources by URI, not by ID
+getEventByUri(calendarId: string, uri: string): CalendarEvent | null
+
+// Raw events for CalDAV — NOT expanded occurrences
+// Returns master events + exception events, NOT CalendarEventOccurrence[]
+getRawEventsInRange(calendarId: string, from: number, to: number): CalendarEvent[]
+
+// All raw events in a calendar (for initial sync / full PROPFIND Depth:1)
+getRawEvents(calendarId: string): CalendarEvent[]
+
+// Batch lookup by URI (for calendar-multiget REPORT)
+getEventsByUris(calendarId: string, uris: string[]): CalendarEvent[]
+
+// Sync-collection support
+getChangedEventsSince(calendarId: string, sinceCtag: number): CalendarEvent[]
+getDeletedEventsSince(calendarId: string, sinceCtag: number): { uri: string }[]
+
+// CalDAV PUT — create or update from parsed iCalendar
+upsertFromIcs(calendarId: string, uri: string, icsBlob: string, ifMatch?: string): CalendarEvent
+
+// CalDAV DELETE — delete by URI with optional ETag check
+deleteByUri(calendarId: string, uri: string, ifMatch?: string): void
+```
+
+### Critical: `getEventsInRange()` vs CalDAV
+
+The existing `getEventsInRange()` returns **expanded `CalendarEventOccurrence[]`** — synthetic objects for each
+recurrence instance. CalDAV clients do their own recurrence expansion. The server must return:
+
+- The **master event** (with RRULE intact) — one VEVENT per recurring series
+- Any **exception events** (with RECURRENCE-ID) — modified/cancelled instances
+- The client does the expansion itself
+
+For `calendar-query` with `time-range` filter, the server must check whether any occurrence of a recurring event
+falls within the requested range (reuse the existing `expandRecurrence()` logic for this check), but still return
+the **raw master VEVENT**, not expanded instances.
+
+`getRawEventsInRange()` should:
+1. Return non-recurring events that overlap `[from, to]` (same as current)
+2. For recurring events: expand to check overlap, but if **any** occurrence hits the range, include the master event
+3. Include all exception events whose parent is a matching recurring event
+
+### Tombstone management
+
+On event deletion, before removing the row:
+
+```typescript
+const cal = this.getCalendarById(event.calendarId);
+this.db.insert(schema.eventTombstones).values({
+  uri: event.uri,
+  calendarId: event.calendarId,
+  deletedAtCtag: cal.ctag + 1, // will be the ctag after incrementCtag()
+}).run();
+```
+
+Periodically clean tombstones older than N ctags (or a time threshold) to bound table growth.
 
 ## iCalendar Serialization
 
-Converting between Eigen's JSON event model and iCalendar `.ics` format.
-
-### JSON -> iCalendar (for GET/REPORT responses)
+### JSON -> iCalendar (`ical-serialize.ts`)
 
 ```
-CalendarEvent {                     VEVENT {
-  uid            ───────────────>     UID
-  title          ───────────────>     SUMMARY
-  description    ───────────────>     DESCRIPTION
-  location       ───────────────>     LOCATION
-  startTime      ───────────────>     DTSTART (epoch -> UTC or TZID)
-  endTime        ───────────────>     DTEND
-  allDay         ───────────────>     DTSTART;VALUE=DATE / DTEND;VALUE=DATE
-  rrule          ───────────────>     RRULE
-  timezone       ───────────────>     DTSTART;TZID= + VTIMEZONE component
-  status         ───────────────>     STATUS (CONFIRMED/TENTATIVE/CANCELLED)
-  sequence       ───────────────>     SEQUENCE
-  data.attendees ───────────────>     ATTENDEE properties
-  data.organizer ───────────────>     ORGANIZER property
-  data.reminders ───────────────>     VALARM components
-  data.url       ───────────────>     URL
-  recurrenceDate ───────────────>     RECURRENCE-ID (on exception events)
-}                                   }
+CalendarEvent                       VCALENDAR/VEVENT
+  uid            ──────────>          UID
+  title          ──────────>          SUMMARY
+  description    ──────────>          DESCRIPTION
+  location       ──────────>          LOCATION
+  startTime      ──────────>          DTSTART (epoch -> UTC or TZID)
+  endTime        ──────────>          DTEND
+  allDay         ──────────>          DTSTART;VALUE=DATE / DTEND;VALUE=DATE
+  rrule          ──────────>          RRULE
+  timezone       ──────────>          DTSTART;TZID= + VTIMEZONE component
+  status         ──────────>          STATUS (CONFIRMED/TENTATIVE/CANCELLED)
+  sequence       ──────────>          SEQUENCE
+  data.attendees ──────────>          ATTENDEE properties
+  data.organizer ──────────>          ORGANIZER property
+  data.reminders ──────────>          VALARM components
+  data.url       ──────────>          URL
+  recurrenceDate ──────────>          RECURRENCE-ID
 ```
 
-### iCalendar -> JSON (for PUT requests from clients)
+If `icsBlob` exists on the event, **use it as the base** and only update fields that Eigen manages. This preserves
+unknown X-properties (X-APPLE-TRAVEL-ADVISORY, X-APPLE-STRUCTURED-LOCATION, etc.) for round-trip fidelity.
 
-Reverse mapping. Parse with `ical.js`, extract known fields into the Eigen schema, and store the **raw `.ics` blob**
-in a new column for properties we don't model (custom X-properties, unknown fields). This ensures round-trip
-fidelity -- a requirement of CalDAV.
+### iCalendar -> JSON (`ical-parse.ts`)
 
-### Recommended library
+Parse incoming `.ics` with `ical.js`. Extract known fields into Eigen's schema. Store the **full raw iCalendar text**
+in `icsBlob`.
 
-**ical.js** (`npm: ical.js`): Full parser and generator, used internally by Thunderbird, handles VTIMEZONE, RRULE,
-RECURRENCE-ID, VALARM, ATTENDEE, ORGANIZER. No native dependencies, works in Bun.
+Recurring events with exceptions: a single `.ics` file can contain multiple VEVENT components (master + exceptions
+with RECURRENCE-ID). The parser must split these into separate database rows sharing the same `uid`, with
+`parentEventId` linking exceptions to the master.
 
----
+### VTIMEZONE generation (`vtimezone.ts`)
+
+iCalendar requires full VTIMEZONE components for every timezone referenced in events. Use
+`timezones-ical-library` (npm) or `ical.js` built-in timezone registry.
+
+Given that Eigen stores timezone as an IANA string (e.g., `America/New_York`), the serializer looks up the VTIMEZONE
+definition from the registry and includes it in the VCALENDAR output. This is a mechanical lookup, not a computation.
+
+### Library
+
+**ical.js** (npm): full parser + generator, used internally by Thunderbird. Handles VTIMEZONE, RRULE,
+RECURRENCE-ID, VALARM, ATTENDEE, ORGANIZER. No native deps, works in Bun.
+
+**timezones-ical-library** (npm): provides VTIMEZONE data for all IANA timezones. Complements ical.js.
 
 ## Sync Mechanism
 
-### CTag (already implemented)
+### CTag (ready)
 
-Eigen's `calendars.ctag` increments on every event change. CalDAV clients poll this via PROPFIND to detect whether
-a calendar has changed. If unchanged, no further sync needed.
+`calendars.ctag` increments on every event change. Clients poll via PROPFIND. If unchanged, skip sync.
 
-### ETag (already implemented)
+### ETag (needs fix)
 
-Eigen's `events.etag` (MD5 of event content) is used in `If-Match` headers for optimistic concurrency.
+Current MD5-based ETag must include `updatedAt` or use `"${eventCtag}-${id}"` to guarantee uniqueness per change.
 
-### Sync-token (needs implementation)
+### Sync-token (new)
 
-RFC 6578 `sync-collection` is the most efficient sync method. Implementation:
+Format: `https://{domain}/ns/sync/{ctag}`. Implementation:
 
-1. Use `ctag` as the basis: sync-token = `https://eigen.example/ns/sync/{ctag}`
-2. Add a **deletion tombstone table**:
-   ```sql
-   CREATE TABLE event_tombstones (
-     uri TEXT NOT NULL,
-     calendarId TEXT NOT NULL,
-     deletedAtCtag INTEGER NOT NULL  -- ctag value when deleted
-   );
-   ```
-3. On `sync-collection` REPORT with token `ctag=N`:
-    - Return events with `updatedAt > timestamp_of_ctag_N` (or just events where the calendar's ctag was > N at
-      time of event change -- simpler: add an `eventCtag` column that records the ctag value at time of change)
-    - Return tombstones where `deletedAtCtag > N` as `404` responses
-    - Return current ctag as new sync-token
-4. On initial sync (no token): return all events + current token
-5. On expired token: return `410 Gone`, client does full re-sync
+1. Client sends REPORT sync-collection with token `sync/{N}`
+2. Server queries `events WHERE calendarId = ? AND eventCtag > N`
+3. Server queries `event_tombstones WHERE calendarId = ? AND deletedAtCtag > N`
+4. Returns changed events (200) + deleted URIs (404) + new token `sync/{currentCtag}`
+5. No token (initial sync): return all events + current token
+6. Unrecognized token: return `403 Invalid Sync Token`, client does full re-sync
 
-**Simpler alternative:** Add an `eventCtag INTEGER` column to events that records the calendar's ctag value at the
-time of the last change. Then sync-collection for token N just queries `WHERE eventCtag > N`. Combined with
-tombstones for deletions, this is complete.
+### eventCtag column
 
----
+On every `createEvent()`, `updateEvent()`, `deleteEvent()`: set `eventCtag` to the calendar's current ctag (before
+incrementing). Then `sync-collection` for token N is just `WHERE eventCtag > N`.
 
-## Shared & Team Calendars via CalDAV
+## Shared & Team Calendars
 
-### Shared calendars
+### Challenge
 
-CalDAV has native support for shared calendars via WebDAV ACL (RFC 3744). Eigen's existing share model maps to:
+Shared calendar data lives in the **owner's** `calendar.db`, not the recipient's. CalDAV PROPFIND on a user's
+calendar-home-set must list shared calendars too. Serving events from shared calendars requires proxying to the
+owner's Home instance.
+
+### Approach
+
+On PROPFIND Depth:1 on `/dav/calendars/{userId}/`:
+
+1. List the user's own calendars (from their Home)
+2. Call `syncTeamCalendars()` + `getSharedCalendars()` to get shared calendar references
+3. For each shared calendar, include a collection entry like:
+   `/dav/calendars/{userId}/shared-{ownerUserId}-{calendarId}/`
+4. The URL encodes the owner, so GET/REPORT on that collection can resolve the owner's Home
+
+### Permission mapping
 
 | Eigen Permission | CalDAV ACL Privilege             |
 |------------------|----------------------------------|
@@ -274,231 +386,185 @@ CalDAV has native support for shared calendars via WebDAV ACL (RFC 3744). Eigen'
 | `read`           | `DAV:read`                       |
 | `write`          | `DAV:read` + `DAV:write-content` |
 
-Shared calendars appear in the recipient's calendar-home-set via `DAV:shared-owner` or can be surfaced as separate
-collections with appropriate ACL.
-
 ### Team calendars
 
-Team calendars could be exposed as additional collections in the user's calendar home, listed during PROPFIND
-Depth:1 on the calendar home. They would appear alongside personal calendars with appropriate read/write ACL based
-on team membership.
+Exposed as collections `/dav/calendars/{userId}/team-{teamOwnerId}-{calendarId}/`. Listed alongside personal
+calendars. Permission resolved via `checkPermission()`. ACL enforcement reuses `resolveCalendarForEvents()`.
 
----
+## Scheduling (RFC 6638) — Deferred
 
-## Scheduling (RFC 6638)
+Eigen's invitation system (`invite-propagation.ts`) already implements core scheduling:
 
-Eigen's invitation system (invite-propagation.ts) already implements the core scheduling semantics:
+| Eigen Feature               | RFC 6638 Equivalent |
+|-----------------------------|---------------------|
+| `propagateInvitation()`     | REQUEST             |
+| `propagateCancellation()`   | CANCEL              |
+| `propagateRsvp()`           | REPLY               |
+| Linked events               | Scheduling objects  |
+| `data.attendees[].status`   | `PARTSTAT=`         |
 
-| Eigen Feature                      | RFC 6638 Equivalent         |
-|------------------------------------|-----------------------------|
-| `propagateInvitation()`            | Auto-schedule REQUEST       |
-| `propagateCancellation()`          | Auto-schedule CANCEL        |
-| `propagateRsvp()`                  | Auto-schedule REPLY         |
-| `propagateDecline()`               | REPLY with DECLINED         |
-| Linked events (`organizerEventId`) | Scheduling object resources |
-| `data.attendees[].status`          | `ATTENDEE;PARTSTAT=`        |
-| `events.sequence`                  | `SEQUENCE`                  |
+Full RFC 6638 adds: scheduling inbox/outbox collections, SCHEDULE-TAG header, iMIP gateway. This is **optional for
+CalDAV compliance**. CalDAV clients will see the resulting events — they just cannot trigger invitations via CalDAV
+PUT. The web UI handles invitations. Implement RFC 6638 only if external client scheduling is needed.
 
-Full RFC 6638 support would additionally require:
-
-- **Scheduling inbox/outbox collections** -- special collections at `/calendars/{userId}/inbox/` and `/outbox/`
-- **SCHEDULE-TAG** header -- like ETag but only changes on scheduling-relevant modifications
-- **iMIP gateway** -- for sending invitations to external (non-Eigen) users via email
-
-RFC 6638 is optional for CalDAV compliance. The existing REST-based invitation system can coexist with CalDAV --
-CalDAV clients would see the resulting events in their calendars, they just wouldn't trigger the invitation flow
-via CalDAV PUT. A pragmatic first version can skip RFC 6638 and let the web UI handle invitations.
-
----
-
-## Client Compatibility Notes
+## Client Compatibility
 
 ### Apple Calendar (macOS/iOS)
 
 - **REQUIRES** `/.well-known/caldav` redirect
-- Requires HTTPS (satisfied by Eigen's HTTPS requirement)
 - Expects `CS:getctag` and `ICAL:calendar-color` (Apple extensions)
 - Aggressive PROPFIND on every sync cycle
 - Known bugs with non-standard ports on some iOS versions
+- Sends PROPFIND with `brief="t"` header — respect it (omit 404 propstat entries)
 
 ### Thunderbird
 
-- No auto-discovery -- users enter full calendar URL manually
-- Each calendar added separately
-- Solid CalDAV compliance, good for testing
+- No auto-discovery — users enter full calendar URL manually
+- Solid compliance, good for testing
 - Supports scheduling extensions
 
 ### DAVx5 (Android)
 
-- Prefers sync-collection (RFC 6578) when available
-- Falls back to PROPFIND + ETag comparison
-- Uses `If-None-Match: *` for new events, `If-Match` for updates
-- Requires HTTPS (satisfied by Eigen's HTTPS requirement)
+- Prefers sync-collection when available, falls back to ctag + ETag
+- Uses `If-None-Match: *` for creates, `If-Match` for updates
 - Handles self-signed certificates
 
 ### GNOME Calendar
 
-- Uses Evolution Data Server as backend
+- Uses Evolution Data Server (EDS) backend
 - Standard CalDAV compliance is sufficient
-- Limited auto-discovery (no `/.well-known` support in GNOME Online Accounts)
+- Limited auto-discovery
 
----
+## XML Layer
 
-## Existing Libraries
+CalDAV XML is deeply nested with multiple namespaces. Two approaches:
 
-### Server-side
+### Option 1: Build custom with `fast-xml-parser`
 
-| Library                                           | Status          | Notes                                                                                                                                                      |
-|---------------------------------------------------|-----------------|------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| **caldav-adapter** (@forwardemail/caldav-adapter) | Active (v9.3.2) | Koa/Express/Fastify middleware. Callback-based: you provide `getCalendar`, `getEventsForCalendar`, etc. Handles XML/WebDAV plumbing. Most practical option |
-| **Nephele** (sciactive/nephele)                   | Active          | WebDAV only (RFC 4918), CalDAV not implemented yet                                                                                                         |
-| **Fennel** (andris9/fennel)                       | Abandoned       | Node.js CalDAV/CardDAV with SQLite. Not maintained                                                                                                         |
+Parse incoming XML with `fast-xml-parser` (already well-suited for Bun). Build response XML with template literals
+or a small builder. The XML structures are well-defined — there are ~10 distinct response shapes.
 
-**No Bun-native CalDAV library exists.** The caldav-adapter would need an Express compatibility layer or porting to
-work with Elysia directly.
+Pros: no framework dependency, full control, lightweight.
+Cons: must handle namespace prefixes carefully, easy to get wrong.
 
-### iCalendar libraries
+### Option 2: Extract XML utilities from `caldav-adapter`
 
-| Library            | Purpose                                                                    |
-|--------------------|----------------------------------------------------------------------------|
-| **ical.js**        | Full parser + generator, used by Thunderbird. Best for round-trip fidelity |
-| **node-ical**      | Parser with RRULE expansion. TypeScript types                              |
-| **ical-generator** | Generation only, lightweight                                               |
-
----
-
-## Implementation Plan
-
-### Phase 1: Read-only CalDAV (1-2 weeks)
-
-Expose existing calendars and events as read-only CalDAV resources. This alone enables one-way sync to any CalDAV
-client.
-
-1. **Add `/dav/*` route group** to Elysia with Basic Auth
-2. **Implement discovery chain**:
-    - `GET /.well-known/caldav` -> redirect to `/dav/`
-    - `PROPFIND /dav/` -> current-user-principal
-    - `PROPFIND /dav/principals/{userId}/` -> calendar-home-set
-    - `PROPFIND /dav/calendars/{userId}/` Depth:1 -> list calendars
-3. **Implement `OPTIONS`** returning `DAV: 1, 2, access-control, calendar-access`
-4. **Implement `PROPFIND`** on calendar collections (displayname, resourcetype, ctag, color, supported-components)
-5. **Implement `GET`** on event resources (serialize JSON -> iCalendar using ical.js)
-6. **Implement `REPORT calendar-query`** with time-range filter (reuse `getEventsInRange()`)
-7. **Implement `REPORT calendar-multiget`** (batch GET by URL)
-
-### Phase 2: Read-write CalDAV (1-2 weeks)
-
-Enable full two-way sync.
-
-1. **Implement `PUT`** for event creation/update:
-    - Parse iCalendar -> JSON event fields
-    - Handle `If-Match` / `If-None-Match` for conflict detection
-    - Store raw `.ics` blob for round-trip fidelity
-    - Map to `createEvent()` / `updateEvent()`
-2. **Implement `DELETE`** for event removal
-3. **Implement `MKCALENDAR`** for calendar creation
-4. **Implement `PROPPATCH`** for calendar property changes (name, color)
-5. **Add deletion tombstones** and implement `REPORT sync-collection`
-6. **Add `eventCtag` column** for efficient sync queries
-
-### Phase 3: Shared & team calendars (1 week)
-
-1. **Expose shared calendars** in PROPFIND Depth:1 on calendar-home-set
-2. **Apply ACL** based on share permissions (free-busy/read/write)
-3. **Expose team calendars** as additional collections
-
-### Phase 4: Scheduling (optional, 2+ weeks)
-
-1. Implement scheduling inbox/outbox
-2. Wire up auto-scheduling (PUT with ATTENDEE -> propagateInvitation)
-3. Handle REPLY and CANCEL iTIP methods
-4. Add SCHEDULE-TAG support
-
----
-
-## Architecture Decision: Where to Mount
-
-Two options for serving CalDAV alongside the existing REST API:
-
-### Option A: Same Elysia server, `/dav/*` prefix
-
-```
-Port 8000:
-  /api/*          -> existing REST API (cookie auth)
-  /dav/*          -> CalDAV (Basic Auth)
-  /.well-known/*  -> CalDAV discovery redirects
-```
-
-**Pros:** Single server, shared Calendar class, no IPC
-**Cons:** Elysia doesn't natively support WebDAV methods (PROPFIND, REPORT, MKCALENDAR). Would need custom method
-registration or a raw HTTP handler fallback.
-
-Elysia does support custom HTTP methods via `.route()`:
-
-```typescript
-app.route('PROPFIND', '/dav/*', handler)
-app.route('REPORT', '/dav/*', handler)
-app.route('MKCALENDAR', '/dav/*', handler)
-```
-
-### Option B: Separate process, reverse-proxied
-
-```
-Port 8000: Elysia REST API
-Port 8001: CalDAV server (Express + caldav-adapter or custom)
-
-Nginx/Caddy:
-  /api/*          -> :8000
-  /dav/*          -> :8001
-  /.well-known/*  -> :8001
-```
-
-**Pros:** Clean separation, can use Express-based caldav-adapter directly
-**Cons:** Separate process, needs IPC or direct DB access for Calendar operations
+The `caldav-adapter` package handles all XML/WebDAV plumbing. Its XML builders and parsers can be extracted and used
+standalone. The package is Koa middleware — using it as-is with Elysia would require porting the middleware pattern.
+Extracting just the XML utilities is more practical than porting the full middleware.
 
 ### Recommendation
 
-**Option A** (same server) is preferable. Elysia's `.route()` supports custom HTTP methods. The CalDAV layer can
-directly call the Calendar class methods. The XML parsing/generation can be isolated in a `/dav/` route group. This
-avoids the complexity of running and coordinating a second server process.
+Start with `fast-xml-parser` for parsing and template-literal builders for responses. The response shapes are
+finite and well-documented. If XML edge cases become painful, extract utilities from `caldav-adapter`.
 
----
+## Implementation Phases
+
+### Phase 0: Schema & Calendar class prep (2-3 days)
+
+1. Add migration: `icsBlob`, `eventCtag` columns, `event_tombstones` table, unique indexes on `uri`/`uid`
+2. Fix ETag to include `updatedAt`
+3. Add `getEventByUri()`, `getRawEvents()`, `getRawEventsInRange()`, `getEventsByUris()`
+4. Add `getChangedEventsSince()`, `getDeletedEventsSince()`
+5. Wire tombstone creation into `deleteEvent()`
+6. Set `eventCtag` in `createEvent()`, `updateEvent()`
+7. Add `app_passwords` table and auth validation
+
+### Phase 1: Read-only CalDAV (1-2 weeks)
+
+1. Create `caldav-router.ts` with Basic Auth middleware
+2. Implement discovery: `/.well-known/caldav` redirect, principal PROPFIND, calendar-home-set
+3. Implement `OPTIONS` with `DAV:` header
+4. Implement `PROPFIND` on calendar-home-set (Depth: 1, list calendars)
+5. Implement `PROPFIND` on calendar collection (Depth: 0 properties, Depth: 1 event ETags)
+6. Implement `GET` on `{uri}` — serialize `CalendarEvent` -> iCalendar via ical.js
+7. Implement `REPORT calendar-query` with time-range filter (using `getRawEventsInRange()`)
+8. Implement `REPORT calendar-multiget` (using `getEventsByUris()`)
+9. Write `ical-serialize.ts` and `vtimezone.ts`
+10. Write `xml-builder.ts` for multistatus responses
+11. Test with Thunderbird (easiest) and Apple Calendar
+
+### Phase 2: Read-write CalDAV (1-2 weeks)
+
+1. Write `ical-parse.ts` — iCalendar -> CalendarEvent fields
+2. Implement `PUT` with `If-Match` / `If-None-Match` — parse iCal, store `icsBlob`, call create/update
+3. Handle multi-VEVENT `.ics` (recurring master + exceptions)
+4. Implement `DELETE` with optional `If-Match`
+5. Implement `MKCALENDAR` — create calendar collection
+6. Implement `PROPPATCH` — update calendar name/color
+7. Implement `REPORT sync-collection` using `eventCtag` + tombstones
+8. Test full two-way sync with Thunderbird, Apple Calendar, DAVx5
+
+### Phase 3: Shared & team calendars (1 week)
+
+1. List shared + team calendars in PROPFIND Depth:1 on calendar-home-set
+2. Route GET/REPORT on shared calendar paths to owner's Home
+3. Enforce ACL (free-busy → strip details, read → allow GET, write → allow PUT/DELETE)
+4. Test with multiple users sharing calendars
+
+### Phase 4: Scheduling (optional, 2+ weeks)
+
+1. Scheduling inbox/outbox collections
+2. Wire PUT with ATTENDEE to `propagateInvitation()`
+3. Handle REPLY/CANCEL iTIP methods
+4. SCHEDULE-TAG support
 
 ## Effort Summary
 
-| Phase     | Scope                 | Effort         | Depends on                        |
-|-----------|-----------------------|----------------|-----------------------------------|
-| Phase 1   | Read-only CalDAV      | 1-2 weeks      | XML layer, iCal serialization     |
-| Phase 2   | Read-write CalDAV     | 1-2 weeks      | Phase 1, tombstones, blob storage |
-| Phase 3   | Shared/team calendars | ~1 week        | Phase 2                           |
-| Phase 4   | Scheduling (RFC 6638) | 2+ weeks       | Phase 2, optional                 |
-| **Total** | **Full CalDAV**       | **~4-7 weeks** |                                   |
+| Phase     | Scope                 | Effort         |
+|-----------|-----------------------|----------------|
+| Phase 0   | Schema + Calendar API | 2-3 days       |
+| Phase 1   | Read-only CalDAV      | 1-2 weeks      |
+| Phase 2   | Read-write CalDAV     | 1-2 weeks      |
+| Phase 3   | Shared/team calendars | ~1 week        |
+| Phase 4   | Scheduling (RFC 6638) | 2+ weeks       |
+| **Total** | **Full CalDAV**       | **~5-8 weeks** |
 
-The biggest single piece of work is the WebDAV XML layer (PROPFIND/REPORT parsing and multistatus response
-generation). If caldav-adapter can be adapted for Elysia (or its XML utilities extracted), this shrinks
-significantly.
-
----
+The biggest piece is the XML layer + client compatibility testing. The iCalendar serialization is mechanical once
+ical.js is wired up. Schema changes are small.
 
 ## Risk Assessment
 
-| Risk                                                            | Impact                               | Mitigation                                                         |
-|-----------------------------------------------------------------|--------------------------------------|--------------------------------------------------------------------|
-| Client quirks (each client expects slightly different behavior) | High -- users blame the server       | Test against Apple Calendar, Thunderbird, and DAVx5 from day one   |
-| XML complexity (deeply nested, multi-namespace)                 | Medium -- verbose but well-specified | Use a library (fast-xml-parser) or extract from caldav-adapter     |
-| Round-trip fidelity (losing unknown iCal properties)            | Medium -- data loss                  | Store raw `.ics` blob, merge on update                             |
-| Recurrence expansion in REPORT queries                          | Low -- already implemented           | Reuse `getEventsInRange()` with time-range filter                  |
-| Performance (PROPFIND Depth:1 on large calendars)               | Low -- SQLite is fast                | Pagination not required by CalDAV, ctag prevents unnecessary syncs |
+| Risk | Impact | Mitigation |
+|------|--------|------------|
+| Client quirks (each client expects slightly different behavior) | High | Test against Apple Calendar, Thunderbird, DAVx5 from day one. Keep a compatibility log |
+| XML complexity (multi-namespace, deeply nested) | Medium | Use fast-xml-parser + template builders. Finite set of response shapes |
+| Round-trip fidelity (losing unknown iCal properties) | Medium | Store raw `icsBlob`, merge on update. Never discard unknown properties |
+| Recurrence in REPORT | Medium | Return raw master+exceptions, NOT expanded. Existing expansion logic reused only for time-range filtering |
+| Shared calendar proxying | Medium | Encode owner in collection URL. Reuse `resolveCalendarForEvents()` for access control |
+| Body parsing (Elysia JSON default vs XML) | Low | Read raw body as text on `/dav/*`. Exclude from JSON parsing |
+| CORS interference | Low | Exclude `/dav/*` from CORS middleware or add WebDAV methods to allowed list |
+| Performance (large calendars) | Low | SQLite is fast. ctag prevents unnecessary syncs. No pagination needed |
 
----
+## Dependencies
+
+```
+ical.js                    -- iCalendar parse + generate (used by Thunderbird)
+timezones-ical-library     -- VTIMEZONE definitions for IANA timezones
+fast-xml-parser            -- XML parse (for PROPFIND/REPORT request bodies)
+```
+
+## Files Changed
+
+| File | Change |
+|------|--------|
+| `apps/api/src/lib/caldav/*` | New directory — all CalDAV logic |
+| `apps/api/src/lib/calendar/schema.ts` | Add `icsBlob`, `eventCtag` columns, `event_tombstones` table |
+| `apps/api/src/lib/calendar/db-config.ts` | Migration v2 |
+| `apps/api/src/lib/calendar/calendar.ts` | New methods: `getEventByUri`, `getRawEvents*`, `upsertFromIcs`, `deleteByUri`, tombstones |
+| `apps/api/src/app.ts` | Add `caldavRouter`, handle CORS exclusion for `/dav/*` |
+| `packages/lib/src/types/calendar.ts` | Add `icsBlob`, `eventCtag` to `CalendarEvent` type |
+| `apps/api/src/lib/auth/auth.ts` | App-specific password validation |
+| `apps/api/src/routes/settings.ts` | App password management endpoints |
 
 ## References
 
-- [RFC 4791 -- CalDAV](https://datatracker.ietf.org/doc/html/rfc4791)
-- [RFC 5545 -- iCalendar](https://datatracker.ietf.org/doc/html/rfc5545)
-- [RFC 6578 -- WebDAV Sync](https://datatracker.ietf.org/doc/html/rfc6578)
-- [RFC 6638 -- CalDAV Scheduling](https://datatracker.ietf.org/doc/rfc6638/)
-- [RFC 3744 -- WebDAV ACL](https://datatracker.ietf.org/doc/html/rfc3744)
-- [sabre/dav Integration Guide](https://sabre.io/dav/caldav-carddav-integration-guide/) -- best practical reference
-- [caldav-adapter](https://github.com/forwardemail/caldav-adapter) -- Node.js CalDAV middleware
-- [Cal.com CalDAV Challenges](https://cal.com/blog/the-intricacies-and-challenges-of-implementing-a-caldav-supporting-system-for-cal)
+- [RFC 4791 — CalDAV](https://datatracker.ietf.org/doc/html/rfc4791)
+- [RFC 5545 — iCalendar](https://datatracker.ietf.org/doc/html/rfc5545)
+- [RFC 6578 — WebDAV Sync](https://datatracker.ietf.org/doc/html/rfc6578)
+- [RFC 6638 — CalDAV Scheduling](https://datatracker.ietf.org/doc/rfc6638/)
+- [RFC 3744 — WebDAV ACL](https://datatracker.ietf.org/doc/html/rfc3744)
+- [sabre/dav Client Guide](https://sabre.io/dav/building-a-caldav-client/) — best practical reference for client behavior
+- [sabre/dav Integration Guide](https://sabre.io/dav/caldav-carddav-integration-guide/) — backend integration patterns
+- [caldav-adapter](https://github.com/forwardemail/caldav-adapter) — Node.js CalDAV middleware (XML utilities extractable)
+- [ical.js](https://github.com/kewisch/ical.js) — iCalendar parser/generator
