@@ -12,18 +12,18 @@ export const Route = createFileRoute('/_auth/mime/$mimeType')({
     validateSearch: (search: Record<string, unknown>) => {
         const pid = typeof search.pid === 'string' ? search.pid : undefined;
         const uid = typeof search.uid === 'string' ? search.uid : undefined;
-        return {pid, uid} as DriveSearchParams;
+        const mid = typeof search.mid === 'string' ? search.mid : undefined;
+        return {pid, uid, mid} as DriveSearchParams;
     },
 });
 
 function DriveRoute() {
     const {mimeType} = Route.useParams();
     const navigate = useNavigate();
-    const {pid} = Route.useSearch();
+    const {pid, mid} = Route.useSearch();
     const auth = useAuth();
     const ownerId = auth.user!.id;
-    const mountId = DEFAULT_MOUNT_ID;
-    const {data: selectedPath = null} = usePathInfo(ownerId, mountId, pid);
+    const {data: selectedPath = null} = usePathInfo(ownerId, mid || DEFAULT_MOUNT_ID, pid);
     const {isMobile} = useLayout();
     const {openPreview, updatePreview, isPreviewOpen} = usePreview();
 
@@ -44,7 +44,7 @@ function DriveRoute() {
             navigate({
                 to: Route.fullPath,
                 params: {mimeType},
-                search: {pid: path.id}
+                search: {pid: path.id, mid: path.mountId}
             });
         }
     };
@@ -83,7 +83,7 @@ function DriveRoute() {
                 pid={pid}
                 selectedPath={selectedPath}
                 ownerId={ownerId}
-                mountId={mountId}
+                mountId={mid || DEFAULT_MOUNT_ID}
                 folderContents={folderContents}
                 isLoading={isFolderContentLoading}
                 error={isFolderContentLoadingError}

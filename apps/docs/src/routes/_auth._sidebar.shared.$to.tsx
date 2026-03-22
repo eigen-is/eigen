@@ -1,5 +1,5 @@
 import {createFileRoute, useNavigate} from '@tanstack/react-router';
-import {usePathInfo, useSharedPaths} from '@workspace/lib/drive';
+import {DEFAULT_MOUNT_ID, usePathInfo, useSharedPaths} from '@workspace/lib/drive';
 import {DriveLayout} from "@workspace/ui/components/layout/drive/drive-layout";
 import {DRIVE_TYPE_DOC, DrivePath, DriveSearchParams, isDocumentType} from "@workspace/lib/types/drive";
 import {useAuth} from '@workspace/lib/auth';
@@ -14,18 +14,19 @@ export const Route = createFileRoute('/_auth/_sidebar/shared/$to')({
     validateSearch: (search: Record<string, unknown>) => {
         const pid = typeof search.pid === 'string' ? search.pid : undefined;
         const uid = typeof search.uid === 'string' ? search.uid : undefined;
-        return {pid, uid} as DriveSearchParams;
+        const mid = typeof search.mid === 'string' ? search.mid : undefined;
+        return {pid, uid, mid} as DriveSearchParams;
     },
 });
 
 function DriveRoute() {
     const {to} = Route.useParams();
     const navigate = useNavigate();
-    const {uid, pid} = Route.useSearch();
+    const {uid, pid, mid} = Route.useSearch();
     const {user} = useAuth();
-    const {rootPath, mountId} = useContext(DriveContext);
+    const {rootPath} = useContext(DriveContext);
     const ownerId = user?.id ?? '';
-    const {data: selectedPath = null} = usePathInfo(uid || '', mountId, pid || '');
+    const {data: selectedPath = null} = usePathInfo(uid || '', mid || DEFAULT_MOUNT_ID, pid || '');
     const {isMobile} = useLayout();
 
     const {
@@ -43,7 +44,7 @@ function DriveRoute() {
             navigate({
                 to: Route.fullPath,
                 params: {to},
-                search: {pid: path.id, uid: path.ownerId}
+                search: {pid: path.id, uid: path.ownerId, mid: path.mountId}
             });
         }
     };
@@ -76,7 +77,7 @@ function DriveRoute() {
             pid={pid}
             selectedPath={selectedPath}
             ownerId={uid || ownerId}
-            mountId={mountId}
+            mountId={mid || DEFAULT_MOUNT_ID}
             folderContents={folderContents ?? []}
             isLoading={isFolderContentLoading}
             error={isFolderContentLoadingError}
@@ -95,6 +96,9 @@ function DriveRoute() {
             allowUpload={false}
             allowCreateDoc={true}
             allowCreateStickies={false}
+            allowCreateChat={false}
+            allowCreateSlides={false}
+            allowCreateSheets={false}
             showBreadcrumb={false}
             currentPath={rootPath}
             allowRename={to === 'by-me'}
