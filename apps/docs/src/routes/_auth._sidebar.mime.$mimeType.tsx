@@ -1,5 +1,5 @@
 import {createFileRoute, useNavigate} from '@tanstack/react-router';
-import {useMimeContent, usePathInfo} from '@workspace/lib/drive';
+import {DEFAULT_MOUNT_ID, useMimeContent, usePathInfo} from '@workspace/lib/drive';
 import {DriveLayout} from "@workspace/ui/components/layout/drive/drive-layout";
 import {DrivePath, DriveSearchParams, isDocumentType} from "@workspace/lib/types/drive";
 import {useAuth} from '@workspace/lib/auth';
@@ -13,18 +13,19 @@ export const Route = createFileRoute('/_auth/_sidebar/mime/$mimeType')({
     validateSearch: (search: Record<string, unknown>) => {
         const pid = typeof search.pid === 'string' ? search.pid : undefined;
         const uid = typeof search.uid === 'string' ? search.uid : undefined;
-        return {pid, uid} as DriveSearchParams;
+        const mid = typeof search.mid === 'string' ? search.mid : undefined;
+        return {pid, uid, mid} as DriveSearchParams;
     },
 });
 
 function DriveRoute() {
     const {mimeType} = Route.useParams();
     const navigate = useNavigate();
-    const {pid} = Route.useSearch();
+    const {pid, mid} = Route.useSearch();
     const {user} = useAuth();
-    const {rootPath, mountId} = useContext(DriveContext);
+    const {rootPath} = useContext(DriveContext);
     const ownerId = user?.id ?? '';
-    const {data: selectedPath = null} = usePathInfo(ownerId, mountId, pid);
+    const {data: selectedPath = null} = usePathInfo(ownerId, mid || DEFAULT_MOUNT_ID, pid);
     const {isMobile} = useLayout();
 
     const {
@@ -40,7 +41,7 @@ function DriveRoute() {
             navigate({
                 to: Route.fullPath,
                 params: {mimeType},
-                search: {pid: path.id}
+                search: {pid: path.id, mid: path.mountId}
             });
         }
     };
@@ -69,7 +70,7 @@ function DriveRoute() {
             pid={pid}
             selectedPath={selectedPath}
             ownerId={ownerId}
-            mountId={mountId}
+            mountId={mid || DEFAULT_MOUNT_ID}
             folderContents={folderContents}
             isLoading={isFolderContentLoading}
             error={isFolderContentLoadingError}
@@ -88,6 +89,9 @@ function DriveRoute() {
             allowUpload={false}
             allowCreateDoc={true}
             allowCreateStickies={false}
+            allowCreateChat={false}
+            allowCreateSlides={false}
+            allowCreateSheets={false}
             showBreadcrumb={false}
             currentPath={rootPath}
         />

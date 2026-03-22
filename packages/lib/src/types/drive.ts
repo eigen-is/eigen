@@ -133,6 +133,7 @@ export type DrivePath = {
 export type DriveSearchParams = {
     pid?: string;
     uid?: string;
+    mid?: string;
 }
 
 export type DriveContextType = {
