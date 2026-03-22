@@ -77,6 +77,22 @@ export function useCreateChat(ownerId: string, mountId: string) {
     });
 }
 
+export function useInviteToChat(ownerId: string, mountId: string, chatId: string) {
+    const queryClient = useQueryClient();
+    return useMutation({
+        mutationFn: async ({email}: { email: string }) => {
+            const response = await chatApi({ownerId})({mountId})({chatId}).invite.post({email});
+            if (response.error) throw new AppError(response);
+            return response.data;
+        },
+        onSuccess: () => {
+            // Refresh chat path so roomMembers list updates
+            queryClient.invalidateQueries({queryKey: driveKeys.path(ownerId, mountId, chatId)});
+        },
+        onError: onMutationError,
+    });
+}
+
 // SSE invalidation functions
 export function invalidateMessages(queryClient: QueryClient, ownerId: string, mountId: string, chatId: string): void {
     queryClient.invalidateQueries({queryKey: chatKeys.messages(ownerId, mountId, chatId)});

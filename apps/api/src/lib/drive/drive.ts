@@ -25,8 +25,8 @@ import {
     isContainerType
 } from '@workspace/lib/types/drive';
 import {ChatRoom} from '../chat';
-import {canRead, canWrite, filterRedundantACL, matchesACL, normalizeACL} from './acl';
-import {validateACLEntries} from '@workspace/lib/validation';
+import {canRead, canWrite, filterRedundantACL, findContainerPath, matchesACL, normalizeACL} from './acl';
+import {validateACLEntries, validateEmailAddress} from '@workspace/lib/validation';
 import {getThumbnail, saveThumbnail} from '../shared/thumbnails';
 import {getScreenPreview, getTextPreviewData} from '../preview/preview-cache';
 import {getTextPreviewMode} from '@workspace/lib/constants';
@@ -527,6 +527,38 @@ export default class Drive {
             await propagateACLChange(updatedItem, oldACL, normalizedACL);
             this.emit(SSEventType.DRIVE_ACL_UPDATED, updatedItem);
         }
+    }
+
+    async findContainerPath(mountId: string, pathId: string): Promise<DrivePath | null> {
+        const mount = this.getMount(mountId);
+        return findContainerPath(mount.getPath.bind(mount), pathId);
+    }
+
+    async inviteToChat(mountId: string, chatId: string, email: string): Promise<{
+        alreadyHasAccess: boolean;
+        targetPathId: string;
+    }> {
+        if (!validateEmailAddress(email)) {
+            throw new ApiError(400, 'Invalid email address');
+        }
+
+        const chatPath = await this.getPath(mountId, chatId);
+        if (!chatPath) throw new ApiError(404, 'Chat not found');
+
+        // Walk up parents to find the container document (doc/stickies/slides/sheets).
+        // Standalone chats get null — ACL is set on the chat itself.
+        const container = await this.findContainerPath(mountId, chatPath.parentId ?? '');
+        const targetPath = container ?? chatPath;
+
+        const currentAcl = targetPath.acl || [];
+        if (currentAcl.some(a => a.id.toLowerCase() === email.toLowerCase())) {
+            return {alreadyHasAccess: true, targetPathId: targetPath.id};
+        }
+
+        const newAcl = [...currentAcl, {id: email.toLowerCase(), read: true, write: true}];
+        await this.updateACL(mountId, targetPath.id, newAcl);
+
+        return {alreadyHasAccess: false, targetPathId: targetPath.id};
     }
 
     async canRead(mountId: string, pathId: string, user: User): Promise<boolean> {

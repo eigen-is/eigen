@@ -75,6 +75,14 @@ export const chatRouter = new Elysia({name: "chat"})
         return {success: result};
     }, {auth: true})
 
+    .post("/chat/:ownerId/:mountId/:chatId/invite", async ({params, body, user}) => {
+        const drive = await getSharedDrive(params.ownerId, user);
+        return await drive.inviteToChat(params.mountId, params.chatId, body.email);
+    }, {
+        body: t.Object({email: t.String()}),
+        auth: true
+    })
+
     .post("/chat/:ownerId/:mountId/:chatId/read", async ({params, body, user}) => {
         const drive = await getSharedDrive(params.ownerId, user);
         const chat = await drive.getChat(params.mountId, params.chatId);
