@@ -126,6 +126,68 @@ async function initializeDatabaseSchema(): Promise<void> {
         "user_id" text NOT NULL REFERENCES "user"("id") ON DELETE CASCADE,
         "created_at" integer
     )`);
+
+    await db.run(`CREATE TABLE IF NOT EXISTS "apikey"
+                  (
+                      "id"
+                      text
+                      PRIMARY
+                      KEY
+                      NOT
+                      NULL,
+                      "config_id"
+                      text
+                      NOT
+                      NULL,
+                      "name"
+                      text,
+                      "start"
+                      text,
+                      "reference_id"
+                      text
+                      NOT
+                      NULL,
+                      "prefix"
+                      text,
+                      "key"
+                      text
+                      NOT
+                      NULL,
+                      "refill_interval"
+                      integer,
+                      "refill_amount"
+                      integer,
+                      "last_refill_at"
+                      integer,
+                      "enabled"
+                      integer,
+                      "rate_limit_enabled"
+                      integer,
+                      "rate_limit_time_window"
+                      integer,
+                      "rate_limit_max"
+                      integer,
+                      "request_count"
+                      integer,
+                      "remaining"
+                      integer,
+                      "last_request"
+                      integer,
+                      "expires_at"
+                      integer,
+                      "created_at"
+                      integer
+                      NOT
+                      NULL,
+                      "updated_at"
+                      integer
+                      NOT
+                      NULL,
+                      "permissions"
+                      text,
+                      "metadata"
+                      text
+                  )`);
 }
 
 export type SetupInput = {
