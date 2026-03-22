@@ -173,7 +173,7 @@ export const driveRouter = new Elysia({name: "drive"})
     })
     .put("/drive/:ownerId/:mountId/path/:pathId/acl", async ({params, body, user}) => {
         const drive = await getSharedDrive(params.ownerId, user);
-        await drive.updateACL(params.mountId, params.pathId, body.acl, body.visibility);
+        await drive.updateACL(params.mountId, params.pathId, body.acl, body.visibility, body.sharingRestricted);
         return {success: true};
     }, {
         body: t.Object({
@@ -186,7 +186,8 @@ export const driveRouter = new Elysia({name: "drive"})
                 t.Literal('private'),
                 t.Literal('public-read'),
                 t.Literal('public-write'),
-            ]))
+            ])),
+            sharingRestricted: t.Optional(t.Boolean()),
         }),
         auth: true
     })

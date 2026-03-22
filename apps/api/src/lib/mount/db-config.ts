@@ -21,6 +21,7 @@ export const MOUNT_DB_CONFIG: DatabaseConfig<typeof schema> = {
                     thumbnail TEXT,
                     acl TEXT,
                     visibility TEXT DEFAULT 'private',
+                    sharingRestricted INTEGER NOT NULL DEFAULT 0,
                     details TEXT,
                     hash TEXT,
                     createdAt INTEGER DEFAULT (unixepoch()),

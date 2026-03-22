@@ -91,7 +91,8 @@
       "WebFetch(domain:sabre.io)",
       "WebFetch(domain:cal.com)",
       "WebFetch(domain:manual.davx5.com)",
-      "WebFetch(domain:deepwiki.com)"
+      "WebFetch(domain:deepwiki.com)",
+      "Bash(for name:*)"
     ]
   },
   "bypassPermissions": "bypassPermissions"

@@ -261,12 +261,17 @@ export function useRenamePath(ownerId: string, mountId: string = DEFAULT_MOUNT_I
 export function useUpdateACL(ownerId: string, mountId: string = DEFAULT_MOUNT_ID, currentUserId?: string) {
     const queryClient = useQueryClient();
     return useMutation({
-        mutationFn: async ({path, acl, visibility}: {
+        mutationFn: async ({path, acl, visibility, sharingRestricted}: {
             path: DrivePath,
             acl: DriveACL[],
-            visibility?: DriveVisibility
+            visibility?: DriveVisibility,
+            sharingRestricted?: boolean,
         }) => {
-            const response = await driveApi({ownerId})({mountId}).path({pathId: path.id}).acl.put({acl, visibility});
+            const response = await driveApi({ownerId})({mountId}).path({pathId: path.id}).acl.put({
+                acl,
+                visibility,
+                sharingRestricted
+            });
             if (response.error) throw new AppError(response);
             return response.data;
         },
