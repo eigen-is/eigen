@@ -27,6 +27,7 @@ export const driveKeys = {
     shared: (ownerId: string, to: 'by-me' | 'with-me') => [...driveKeys.owner(ownerId), 'shared', to] as const,
     textPreviews: (ownerId: string) => [...driveKeys.owner(ownerId), 'text-preview'] as const,
     textPreview: (ownerId: string, mountId: string, pathId: string) => [...driveKeys.textPreviews(ownerId), mountId, pathId] as const,
+    effectiveMembers: (ownerId: string, mountId: string, pathId: string) => [...driveKeys.owner(ownerId), 'effective-members', mountId, pathId] as const,
 };
 
 // GET MOUNTS
@@ -314,6 +315,19 @@ export function useCheckWritePermission(ownerId: string, mountId: string, pathId
         },
         enabled: !!pathId && !!ownerId && !!mountId,
         staleTime: 1000 * 60 * 5 // 5 minutes
+    });
+}
+
+// EFFECTIVE MEMBERS (teams expanded, ancestors walked, deduplicated)
+export function useEffectiveMembers(ownerId: string, mountId: string, pathId: string | undefined) {
+    return useQuery({
+        queryKey: driveKeys.effectiveMembers(ownerId, mountId, pathId || ''),
+        queryFn: async () => {
+            if (!pathId) return [];
+            const response = await driveApi({ownerId})({mountId}).path({pathId})['effective-members'].get();
+            return response.data || [];
+        },
+        enabled: !!pathId && !!ownerId && !!mountId,
     });
 }
 

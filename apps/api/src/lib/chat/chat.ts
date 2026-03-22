@@ -8,7 +8,9 @@ import type {Drive} from '../drive';
 import type {ManagedDatabase} from '../core/managed-database';
 import {CHAT_ROOM_DB_CONFIG} from './db-config';
 import * as schema from './schema';
-import {buildChatEvent} from './sse-events';
+import {buildChatEvent, buildCommentIndexUpdatedEvent} from './sse-events';
+import {type CommentIndex, openCommentIndex} from './comment-index';
+import {extractMentionedEmails} from './mentions';
 import {type SSEvent, SSEventType} from '@workspace/lib/types/sse';
 import type {Home} from '../home';
 import {getHome} from '../home';
@@ -16,13 +18,13 @@ import {formatEmoteForViewer, parseCommand} from './commands';
 import {validateEmailAddress} from '@workspace/lib/validation';
 import {getUserByEmail} from '../user/';
 import {ApiError} from '../core/errors';
-import {resolveACLUserIds} from '../drive/acl-propagation';
 import {atHome} from "../home/get-home.ts";
 
 export class ChatRoom {
     private drive: Drive;
     private home: Home;
     private path: DrivePath;
+    private containerPath: DrivePath | null = null;
     private db!: BunSQLiteDatabase<typeof schema>;
     private managedDb!: ManagedDatabase<typeof schema>;
 
@@ -49,6 +51,12 @@ export class ChatRoom {
 
         this.managedDb = await this.drive.openDatabase(this.path.mountId, CHAT_ROOM_DB_CONFIG, dataDbPath.id);
         this.db = this.managedDb.db;
+
+        // Walk parentId chain to find outermost collab container (if any)
+        this.containerPath = await this.drive.findContainerPath(
+            this.path.mountId, this.path.parentId ?? ''
+        );
+
         return this;
     }
 
@@ -128,6 +136,17 @@ export class ChatRoom {
         this.home.notify(event);
         this.notifySharedUsers(event);
 
+        // Update comment index if this chat is embedded in a container document
+        if (this.containerPath && type !== 'whisper') {
+            await this.updateCommentIndex(async (index) => {
+                await index.ensureComment(this.path.name);
+                await index.updateActivity(this.path.name, authorEmail, content);
+                for (const email of extractMentionedEmails(content)) {
+                    await index.addMention(this.path.name, email);
+                }
+            });
+        }
+
         return message;
     }
 
@@ -201,6 +220,15 @@ export class ChatRoom {
         this.home.notify(event);
         this.notifySharedUsers(event);
 
+        if (this.containerPath && existing.type !== 'whisper') {
+            await this.updateCommentIndex(async (index) => {
+                await index.updateActivity(this.path.name, existing.authorEmail, content, false);
+                for (const email of extractMentionedEmails(content)) {
+                    await index.addMention(this.path.name, email);
+                }
+            });
+        }
+
         return updated;
     }
 
@@ -233,6 +261,12 @@ export class ChatRoom {
         this.home.notify(event);
         this.notifySharedUsers(event);
 
+        if (this.containerPath && existing.type !== 'whisper') {
+            await this.updateCommentIndex(async (index) => {
+                await index.decrementCount(this.path.name);
+            });
+        }
+
         return true;
     }
 
@@ -252,14 +286,32 @@ export class ChatRoom {
         }
     }
 
+    private async updateCommentIndex(fn: (index: CommentIndex) => Promise<void>) {
+        if (!this.containerPath) return;
+        try {
+            const index = await openCommentIndex(this.drive, this.containerPath);
+            await fn(index);
+
+            const event = buildCommentIndexUpdatedEvent(
+                this.containerPath.id, this.path.ownerId, this.path.mountId
+            );
+            this.home.notify(event);
+            this.notifySharedUsers(event);
+        } catch (error) {
+            console.error('Failed to update comment index:', error);
+        }
+    }
+
+    // Uses getEffectiveMembers to resolve all users with access — handles inherited
+    // ACL from parent folders, team membership, and container document ACL.
     private async notifySharedUsers(event: SSEvent) {
-        if (!this.path.acl?.length) return;
-        const userIds = await resolveACLUserIds(this.path.ownerId, this.path.acl);
-        for (const userId of userIds) {
+        const members = await this.drive.getEffectiveMembers(this.path.mountId, this.path.id);
+        for (const member of members) {
+            const user = await getUserByEmail(member.email);
+            if (!user) continue;
             try {
-                // only notify when the user is at home
-                if (atHome(userId)) {
-                    const home = await getHome(userId);
+                if (atHome(user.id)) {
+                    const home = await getHome(user.id);
                     home.notify(event);
                 }
             } catch { /* user home may not exist */

@@ -168,6 +168,7 @@ export default class CollabDocument {
 
     static async create(drive: Drive, mountId: string, docId: string): Promise<void> {
         await drive.touchFile(mountId, docId, 'data.db', 'application/x-sqlite3');
+        await drive.touchFile(mountId, docId, 'comments.db', 'application/x-sqlite3');
         await drive.createFolder(mountId, docId, 'media');
         await drive.createFolder(mountId, docId, 'chat');
     }

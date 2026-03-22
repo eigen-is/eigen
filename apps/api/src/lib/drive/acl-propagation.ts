@@ -27,6 +27,38 @@ export async function resolveACLUserIds(ownerId: string, acls: DriveACL[]): Prom
     return ids;
 }
 
+export type EffectiveMember = { email: string; read: boolean; write: boolean };
+
+// Resolves ACL entries to individual user emails with permissions.
+// Teams are expanded to their members. Deduplicated by email (most permissive wins).
+export async function resolveACLToEmails(acls: DriveACL[]): Promise<Map<string, EffectiveMember>> {
+    const members = new Map<string, EffectiveMember>();
+
+    function addMember(email: string, read: boolean, write: boolean) {
+        const key = email.toLowerCase();
+        const existing = members.get(key);
+        if (existing) {
+            existing.read = existing.read || read;
+            existing.write = existing.write || write;
+        } else {
+            members.set(key, {email: key, read, write});
+        }
+    }
+
+    for (const acl of acls) {
+        const parsed = parseOwnerId(acl.id);
+        if (parsed.type === 'team') {
+            const teamMembers = await getTeamMembers(parsed.id);
+            for (const m of teamMembers) {
+                addMember(m.user.email, acl.read, acl.write);
+            }
+        } else {
+            addMember(acl.id, acl.read, acl.write);
+        }
+    }
+    return members;
+}
+
 export async function propagateACLChange(path: DrivePath, oldACL: DriveACL[] | null, newACL: DriveACL[] | null): Promise<void> {
     const ids = await resolveACLUserIds(path.ownerId, [...(oldACL || []), ...(newACL || [])]);
 

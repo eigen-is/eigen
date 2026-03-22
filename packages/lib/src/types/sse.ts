@@ -50,6 +50,7 @@ export const SSEventType = {
     CHAT_MEMBER_ENTERED: 'chat:member-entered',
     CHAT_MEMBER_LEFT: 'chat:member-left',
     CHAT_TYPING: 'chat:typing',
+    CHAT_COMMENT_INDEX_UPDATED: 'chat:comment-index-updated',
     // Calendar events
     CALENDAR_EVENT_CREATED: 'calendar:event-created',
     CALENDAR_EVENT_UPDATED: 'calendar:event-updated',
