@@ -261,6 +261,7 @@ the `post()` call is better. This can be done via a new `useInviteToChatRoom` mu
 | Self-invite | Allowed (harmless, filtered by `filterRedundantACL` if owner) |
 | Team chat | Works — team member ACL on container, `filterRedundantACL` strips if redundant |
 | Email not a registered user | ACL entry created (consistent with share dialog behavior) |
+| Container has `sharingRestricted: true` | `drive.updateACL()` goes through `SharedDrive.updateACL()` which blocks — correct, editors cannot invite when sharing is restricted (see [TODO-RESHARE-PREVENTION.md](TODO-RESHARE-PREVENTION.md)) |
 
 ## What This Does NOT Change
 
