@@ -4,6 +4,7 @@ import {type ServerWebSocket} from "bun";
 import {getSharedDrive} from "../lib/drive";
 import {keepWebSocketAlive} from "../utils/websockets.ts";
 import {ApiError} from "../lib/core/errors.ts";
+import {getCommentIndex} from "../lib/chat/comment-index.ts";
 import type CollabDocument from "../lib/collab/collabDocument.ts";
 import type {User} from "better-auth/types";
 import type Drive from "../lib/drive/drive.ts";
@@ -78,6 +79,35 @@ export const collabRouter = new Elysia({
             pathId: t.String(),
             revisionId: t.String({pattern: '^[0-9]+$'}),
         }),
+    })
+
+    .get("/collab/:ownerId/:mountId/:pathId/comments", async ({params, user}) => {
+        const drive = await getSharedDrive(params.ownerId, user);
+        const index = await getCommentIndex(drive, params.mountId, params.pathId);
+        return await index.list();
+    }, {auth: true})
+
+    .get("/collab/:ownerId/:mountId/:pathId/comments/unresolved-count", async ({params, user}) => {
+        const drive = await getSharedDrive(params.ownerId, user);
+        const index = await getCommentIndex(drive, params.mountId, params.pathId);
+        return {count: await index.unresolvedCount()};
+    }, {auth: true})
+
+    .patch("/collab/:ownerId/:mountId/:pathId/comments/:chatName/status", async ({params, body, user}) => {
+        const drive = await getSharedDrive(params.ownerId, user);
+        if (!(await drive.canWrite(params.mountId, params.pathId, user))) {
+            throw new ApiError(403, 'No write permission');
+        }
+        const index = await getCommentIndex(drive, params.mountId, params.pathId);
+        if (body.status === 'resolved') {
+            await index.resolve(params.chatName, user.email);
+        } else {
+            await index.reopen(params.chatName);
+        }
+        return {success: true};
+    }, {
+        body: t.Object({status: t.Union([t.Literal('resolved'), t.Literal('open')])}),
+        auth: true
     })
 
     // WebSocket endpoint for collaborative editing

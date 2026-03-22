@@ -26,6 +26,7 @@ import {
 } from '@workspace/lib/types/drive';
 import {ChatRoom} from '../chat';
 import {canRead, canWrite, filterRedundantACL, findContainerPath, matchesACL, normalizeACL} from './acl';
+import {type EffectiveMember, propagateACLChange, resolveACLToEmails} from './acl-propagation';
 import {validateACLEntries, validateEmailAddress} from '@workspace/lib/validation';
 import {getThumbnail, saveThumbnail} from '../shared/thumbnails';
 import {getScreenPreview, getTextPreviewData} from '../preview/preview-cache';
@@ -34,7 +35,6 @@ import {extractFrontmatter, MAX_INLINE_EDIT_SIZE, reattachFrontmatter} from './i
 import CollabDocument from '../collab/collabDocument';
 import {getSharedDatabase} from './shared';
 import * as sharedSchema from './sharedschema';
-import {propagateACLChange} from './acl-propagation';
 import {createAsyncSingleton} from '../../utils/singleton';
 import type {Home} from '../home';
 import {SSEventType} from '@workspace/lib/types/sse';
@@ -527,6 +527,41 @@ export default class Drive {
             await propagateACLChange(updatedItem, oldACL, normalizedACL);
             this.emit(SSEventType.DRIVE_ACL_UPDATED, updatedItem);
         }
+    }
+
+    // Returns all individual users who have effective access to a path,
+    // walking the ancestor chain and expanding team entries to members.
+    async getEffectiveMembers(mountId: string, pathId: string): Promise<EffectiveMember[]> {
+        const mount = this.getMount(mountId);
+        const path = await mount.getPath(pathId);
+        if (!path) throw new ApiError(404, 'Path not found');
+        const crumbs = await mount.getBreadcrumb(pathId);
+
+        // Collect ACL entries from the path and all ancestors
+        const allACL: DriveACL[] = [];
+        for (const crumb of crumbs) {
+            if (crumb.acl) {
+                allACL.push(...crumb.acl);
+            }
+        }
+
+        // Resolve to individual emails (expands teams, deduplicates)
+        const members = await resolveACLToEmails(allACL);
+
+        // Add owner — for personal drives it's the user, for team drives
+        // the team members are already included via the ACL team expansion
+        if (this.owner.email) {
+            const key = this.owner.email.toLowerCase();
+            const existing = members.get(key);
+            if (existing) {
+                existing.read = true;
+                existing.write = true;
+            } else {
+                members.set(key, {email: key, read: true, write: true});
+            }
+        }
+
+        return [...members.values()];
     }
 
     async findContainerPath(mountId: string, pathId: string): Promise<DrivePath | null> {

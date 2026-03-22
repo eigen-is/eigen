@@ -184,6 +184,14 @@ export default class SharedDrive extends Drive {
         return this.sharedDrive.getChat(mountId, chatId);
     }
 
+    public async getChildByName(mountId: string, parentId: string, name: string): Promise<DrivePath | null> {
+        return this.withReadPermission(mountId, parentId, () => this.sharedDrive.getChildByName(mountId, parentId, name));
+    }
+
+    public async getEffectiveMembers(mountId: string, pathId: string) {
+        return this.withReadPermission(mountId, pathId, () => this.sharedDrive.getEffectiveMembers(mountId, pathId));
+    }
+
     public async findContainerPath(mountId: string, pathId: string): Promise<DrivePath | null> {
         return this.sharedDrive.findContainerPath(mountId, pathId);
     }

@@ -195,6 +195,10 @@ export const driveRouter = new Elysia({name: "drive"})
         const drive = await getSharedDrive(params.ownerId, user);
         return await drive.breadCrumb(params.mountId, params.pathId);
     }, {auth: true})
+    .get("/drive/:ownerId/:mountId/path/:pathId/effective-members", async ({params, user}) => {
+        const drive = await getSharedDrive(params.ownerId, user);
+        return await drive.getEffectiveMembers(params.mountId, params.pathId);
+    }, {auth: true})
     .get("/drive/:ownerId/:mountId/path/:pathId/permissions/read", async ({params, user}) => {
         const drive = await getSharedDrive(params.ownerId, user);
         return {canRead: await drive.canRead(params.mountId, params.pathId, user)};

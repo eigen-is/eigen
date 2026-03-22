@@ -10,3 +10,9 @@ export function buildChatEvent(type: ChatEventType, data: SSEventChatData, title
         chat: data,
     } as SSEvent;
 }
+
+// chatId carries the containerId — the container is the resource being invalidated
+export function buildCommentIndexUpdatedEvent(containerId: string, ownerId: string, mountId: string): SSEvent {
+    return buildChatEvent(SSEventType.CHAT_COMMENT_INDEX_UPDATED, {chatId: containerId, ownerId, mountId});
+}
+
