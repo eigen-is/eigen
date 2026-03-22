@@ -37,12 +37,13 @@ Projects/               type=folder   parentId → [root-id]
 root                    type=folder   parentId → null
 ```
 
-`CollabDocument.create()` always creates this structure:
+`CollabDocument.create()` always creates this structure — add `comments.db` here:
 
 ```typescript
-// apps/api/src/lib/collab/collabDocument.ts:169-173
+// apps/api/src/lib/collab/collabDocument.ts — modified
 static async create(drive: Drive, mountId: string, docId: string): Promise<void> {
     await drive.touchFile(mountId, docId, 'data.db', 'application/x-sqlite3');
+    await drive.touchFile(mountId, docId, 'comments.db', 'application/x-sqlite3');  // ← NEW
     await drive.createFolder(mountId, docId, 'media');
     await drive.createFolder(mountId, docId, 'chat');
 }
@@ -69,7 +70,8 @@ my-doc.eigendoc/
     └── comment-2.eigenchat/
 ```
 
-Created lazily on first comment creation — documents without comments never get one.
+Created eagerly by `CollabDocument.create()` — every container document has one from birth. No backward
+compatibility needed (data is throwaway during dev).
 
 ### Schema
 
@@ -134,13 +136,11 @@ export const COMMENT_INDEX_DB_CONFIG: DatabaseConfig<typeof commentSchema> = {
 
 ## ChatRoom: Container Discovery
 
-Add a `containerPath` field to `ChatRoom`, resolved during `init()` using the shared `findContainerPath()` utility
-from `acl.ts` (see [ACL_BUBBLING.md](ACL_BUBBLING.md)):
+Add a `containerPath` field to `ChatRoom`, resolved during `init()` via `Drive.findContainerPath()`
+(added in [ACL_BUBBLING.md](ACL_BUBBLING.md)):
 
 ```typescript
 // apps/api/src/lib/chat/chat.ts — modifications
-import {findContainerPath} from '../drive/acl';
-
 export class ChatRoom {
     private drive: Drive;
     private home: Home;
@@ -152,7 +152,7 @@ export class ChatRoom {
     async init(): Promise<ChatRoom> {
         // ... existing data.db init ...
 
-        // Discover container (2 hops: chat → chat/ folder → container)
+        // Walk parentId chain to find outermost collab container (if any)
         this.containerPath = await this.drive.findContainerPath(
             this.path.mountId, this.path.parentId ?? ''
         );
@@ -166,9 +166,9 @@ export class ChatRoom {
 }
 ```
 
-`Drive.findContainerPath()` delegates to the shared `findContainerPath()` in `acl.ts`, which walks the `parentId` chain
-and returns the outermost collab ancestor. The walk is exactly 2 hops for embedded chats (chat/ folder → container).
-For standalone chats it's 1-2 hops to root. Negligible cost, done once per `ChatRoom.init()`.
+`Drive.findContainerPath()` delegates to the shared `findContainerPath()` in `acl.ts`, which walks the full `parentId`
+chain to root and returns the outermost collab ancestor. For the standard eigendoc structure the walk is short
+(chat/ folder → doc → parent folder → root). Negligible cost, done once per `ChatRoom.init()`.
 
 ## CommentIndex Service
 
@@ -247,7 +247,7 @@ export class CommentIndex {
 
 ### Opening `comments.db`
 
-Helper function follows the same pattern as `ChatRoom.init()` for `data.db`:
+`comments.db` is created by `CollabDocument.create()`, so it always exists:
 
 ```typescript
 // apps/api/src/lib/chat/comment-index.ts
@@ -255,12 +255,8 @@ export async function openCommentIndex(
     drive: Drive,
     containerPath: DrivePath
 ): Promise<CommentIndex> {
-    let dbPath = await drive.getChildByName(containerPath.mountId, containerPath.id, 'comments.db');
-    if (!dbPath) {
-        await drive.touchFile(containerPath.mountId, containerPath.id, 'comments.db', 'application/x-sqlite3');
-        dbPath = await drive.getChildByName(containerPath.mountId, containerPath.id, 'comments.db');
-        if (!dbPath) throw new Error('Failed to create comments.db');
-    }
+    const dbPath = await drive.getChildByName(containerPath.mountId, containerPath.id, 'comments.db');
+    if (!dbPath) throw new ApiError(404, 'comments.db not found');
     const managed = await drive.openDatabase(containerPath.mountId, COMMENT_INDEX_DB_CONFIG, dbPath.id);
     return new CommentIndex(managed.db);
 }
@@ -328,42 +324,41 @@ These are best-effort — a stale snippet or count is low-impact.
 ## API Routes
 
 Added to the existing `apps/api/src/routes/collab.ts` — comments are document-scoped metadata, so they belong alongside
-`/info` and `/revisions` under the same `collab/:ownerId/:mountId/:pathId` prefix:
+`/info` and `/revisions` under the same `collab/:ownerId/:mountId/:pathId` prefix.
+
+To keep routes thin, add a helper that combines `getPath` + `openCommentIndex`:
+
+```typescript
+// apps/api/src/lib/chat/comment-index.ts — add alongside openCommentIndex
+export async function getCommentIndex(drive: Drive, mountId: string, pathId: string): Promise<CommentIndex> {
+    const path = await drive.getPath(mountId, pathId);
+    if (!path) throw new ApiError(404, 'Container not found');
+    return openCommentIndex(drive, path);
+}
+```
+
+`SharedDrive.getPath()` already enforces read permission — no explicit `canRead` check needed in GET routes.
+The PATCH route needs an explicit `canWrite` check since `getPath` only verifies read access.
 
 ```typescript
 // List all comments in a container document
 .get("/collab/:ownerId/:mountId/:pathId/comments", async ({params, user}) => {
     const drive = await getSharedDrive(params.ownerId, user);
-    if (!(await drive.canRead(params.mountId, params.pathId, user))) {
-        throw new ApiError(403, 'No read permission');
-    }
-    const containerPath = await drive.getPath(params.mountId, params.pathId);
-    if (!containerPath) throw new ApiError(404, 'Container not found');
-    const index = await openCommentIndex(drive, containerPath);
+    const index = await getCommentIndex(drive, params.mountId, params.pathId);
     return await index.list();
 }, {auth: true})
 
 // List comments that mention the current user
 .get("/collab/:ownerId/:mountId/:pathId/comments/mentions", async ({params, user}) => {
     const drive = await getSharedDrive(params.ownerId, user);
-    if (!(await drive.canRead(params.mountId, params.pathId, user))) {
-        throw new ApiError(403, 'No read permission');
-    }
-    const containerPath = await drive.getPath(params.mountId, params.pathId);
-    if (!containerPath) throw new ApiError(404, 'Container not found');
-    const index = await openCommentIndex(drive, containerPath);
+    const index = await getCommentIndex(drive, params.mountId, params.pathId);
     return await index.mentionsForUser(user.email);
 }, {auth: true})
 
 // Unresolved comment count
 .get("/collab/:ownerId/:mountId/:pathId/comments/unresolved-count", async ({params, user}) => {
     const drive = await getSharedDrive(params.ownerId, user);
-    if (!(await drive.canRead(params.mountId, params.pathId, user))) {
-        throw new ApiError(403, 'No read permission');
-    }
-    const containerPath = await drive.getPath(params.mountId, params.pathId);
-    if (!containerPath) throw new ApiError(404, 'Container not found');
-    const index = await openCommentIndex(drive, containerPath);
+    const index = await getCommentIndex(drive, params.mountId, params.pathId);
     return {count: await index.unresolvedCount()};
 }, {auth: true})
 
@@ -373,9 +368,7 @@ Added to the existing `apps/api/src/routes/collab.ts` — comments are document-
     if (!(await drive.canWrite(params.mountId, params.pathId, user))) {
         throw new ApiError(403, 'No write permission');
     }
-    const containerPath = await drive.getPath(params.mountId, params.pathId);
-    if (!containerPath) throw new ApiError(404, 'Container not found');
-    const index = await openCommentIndex(drive, containerPath);
+    const index = await getCommentIndex(drive, params.mountId, params.pathId);
     if (body.status === 'resolved') {
         await index.resolve(params.chatName, user.email);
     } else {
@@ -395,8 +388,15 @@ Tiptap and `CardItem.chatName` in stickies Yjs).
 
 ## Frontend Hooks
 
+Routes live under `/collab/...`, so add `collabApi` to `packages/lib/src/core/api.ts`:
+
+```typescript
+export const collabApi = api.collab;
+```
+
 ```typescript
 // packages/lib/src/core/chat/hooks/use-comments.ts
+import {collabApi} from '../../api';
 
 export const commentKeys = {
     all: ['comments'] as const,
@@ -414,7 +414,7 @@ export function useComments(ownerId: string, mountId: string, containerId: strin
     return useQuery({
         queryKey: commentKeys.list(ownerId, mountId, containerId),
         queryFn: async () => {
-            const response = await commentsApi({ownerId})({mountId})({containerId}).get();
+            const response = await collabApi({ownerId})({mountId})({pathId: containerId}).comments.get();
             if (response.error) throw new AppError(response);
             return response.data ?? [];
         },
@@ -426,7 +426,7 @@ export function useMyMentions(ownerId: string, mountId: string, containerId: str
     return useQuery({
         queryKey: commentKeys.mentions(ownerId, mountId, containerId),
         queryFn: async () => {
-            const response = await commentsApi({ownerId})({mountId})({containerId}).mentions.get();
+            const response = await collabApi({ownerId})({mountId})({pathId: containerId}).comments.mentions.get();
             if (response.error) throw new AppError(response);
             return response.data ?? [];
         },
@@ -438,8 +438,8 @@ export function useResolveComment(ownerId: string, mountId: string, containerId:
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: async ({chatName, status}: {chatName: string, status: 'resolved' | 'open'}) => {
-            const response = await commentsApi({ownerId})({mountId})({containerId})
-                ({chatName}).status.patch({status});
+            const response = await collabApi({ownerId})({mountId})({pathId: containerId})
+                .comments({chatName}).status.patch({status});
             if (response.error) throw new AppError(response);
             return response.data;
         },
@@ -467,21 +467,57 @@ The comment sidebar component (shared in `packages/ui`) receives `ownerId`, `mou
 3. **Resolve/Reopen** button per comment
 4. **Click** → opens the comment chat dialog (existing `ViewCommentDialog` or equivalent)
 
-## Existing Documents Without `comments.db`
+## Active vs Orphaned Comments
 
-`openCommentIndex()` creates `comments.db` on first access. Old documents get it when:
+When a user deletes a CommentMark in a doc (removes annotation from text) or deletes a card in stickies, the
+`.eigenchat` stays on disk and `comments.db` retains the row. This is intentional — the chat is preserved for version
+revert and the index is a metadata cache, not an authority on what's live.
 
-- A new comment is created (first message triggers `ensureComment` + `updateActivity`)
-- The comment list endpoint is called (creates empty DB, returns empty list)
+**The document structure is the source of truth for which comments are "active":**
 
-Old comments (created before this feature) won't appear in the index until someone posts a new message to them. A
-one-time backfill script could scan `chat/` contents and populate — but this is optional and can be deferred.
+- **Docs**: scan Tiptap document for `CommentMark` nodes → extract `chatName` attributes
+- **Stickies**: scan Y.Map cards → extract cards with `chatName`
+- **Slides/Sheets**: same pattern
+
+**Filtering is a frontend concern.** The Yjs document is already loaded in the frontend, so getting the active set is
+trivial. The comment sidebar flow:
+
+1. `GET /collab/.../comments` → returns ALL comments from the index
+2. Frontend intersects with active `chatName`s from the Yjs state
+3. Show active comments first, optionally show orphaned ones in a collapsed "archived" section
+
+No `archived` status in the schema — that would couple the DB to document format and require Yjs observers on the
+server. The `open | resolved` status tracks comment thread state, not whether the anchor exists.
+
+## Integration with Mentions System
+
+See [RESEARCH_MENTIONS.md](RESEARCH_MENTIONS.md). The `containerPath` field on `ChatRoom` enables proper deep linking
+when mention notifications are added (Phase 2 of the mentions plan):
+
+```typescript
+// In ChatRoom — when creating mention notification for a @mentioned email:
+const link = this.containerPath
+    ? getDocUrl(this.containerPath.ownerId, this.containerPath.mountId, this.containerPath.id)
+    : getChatRoomUrl(this.path.ownerId, this.path.mountId, this.path.id);
+```
+
+- **Standalone chat mention** → notification links to chat room
+- **Embedded comment mention** → notification links to the container document
+
+ChatRoom handles the routing. The notification system doesn't need to know about containers — it just receives a link
+and a tag. The `comment_mentions` table in `comments.db` and the `notifications.db` from RESEARCH_MENTIONS serve
+complementary purposes:
+
+- `comment_mentions` → "which comments in this doc mention me?" (document-scoped sidebar filter)
+- `notifications.db` → "what happened across all apps?" (user-scoped inbox)
+
+Both `extractMentionedEmails` implementations should share `EMAIL_FIND_REGEX` from `@workspace/lib/validation`.
 
 ## Performance
 
 | Operation | Cost |
 |-----------|------|
-| Container discovery (`findContainer`) | 2 SQLite lookups by PK (once per `ChatRoom.init()`) |
+| Container discovery (`findContainerPath`) | ~4 SQLite lookups by PK for standard structure (once per `ChatRoom.init()`) |
 | Index update on message post | 1 DB open (cached by `ManagedDatabase`) + 2-3 INSERTs/UPDATEs |
 | List all comments | 1 DB open + 1 SELECT |
 | "Where am I mentioned" | 1 DB open + 1 JOIN query (indexed) |
@@ -520,7 +556,9 @@ SSE handler invalidates `commentKeys.container(...)`.
 | **New** `apps/api/src/lib/chat/comment-index.ts` | `CommentIndex` class + `openCommentIndex()` |
 | **New** `apps/api/src/lib/chat/mentions.ts` | `extractMentionedEmails()` |
 | **New** `packages/lib/src/core/chat/hooks/use-comments.ts` | Query hooks + keys |
-| `apps/api/src/lib/chat/chat.ts` | Add `containerPath` (using shared `findContainerPath()` from `acl.ts`), index updates in `postMessage()` |
+| `apps/api/src/lib/chat/chat.ts` | Add `containerPath` (via `Drive.findContainerPath()`), index updates in `postMessage()` |
+| `apps/api/src/lib/collab/collabDocument.ts` | Add `comments.db` creation in `CollabDocument.create()` |
+| `packages/lib/src/core/api.ts` | Add `collabApi` export |
 | `apps/api/src/routes/collab.ts` | Add comment list/mentions/status routes |
 | `packages/lib/src/types/sse.ts` | Add `COMMENT_INDEX_UPDATED` |
 | `apps/api/src/lib/chat/sse-events.ts` | Add `buildCommentIndexUpdatedEvent()` |

@@ -92,11 +92,11 @@ matching tag, the existing row is updated (refreshed `title`, `body`, `createdAt
 spam from multiple mentions in the same resource. `NULL` tags are exempt from uniqueness (SQLite treats NULLs as
 distinct).
 
-Tag format:
+Tag format (includes `ownerId` and `mountId` for global uniqueness, consistent with resource addressing):
 
-- Chat: `chat:{chatId}`
-- Doc: `doc:{pathId}`
-- Stickies: `stickies:{pathId}:{cardId}`
+- Chat: `chat:{ownerId}:{mountId}:{chatId}`
+- Doc: `doc:{ownerId}:{mountId}:{pathId}`
+- Stickies: `stickies:{ownerId}:{mountId}:{pathId}:{cardId}`
 
 #### DatabaseConfig
 
