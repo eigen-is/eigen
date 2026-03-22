@@ -168,7 +168,7 @@ export function LabelDialog({
                                     )}
                                 />
                             </div>
-                            <DialogFooter className="flex justify-end">
+                            <DialogFooter>
                                 {isEditMode && (
                                     <Button
                                         type="button"
@@ -184,7 +184,6 @@ export function LabelDialog({
                                     type="button"
                                     variant="outline"
                                     onClick={() => onOpenChange(false)}
-                                    className="mr-2"
                                     disabled={isLoading}
                                 >
                                     Cancel

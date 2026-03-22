@@ -19,7 +19,7 @@ export function ConflictDialog({open, onOpenChange, onOverwrite, onReload, onDow
                 <p className="text-sm text-muted-foreground">
                     This file was modified since you opened it. What would you like to do?
                 </p>
-                <DialogFooter className="gap-2">
+                <DialogFooter>
                     <Button variant="outline" onClick={onDownload}>Download your version</Button>
                     <Button variant="outline" onClick={onReload}>Reload server version</Button>
                     <Button onClick={onOverwrite}>Overwrite</Button>

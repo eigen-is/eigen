@@ -63,8 +63,8 @@ function UserDropdown({rootRoute}: { rootRoute: TopbarProps['rootRoute'] }) {
                             need to log in again to continue.
                         </DialogDescription>
                     </DialogHeader>
-                    <DialogFooter className="flex justify-end gap-2">
-                        <Button variant="outline" onClick={() => setLogoutDialogOpen(false)} className="mr-2">
+                    <DialogFooter>
+                        <Button variant="outline" onClick={() => setLogoutDialogOpen(false)}>
                             Go Back
                         </Button>
                         <Button variant="default" onClick={handleLogout}>
