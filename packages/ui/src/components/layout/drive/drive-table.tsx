@@ -79,6 +79,7 @@ export function DriveTable({
                 thumbnail: null,
                 acl: null,
                 visibility: 'private',
+                sharingRestricted: false,
                 details: null,
                 createdAt: new Date(),
                 updatedAt: new Date()

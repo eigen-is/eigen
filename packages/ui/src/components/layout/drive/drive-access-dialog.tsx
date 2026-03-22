@@ -1,8 +1,9 @@
 import {useState} from "react"
 import {Dialog, DialogContent, DialogHeader, DialogTitle} from "@workspace/ui/components/dialog"
 import {DriveAccessListEdit} from "@workspace/ui/components/layout/drive/drive-access-list-edit"
+import {DriveAccessList} from "@workspace/ui/components/layout/drive/drive-access-list"
 import type {DriveACL, DrivePath, DriveVisibility} from "@workspace/lib/types/drive"
-import {useUpdateACL} from "@workspace/lib/drive";
+import {useIsEffectiveOwner, useUpdateACL} from "@workspace/lib/drive";
 import {useAuth} from "@workspace/lib/auth";
 
 export type DriveAccessDialogProps = {
@@ -18,16 +19,19 @@ export function DriveAccessDialog({
                                   }: DriveAccessDialogProps) {
     const [isSubmitting, setIsSubmitting] = useState(false)
     const {user} = useAuth();
-
     const updateACL = useUpdateACL(path?.ownerId || '', path?.mountId, user?.id);
+    const isEffectiveOwner = useIsEffectiveOwner(path?.ownerId || '');
 
     if (!path) {
         return null
     }
 
-    const handleSave = async (updatedAcl: DriveACL[], visibility: DriveVisibility) => {
+    // Non-owner editors see read-only view when sharing is restricted
+    const readOnly = path.sharingRestricted && !isEffectiveOwner
+
+    const handleSave = async (updatedAcl: DriveACL[], visibility: DriveVisibility, sharingRestricted?: boolean) => {
         setIsSubmitting(true)
-        await updateACL.mutateAsync({path, acl: updatedAcl, visibility});
+        await updateACL.mutateAsync({path, acl: updatedAcl, visibility, sharingRestricted});
         onOpenChange(false);
         setIsSubmitting(false);
     }
@@ -41,11 +45,18 @@ export function DriveAccessDialog({
                     </div>
                 </DialogHeader>
 
-                <DriveAccessListEdit
-                    path={path}
-                    onSave={handleSave}
-                    onCancel={!isSubmitting ? () => onOpenChange(false) : undefined}
-                />
+                {readOnly ? (
+                    <div className="space-y-3">
+                        <p className="text-sm text-muted-foreground">Sharing is restricted by the owner.</p>
+                        <DriveAccessList path={path}/>
+                    </div>
+                ) : (
+                    <DriveAccessListEdit
+                        path={path}
+                        onSave={handleSave}
+                        onCancel={!isSubmitting ? () => onOpenChange(false) : undefined}
+                    />
+                )}
             </DialogContent>
         </Dialog>
     )

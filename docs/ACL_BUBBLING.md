@@ -250,18 +250,18 @@ the `post()` call is better. This can be done via a new `useInviteToChatRoom` mu
 
 ## Edge Cases
 
-| Case | Behavior |
-|------|----------|
-| Standalone chat (top-level `.eigenchat`) | `findContainerPath` returns `null` → ACL on chat |
-| Embedded chat in eigendoc | ACL on eigendoc |
-| Embedded chat in eigenstickies | ACL on eigenstickies |
-| Chat inside slides/sheets | ACL on eigenslides/eigensheets |
-| User already has access | Returns `alreadyHasAccess: true`, no ACL change |
-| Caller has chat write but not doc write | 403 — correct, shouldn't invite to doc you can't manage |
-| Self-invite | Allowed (harmless, filtered by `filterRedundantACL` if owner) |
-| Team chat | Works — team member ACL on container, `filterRedundantACL` strips if redundant |
-| Email not a registered user | ACL entry created (consistent with share dialog behavior) |
-| Container has `sharingRestricted: true` | `drive.updateACL()` goes through `SharedDrive.updateACL()` which blocks — correct, editors cannot invite when sharing is restricted (see [TODO-RESHARE-PREVENTION.md](TODO-RESHARE-PREVENTION.md)) |
+| Case                                     | Behavior                                                                                                                                                                                      |
+|------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| Standalone chat (top-level `.eigenchat`) | `findContainerPath` returns `null` → ACL on chat                                                                                                                                              |
+| Embedded chat in eigendoc                | ACL on eigendoc                                                                                                                                                                               |
+| Embedded chat in eigenstickies           | ACL on eigenstickies                                                                                                                                                                          |
+| Chat inside slides/sheets                | ACL on eigenslides/eigensheets                                                                                                                                                                |
+| User already has access                  | Returns `alreadyHasAccess: true`, no ACL change                                                                                                                                               |
+| Caller has chat write but not doc write  | 403 — correct, shouldn't invite to doc you can't manage                                                                                                                                       |
+| Self-invite                              | Allowed (harmless, filtered by `filterRedundantACL` if owner)                                                                                                                                 |
+| Team chat                                | Works — team member ACL on container, `filterRedundantACL` strips if redundant                                                                                                                |
+| Email not a registered user              | ACL entry created (consistent with share dialog behavior)                                                                                                                                     |
+| Container has `sharingRestricted: true`  | `drive.updateACL()` goes through `SharedDrive.updateACL()` which blocks — correct, editors cannot invite when sharing is restricted (see [TODO-RESHARE-PREVENTION.md](RESHARE-PREVENTION.md)) |
 
 ## What This Does NOT Change
 
