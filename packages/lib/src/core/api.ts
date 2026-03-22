@@ -23,6 +23,7 @@ export const publicApi = api.p;
 export const driveApi = api.drive;
 export const homeApi = api.home;
 export const chatApi = api.chat;
+export const collabApi = api.collab;
 export const calendarApi = api.calendar;
 export const spaceApi = api.space;
 export const teamApi = api.team;

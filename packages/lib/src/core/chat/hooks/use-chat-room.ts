@@ -1,7 +1,7 @@
 import {useCallback, useMemo, useRef, useState} from 'react';
 import {useAuth} from '../../auth';
 import {useInviteToChat, useMessages, usePostMessage} from './use-chat';
-import {useCheckWritePermission, useFolderContent, usePathInfo, useUploadFile} from '../../drive';
+import {useCheckWritePermission, useEffectiveMembers, useFolderContent, usePathInfo, useUploadFile} from '../../drive';
 import {COMMANDS_HELP, getLocalCommand, isUnknownCommand} from '../commands';
 import {validateEmailTarget} from '../../../validation';
 import type {ChatMessage, RoomMember} from '../../../types/chat';
@@ -31,12 +31,14 @@ export function useChatRoom(ownerId: string, mountId: string, chatId: string) {
 
     const chatName = chatPath?.name?.replace('.eigenchat', '') || 'Chat';
 
+    const {data: effectiveMembers} = useEffectiveMembers(ownerId, mountId, chatId);
     const roomMembers: RoomMember[] = useMemo(() => {
-        if (!chatPath?.acl) return [];
-        return chatPath.acl
-            .filter(a => a.id && !a.id.startsWith('team_'))
-            .map(a => ({email: a.id, displayName: a.id.split('@')[0]}));
-    }, [chatPath?.acl]);
+        if (!effectiveMembers) return [];
+        return effectiveMembers.map(m => ({
+            email: m.email,
+            displayName: m.email.split('@')[0],
+        }));
+    }, [effectiveMembers]);
 
     const addLocalMessage = useCallback((content: string) => {
         const msg: ChatMessage = {

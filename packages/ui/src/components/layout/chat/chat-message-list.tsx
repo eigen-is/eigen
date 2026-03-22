@@ -6,7 +6,8 @@ import {usePublicUser} from "@workspace/lib/public";
 import {useContacts} from "@workspace/lib/contacts";
 import {Paperclip} from "lucide-react";
 import {useFolderLookup} from "@workspace/lib/drive";
-import {getDriveDownloadUrl, getDriveThumbnailUrl, getMailComposeUrl} from "@workspace/lib/api";
+import {getDriveDownloadUrl, getDriveThumbnailUrl} from "@workspace/lib/api";
+import {HoverCard, HoverCardContent, HoverCardTrigger} from "../../../components/hover-card";
 import {usePreview} from "../preview-provider";
 import {formatTime} from "@workspace/lib/date";
 import {EMAIL_FIND_REGEX} from "@workspace/lib/validation";
@@ -74,13 +75,14 @@ function InlineEmail({email}: { email: string }) {
     const {data} = usePublicUser(email);
     const name = data?.name || email.split('@')[0];
     return (
-        <a
-            href={getMailComposeUrl(email)}
-            className="inline-flex items-baseline gap-1 text-primary hover:underline"
-        >
-            <UserAvatar email={email} size="sm" className="h-4 w-4 inline-block relative top-0.5"/>
-            <span>{name}</span>
-        </a>
+        <HoverCard>
+            <HoverCardTrigger asChild>
+                <span className="text-primary cursor-default font-medium underline hover:no-underline">{name}</span>
+            </HoverCardTrigger>
+            <HoverCardContent className="w-auto p-3">
+                <UserItem email={email} mailLink/>
+            </HoverCardContent>
+        </HoverCard>
     );
 }
 
