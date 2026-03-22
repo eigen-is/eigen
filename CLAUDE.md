@@ -219,12 +219,13 @@ Detailed architecture docs in `docs/`:
 
 ### Future/Planning Docs
 
-| Doc                                                   | Topic                                    |
-|-------------------------------------------------------|------------------------------------------|
-| [TODO-CHAT-ACL.md](docs/TODO-CHAT-ACL.md)             | Chat membership vs ACL design discussion |
-| [TODO-ENCRYPTION.md](docs/TODO-ENCRYPTION.md)         | E2E encryption design                    |
-| [TODO-SCALABILITY.md](docs/TODO-SCALABILITY.md)       | Multi-server scaling design              |
-| [TODO-GUEST-USERS.md](docs/TODO-GUEST-USERS.md)       | Guest user access plan                   |
-| [TODO-CALENDAR-TIMEZONE.md](docs/TODO-CALENDAR-TIMEZONE.md) | Timezone-aware recurrence expansion |
-| [FORTUNE-SHEETS-TODO.md](docs/FORTUNE-SHEETS-TODO.md) | Fortune-sheet refactoring audit          |
-| [RESEARCH_AI.md](docs/RESEARCH_AI.md)                 | Local/private AI integration research    |
+| Doc                                                         | Topic                                    |
+|-------------------------------------------------------------|------------------------------------------|
+| [TODO-CHAT-ACL.md](docs/TODO-CHAT-ACL.md)                   | Chat membership vs ACL design discussion |
+| [TODO-ENCRYPTION.md](docs/TODO-ENCRYPTION.md)               | E2E encryption design                    |
+| [TODO-SCALABILITY.md](docs/TODO-SCALABILITY.md)             | Multi-server scaling design              |
+| [TODO-GUEST-USERS.md](docs/TODO-GUEST-USERS.md)             | Guest user access plan                   |
+| [TODO-CALENDAR-TIMEZONE.md](docs/TODO-CALENDAR-TIMEZONE.md) | Timezone-aware recurrence expansion      |
+| [FORTUNE-SHEETS-TODO.md](docs/FORTUNE-SHEETS-TODO.md)       | Fortune-sheet refactoring audit          |
+| [RESEARCH_AI.md](docs/RESEARCH_AI.md)                       | Local/private AI integration research    |
+| [RESEARCH_CALDAV.md](docs/RESEARCH_CALDAV.md)               | CalDAV backend feasibility research      |
