@@ -97,10 +97,8 @@ app.route('MKCALENDAR', '/dav/*', handler)
 app.route('PROPPATCH', '/dav/*', handler)
 ```
 
-**CORS note**: The current CORS config in `app.ts` only allows `GET/POST/PUT/DELETE/OPTIONS`. CalDAV methods
-(PROPFIND, REPORT, etc.) are not in this list. This is fine — CalDAV clients are native apps, not browsers, so CORS
-does not apply. But the Elysia CORS middleware must not reject requests with unknown methods on `/dav/*`. Either
-exclude `/dav/*` from CORS or add WebDAV methods to the allowed list.
+**CORS**: Handled at nginx level — `/dav/*` is proxied separately without CORS headers (see Discovery Flow).
+Elysia's CORS middleware only applies to `/eigen/*` requests, so no interference with CalDAV methods.
 
 **Body parsing note**: Elysia parses JSON by default. CalDAV sends `application/xml` bodies. The `/dav/*` routes
 must read the raw request body as text (`await request.text()`) and parse XML manually. Use `parse: 'text'` or
@@ -128,31 +126,54 @@ apps/api/src/lib/caldav/
 
 CalDAV clients only support HTTP-level auth. Cookie/session auth does not work.
 
-### HTTP Basic Auth
+### HTTP Basic Auth + email → userId resolution
 
 1. Extract `Authorization: Basic <base64>` header on all `/dav/*` requests
 2. Decode to `email:password`
-3. Validate against better-auth's credential store
+3. Look up `email` in `users3.db` → get `userId`
+4. Validate password (app-specific first, then primary credential)
+5. Attach `userId` to request context — all subsequent CalDAV handlers use it as the ownerId
 
-### App-specific passwords (recommended)
+CalDAV clients never know the userId directly. They authenticate with email and **discover** the userId via the
+PROPFIND chain (step 2 of Discovery Flow below returns `current-user-principal = /dav/principals/{userId}/`).
+All subsequent requests include `{userId}` in the URL, which is the ownerId.
 
-Add an `app_passwords` table:
+### App-specific passwords via better-auth API Key plugin
 
-```sql
-CREATE TABLE app_passwords (
-  id TEXT PRIMARY KEY,
-  userId TEXT NOT NULL,
-  name TEXT NOT NULL,          -- "MacBook Calendar", "DAVx5"
-  passwordHash TEXT NOT NULL,  -- bcrypt/argon2 hash
-  createdAt INTEGER DEFAULT (unixepoch()),
-  lastUsedAt INTEGER
-);
+Use the official `@better-auth/api-key` plugin. It manages its own `apiKey` table in `users3.db` (better-auth's
+managed database) — no custom tables needed.
+
+```typescript
+// auth.ts — add to plugins array
+import { apiKey } from "@better-auth/api-key"
+
+plugins: [
+    // ...existing plugins...
+    apiKey({
+        defaultPrefix: "eigen_",
+    }),
+]
 ```
+
+User creates a key via the settings UI:
+
+```typescript
+authClient.apiKey.create({ name: "MacBook Calendar", prefix: "eigen_" })
+// returns { key: "eigen_xxxxxxxxxxxxxxxx" } — shown once, user copies it
+```
+
+CalDAV Basic Auth flow:
+
+1. Decode `Authorization: Basic <base64>` → `email:key`
+2. Call `auth.api.verifyApiKey({ body: { key } })` → `{ valid, key: { userId } }`
+3. Look up user by `userId`, verify email matches (safety check)
+4. Attach `userId` to request context
+
+Fallback: if `key` doesn't look like an API key (no `eigen_` prefix), try primary credential validation.
 
 Benefits: user's primary password never exposed to CalDAV clients, individually revocable, standard practice
 (Google, Apple, Fastmail all use them). UI: settings page with "App Passwords" section — generate, name, revoke.
-
-Validation order: try app-specific passwords first, fall back to primary credential if none match.
+All managed by better-auth (table, hashing, CRUD endpoints).
 
 ## Discovery Flow
 
@@ -173,6 +194,38 @@ Validation order: try app-specific passwords first, fall back to primary credent
 ```
 
 Apple Calendar **requires** `/.well-known/caldav`. Thunderbird does not auto-discover — users enter the full URL.
+
+### Reverse proxy handling
+
+Production runs at `api.eigen.is` (API) and `eigen.is/...` (apps). The reverse proxy (nginx/Caddy) in front of
+`api.eigen.is` needs two additions:
+
+```nginx
+# CalDAV discovery — on the domain clients connect to
+location = /.well-known/caldav {
+    return 301 /dav/;
+}
+
+# CalDAV proxy — no CORS headers, pass WebDAV methods through
+location /dav/ {
+    proxy_pass http://127.0.0.1:8000/dav/;
+    proxy_http_version 1.1;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+    proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    proxy_set_header X-Forwarded-Proto $scheme;
+}
+```
+
+No CORS headers on `/dav/*` — CalDAV clients are native apps, not browsers. The `nginx.conf` in the repo is for
+local Docker dev only and is not the production config.
+
+### Sharding compatibility
+
+After the discovery PROPFIND, all CalDAV requests use `/dav/calendars/{ownerId}/...` — the ownerId is in the URL,
+same pattern as all other Eigen routes (`/calendar/{ownerId}/...`, `/drive/{ownerId}/...`). A future API gateway
+can extract ownerId from the URL and route to the correct server without any CalDAV-specific logic. No separate
+proxy layer needed.
 
 ### OPTIONS response
 
@@ -468,7 +521,7 @@ finite and well-documented. If XML edge cases become painful, extract utilities 
 4. Add `getChangedEventsSince()`, `getDeletedEventsSince()`
 5. Wire tombstone creation into `deleteEvent()`
 6. Set `eventCtag` in `createEvent()`, `updateEvent()`
-7. Add `app_passwords` table and auth validation
+7. Add `@better-auth/api-key` plugin to auth config, run migration
 
 ### Phase 1: Read-only CalDAV (1-2 weeks)
 
@@ -533,7 +586,7 @@ ical.js is wired up. Schema changes are small.
 | Recurrence in REPORT | Medium | Return raw master+exceptions, NOT expanded. Existing expansion logic reused only for time-range filtering |
 | Shared calendar proxying | Medium | Encode owner in collection URL. Reuse `resolveCalendarForEvents()` for access control |
 | Body parsing (Elysia JSON default vs XML) | Low | Read raw body as text on `/dav/*`. Exclude from JSON parsing |
-| CORS interference | Low | Exclude `/dav/*` from CORS middleware or add WebDAV methods to allowed list |
+| CORS interference | Low | nginx proxies `/dav/*` separately — no CORS headers applied |
 | Performance (large calendars) | Low | SQLite is fast. ctag prevents unnecessary syncs. No pagination needed |
 
 ## Dependencies
@@ -542,6 +595,7 @@ ical.js is wired up. Schema changes are small.
 ical.js                    -- iCalendar parse + generate (used by Thunderbird)
 timezones-ical-library     -- VTIMEZONE definitions for IANA timezones
 fast-xml-parser            -- XML parse (for PROPFIND/REPORT request bodies)
+@better-auth/api-key       -- app-specific passwords (better-auth managed)
 ```
 
 ## Files Changed
@@ -552,10 +606,10 @@ fast-xml-parser            -- XML parse (for PROPFIND/REPORT request bodies)
 | `apps/api/src/lib/calendar/schema.ts` | Add `icsBlob`, `eventCtag` columns, `event_tombstones` table |
 | `apps/api/src/lib/calendar/db-config.ts` | Migration v2 |
 | `apps/api/src/lib/calendar/calendar.ts` | New methods: `getEventByUri`, `getRawEvents*`, `upsertFromIcs`, `deleteByUri`, tombstones |
-| `apps/api/src/app.ts` | Add `caldavRouter`, handle CORS exclusion for `/dav/*` |
+| `apps/api/src/app.ts` | Add `caldavRouter` |
+| `nginx.conf` | Add `/.well-known/caldav` redirect + `/dav/` proxy block |
 | `packages/lib/src/types/calendar.ts` | Add `icsBlob`, `eventCtag` to `CalendarEvent` type |
-| `apps/api/src/lib/auth/auth.ts` | App-specific password validation |
-| `apps/api/src/routes/settings.ts` | App password management endpoints |
+| `apps/api/src/lib/auth/auth.ts` | Add `apiKey()` plugin to better-auth config |
 
 ## References
 
