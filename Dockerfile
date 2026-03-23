@@ -19,6 +19,7 @@ WORKDIR /app
 # Install runtime dependencies + build tools for native modules
 RUN apt-get update && apt-get install -y \
     libvips \
+    libimage-exiftool-perl \
     python3 \
     make \
     g++ \
