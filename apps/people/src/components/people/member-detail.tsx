@@ -3,11 +3,12 @@ import {UserAvatar} from '@workspace/ui/components/layout/user-avatar';
 import {Badge} from '@workspace/ui/components/badge';
 import {Button} from '@workspace/ui/components/button';
 import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '@workspace/ui/components/select';
-import {Trash2} from 'lucide-react';
+import {KeyRound, Trash2} from 'lucide-react';
 import {DeleteDialog} from '@workspace/ui/components/layout/delete/delete-dialog';
 import {TooltipButton} from '@workspace/ui/components/layout/toolbar/tooltip-button.tsx';
 import {useDeleteUser, useRemoveMember, useUpdateMemberRole} from '@workspace/lib/people';
 import {useNavigate} from '@tanstack/react-router';
+import {ResetPasswordDialog} from './reset-password-dialog';
 
 import type {OrgMember} from '@workspace/lib/types/people';
 
@@ -18,6 +19,7 @@ interface MemberDetailToolbarProps {
 
 export function MemberDetailToolbar({member, organizationId}: MemberDetailToolbarProps) {
     const [showRemove, setShowRemove] = useState(false);
+    const [showResetPassword, setShowResetPassword] = useState(false);
     const removeMember = useRemoveMember(organizationId);
     const navigate = useNavigate();
 
@@ -30,7 +32,14 @@ export function MemberDetailToolbar({member, organizationId}: MemberDetailToolba
 
     return (
         <div className="flex items-center gap-1 ml-auto">
+            <TooltipButton icon={KeyRound} tooltipText="Reset password" onClick={() => setShowResetPassword(true)}/>
             <TooltipButton icon={Trash2} tooltipText="Remove from organization" onClick={() => setShowRemove(true)}/>
+            <ResetPasswordDialog
+                open={showResetPassword}
+                onOpenChange={setShowResetPassword}
+                userId={member.userId}
+                userName={member.name}
+            />
             <DeleteDialog
                 open={showRemove}
                 onOpenChange={setShowRemove}

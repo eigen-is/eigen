@@ -111,12 +111,12 @@ export function SearchReplace() {
     );
 
     return (
-        <div className="flex flex-col min-h-0 flex-1 w-[32rem]">
-            <DialogHeader className="p-6 pb-0">
+        <div className="flex flex-col min-h-0 flex-1 w-[32rem] gap-4">
+            <DialogHeader>
                 <DialogTitle>{findAndReplace.find}</DialogTitle>
             </DialogHeader>
 
-            <div className="flex flex-col min-h-0 flex-1 px-6 py-4 gap-4">
+            <div className="flex flex-col min-h-0 flex-1 gap-4">
                 <Tabs
                     value={showReplace ? "replace" : "find"}
                     onValueChange={(v) => setShowReplace(v === "replace")}
@@ -234,7 +234,7 @@ export function SearchReplace() {
                 )}
             </div>
 
-            <DialogFooter className="p-6 pt-0">
+            <DialogFooter>
                 <Button variant="outline" size="sm" onClick={closeDialog}>
                     {button.close}
                 </Button>
