@@ -14,6 +14,12 @@ import {
     DropdownMenuTrigger
 } from "@workspace/ui/components/dropdown-menu";
 import {
+    ContextMenu,
+    ContextMenuContent,
+    ContextMenuItem,
+    ContextMenuTrigger
+} from "@workspace/ui/components/context-menu";
+import {
     Breadcrumb,
     BreadcrumbItem,
     BreadcrumbLink,
@@ -24,14 +30,7 @@ import {
 import {useBreadcrumb} from "@workspace/lib/drive";
 import {useLayout} from "../app/layout-context.tsx";
 
-type DriveListToolbarProps = {
-    ownerId: string;
-    mountId: string;
-    pathId: string;
-    showBreadcrumb?: boolean;
-    onRowSelect?: (path: DrivePath) => void;
-    onRowActivate?: (path: DrivePath) => void;
-    activeRowId?: string;
+type CreateCallbacks = {
     onCreateFolder?: () => void;
     onUploadFile?: () => void;
     onCreateDoc?: () => void;
@@ -39,6 +38,32 @@ type DriveListToolbarProps = {
     onCreateChat?: () => void;
     onCreateSlides?: () => void;
     onCreateSheets?: () => void;
+};
+
+const CREATE_MENU_DEFS: {key: keyof CreateCallbacks; icon: typeof FolderPlus; label: string; buttonLabel: string}[] = [
+    {key: 'onCreateFolder', icon: FolderPlus, label: 'Create folder', buttonLabel: 'New folder'},
+    {key: 'onUploadFile', icon: UploadIcon, label: 'Upload file', buttonLabel: 'Upload'},
+    {key: 'onCreateDoc', icon: FileText, label: 'Create document', buttonLabel: 'New document'},
+    {key: 'onCreateStickies', icon: StickyNote, label: 'Create stickies', buttonLabel: 'New stickies'},
+    {key: 'onCreateChat', icon: MessageSquare, label: 'Create chat', buttonLabel: 'New chat'},
+    {key: 'onCreateSlides', icon: Presentation, label: 'Create slides', buttonLabel: 'New slides'},
+    {key: 'onCreateSheets', icon: Sheet, label: 'Create sheets', buttonLabel: 'New sheets'},
+];
+
+function getCreateMenuItems(cb: CreateCallbacks) {
+    return CREATE_MENU_DEFS
+        .filter(def => cb[def.key])
+        .map(def => ({...def, onSelect: cb[def.key]!}));
+}
+
+type DriveListToolbarProps = CreateCallbacks & {
+    ownerId: string;
+    mountId: string;
+    pathId: string;
+    showBreadcrumb?: boolean;
+    onRowSelect?: (path: DrivePath) => void;
+    onRowActivate?: (path: DrivePath) => void;
+    activeRowId?: string;
 }
 
 export function DriveListToolbar({
@@ -68,72 +93,30 @@ export function DriveListToolbar({
         }
     };
 
-    const numberOfDropDownItems = (onCreateFolder ? 1 : 0) + (onUploadFile ? 1 : 0) + (onCreateDoc ? 1 : 0) + (onCreateStickies ? 1 : 0) + (onCreateChat ? 1 : 0) + (onCreateSlides ? 1 : 0) + (onCreateSheets ? 1 : 0);
+    const createItems = getCreateMenuItems({onCreateFolder, onUploadFile, onCreateDoc, onCreateStickies, onCreateChat, onCreateSlides, onCreateSheets});
 
-    const newItemButton = (onCreateFolder || onUploadFile || onCreateDoc || onCreateStickies || onCreateChat || onCreateSlides || onCreateSheets) ? (
-        (numberOfDropDownItems === 1 ? (
-                    onCreateDoc ? <Button size="default" onClick={onCreateDoc}>
-                        <Plus/>
-                        <span className="mr-2">New document</span>
-                    </Button> : onCreateStickies ?
-                        <Button size="default" onClick={onCreateStickies}>
-                            <Plus/>
-                            <span className="mr-2">New stickies</span>
-                        </Button> : null
-                ) :
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button size="default">
-                            <Plus/>
-                            <span className="mr-2">New</span>
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="end">
-                        {onCreateFolder && (
-                            <DropdownMenuItem onClick={onCreateFolder}>
-                                <FolderPlus className="h-4 w-4 mr-2"/>
-                                Create folder
-                            </DropdownMenuItem>
-                        )}
-                        {onUploadFile && (
-                            <DropdownMenuItem onClick={onUploadFile}>
-                                <UploadIcon className="h-4 w-4 mr-2"/>
-                                Upload file
-                            </DropdownMenuItem>
-                        )}
-                        {onCreateDoc && (
-                            <DropdownMenuItem onClick={onCreateDoc}>
-                                <FileText className="h-4 w-4 mr-2"/>
-                                Create document
-                            </DropdownMenuItem>
-                        )}
-                        {onCreateStickies && (
-                            <DropdownMenuItem onClick={onCreateStickies}>
-                                <StickyNote className="h-4 w-4 mr-2"/>
-                                Create stickies
-                            </DropdownMenuItem>
-                        )}
-                        {onCreateChat && (
-                            <DropdownMenuItem onClick={onCreateChat}>
-                                <MessageSquare className="h-4 w-4 mr-2"/>
-                                Create chat
-                            </DropdownMenuItem>
-                        )}
-                        {onCreateSlides && (
-                            <DropdownMenuItem onClick={onCreateSlides}>
-                                <Presentation className="h-4 w-4 mr-2"/>
-                                Create slides
-                            </DropdownMenuItem>
-                        )}
-                        {onCreateSheets && (
-                            <DropdownMenuItem onClick={onCreateSheets}>
-                                <Sheet className="h-4 w-4 mr-2"/>
-                                Create sheets
-                            </DropdownMenuItem>
-                        )}
-                    </DropdownMenuContent>
-                </DropdownMenu>
-        )) : null;
+    const newItemButton = createItems.length === 0 ? null : createItems.length === 1 ? (
+        <Button size="default" onClick={createItems[0].onSelect}>
+            <Plus/>
+            <span className="mr-2">{createItems[0].buttonLabel}</span>
+        </Button>
+    ) : (
+        <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+                <Button size="default">
+                    <Plus/>
+                    <span className="mr-2">New</span>
+                </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+                {createItems.map(({key, icon: Icon, label, onSelect}) => (
+                    <DropdownMenuItem key={key} onClick={onSelect}>
+                        <Icon className="h-4 w-4 mr-2"/>{label}
+                    </DropdownMenuItem>
+                ))}
+            </DropdownMenuContent>
+        </DropdownMenu>
+    );
 
     return (
         <div className="flex items-center justify-between w-full">
@@ -167,24 +150,17 @@ export function DriveListToolbar({
     );
 }
 
-interface DriveListProps {
+type DriveListProps = CreateCallbacks & {
     items: DrivePath[];
     isLoading?: boolean;
     error?: Error | null;
     onRowSelect?: (path: DrivePath) => void;
     onRowActivate?: (path: DrivePath) => void;
     activeRowId?: string;
-    onCreateFolder?: () => void;
-    onUploadFile?: () => void;
     onUploadFiles?: (files: File[]) => void;
     currentPath?: DrivePath | null;
     onDelete?: (paths: DrivePath[]) => void;
     onShareClick?: (item: DrivePath) => void;
-    onCreateDoc?: () => void;
-    onCreateStickies?: () => void;
-    onCreateChat?: () => void;
-    onCreateSlides?: () => void;
-    onCreateSheets?: () => void;
     onDownload?: (path: DrivePath) => void;
     ownerId: string;
     mountId: string;
@@ -206,10 +182,17 @@ export function DriveList({
                               onRowSelect,
                               onRowActivate,
                               activeRowId,
+                              onCreateFolder,
+                              onUploadFile,
                               onUploadFiles,
                               onDelete,
                               currentPath,
                               onShareClick,
+                              onCreateDoc,
+                              onCreateStickies,
+                              onCreateChat,
+                              onCreateSlides,
+                              onCreateSheets,
                               onDownload,
                               ownerId,
                               mountId,
@@ -293,7 +276,8 @@ export function DriveList({
         }
     };
 
-    // Handle showing empty, loading, and error states
+    const createItems = getCreateMenuItems({onCreateFolder, onUploadFile, onCreateDoc, onCreateStickies, onCreateChat, onCreateSlides, onCreateSheets});
+
     if (isLoading) {
         return <LoadingState/>;
     }
@@ -302,7 +286,7 @@ export function DriveList({
         return <ErrorState message="Error loading files" detail={error.message}/>;
     }
 
-    return (
+    const contentDiv = (
         <div
             className={cn(
                 "h-full flex flex-col relative border-r",
@@ -313,7 +297,6 @@ export function DriveList({
             onDragLeave={handleDragLeave}
             onDrop={handleDrop}
         >
-            {/* Drag overlay */}
             {allowUpload && isDragging && (
                 <div
                     className="absolute inset-0 bg-background/80 backdrop-blur-sm flex items-center justify-center z-10 pointer-events-none">
@@ -325,7 +308,6 @@ export function DriveList({
                 </div>
             )}
 
-            {/* Drive table */}
             <DriveTable
                 items={items}
                 currentPath={currentPath}
@@ -348,5 +330,22 @@ export function DriveList({
                 <EmptyState/>
             )}
         </div>
+    );
+
+    if (createItems.length === 0) return contentDiv;
+
+    return (
+        <ContextMenu>
+            <ContextMenuTrigger asChild>
+                {contentDiv}
+            </ContextMenuTrigger>
+            <ContextMenuContent>
+                {createItems.map(({key, icon: Icon, label, onSelect}) => (
+                    <ContextMenuItem key={key} onSelect={onSelect}>
+                        <Icon className="h-4 w-4 mr-2"/>{label}
+                    </ContextMenuItem>
+                ))}
+            </ContextMenuContent>
+        </ContextMenu>
     );
 }
