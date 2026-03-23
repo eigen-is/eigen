@@ -22,10 +22,15 @@ export async function extractEmbeddedPreview(filePath: string, tmpDir: string, p
         const extractPath = path.join(tmpDir, `${pathId}-extract.jpg`);
 
         // Try PreviewImage first (largest), then JpgFromRaw, then ThumbnailImage
+        // Use -b to write binary to stdout, then save to file ourselves
         for (const tag of ['-PreviewImage', '-JpgFromRaw', '-ThumbnailImage']) {
             try {
-                await execFileAsync(bin, ['-b', tag, '-W', extractPath, filePath]);
-                if (fs.existsSync(extractPath) && fs.statSync(extractPath).size > 0) {
+                const {stdout} = await execFileAsync(bin, ['-b', tag, filePath], {
+                    encoding: 'buffer',
+                    maxBuffer: 20 * 1024 * 1024,
+                });
+                if (stdout && stdout.length > 0) {
+                    fs.writeFileSync(extractPath, stdout);
                     return extractPath;
                 }
             } catch { /* tag not present, try next */
