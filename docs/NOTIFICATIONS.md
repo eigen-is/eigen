@@ -81,20 +81,7 @@ toast, but the type is kept for two reasons:
 
 ## Future: Notification Center
 
-Replace toasts with a notification bell/dropdown that accumulates events. The backend would:
-
-1. Store notifications in a per-user `notifications` table (`id, userId, type, title, body, link, read, createdAt`)
-2. Push via SSE for real-time delivery (ephemeral)
-3. Use `isSSEventNotification()` on the backend to decide which events to persist
-
-The frontend notification center would:
-
-- On load: fetch unread notifications from the API
-- On SSE event: append to the list in real-time
-- Mark as read when clicked/dismissed
-
-The `SSEventNotification` type's `tag` field enables deduplication (e.g., multiple messages in same chat → one
-notification). The `link` field provides click-to-open behavior.
+See [TODO-NOTIFICATION-CENTER.md](TODO-NOTIFICATION-CENTER.md) for the full design.
 
 ## Related Files
 

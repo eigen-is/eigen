@@ -6,12 +6,6 @@
 > Updates to `comments.db` happen server-side via `ChatRoom.updateCommentIndex()`. Mentions are returned inline with
 > the comment list (no separate endpoint).
 
-## Problem
-
-When opening a document with 20 comments, there's no way to know which comments mention the current user, which are
-resolved, or what the latest activity is — without opening all 20 `*.eigenchat/data.db` files and scanning every
-message. This is O(N) database opens and unacceptable for a comment sidebar.
-
 ## How a Chat Knows It's Embedded
 
 A chat does **not** inherently know. The `ChatRoom` class receives a `DrivePath` during construction:
@@ -446,19 +440,14 @@ server. The `open | resolved` status tracks comment thread state, not whether th
 
 ## Integration with Mentions System
 
-See [RESEARCH_MENTIONS.md](RESEARCH_MENTIONS.md). The `containerPath` field on `ChatRoom` enables proper deep linking
-when mention notifications are added (Phase 2 of the mentions plan):
+The `containerPath` field on `ChatRoom` enables proper deep linking when mention notifications are added:
 
-- **Standalone chat mention** -> notification links to chat room
-- **Embedded comment mention** -> notification links to the container document
+- **Standalone chat mention** → notification links to chat room
+- **Embedded comment mention** → notification links to the container document
 
-The `comment_mentions` table in `comments.db` and the `notifications.db` from RESEARCH_MENTIONS serve complementary
-purposes:
-
-- `comment_mentions` -> "which comments in this doc mention me?" (document-scoped sidebar filter)
-- `notifications.db` -> "what happened across all apps?" (user-scoped inbox)
-
-Both use `extractMentionedEmails` with `EMAIL_FIND_REGEX` from `@workspace/lib/validation`.
+The `comment_mentions` table in `comments.db` serves document-scoped filtering ("which comments in this doc mention
+me?"). Both mention detection and extraction use `extractMentionedEmails` with `EMAIL_FIND_REGEX` from
+`@workspace/lib/validation`. See [TODO-MENTIONS.md](TODO-MENTIONS.md) for the cross-app notification center plan.
 
 ## Performance
 
@@ -494,11 +483,3 @@ The `comments.db` is tiny: rows = number of comments (typically <100 per documen
 | `packages/lib/src/core/chat/sse-handlers.ts`               | `CHAT_COMMENT_INDEX_UPDATED` handler                                                              |
 | `packages/lib/src/core/drive/hooks/use-drive.ts`           | `useEffectiveMembers()` hook                                                                      |
 
-## What This Does NOT Change
-
-- Chat `data.db` schema — unchanged, messages table stays the same
-- Yjs `data.db` — unchanged, collaborative state is separate
-- `CommentMark` Tiptap extension — unchanged, still stores `chatName`
-- `MediaResolverProvider` — unchanged, still resolves `chatName` -> `pathId`
-- Standalone chats — no `comments.db` created, no index updates
-- `ChatRoom.postMessage()` message flow — index update is appended, non-fatal on failure

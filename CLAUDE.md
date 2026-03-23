@@ -190,6 +190,8 @@ Detailed architecture docs in `docs/`:
 | [CONTRIBUTING.md](docs/CONTRIBUTING.md)                         | Code style, patterns, development workflow              |
 | [DATABASE.md](docs/DATABASE.md)                                 | SQLite databases, ManagedDatabase, migrations           |
 | [STORAGE.md](docs/STORAGE.md)                                   | Storage backends, mount system, Home singleton          |
+| [SERVER-SETTINGS.md](docs/SERVER-SETTINGS.md)                   | ServerSettings, JsonStore, admin API, settings UI       |
+| [QUOTA.md](docs/QUOTA.md)                                       | Quota model, resolution, enforcement functions          |
 | [SSE.md](docs/SSE.md)                                           | Real-time events, adding SSE to new domains             |
 | [ACL.md](docs/ACL.md)                                           | Additive ACL inheritance, visibility, effective members |
 | [ORGANISATIONS-AND-TEAMS.md](docs/ORGANISATIONS-AND-TEAMS.md)   | Org/team model, team drives, prefixed owner IDs         |
@@ -201,6 +203,7 @@ Detailed architecture docs in `docs/`:
 | [COMMENTS_IN_DOCS.md](docs/COMMENTS_IN_DOCS.md)                 | Comment index, mentions, resolution tracking            |
 | [CALENDAR.md](docs/CALENDAR.md)                                 | Calendar, RRULE, sharing, team calendars                |
 | [SHARE-PROPAGATION.md](docs/SHARE-PROPAGATION.md)               | Push-based sharing, share registry                      |
+| [RESHARE-PREVENTION.md](docs/RESHARE-PREVENTION.md)             | Per-path sharing restriction flag                       |
 | [STICKIES.md](docs/STICKIES.md)                                 | Kanban board, Yjs data model                            |
 | [SLIDES.md](docs/SLIDES.md)                                     | Presentation editor, percentage coordinates             |
 | [SHEETS.md](docs/SHEETS.md)                                     | Spreadsheet, op-based Yjs sync                          |
@@ -214,20 +217,23 @@ Detailed architecture docs in `docs/`:
 | [NOTIFICATIONS.md](docs/NOTIFICATIONS.md)                       | Error/success toasts, SSE notification pattern          |
 | [TESTING.md](docs/TESTING.md)                                   | Test setup, patterns, test files                        |
 | [DOCKER.md](docs/DOCKER.md)                                     | Docker deployment                                       |
-| [IMAP.md](docs/PLAN_IMAP.md)                                    | IMAP/Dovecot Maildir compatibility plan                 |
+| [ACL_BUBBLING.md](docs/ACL_BUBBLING.md)                         | Chat invite ACL bubbling to container                   |
+| [IMAP.md](docs/IMAP.md)                                         | Maildir storage format, Dovecot compatibility           |
+| [TYPOGRAPHY.md](docs/TYPOGRAPHY.md)                             | Self-hosted font system, FontPicker                     |
 
 | [Code Reviews](codereviews/OVERVIEW.md)                         | Full-stack code review findings + fix priorities |
 
 ### Future/Planning Docs
 
-| Doc                                                         | Topic                                    |
-|-------------------------------------------------------------|------------------------------------------|
-| [TODO-CHAT-ACL.md](docs/TODO-CHAT-ACL.md)                   | Chat membership vs ACL design discussion |
-| [TODO-RESHARE-PREVENTION.md](docs/RESHARE-PREVENTION.md)    | Re-share prevention design               |
-| [TODO-ENCRYPTION.md](docs/TODO-ENCRYPTION.md)               | E2E encryption design                    |
-| [TODO-SCALABILITY.md](docs/TODO-SCALABILITY.md)             | Multi-server scaling design              |
-| [TODO-GUEST-USERS.md](docs/TODO-GUEST-USERS.md)             | Guest user access plan                   |
-| [TODO-CALENDAR-TIMEZONE.md](docs/TODO-CALENDAR-TIMEZONE.md) | Timezone-aware recurrence expansion      |
-| [FORTUNE-SHEETS-TODO.md](docs/FORTUNE-SHEETS-TODO.md)       | Fortune-sheet refactoring audit          |
-| [RESEARCH_AI.md](docs/RESEARCH_AI.md)                       | Local/private AI integration research    |
-| [RESEARCH_CALDAV.md](docs/RESEARCH_CALDAV.md)               | CalDAV implementation plan               |
+| Doc                                                             | Topic                                    |
+|-----------------------------------------------------------------|------------------------------------------|
+| [TODO-NOTIFICATION-CENTER.md](docs/TODO-NOTIFICATION-CENTER.md) | Persistent notification center design    |
+| [TODO-MENTIONS.md](docs/TODO-MENTIONS.md)                       | Cross-app @mention system                |
+| [TODO-CHAT-ACL.md](docs/TODO-CHAT-ACL.md)                       | Chat membership vs ACL design discussion |
+| [TODO-ENCRYPTION.md](docs/TODO-ENCRYPTION.md)                   | E2E encryption design                    |
+| [TODO-SCALABILITY.md](docs/TODO-SCALABILITY.md)                 | Multi-server scaling design              |
+| [TODO-GUEST-USERS.md](docs/TODO-GUEST-USERS.md)                 | Guest user access plan                   |
+| [TODO-CALENDAR-TIMEZONE.md](docs/TODO-CALENDAR-TIMEZONE.md)     | Timezone-aware recurrence expansion      |
+| [FORTUNE-SHEETS-TODO.md](docs/FORTUNE-SHEETS-TODO.md)           | Fortune-sheet refactoring audit          |
+| [RESEARCH_AI.md](docs/RESEARCH_AI.md)                           | Local/private AI integration research    |
+| [RESEARCH_CALDAV.md](docs/RESEARCH_CALDAV.md)                   | CalDAV implementation plan               |
