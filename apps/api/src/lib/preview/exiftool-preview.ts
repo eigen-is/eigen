@@ -12,6 +12,13 @@ export function isExiftoolCandidate(mimeType: string, fileName: string): boolean
 }
 
 async function getExiftoolPath(): Promise<string> {
+    // Try system exiftool first, fall back to vendored
+    try {
+        const {stdout} = await execFileAsync('exiftool', ['-ver']);
+        if (stdout.trim()) return 'exiftool';
+    } catch { /* not installed system-wide */
+    }
+
     const {exiftool} = await import('exiftool-vendored');
     return exiftool.exiftoolPath();
 }
