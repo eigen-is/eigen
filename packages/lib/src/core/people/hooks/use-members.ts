@@ -1,4 +1,5 @@
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
+import {toast} from 'sonner';
 import {authClient} from '../../auth/hooks/use-auth-client';
 import {settingsApi} from '../../api';
 import {peopleKeys} from './keys.ts';
@@ -75,6 +76,22 @@ export function useDeleteUser(organizationId?: string) {
         },
         onSuccess: () => {
             queryClient.invalidateQueries({queryKey: peopleKeys.members(organizationId ?? '')});
+        },
+        onError: onMutationError,
+    });
+}
+
+export function useResetUserPassword() {
+    return useMutation({
+        mutationFn: async ({userId, newPassword}: { userId: string; newPassword: string }) => {
+            const {error} = await authClient.admin.setUserPassword({
+                userId,
+                newPassword,
+            });
+            if (error) throw new Error(String(error));
+        },
+        onSuccess: () => {
+            toast.success('Password has been reset');
         },
         onError: onMutationError,
     });

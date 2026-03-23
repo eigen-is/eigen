@@ -41,14 +41,14 @@ function DialogWrapper({
     children?: React.ReactNode;
 }) {
     return (
-        <div className="min-w-[280px]">
-            <DialogHeader className="p-6 pb-0">
+        <>
+            <DialogHeader>
                 <DialogTitle className="text-base">Notice</DialogTitle>
             </DialogHeader>
-            <DialogDescription className="px-6 py-4 text-sm text-foreground">
+            <DialogDescription className="text-foreground">
                 {children}
             </DialogDescription>
-            <DialogFooter className="p-6 pt-0">
+            <DialogFooter>
                 {type === "yesno" && (
                     <Button variant="outline" size="sm" onClick={onCancel}>
                         Cancel
@@ -58,6 +58,6 @@ function DialogWrapper({
                     OK
                 </Button>
             </DialogFooter>
-        </div>
+        </>
     );
 }
