@@ -2,7 +2,7 @@ import {randomUUID} from 'crypto';
 import {desc, eq, lt} from 'drizzle-orm';
 import type {BunSQLiteDatabase} from 'drizzle-orm/bun-sqlite';
 
-import type {DrivePath} from '@workspace/lib/types/drive';
+import {type DrivePath, stripEigenExtension} from '@workspace/lib/types/drive';
 import type {ChatMessage} from '@workspace/lib/types/chat';
 import type {Drive} from '../drive';
 import type {ManagedDatabase} from '../core/managed-database';
@@ -124,16 +124,12 @@ export class ChatRoom {
             createdAt: now,
         };
 
-        const sseMessage = type === 'whisper'
-            ? {...message, content: '', whisperTo: null}
-            : message;
         const event = buildChatEvent(SSEventType.CHAT_MESSAGE_POSTED, {
             chatId: this.path.id,
             ownerId: this.path.ownerId,
             mountId: this.path.mountId,
-            message: sseMessage,
         });
-        this.home.notify(event);
+        this.home.broadcast(event);
         this.notifySharedUsers(event);
 
         // Update comment index if this chat is embedded in a container document
@@ -145,6 +141,36 @@ export class ChatRoom {
                     await index.addMention(this.path.name, email);
                 }
             });
+        }
+
+        // Notify mentioned users (only those with read access)
+        if (type !== 'whisper') {
+            const mentionedEmails = extractMentionedEmails(content);
+            if (mentionedEmails.length > 0) {
+                const members = await this.drive.getEffectiveMembers(this.path.mountId, this.path.id);
+                const memberEmails = new Set(members.map(m => m.email.toLowerCase()));
+                const displayName = stripEigenExtension(this.containerPath?.name ?? this.path.name);
+                const notificationType = this.containerPath ? 'mention-comment' : 'mention-chat';
+                const targetPath = this.containerPath ?? this.path;
+
+                for (const email of mentionedEmails) {
+                    if (email === authorEmail.toLowerCase()) continue;
+                    if (!memberEmails.has(email)) continue;
+                    try {
+                        const mentionedUser = await getUserByEmail(email);
+                        if (!mentionedUser) continue;
+                        const targetHome = await getHome(mentionedUser.id);
+                        targetHome.notifications?.persist({
+                            type: notificationType,
+                            actorEmail: authorEmail,
+                            title: `You were mentioned in "${displayName}"`,
+                            body: content.length > 100 ? content.slice(0, 100) + '...' : content,
+                            tag: `mention:${targetPath.ownerId}:${targetPath.mountId}:${targetPath.id}:${email}`,
+                        });
+                    } catch { /* user may not exist */
+                    }
+                }
+            }
         }
 
         return message;
@@ -215,9 +241,8 @@ export class ChatRoom {
             chatId: this.path.id,
             ownerId: this.path.ownerId,
             mountId: this.path.mountId,
-            message: updated,
         });
-        this.home.notify(event);
+        this.home.broadcast(event);
         this.notifySharedUsers(event);
 
         if (this.containerPath && existing.type !== 'whisper') {
@@ -256,9 +281,8 @@ export class ChatRoom {
             chatId: this.path.id,
             ownerId: this.path.ownerId,
             mountId: this.path.mountId,
-            message: this.toMessage({...existing, deletedAt: now}),
         });
-        this.home.notify(event);
+        this.home.broadcast(event);
         this.notifySharedUsers(event);
 
         if (this.containerPath && existing.type !== 'whisper') {
@@ -295,7 +319,7 @@ export class ChatRoom {
             const event = buildCommentIndexUpdatedEvent(
                 this.containerPath.id, this.path.ownerId, this.path.mountId
             );
-            this.home.notify(event);
+            this.home.broadcast(event);
             this.notifySharedUsers(event);
         } catch (error) {
             console.error('Failed to update comment index:', error);
@@ -312,7 +336,7 @@ export class ChatRoom {
             try {
                 if (atHome(user.id)) {
                     const home = await getHome(user.id);
-                    home.notify(event);
+                    home.broadcast(event);
                 }
             } catch { /* user home may not exist */
             }

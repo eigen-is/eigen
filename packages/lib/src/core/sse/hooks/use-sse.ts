@@ -8,6 +8,7 @@ import {handleMailSSEvent} from '@workspace/lib/mail';
 import {handleContactsSSEvent} from '@workspace/lib/contacts';
 import {handleChatSSEvent} from '@workspace/lib/chat';
 import {handleCalendarSSEvent} from '@workspace/lib/calendar';
+import {handleNotificationSSEvent} from '@workspace/lib/notification';
 import {handleSpaceSSEvent} from '@workspace/lib/space';
 import {handleTeamSSEvent} from '@workspace/lib/team';
 
@@ -25,6 +26,7 @@ export function useSSE() {
         handleContactsSSEvent(event, queryClient, userId);
         handleChatSSEvent(event, queryClient);
         handleCalendarSSEvent(event, queryClient, userId);
+        handleNotificationSSEvent(event, queryClient, userId);
         handleSpaceSSEvent(event, queryClient, userId);
         handleTeamSSEvent(event, queryClient);
     }, [queryClient]);

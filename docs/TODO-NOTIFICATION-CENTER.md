@@ -1,110 +1,141 @@
-# TODO: Notification Center
+# Notification Center
 
-> **Goal**: Replace ephemeral toasts with a persistent notification bell/dropdown in the topbar. Per-user SQLite
-> database
-> stores notifications. SSE delivers real-time events. Existing `SSEventNotification` mixin (`body`, `tag?`, `link?`) on
-> SSE events is designed for this — `isSSEventNotification()` already identifies which events to persist.
+> **TLDR**: Persistent notification bell/dropdown in topbar. `NotificationCenter` is a Home domain service (like
+> Calendar, Contacts) with per-user SQLite database. `home.notify()` renamed to `home.broadcast()` (SSE push). Toast
+> notifications removed from individual SSE handlers — toasts now come exclusively from the notification SSE handler
+> when a new notification arrives.
 
-## Current State
+## Architecture
 
-- SSE events with `SSEventNotification` mixin carry `body`, `tag`, `link` fields (see [SSE.md](SSE.md))
-- Cross-user notification works: `ChatRoom.notifySharedUsers()`, `propagateACLChange()`,
-  `notifySharedCalendarUsers()`, `propagateInvitation()` all call `home.notify()` on recipient Homes
-- Curated events already show ephemeral toasts in SSE handlers (see [NOTIFICATIONS.md](NOTIFICATIONS.md))
-- No persistence — missed notifications are lost
+### NotificationCenter as Home Domain Service
 
-## Proposed Architecture
+Follows the same pattern as Calendar, Contacts, Mail:
 
-### Storage
+```
+Home
+├── _drive (Drive)                  → mounts/default/
+├── _contacts (Contacts)            → eigen.contacts/contacts.db
+├── _mail (Maildir)                 → eigen.mail/mail.db
+├── _calendar (Calendar)            → eigen.calendar/calendar.db
+└── _notifications (NotificationCenter) → eigen.notifications/notifications.db
+```
 
-Per-user SQLite database following the Home pattern:
+**User-only** — notifications live in `UserHome`, not `TeamHome`. Team actions generate notifications in each affected
+user's Home.
+
+### SSE Rename: `home.notify()` → `home.broadcast()`
+
+The old `home.notify()` name was ambiguous — it broadcasts SSE events for cache invalidation, not user-facing
+notifications. Renamed to `home.broadcast()` to clarify that it pushes events to SSE listeners.
+
+The new flow for cross-user events:
+
+```
+1. Something happens (e.g., drive share)
+2. home.notifications.persist({...})   → writes to notifications.db + broadcasts notification SSE event
+3. home.broadcast(domainEvent)         → existing SSE push for cache invalidation
+```
+
+### Toast Migration
+
+**Before**: 7 toast calls scattered across 3 SSE handlers (drive, mail, calendar).
+**After**: One `handleNotificationSSEvent()` handler shows toasts when `notification:created` arrives.
+
+Removed toast calls:
+
+| Handler                    | Events                                                             |
+|----------------------------|--------------------------------------------------------------------|
+| `drive/sse-handlers.ts`    | `DRIVE_ACL_SHARED`, `DRIVE_ACL_UNSHARED`                           |
+| `mail/sse-handlers.ts`     | `MAIL_RECEIVED`                                                    |
+| `calendar/sse-handlers.ts` | `CALENDAR_SHARED`, `CALENDAR_UNSHARED`, `CALENDAR_INVITE_RECEIVED` |
+
+## Storage
 
 ```
 data/home/{userId}/eigen.notifications/notifications.db
 ```
 
-### Schema
+## Schema
 
 ```typescript
-// apps/api/src/lib/notification/schema.ts
+// apps/api/src/lib/notification-center/schema.ts
 export const notifications = sqliteTable('notifications', {
     id: text('id').primaryKey(),
-    type: text('type').notNull(),                                       // 'mention' | 'share' | 'invite' | ...
-    actorEmail: text('actorEmail').notNull(),                           // who triggered it
-    title: text('title').notNull(),                                     // "Alice shared 'Report.pdf' with you"
-    body: text('body'),                                                 // message excerpt
-    link: text('link'),                                                 // deep link URL
+    type: text('type').notNull(),                                       // 'share' | 'unshare' | 'invite' | 'mail' | ...
+    actorEmail: text('actorEmail'),                                     // who triggered it (null for system)
+    title: text('title').notNull(),                                     // "Report.pdf was shared with you"
+    body: text('body'),                                                 // optional extra detail
+    link: text('link'),                                                 // deep link path
     tag: text('tag').unique(),                                          // dedup key (NULL = no dedup)
-    sourceApp: text('sourceApp'),                                       // 'chat' | 'drive' | 'calendar' | ...
     read: integer('read', {mode: 'boolean'}).notNull().default(false),
     createdAt: integer('createdAt', {mode: 'timestamp'}).notNull().default(sql`(unixepoch())`),
 });
 ```
 
-The `tag` column with `UNIQUE` constraint enables upsert-based deduplication. Multiple messages in the same chat
-produce one notification (refreshed, not duplicated). `NULL` tags are exempt (SQLite treats NULLs as distinct).
+The `tag` column with `UNIQUE` constraint enables upsert-based deduplication. `NULL` tags are exempt (SQLite treats
+NULLs as distinct).
 
-Tag format examples:
+## API Routes
 
-- `chat:{ownerId}:{mountId}:{chatId}`
-- `share:{ownerId}:{mountId}:{pathId}`
-- `calendar:{ownerId}:{calendarId}:{eventId}`
-
-### Backend Flow
+Router: `apps/api/src/routes/notification.ts`, prefix `/notifications/`, all `{auth: true}`.
 
 ```
-Existing SSE event with SSEventNotification mixin
-    → NotificationService.persist(userId, event)    // new: write to notifications.db
-    → home.notify(event)                            // existing: push via SSE
+GET    /notifications/:ownerId                    Recent notifications (paginated)
+GET    /notifications/:ownerId/unread-count        Badge count
+PATCH  /notifications/:ownerId/:id/read            Mark one as read
+POST   /notifications/:ownerId/mark-all-read       Mark all as read
+DELETE /notifications/:ownerId/:id                 Dismiss
 ```
 
-### API Routes
+## Notification Sources
 
+| Source           | Where persisted                      | Tag format                           |
+|------------------|--------------------------------------|--------------------------------------|
+| Drive share      | `Drive.receiveACLChange()` (shared)  | `share:{ownerId}:{mountId}:{pathId}` |
+| Drive unshare    | `Drive.receiveACLChange()` (removed) | (no tag — always new)                |
+| Calendar share   | `Calendar.receiveShare()`            | `cal-share:{calId}:{ownerUserId}`    |
+| Calendar unshare | `Calendar.receiveUnshare()`          | (no tag)                             |
+| Calendar invite  | `invite-propagation.ts`              | `cal-invite:{eventId}`               |
+| Incoming mail    | `Maildir.receive()`                  | `mail:{messageId}`                   |
+
+## Frontend
+
+### Topbar Bell
+
+`NotificationBell` in topbar between document title and user dropdown. Shows unread count badge. Click opens popover
+with latest notifications. Each notification: avatar + title + timestamp. Click navigates via `link`, marks as read.
+
+### SSE Handler
+
+`handleNotificationSSEvent()` listens for `notification:created` → shows toast + invalidates notification queries.
+
+### Future: Space Page
+
+A full notification page in Space app can be added later with search, filtering, and pagination.
+
+## SSE Events
+
+```typescript
+// Added to SSEventType
+NOTIFICATION_CREATED: 'notification:created'
+
+// New SSE event type
+type SSEventNotificationCreated = SSEventBase & {
+    type: typeof SSEventType.NOTIFICATION_CREATED;
+    notification: Notification;
+};
 ```
-GET    /notifications/:ownerId                      Unread + recent (paginated)
-GET    /notifications/:ownerId/unread-count          Badge count
-PATCH  /notifications/:ownerId/:id/read              Mark as read
-POST   /notifications/:ownerId/mark-all-read         Mark all as read
-DELETE /notifications/:ownerId/:id                   Dismiss
-```
 
-### Frontend
+## Files
 
-- `NotificationBell` in topbar — shows unread count badge
-- Dropdown list with avatar, title, body excerpt, timestamp, click-to-navigate via `link`
-- SSE handler appends new notifications in real-time (no page refresh needed)
-- Mark as read on click/dismiss
-
-### Notification Sources (initial)
-
-| Source          | Event                          | Tag                                    |
-|-----------------|--------------------------------|----------------------------------------|
-| Drive share     | `drive:acl-shared`             | `share:{ownerId}:{mountId}:{pathId}`   |
-| Calendar invite | `calendar:invite-received`     | `calendar:{ownerId}:{calId}:{eventId}` |
-| Incoming mail   | `mail:new`                     | `mail:{ownerId}:{mailId}`              |
-| Chat mention    | `chat:message-posted` (with @) | `chat:{ownerId}:{mountId}:{chatId}`    |
-
-## Related: @Mentions
-
-The [TODO-MENTIONS.md](TODO-MENTIONS.md) design extends this with cross-app @mention detection (chat, docs, stickies).
-Mentions produce notifications using this same notification center infrastructure. Implement the notification center
-first, then add mention detection as a follow-up.
-
-## Files to Create
-
-| File                                                            | Purpose        |
-|-----------------------------------------------------------------|----------------|
-| `apps/api/src/lib/notification/schema.ts`                       | Drizzle schema |
-| `apps/api/src/lib/notification/db-config.ts`                    | DatabaseConfig |
-| `apps/api/src/lib/notification/notification-service.ts`         | CRUD + persist |
-| `apps/api/src/routes/notification.ts`                           | API routes     |
-| `packages/lib/src/core/notification/hooks/use-notifications.ts` | Query hooks    |
-| `packages/ui/src/components/layout/app/notification-bell.tsx`   | Topbar UI      |
-
-## Existing Infrastructure to Leverage
-
-- `SSEventNotification` mixin in `packages/lib/src/types/sse.ts`
-- `isSSEventNotification()` type guard
-- `home.notify()` for SSE delivery
-- `ManagedDatabase` for SQLite lifecycle
-- `UserAvatar` for actor display
+| File                                                            | Purpose                          |
+|-----------------------------------------------------------------|----------------------------------|
+| `packages/lib/src/types/notification.ts`                        | Shared `Notification` type       |
+| `apps/api/src/lib/notification-center/schema.ts`                | Drizzle schema                   |
+| `apps/api/src/lib/notification-center/db-config.ts`             | DatabaseConfig + migration       |
+| `apps/api/src/lib/notification-center/notification-center.ts`   | Domain service class             |
+| `apps/api/src/lib/notification-center/sse-events.ts`            | SSE event builder                |
+| `apps/api/src/routes/notification.ts`                           | API routes                       |
+| `packages/lib/src/core/notification/hooks/use-notifications.ts` | Query + mutation hooks           |
+| `packages/lib/src/core/notification/sse-handlers.ts`            | SSE handler (toast + invalidate) |
+| `packages/ui/src/components/layout/app/notification-bell.tsx`   | Topbar bell + popover            |

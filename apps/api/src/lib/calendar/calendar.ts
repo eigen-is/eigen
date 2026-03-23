@@ -17,7 +17,7 @@ import {CALENDAR_DB_CONFIG} from './db-config';
 import type {ManagedDatabase} from '../core/';
 import {ApiError, PATHS} from '../core';
 import {SSEventType} from '@workspace/lib/types/sse';
-import {buildCalendarEvent, buildCalendarShareEvent} from './sse-events';
+import {buildCalendarEvent} from './sse-events';
 import {EIGEN_ACCENT_COLORS_SHUFFLED} from '@workspace/lib/constants/colors';
 import {notifySharedCalendarUsers, propagateCalendarShare} from './share-propagation';
 import {propagateCancellation, propagateDecline, propagateInvitation, propagateRsvp} from './invite-propagation';
@@ -208,11 +208,7 @@ export class Calendar {
             shares: null,
         }).run();
 
-        this.home.notify(buildCalendarEvent(SSEventType.CALENDAR_CREATED, {
-            ownerId: this.home.user.id,
-            calendarId: id,
-            title: input.name.trim()
-        }));
+        this.home.broadcast(buildCalendarEvent(SSEventType.CALENDAR_CREATED, this.home.user.id));
         return this.getCalendarById(id)!;
     }
 
@@ -240,10 +236,7 @@ export class Calendar {
             await propagateCalendarShare(this.home, updated, oldShares);
         }
 
-        this.home.notify(buildCalendarEvent(SSEventType.CALENDAR_UPDATED, {
-            ownerId: this.home.user.id, calendarId: id,
-            title: input.name ?? existing.name
-        }));
+        this.home.broadcast(buildCalendarEvent(SSEventType.CALENDAR_UPDATED, this.home.user.id));
         return this.getCalendarById(id)!;
     }
 
@@ -257,11 +250,7 @@ export class Calendar {
         }
 
         this.db.delete(schema.calendars).where(eq(schema.calendars.id, id)).run();
-        this.home.notify(buildCalendarEvent(SSEventType.CALENDAR_DELETED, {
-            ownerId: this.home.user.id,
-            calendarId: id,
-            title: existing.name
-        }));
+        this.home.broadcast(buildCalendarEvent(SSEventType.CALENDAR_DELETED, this.home.user.id));
     }
 
     // --- Events ---
@@ -329,12 +318,8 @@ export class Calendar {
         this.incrementCtag(calendarId);
         const event = this.getEventById(id)!;
 
-        const sseEvent = buildCalendarEvent(SSEventType.CALENDAR_EVENT_CREATED, {
-            ownerId: this.home.user.id, calendarId,
-            eventId: id,
-            title: input.title.trim()
-        });
-        this.home.notify(sseEvent);
+        const sseEvent = buildCalendarEvent(SSEventType.CALENDAR_EVENT_CREATED, this.home.user.id);
+        this.home.broadcast(sseEvent);
         notifySharedCalendarUsers(this.home, cal, sseEvent).catch(() => {});
 
         if (user && event.data?.attendees?.length) {
@@ -404,10 +389,8 @@ export class Calendar {
         this.incrementCtag(existing.calendarId);
         const updated = this.getEventById(id)!;
 
-        const sseEvent = buildCalendarEvent(SSEventType.CALENDAR_EVENT_UPDATED, {
-            ownerId: this.home.user.id, calendarId: existing.calendarId, eventId: id, title,
-        });
-        this.home.notify(sseEvent);
+        const sseEvent = buildCalendarEvent(SSEventType.CALENDAR_EVENT_UPDATED, this.home.user.id);
+        this.home.broadcast(sseEvent);
         const cal = this.getCalendarById(existing.calendarId);
         if (cal) notifySharedCalendarUsers(this.home, cal, sseEvent).catch(() => {});
 
@@ -435,10 +418,8 @@ export class Calendar {
 
         this.db.delete(schema.events).where(eq(schema.events.id, id)).run();
         this.incrementCtag(existing.calendarId);
-        const sseEvent = buildCalendarEvent(SSEventType.CALENDAR_EVENT_DELETED, {
-            ownerId: this.home.user.id, calendarId: existing.calendarId, eventId: id, title: existing.title,
-        });
-        this.home.notify(sseEvent);
+        const sseEvent = buildCalendarEvent(SSEventType.CALENDAR_EVENT_DELETED, this.home.user.id);
+        this.home.broadcast(sseEvent);
         const cal = this.getCalendarById(existing.calendarId);
         if (cal) notifySharedCalendarUsers(this.home, cal, sseEvent).catch(() => {});
     }
@@ -557,7 +538,7 @@ export class Calendar {
         this.db.delete(schema.sharedCalendars).where(eq(schema.sharedCalendars.id, id)).run();
     }
 
-    public receiveShare(ownerUserId: string, calendarId: string, calendarName: string, _calendarColor: string, permission: CalendarShare['permission']): void {
+    public receiveShare(ownerUserId: string, calendarId: string, calendarName: string, _calendarColor: string, permission: CalendarShare['permission'], actorEmail?: string): void {
         const existing = this.db.select().from(schema.sharedCalendars).where(
             and(
                 eq(schema.sharedCalendars.ownerUserId, ownerUserId),
@@ -586,15 +567,16 @@ export class Calendar {
             }).run();
         }
 
-        this.home.notify(buildCalendarShareEvent(SSEventType.CALENDAR_SHARED, {
-            calendarId,
-            calendarName,
-            ownerUserId,
-            permission,
-        }));
+        this.home.broadcast(buildCalendarEvent(SSEventType.CALENDAR_SHARED, ownerUserId));
+        this.home.notifications?.persist({
+            type: 'calendar-share',
+            actorEmail,
+            title: `"${calendarName}" was shared with you`,
+            tag: `calendar-share:${calendarId}:${ownerUserId}`,
+        });
     }
 
-    public removeShare(ownerUserId: string, calendarId: string): void {
+    public removeShare(ownerUserId: string, calendarId: string, actorEmail?: string): void {
         const existing = this.db.select().from(schema.sharedCalendars).where(
             and(
                 eq(schema.sharedCalendars.ownerUserId, ownerUserId),
@@ -604,11 +586,12 @@ export class Calendar {
 
         if (existing) {
             this.db.delete(schema.sharedCalendars).where(eq(schema.sharedCalendars.id, existing.id)).run();
-            this.home.notify(buildCalendarShareEvent(SSEventType.CALENDAR_UNSHARED, {
-                calendarId,
-                calendarName: existing.calendarName,
-                ownerUserId,
-            }));
+            this.home.broadcast(buildCalendarEvent(SSEventType.CALENDAR_UNSHARED, ownerUserId));
+            this.home.notifications?.persist({
+                type: 'calendar-unshare',
+                actorEmail,
+                title: `"${existing.calendarName}" is no longer shared with you`,
+            });
         }
     }
 

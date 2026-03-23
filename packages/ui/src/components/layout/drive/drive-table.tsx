@@ -2,7 +2,7 @@ import React, {useCallback, useMemo, useRef, useState} from "react";
 import {Table, TableBody, TableCell, TableHead, TableHeader, TableRow} from "@workspace/ui/components/table";
 import {cn} from "@workspace/ui/lib/utils";
 import {formatDistanceToNow} from "date-fns";
-import {DEFAULT_MOUNT_ID, DrivePath, isFolderType, isInlineEditable} from "@workspace/lib/types";
+import {DEFAULT_MOUNT_ID, DrivePath, isFolderType, isInlineEditable, stripEigenExtension} from "@workspace/lib/types";
 import {DriveShareSummary} from "./drive-share-summary";
 import {ArrowRight, ChevronLeft, Download, Pencil, Trash2, UserRoundPlus} from "lucide-react";
 import {DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator} from "@workspace/ui/components/dropdown-menu";
@@ -230,7 +230,7 @@ export function DriveTable({
                                             }
                                         )}
                                         <span
-                                            className="truncate max-w-[calc(100%-1.5rem)]">{item.name.replace(/\.eigen(doc|stickies|chat|sheets|slides)$/, "")}</span>
+                                            className="truncate max-w-[calc(100%-1.5rem)]">{stripEigenExtension(item.name)}</span>
                                     </div>
                                 </TableCell>
                                 <TableCell className="hidden sm:table-cell group">

@@ -1,28 +1,4 @@
-import type {DrivePath} from './drive';
-import type {ChatMessage} from './chat';
-import type {CalendarShare} from './calendar';
-
-// Lightweight mail event data (IDs and minimal fields)
-export type SSEventMailData = {
-    messageId: string;
-    mailbox: string;
-    subject?: string;
-    fromShort?: string;
-    toMailbox?: string;
-};
-
-// Contact/Label event data
-export type SSEventContactData = {
-    contactId: string;
-    name?: string;
-};
-
-export type SSEventContactLabelData = {
-    labelId: string;
-    name?: string;
-};
-
-// Event type constants - single source of truth
+// Event type constants
 export const SSEventType = {
     // Mail events
     MAIL_RECEIVED: 'mail:received',
@@ -68,6 +44,8 @@ export const SSEventType = {
     SPACE_SETTINGS_UPDATED: 'space:settings-updated',
     // Team events
     TEAM_SETTINGS_UPDATED: 'team:settings-updated',
+    // Notification events
+    NOTIFICATION_CREATED: 'notification:created',
     // Contact events
     CONTACT_CREATED: 'contacts:contact-created',
     CONTACT_UPDATED: 'contacts:contact-updated',
@@ -77,123 +55,74 @@ export const SSEventType = {
     LABEL_DELETED: 'contacts:label-deleted',
 } as const;
 
-// Base for all events
-type SSEventBase = {
-    title: string;
-};
+// --- Event data types (minimal — only what frontend handlers need for cache invalidation) ---
 
-// Notification mixin - events that should show toasts
-export type SSEventNotification = {
-    body: string;
-    tag?: string;
-    link?: string;
-};
-
-// All Drive events share the same structure with full path
-type SSEventDrive = SSEventBase & SSEventNotification & {
+type SSEventDrive = {
     type: typeof SSEventType[keyof typeof SSEventType] & `drive:${string}`;
-    path: DrivePath;
-    drive?: {
-        oldParentId?: string;
-    };
+    path: { ownerId: string; mountId: string; id: string; parentId: string | null; mimeType: string | null };
+    oldParentId?: string;
 };
 
-// Mail notification events (with body, show toast)
-type SSEventMailNotification = SSEventBase & SSEventNotification & {
-    type: typeof SSEventType.MAIL_RECEIVED | typeof SSEventType.MAIL_DELETED | typeof SSEventType.MAIL_MOVED | typeof SSEventType.MAIL_SENT;
-    mail: SSEventMailData;
+type SSEventMail = {
+    type: typeof SSEventType[keyof typeof SSEventType] & `mail:${string}`;
+    mail: { messageId: string; mailbox: string; toMailbox?: string };
 };
 
-// Mail data-only events (no body, no toast, just cache invalidation)
-type SSEventMailDataUpdate = SSEventBase & {
-    type: typeof SSEventType.MAIL_READ_CHANGED | typeof SSEventType.MAIL_DRAFT_UPDATED | typeof SSEventType.MAIL_FLAGS_CHANGED;
-    mail: SSEventMailData;
-};
-
-type SSEventMail = SSEventMailNotification | SSEventMailDataUpdate;
-
-// Contact notification events (with body, show toast)
-type SSEventContactNotification = SSEventBase & SSEventNotification & {
-    type: typeof SSEventType.CONTACT_CREATED | typeof SSEventType.CONTACT_UPDATED | typeof SSEventType.CONTACT_DELETED;
-    contact: SSEventContactData;
-};
-
-// Label notification events (with body, show toast)
-type SSEventContactLabelNotification = SSEventBase & SSEventNotification & {
-    type: typeof SSEventType.LABEL_CREATED | typeof SSEventType.LABEL_UPDATED | typeof SSEventType.LABEL_DELETED;
-    label: SSEventContactLabelData;
-};
-
-type SSEventContacts = SSEventContactNotification | SSEventContactLabelNotification;
-
-// Calendar event data
-export type SSEventCalendarData = {
+type SSEventCalendar = {
+    type: typeof SSEventType[keyof typeof SSEventType] & `calendar:${string}`;
     ownerId: string;
-    calendarId: string;
-    eventId?: string;
-    title?: string;
 };
 
-export type SSEventCalendarShareData = {
-    calendarId: string;
-    calendarName: string;
-    ownerUserId: string;
-    permission?: CalendarShare['permission'];
-};
-
-type SSEventCalendarNotification = SSEventBase & SSEventNotification & {
-    type: typeof SSEventType.CALENDAR_EVENT_CREATED
-        | typeof SSEventType.CALENDAR_EVENT_UPDATED
-        | typeof SSEventType.CALENDAR_EVENT_DELETED
-        | typeof SSEventType.CALENDAR_CREATED
-        | typeof SSEventType.CALENDAR_UPDATED
-        | typeof SSEventType.CALENDAR_DELETED
-        | typeof SSEventType.CALENDAR_INVITE_RECEIVED
-        | typeof SSEventType.CALENDAR_INVITE_UPDATED
-        | typeof SSEventType.CALENDAR_INVITE_CANCELLED
-        | typeof SSEventType.CALENDAR_INVITE_RSVP;
-    calendar: SSEventCalendarData;
-};
-
-type SSEventCalendarShare = SSEventBase & SSEventNotification & {
-    type: typeof SSEventType.CALENDAR_SHARED | typeof SSEventType.CALENDAR_UNSHARED;
-    calendarShare: SSEventCalendarShareData;
-};
-
-type SSEventCalendar = SSEventCalendarNotification | SSEventCalendarShare;
-
-// Chat event data
-export type SSEventChatData = {
-    chatId: string;
-    ownerId: string;
-    mountId: string;
-    message?: ChatMessage;
-    userId?: string;
-    userEmail?: string;
-};
-
-type SSEventChat = SSEventBase & SSEventNotification & {
+type SSEventChat = {
     type: typeof SSEventType[keyof typeof SSEventType] & `chat:${string}`;
-    chat: SSEventChatData;
+    chat: { chatId: string; ownerId: string; mountId: string };
 };
 
-// Space/Team settings events (data-only, no toast)
-type SSEventSpace = SSEventBase & {
+type SSEventContact = {
+    type: typeof SSEventType.CONTACT_CREATED | typeof SSEventType.CONTACT_UPDATED | typeof SSEventType.CONTACT_DELETED;
+    contactId: string;
+};
+
+type SSEventLabel = {
+    type: typeof SSEventType.LABEL_CREATED | typeof SSEventType.LABEL_UPDATED | typeof SSEventType.LABEL_DELETED;
+    labelId: string;
+};
+
+type SSEventNotificationCreated = {
+    type: typeof SSEventType.NOTIFICATION_CREATED;
+    title: string;
+    body?: string;
+};
+
+type SSEventSpace = {
     type: typeof SSEventType.SPACE_SETTINGS_UPDATED;
 };
 
-type SSEventTeam = SSEventBase & {
+type SSEventTeam = {
     type: typeof SSEventType.TEAM_SETTINGS_UPDATED;
     teamId: string;
 };
 
 // Union of all events
-export type SSEvent = SSEventDrive | SSEventMail | SSEventContacts | SSEventChat | SSEventCalendar | SSEventSpace | SSEventTeam;
+export type SSEvent =
+    | SSEventDrive
+    | SSEventMail
+    | SSEventCalendar
+    | SSEventChat
+    | SSEventContact
+    | SSEventLabel
+    | SSEventNotificationCreated
+    | SSEventSpace
+    | SSEventTeam;
 
-// Type guard to check if event is a notification (has body, should show toast)
-export function isSSEventNotification(event: SSEvent): event is SSEvent & SSEventNotification {
-    return 'body' in event;
-}
-
-// Export individual types for consumers
-export type {SSEventBase, SSEventDrive, SSEventMail, SSEventContacts, SSEventChat, SSEventCalendar, SSEventSpace, SSEventTeam};
+export type {
+    SSEventDrive,
+    SSEventMail,
+    SSEventCalendar,
+    SSEventChat,
+    SSEventContact,
+    SSEventLabel,
+    SSEventNotificationCreated,
+    SSEventSpace,
+    SSEventTeam
+};

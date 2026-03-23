@@ -22,7 +22,8 @@ import {
     type DriveVisibility,
     isChatType,
     isCollabType,
-    isContainerType
+    isContainerType,
+    stripEigenExtension
 } from '@workspace/lib/types/drive';
 import {ChatRoom} from '../chat';
 import {canRead, canWrite, filterRedundantACL, findContainerPath, matchesACL, normalizeACL} from './acl';
@@ -353,7 +354,7 @@ export default class Drive {
         await mount.updatePath(pathId, {parentId: targetParentId});
         const movedPath = await mount.getPath(pathId);
         if (!movedPath) throw new ApiError(500, 'Failed to move path');
-        this.emit(SSEventType.DRIVE_PATH_MOVED, movedPath, {oldParentId: oldParentId ?? undefined});
+        this.emit(SSEventType.DRIVE_PATH_MOVED, movedPath, oldParentId ?? undefined);
         return movedPath;
     }
 
@@ -371,7 +372,7 @@ export default class Drive {
         await mount.updatePath(pathId, {name: newName});
         await propagateACLChange(item, item.acl, item.acl);
         const renamedItem = await mount.getPath(pathId);
-        if (renamedItem) this.emit(SSEventType.DRIVE_PATH_RENAMED, renamedItem, {extra: newName});
+        if (renamedItem) this.emit(SSEventType.DRIVE_PATH_RENAMED, renamedItem);
     }
 
     async downloadFile(mountId: string, pathId: string): Promise<ArrayBuffer | null> {
@@ -524,7 +525,7 @@ export default class Drive {
         await mount.updatePath(pathId, updates);
         const updatedItem = await mount.getPath(pathId);
         if (updatedItem) {
-            await propagateACLChange(updatedItem, oldACL, normalizedACL);
+            await propagateACLChange(updatedItem, oldACL, normalizedACL, this.owner.email);
             this.emit(SSEventType.DRIVE_ACL_UPDATED, updatedItem);
         }
     }
@@ -689,12 +690,18 @@ export default class Drive {
         return allResults;
     }
 
-    async receiveACLChange(path: DrivePath, newACL: DriveACL[] | null): Promise<void> {
+    async receiveACLChange(path: DrivePath, newACL: DriveACL[] | null, actorEmail?: string): Promise<void> {
+        const displayName = stripEigenExtension(path.name);
         if (newACL === null || !(await matchesACL(newACL, this.owner, 'read'))) {
             this.sharedDb.delete(sharedSchema.sharedPaths)
                 .where(eq(sharedSchema.sharedPaths.id, path.id))
                 .run();
-            this.emit(SSEventType.DRIVE_ACL_UNSHARED, path, {tag: 'shared_path_deleted'});
+            this.emit(SSEventType.DRIVE_ACL_UNSHARED, path);
+            this.home.notifications?.persist({
+                type: 'unshare',
+                actorEmail,
+                title: `"${displayName}" is no longer shared with you`,
+            });
         } else if (this.sharedDb.select().from(sharedSchema.sharedPaths).where(eq(sharedSchema.sharedPaths.id, path.id)).get()) {
             this.sharedDb.update(sharedSchema.sharedPaths).set({
                 acl: newACL,
@@ -724,9 +731,12 @@ export default class Drive {
                 createdAt: new Date(),
                 updatedAt: new Date()
             }).run();
-            this.emit(SSEventType.DRIVE_ACL_SHARED, path, {
-                tag: 'shared_path_created',
-                link: `/drive/fs/${path.ownerId}/${path.mountId}/${path.id}`
+            this.emit(SSEventType.DRIVE_ACL_SHARED, path);
+            this.home.notifications?.persist({
+                type: 'share',
+                actorEmail,
+                title: `"${displayName}" was shared with you`,
+                tag: `share:${path.ownerId}:${path.mountId}:${path.id}`,
             });
         }
     }
@@ -832,7 +842,7 @@ export default class Drive {
         }
     }
 
-    private emit(type: Parameters<typeof buildDriveEvent>[0], path: DrivePath, options?: Parameters<typeof buildDriveEvent>[2]): void {
-        this.home.notify(buildDriveEvent(type, path, options));
+    private emit(type: Parameters<typeof buildDriveEvent>[0], path: DrivePath, oldParentId?: string): void {
+        this.home.broadcast(buildDriveEvent(type, path, oldParentId));
     }
 }
