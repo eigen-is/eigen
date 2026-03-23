@@ -46,9 +46,9 @@ passkey({
 After setup, it returns the configured domain from `data/server/config.json`. This follows the same pattern as
 `secret: getServerConfig()?.secret || crypto.randomUUID()`.
 
-No explicit `origin` needed — better-auth reads the request's `Origin` header at runtime. On production everything
-runs on the same domain, so this works automatically. During development, the browser sends the correct
-`http://localhost:PORT` origin per request.
+No explicit `origin` needed — better-auth reads the request's `Origin` header at runtime and validates against the
+existing `trustedOrigins` list in `auth.ts`. On production everything runs on the same domain. During development,
+the browser sends the correct `http://localhost:PORT` origin per request.
 
 **Client** (`packages/lib/src/core/auth/hooks/use-auth-client.ts`):
 
@@ -62,6 +62,13 @@ createAuthClient({
     ],
 })
 ```
+
+### Dependencies
+
+Install `@better-auth/passkey` in **two** packages:
+
+- `apps/api/package.json` — server plugin (`passkey()`)
+- `packages/lib/package.json` — client plugin (`passkeyClient()`) since `use-auth-client.ts` lives here
 
 ### Database Schema
 
@@ -88,23 +95,69 @@ no migration needed — delete `users3.db` and restart.
 
 ### 1. Backend wiring
 
-- Install `@better-auth/passkey`
+- Install `@better-auth/passkey` in both `apps/api` and `packages/lib`
 - Add `passkey` table to `apps/api/auth-schema.ts`
-- Register schema + plugin in `apps/api/src/lib/auth/auth.ts`
-- Add `passkeyClient()` to auth client in `packages/lib/src/core/auth/hooks/use-auth-client.ts`
+- Import + register schema in the `drizzleAdapter` schema map in `apps/api/src/lib/auth/auth.ts`
+- Add `passkey()` to the `plugins` array in the `betterAuth()` config
+- Add `passkeyClient()` to the `plugins` array in `packages/lib/src/core/auth/hooks/use-auth-client.ts`
 
 ### 2. Passkey management hooks (`packages/lib/src/core/auth/hooks/`)
 
-New file `use-passkeys.ts` with hooks following the existing mutation pattern:
+New file `use-passkeys.ts` with hooks. These use `authClient` directly (not Eden Treaty), so error handling follows
+the `{data, error}` pattern from better-auth — check `error` property, don't `throw new AppError(res)`.
 
-- `usePasskeys()` — query: list user's passkeys via `authClient.passkey.listUserPasskeys()`
-- `useAddPasskey()` — mutation: `authClient.passkey.addPasskey({name})`, success toast
-- `useDeletePasskey()` — mutation: `authClient.passkey.deletePasskey({id})`, invalidate query
-- `useUpdatePasskey()` — mutation: `authClient.passkey.updatePasskey({id, name})`, invalidate query
+```typescript
+import {useMutation, useQuery, useQueryClient, type QueryClient} from '@tanstack/react-query';
+import {authClient} from './use-auth-client';
+import {toast} from 'sonner';
 
-### 3. Security settings UI (Space app)
+export const passkeyKeys = {
+    all: ['passkeys'] as const,
+    list: () => [...passkeyKeys.all, 'list'] as const,
+};
 
-New route `apps/space/src/routes/_auth.security.passkeys.tsx` + component, following the 2FA settings page pattern:
+export function invalidatePasskeys(queryClient: QueryClient) {
+    queryClient.invalidateQueries({queryKey: passkeyKeys.list()});
+}
+```
+
+Hooks:
+
+- `usePasskeys()` — query: `authClient.passkey.listUserPasskeys()`
+- `useAddPasskey()` — mutation: `authClient.passkey.addPasskey({name})`, success toast, invalidate
+- `useDeletePasskey()` — mutation: `authClient.passkey.deletePasskey({id})`, invalidate
+- `useUpdatePasskey()` — mutation: `authClient.passkey.updatePasskey({id, name})`, invalidate
+
+Error handling: `if (res.error) throw new Error(res.error.message ?? 'Passkey operation failed')`, with
+`onError: (e) => toast.error(e.message)`.
+
+Export from `packages/lib/src/core/auth/hooks/index.ts`.
+
+### 3. AuthProvider: passkey login support
+
+`packages/lib/src/core/auth/auth-context.tsx` currently has `login()` hardcoded to `authClient.signIn.email()`.
+Passkey sign-in uses a different method (`authClient.signIn.passkey()`), but the session result has the same shape.
+
+Add a `loginWithPasskey` method to `AuthContextType` and `AuthProvider`:
+
+```typescript
+const loginWithPasskey = async () => {
+    const {data, error} = await authClient.signIn.passkey();
+    if (error) return {success: false, error};
+    if (data) {
+        setUser(data.user);
+        return {success: true};
+    }
+    return {success: false, error: {message: 'Unknown error'}};
+};
+```
+
+Expose via context alongside the existing `login`. The `LoginPage` component uses `useAuth()` to call either method.
+
+### 4. Security settings UI (Space app)
+
+New route `apps/space/src/routes/_auth.security.passkeys.tsx` + component, following the 2FA settings page pattern
+(`_auth.security.2fa.tsx`):
 
 - List registered passkeys: name, created date, device type, backed-up badge
 - "Add passkey" button — triggers browser WebAuthn dialog
@@ -112,28 +165,61 @@ New route `apps/space/src/routes/_auth.security.passkeys.tsx` + component, follo
 - Rename (inline or dialog)
 - Empty state encouraging passkey registration for account recovery
 
-### 4. Login page
+Add sidebar item in `apps/space/src/components/space/space-sidebar.tsx`, in the security section alongside
+"Change password" and "Two factor authentication":
 
-Modify `packages/ui/src/components/layout/pages/loginpage.tsx`:
+```tsx
+<SidebarItem
+    icon={<Fingerprint className="h-4 w-4"/>}
+    label="Passkeys"
+    condensed={condensed}
+    to='/security/passkeys' params={{}}/>
+```
+
+### 5. Login page (shared across all apps)
+
+Modify `packages/ui/src/components/layout/pages/loginpage.tsx`. This component is used by **every app** (11 total)
+via `createLoginRouteOptions()` — passkey login will be available everywhere automatically.
 
 - Add "Sign in with passkey" button below the password form
-- Calls `authClient.signIn.passkey()` — on success, same redirect flow as password login
-- On cancel: show inline message, password form stays available
+- Calls `loginWithPasskey()` from `useAuth()` — on success, same redirect flow as password login
+- On cancel/error: show inline message, password form stays available
+- Hide button if `window.PublicKeyCredential` is undefined (no WebAuthn support)
 - Conditional mediation (autofill): add `autocomplete="username webauthn"` to email input, call
   `authClient.signIn.passkey({autoFill: true})` on mount if
   `PublicKeyCredential.isConditionalMediationAvailable()` returns true
 
-### 5. Password change after passkey login
+### 6. Password reset after passkey login
 
-The existing `changePassword` API requires `currentPassword`. A user who signed in via passkey doesn't know their
-old password — that's the whole point.
+The existing `authClient.changePassword()` requires `currentPassword`. A user who signed in via passkey doesn't know
+their old password — that's the whole point.
 
-**Solution**: Custom endpoint `POST /settings/set-password` in `apps/api/src/routes/settings.ts` that sets a new
-password without requiring the old one. Requires an authenticated session. Uses better-auth's internal password
-hashing via `auth.$context`.
+**Solution**: Use `authClient.admin.setUserPassword({userId, newPassword})` — this API already exists and is already
+used in `useResetUserPassword()` in `packages/lib/src/core/people/hooks/use-members.ts` for admin-initiated resets.
 
-In the change-password UI (`apps/space/src/components/space/change-password.tsx`), detect if the user has passkeys
-registered and offer a simplified "Set new password" form (no current password field) that calls this endpoint.
+However, `admin.setUserPassword` requires admin role. For non-admin users, add a thin backend endpoint that calls
+better-auth's internal `auth.api.setUserPassword()` server-side, requiring only an authenticated session (no admin
+check). The endpoint sets the password for the **currently logged-in user only** (uses `user.id` from session, not
+from request body — no privilege escalation).
+
+```typescript
+// apps/api/src/routes/settings.ts
+.post("/settings/my-password", async ({body, user}) => {
+    await auth.api.setUserPassword({body: {userId: user.id, newPassword: body.newPassword}});
+    return {success: true};
+}, {
+    body: t.Object({newPassword: t.String({minLength: 8})}),
+    auth: true,
+})
+```
+
+In the change-password UI (`apps/space/src/components/space/change-password.tsx`), always show both options:
+
+- **"Change password"** — existing form (current + new password) for users who know their password
+- **"Set new password"** — simplified form (new password only) for users who signed in via passkey
+
+Both options are always visible. No need to detect session auth method or query passkey registration status — the
+user knows which one applies to them. Keep the UI simple.
 
 ## Edge Cases
 
