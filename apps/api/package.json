@@ -23,6 +23,7 @@
     "encoding-japanese": "^2.2.0",
     "exiftool-vendored": "^35.14.0",
     "he": "^1.2.0",
+    "heic-convert": "^2.1.0",
     "html-to-text": "^9.0.5",
     "iconv-lite": "^0.7.2",
     "isomorphic-dompurify": "^3.6.0",
