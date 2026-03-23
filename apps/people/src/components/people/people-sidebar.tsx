@@ -1,4 +1,4 @@
-import {PlusIcon, Settings, Users, UsersRound} from 'lucide-react';
+import {Plus, Settings, Users, UsersRound} from 'lucide-react';
 import {Button} from '@workspace/ui/components/button';
 import {Separator} from '@workspace/ui/components/separator';
 import {SidebarItem} from '@workspace/ui/components/layout/sidebar/sidebar-item';
@@ -76,7 +76,7 @@ export function PeopleSidebar({
                         {!condensed && <h3 className="text-sm font-semibold text-foreground px-3 select-none">Teams</h3>}
                         <div className="flex items-center gap-1">
                             <TooltipButton
-                                icon={PlusIcon}
+                                icon={Plus}
                                 tooltipText="Create Team"
                                 onClick={() => setShowCreate(true)}
                             />

@@ -1,6 +1,6 @@
 import {useEffect, useState} from 'react';
 import {formatForDisplay} from '@tanstack/react-hotkeys';
-import {Check, FileText, Folder, Pencil, Plus, Redo, Trash2, Undo, UserPlus, UserRoundPlus} from 'lucide-react';
+import {Check, FileText, Folder, Pencil, Plus, Redo, Trash2, Undo, UserRoundPlus} from 'lucide-react';
 import {Button} from '@workspace/ui/components/button';
 import {
     DropdownMenu,
@@ -167,7 +167,7 @@ export function Toolbar({
                 <RevisionHistory path={path} onRestore={onRestore}/>
                 {canWrite ? (
                     <TooltipButton
-                        icon={UserPlus}
+                        icon={UserRoundPlus}
                         tooltipText="Share"
                         onClick={onAccessDialogOpen}
                     />

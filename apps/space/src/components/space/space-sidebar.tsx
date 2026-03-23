@@ -1,4 +1,4 @@
-import {BookUser, CircleUser, Download, KeySquare, LockKeyholeIcon} from 'lucide-react';
+import {BookUser, Download, KeySquare, LockKeyholeIcon, UserRound} from 'lucide-react';
 import {SidebarSection} from '@workspace/ui/components/layout/sidebar/sidebar-section';
 import {SidebarHeader} from '@workspace/ui/components/layout/sidebar/sidebar-header';
 import {SidebarItem, StorageUsage} from "@workspace/ui";
@@ -24,7 +24,7 @@ export function SpaceSidebar({
 
             <SidebarSection condensed={condensed}>
                 <SidebarItem
-                    icon={<CircleUser className="h-4 w-4"/>}
+                    icon={<UserRound className="h-4 w-4"/>}
                     label="Home"
                     condensed={condensed}
                     to='/' params={{}}/>

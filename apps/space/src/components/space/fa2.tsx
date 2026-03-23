@@ -13,7 +13,7 @@ import {
     FormMessage
 } from "@workspace/ui/components/form"
 import {Input} from "@workspace/ui/components/input"
-import {Check, ClipboardCopy, InfoIcon} from "lucide-react"
+import {Check, Copy, InfoIcon} from "lucide-react"
 import {Card, CardContent} from "@workspace/ui/components/card"
 import {Separator} from "@workspace/ui/components/separator"
 import QRCode from "react-qr-code"
@@ -212,7 +212,7 @@ export function TwoFactorSetup({
                                 onClick={copyToClipboard}
                                 title="Copy to clipboard"
                             >
-                                {isCopied ? <Check className="h-4 w-4"/> : <ClipboardCopy className="h-4 w-4"/>}
+                                {isCopied ? <Check className="h-4 w-4"/> : <Copy className="h-4 w-4"/>}
                             </Button>
                         </div>
                     </div>
@@ -321,7 +321,7 @@ export function TwoFactorSetup({
                         {codesCopied ? (
                             <><Check className="h-4 w-4 mr-2"/>Copied!</>
                         ) : (
-                            <><ClipboardCopy className="h-4 w-4 mr-2"/>Copy all codes</>
+                            <><Copy className="h-4 w-4 mr-2"/>Copy all codes</>
                         )}
                     </Button>
 

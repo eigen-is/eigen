@@ -10,7 +10,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger
 } from '@workspace/ui/components/dropdown-menu';
-import {ArrowUpDown, Edit, Trash2} from 'lucide-react';
+import {ArrowUpDown, Pencil, Trash2} from 'lucide-react';
 import {Button} from '@workspace/ui/components/button';
 import {EigenLoader} from '@workspace/ui/components/layout/braket/eigen-loader.tsx';
 import {UserItem} from '@workspace/ui/components/layout/user-item';
@@ -236,7 +236,7 @@ export function ContactsList({
                                 onEdit(contextMenu.item!);
                                 contextMenu.close();
                             }}>
-                                <Edit className="h-4 w-4 mr-2"/> Edit
+                                <Pencil className="h-4 w-4 mr-2"/> Edit
                             </DropdownMenuItem>
                         )}
                         {onDelete && !hasMe && contextItems.length > 0 && (
