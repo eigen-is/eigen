@@ -97,7 +97,13 @@
       "Bash(PRODUCTION=1 bun run buildfordocker)",
       "Bash(dd:*)",
       "WebFetch(domain:www.better-auth.com)",
-      "WebFetch(domain:www.corbado.com)"
+      "WebFetch(domain:www.corbado.com)",
+      "WebFetch(domain:registry.npmjs.org)",
+      "WebFetch(domain:developers.yubico.com)",
+      "WebFetch(domain:web.dev)",
+      "WebFetch(domain:bundlephobia.com)",
+      "WebFetch(domain:gist.github.com)",
+      "WebFetch(domain:simplewebauthn.dev)"
     ]
   },
   "bypassPermissions": "bypassPermissions"

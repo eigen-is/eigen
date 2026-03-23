@@ -1,5 +1,5 @@
 import {useState} from 'react';
-import {Pencil, PlusIcon} from 'lucide-react';
+import {Pencil, Plus} from 'lucide-react';
 import {cn} from "../../../lib/utils";
 import {LabelDialog} from './label-dialog';
 import {LabelManagerProps} from './types';
@@ -75,7 +75,7 @@ export function LabelManager({
                 {!condensed && <h3 className="text-sm font-semibold text-foreground px-3 select-none">Labels</h3>}
                 <div className="flex items-center gap-1">
                     <TooltipButton
-                        icon={PlusIcon}
+                        icon={Plus}
                         tooltipText="Add new label"
                         onClick={handleAddLabel}
                     />

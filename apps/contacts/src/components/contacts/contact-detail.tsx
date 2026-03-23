@@ -1,4 +1,4 @@
-import {Building, Calendar, Edit, Mail, MapPin, MoreVertical, Phone, Printer, Trash2} from 'lucide-react';
+import {Building, Calendar, Mail, MapPin, MoreVertical, Pencil, Phone, Printer, Trash2} from 'lucide-react';
 import {type Address, type Contact} from "@workspace/lib/types/contact";
 import {type Label} from "@workspace/lib/types/label";
 import {Button} from "@workspace/ui/components/button";
@@ -42,7 +42,7 @@ export function ContactDetailToolbar({contact, filterType, filterId, onDeleteCli
                 }}
             >
                 <TooltipButton
-                    icon={Edit}
+                    icon={Pencil}
                     tooltipText="Edit"
                     className="h-8 w-8"
                 />
@@ -86,7 +86,7 @@ export function ContactDetailToolbar({contact, filterType, filterId, onDeleteCli
                                 contactId: contact.id
                             }}
                         >
-                            <Edit className="mr-2"/>
+                            <Pencil className="mr-2"/>
                             Edit
                         </Link>
                     </DropdownMenuItem>
