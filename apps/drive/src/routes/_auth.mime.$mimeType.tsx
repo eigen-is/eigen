@@ -21,10 +21,10 @@ export const Route = createFileRoute('/_auth/mime/$mimeType')({
 function DriveRoute() {
     const {mimeType} = Route.useParams();
     const navigate = useNavigate();
-    const {pid, mid} = Route.useSearch();
+    const {pid, uid, mid} = Route.useSearch();
     const auth = useAuth();
     const ownerId = auth.user!.id;
-    const {data: selectedPath = null} = usePathInfo(ownerId, mid || DEFAULT_MOUNT_ID, pid);
+    const {data: selectedPath = null} = usePathInfo(uid || ownerId, mid || DEFAULT_MOUNT_ID, pid);
     const {isMobile} = useLayout();
     const {openPreview, updatePreview, isPreviewOpen} = usePreview();
 
@@ -45,7 +45,7 @@ function DriveRoute() {
             navigate({
                 to: Route.fullPath,
                 params: {mimeType},
-                search: {pid: path.id, mid: path.mountId}
+                search: {pid: path.id, uid: path.ownerId, mid: path.mountId}
             });
         }
     };
@@ -79,7 +79,7 @@ function DriveRoute() {
             <DriveLayout
                 pid={pid}
                 selectedPath={selectedPath}
-                ownerId={ownerId}
+                ownerId={uid || ownerId}
                 mountId={mid || DEFAULT_MOUNT_ID}
                 folderContents={folderContents}
                 isLoading={isFolderContentLoading}
