@@ -105,7 +105,12 @@
       "WebFetch(domain:gist.github.com)",
       "WebFetch(domain:simplewebauthn.dev)",
       "Bash(2)",
-      "Bash(find /Users/reinder/Documents/GitHub/eigen -type f \\\\\\(-name *notif* -o -name *announce* \\\\\\))"
+      "Bash(find /Users/reinder/Documents/GitHub/eigen -type f \\\\\\(-name *notif* -o -name *announce* \\\\\\))",
+      "Bash(vips --vips-config)",
+      "Bash(brew list:*)",
+      "Bash(npm search:*)",
+      "Bash(exiftool -ver)",
+      "Bash(head -1 node_modules/.bun/exiftool-vendored.pl@*/node_modules/exiftool-vendored.pl/bin/exiftool)"
     ]
   },
   "bypassPermissions": "bypassPermissions"

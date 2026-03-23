@@ -61,6 +61,29 @@ async function sharpResize(
     }
 }
 
+async function heicToJpeg(source: BunFile | Buffer | string): Promise<Buffer | null> {
+    try {
+        // @ts-ignore -- no type declarations available for heic-convert
+        const convert = (await import('heic-convert')).default as (opts: {
+            buffer: Buffer;
+            format: string;
+            quality: number
+        }) => Promise<ArrayBuffer>;
+        let buffer: Buffer;
+        if (typeof source === 'string') {
+            buffer = Buffer.from(await Bun.file(source).arrayBuffer());
+        } else if (Buffer.isBuffer(source)) {
+            buffer = source;
+        } else {
+            buffer = Buffer.from(await source.arrayBuffer());
+        }
+        const output = await convert({buffer, format: 'JPEG', quality: 0.8});
+        return Buffer.from(output);
+    } catch {
+        return null;
+    }
+}
+
 export async function generateImagePreview(
     source: BunFile | Buffer | string,
     mimeType: string,
@@ -75,7 +98,16 @@ export async function generateImagePreview(
     const result = await sharpResize(source, options);
     if (result) return result;
 
-    // Sharp failed — try exiftool (needs a file on disk)
+    // Sharp failed on HEIC — convert to JPEG first, then resize
+    if (mimeType === 'image/heic' || mimeType === 'image/heif') {
+        const jpeg = await heicToJpeg(source);
+        if (jpeg) {
+            const converted = await sharpResize(jpeg, options);
+            if (converted) return converted;
+        }
+    }
+
+    // Sharp + HEIC conversion both failed — try exiftool (needs a file on disk)
     let filePath: string;
     let tempFile: string | null = null;
 
