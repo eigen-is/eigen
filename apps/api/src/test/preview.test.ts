@@ -129,7 +129,15 @@ describe('Preview', () => {
         ]);
         const file = new File([pngBytes], 'thumb-test.png', {type: 'image/png'});
         const uploaded = await driveUpload(token, ownerId, mountId, rootId, file);
-        expect(uploaded.thumbnail).toBeTruthy();
+
+        // Thumbnail is generated in the background — poll for it
+        let path = uploaded;
+        for (let i = 0; i < 20 && !path.thumbnail; i++) {
+            await Bun.sleep(50);
+            const res = await authedRequest(token, `/drive/${ownerId}/${mountId}/path/${uploaded.id}`);
+            path = await res.json();
+        }
+        expect(path.thumbnail).toBeTruthy();
     });
 });
 
