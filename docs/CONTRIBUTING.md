@@ -78,3 +78,51 @@ bun run check          # typecheck + test
 - **Never run package install commands** — ask the user
 - **No migrations needed** — data is throwaway during dev. Prefer clean schemas over compatibility
 - See [TESTING.md](TESTING.md) for test patterns, [DOCKER.md](DOCKER.md) for deployment
+
+## Public API
+
+Public endpoints at `/p/` require no auth. Avatar URL: `{API_HOST}/p/avatar/{email}?fallback=digidoodle` —
+HTTP-cacheable, no client resolution needed.
+
+```
+GET /p/user/:emailOrId     → { name, email, avatar }
+GET /p/avatar/:emailOrId   → image binary (Cache-Control: 86400s) or fallback SVG
+POST /p/waitlist           → waitlist signup
+```
+
+Components use `UserAvatar` (`packages/ui/src/components/layout/user-avatar.tsx`) which resolves via
+`packages/lib/src/core/media/hooks/avatar.ts`. Direct loading:
+`<img src="{API_HOST}/p/avatar/{email}?fallback=digidoodle" />`.
+
+**Route**: `apps/api/src/routes/public.ts`
+
+## Hotkeys
+
+`@tanstack/react-hotkeys` for global shortcuts. `Mod` = Cmd (Mac) / Ctrl (Windows). Manual listeners kept for stateful
+navigation and Tiptap editor. Use `formatForDisplay()` for tooltip labels.
+
+| Shortcut             | Action                      | Location                      |
+|----------------------|-----------------------------|-------------------------------|
+| `Mod+B`              | Toggle sidebar              | `packages/ui/.../sidebar.tsx` |
+| `Mod+P`              | Print                       | `eigen-app.tsx`               |
+| `Mod+S`              | Save (Inline Editor)        | `use-editor-save.ts`          |
+| `Escape`             | Close preview               | `file-preview.tsx`            |
+| `ArrowLeft/Right`    | Navigate preview            | `file-preview.tsx`            |
+| `Mod+Z`              | Undo (Stickies, Slides)     | `board.tsx`, `editor.tsx`     |
+| `Mod+Y`              | Redo (Stickies, Slides)     | `board.tsx`, `editor.tsx`     |
+| `Mod+Shift+Z`        | Redo alt (Stickies, Slides) | `board.tsx`, `editor.tsx`     |
+| `Delete`/`Backspace` | Delete selected (Slides)    | `slides/editor.tsx`           |
+| `Escape`             | Deselect (Slides)           | `slides/editor.tsx`           |
+
+**Use `@tanstack/react-hotkeys`** for: global shortcuts, simple actions, display formatting, cross-platform needs.
+
+**Keep manual** for: stateful navigation (`use-keyboard-list-navigation.ts`), framework-specific (Tiptap editor),
+simple input fields.
+
+```tsx
+import {useHotkey} from '@tanstack/react-hotkeys';
+import {formatForDisplay} from '@tanstack/react-hotkeys';
+
+useHotkey('Mod+S', () => save(), {enabled: canSave});
+const label = formatForDisplay('Mod+S'); // "⌘S" on Mac, "Ctrl+S" on Windows
+```

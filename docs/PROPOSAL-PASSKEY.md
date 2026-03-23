@@ -194,24 +194,36 @@ via `createLoginRouteOptions()` — passkey login will be available everywhere a
 The existing `authClient.changePassword()` requires `currentPassword`. A user who signed in via passkey doesn't know
 their old password — that's the whole point.
 
-**Solution**: Use `authClient.admin.setUserPassword({userId, newPassword})` — this API already exists and is already
-used in `useResetUserPassword()` in `packages/lib/src/core/people/hooks/use-members.ts` for admin-initiated resets.
+`authClient.admin.setUserPassword()` exists but requires **admin role** — regular users get a 403. There is no
+built-in better-auth API that lets a non-admin user set their own password without the old one.
 
-However, `admin.setUserPassword` requires admin role. For non-admin users, add a thin backend endpoint that calls
-better-auth's internal `auth.api.setUserPassword()` server-side, requiring only an authenticated session (no admin
-check). The endpoint sets the password for the **currently logged-in user only** (uses `user.id` from session, not
-from request body — no privilege escalation).
+**Solution**: Custom endpoint using `auth.$context` for password hashing + direct DB update. This is the established
+better-auth pattern for server-side password changes without admin role (see better-auth#1173).
 
 ```typescript
 // apps/api/src/routes/settings.ts
 .post("/settings/my-password", async ({body, user}) => {
-    await auth.api.setUserPassword({body: {userId: user.id, newPassword: body.newPassword}});
+    const ctx = await auth.$context;
+    const hash = await ctx.password.hash(body.newPassword);
+    const db = getAuthDrizzleDb();
+    db.update(accountScheme)
+        .set({password: hash})
+        .where(
+            and(
+                eq(accountScheme.userId, user.id),
+                eq(accountScheme.providerId, 'credential'),
+            )
+        )
+        .run();
     return {success: true};
 }, {
     body: t.Object({newPassword: t.String({minLength: 8})}),
     auth: true,
 })
 ```
+
+Security: the endpoint uses `user.id` from the authenticated session (not from the request body), so a user can only
+change their own password. No privilege escalation possible.
 
 In the change-password UI (`apps/space/src/components/space/change-password.tsx`), always show both options:
 
