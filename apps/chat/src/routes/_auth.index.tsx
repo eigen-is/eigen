@@ -3,6 +3,7 @@ import {useAuth} from "@workspace/lib/auth";
 import {useChats, useCreateChat} from "@workspace/lib/chat";
 import {DEFAULT_MOUNT_ID, useRootFolder} from "@workspace/lib/drive";
 import {Button} from "@workspace/ui/components/button";
+import {EmptyState} from "@workspace/ui";
 import {MessageSquare, Plus} from "lucide-react";
 import {DriveCreateItemDialog} from "@workspace/ui/components/layout/drive/drive-create-folder-item";
 import {useEffect, useState} from "react";
@@ -52,13 +53,17 @@ function ChatIndex() {
 
     if (data && data.length === 0) {
         return (
-            <div className="flex flex-col items-center justify-center h-full w-full gap-4">
-                <MessageSquare className="h-12 w-12 text-muted-foreground"/>
-                <p className="text-muted-foreground">No chats yet</p>
-                <Button onClick={() => setCreateChatOpen(true)}>
-                    <Plus className="h-4 w-4 mr-2"/>
-                    Create your first chat
-                </Button>
+            <>
+                <EmptyState
+                    message="No chats yet"
+                    icon={<MessageSquare className="h-12 w-12"/>}
+                    action={
+                        <Button onClick={() => setCreateChatOpen(true)}>
+                            <Plus className="h-4 w-4 mr-2"/>
+                            Create your first chat
+                        </Button>
+                    }
+                />
                 {root && (
                     <DriveCreateItemDialog
                         open={createChatOpen}
@@ -69,14 +74,12 @@ function ChatIndex() {
                         path={root}
                     />
                 )}
-            </div>
+            </>
         );
     }
 
     return (
-        <div className="flex items-center justify-center h-full w-full">
-            <p className="text-muted-foreground">Select a chat from the sidebar</p>
-        </div>
+        <EmptyState message="Select a chat from the sidebar"/>
     );
 }
 

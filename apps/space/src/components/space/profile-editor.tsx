@@ -8,7 +8,7 @@ import {useAuth} from '@workspace/lib/auth';
 import {useUpload} from '@workspace/ui/components/layout/upload-provider/upload-provider';
 import {uploadWithProgress} from "@workspace/ui/components/layout/upload-provider/upload-with-progress";
 import {getContactsAvatarUploadUrl} from "@workspace/lib/api";
-import {UserAvatar} from "@workspace/ui";
+import {ErrorState, LoadingState, UserAvatar} from "@workspace/ui";
 import {Button} from "@workspace/ui/components/button";
 import {Input} from "@workspace/ui/components/input";
 import {Form, FormControl, FormField, FormItem, FormLabel, FormMessage} from "@workspace/ui/components/form";
@@ -82,15 +82,11 @@ export function ProfileEditor() {
     });
 
     if (isLoading && !contact) {
-        return <div className="flex justify-center items-center h-64">Loading your profile...</div>;
+        return <LoadingState/>;
     }
 
     if (fetchError && !contact) {
-        return (
-            <div className="flex justify-center items-center h-64 text-destructive">
-                Failed to load your profile information. Please try again.
-            </div>
-        );
+        return <ErrorState message="Failed to load your profile information."/>;
     }
 
     return (<>

@@ -1,5 +1,5 @@
 import {createFileRoute, useNavigate} from '@tanstack/react-router';
-import {EigenLoader} from "@workspace/ui";
+import {LoadingState, NotFound} from "@workspace/ui";
 import {useFolderContent, usePathInfo} from '@workspace/lib/drive';
 import {useContext, useEffect} from "react";
 import {DriveLayout} from "@workspace/ui/components/layout/drive/drive-layout";
@@ -114,19 +114,11 @@ function DriveRoute() {
 
     // Show loading state while resolving root folder ID
     if (pathId === 'root' && !rootPath) {
-        return (
-            <div className="flex items-center justify-center h-full w-full">
-                <EigenLoader/>
-            </div>
-        );
+        return <LoadingState/>;
     }
 
     if (isFolderContentLoadingError) {
-        return (
-            <div className="flex items-center justify-center h-full w-full">
-                <p className="text-muted-foreground">Encountering the null vector: a rendezvous with nothing at all.</p>
-            </div>
-        );
+        return <NotFound/>;
     }
 
     return (

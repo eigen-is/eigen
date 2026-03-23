@@ -4,7 +4,7 @@ import {Button} from '@workspace/ui/components/button';
 import {Label} from '@workspace/ui/components/label';
 import {Separator} from '@workspace/ui/components/separator';
 import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '@workspace/ui/components/select';
-import {EigenLoader} from '@workspace/ui/components/layout/braket/eigen-loader';
+import {LoadingState} from '@workspace/ui';
 import {
     useCheckS3Connection,
     useServerS3Config,
@@ -45,11 +45,7 @@ export function ServerSettingsPage() {
     const [s3Checking, setS3Checking] = useState(false);
 
     if (isLoading || !settings) {
-        return (
-            <div className="h-full flex items-center justify-center">
-                <EigenLoader/>
-            </div>
-        );
+        return <LoadingState/>;
     }
 
     const current = {

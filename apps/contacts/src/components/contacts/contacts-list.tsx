@@ -12,7 +12,7 @@ import {
 } from '@workspace/ui/components/dropdown-menu';
 import {ArrowUpDown, Pencil, Trash2} from 'lucide-react';
 import {Button} from '@workspace/ui/components/button';
-import {EigenLoader} from '@workspace/ui/components/layout/braket/eigen-loader.tsx';
+import {EmptyState, ErrorState, LoadingState} from '@workspace/ui';
 import {UserItem} from '@workspace/ui/components/layout/user-item';
 import {useContextMenu} from '@workspace/ui/components/layout/context-menu/use-context-menu';
 import {ContextMenuAnchor} from '@workspace/ui/components/layout/context-menu/context-menu-anchor';
@@ -158,12 +158,7 @@ export function ContactsList({
     }, [searchedContacts, sortBy]);
 
     if (error) {
-        return (
-            <div className="w-full h-full flex flex-col items-center justify-center text-destructive">
-                <p>An error occurred while loading contacts.</p>
-                <p className="text-sm">{error.message}</p>
-            </div>
-        );
+        return <ErrorState message="An error occurred while loading contacts." detail={error.message}/>;
     }
 
     return (
@@ -175,13 +170,9 @@ export function ContactsList({
                 onKeyDown={handleKeyDown}
             >
                 {isLoading ? (
-                    <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
-                        <EigenLoader/>
-                    </div>
+                    <LoadingState/>
                 ) : groupedContacts.length === 0 ? (
-                    <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
-                        <p>No contacts found.</p>
-                    </div>
+                    <EmptyState message="No contacts found."/>
                 ) : (
                     <div>
                         {groupedContacts.map(([letter, contacts]) => (

@@ -2,7 +2,7 @@ import {Paperclip} from "lucide-react";
 import {useMemo, useRef} from "react";
 import {cn} from "@workspace/ui/lib/utils";
 import {SearchBar} from "@workspace/ui/components/layout/search-bar/search-bar";
-import {EigenLoader} from "@workspace/ui/components/layout/braket/eigen-loader.tsx";
+import {EmptyState, LoadingState} from "@workspace/ui";
 import {EmailSummary, MaildirMailbox} from "@workspace/lib/types/mail";
 import {EmailContextMenu} from "./email-context-menu";
 import {ContextMenuAnchor, useContextMenu} from "@workspace/ui/components/layout/context-menu";
@@ -95,11 +95,7 @@ export function EmailList({
     const isSingleSelect = contextIds.length === 1;
 
     if (isLoading || !emails) {
-        return (
-            <div className="flex h-full items-center justify-center">
-                <EigenLoader/>
-            </div>
-        );
+        return <LoadingState/>;
     }
 
     return (
@@ -177,9 +173,7 @@ export function EmailList({
                             })}
                         </div>
                     ) : (
-                        <div className="h-24 flex items-center justify-center text-muted-foreground">
-                            No emails found.
-                        </div>
+                        <EmptyState message="No emails found."/>
                     )}
                 </div>
             </div>

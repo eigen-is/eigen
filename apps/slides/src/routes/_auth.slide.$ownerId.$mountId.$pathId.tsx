@@ -2,7 +2,7 @@ import {createFileRoute} from '@tanstack/react-router';
 import {useCollabDocumentInfo} from '@workspace/lib/collab';
 import {useCallback, useEffect, useMemo, useState} from 'react';
 import {useLayout} from '@workspace/ui/components/layout/app/layout-context';
-import {EigenLoader} from '@workspace/ui';
+import {AccessDenied, LoadingState} from '@workspace/ui';
 import {SlideEditor} from '../components/slides/editor';
 import {DriveAccessDialog} from '@workspace/ui/components/layout/drive/drive-access-dialog';
 
@@ -32,9 +32,8 @@ function SlideView() {
 
     const handleAccessDialogOpen = useCallback(() => setAccessDialogOpen(true), []);
 
-    if (isLoading || !path) {
-        return <EigenLoader/>;
-    }
+    if (isLoading) return <LoadingState/>;
+    if (!path) return <AccessDenied/>;
 
     return (
         <>
