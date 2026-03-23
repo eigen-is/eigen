@@ -1,4 +1,4 @@
-import {useState} from 'react';
+import {useEffect, useState} from 'react';
 import {
     Dialog,
     DialogContent,
@@ -34,6 +34,10 @@ export function ResetPasswordDialog({open, onOpenChange, userId, userName}: Rese
     const [password, setPassword] = useState(() => generatePassword());
     const resetPassword = useResetUserPassword();
 
+    useEffect(() => {
+        if (open) setPassword(generatePassword());
+    }, [open]);
+
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!password || password.length < 8) return;
@@ -41,13 +45,8 @@ export function ResetPasswordDialog({open, onOpenChange, userId, userName}: Rese
         onOpenChange(false);
     };
 
-    const handleOpenChange = (next: boolean) => {
-        if (next) setPassword(generatePassword());
-        onOpenChange(next);
-    };
-
     return (
-        <Dialog open={open} onOpenChange={handleOpenChange}>
+        <Dialog open={open} onOpenChange={onOpenChange}>
             <DialogContent>
                 <DialogHeader>
                     <DialogTitle>Reset password for {userName}</DialogTitle>
