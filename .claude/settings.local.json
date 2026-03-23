@@ -103,7 +103,8 @@
       "WebFetch(domain:web.dev)",
       "WebFetch(domain:bundlephobia.com)",
       "WebFetch(domain:gist.github.com)",
-      "WebFetch(domain:simplewebauthn.dev)"
+      "WebFetch(domain:simplewebauthn.dev)",
+      "Bash(2)"
     ]
   },
   "bypassPermissions": "bypassPermissions"
