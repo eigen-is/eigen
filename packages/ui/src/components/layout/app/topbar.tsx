@@ -25,6 +25,7 @@ import {AppLogo} from "./app-logo.tsx";
 import {UserAvatar} from "../user-avatar.tsx";
 import {useLayout} from "./layout-context.tsx";
 import {NotificationBell} from "./notification-bell.tsx";
+import {useUnreadNotificationCount} from "@workspace/lib/notification";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TanStack Router's useNavigate has app-specific types
 type NavigateFunction = (...args: any[]) => any;
@@ -150,10 +151,13 @@ function UserDropdown({rootRoute}: { rootRoute: TopbarProps['rootRoute'] }) {
 
 export function Topbar({rootRoute}: TopbarProps) {
     const {appName, documentTitle, isMobile, sidebarMode, setSidebarOpen} = useLayout();
+    const auth = useAuth();
+    const {data: unreadCount = 0} = useUnreadNotificationCount(auth.user?.id ?? '');
 
     useEffect(() => {
-        document.title = documentTitle ? `${documentTitle} — eigen|${appName}>` : `eigen|${appName}>`;
-    }, [appName, documentTitle]);
+        const base = documentTitle ? `${documentTitle} — eigen|${appName}>` : `eigen|${appName}>`;
+        document.title = unreadCount > 0 ? `(${unreadCount}) ${base}` : base;
+    }, [appName, documentTitle, unreadCount]);
 
     const showBurger = isMobile && sidebarMode !== 'none';
 

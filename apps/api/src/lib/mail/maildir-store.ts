@@ -58,8 +58,12 @@ export class MaildirStore {
         return {uniqueId, size}
     }
 
-    async deliverToCur(mailbox: string, message: string, flags: Record<string, boolean>): Promise<{uniqueId: string, size: number, filename: string}> {
-        const uniqueId = createUniqueMessageId()
+    async deliverToCur(mailbox: string, message: string, flags: Record<string, boolean>, existingId?: string): Promise<{
+        uniqueId: string,
+        size: number,
+        filename: string
+    }> {
+        const uniqueId = existingId ?? createUniqueMessageId()
         const size = Buffer.byteLength(message, 'utf-8')
         const filename = buildMaildirFilename(uniqueId, flags, size)
         const mailboxPath = this.mailboxDir(mailbox)

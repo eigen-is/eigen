@@ -230,7 +230,10 @@ export default class Maildir {
             date: new Date(),
         })
 
-        const {uniqueId, filename} = await this.store.deliverToCur('Drafts', emlContent, {draft: true, seen: true})
+        const {uniqueId, filename} = await this.store.deliverToCur('Drafts', emlContent, {
+            draft: true,
+            seen: true
+        }, isNew ? undefined : email.id)
 
         const parsed = await this.readAndParse(uniqueId, 'Drafts', filename)
         if (!parsed) throw new Error(`Failed to parse draft message: ${uniqueId}`)
