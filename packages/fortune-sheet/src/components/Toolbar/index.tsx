@@ -380,7 +380,7 @@ export function Toolbar({
                             const imgsrc = handleScreenShot(contextRef.current);
                             if (imgsrc) {
                                 showDialog(
-                                    <div className="p-6">
+                                    <div>
                                         <p className="text-sm mb-3">
                                             {screenshot.screenshotTipSuccess}
                                         </p>

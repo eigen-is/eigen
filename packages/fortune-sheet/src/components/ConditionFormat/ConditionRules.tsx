@@ -92,14 +92,14 @@ export function ConditionRules({type}: { type: string }) {
     }, []);
 
     return (
-        <div className="min-w-[340px]">
-            <DialogHeader className="p-6 pb-4">
+        <div className="flex flex-col gap-4">
+            <DialogHeader>
                 <DialogTitle className="text-base">
                     {(conditionformat as any)[`conditionformat_${type}`]}
                 </DialogTitle>
             </DialogHeader>
 
-            <div className="px-6">
+            <div>
                 <p className="text-sm text-muted-foreground mb-2">
                     {(conditionformat as any)[`conditionformat_${type}_title`]}
                 </p>
@@ -287,7 +287,7 @@ export function ConditionRules({type}: { type: string }) {
                 </div>
 
             </div>
-            <DialogFooter className="p-6 pt-4">
+            <DialogFooter>
                 <Button variant="outline" size="sm" onClick={() => close("close")}>
                     {button.cancel}
                 </Button>
