@@ -246,25 +246,26 @@ export default class Drive {
             buffer
         );
 
-        const storageFile = await mount.getStorageFile(pathId);
-        const storagePath = storageFile.name!;
-        const thumbnail = await saveThumbnail(mount.thumbsDir, pathId, storagePath, file.type, safeName);
-
-        const details: Record<string, unknown> = {};
-        if (thumbnail) { details['width'] = thumbnail.width; details['height'] = thumbnail.height; }
-        if (originalName) details['originalName'] = originalName;
-
-        const updates: Partial<DrivePath> = {};
-        if (thumbnail) updates.thumbnail = thumbnail.fileName;
-        if (Object.keys(details).length > 0) updates.details = details;
-
-        if (Object.keys(updates).length > 0) {
-            await mount.updatePath(pathId, updates);
+        if (originalName) {
+            await mount.updatePath(pathId, {details: {originalName}});
         }
 
         const uploadedFile = await mount.getPath(pathId);
         if (!uploadedFile) throw new ApiError(500, 'Failed to get uploaded file');
         this.emit(SSEventType.DRIVE_FILE_UPLOADED, uploadedFile);
+
+        // Generate thumbnail in the background — don't block the upload response
+        mount.getStorageFile(pathId).then(async (storageFile) => {
+            const thumbnail = await saveThumbnail(mount.thumbsDir, pathId, storageFile.name!, file.type, safeName);
+            if (thumbnail) {
+                await mount.updatePath(pathId, {
+                    thumbnail: thumbnail.fileName,
+                    details: {...(uploadedFile.details ?? {}), width: thumbnail.width, height: thumbnail.height},
+                });
+                this.emit(SSEventType.DRIVE_FILE_UPLOADED, (await mount.getPath(pathId))!);
+            }
+        }).catch((e) => console.error(`Thumbnail generation failed for ${pathId}:`, e));
+
         return uploadedFile;
     }
 
