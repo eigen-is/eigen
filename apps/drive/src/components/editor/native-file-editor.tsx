@@ -1,5 +1,5 @@
 import {lazy, Suspense, useState} from "react";
-import {EigenLoader} from "@workspace/ui";
+import {ErrorState, LoadingState} from "@workspace/ui";
 import {editorKeys, useFileContent} from "@workspace/lib/editor";
 import {useCheckWritePermission, useTextPreview} from "@workspace/lib/drive";
 import type {DrivePath} from "@workspace/lib/types/drive";
@@ -50,19 +50,11 @@ export function NativeFileEditor({path, onClose}: NativeFileEditorProps) {
     };
 
     if (isLoading && !preview) {
-        return (
-            <div className="flex items-center justify-center h-full w-full">
-                <EigenLoader/>
-            </div>
-        );
+        return <LoadingState/>;
     }
 
     if (error || (!data && !preview)) {
-        return (
-            <div className="flex items-center justify-center h-full w-full">
-                <p className="text-muted-foreground">{error?.message || 'Failed to load file'}</p>
-            </div>
-        );
+        return <ErrorState detail={error?.message || 'Failed to load file'}/>;
     }
 
     const detailColumn = !isMobile && (
@@ -82,9 +74,7 @@ export function NativeFileEditor({path, onClose}: NativeFileEditorProps) {
                             {preview?.body ? (
                                 <div className="eigen-prose" dangerouslySetInnerHTML={{__html: preview.body}}/>
                             ) : (
-                                <div className="flex items-center justify-center h-full">
-                                    <EigenLoader/>
-                                </div>
+                                <LoadingState/>
                             )}
                         </div>
                     </div>
@@ -111,7 +101,7 @@ export function NativeFileEditor({path, onClose}: NativeFileEditorProps) {
 
     return (
         <ColumnLayout>
-            <Suspense fallback={<div className="flex items-center justify-center h-full w-full"><EigenLoader/></div>}>
+            <Suspense fallback={<LoadingState/>}>
                 {data!.editMode === 'markdown' ? (
                     <MarkdownEditor {...editorProps} frontmatter={data!.frontmatter ?? null}/>
                 ) : (

@@ -1,6 +1,8 @@
 import {Fragment, useRef, useState} from 'react';
 import {Button} from "@workspace/ui/components/button";
-import {EigenLoader} from "@workspace/ui";
+import {LoadingState} from "../app/loading-state";
+import {ErrorState} from "../app/error-state";
+import {EmptyState} from "../app/empty-state";
 import {FileText, FolderPlus, MessageSquare, Plus, Presentation, Sheet, StickyNote, UploadIcon} from "lucide-react";
 import {DriveTable, getFileIcon} from "@workspace/ui/components/layout/drive";
 import {type DrivePath} from "@workspace/lib/types/drive";
@@ -293,20 +295,11 @@ export function DriveList({
 
     // Handle showing empty, loading, and error states
     if (isLoading) {
-        return (
-            <div className="h-full flex flex-col items-center justify-center p-8">
-                <EigenLoader/>
-            </div>
-        );
+        return <LoadingState/>;
     }
 
     if (error) {
-        return (
-            <div className="h-full flex flex-col items-center justify-center p-8 text-center">
-                <p className="text-destructive mb-2">Error loading files</p>
-                <p className="text-muted-foreground text-sm">{error.message}</p>
-            </div>
-        );
+        return <ErrorState message="Error loading files" detail={error.message}/>;
     }
 
     return (
@@ -352,13 +345,7 @@ export function DriveList({
             />
 
             {items.length === 0 && (
-                <div className="flex-1 flex flex-col items-center justify-top text-center">
-                    <p className="text-muted-foreground mb-4">Within this void, all possibilities are yet
-                        unobserved.</p>
-                    {/* <div className="flex gap-2">
-                        {newItemButton}
-                    </div> */}
-                </div>
+                <EmptyState/>
             )}
         </div>
     );

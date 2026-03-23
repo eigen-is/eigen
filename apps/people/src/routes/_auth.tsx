@@ -3,7 +3,7 @@ import {createFileRoute, Outlet, redirect} from '@tanstack/react-router';
 import {usePeopleMembers} from '@workspace/lib/people';
 import {authClient, useAuth} from '@workspace/lib/auth';
 import {usePublicConfig} from '@workspace/lib/public';
-import {EigenLoader} from '@workspace/ui/components/layout/braket/eigen-loader.tsx';
+import {AccessDenied, EmptyState, LoadingState} from '@workspace/ui';
 
 export const Route = createFileRoute('/_auth')({
     beforeLoad: ({context, location}) => {
@@ -33,32 +33,17 @@ function AuthGuard() {
     }, [config]);
 
     if (configLoading || membersLoading) {
-        return (
-            <div className="h-full flex items-center justify-center">
-                <EigenLoader/>
-            </div>
-        );
+        return <LoadingState/>;
     }
 
     if (!config?.orgId) {
-        return (
-            <div className="h-full flex items-center justify-center">
-                <p className="text-muted-foreground">No organization found.</p>
-            </div>
-        );
+        return <EmptyState message="No organization found."/>;
     }
 
     const currentMember = members.find(m => m.userId === user?.id);
 
     if (!currentMember || currentMember.role === 'member') {
-        return (
-            <div className="flex-1 flex items-center justify-center w-full h-full">
-                <div className="text-center space-y-2">
-                    <p className="text-lg font-medium">Access Denied</p>
-                    <p className="text-muted-foreground">You need admin or owner privileges to access People management.</p>
-                </div>
-            </div>
-        );
+        return <AccessDenied message="You need admin or owner privileges to access People management."/>;
     }
 
     return <Outlet/>;

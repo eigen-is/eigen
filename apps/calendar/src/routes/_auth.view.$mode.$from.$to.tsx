@@ -1,15 +1,15 @@
 import {createFileRoute, useNavigate} from '@tanstack/react-router'
 import {useCallback, useMemo, useState} from 'react';
 import {Column, ColumnLayout} from "@workspace/ui/components/layout";
-import {useCalendars, useEvents, useSharedCalendars, useAllSharedCalendarEvents} from '@workspace/lib/calendar';
+import {useAllSharedCalendarEvents, useCalendars, useEvents, useSharedCalendars} from '@workspace/lib/calendar';
 import {useAuth} from '@workspace/lib/auth';
 import {CalendarToolbar} from '../components/calendar-toolbar';
 import {MonthView} from '../components/month-view';
 import {WeekView} from '../components/week-view';
 import {CreateEventDialog} from '../components/create-event-dialog';
-import {getMonthRange, getWeekRange} from '../components/calendar-utils';
 import type {ViewMode} from '../components/calendar-utils';
-import {EigenLoader} from '@workspace/ui';
+import {getMonthRange, getWeekRange} from '../components/calendar-utils';
+import {LoadingState} from '@workspace/ui';
 
 export const Route = createFileRoute('/_auth/view/$mode/$from/$to')({
     component: CalendarView,
@@ -115,9 +115,7 @@ function CalendarView() {
                 }
             >
                 {isLoading ? (
-                    <div className="flex items-center justify-center h-full">
-                        <EigenLoader/>
-                    </div>
+                    <LoadingState/>
                 ) : viewMode === 'month' ? (
                     <MonthView
                         currentDate={currentDate}

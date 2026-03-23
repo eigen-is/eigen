@@ -1,6 +1,6 @@
 import {useCallback, useMemo} from "react";
 import {DrivePath} from "@workspace/lib/types/drive";
-import {EigenLoader} from "@workspace/ui";
+import {LoadingState} from "../app/loading-state";
 import {DriveList, DriveListToolbar} from "./drive-list";
 import {DriveDetail, DriveDetailToolbar} from "./drive-detail";
 import {defaultDriveSort} from "./drive-table";
@@ -137,11 +137,7 @@ export function DriveLayout({
     }, [onQuickLook, sortedContents]);
 
     if (isLoading) {
-        return (
-            <div className="flex items-center justify-center h-full w-full">
-                <EigenLoader/>
-            </div>
-        );
+        return <LoadingState/>;
     }
 
     const listProps = {

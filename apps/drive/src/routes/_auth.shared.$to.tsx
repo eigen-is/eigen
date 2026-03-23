@@ -4,7 +4,7 @@ import {DriveLayout} from "@workspace/ui/components/layout/drive/drive-layout";
 import {DrivePath, DriveSearchParams, isDocumentType, isFolderType, isInlineEditable} from "@workspace/lib/types/drive";
 import {useAuth} from '@workspace/lib/auth';
 import {useLayout} from "@workspace/ui/components/layout/app/layout-context.tsx";
-import {EigenLoader} from '@workspace/ui';
+import {LoadingState, NotFound} from '@workspace/ui';
 import {openDocument} from "@workspace/lib/api";
 import {usePreview} from '@workspace/ui/components/layout/preview-provider';
 
@@ -74,15 +74,11 @@ function DriveRoute() {
     };
 
     if (isFolderContentLoadingError) {
-        return (
-            <div className="flex items-center justify-center h-full w-full">
-                <p className="text-muted-foreground">Encountering the null vector: a rendezvous with nothing at all.</p>
-            </div>
-        );
+        return <NotFound/>;
     }
 
     if (isFolderContentLoading) {
-        return <EigenLoader/>;
+        return <LoadingState/>;
     }
 
     return (

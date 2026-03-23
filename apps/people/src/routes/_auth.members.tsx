@@ -4,7 +4,7 @@ import {MemberDetail, MemberDetailToolbar} from '../components/people/member-det
 import {usePeopleMembers} from '@workspace/lib/people';
 import {usePublicConfig} from '@workspace/lib/public';
 import {Column, ColumnLayout} from '@workspace/ui/components/layout/app/column-layout.tsx';
-import {EigenLoader} from '@workspace/ui/components/layout/braket/eigen-loader.tsx';
+import {EmptyState, LoadingState} from '@workspace/ui';
 import {useState} from 'react';
 
 type MembersSearch = {
@@ -38,11 +38,7 @@ function MembersRoute() {
     };
 
     if (isLoading) {
-        return (
-            <div className="h-full flex items-center justify-center">
-                <EigenLoader/>
-            </div>
-        );
+        return <LoadingState/>;
     }
 
     const listToolbar = (
@@ -75,9 +71,7 @@ function MembersRoute() {
                 {member ? (
                     <MemberDetail member={member} organizationId={config?.orgId}/>
                 ) : (
-                    <div className="flex-1 flex items-center justify-center">
-                        <p className="text-muted-foreground text-center">Select a member to view details</p>
-                    </div>
+                    <EmptyState message="Select a member to view details"/>
                 )}
             </Column>
         </ColumnLayout>

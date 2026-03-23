@@ -5,6 +5,7 @@ import {useEmail, useEmails, useMailboxes} from '@workspace/lib/mail';
 import {EmailList, EmailListToolbar} from "../components/mail/email-list";
 import type {Email, EmailDraft as EmailDraftType} from "@workspace/lib/types/mail";
 import {useEffect, useState} from 'react';
+import {EmptyState} from "@workspace/ui";
 import {DeleteDialog} from "@workspace/ui/components/layout/delete/delete-dialog";
 import {Column, ColumnLayout} from "@workspace/ui/components/layout/app/column-layout.tsx";
 import {useLayout} from "@workspace/ui/components/layout/app/layout-context.tsx";
@@ -162,9 +163,7 @@ function MailRoute() {
                             />
                         )
                     ) : (
-                        <div className="h-full w-full flex items-center justify-center">
-                            <p className="text-muted-foreground">Select an email to view details</p>
-                        </div>
+                        <EmptyState message="Select an email to view details"/>
                     )}
                 </Column>
             </ColumnLayout>
