@@ -27,6 +27,7 @@ export const collabApi = api.collab;
 export const calendarApi = api.calendar;
 export const spaceApi = api.space;
 export const teamApi = api.team;
+export const notificationApi = api.notifications;
 export const settingsApi = api.settings;
 export const setupApi = api.setup;
 

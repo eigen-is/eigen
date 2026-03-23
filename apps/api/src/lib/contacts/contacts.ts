@@ -55,12 +55,12 @@ export class Contacts {
         this.storage = new LocalFilesystem(`${home.homeDir}/eigen.contacts`);
     }
 
-    private emitContact(type: Parameters<typeof buildContactEvent>[0], contactId: string, name?: string): void {
-        this.home.notify(buildContactEvent(type, {contactId, name}));
+    private emitContact(type: Parameters<typeof buildContactEvent>[0], contactId: string): void {
+        this.home.broadcast(buildContactEvent(type, contactId));
     }
 
-    private emitLabel(type: Parameters<typeof buildLabelEvent>[0], labelId: string, name?: string): void {
-        this.home.notify(buildLabelEvent(type, {labelId, name}));
+    private emitLabel(type: Parameters<typeof buildLabelEvent>[0], labelId: string): void {
+        this.home.broadcast(buildLabelEvent(type, labelId));
     }
 
     public async init() {
@@ -146,7 +146,7 @@ export class Contacts {
         // Add labels if provided
         await this.setContactLabels(contactId, labels || []);
 
-        this.emitContact(SSEventType.CONTACT_CREATED, contactId, `${contactData.firstName} ${contactData.lastName}`.trim());
+        this.emitContact(SSEventType.CONTACT_CREATED, contactId);
 
         return contactId;
     }
@@ -156,9 +156,8 @@ export class Contacts {
         if (await this.you(id)) {
             throw new ApiError(400, 'You cannot delete yourself');
         } else {
-            const contact = await this.getContactById(id);
             await this.db.delete(schema.contacts).where(eq(schema.contacts.id, id));
-            this.emitContact(SSEventType.CONTACT_DELETED, id, contact ? `${contact.firstName} ${contact.lastName}`.trim() : undefined);
+            this.emitContact(SSEventType.CONTACT_DELETED, id);
         }
     }
 
@@ -187,7 +186,7 @@ export class Contacts {
             await this.setContactLabels(id, labels || []);
         }
 
-        this.emitContact(SSEventType.CONTACT_UPDATED, id, `${contactData.firstName} ${contactData.lastName}`.trim());
+        this.emitContact(SSEventType.CONTACT_UPDATED, id);
     }
 
     public async getLabels(): Promise<Label[]> {
@@ -205,7 +204,7 @@ export class Contacts {
             updatedAt: sql`unixepoch()`,
         });
 
-        this.emitLabel(SSEventType.LABEL_CREATED, labelId, label.name.trim());
+        this.emitLabel(SSEventType.LABEL_CREATED, labelId);
 
         return labelId;
     }
@@ -222,7 +221,7 @@ export class Contacts {
 
             const updatedLabel = await this.db.select().from(schema.labels).where(eq(schema.labels.id, id)).get();
 
-            this.emitLabel(SSEventType.LABEL_UPDATED, id, label.name.trim());
+            this.emitLabel(SSEventType.LABEL_UPDATED, id);
 
             return updatedLabel;
         } catch (error) {
@@ -231,10 +230,9 @@ export class Contacts {
     }
 
     public async deleteLabel(id: string) {
-        const label = await this.db.select().from(schema.labels).where(eq(schema.labels.id, id)).get();
         await this.db.delete(schema.labels).where(eq(schema.labels.id, id));
         await this.db.delete(schema.contactsToLabels).where(eq(schema.contactsToLabels.labelId, id));
-        this.emitLabel(SSEventType.LABEL_DELETED, id, label?.name);
+        this.emitLabel(SSEventType.LABEL_DELETED, id);
     }
 
     public async getContactById(id: string): Promise<Contact | null> {

@@ -24,6 +24,7 @@ import {UserItem} from "../user-item.tsx";
 import {AppLogo} from "./app-logo.tsx";
 import {UserAvatar} from "../user-avatar.tsx";
 import {useLayout} from "./layout-context.tsx";
+import {NotificationBell} from "./notification-bell.tsx";
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any -- TanStack Router's useNavigate has app-specific types
 type NavigateFunction = (...args: any[]) => any;
@@ -180,7 +181,8 @@ export function Topbar({rootRoute}: TopbarProps) {
                     )}
                 </div>
 
-                <div className="flex items-center px-4 shrink-0">
+                <div className="flex items-center gap-1 px-4 shrink-0">
+                    <NotificationBell/>
                     <UserDropdown rootRoute={rootRoute}/>
                 </div>
             </div>

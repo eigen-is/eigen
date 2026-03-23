@@ -12,16 +12,12 @@ export function handleChatSSEvent(event: SSEvent, queryClient: QueryClient): boo
 
     switch (event.type) {
         case SSEventType.CHAT_MESSAGE_POSTED:
-            invalidateMessages(queryClient, chat.ownerId, chat.mountId, chat.chatId);
-            return true;
-
         case SSEventType.CHAT_MESSAGE_EDITED:
         case SSEventType.CHAT_MESSAGE_DELETED:
             invalidateMessages(queryClient, chat.ownerId, chat.mountId, chat.chatId);
             return true;
 
         case SSEventType.CHAT_COMMENT_INDEX_UPDATED:
-            // chatId carries the containerId for comment index events
             invalidateComments(queryClient, chat.ownerId, chat.mountId, chat.chatId);
             return true;
 

@@ -59,13 +59,13 @@ export async function resolveACLToEmails(acls: DriveACL[]): Promise<Map<string, 
     return members;
 }
 
-export async function propagateACLChange(path: DrivePath, oldACL: DriveACL[] | null, newACL: DriveACL[] | null): Promise<void> {
+export async function propagateACLChange(path: DrivePath, oldACL: DriveACL[] | null, newACL: DriveACL[] | null, actorEmail?: string): Promise<void> {
     const ids = await resolveACLUserIds(path.ownerId, [...(oldACL || []), ...(newACL || [])]);
 
     for (const id of ids) {
         try {
             const home = await getHome(id);
-            await home.drive.receiveACLChange(path, newACL);
+            await home.drive.receiveACLChange(path, newACL, actorEmail);
         } catch (error) {
             console.error('Failed to propagate ACL change:', error);
         }

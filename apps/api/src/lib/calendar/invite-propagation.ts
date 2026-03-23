@@ -54,10 +54,13 @@ export async function propagateInvitation(
                 organizerEventId: event.id,
                 organizerUserId: organizerHome.user.id,
             });
-            targetHome.notify(buildCalendarEvent(SSEventType.CALENDAR_INVITE_RECEIVED, {
-                ownerId: organizerHome.user.id,
-                calendarId: '', eventId: event.id, title: event.title,
-            }));
+            targetHome.broadcast(buildCalendarEvent(SSEventType.CALENDAR_INVITE_RECEIVED, organizerHome.user.id));
+            targetHome.notifications?.persist({
+                type: 'calendar-invite',
+                actorEmail: organizerHome.user.email,
+                title: `New invitation: ${event.title}`,
+                tag: `calendar-invite:${event.id}`,
+            });
         } catch (error) {
             console.error('Failed to send invitation:', error);
         }
@@ -70,10 +73,13 @@ export async function propagateInvitation(
             if (!targetUser) continue;
             const targetHome = await getHome(targetUser.id);
             targetHome.calendar.removeInvitation(event.id, organizerHome.user.id);
-            targetHome.notify(buildCalendarEvent(SSEventType.CALENDAR_INVITE_CANCELLED, {
-                ownerId: organizerHome.user.id,
-                calendarId: '', eventId: event.id, title: event.title,
-            }));
+            targetHome.broadcast(buildCalendarEvent(SSEventType.CALENDAR_INVITE_CANCELLED, organizerHome.user.id));
+            targetHome.notifications?.persist({
+                type: 'calendar-invite-cancelled',
+                actorEmail: organizerHome.user.email,
+                title: `Cancelled: ${event.title}`,
+                tag: `calendar-invite:${event.id}`,
+            });
         } catch (error) {
             console.error('Failed to cancel invitation:', error);
         }
@@ -98,10 +104,13 @@ export async function propagateInvitation(
                 sequence: event.sequence,
                 attendees: newAttendees,
             });
-            targetHome.notify(buildCalendarEvent(SSEventType.CALENDAR_INVITE_UPDATED, {
-                ownerId: organizerHome.user.id,
-                calendarId: '', eventId: event.id, title: event.title,
-            }));
+            targetHome.broadcast(buildCalendarEvent(SSEventType.CALENDAR_INVITE_UPDATED, organizerHome.user.id));
+            targetHome.notifications?.persist({
+                type: 'calendar-invite-updated',
+                actorEmail: organizerHome.user.email,
+                title: `Updated: ${event.title}`,
+                tag: `calendar-invite:${event.id}`,
+            });
         } catch (error) {
             console.error('Failed to update invitation:', error);
         }
@@ -121,10 +130,7 @@ export async function propagateRsvp(
     } else {
         organizerHome.calendar.updateAttendeeStatus(organizerEventId, attendeeEmail, newStatus);
     }
-    organizerHome.notify(buildCalendarEvent(SSEventType.CALENDAR_INVITE_RSVP, {
-        ownerId: organizerHome.user.id,
-        calendarId: '', eventId: organizerEventId,
-    }));
+    organizerHome.broadcast(buildCalendarEvent(SSEventType.CALENDAR_INVITE_RSVP, organizerHome.user.id));
 }
 
 export async function propagateCancellation(
@@ -138,10 +144,13 @@ export async function propagateCancellation(
             if (!targetUser) continue;
             const targetHome = await getHome(targetUser.id);
             targetHome.calendar.removeInvitation(event.id, organizerHome.user.id);
-            targetHome.notify(buildCalendarEvent(SSEventType.CALENDAR_INVITE_CANCELLED, {
-                ownerId: organizerHome.user.id,
-                calendarId: '', eventId: event.id, title: event.title,
-            }));
+            targetHome.broadcast(buildCalendarEvent(SSEventType.CALENDAR_INVITE_CANCELLED, organizerHome.user.id));
+            targetHome.notifications?.persist({
+                type: 'calendar-invite-cancelled',
+                actorEmail: organizerHome.user.email,
+                title: `Cancelled: ${event.title}`,
+                tag: `calendar-invite:${event.id}`,
+            });
         } catch (error) {
             console.error('Failed to propagate cancellation:', error);
         }

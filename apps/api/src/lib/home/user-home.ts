@@ -6,6 +6,7 @@ import Maildir from "../mail/maildir.ts";
 import {Drive} from "../drive";
 import {JsonStore, LocalFilesystem} from "../core";
 import {Calendar} from "../calendar/calendar";
+import {NotificationCenter} from "../notification-center/notification-center";
 import type {UserSettings} from "@workspace/lib/types/settings";
 import {getServerSettings, mapStorageType} from "../config/server-settings";
 
@@ -23,6 +24,7 @@ export class UserHome extends Home {
         this._mail = new Maildir(this);
         this._drive = new Drive(this);
         this._calendar = new Calendar(this);
+        this._notifications = new NotificationCenter(this);
     }
 
     override async init() {
