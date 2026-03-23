@@ -2,7 +2,8 @@
 
 > **TLDR**: Per-user SQLite calendar at `{home}/eigen.calendar/calendar.db`. RRULE strings stored as-is (RFC 5545).
 > Sharing via push-based propagation (like Drive ACL). Team calendars in TeamHome. Three permission levels: `free-busy`,
-`read`, `write`. Recurrence exceptions are regular events with `parentEventId` + `recurrenceDate`.
+> `read`, `write`. Recurrence exceptions are regular events with `parentEventId` + `recurrenceDate`. Timezone-aware
+> recurrence expansion via `timezone` column on events.
 
 ## Storage
 
@@ -30,29 +31,31 @@ Follows the Contacts/Mail pattern — per-user Home directory, not Drive.
 
 ### events
 
-| Column           | Type    | Description                                   |
-|------------------|---------|-----------------------------------------------|
-| `id`             | TEXT PK | UUID                                          |
-| `calendarId`     | TEXT FK | → calendars.id                                |
-| `uid`            | TEXT    | iCalendar UID (CalDAV-ready)                  |
-| `title`          | TEXT    | Summary                                       |
-| `description`    | TEXT    | Nullable                                      |
-| `location`       | TEXT    | Nullable                                      |
-| `startTime`      | INTEGER | Unix timestamp                                |
-| `endTime`        | INTEGER | Unix timestamp                                |
-| `allDay`         | INTEGER | Boolean                                       |
-| `rrule`          | TEXT    | RFC 5545 RRULE string (nullable)              |
-| `parentEventId`  | TEXT FK | Recurrence exception parent                   |
-| `recurrenceDate` | TEXT    | ISO date of replaced occurrence               |
-| `status`         | TEXT    | `confirmed` / `tentative` / `cancelled`       |
-| `etag`             | TEXT    | Change hash (CalDAV-ready)                    |
-| `data`             | TEXT    | JSON: reminders, attendees, url, notes, color |
-| `organizerEventId` | TEXT   | Linked copy → organizer's event ID (nullable) |
-| `organizerUserId`  | TEXT   | Linked copy → organizer's user ID (nullable)  |
-| `sequence`         | INTEGER | CalDAV SEQUENCE — bumped on organizer updates |
-| `createByUserId`   | TEXT   | User who created the event                    |
-| `createdAt`        | INTEGER | Timestamp                                    |
-| `updatedAt`        | INTEGER | Timestamp                                    |
+| Column             | Type    | Description                                       |
+|--------------------|---------|---------------------------------------------------|
+| `id`               | TEXT PK | UUID                                              |
+| `calendarId`       | TEXT FK | → calendars.id                                    |
+| `uid`              | TEXT    | iCalendar UID (CalDAV-ready)                      |
+| `title`            | TEXT    | Summary                                           |
+| `description`      | TEXT    | Nullable                                          |
+| `location`         | TEXT    | Nullable                                          |
+| `startTime`        | INTEGER | Unix timestamp                                    |
+| `endTime`          | INTEGER | Unix timestamp                                    |
+| `allDay`           | INTEGER | Boolean                                           |
+| `rrule`            | TEXT    | RFC 5545 RRULE string (nullable)                  |
+| `timezone`         | TEXT    | IANA timezone for recurrence expansion (nullable) |
+| `uri`              | TEXT    | iCalendar URI (CalDAV-ready)                      |
+| `parentEventId`    | TEXT FK | Recurrence exception parent                       |
+| `recurrenceDate`   | TEXT    | ISO date of replaced occurrence                   |
+| `status`           | TEXT    | `confirmed` / `tentative` / `cancelled`           |
+| `etag`             | TEXT    | Change hash (CalDAV-ready)                        |
+| `data`             | TEXT    | JSON: reminders, attendees, url, notes, color     |
+| `organizerEventId` | TEXT    | Linked copy → organizer's event ID (nullable)     |
+| `organizerUserId`  | TEXT    | Linked copy → organizer's user ID (nullable)      |
+| `sequence`         | INTEGER | CalDAV SEQUENCE — bumped on organizer updates     |
+| `createByUserId`   | TEXT    | User who created the event                        |
+| `createdAt`        | INTEGER | Timestamp                                         |
+| `updatedAt`        | INTEGER | Timestamp                                         |
 
 ### shared_calendars (recipient-side)
 

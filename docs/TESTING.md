@@ -44,12 +44,20 @@ Test → Eden Treaty / authedRequest() → app.handle() → Real business logic 
 | `settings.test.ts`            | Server settings, admin access control                      |
 | `share-registry.test.ts`      | Share registry push/pull, reconciliation                   |
 | `team-calendar-share.test.ts` | Team calendar sharing                                      |
+| `acl-bubbling.test.ts`        | Chat invite ACL bubbling to container                      |
+| `calendar-timezone.test.ts`   | Timezone-aware recurrence expansion                        |
+| `command-validation.test.ts`  | Chat command validation                                    |
+| `comment-index.test.ts`       | Comment index CRUD, mentions                               |
+| `effective-members.test.ts`   | Effective member resolution                                |
 | `integration.test.ts`         | Cross-domain integration                                   |
+| `json-store.test.ts`          | JsonStore read/write                                       |
 | `preview.test.ts`             | File preview endpoints                                     |
 | `public.test.ts`              | Public routes, avatars                                     |
 | `editor.test.ts`              | Inline text editing                                        |
 | `mount.test.ts`               | Mount storage backends                                     |
 | `org-home.test.ts`            | Org/team Home lifecycle                                    |
+| `sharing-restricted.test.ts`  | Sharing restriction enforcement                            |
+| `storage.test.ts`             | Storage backend operations                                 |
 
 ## Key Details
 

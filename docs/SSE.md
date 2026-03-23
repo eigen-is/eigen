@@ -59,4 +59,14 @@ See [NOTIFICATIONS.md](NOTIFICATIONS.md) for the full notification pattern.
 
 ## Implemented Domains
 
-Drive, Mail, Contacts, Chat, Calendar, Space, Team
+| Domain   | sse-events builder | sse-handler |
+|----------|--------------------|-------------|
+| Drive    | Yes                | Yes         |
+| Mail     | Yes                | Yes         |
+| Contacts | Yes                | Yes         |
+| Chat     | Yes                | Yes         |
+| Calendar | Yes                | Yes         |
+| Space    | —                  | Yes         |
+| Team     | —                  | Yes         |
+
+Space and Team use event types defined in `sse.ts` directly (no dedicated builder file).
