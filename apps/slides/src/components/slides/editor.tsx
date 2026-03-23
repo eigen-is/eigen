@@ -19,7 +19,7 @@ import {
 } from '@workspace/lib/clipboard';
 import type {EigenClipboardData, EigenClipboardItem} from '@workspace/lib/types/clipboard';
 import * as Y from 'yjs';
-import {Column, ColumnLayout} from '@workspace/ui/index';
+import {Column, ColumnLayout, EmptyState} from '@workspace/ui/index';
 
 function buildClipboardItem(obj: SlideObject, resolveMediaPath: (name: string) => DrivePath | undefined): EigenClipboardItem | null {
     const rect = {x: obj.x, y: obj.y, w: obj.w, h: obj.h, rotation: obj.rotation};
@@ -490,9 +490,7 @@ function SlideEditorInner({ownerId, path, canWrite, mediaFolderId, onAccessDialo
                             ) : null}
                         </div>
                     ) : (
-                        <div className="flex-1 flex items-center justify-center text-muted-foreground">
-                            No slides yet
-                        </div>
+                        <EmptyState message="No slides yet"/>
                     )}
                 </div>
 

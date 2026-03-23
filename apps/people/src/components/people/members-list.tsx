@@ -1,5 +1,6 @@
 import {useMemo, useRef} from 'react';
 import {cn} from '@workspace/ui/lib/utils';
+import {EmptyState} from '@workspace/ui';
 import {SearchBar} from '@workspace/ui/components/layout/search-bar/search-bar';
 import {UserItem} from '@workspace/ui/components/layout/user-item';
 import {useKeyboardListNavigation} from '@workspace/ui/hooks/use-keyboard-list-navigation';
@@ -87,11 +88,7 @@ export function MembersList({members, searchQuery, activeMemberId, onRowClick}: 
     });
 
     if (filteredMembers.length === 0) {
-        return (
-            <div className="flex flex-col items-center justify-center h-full text-muted-foreground">
-                <p>{searchQuery ? 'No members match your search.' : 'No members found.'}</p>
-            </div>
-        );
+        return <EmptyState message={searchQuery ? 'No members match your search.' : 'No members found.'}/>;
     }
 
     return (

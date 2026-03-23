@@ -6,6 +6,7 @@ import {useAuth} from '@workspace/lib/auth';
 import {useLayout} from "@workspace/ui/components/layout/app/layout-context.tsx";
 import {openDocument} from "@workspace/lib/api";
 import {usePreview} from '@workspace/ui/components/layout/preview-provider';
+import {NotFound} from '@workspace/ui';
 
 export const Route = createFileRoute('/_auth/mime/$mimeType')({
     component: DriveRoute,
@@ -70,11 +71,7 @@ function DriveRoute() {
     };
 
     if (isFolderContentLoadingError) {
-        return (
-            <div className="flex items-center justify-center h-full w-full">
-                <p className="text-muted-foreground">Encountering the null vector: a rendezvous with nothing at all.</p>
-            </div>
-        );
+        return <NotFound/>;
     }
 
     return (

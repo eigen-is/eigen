@@ -3,7 +3,7 @@ import {ContactsList, ContactsListToolbar} from '../components/contacts/contacts
 import {ContactDetail, ContactDetailToolbar} from '../components/contacts/contact-detail';
 import {useContacts, useDeleteContact, useLabels, useUpdateContact} from '@workspace/lib/contacts';
 import {type Contact} from '@workspace/lib/types/contact';
-import {EigenLoader} from '@workspace/ui/components/layout/braket/eigen-loader.tsx';
+import {EmptyState, LoadingState} from '@workspace/ui';
 import {LabelFilterHeader} from "@workspace/ui/components/layout/labels/label-filter-header";
 import {Column, ColumnLayout} from "@workspace/ui/components/layout/app/column-layout.tsx";
 import {DeleteDialog} from "@workspace/ui/components/layout/delete/delete-dialog";
@@ -94,11 +94,7 @@ function ContactsRoute() {
     ) : null;
 
     if (contactsLoading) {
-        return (
-            <div className="h-full flex items-center justify-center">
-                <EigenLoader/>
-            </div>
-        );
+        return <LoadingState/>;
     }
 
     return (
@@ -158,9 +154,7 @@ function ContactsRoute() {
                         onDelete={(id) => setDeleteTargets([contact])}
                     />
                 ) : (
-                    <div className="h-full w-full flex items-center justify-center">
-                        <p className="text-muted-foreground">Select a contact to view details</p>
-                    </div>
+                    <EmptyState message="Select a contact to view details"/>
                 )}
             </Column>
         </ColumnLayout>

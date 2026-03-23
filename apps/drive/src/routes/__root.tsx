@@ -3,7 +3,7 @@ import {AuthContextType, useAuth} from "@workspace/lib/auth";
 import {AppShell} from "@workspace/ui/components/layout/app/app-shell.tsx";
 import {DriveSidebar} from '../components/drive/drive-sidebar';
 import {DEFAULT_MOUNT_ID, useRootFolder} from '@workspace/lib/drive';
-import {EigenLoader} from '@workspace/ui';
+import {ErrorState, LoadingState} from '@workspace/ui';
 import {createContext} from 'react';
 import {DriveContextType} from '@workspace/lib/types/drive';
 
@@ -33,9 +33,7 @@ function DriveRoot() {
     if (isLoading) {
         return (
             <AppShell appName="drive" rootRoute={Route}>
-                <div className="flex items-center justify-center h-full w-full">
-                    <EigenLoader/>
-                </div>
+                <LoadingState/>
             </AppShell>
         );
     }
@@ -43,10 +41,7 @@ function DriveRoot() {
     if (error) {
         return (
             <AppShell appName="drive" rootRoute={Route}>
-                <div className="flex flex-col items-center justify-center h-full w-full">
-                    <p className="text-destructive">Error loading drive content</p>
-                    <p className="text-sm">{error.message}</p>
-                </div>
+                <ErrorState message="Error loading drive content" detail={error.message}/>
             </AppShell>
         );
     }

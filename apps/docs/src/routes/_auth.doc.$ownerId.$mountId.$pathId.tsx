@@ -1,7 +1,7 @@
 import {createFileRoute, useNavigate} from '@tanstack/react-router'
 import {CollaborativeEditor} from '../components/docs/editor'
 import {useCollabDocumentInfo} from '@workspace/lib/collab'
-import {EigenLoader} from '@workspace/ui'
+import {AccessDenied, LoadingState} from '@workspace/ui'
 import {useCallback, useEffect, useMemo, useState} from 'react'
 import {useLayout} from '@workspace/ui/components/layout/app/layout-context'
 import {DriveAccessDialog} from '@workspace/ui/components/layout/drive/drive-access-dialog'
@@ -38,15 +38,11 @@ function CollaborativeTextEditor() {
     }, [docInfo?.folderContents]);
 
     if (isLoading) {
-        return <EigenLoader/>
+        return <LoadingState/>
     }
 
     if (!docInfo?.canRead || !docInfo.path) {
-        return (
-            <div className="flex items-center justify-center h-full w-full">
-                <p className="text-muted-foreground">Encountering the null vector: a rendezvous with nothing at all.</p>
-            </div>
-        );
+        return <AccessDenied/>;
     }
 
     return (

@@ -8,7 +8,8 @@ import {
     DropdownMenuTrigger
 } from "@workspace/ui/components/dropdown-menu";
 import {Button} from "@workspace/ui/components/button";
-import {EigenLoader, TooltipButton} from "@workspace/ui";
+import {TooltipButton} from "@workspace/ui";
+import {LoadingState} from "../app/loading-state";
 import {DriveAccessList} from "@workspace/ui/components/layout/drive";
 import {type DrivePath, isInlineEditable} from "@workspace/lib/types/drive";
 import {formatFileSize} from "@workspace/ui/lib/formatFileSize";
@@ -110,11 +111,7 @@ export function DriveDetail({
                             }: DriveDetailProps) {
 
     if (!path) {
-        return (
-            <div className="flex h-full items-center justify-center">
-                <EigenLoader/>
-            </div>
-        );
+        return <LoadingState/>;
     }
 
     const fullPath = getDriveDownloadUrl(path.ownerId, path.mountId, path.id);

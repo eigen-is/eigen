@@ -3,7 +3,7 @@ import {z} from 'zod';
 import {ContactEdit, ContactEditToolbar, type ContactFormValues} from '../components/contacts/contact-edit';
 import {useAddContact, useContacts, useUpdateContact} from '@workspace/lib/contacts';
 import {type Contact} from "@workspace/lib/types/contact";
-import {EigenLoader} from "@workspace/ui";
+import {LoadingState} from "@workspace/ui";
 import {Column, ColumnLayout} from "@workspace/ui/components/layout/app/column-layout.tsx";
 import {emptyContact} from '@workspace/lib/constants/contact';
 
@@ -88,11 +88,7 @@ function EditContactRoute() {
     };
 
     if (contactsLoading) {
-        return (
-            <div className="h-full flex items-center justify-center">
-                <EigenLoader/>
-            </div>
-        );
+        return <LoadingState/>;
     }
 
     if (contactId && !contact) {

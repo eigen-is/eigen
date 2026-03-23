@@ -1,4 +1,5 @@
 import {useEffect, useState} from 'react'
+import {LoadingState} from '@workspace/ui'
 import {Button} from '@workspace/ui/components/button'
 import {Input} from '@workspace/ui/components/input'
 import {Label} from '@workspace/ui/components/label'
@@ -97,7 +98,7 @@ export function SetupWizard() {
     if (step === 'loading') {
         return (
             <div className="min-h-screen flex items-center justify-center bg-background">
-                <div className="text-muted-foreground">Loading...</div>
+                <LoadingState/>
             </div>
         )
     }

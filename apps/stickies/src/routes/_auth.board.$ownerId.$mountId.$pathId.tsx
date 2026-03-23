@@ -1,6 +1,6 @@
 import {createFileRoute} from '@tanstack/react-router'
 import {useCollabDocumentInfo} from '@workspace/lib/collab'
-import {EigenLoader} from '@workspace/ui'
+import {AccessDenied, LoadingState} from '@workspace/ui'
 import {useCallback, useEffect, useMemo, useState} from 'react'
 import {useLayout} from '@workspace/ui/components/layout/app/layout-context'
 import {StickiesBoard} from "../components/stickies/board";
@@ -30,13 +30,9 @@ function StickiesRoute() {
         return docInfo?.folderContents?.find(item => item.name === 'chat')?.id ?? null;
     }, [docInfo?.folderContents]);
 
-    if (isLoading) return <EigenLoader/>
+    if (isLoading) return <LoadingState/>
     if (!docInfo?.canRead || !docInfo.path) {
-        return (
-            <div className="flex items-center justify-center h-full w-full">
-                <p className="text-muted-foreground">Encountering the null vector: a rendezvous with nothing at all.</p>
-            </div>
-        );
+        return <AccessDenied/>;
     }
 
     return (

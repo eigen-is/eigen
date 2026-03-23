@@ -26,7 +26,7 @@ import * as Y from "yjs";
 import {WebsocketProvider} from "y-websocket";
 import {useAuth} from "@workspace/lib/auth";
 import {EditorToolbar} from "./editor-toolbar";
-import {Column, EigenLoader} from "@workspace/ui";
+import {Column, LoadingState} from "@workspace/ui";
 import {DrivePath} from "@workspace/lib/types/drive";
 import {getCollabWebSocketUrl} from "@workspace/lib/api";
 import {EIGEN_ACCENT_COLORS_SHUFFLED} from "@workspace/lib/constants/colors";
@@ -69,7 +69,7 @@ export const CollaborativeEditor = ({path, access, mediaFolderId, chatFolderId, 
     }, [yDoc, path.ownerId, path.mountId, path.id]);
 
     if (!connected || !provider) {
-        return <div className="flex h-full items-center justify-center"><EigenLoader/></div>;
+        return <LoadingState/>;
     }
 
     return (

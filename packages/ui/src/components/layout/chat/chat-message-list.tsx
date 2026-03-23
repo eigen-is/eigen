@@ -1,6 +1,7 @@
 import {type ReactNode, useCallback, useEffect, useRef} from 'react';
 import {UserAvatar} from "../user-avatar";
 import {EigenLoader} from "../braket/eigen-loader.tsx";
+import {LoadingState} from "../app/loading-state";
 import {cn} from "../../../lib/utils";
 import {usePublicUser} from "@workspace/lib/public";
 import {useContacts} from "@workspace/lib/contacts";
@@ -224,11 +225,7 @@ export function ChatMessageList({
     }, [handleScroll]);
 
     if (isLoading) {
-        return (
-            <div className={cn("flex items-center justify-center flex-1", className)}>
-                <EigenLoader/>
-            </div>
-        );
+        return <LoadingState/>;
     }
 
     if (messages.length === 0) {

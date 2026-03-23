@@ -2,7 +2,7 @@ import {useMemo, useRef} from 'react';
 import {Workbook, type WorkbookInstance} from '@workspace/fortune-sheet';
 import {useSheet} from './hooks/use-sheet';
 import {ToolbarLeftItems, ToolbarRightItems} from './toolbar';
-import {EigenLoader} from '@workspace/ui';
+import {LoadingState} from '@workspace/ui';
 import type {DrivePath} from '@workspace/lib/types/drive';
 
 type SheetEditorProps = {
@@ -51,7 +51,7 @@ export function SheetEditor({ownerId, path, canWrite, onAccessDialogOpen}: Sheet
     ), [path, canWrite, onAccessDialogOpen, handleRestore]);
 
     if (!synced || !initialData) {
-        return <EigenLoader/>;
+        return <LoadingState/>;
     }
 
     return (

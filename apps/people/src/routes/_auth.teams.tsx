@@ -3,7 +3,7 @@ import {TeamDetail, TeamDetailToolbar} from '../components/people/team-detail';
 import {usePeopleTeams} from '@workspace/lib/people';
 import {usePublicConfig} from '@workspace/lib/public';
 import {Column, ColumnLayout} from '@workspace/ui/components/layout/app/column-layout.tsx';
-import {EigenLoader} from '@workspace/ui/components/layout/braket/eigen-loader.tsx';
+import {EmptyState, LoadingState} from '@workspace/ui';
 
 type TeamsSearch = {
     teamId?: string;
@@ -25,11 +25,7 @@ function TeamsRoute() {
     const team = teams.find(t => t.id === teamId);
 
     if (isLoading) {
-        return (
-            <div className="h-full flex items-center justify-center">
-                <EigenLoader/>
-            </div>
-        );
+        return <LoadingState/>;
     }
 
     const detailToolbar = team ? (
@@ -42,9 +38,7 @@ function TeamsRoute() {
                 {team ? (
                     <TeamDetail team={team} organizationId={config?.orgId}/>
                 ) : (
-                    <div className="flex-1 flex items-center justify-center">
-                        <p className="text-muted-foreground text-center">Select a team from the sidebar to view details</p>
-                    </div>
+                    <EmptyState message="Select a team from the sidebar to view details"/>
                 )}
             </Column>
         </ColumnLayout>
