@@ -94,14 +94,9 @@ export async function generateImagePreview(
 ): Promise<ImageResult | null> {
     if (!isExiftoolCandidate(mimeType, fileName)) return null;
 
-    console.log(`[thumbnail] ${fileName} (${mimeType}) — trying sharp`);
     // Try sharp first — handles JPEG, PNG, WebP, GIF, TIFF, and HEIC (if libvips supports it)
     const result = await sharpResize(source, options);
-    if (result) {
-        console.log(`[thumbnail] ${fileName} — sharp succeeded`);
-        return result;
-    }
-    console.log(`[thumbnail] ${fileName} — sharp failed`);
+    if (result) return result;
 
     // Sharp failed on HEIC — convert to JPEG first, then resize
     if (mimeType === 'image/heic' || mimeType === 'image/heif') {

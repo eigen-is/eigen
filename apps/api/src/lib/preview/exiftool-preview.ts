@@ -11,47 +11,48 @@ export function isExiftoolCandidate(mimeType: string, fileName: string): boolean
     return isExiftoolExtension(fileName);
 }
 
+let cachedExiftoolPath: string | null = null;
+
 async function getExiftoolPath(): Promise<string> {
+    if (cachedExiftoolPath) return cachedExiftoolPath;
+
     // Try system exiftool first, fall back to vendored
     try {
         const {stdout} = await execFileAsync('exiftool', ['-ver']);
-        if (stdout.trim()) return 'exiftool';
+        if (stdout.trim()) {
+            cachedExiftoolPath = 'exiftool';
+            return cachedExiftoolPath;
+        }
     } catch { /* not installed system-wide */
     }
 
     const {exiftool} = await import('exiftool-vendored');
-    return exiftool.exiftoolPath();
+    cachedExiftoolPath = await exiftool.exiftoolPath();
+    return cachedExiftoolPath;
 }
 
 export async function extractEmbeddedPreview(filePath: string, tmpDir: string, pathId: string): Promise<string | null> {
     try {
         const bin = await getExiftoolPath();
-        console.log(`[exiftool] binary: ${bin}`);
         const extractPath = path.join(tmpDir, `${pathId}-extract.jpg`);
 
-        // Try PreviewImage first (largest), then JpgFromRaw, then ThumbnailImage
-        // Use -b to write binary to stdout, then save to file ourselves
+        // Try PreviewImage (largest), then JpgFromRaw, then ThumbnailImage
         for (const tag of ['-PreviewImage', '-JpgFromRaw', '-ThumbnailImage']) {
             try {
-                console.log(`[exiftool] trying ${tag} on ${filePath}`);
                 const {stdout} = await execFileAsync(bin, ['-b', tag, filePath], {
                     encoding: 'buffer',
                     maxBuffer: 20 * 1024 * 1024,
                 });
-                console.log(`[exiftool] ${tag} returned ${stdout?.length ?? 0} bytes`);
                 if (stdout && stdout.length > 0) {
                     fs.writeFileSync(extractPath, stdout);
                     return extractPath;
                 }
-            } catch (e: any) {
-                console.log(`[exiftool] ${tag} failed: ${e.message?.split('\n')[0]}`);
+            } catch { /* tag not present, try next */
             }
         }
 
-        console.log(`[exiftool] no preview found for ${filePath}`);
         return null;
-    } catch (e: any) {
-        console.log(`[exiftool] error: ${e.message}`);
+    } catch {
         return null;
     }
 }
