@@ -159,27 +159,16 @@ export function EmailDraft({
         };
     }, [draft]);
 
-    // Auto-save existing drafts every 3s if content changed
-    const lastSavedRef = useRef<string>('');
+    // Save draft on unmount (navigation away / page leave)
+    const onAutoSaveRef = useRef(onAutoSave);
+    onAutoSaveRef.current = onAutoSave;
     useEffect(() => {
-        if (!email?.id || !onAutoSave) return;
-        const timer = setInterval(() => {
-            const current = getCurrentDraft();
-            const snapshot = JSON.stringify({
-                to: current.to,
-                cc: current.cc,
-                bcc: current.bcc,
-                subject: current.subject,
-                text: current.text
+        if (!email?.id) return;
+        return () => {
+            onAutoSaveRef.current?.(getCurrentDraft()).catch(() => {
             });
-            if (snapshot !== lastSavedRef.current) {
-                lastSavedRef.current = snapshot;
-                onAutoSave(current).catch(() => {
-                });
-            }
-        }, 3000);
-        return () => clearInterval(timer);
-        // eslint-disable-next-line react-hooks/exhaustive-deps -- getCurrentDraft and onAutoSave read from refs; email.id is the stable key
+        };
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- save on unmount only
     }, [email?.id]);
 
     // Handle send email functionality
