@@ -9,7 +9,7 @@
 | Database       | Path                                   | Purpose                                                       |
 |----------------|----------------------------------------|---------------------------------------------------------------|
 | Auth           | `{server}/users3.db`                   | User auth (better-auth managed)                               |
-| Eigen          | `{server}/eigen.db`                    | Share registry ([SHARE-PROPAGATION.md](SHARE-PROPAGATION.md)) |
+| Eigen          | `{server}/eigen.db`                    | Share registry ([ACL.md](ACL.md#share-registry))              |
 | Mount metadata | `{home}/mounts/{id}/metadata.db`       | Drive file/folder structure                                   |
 | Shared paths   | `{home}/mounts/shared.db`              | Files shared with this user                                   |
 | Contacts       | `{home}/eigen.contacts/contacts.db`    | Contact data                                                  |

@@ -187,37 +187,28 @@ Detailed architecture docs in `docs/`:
 
 | Doc                                                             | Topic                                                   |
 |-----------------------------------------------------------------|---------------------------------------------------------|
-| [CONTRIBUTING.md](docs/CONTRIBUTING.md)                         | Code style, patterns, development workflow              |
+| [CONTRIBUTING.md](docs/CONTRIBUTING.md)                         | Code style, patterns, development workflow, public API, hotkeys |
 | [DATABASE.md](docs/DATABASE.md)                                 | SQLite databases, ManagedDatabase, migrations           |
 | [STORAGE.md](docs/STORAGE.md)                                   | Storage backends, mount system, Home singleton          |
 | [SERVER-SETTINGS.md](docs/SERVER-SETTINGS.md)                   | ServerSettings, JsonStore, admin API, settings UI       |
 | [QUOTA.md](docs/QUOTA.md)                                       | Quota model, resolution, enforcement functions          |
 | [SSE.md](docs/SSE.md)                                           | Real-time events, adding SSE to new domains             |
-| [ACL.md](docs/ACL.md)                                           | Additive ACL inheritance, visibility, effective members |
-| [ORGANISATIONS-AND-TEAMS.md](docs/ORGANISATIONS-AND-TEAMS.md)   | Org/team model, team drives, prefixed owner IDs         |
-| [LAYOUT.md](docs/LAYOUT.md)                                     | AppShell, ColumnLayout, responsive patterns             |
-| [LAYOUT-SHARED-COMPONENTS.md](docs/LAYOUT-SHARED-COMPONENTS.md) | UI component lookup reference                           |
-| [LAYOUT-UI-LIST.md](docs/LAYOUT-UI-LIST.md)                     | List hooks and patterns                                 |
-| [LAYOUT-UI-DRIVE.md](docs/LAYOUT-UI-DRIVE.md)                   | Drive UI component reference                            |
+| [ACL.md](docs/ACL.md)                                           | ACL inheritance, share propagation, chat invite bubbling, reshare prevention |
+| [ORGANISATIONS-AND-TEAMS.md](docs/ORGANISATIONS-AND-TEAMS.md)   | Org/team model, team drives, prefixed owner IDs, People app |
+| [LAYOUT.md](docs/LAYOUT.md)                                     | AppShell, ColumnLayout, shared components, Drive UI, list patterns |
 | [CHAT.md](docs/CHAT.md)                                         | Chat rooms, slash commands, embedded chats              |
 | [COMMENTS_IN_DOCS.md](docs/COMMENTS_IN_DOCS.md)                 | Comment index, mentions, resolution tracking            |
 | [CALENDAR.md](docs/CALENDAR.md)                                 | Calendar, RRULE, sharing, team calendars                |
-| [SHARE-PROPAGATION.md](docs/SHARE-PROPAGATION.md)               | Push-based sharing, share registry                      |
-| [RESHARE-PREVENTION.md](docs/RESHARE-PREVENTION.md)             | Per-path sharing restriction flag                       |
 | [STICKIES.md](docs/STICKIES.md)                                 | Kanban board, Yjs data model                            |
 | [SLIDES.md](docs/SLIDES.md)                                     | Presentation editor, percentage coordinates             |
 | [SHEETS.md](docs/SHEETS.md)                                     | Spreadsheet, op-based Yjs sync                          |
 | [CLIPBOARD.md](docs/CLIPBOARD.md)                               | Inter-app copy-paste                                    |
 | [MEDIA-REFERENCES.md](docs/MEDIA-REFERENCES.md)                 | Name-based media/chat references in eigendocs           |
-| [HOTKEYS.md](docs/HOTKEYS.md)                                   | Keyboard shortcuts                                      |
 | [INLINE-EDITING.md](docs/INLINE-EDITING.md)                     | Inline text file editing in Drive                       |
 | [PREVIEWS.md](docs/PREVIEWS.md)                                 | File preview system, text/image/video previews          |
-| [PUBLIC-API.md](docs/PUBLIC-API.md)                             | Public endpoints, avatar resolution                     |
-| [PEOPLE.md](docs/PEOPLE.md)                                     | Org/team management UI                                  |
 | [NOTIFICATIONS.md](docs/NOTIFICATIONS.md)                       | Error/success toasts, SSE notification pattern          |
 | [TESTING.md](docs/TESTING.md)                                   | Test setup, patterns, test files                        |
 | [DOCKER.md](docs/DOCKER.md)                                     | Docker deployment                                       |
-| [ACL_BUBBLING.md](docs/ACL_BUBBLING.md)                         | Chat invite ACL bubbling to container                   |
 | [IMAP.md](docs/IMAP.md)                                         | Maildir storage format, Dovecot compatibility           |
 | [TYPOGRAPHY.md](docs/TYPOGRAPHY.md)                             | Self-hosted font system, FontPicker                     |
 

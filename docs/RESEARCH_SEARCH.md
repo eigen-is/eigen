@@ -375,7 +375,7 @@ For v1, shared Drive path names are searchable via the user's index (indexed on 
 
 ### Search UI
 
-- **Trigger**: `Mod+K` hotkey via `@tanstack/react-hotkeys` (see `docs/HOTKEYS.md`)
+- **Trigger**: `Mod+K` hotkey via `@tanstack/react-hotkeys` (see Hotkeys section in `docs/CONTRIBUTING.md`)
 - **Component**: `packages/ui/src/components/layout/app/search-dialog.tsx`
 - **Pattern**: Dialog/command palette, rendered inside `EigenApp` provider stack
 - **Debounce**: 200ms on input before API call
