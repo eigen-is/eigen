@@ -7,6 +7,7 @@ export * from './drive';
 export * from './label';
 export * from './mail';
 export * from './mount';
+export * from './notification';
 export * from './owner';
 export * from './sse';
 export * from './people';

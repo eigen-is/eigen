@@ -80,22 +80,23 @@ bun run check          # typecheck + test
 
 ### Backend
 
-| Concept               | Location                                    | Pattern                                                                                                    |
-|-----------------------|---------------------------------------------|------------------------------------------------------------------------------------------------------------|
-| **Home singleton**    | `apps/api/src/lib/home/home.ts`             | Per-user instance managing DB connections + domain services. Subclasses: `UserHome`, `TeamHome`, `OrgHome` |
-| **Domain classes**    | `apps/api/src/lib/[domain]/[domain].ts`     | Business logic (Drive, Maildir, Contacts, Calendar, ChatRoom)                                              |
-| **Routes**            | `apps/api/src/routes/[domain].ts`           | Thin Elysia routers, `{auth: true}` for protected                                                          |
-| **DB schemas**        | `apps/api/src/lib/[domain]/schema.ts`       | Drizzle ORM schemas                                                                                        |
-| **DB config**         | `apps/api/src/lib/[domain]/db-config.ts`    | `DatabaseConfig` with versioned migrations                                                                 |
-| **ManagedDatabase**   | `apps/api/src/lib/core/managed-database.ts` | WAL mode, versioning, auto-sync, dirty tracking                                                            |
-| **Storage backends**  | `apps/api/src/lib/storage/`                 | `LocalKeyStorage`, `LocalStorage`, `S3Storage`                                                             |
-| **Errors**            | `apps/api/src/lib/core/errors.ts`           | `throw new ApiError(status, message)`                                                                      |
-| **SSE emission**      | `apps/api/src/lib/[domain]/sse-events.ts`   | `home.notify(buildEvent(...))`                                                                             |
-| **Auth**              | `apps/api/src/lib/auth/auth.ts`             | better-auth with org/team/2FA plugins                                                                      |
+| Concept               | Location                                     | Pattern                                                                                                    |
+|-----------------------|----------------------------------------------|------------------------------------------------------------------------------------------------------------|
+| **Home singleton**    | `apps/api/src/lib/home/home.ts`              | Per-user instance managing DB connections + domain services. Subclasses: `UserHome`, `TeamHome`, `OrgHome` |
+| **Domain classes**    | `apps/api/src/lib/[domain]/[domain].ts`      | Business logic (Drive, Maildir, Contacts, Calendar, ChatRoom)                                              |
+| **Routes**            | `apps/api/src/routes/[domain].ts`            | Thin Elysia routers, `{auth: true}` for protected                                                          |
+| **DB schemas**        | `apps/api/src/lib/[domain]/schema.ts`        | Drizzle ORM schemas                                                                                        |
+| **DB config**         | `apps/api/src/lib/[domain]/db-config.ts`     | `DatabaseConfig` with versioned migrations                                                                 |
+| **ManagedDatabase**   | `apps/api/src/lib/core/managed-database.ts`  | WAL mode, versioning, auto-sync, dirty tracking                                                            |
+| **Storage backends**  | `apps/api/src/lib/storage/`                  | `LocalKeyStorage`, `LocalStorage`, `S3Storage`                                                             |
+| **Errors**            | `apps/api/src/lib/core/errors.ts`            | `throw new ApiError(status, message)`                                                                      |
+| **SSE emission**      | `apps/api/src/lib/[domain]/sse-events.ts`    | `home.broadcast(buildEvent(...))`                                                                          |
+| **Notifications**     | `apps/api/src/lib/notification-center/`      | `home.notifications.persist({...})` — per-user SQLite, broadcasts SSE                                      |
+| **Auth**              | `apps/api/src/lib/auth/auth.ts`              | better-auth with org/team/2FA plugins                                                                      |
 | **Server settings**   | `apps/api/src/lib/config/server-settings.ts` | Runtime-adjustable quotas & defaults via `JsonStore<ServerSettings>`                                       |
-| **Quota resolution**  | `apps/api/src/lib/config/quota.ts`          | `resolveUserQuotas()` — server default + team overrides (most permissive wins)                             |
-| **Quota enforcement** | `apps/api/src/lib/config/enforcement.ts`    | `enforceFileUpload`, `enforceBatchUpload`, `enforceAvatarUpload`                                           |
-| **Singleton factory** | `apps/api/src/utils/singleton.ts`           | `createAsyncSingleton()` for Home/DB instances                                                             |
+| **Quota resolution**  | `apps/api/src/lib/config/quota.ts`           | `resolveUserQuotas()` — server default + team overrides (most permissive wins)                             |
+| **Quota enforcement** | `apps/api/src/lib/config/enforcement.ts`     | `enforceFileUpload`, `enforceBatchUpload`, `enforceAvatarUpload`                                           |
+| **Singleton factory** | `apps/api/src/utils/singleton.ts`            | `createAsyncSingleton()` for Home/DB instances                                                             |
 
 ### Frontend
 
@@ -146,8 +147,9 @@ These patterns have caused bugs across multiple domains:
 
 ### SSE Pattern
 
-Backend: mutation → `home.notify(buildEvent())` → SSE stream
-Frontend: `useSSE` → domain handler → `queryClient.invalidateQueries()` (+ toast for curated remote events only)
+Backend: mutation → `home.broadcast(buildEvent())` → SSE stream
+Frontend: `useSSE` → domain handler → `queryClient.invalidateQueries()`
+Notifications: `home.notifications.persist({...})` → writes to DB + broadcasts `notification:created` SSE event → toast
 
 ### Eigen File Types
 
@@ -185,32 +187,33 @@ Resolution: `parseOwnerId()` in `packages/lib/src/types/owner.ts`
 
 Detailed architecture docs in `docs/`:
 
-| Doc                                                             | Topic                                                   |
-|-----------------------------------------------------------------|---------------------------------------------------------|
-| [CONTRIBUTING.md](docs/CONTRIBUTING.md)                         | Code style, patterns, development workflow, public API, hotkeys |
-| [DATABASE.md](docs/DATABASE.md)                                 | SQLite databases, ManagedDatabase, migrations           |
-| [STORAGE.md](docs/STORAGE.md)                                   | Storage backends, mount system, Home singleton          |
-| [SERVER-SETTINGS.md](docs/SERVER-SETTINGS.md)                   | ServerSettings, JsonStore, admin API, settings UI       |
-| [QUOTA.md](docs/QUOTA.md)                                       | Quota model, resolution, enforcement functions          |
-| [SSE.md](docs/SSE.md)                                           | Real-time events, adding SSE to new domains             |
+| Doc                                                             | Topic                                                                        |
+|-----------------------------------------------------------------|------------------------------------------------------------------------------|
+| [CONTRIBUTING.md](docs/CONTRIBUTING.md)                         | Code style, patterns, development workflow, public API, hotkeys              |
+| [DATABASE.md](docs/DATABASE.md)                                 | SQLite databases, ManagedDatabase, migrations                                |
+| [STORAGE.md](docs/STORAGE.md)                                   | Storage backends, mount system, Home singleton                               |
+| [SERVER-SETTINGS.md](docs/SERVER-SETTINGS.md)                   | ServerSettings, JsonStore, admin API, settings UI                            |
+| [QUOTA.md](docs/QUOTA.md)                                       | Quota model, resolution, enforcement functions                               |
+| [SSE.md](docs/SSE.md)                                           | Real-time events, adding SSE to new domains                                  |
 | [ACL.md](docs/ACL.md)                                           | ACL inheritance, share propagation, chat invite bubbling, reshare prevention |
-| [ORGANISATIONS-AND-TEAMS.md](docs/ORGANISATIONS-AND-TEAMS.md)   | Org/team model, team drives, prefixed owner IDs, People app |
-| [LAYOUT.md](docs/LAYOUT.md)                                     | AppShell, ColumnLayout, shared components, Drive UI, list patterns |
-| [CHAT.md](docs/CHAT.md)                                         | Chat rooms, slash commands, embedded chats              |
-| [COMMENTS_IN_DOCS.md](docs/COMMENTS_IN_DOCS.md)                 | Comment index, mentions, resolution tracking            |
-| [CALENDAR.md](docs/CALENDAR.md)                                 | Calendar, RRULE, sharing, team calendars                |
-| [STICKIES.md](docs/STICKIES.md)                                 | Kanban board, Yjs data model                            |
-| [SLIDES.md](docs/SLIDES.md)                                     | Presentation editor, percentage coordinates             |
-| [SHEETS.md](docs/SHEETS.md)                                     | Spreadsheet, op-based Yjs sync                          |
-| [CLIPBOARD.md](docs/CLIPBOARD.md)                               | Inter-app copy-paste                                    |
-| [MEDIA-REFERENCES.md](docs/MEDIA-REFERENCES.md)                 | Name-based media/chat references in eigendocs           |
-| [INLINE-EDITING.md](docs/INLINE-EDITING.md)                     | Inline text file editing in Drive                       |
-| [PREVIEWS.md](docs/PREVIEWS.md)                                 | File preview system, text/image/video previews          |
-| [NOTIFICATIONS.md](docs/NOTIFICATIONS.md)                       | Error/success toasts, SSE notification pattern          |
-| [TESTING.md](docs/TESTING.md)                                   | Test setup, patterns, test files                        |
-| [DOCKER.md](docs/DOCKER.md)                                     | Docker deployment                                       |
-| [IMAP.md](docs/IMAP.md)                                         | Maildir storage format, Dovecot compatibility           |
-| [TYPOGRAPHY.md](docs/TYPOGRAPHY.md)                             | Self-hosted font system, FontPicker                     |
+| [ORGANISATIONS-AND-TEAMS.md](docs/ORGANISATIONS-AND-TEAMS.md)   | Org/team model, team drives, prefixed owner IDs, People app                  |
+| [LAYOUT.md](docs/LAYOUT.md)                                     | AppShell, ColumnLayout, shared components, Drive UI, list patterns           |
+| [CHAT.md](docs/CHAT.md)                                         | Chat rooms, slash commands, embedded chats                                   |
+| [COMMENTS_IN_DOCS.md](docs/COMMENTS_IN_DOCS.md)                 | Comment index, mentions, resolution tracking                                 |
+| [CALENDAR.md](docs/CALENDAR.md)                                 | Calendar, RRULE, sharing, team calendars                                     |
+| [STICKIES.md](docs/STICKIES.md)                                 | Kanban board, Yjs data model                                                 |
+| [SLIDES.md](docs/SLIDES.md)                                     | Presentation editor, percentage coordinates                                  |
+| [SHEETS.md](docs/SHEETS.md)                                     | Spreadsheet, op-based Yjs sync                                               |
+| [CLIPBOARD.md](docs/CLIPBOARD.md)                               | Inter-app copy-paste                                                         |
+| [MEDIA-REFERENCES.md](docs/MEDIA-REFERENCES.md)                 | Name-based media/chat references in eigendocs                                |
+| [INLINE-EDITING.md](docs/INLINE-EDITING.md)                     | Inline text file editing in Drive                                            |
+| [PREVIEWS.md](docs/PREVIEWS.md)                                 | File preview system, text/image/video previews                               |
+| [NOTIFICATIONS.md](docs/NOTIFICATIONS.md)                       | Error/success toasts, SSE notification pattern                               |
+| [TODO-NOTIFICATION-CENTER.md](docs/TODO-NOTIFICATION-CENTER.md) | Notification center: persistent bell, per-user DB                            |
+| [TESTING.md](docs/TESTING.md)                                   | Test setup, patterns, test files                                             |
+| [DOCKER.md](docs/DOCKER.md)                                     | Docker deployment                                                            |
+| [IMAP.md](docs/IMAP.md)                                         | Maildir storage format, Dovecot compatibility                                |
+| [TYPOGRAPHY.md](docs/TYPOGRAPHY.md)                             | Self-hosted font system, FontPicker                                          |
 
 | [Code Reviews](codereviews/OVERVIEW.md)                         | Full-stack code review findings + fix priorities |
 
@@ -218,7 +221,6 @@ Detailed architecture docs in `docs/`:
 
 | Doc                                                             | Topic                                    |
 |-----------------------------------------------------------------|------------------------------------------|
-| [TODO-NOTIFICATION-CENTER.md](docs/TODO-NOTIFICATION-CENTER.md) | Persistent notification center design    |
 | [TODO-MENTIONS.md](docs/TODO-MENTIONS.md)                       | Cross-app @mention system                |
 | [TODO-CHAT-ACL.md](docs/TODO-CHAT-ACL.md)                       | Chat membership vs ACL design discussion |
 | [TODO-ENCRYPTION.md](docs/TODO-ENCRYPTION.md)                   | E2E encryption design                    |

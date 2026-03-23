@@ -14,7 +14,7 @@ import MailDB from "./maildb"
 import {MaildirStore} from "./maildir-store"
 import type {Home} from "../home"
 import {draftToMailOptions, sendMail} from './sender'
-import {type SSEventMailData, SSEventType} from "@workspace/lib/types/sse"
+import {SSEventType} from "@workspace/lib/types/sse"
 import {buildMailEvent} from './sse-events'
 import {ApiError, STANDARD_MAILBOXES} from '../core'
 
@@ -32,8 +32,8 @@ export default class Maildir {
         this.store = new MaildirStore(home.homeDir)
     }
 
-    private emit(type: Parameters<typeof buildMailEvent>[0], mail: SSEventMailData, options?: Parameters<typeof buildMailEvent>[2]): void {
-        this.home.notify(buildMailEvent(type, mail, options))
+    private emit(type: Parameters<typeof buildMailEvent>[0], mail: Parameters<typeof buildMailEvent>[1]): void {
+        this.home.broadcast(buildMailEvent(type, mail))
     }
 
     async init() {
@@ -138,11 +138,7 @@ export default class Maildir {
         await this.store.deleteMessage(email.mailbox, email.filename)
         this.db.deleteEmail(messageId)
 
-        this.emit(SSEventType.MAIL_DELETED, {
-            messageId,
-            mailbox: email.mailbox,
-            subject: email.subject,
-        })
+        this.emit(SSEventType.MAIL_DELETED, {messageId, mailbox: email.mailbox})
     }
 
     async messageMove(messageId: string, targetMailbox: string): Promise<void> {
@@ -158,12 +154,7 @@ export default class Maildir {
         await this.store.moveMessage(sourceMailbox, email.filename, targetMailbox)
         this.db.moveEmail(messageId, targetMailbox)
 
-        this.emit(SSEventType.MAIL_MOVED, {
-            messageId,
-            mailbox: sourceMailbox,
-            toMailbox: targetMailbox,
-            subject: email.subject,
-        })
+        this.emit(SSEventType.MAIL_MOVED, {messageId, mailbox: sourceMailbox, toMailbox: targetMailbox})
     }
 
     async messageCopy(messageId: string, targetMailbox: string): Promise<void> {
@@ -249,11 +240,7 @@ export default class Maildir {
         parsed.mailbox = 'Drafts'
         this.db.addEmail(parsed as EmailSummary)
 
-        this.emit(SSEventType.MAIL_DRAFT_UPDATED, {
-            messageId: uniqueId,
-            mailbox: 'Drafts',
-            subject: parsed.subject,
-        })
+        this.emit(SSEventType.MAIL_DRAFT_UPDATED, {messageId: uniqueId, mailbox: 'Drafts'})
 
         return parsed as EmailDraft
     }
@@ -279,11 +266,7 @@ export default class Maildir {
 
             if (sent) {
                 await this.messageMove(mail.id, 'Sent');
-                this.emit(SSEventType.MAIL_SENT, {
-                    messageId: mail.id,
-                    mailbox: 'Sent',
-                    subject: mail.subject,
-                })
+                this.emit(SSEventType.MAIL_SENT, {messageId: mail.id, mailbox: 'Sent'})
             }
         } catch (error) {
             console.error('Error sending email:', error)
@@ -333,9 +316,17 @@ export default class Maildir {
                         applyFlagsFromFilename(parsed, fileName)
                         parsed.filename = fileName
                         this.db.addEmail(parsed as EmailSummary)
-                        this.emit(SSEventType.MAIL_RECEIVED, {
-                            messageId: id, mailbox, subject: parsed.subject, fromShort: parsed.fromShort,
-                        })
+                        this.emit(SSEventType.MAIL_RECEIVED, {messageId: id, mailbox})
+                        if (parsed.fromShort) {
+                            const fromEmail = parsed.from?.value?.[0]?.address ?? null;
+                            this.home.notifications?.persist({
+                                type: 'mail',
+                                actorEmail: fromEmail,
+                                title: 'New email',
+                                body: parsed.subject ? `From ${parsed.fromShort}: ${parsed.subject}` : `New email from ${parsed.fromShort}`,
+                                tag: `mail:${id}`,
+                            });
+                        }
                     }
                 } catch (e: any) {
                     if (e.code !== 'ENOENT') console.warn(`syncMailbox: failed to parse ${fileName}:`, e.message)

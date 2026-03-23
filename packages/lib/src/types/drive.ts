@@ -37,6 +37,10 @@ export type DrivePathType =
     | DriveTypeFile;
 export type DriveVisibility = 'private' | 'public-read' | 'public-write';
 
+export function stripEigenExtension(name: string): string {
+    return name.replace(/\.eigen(doc|stickies|slides|sheets|chat)$/, '');
+}
+
 export type DriveCollabType = DriveTypeDoc | DriveTypeStickies | DriveTypeSlides | DriveTypeSheets;
 export type DriveChatType = DriveTypeChat;
 export type DriveContainerType = DriveTypeFolder | DriveCollabType | DriveChatType;

@@ -12,33 +12,25 @@ export function handleContactsSSEvent(event: SSEvent, queryClient: QueryClient, 
             invalidateContactCreated(queryClient, userId);
             return true;
 
-        case SSEventType.CONTACT_UPDATED: {
-            if (!('contact' in event)) return false;
-            invalidateContactUpdated(queryClient, userId, event.contact.contactId);
+        case SSEventType.CONTACT_UPDATED:
+            invalidateContactUpdated(queryClient, userId, event.contactId);
             return true;
-        }
 
-        case SSEventType.CONTACT_DELETED: {
-            if (!('contact' in event)) return false;
-            invalidateContactDeleted(queryClient, userId, event.contact.contactId);
+        case SSEventType.CONTACT_DELETED:
+            invalidateContactDeleted(queryClient, userId, event.contactId);
             return true;
-        }
 
         case SSEventType.LABEL_CREATED:
             invalidateLabelCreated(queryClient, userId);
             return true;
 
-        case SSEventType.LABEL_UPDATED: {
-            if (!('label' in event)) return false;
-            invalidateLabelUpdated(queryClient, userId, event.label.labelId);
+        case SSEventType.LABEL_UPDATED:
+            invalidateLabelUpdated(queryClient, userId, event.labelId);
             return true;
-        }
 
-        case SSEventType.LABEL_DELETED: {
-            if (!('label' in event)) return false;
-            invalidateLabelDeleted(queryClient, userId, event.label.labelId);
+        case SSEventType.LABEL_DELETED:
+            invalidateLabelDeleted(queryClient, userId, event.labelId);
             return true;
-        }
 
         default:
             return false;

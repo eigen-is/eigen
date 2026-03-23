@@ -104,7 +104,8 @@
       "WebFetch(domain:bundlephobia.com)",
       "WebFetch(domain:gist.github.com)",
       "WebFetch(domain:simplewebauthn.dev)",
-      "Bash(2)"
+      "Bash(2)",
+      "Bash(find /Users/reinder/Documents/GitHub/eigen -type f \\\\\\(-name *notif* -o -name *announce* \\\\\\))"
     ]
   },
   "bypassPermissions": "bypassPermissions"

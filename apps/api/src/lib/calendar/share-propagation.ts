@@ -36,7 +36,7 @@ export async function notifySharedCalendarUsers(
         try {
             if (atHome(userId)) {
                 const targetHome = await getHome(userId);
-                targetHome.notify(event);
+                targetHome.broadcast(event);
             }
         } catch (error) {
             console.error('Failed to notify shared calendar user:', error);
@@ -94,9 +94,10 @@ export async function propagateCalendarShare(
                     calendar.name,
                     calendar.color,
                     permission,
+                    ownerHome.user.email,
                 );
             } else {
-                targetHome.calendar.removeShare(ownerHome.user.id, calendar.id);
+                targetHome.calendar.removeShare(ownerHome.user.id, calendar.id, ownerHome.user.email);
             }
         } catch (error) {
             console.error('Failed to propagate calendar share:', error);

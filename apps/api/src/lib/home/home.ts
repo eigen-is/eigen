@@ -12,6 +12,7 @@ import {
 import type {Contacts} from '../contacts/contacts';
 import type Maildir from '../mail/maildir';
 import type {Calendar} from '../calendar/calendar';
+import type {NotificationCenter} from '../notification-center/notification-center';
 import type {SSEvent} from '@workspace/lib/types/sse';
 import {createAsyncSingleton} from '../../utils/singleton';
 import type {Drive} from '../drive';
@@ -30,6 +31,7 @@ export class Home {
     protected _contacts!: Contacts;
     protected _mail!: Maildir;
     protected _calendar!: Calendar;
+    protected _notifications!: NotificationCenter;
 
     protected initialized: boolean = false;
     protected initializationStarted: boolean = false;
@@ -50,6 +52,10 @@ export class Home {
     get mail(): Maildir { return this._mail; }
     get calendar(): Calendar { return this._calendar; }
 
+    get notifications(): NotificationCenter {
+        return this._notifications;
+    }
+
     public async init(autoCreateDefaultMount: boolean = false) {
         if (this.initialized) {
             return this;
@@ -66,6 +72,7 @@ export class Home {
         await this._contacts?.init();
         await this._mail?.init();
         await this._calendar?.init();
+        await this._notifications?.init();
 
         this.initialized = true;
         console.log(`[Home] Initialized for ${this.user.id}`);
@@ -154,6 +161,12 @@ export class Home {
             console.error('Failed to destruct calendar:', error);
         }
 
+        try {
+            await this._notifications?.destruct();
+        } catch (error) {
+            console.error('Failed to destruct notifications:', error);
+        }
+
         for (const [key, getter] of this.managedDatabases) {
             try {
                 const db = await getter();
@@ -169,7 +182,7 @@ export class Home {
         throw new Error('Not implemented');
     }
 
-    public notify(event: SSEvent) {
+    public broadcast(event: SSEvent) {
         for (const listener of this.sseListeners) {
             listener(event);
         }
