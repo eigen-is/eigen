@@ -1,23 +1,23 @@
 # Notification System
 
 Notifications follow a three-layer pattern: error toasts in hooks, success toasts for fire-and-forget operations,
-and curated remote event notifications in SSE handlers.
+and persistent notifications via the notification center.
 
-## 1. Error toasts -- centralized in mutation hooks
+## 1. Error toasts — centralized in mutation hooks
 
 Every `useMutation` in `packages/lib/src/core/[domain]/hooks/` has `onError: onMutationError` which calls
 `toast.error(getErrorMessage(error))`. The `AppError` class preserves the HTTP status code from Eden Treaty
 responses, so errors show as e.g. "Not enough storage (413)".
 
-Apps must NOT add their own `try/catch` + `toast.error()` around mutations -- the hook already does it.
+Apps must NOT add their own `try/catch` + `toast.error()` around mutations — the hook already does it.
 Apps only need `try/catch` when they must do extra work on failure (e.g., reset UI state), and in that case
 they must NOT show a toast.
 
 See: `packages/lib/src/core/api-error.ts`
 
-## 2. Success toasts -- only for fire-and-forget operations
+## 2. Success toasts — only for fire-and-forget operations
 
-Most mutations don't need success toasts -- the UI update from cache invalidation is the feedback. Success toasts
+Most mutations don't need success toasts — the UI update from cache invalidation is the feedback. Success toasts
 are added only to hooks where the result isn't immediately visible:
 
 | Hook                      | Toast                    | Why                             |
@@ -29,68 +29,48 @@ are added only to hooks where the result isn't immediately visible:
 | `useUpdateServerS3Config` | "S3 configuration saved" | Subtle change                   |
 | `useUpdateACL`            | "Sharing updated"        | Confirmation of access change   |
 
-## 3. Remote event notifications -- curated in SSE handlers
+## 3. Persistent notifications — via notification center
 
-`SSEProvider` no longer shows generic toasts for all SSE events. Instead, specific SSE handlers show toasts only
-for events that genuinely need user attention.
+Cross-user events (shares, invites, mentions, incoming mail) create persistent notifications in the recipient's
+`NotificationCenter`. Each notification is written to a per-user SQLite database and an SSE event
+(`notification:created`) is broadcast with `title` + `body` for the toast.
 
-### SSE event routing
+The frontend `handleNotificationSSEvent()` shows the toast and invalidates notification queries. Domain SSE
+handlers do NOT show toasts — they only invalidate caches.
 
-SSE events are per-user (each user subscribes to their own Home's event stream via `requireSelf()`). Events fall
-into two categories:
+See [NOTIFICATION-CENTER.md](NOTIFICATION-CENTER.md) for the full architecture.
 
-**Self-triggered events** -- your own action bounces back to your Home for cache invalidation. These never need
-a toast because the UI already reflects the change:
+### What creates notifications
 
-- All drive CRUD (create, delete, rename, move, upload)
-- All mail operations (delete, move, read, flag, draft, sent)
-- All calendar CRUD (create/update/delete events and calendars)
-- All contacts/labels
-- Chat messages (emitted on the chat room owner's Home)
+| Event                  | Notification title                    | Source                     |
+|------------------------|---------------------------------------|----------------------------|
+| Drive share            | `"file" was shared with you`          | `Drive.receiveACLChange()` |
+| Drive unshare          | `"file" is no longer shared with you` | `Drive.receiveACLChange()` |
+| Calendar share         | `"calendar" was shared with you`      | `Calendar.receiveShare()`  |
+| Calendar unshare       | `"calendar" is no longer shared`      | `Calendar.removeShare()`   |
+| Calendar invite        | `New invitation: "event"`             | `invite-propagation.ts`    |
+| Calendar invite update | `Updated: "event"`                    | `invite-propagation.ts`    |
+| Calendar invite cancel | `Cancelled: "event"`                  | `invite-propagation.ts`    |
+| Incoming mail          | `New email` + sender/subject          | `Maildir` sync             |
+| Chat @mention          | `You were mentioned in "chat"`        | `ChatRoom.postMessage()`   |
+| Comment @mention       | `You were mentioned in "doc"`         | `ChatRoom.postMessage()`   |
 
-**Recipient-only events** -- explicitly propagated to another user's Home. The actor never receives these. These
-are the only events that show toasts:
+### What does NOT create notifications
 
-| SSE Handler | Event                      | Toast                          | Propagation mechanism                            |
-|-------------|----------------------------|--------------------------------|--------------------------------------------------|
-| Mail        | `mail:received`            | "New email -- From X: subject" | `doSyncMailbox()` on recipient's maildir         |
-| Drive       | `drive:acl-shared`         | "Item shared with you -- name" | `propagateACLChange()` → recipient's home        |
-| Drive       | `drive:acl-unshared`       | "Item unshared -- name"        | `propagateACLChange()` → recipient's home        |
-| Calendar    | `calendar:shared`          | "Calendar shared -- name"      | `notifySharedCalendarUsers()` → recipient's home |
-| Calendar    | `calendar:unshared`        | "Calendar unshared -- name"    | `notifySharedCalendarUsers()` → recipient's home |
-| Calendar    | `calendar:invite-received` | "New invitation -- title"      | `propagateInvitation()` → attendee's home        |
-
-### What does NOT show a toast
-
-- Your own drive operations -- the UI already reflects these
-- Your own contact/label changes -- single-user domain, UI updates immediately
-- Your own calendar event changes -- calendar view updates via cache invalidation
-- Settings changes from yourself -- the hook's `onSuccess` toast confirms it
-- Shared drive file activity from collaborators -- too spammy; visible when they navigate there
-- Mail operations you initiated (delete, move, flag) -- UI reflects these immediately
-- Chat messages -- no way to distinguish your own messages from others' (chat room owner's Home receives all)
-
-## SSEventNotification type
-
-The `SSEventNotification` mixin (`{body, tag?, link?}`) is still defined in `packages/lib/src/types/sse.ts` and
-used in the SSE event type definitions. The frontend no longer checks `isSSEventNotification()` to decide what to
-toast, but the type is kept for two reasons:
-
-1. SSE event builders on the backend still produce `body`/`title`/`link` fields
-2. These fields map directly to a future notification DB schema
-
-## Future: Notification Center
-
-See [TODO-NOTIFICATION-CENTER.md](TODO-NOTIFICATION-CENTER.md) for the full design.
+- Your own drive operations — the UI already reflects these
+- Your own contact/label changes — single-user domain
+- Your own calendar event changes — calendar view updates via cache invalidation
+- Settings changes from yourself — the hook's `onSuccess` toast confirms it
+- Shared drive file activity from collaborators — too spammy
+- Mail operations you initiated (delete, move, flag) — UI reflects these immediately
 
 ## Related Files
 
-- `packages/lib/src/core/api-error.ts` -- `AppError`, `getErrorMessage`, `onMutationError`
-- `packages/lib/src/types/sse.ts` -- `SSEvent` types, `SSEventNotification` mixin
-- `packages/ui/src/components/layout/sse-provider/sse-provider.tsx` -- just calls `useSSE()`, no toasts
-- `packages/lib/src/core/sse/hooks/use-sse.ts` -- dispatches SSE events to domain handlers
-- `packages/lib/src/core/[domain]/sse-handlers.ts` -- cache invalidation + curated notification toasts
-- `packages/lib/src/core/[domain]/hooks/*.ts` -- `onError` + selective `onSuccess` toasts
-- `apps/api/src/lib/drive/acl-propagation.ts` -- drive share propagation to recipients
-- `apps/api/src/lib/calendar/share-propagation.ts` -- calendar share propagation
-- `apps/api/src/lib/calendar/invite-propagation.ts` -- calendar invite propagation
+- `packages/lib/src/core/api-error.ts` — `AppError`, `getErrorMessage`, `onMutationError`
+- `packages/lib/src/types/sse.ts` — `SSEvent` types (minimal cache-invalidation payloads)
+- `packages/ui/src/components/layout/sse-provider/sse-provider.tsx` — just calls `useSSE()`, no toasts
+- `packages/lib/src/core/sse/hooks/use-sse.ts` — dispatches SSE events to domain handlers
+- `packages/lib/src/core/[domain]/sse-handlers.ts` — cache invalidation only (no toasts)
+- `packages/lib/src/core/notification/sse-handlers.ts` — shows toasts for `notification:created`
+- `packages/lib/src/core/[domain]/hooks/*.ts` — `onError` + selective `onSuccess` toasts
+- `apps/api/src/lib/notification-center/` — `NotificationCenter` domain service

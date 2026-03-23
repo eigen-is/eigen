@@ -3,7 +3,7 @@
 > **TLDR**: Persistent notification bell/dropdown in topbar. `NotificationCenter` is a Home domain service (like
 > Calendar, Contacts) with per-user SQLite database. `home.notify()` renamed to `home.broadcast()` (SSE push). Toast
 > notifications removed from individual SSE handlers — toasts now come exclusively from the notification SSE handler
-> when a new notification arrives.
+> when a new notification arrives. SSE events stripped to minimal cache-invalidation payloads across all domains.
 
 ## Architecture
 
@@ -36,6 +36,12 @@ The new flow for cross-user events:
 3. home.broadcast(domainEvent)         → existing SSE push for cache invalidation
 ```
 
+### SSE Event Slim-Down
+
+All SSE events stripped to carry only the minimum data needed for frontend cache invalidation. No more `title`, `body`,
+`tag`, `link`, `SSEventNotification` mixin, or full domain objects (`DrivePath`, `ChatMessage`, etc.) on SSE events.
+The notification SSE event carries only `title` and optional `body` for the toast.
+
 ### Toast Migration
 
 **Before**: 7 toast calls scattered across 3 SSE handlers (drive, mail, calendar).
@@ -61,19 +67,19 @@ data/home/{userId}/eigen.notifications/notifications.db
 // apps/api/src/lib/notification-center/schema.ts
 export const notifications = sqliteTable('notifications', {
     id: text('id').primaryKey(),
-    type: text('type').notNull(),                                       // 'share' | 'unshare' | 'invite' | 'mail' | ...
-    actorEmail: text('actorEmail'),                                     // who triggered it (null for system)
-    title: text('title').notNull(),                                     // "Report.pdf was shared with you"
-    body: text('body'),                                                 // optional extra detail
-    link: text('link'),                                                 // deep link path
-    tag: text('tag').unique(),                                          // dedup key (NULL = no dedup)
+    type: text('type').notNull(),
+    actorEmail: text('actorEmail'),
+    title: text('title').notNull(),
+    body: text('body'),
+    tag: text('tag').unique(),
     read: integer('read', {mode: 'boolean'}).notNull().default(false),
     createdAt: integer('createdAt', {mode: 'timestamp'}).notNull().default(sql`(unixepoch())`),
 });
 ```
 
-The `tag` column with `UNIQUE` constraint enables upsert-based deduplication. `NULL` tags are exempt (SQLite treats
-NULLs as distinct).
+The `tag` column with `UNIQUE` constraint enables `INSERT ... ON CONFLICT(tag) DO UPDATE` upsert. Multiple mentions in
+the same chat produce one notification (refreshed, not duplicated). `NULL` tags are exempt (SQLite treats NULLs as
+distinct).
 
 ## API Routes
 
@@ -89,21 +95,44 @@ DELETE /notifications/:ownerId/:id                 Dismiss
 
 ## Notification Sources
 
-| Source           | Where persisted                      | Tag format                           |
-|------------------|--------------------------------------|--------------------------------------|
-| Drive share      | `Drive.receiveACLChange()` (shared)  | `share:{ownerId}:{mountId}:{pathId}` |
-| Drive unshare    | `Drive.receiveACLChange()` (removed) | (no tag — always new)                |
-| Calendar share   | `Calendar.receiveShare()`            | `cal-share:{calId}:{ownerUserId}`    |
-| Calendar unshare | `Calendar.receiveUnshare()`          | (no tag)                             |
-| Calendar invite  | `invite-propagation.ts`              | `cal-invite:{eventId}`               |
-| Incoming mail    | `Maildir.receive()`                  | `mail:{messageId}`                   |
+| Source                 | Where persisted                          | Type                        | Tag format                                          |
+|------------------------|------------------------------------------|-----------------------------|-----------------------------------------------------|
+| Drive share            | `Drive.receiveACLChange()` (new share)   | `share`                     | `share:{ownerId}:{mountId}:{pathId}`                |
+| Drive unshare          | `Drive.receiveACLChange()` (removed)     | `unshare`                   | (no tag)                                            |
+| Calendar share         | `Calendar.receiveShare()`                | `calendar-share`            | `calendar-share:{calId}:{ownerUserId}`              |
+| Calendar unshare       | `Calendar.removeShare()`                 | `calendar-unshare`          | (no tag)                                            |
+| Calendar invite        | `invite-propagation.ts`                  | `calendar-invite`           | `calendar-invite:{eventId}`                         |
+| Calendar invite update | `invite-propagation.ts`                  | `calendar-invite-updated`   | `calendar-invite:{eventId}`                         |
+| Calendar invite cancel | `invite-propagation.ts`                  | `calendar-invite-cancelled` | `calendar-invite:{eventId}`                         |
+| Incoming mail          | `Maildir` sync                           | `mail`                      | `mail:{messageId}`                                  |
+| Chat @mention          | `ChatRoom.postMessage()`                 | `mention-chat`              | `mention:{ownerId}:{mountId}:{chatId}:{email}`      |
+| Comment @mention       | `ChatRoom.postMessage()` (embedded chat) | `mention-comment`           | `mention:{ownerId}:{mountId}:{containerId}:{email}` |
+
+`actorEmail` is set on all sources — the sharer, organizer, mail sender, or mention author.
 
 ## Frontend
 
 ### Topbar Bell
 
-`NotificationBell` in topbar between document title and user dropdown. Shows unread count badge. Click opens popover
-with latest notifications. Each notification: avatar + title + timestamp. Click navigates via `link`, marks as read.
+`NotificationBell` in topbar between document title and user dropdown. Shows unread count badge (fetched always).
+Notification list fetched lazily only when popover opens.
+
+### Link Resolution
+
+Links are constructed client-side based on notification `type` and `tag`:
+
+- `share`, `mention-chat`, `mention-comment` → async: fetches `DrivePath` via API on click, routes to correct app
+  using `getDocumentUrl()` (eigendoc → Docs, eigenchat → Chat, etc.) or falls back to Drive
+- `calendar-*` → `getCalendarAppUrl()`
+- `mail` → `getMailAppUrl('box/inbox')`
+- `unshare`, `calendar-unshare` → not clickable (resource no longer accessible)
+
+No URLs stored in the database — `tag` contains the IDs, frontend resolves using `get*AppUrl()` helpers from `api.ts`.
+
+### Display Names
+
+Eigen extensions (`.eigendoc`, `.eigenstickies`, etc.) are stripped from notification titles using
+`stripEigenExtension()` from `packages/lib/src/types/drive.ts`.
 
 ### SSE Handler
 
@@ -113,24 +142,25 @@ with latest notifications. Each notification: avatar + title + timestamp. Click 
 
 A full notification page in Space app can be added later with search, filtering, and pagination.
 
-## SSE Events
+## SSE Event
 
 ```typescript
-// Added to SSEventType
-NOTIFICATION_CREATED: 'notification:created'
-
-// New SSE event type
-type SSEventNotificationCreated = SSEventBase & {
+type SSEventNotificationCreated = {
     type: typeof SSEventType.NOTIFICATION_CREATED;
-    notification: Notification;
+    title: string;
+    body?: string;
 };
 ```
+
+Minimal — only what the toast needs. The notification list is fetched via API, not populated from SSE.
 
 ## Files
 
 | File                                                            | Purpose                          |
 |-----------------------------------------------------------------|----------------------------------|
 | `packages/lib/src/types/notification.ts`                        | Shared `Notification` type       |
+| `packages/lib/src/types/drive.ts`                               | `stripEigenExtension()` utility  |
+| `packages/lib/src/core/date.ts`                                 | `formatTimeAgo()` utility        |
 | `apps/api/src/lib/notification-center/schema.ts`                | Drizzle schema                   |
 | `apps/api/src/lib/notification-center/db-config.ts`             | DatabaseConfig + migration       |
 | `apps/api/src/lib/notification-center/notification-center.ts`   | Domain service class             |

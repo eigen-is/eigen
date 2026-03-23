@@ -187,33 +187,33 @@ Resolution: `parseOwnerId()` in `packages/lib/src/types/owner.ts`
 
 Detailed architecture docs in `docs/`:
 
-| Doc                                                             | Topic                                                                        |
-|-----------------------------------------------------------------|------------------------------------------------------------------------------|
-| [CONTRIBUTING.md](docs/CONTRIBUTING.md)                         | Code style, patterns, development workflow, public API, hotkeys              |
-| [DATABASE.md](docs/DATABASE.md)                                 | SQLite databases, ManagedDatabase, migrations                                |
-| [STORAGE.md](docs/STORAGE.md)                                   | Storage backends, mount system, Home singleton                               |
-| [SERVER-SETTINGS.md](docs/SERVER-SETTINGS.md)                   | ServerSettings, JsonStore, admin API, settings UI                            |
-| [QUOTA.md](docs/QUOTA.md)                                       | Quota model, resolution, enforcement functions                               |
-| [SSE.md](docs/SSE.md)                                           | Real-time events, adding SSE to new domains                                  |
-| [ACL.md](docs/ACL.md)                                           | ACL inheritance, share propagation, chat invite bubbling, reshare prevention |
-| [ORGANISATIONS-AND-TEAMS.md](docs/ORGANISATIONS-AND-TEAMS.md)   | Org/team model, team drives, prefixed owner IDs, People app                  |
-| [LAYOUT.md](docs/LAYOUT.md)                                     | AppShell, ColumnLayout, shared components, Drive UI, list patterns           |
-| [CHAT.md](docs/CHAT.md)                                         | Chat rooms, slash commands, embedded chats                                   |
-| [COMMENTS_IN_DOCS.md](docs/COMMENTS_IN_DOCS.md)                 | Comment index, mentions, resolution tracking                                 |
-| [CALENDAR.md](docs/CALENDAR.md)                                 | Calendar, RRULE, sharing, team calendars                                     |
-| [STICKIES.md](docs/STICKIES.md)                                 | Kanban board, Yjs data model                                                 |
-| [SLIDES.md](docs/SLIDES.md)                                     | Presentation editor, percentage coordinates                                  |
-| [SHEETS.md](docs/SHEETS.md)                                     | Spreadsheet, op-based Yjs sync                                               |
-| [CLIPBOARD.md](docs/CLIPBOARD.md)                               | Inter-app copy-paste                                                         |
-| [MEDIA-REFERENCES.md](docs/MEDIA-REFERENCES.md)                 | Name-based media/chat references in eigendocs                                |
-| [INLINE-EDITING.md](docs/INLINE-EDITING.md)                     | Inline text file editing in Drive                                            |
-| [PREVIEWS.md](docs/PREVIEWS.md)                                 | File preview system, text/image/video previews                               |
-| [NOTIFICATIONS.md](docs/NOTIFICATIONS.md)                       | Error/success toasts, SSE notification pattern                               |
-| [TODO-NOTIFICATION-CENTER.md](docs/TODO-NOTIFICATION-CENTER.md) | Notification center: persistent bell, per-user DB                            |
-| [TESTING.md](docs/TESTING.md)                                   | Test setup, patterns, test files                                             |
-| [DOCKER.md](docs/DOCKER.md)                                     | Docker deployment                                                            |
-| [IMAP.md](docs/IMAP.md)                                         | Maildir storage format, Dovecot compatibility                                |
-| [TYPOGRAPHY.md](docs/TYPOGRAPHY.md)                             | Self-hosted font system, FontPicker                                          |
+| Doc                                                           | Topic                                                                        |
+|---------------------------------------------------------------|------------------------------------------------------------------------------|
+| [CONTRIBUTING.md](docs/CONTRIBUTING.md)                       | Code style, patterns, development workflow, public API, hotkeys              |
+| [DATABASE.md](docs/DATABASE.md)                               | SQLite databases, ManagedDatabase, migrations                                |
+| [STORAGE.md](docs/STORAGE.md)                                 | Storage backends, mount system, Home singleton                               |
+| [SERVER-SETTINGS.md](docs/SERVER-SETTINGS.md)                 | ServerSettings, JsonStore, admin API, settings UI                            |
+| [QUOTA.md](docs/QUOTA.md)                                     | Quota model, resolution, enforcement functions                               |
+| [SSE.md](docs/SSE.md)                                         | Real-time events, adding SSE to new domains                                  |
+| [ACL.md](docs/ACL.md)                                         | ACL inheritance, share propagation, chat invite bubbling, reshare prevention |
+| [ORGANISATIONS-AND-TEAMS.md](docs/ORGANISATIONS-AND-TEAMS.md) | Org/team model, team drives, prefixed owner IDs, People app                  |
+| [LAYOUT.md](docs/LAYOUT.md)                                   | AppShell, ColumnLayout, shared components, Drive UI, list patterns           |
+| [CHAT.md](docs/CHAT.md)                                       | Chat rooms, slash commands, embedded chats                                   |
+| [COMMENTS_IN_DOCS.md](docs/COMMENTS_IN_DOCS.md)               | Comment index, mentions, resolution tracking                                 |
+| [CALENDAR.md](docs/CALENDAR.md)                               | Calendar, RRULE, sharing, team calendars                                     |
+| [STICKIES.md](docs/STICKIES.md)                               | Kanban board, Yjs data model                                                 |
+| [SLIDES.md](docs/SLIDES.md)                                   | Presentation editor, percentage coordinates                                  |
+| [SHEETS.md](docs/SHEETS.md)                                   | Spreadsheet, op-based Yjs sync                                               |
+| [CLIPBOARD.md](docs/CLIPBOARD.md)                             | Inter-app copy-paste                                                         |
+| [MEDIA-REFERENCES.md](docs/MEDIA-REFERENCES.md)               | Name-based media/chat references in eigendocs                                |
+| [INLINE-EDITING.md](docs/INLINE-EDITING.md)                   | Inline text file editing in Drive                                            |
+| [PREVIEWS.md](docs/PREVIEWS.md)                               | File preview system, text/image/video previews                               |
+| [NOTIFICATIONS.md](docs/NOTIFICATIONS.md)                     | Error/success toasts, SSE notification pattern                               |
+| [NOTIFICATION-CENTER.md](docs/NOTIFICATION-CENTER.md)         | Notification center: persistent bell, per-user DB                            |
+| [TESTING.md](docs/TESTING.md)                                 | Test setup, patterns, test files                                             |
+| [DOCKER.md](docs/DOCKER.md)                                   | Docker deployment                                                            |
+| [IMAP.md](docs/IMAP.md)                                       | Maildir storage format, Dovecot compatibility                                |
+| [TYPOGRAPHY.md](docs/TYPOGRAPHY.md)                           | Self-hosted font system, FontPicker                                          |
 
 | [Code Reviews](codereviews/OVERVIEW.md)                         | Full-stack code review findings + fix priorities |
 
