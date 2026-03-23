@@ -93,7 +93,9 @@
       "WebFetch(domain:manual.davx5.com)",
       "WebFetch(domain:deepwiki.com)",
       "Bash(for name:*)",
-      "Bash(xargs head:*)"
+      "Bash(xargs head:*)",
+      "Bash(PRODUCTION=1 bun run buildfordocker)",
+      "Bash(dd:*)"
     ]
   },
   "bypassPermissions": "bypassPermissions"
