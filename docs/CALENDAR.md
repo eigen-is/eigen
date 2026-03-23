@@ -75,7 +75,7 @@ Follows the Contacts/Mail pattern — per-user Home directory, not Drive.
 **Permissions**: `free-busy` (time blocks only), `read` (full details), `write` (can edit).
 
 Push-based propagation — when shares change, `share-propagation.ts` resolves targets and writes to recipient's
-`shared_calendars`. See [SHARE-PROPAGATION.md](SHARE-PROPAGATION.md).
+`shared_calendars`. See [ACL.md](ACL.md#share-propagation).
 
 **Team calendars**: Auto-synced into the user's `shared_calendars` table (with `ownerUserId = 'team_{teamId}'`) when
 `GET /calendar/:ownerId/shared` is called. Can be disabled via `settings.json` in the team home dir

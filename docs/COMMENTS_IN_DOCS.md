@@ -8,46 +8,16 @@
 
 ## How a Chat Knows It's Embedded
 
-A chat does **not** inherently know. The `ChatRoom` class receives a `DrivePath` during construction:
+A chat does **not** inherently know. `ChatRoom` receives a `DrivePath` during construction. The `DrivePath` has a
+`parentId` field. By walking up the parent chain via `Drive.getPath()`, the server determines if the chat lives inside
+a container document. The chain for an embedded comment is always:
+`eigenchat -> chat/ folder -> container document`.
 
-```typescript
-// apps/api/src/lib/chat/chat.ts
-constructor(drive: Drive, home: Home, path: DrivePath) {
-    this.drive = drive;
-    this.home = home;
-    this.path = path;  // the .eigenchat DrivePath
-}
-```
+For a standalone chat (top-level `.eigenchat` in Drive), the parent chain goes directly to a regular folder or root —
+no collab type ancestor is found.
 
-The `DrivePath` has a `parentId` field. By walking up the parent chain via `Drive.getPath()`, the server can determine
-if the chat lives inside a container document.
-
-**Path chain for an embedded comment chat:**
-
-```
-comment-123.eigenchat   type=chat     parentId -> [chat-folder-id]
-chat/                   type=folder   parentId -> [eigendoc-id]
-my-doc.eigendoc         type=doc      parentId -> [projects-folder-id]    <- container
-Projects/               type=folder   parentId -> [root-id]
-root                    type=folder   parentId -> null
-```
-
-`CollabDocument.create()` always creates this structure — `comments.db` is created here:
-
-```typescript
-// apps/api/src/lib/collab/collabDocument.ts
-static async create(drive: Drive, mountId: string, docId: string): Promise<void> {
-    await drive.touchFile(mountId, docId, 'data.db', 'application/x-sqlite3');
-    await drive.touchFile(mountId, docId, 'comments.db', 'application/x-sqlite3');
-    await drive.createFolder(mountId, docId, 'media');
-    await drive.createFolder(mountId, docId, 'chat');
-}
-```
-
-So the chain is always: `eigenchat -> chat/ folder -> container document`.
-
-**For a standalone chat** (top-level `.eigenchat` in Drive), the parent chain goes directly to a regular folder or root
-— no collab type ancestor is found.
+`CollabDocument.create()` creates the standard structure — including `comments.db`, a `media/` folder, and a `chat/`
+folder — so every container document has these from birth.
 
 ## Solution: `comments.db`
 
@@ -64,9 +34,6 @@ my-doc.eigendoc/
     ├── comment-1.eigenchat/
     └── comment-2.eigenchat/
 ```
-
-Created eagerly by `CollabDocument.create()` — every container document has one from birth. No backward
-compatibility needed (data is throwaway during dev).
 
 ### Schema
 
@@ -97,248 +64,54 @@ export const commentMentions = sqliteTable('comment_mentions', {
 **`comment_mentions`**: Normalized mention index. One row per (comment, mentioned user). Composite PK deduplicates
 automatically — mentioning the same user twice in the same chat is a no-op.
 
-### DatabaseConfig
-
-```typescript
-// apps/api/src/lib/chat/comment-db-config.ts
-export const COMMENT_INDEX_DB_CONFIG: DatabaseConfig<typeof commentSchema> = {
-    name: 'comment-index',
-    currentVersion: 1,
-    schema: commentSchema,
-    migrations: [{
-        version: 1,
-        up: (db) => db.run(`
-            CREATE TABLE IF NOT EXISTS comments (...);
-            CREATE TABLE IF NOT EXISTS comment_mentions (...);
-            CREATE INDEX IF NOT EXISTS idx_mentions_email ON comment_mentions(email);
-        `)
-    }]
-};
-```
-
 ## ChatRoom: Container Discovery
 
-`containerPath` field on `ChatRoom`, resolved during `init()` via `Drive.findContainerPath()`:
-
-```typescript
-// apps/api/src/lib/chat/chat.ts
-export class ChatRoom {
-    private drive: Drive;
-    private home: Home;
-    private path: DrivePath;
-    private containerPath: DrivePath | null = null;
-    private db!: BunSQLiteDatabase<typeof schema>;
-    private managedDb!: ManagedDatabase<typeof schema>;
-
-    async init(): Promise<ChatRoom> {
-        // ... existing data.db init ...
-
-        // Walk parentId chain to find outermost collab container (if any)
-        this.containerPath = await this.drive.findContainerPath(
-            this.path.mountId, this.path.parentId ?? ''
-        );
-
-        return this;
-    }
-}
-```
-
-`Drive.findContainerPath()` delegates to the shared `findContainerPath()` in `acl.ts`, which walks the full `parentId`
-chain to root and returns the outermost collab ancestor. For the standard eigendoc structure the walk is short
-(chat/ folder -> doc -> parent folder -> root). Negligible cost, done once per `ChatRoom.init()`.
+`containerPath` field on `ChatRoom`, resolved during `init()` via `Drive.findContainerPath()`. This delegates to the
+shared `findContainerPath()` in `acl.ts`, which walks the full `parentId` chain to root and returns the outermost
+collab ancestor. For the standard eigendoc structure the walk is short (chat/ folder -> doc -> parent folder -> root).
+Negligible cost, done once per `ChatRoom.init()`.
 
 ## CommentIndex Service
 
-```typescript
-// apps/api/src/lib/chat/comment-index.ts
-export class CommentIndex {
-    private db: BunSQLiteDatabase<typeof commentSchema>;
+`CommentIndex` (`apps/api/src/lib/chat/comment-index.ts`) wraps `comments.db` with these operations:
 
-    constructor(db: BunSQLiteDatabase<typeof commentSchema>) {
-        this.db = db;
-    }
+| Method              | Description                                                                       |
+|---------------------|-----------------------------------------------------------------------------------|
+| `ensureComment`     | Upsert a comment row (`onConflictDoNothing`)                                      |
+| `updateActivity`    | Update `lastAuthorEmail`, `lastMessageSnippet` (truncated 100 chars), `lastActivityAt`. Optionally increments `messageCount` |
+| `addMention`        | Insert mention row (`onConflictDoNothing`)                                        |
+| `resolve`           | Set `status='resolved'`, record `resolvedBy`/`resolvedAt`                         |
+| `reopen`            | Set `status='open'`, clear `resolvedBy`/`resolvedAt`                              |
+| `decrementCount`    | `MAX(0, messageCount - 1)`                                                        |
+| `list`              | Returns all comments with inline `mentions: string[]` per comment (2 queries, grouped in memory) |
+| `unresolvedCount`   | `COUNT(*) WHERE status='open'`                                                    |
 
-    async ensureComment(chatName: string): Promise<void> { /* upsert, onConflictDoNothing */
-    }
-
-    async updateActivity(chatName: string, authorEmail: string, snippet: string, incrementCount = true): Promise<void> {
-        // Updates lastAuthorEmail, lastMessageSnippet (truncated to 100 chars), lastActivityAt.
-        // Increments messageCount when incrementCount=true (post). Skips increment on edit (incrementCount=false).
-    }
-
-    async addMention(chatName: string, email: string): Promise<void> { /* onConflictDoNothing */
-    }
-
-    async resolve(chatName: string, email: string): Promise<void> { /* sets status='resolved' */
-    }
-
-    async reopen(chatName: string): Promise<void> { /* sets status='open', clears resolvedBy/At */
-    }
-
-    async decrementCount(chatName: string): Promise<void> { /* MAX(0, messageCount - 1) */
-    }
-
-    async list() {
-        // Returns all comments with inline mentions: string[] array per comment.
-        // Loads all comments + all mentions in 2 queries, groups mentions by chatName in memory.
-        // No separate mentions endpoint — frontend filters client-side for any user.
-    }
-
-    async unresolvedCount(): Promise<number> { /* COUNT(*) WHERE status='open' */
-    }
-}
-```
-
-### Opening `comments.db`
-
-`comments.db` is created by `CollabDocument.create()`, so it always exists:
-
-```typescript
-// apps/api/src/lib/chat/comment-index.ts
-export async function openCommentIndex(drive: Drive, containerPath: DrivePath): Promise<CommentIndex> {
-    const dbPath = await drive.getChildByName(containerPath.mountId, containerPath.id, 'comments.db');
-    if (!dbPath) throw new ApiError(404, 'comments.db not found');
-    const managed = await drive.openDatabase(containerPath.mountId, COMMENT_INDEX_DB_CONFIG, dbPath.id);
-    return new CommentIndex(managed.db);
-}
-
-// Convenience: resolves path + opens index. SharedDrive.getPath() enforces read permission.
-export async function getCommentIndex(drive: Drive, mountId: string, pathId: string): Promise<CommentIndex> {
-    const path = await drive.getPath(mountId, pathId);
-    if (!path) throw new ApiError(404, 'Container not found');
-    return openCommentIndex(drive, path);
-}
-```
-
-`ManagedDatabase` handles WAL mode, versioning, and caching. No explicit cleanup — registered with Home's DB tracker.
+Helper functions `openCommentIndex(drive, containerPath)` and `getCommentIndex(drive, mountId, pathId)` handle path
+resolution and DB opening. `ManagedDatabase` handles WAL mode, versioning, and caching.
 
 ## Updating the Index
 
-All index updates are wrapped in a private `updateCommentIndex(fn)` helper that opens the index, runs the callback,
-emits an SSE event, and catches errors (non-fatal — the message is already posted):
+All index updates go through `ChatRoom.updateCommentIndex(fn)`, which opens the index, runs the callback, emits a
+`CHAT_COMMENT_INDEX_UPDATED` SSE event, and catches errors (non-fatal — the message is already posted).
 
-```typescript
-// apps/api/src/lib/chat/chat.ts
-private async
-updateCommentIndex(fn
-:
-(index: CommentIndex) => Promise<void>
-)
-{
-    if (!this.containerPath) return;
-    try {
-        const index = await openCommentIndex(this.drive, this.containerPath);
-        await fn(index);
+| Trigger                 | Index operations                                                                      |
+|-------------------------|---------------------------------------------------------------------------------------|
+| **Message post**        | `ensureComment` + `updateActivity` (with increment) + `addMention` for each extracted email |
+| **Comment chat creation** | No separate hook — first message post triggers `ensureComment` upsert               |
+| **Message edit**        | `updateActivity` (no increment) + re-extract mentions                                 |
+| **Message delete**      | `decrementCount`                                                                      |
 
-        const event = buildCommentIndexUpdatedEvent(
-            this.containerPath.id, this.path.ownerId, this.path.mountId
-        );
-        this.home.notify(event);
-        this.notifySharedUsers(event);
-    } catch (error) {
-        console.error('Failed to update comment index:', error);
-    }
-}
-```
-
-### On Message Post
-
-In `ChatRoom.postMessage()`, after the message is inserted and SSE events are sent:
-
-```typescript
-if (this.containerPath && type !== 'whisper') {
-    await this.updateCommentIndex(async (index) => {
-        await index.ensureComment(this.path.name);
-        await index.updateActivity(this.path.name, authorEmail, content);
-        for (const email of extractMentionedEmails(content)) {
-            await index.addMention(this.path.name, email);
-        }
-    });
-}
-```
-
-`extractMentionedEmails` reuses the regex from `packages/lib/src/validation/email.ts` (`EMAIL_FIND_REGEX`):
-
-```typescript
-// apps/api/src/lib/chat/mentions.ts
-import {EMAIL_FIND_REGEX} from '@workspace/lib/validation';
-
-export function extractMentionedEmails(content: string): string[] {
-    const matches = content.match(EMAIL_FIND_REGEX);
-    if (!matches) return [];
-    return [...new Set(matches.map(e => e.toLowerCase()))];
-}
-```
-
-### On Comment Chat Creation
-
-When `CreateCommentDialog` creates a chat via `POST /drive/:ownerId/:mountId/folder/:pathId/chat`, the server creates
-the `.eigenchat` inside the container's `chat/` folder. The first message post (which happens immediately after
-creation in `CreateCommentDialog`) triggers `ensureComment()` + `updateActivity()`. No separate creation hook needed —
-the `ensureComment` upsert handles it.
-
-### On Message Edit
-
-Calls `updateActivity(name, email, content, false)` (no messageCount increment) and re-extracts mentions.
-
-### On Message Delete
-
-Calls `decrementCount()` to decrement messageCount (clamped to 0).
+Mention extraction uses `extractMentionedEmails()` (`apps/api/src/lib/chat/mentions.ts`) with `EMAIL_FIND_REGEX` from
+`@workspace/lib/validation`.
 
 ## SSE Notifications
 
-### Comment Index Updates
+When `updateCommentIndex()` succeeds, it emits `CHAT_COMMENT_INDEX_UPDATED` (`chat:comment-index-updated`).
+The SSE handler invalidates `commentKeys.container(...)`.
 
-When `updateCommentIndex()` succeeds, it emits a `CHAT_COMMENT_INDEX_UPDATED` event:
-
-```typescript
-// apps/api/src/lib/chat/sse-events.ts
-export function buildCommentIndexUpdatedEvent(containerId: string, ownerId: string, mountId: string): SSEvent {
-    return buildChatEvent(SSEventType.CHAT_COMMENT_INDEX_UPDATED, {chatId: containerId, ownerId, mountId});
-}
-```
-
-```typescript
-// packages/lib/src/types/sse.ts
-CHAT_COMMENT_INDEX_UPDATED: 'chat:comment-index-updated',
-```
-
-SSE handler invalidates `commentKeys.container(...)`.
-
-### Notifying Shared Users
-
-`ChatRoom.notifySharedUsers(event)` uses `Drive.getEffectiveMembers()` to resolve all users with access to the chat.
-This handles all access scenarios:
-
-- **Direct ACL on the chat** — explicit shares
-- **Inherited ACL from parent folders** — chat inside a shared folder
-- **Container document ACL** — embedded chat inherits from the doc
-- **Team membership** — team ACL entries expanded to individual members
-- **Owner** — always included with full permissions
-
-```typescript
-private async
-notifySharedUsers(event
-:
-SSEvent
-)
-{
-    const members = await this.drive.getEffectiveMembers(this.path.mountId, this.path.id);
-    for (const member of members) {
-        const user = await getUserByEmail(member.email);
-        if (!user) continue;
-        try {
-            if (atHome(user.id)) {
-                const home = await getHome(user.id);
-                home.notify(event);
-            }
-        } catch { /* user home may not exist */
-        }
-    }
-}
-```
-
-See [ACL.md](ACL.md) for details on `getEffectiveMembers`.
+`ChatRoom.notifySharedUsers(event)` uses `Drive.getEffectiveMembers()` to resolve all users with access to the chat
+(direct ACL, inherited ACL from parents, team membership, owner). See [ACL.md](ACL.md) for details on
+`getEffectiveMembers`.
 
 ## API Routes
 
@@ -369,33 +142,16 @@ inherited from the container document).
 
 ## Frontend Hooks
 
-```typescript
-// packages/lib/src/core/chat/hooks/use-comments.ts
-export const commentKeys = {
-    all: ['comments'] as const,
-    container: (ownerId, mountId, containerId) => [...commentKeys.all, ownerId, mountId, containerId] as const,
-    list: (ownerId, mountId, containerId) => [...commentKeys.container(...), 'list'] as const,
-    unresolvedCount: (ownerId, mountId, containerId) => [...commentKeys.container(...), 'unresolved-count'] as const,
-};
+All hooks live in `packages/lib/src/core/chat/hooks/use-comments.ts`.
 
-export function useComments(ownerId, mountId, containerId) { /* GET /collab/.../comments */
-}
-
-export function useUnresolvedCommentCount(ownerId, mountId, containerId) { /* GET /collab/.../comments/unresolved-count */
-}
-
-export function useResolveComment(ownerId, mountId, containerId) { /* PATCH .../comments/:chatName/status */
-}
-
-export function invalidateComments(queryClient, ownerId, mountId, containerId) { /* SSE handler calls this */
-}
-```
-
-```typescript
-// packages/lib/src/core/drive/hooks/use-drive.ts
-export function useEffectiveMembers(ownerId, mountId, pathId) { /* GET /drive/.../effective-members */
-}
-```
+| Hook / export                | Description                                       |
+|------------------------------|---------------------------------------------------|
+| `commentKeys`                | Query key factory: `all`, `container`, `list`, `unresolvedCount` |
+| `useComments`                | `GET /collab/.../comments` — list with inline mentions |
+| `useUnresolvedCommentCount`  | `GET /collab/.../comments/unresolved-count`        |
+| `useResolveComment`          | `PATCH .../comments/:chatName/status`              |
+| `invalidateComments`         | Called by SSE handler to invalidate container keys  |
+| `useEffectiveMembers`        | In `use-drive.ts` — `GET /drive/.../effective-members` |
 
 Mention filtering ("show comments mentioning me") is done client-side by filtering the `mentions: string[]` array
 returned inline with each comment from `list()`. This allows filtering by any user, not just the current one.
@@ -442,12 +198,11 @@ server. The `open | resolved` status tracks comment thread state, not whether th
 
 The `containerPath` field on `ChatRoom` enables proper deep linking when mention notifications are added:
 
-- **Standalone chat mention** → notification links to chat room
-- **Embedded comment mention** → notification links to the container document
+- **Standalone chat mention** -> notification links to chat room
+- **Embedded comment mention** -> notification links to the container document
 
 The `comment_mentions` table in `comments.db` serves document-scoped filtering ("which comments in this doc mention
-me?"). Both mention detection and extraction use `extractMentionedEmails` with `EMAIL_FIND_REGEX` from
-`@workspace/lib/validation`. See [TODO-MENTIONS.md](TODO-MENTIONS.md) for the cross-app notification center plan.
+me?"). See [TODO-MENTIONS.md](TODO-MENTIONS.md) for the cross-app notification center plan.
 
 ## Performance
 
@@ -461,25 +216,17 @@ me?"). Both mention detection and extraction use `extractMentionedEmails` with `
 
 The `comments.db` is tiny: rows = number of comments (typically <100 per document). All operations are sub-millisecond.
 
-## Complete File Changes
+## Key Files
 
-| File                                                       | Change                                                                                            |
-|------------------------------------------------------------|---------------------------------------------------------------------------------------------------|
-| **New** `apps/api/src/lib/chat/comment-schema.ts`          | Drizzle schema for `comments` + `comment_mentions`                                                |
-| **New** `apps/api/src/lib/chat/comment-db-config.ts`       | `COMMENT_INDEX_DB_CONFIG`                                                                         |
-| **New** `apps/api/src/lib/chat/comment-index.ts`           | `CommentIndex` class + `openCommentIndex()` + `getCommentIndex()`                                 |
-| **New** `apps/api/src/lib/chat/mentions.ts`                | `extractMentionedEmails()`                                                                        |
-| **New** `packages/lib/src/core/chat/hooks/use-comments.ts` | Query hooks + keys + `invalidateComments()`                                                       |
-| `apps/api/src/lib/chat/chat.ts`                            | `containerPath`, `updateCommentIndex()` helper, `notifySharedUsers()` via `getEffectiveMembers()` |
-| `apps/api/src/lib/chat/sse-events.ts`                      | `buildCommentIndexUpdatedEvent()`                                                                 |
-| `apps/api/src/lib/collab/collabDocument.ts`                | `comments.db` creation in `CollabDocument.create()`                                               |
-| `apps/api/src/lib/drive/acl-propagation.ts`                | `EffectiveMember` type + `resolveACLToEmails()`                                                   |
-| `apps/api/src/lib/drive/drive.ts`                          | `getEffectiveMembers()`                                                                           |
-| `apps/api/src/lib/drive/sharedDrive.ts`                    | `getEffectiveMembers()` + `getChildByName()` overrides                                            |
-| `apps/api/src/routes/collab.ts`                            | Comment list/unresolved-count/status routes                                                       |
-| `apps/api/src/routes/drive.ts`                             | Effective members route                                                                           |
-| `packages/lib/src/types/sse.ts`                            | `CHAT_COMMENT_INDEX_UPDATED`                                                                      |
-| `packages/lib/src/core/api.ts`                             | `collabApi` export                                                                                |
-| `packages/lib/src/core/chat/sse-handlers.ts`               | `CHAT_COMMENT_INDEX_UPDATED` handler                                                              |
-| `packages/lib/src/core/drive/hooks/use-drive.ts`           | `useEffectiveMembers()` hook                                                                      |
-
+| File                                                       | Purpose                                            |
+|------------------------------------------------------------|----------------------------------------------------|
+| `apps/api/src/lib/chat/comment-schema.ts`                  | Drizzle schema for `comments` + `comment_mentions`  |
+| `apps/api/src/lib/chat/comment-db-config.ts`               | `COMMENT_INDEX_DB_CONFIG`                           |
+| `apps/api/src/lib/chat/comment-index.ts`                   | `CommentIndex` class + open/get helpers             |
+| `apps/api/src/lib/chat/mentions.ts`                        | `extractMentionedEmails()`                          |
+| `apps/api/src/lib/chat/chat.ts`                            | `containerPath`, `updateCommentIndex()`, `notifySharedUsers()` |
+| `apps/api/src/lib/chat/sse-events.ts`                      | `buildCommentIndexUpdatedEvent()`                   |
+| `apps/api/src/routes/collab.ts`                            | Comment list/status routes                          |
+| `apps/api/src/routes/drive.ts`                             | Effective members route                             |
+| `packages/lib/src/core/chat/hooks/use-comments.ts`         | Query hooks + keys + `invalidateComments()`         |
+| `packages/lib/src/core/drive/hooks/use-drive.ts`           | `useEffectiveMembers()` hook                        |
