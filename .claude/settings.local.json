@@ -95,7 +95,9 @@
       "Bash(for name:*)",
       "Bash(xargs head:*)",
       "Bash(PRODUCTION=1 bun run buildfordocker)",
-      "Bash(dd:*)"
+      "Bash(dd:*)",
+      "WebFetch(domain:www.better-auth.com)",
+      "WebFetch(domain:www.corbado.com)"
     ]
   },
   "bypassPermissions": "bypassPermissions"
