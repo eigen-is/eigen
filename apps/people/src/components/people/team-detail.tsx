@@ -5,7 +5,7 @@ import {Label} from '@workspace/ui/components/label';
 import {Select, SelectContent, SelectItem, SelectTrigger, SelectValue} from '@workspace/ui/components/select';
 import {Switch} from '@workspace/ui/components/switch';
 import {Separator} from '@workspace/ui/components/separator';
-import {HardDrive, Pencil, Plus, Settings, Trash2, UserPlus, X} from 'lucide-react';
+import {HardDrive, Pencil, Plus, Settings, Trash2, UserRoundPlus, X} from 'lucide-react';
 import {Dialog, DialogContent, DialogHeader, DialogTitle} from '@workspace/ui/components/dialog';
 import {DeleteDialog} from '@workspace/ui/components/layout/delete/delete-dialog';
 import {TooltipButton} from '@workspace/ui/components/layout/toolbar/tooltip-button.tsx';
@@ -435,7 +435,7 @@ export function TeamDetail({team, organizationId}: TeamDetailProps) {
                 <div className="flex items-center justify-between">
                     <h3 className="text-sm font-medium">Members ({teamMembers.length})</h3>
                     <Button variant="ghost" size="sm" onClick={() => setShowAddDialog(true)}>
-                        <UserPlus className="h-4 w-4 mr-1"/>Add
+                        <UserRoundPlus className="h-4 w-4 mr-1"/>Add
                     </Button>
                 </div>
 
