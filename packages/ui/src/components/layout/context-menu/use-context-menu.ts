@@ -6,6 +6,7 @@ export function useContextMenu<T>() {
 
     const handleContextMenu = useCallback((e: React.MouseEvent, item: T) => {
         e.preventDefault();
+        e.stopPropagation();
         setItem(item);
         setPosition({x: e.clientX, y: e.clientY});
     }, []);
