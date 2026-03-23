@@ -1,271 +1,106 @@
 # ACL Bubbling
 
-> **TLDR**: When a user invites someone to an embedded chat (inside an eigendoc/stickies/slides/sheets), ACL should be
-> set on the container document — not on the chat itself. Implemented via a dedicated server-side
-> `POST /chat/:ownerId/:mountId/:chatId/invite` endpoint that resolves the container, merges ACL, and calls
-> `updateACL` on the container. `Drive.updateACL()` itself is NOT modified.
+> **TLDR**: When inviting someone to an embedded chat (inside an eigendoc/stickies/slides/sheets), ACL is set on the
+> container document — not on the chat itself. A dedicated `POST /chat/:ownerId/:mountId/:chatId/invite` endpoint
+> resolves the outermost container via `findContainerPath()`, merges the new ACL entry server-side, and delegates to
+> `Drive.inviteToChat()`. The generic `Drive.updateACL()` is not involved.
 
-## Problem
+## Why Not Set ACL on the Chat Directly
 
-The `/invite` command in chat (`use-chat-room.ts:121-136`) does:
+The generic `PUT /drive/.../acl` endpoint replaces the entire ACL array. The frontend builds that array from the
+current path's ACL. An embedded chat typically has no direct ACL (it inherits from the container), so the built array
+would contain only the new entry — overwriting the container's existing ACL entries. Server-side resolution and merging
+avoids this data loss.
 
-```typescript
-const currentAcl = chatPath.acl || [];
-const newAcl = [...currentAcl, {id: local.target, read: true, write: true}];
-await updateACL.mutateAsync({path: chatPath, acl: newAcl});
-```
+## findContainerPath()
 
-For an embedded chat, `chatPath` is the `.eigenchat` DrivePath inside the container. This sets ACL on the chat, not the
-container document. The invited user can read chat messages but cannot open the document.
+**File**: `apps/api/src/lib/drive/acl.ts`
 
-## Why NOT Redirect Inside `updateACL()`
-
-Initial idea: add `findACLTarget()` inside `Drive.updateACL()` to silently redirect. **This is dangerous.**
-
-The `PUT /drive/:ownerId/:mountId/path/:pathId/acl` endpoint replaces the entire ACL array. The frontend builds the
-array from the current path's ACL:
-
-```typescript
-const currentAcl = chatPath.acl || [];    // embedded chat has null ACL (inherited)
-const newAcl = [...currentAcl, {id: email, read: true, write: true}];
-// newAcl = [{id: email, read: true, write: true}]  ← only the new entry!
-```
-
-If `updateACL` silently redirects to the container, it would **replace** the container's ACL with just `[{alice}]` —
-dropping all existing entries like `[{bob}, {carol}]`. **Data loss.**
-
-Proper ACL merging requires reading the container's ACL server-side. This belongs in a dedicated endpoint, not in the
-generic `updateACL`.
-
-## Solution
-
-### 1. `findContainerPath()` Utility
-
-Walk up the `parentId` chain to find the outermost collab container. Exported from `acl.ts` for reuse.
-
-```typescript
-// apps/api/src/lib/drive/acl.ts — new export
-
-import {isCollabType} from '@workspace/lib/types/drive';
-
-export async function findContainerPath(
-    getPath: PathGetter,
-    startPathId: string
-): Promise<DrivePath | null> {
-    let currentId: string | null = startPathId;
-    let container: DrivePath | null = null;
-
-    while (currentId) {
-        const path = await getPath(currentId);
-        if (!path) break;
-        if (isCollabType(path.type)) {
-            container = path;
-        }
-        currentId = path.parentId;
-    }
-
-    return container;
-}
-```
-
-**Walk example** for `comment-123.eigenchat` inside `my-doc.eigendoc`:
+Walks the `parentId` chain upward from a starting path. Returns the outermost `DrivePath` whose MIME type is a collab
+type (eigendoc, eigenstickies, eigenslides, eigensheets), or `null` if none is found (standalone chat).
 
 ```
-comment-123.eigenchat  (type=chat)     → not collab
-chat/                  (type=folder)   → not collab
-my-doc.eigendoc        (type=doc)      → IS collab → container = this
-Projects/              (type=folder)   → not collab
-root                   (parentId=null) → stop
+chat/General.eigenchat  → not collab
+my-doc.eigendoc         → IS collab → container
+Projects/               → folder
+root                    → stop
 → returns my-doc.eigendoc
 ```
 
-**Standalone chat** (not inside a container): walk reaches root without finding a collab type → returns `null`.
+Used by `ChatRoom.init()` and `Drive.inviteToChat()`.
 
-### 2. `POST /chat/:ownerId/:mountId/:chatId/invite` Endpoint
+## Invite Endpoint
 
-New route in `apps/api/src/routes/chat.ts`:
-
-```typescript
-.post("/chat/:ownerId/:mountId/:chatId/invite", async ({params, body, user}) => {
-    const drive = await getSharedDrive(params.ownerId, user);
-
-    // Verify caller can write to the chat
-    if (!(await drive.canWrite(params.mountId, params.chatId, user))) {
-        throw new ApiError(403, 'No write permission');
-    }
-
-    // Validate email
-    if (!validateEmailAddress(body.email)) {
-        throw new ApiError(400, 'Invalid email address');
-    }
-
-    // Find the ACL target: container document if embedded, chat itself if standalone
-    const mount = drive.getMount(params.mountId);
-    const chatPath = await mount.getPath(params.chatId);
-    if (!chatPath) throw new ApiError(404, 'Chat not found');
-
-    const container = await findContainerPath(mount.getPath.bind(mount), chatPath.parentId ?? '');
-    const targetPath = container ?? chatPath;
-
-    // Check caller can write to the target
-    if (container && !(await drive.canWrite(params.mountId, targetPath.id, user))) {
-        throw new ApiError(403, 'No write permission on container document');
-    }
-
-    // Merge: read current ACL, check for duplicates, append
-    const currentAcl = targetPath.acl || [];
-    if (currentAcl.some(a => a.id.toLowerCase() === body.email.toLowerCase())) {
-        return {success: true, alreadyHasAccess: true, targetPathId: targetPath.id};
-    }
-
-    const newAcl = [...currentAcl, {id: body.email, read: true, write: true}];
-    await drive.updateACL(params.mountId, targetPath.id, newAcl);
-
-    return {success: true, alreadyHasAccess: false, targetPathId: targetPath.id};
-}, {
-    body: t.Object({email: t.String()}),
-    auth: true
-})
+```
+POST /chat/:ownerId/:mountId/:chatId/invite
+Body: { email: string }
+Returns: { alreadyHasAccess: boolean, targetPathId: string }
 ```
 
-**Key behaviors**:
+Route in `apps/api/src/routes/chat.ts`. Delegates to `drive.inviteToChat(mountId, chatId, email)`.
 
-- Standalone chat → `findContainerPath` returns `null` → ACL set on chat itself (preserves current behavior)
-- Embedded chat → ACL set on container document (new behavior)
-- ACL properly merged with existing entries (no data loss)
-- Double-invite returns `alreadyHasAccess: true` (idempotent)
+### Drive.inviteToChat()
 
-### 3. `Drive.getMount()` Visibility
+**File**: `apps/api/src/lib/drive/drive.ts`
 
-The route needs `mount.getPath.bind(mount)` for `findContainerPath`. Currently `Drive.getMount()` is private:
+1. Finds the chat path
+2. Calls `findContainerPath()` to locate the outermost container
+3. If embedded: sets ACL on the container document
+4. If standalone: sets ACL on the chat itself
+5. Lowercases the email before adding to ACL
+6. Returns `{ alreadyHasAccess, targetPathId }`
 
-```typescript
-// apps/api/src/lib/drive/drive.ts
-private getMount(mountId: string): Mount { ... }
+### SharedDrive.inviteToChat() Override
+
+**File**: `apps/api/src/lib/drive/sharedDrive.ts`
+
+Adds permission checks before delegating to the underlying drive:
+
+1. Verifies write permission on the chat
+2. Finds container via `findContainerPath()`
+3. Verifies write permission on the container (if present)
+4. Checks `sharingRestricted` flag — blocks non-owners from inviting
+5. Delegates to underlying drive
+
+## Frontend
+
+The `/invite` slash command in chat calls `useInviteToChat()`, which posts to the invite endpoint and invalidates
+`driveKeys.path()` on success.
+
+```
+/invite alice@example.com
 ```
 
-Two options:
+Handles the `alreadyHasAccess` response with an appropriate local message.
 
-**Option A (recommended)**: Add a `findContainerPath` method to `Drive` itself:
-
-```typescript
-// apps/api/src/lib/drive/drive.ts — new method
-async findContainerPath(mountId: string, pathId: string): Promise<DrivePath | null> {
-    const mount = this.getMount(mountId);
-    return findContainerPath(mount.getPath.bind(mount), pathId);
-}
-```
-
-Then the route becomes:
-
-```typescript
-const container = await drive.findContainerPath(params.mountId, chatPath.parentId ?? '');
-```
-
-**Option B**: Make `getMount` protected. SharedDrive already extends Drive, so it would work. But it exposes internal
-API unnecessarily.
-
-### 4. `SharedDrive` Override
-
-Add corresponding method to `SharedDrive`:
-
-```typescript
-// apps/api/src/lib/drive/sharedDrive.ts
-public async findContainerPath(mountId: string, pathId: string): Promise<DrivePath | null> {
-    return this.sharedDrive.findContainerPath(mountId, pathId);
-}
-```
-
-No permission check needed — `findContainerPath` only reads paths (no mutation). The invite endpoint already checks
-write permission before calling `updateACL`.
-
-### 5. Frontend: Update `/invite` Handler
-
-```typescript
-// packages/lib/src/core/chat/hooks/use-chat-room.ts — replace lines 121-136
-
-case 'invite': {
-    if (!chatPath) return;
-    const inviteError = validateEmailTarget(local.target, 'Invite');
-    if (inviteError) {
-        addLocalMessage(inviteError);
-        return;
-    }
-    try {
-        const response = await chatApi({ownerId})({mountId})({chatId}).invite.post({
-            email: local.target
-        });
-        if (response.data?.alreadyHasAccess) {
-            addLocalMessage(`${local.target} already has access.`);
-        } else {
-            addLocalMessage(`You invited ${local.target}.`);
-        }
-    } catch {
-        addLocalMessage(`Failed to invite ${local.target}.`);
-    }
-    return;
-}
-```
-
-This replaces `useUpdateACL` usage for invites. The `updateACL` import and hook can stay (used by the share dialog on
-documents).
-
-### 6. Treaty API Client
-
-Add the invite endpoint to the Treaty client in `packages/lib/src/core/api.ts`:
-
-```typescript
-// Already auto-derived from Elysia route definitions — no manual change needed.
-// Treaty infers the type from the chatRouter definition.
-```
-
-### 7. Invalidation
-
-The invite endpoint calls `drive.updateACL()` which already:
-
-1. Calls `propagateACLChange()` — updates recipient's `shared.db`
-2. Emits `SSEventType.DRIVE_ACL_UPDATED` — triggers SSE
-
-The frontend SSE handler already invalidates drive queries on ACL events. The `/invite` handler should also invalidate
-the chat path info:
-
-```typescript
-// After successful invite, invalidate chatPath to refresh roomMembers
-queryClient.invalidateQueries({queryKey: driveKeys.path(ownerId, mountId, chatId)});
-```
-
-This happens automatically if the SSE handler fires — but for the caller's immediate UI, an explicit invalidation after
-the `post()` call is better. This can be done via a new `useInviteToChatRoom` mutation hook.
-
-## Complete File Changes
-
-| File | Change |
-|------|--------|
-| `apps/api/src/lib/drive/acl.ts` | Add `findContainerPath()` export |
-| `apps/api/src/lib/drive/drive.ts` | Add `findContainerPath()` method |
-| `apps/api/src/lib/drive/sharedDrive.ts` | Add `findContainerPath()` override |
-| `apps/api/src/routes/chat.ts` | Add `POST /chat/:ownerId/:mountId/:chatId/invite` |
-| `packages/lib/src/core/chat/hooks/use-chat-room.ts` | Replace `/invite` case to call new endpoint |
-| `packages/lib/src/core/chat/hooks/use-chat.ts` | Add `useInviteToChat()` mutation hook |
+**Hook**: `useInviteToChat()` in `packages/lib/src/core/chat/hooks/use-chat.ts`
+**Command handler**: `use-chat-room.ts` — the `/invite` case calls `inviteToChat.mutateAsync({ email })`
 
 ## Edge Cases
 
-| Case                                     | Behavior                                                                                                                                                                                      |
-|------------------------------------------|-----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| Standalone chat (top-level `.eigenchat`) | `findContainerPath` returns `null` → ACL on chat                                                                                                                                              |
-| Embedded chat in eigendoc                | ACL on eigendoc                                                                                                                                                                               |
-| Embedded chat in eigenstickies           | ACL on eigenstickies                                                                                                                                                                          |
-| Chat inside slides/sheets                | ACL on eigenslides/eigensheets                                                                                                                                                                |
-| User already has access                  | Returns `alreadyHasAccess: true`, no ACL change                                                                                                                                               |
-| Caller has chat write but not doc write  | 403 — correct, shouldn't invite to doc you can't manage                                                                                                                                       |
-| Self-invite                              | Allowed (harmless, filtered by `filterRedundantACL` if owner)                                                                                                                                 |
-| Team chat                                | Works — team member ACL on container, `filterRedundantACL` strips if redundant                                                                                                                |
-| Email not a registered user              | ACL entry created (consistent with share dialog behavior)                                                                                                                                     |
-| Container has `sharingRestricted: true`  | `drive.updateACL()` goes through `SharedDrive.updateACL()` which blocks — correct, editors cannot invite when sharing is restricted (see [TODO-RESHARE-PREVENTION.md](RESHARE-PREVENTION.md)) |
+| Case                              | Behavior                                                  |
+|-----------------------------------|-----------------------------------------------------------|
+| Standalone chat                   | `findContainerPath()` returns `null` → ACL on chat itself |
+| Embedded chat                     | ACL on outermost container document                       |
+| Nested (chat in folder in doc)    | ACL on outermost container                                |
+| Already has access                | Returns `alreadyHasAccess: true`, no ACL change           |
+| Chat write but no container write | 403                                                       |
+| `sharingRestricted` on container  | Blocks editors, owner bypasses                            |
+| Invalid email                     | 400                                                       |
+| No write permission               | 403                                                       |
+| Case-insensitive emails           | Email lowercased before comparison and storage            |
+| Self-invite                       | Allowed                                                   |
 
-## What This Does NOT Change
+## Files
 
-- `Drive.updateACL()` — unchanged, still replaces full ACL array on the specified path
-- Share dialog — already operates on documents, not embedded chats
-- `PUT /drive/:ownerId/:mountId/path/:pathId/acl` — unchanged
-- ACL inheritance model — unchanged (additive, parent → child)
+| File                                                | Purpose                                                     |
+|-----------------------------------------------------|-------------------------------------------------------------|
+| `apps/api/src/lib/drive/acl.ts`                     | `findContainerPath()` — walks parent chain                  |
+| `apps/api/src/lib/drive/drive.ts`                   | `inviteToChat()` — resolves target, merges ACL              |
+| `apps/api/src/lib/drive/sharedDrive.ts`             | `inviteToChat()` override — permission + restriction checks |
+| `apps/api/src/routes/chat.ts`                       | `POST /chat/:ownerId/:mountId/:chatId/invite` route         |
+| `packages/lib/src/core/chat/hooks/use-chat.ts`      | `useInviteToChat()` mutation hook                           |
+| `packages/lib/src/core/chat/hooks/use-chat-room.ts` | `/invite` command handler                                   |
+| `apps/api/src/tests/acl-bubbling.test.ts`           | Integration tests                                           |
+
+See: [ACL.md](ACL.md) for the base ACL system, [CHAT.md](CHAT.md) for the chat system
