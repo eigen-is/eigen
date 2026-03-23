@@ -1,9 +1,9 @@
-# Mentions & Notification Center
+# TODO: Mentions in Docs & Stickies
 
-> **TLDR**: Cross-cutting @mention system for chat, docs, and stickies. Mentions produce persisted notifications in a
-> per-user SQLite database. A notification bell in the topbar shows unread count + dropdown list. SSE delivers real-time
-> events. Chat mentions are detected server-side in `postMessage()`. Doc and stickies mentions use a lightweight POST
-> endpoint. Mention autocomplete reuses the `ChatPlayerSuggest` pattern.
+> **Status**: Chat @mentions are implemented — `ChatRoom.postMessage()` detects mentions, checks access via
+> `getEffectiveMembers()`, and creates notifications via `NotificationCenter.persist()`. This doc covers the remaining
+> work: @mention detection in **docs** (Tiptap) and **stickies** (Yjs) which don't go through chat's `postMessage()`.
+> See [NOTIFICATION-CENTER.md](NOTIFICATION-CENTER.md) for the notification infrastructure.
 
 ## 1. Problem Statement
 

@@ -1,17 +1,20 @@
 # Server-Sent Events (SSE)
 
-> **TLDR**: Real-time cache invalidation. Backend emits events via `home.notify()` → SSE stream → frontend handlers
-> invalidate TanStack Query cache. A small set of curated events also show toast notifications (see
-> [NOTIFICATIONS.md](NOTIFICATIONS.md)). Add new domain SSE: define types in `packages/lib/src/types/sse.ts`,
-> create builder in `apps/api/src/lib/[domain]/sse-events.ts`, create handler in
-> `packages/lib/src/core/[domain]/sse-handlers.ts`, register in `use-sse.ts`.
+> **TLDR**: Real-time cache invalidation. Backend emits events via `home.broadcast()` → SSE stream → frontend handlers
+> invalidate TanStack Query cache. User-facing notifications (toasts) come exclusively from the notification center's
+> SSE event. SSE events carry only the minimum data needed for cache invalidation — no display text, no full domain
+> objects. Add new domain SSE: define types in `packages/lib/src/types/sse.ts`, create builder in
+> `apps/api/src/lib/[domain]/sse-events.ts`, create handler in `packages/lib/src/core/[domain]/sse-handlers.ts`,
+> register in `use-sse.ts`.
 
 ## Flow
 
 ```
-API Mutation → home.notify(event) → SSE Stream → Client
-                                                    └── SSE Handler → QueryClient.invalidateQueries()
-                                                                    → toast (only for curated remote events)
+API Mutation → home.broadcast(event)  → SSE Stream → Client
+                                                        └── SSE Handler → QueryClient.invalidateQueries()
+
+Notification → home.notifications.persist({...})
+                 └── broadcasts notification:created SSE → toast + invalidate notification queries
 ```
 
 SSE is personal-only — each user subscribes to their own Home's event stream. The SSE keepalive (every 30s)
@@ -21,12 +24,13 @@ timeouts. The frontend `useSSE` hook auto-reconnects after HTTP errors (e.g. 502
 
 Events fall into two categories:
 
-- **Self-triggered**: your own action bounces back for cache invalidation. No toast needed — the UI already reflects
-  the change
-- **Recipient-only**: explicitly propagated to another user's Home (share, invite, incoming mail). These show a
-  toast notification directly in the SSE handler
+- **Cache invalidation**: domain events (drive, mail, calendar, chat, contacts) carry only IDs needed for
+  `queryClient.invalidateQueries()`. No toasts, no display text
+- **Notification**: `notification:created` carries `title` + optional `body` for the toast. Created by
+  `NotificationCenter.persist()` which also writes to the per-user notifications database
 
-See [NOTIFICATIONS.md](NOTIFICATIONS.md) for the full notification pattern.
+See [NOTIFICATIONS.md](NOTIFICATIONS.md) for the toast pattern, [NOTIFICATION-CENTER.md](NOTIFICATION-CENTER.md)
+for the notification center architecture.
 
 ## File Locations
 
@@ -38,35 +42,40 @@ See [NOTIFICATIONS.md](NOTIFICATIONS.md) for the full notification pattern.
 | useSSE hook       | `packages/lib/src/core/sse/hooks/use-sse.ts`                      |
 | SSE Provider      | `packages/ui/src/components/layout/sse-provider/sse-provider.tsx` |
 | SSE route         | `apps/api/src/routes/sse.ts`                                      |
-| Home.notify()     | `apps/api/src/lib/home/home.ts`                                   |
+| Home.broadcast()  | `apps/api/src/lib/home/home.ts`                                   |
 
 ## Event Design
 
-- All events have `title` (base field)
-- Notification events add `body`, `tag?`, `link?` (via `SSEventNotification` mixin)
-- Domain-specific payloads: `path` (Drive), `mail` (Mail), `contact`/`label` (Contacts), `chat` (Chat), `calendar` (
-  Calendar)
-- Type prefixes: `drive:`, `mail:`, `contacts:`, `chat:`, `calendar:`, `space:`, `team:`
+Events are minimal — only what the frontend handler needs for cache invalidation:
+
+- Drive: `path.ownerId`, `path.mountId`, `path.id`, `path.parentId`, `path.mimeType`, optional `oldParentId`
+- Mail: `mail.messageId`, `mail.mailbox`, optional `mail.toMailbox`
+- Calendar: `ownerId`
+- Chat: `chat.chatId`, `chat.ownerId`, `chat.mountId`
+- Contacts: `contactId` or `labelId`
+- Notification: `title`, optional `body`
+- Space/Team: just the event type
+
+Type prefixes: `drive:`, `mail:`, `contacts:`, `chat:`, `calendar:`, `notification:`, `space:`, `team:`
 
 ## Adding SSE to a New Domain
 
 1. **Define types** in `packages/lib/src/types/sse.ts` — add to `SSEventType`, create event type, add to `SSEvent` union
-2. **Create builder** at `apps/api/src/lib/[domain]/sse-events.ts` — templates + `build[Domain]Event()`
-3. **Emit from business logic** — add `emit()` helper calling `this.home.notify()`
-4. **Create handler** at `packages/lib/src/core/[domain]/sse-handlers.ts` — call invalidation functions from hooks.
-   If the event is a recipient-only remote event (share, invite), add a `toast()` call directly in the handler
+2. **Create builder** at `apps/api/src/lib/[domain]/sse-events.ts` — `build[Domain]Event()` returning minimal data
+3. **Emit from business logic** — call `this.home.broadcast(buildEvent(...))`
+4. **Create handler** at `packages/lib/src/core/[domain]/sse-handlers.ts` — switch on event type, call invalidation
+   functions. Do NOT add toast calls — toasts come from the notification center
 5. **Register handler** in `packages/lib/src/core/sse/hooks/use-sse.ts`
 
 ## Implemented Domains
 
-| Domain   | sse-events builder | sse-handler |
-|----------|--------------------|-------------|
-| Drive    | Yes                | Yes         |
-| Mail     | Yes                | Yes         |
-| Contacts | Yes                | Yes         |
-| Chat     | Yes                | Yes         |
-| Calendar | Yes                | Yes         |
-| Space    | —                  | Yes         |
-| Team     | —                  | Yes         |
-
-Space and Team use event types defined in `sse.ts` directly (no dedicated builder file).
+| Domain       | sse-events builder | sse-handler |
+|--------------|--------------------|-------------|
+| Drive        | Yes                | Yes         |
+| Mail         | Yes                | Yes         |
+| Contacts     | Yes                | Yes         |
+| Chat         | Yes                | Yes         |
+| Calendar     | Yes                | Yes         |
+| Notification | Yes                | Yes         |
+| Space        | —                  | Yes         |
+| Team         | —                  | Yes         |

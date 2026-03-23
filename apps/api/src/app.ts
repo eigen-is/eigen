@@ -24,7 +24,7 @@ export const app = new Elysia()
     .use(swagger())
     .use(cors({
         origin: trustedOrigins,
-        methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+        methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
         credentials: true,
         allowedHeaders: ["Content-Type", "Authorization"],
     }))
