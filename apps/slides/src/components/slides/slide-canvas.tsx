@@ -4,6 +4,7 @@ import {SlideObjectView} from './slide-object';
 import {useMediaResolver} from '@workspace/lib/drive';
 import {useObjectDrag} from './hooks/use-object-drag';
 import {useSnapTargets} from './hooks/use-snap-lines';
+import {useMarqueeSelect} from './hooks/use-marquee-select';
 
 type SlideCanvasProps = {
     slide: SlideItem;
@@ -11,6 +12,7 @@ type SlideCanvasProps = {
     selectedObjectIds: string[];
     editingObjectId: string | null;
     onSelectObject: (objId: string | null, additive?: boolean) => void;
+    onSelectObjects: (objIds: string[]) => void;
     onStartEditing: (objId: string) => void;
     onStopEditing: () => void;
     onUpdateObject: (objId: string, updates: Partial<SlideObject>) => void;
@@ -30,6 +32,7 @@ export function SlideCanvas({
                                 selectedObjectIds,
                                 editingObjectId,
                                 onSelectObject,
+                                onSelectObjects,
                                 onStartEditing,
                                 onStopEditing,
                                 onUpdateObject,
@@ -55,6 +58,12 @@ export function SlideCanvas({
         hSnaps,
     });
 
+    const {marquee, startMarquee} = useMarqueeSelect({
+        objects,
+        canvasRef,
+        onSelect: onSelectObjects,
+    });
+
     const handleDragStart = useCallback((e: React.MouseEvent, objId: string, mode: 'move', x: number, y: number, w: number, h: number) => {
         startDrag(e, objId, mode, x, y, w, h);
     }, [startDrag]);
@@ -66,8 +75,11 @@ export function SlideCanvas({
     const handleCanvasMouseDown = useCallback((e: React.MouseEvent) => {
         if (e.target === canvasRef.current) {
             onSelectObject(null);
+            if (canWrite) {
+                startMarquee(e);
+            }
         }
-    }, [onSelectObject]);
+    }, [onSelectObject, canWrite, startMarquee]);
 
     const handleDrop = useCallback((e: React.DragEvent) => {
         e.preventDefault();
@@ -142,6 +154,17 @@ export function SlideCanvas({
                         }
                     />
                 ))}
+                {marquee && (
+                    <div
+                        className="absolute pointer-events-none z-50 border border-blue-500 bg-blue-500/10"
+                        style={{
+                            left: `${pxToPercent(marquee.x, 'x')}%`,
+                            top: `${pxToPercent(marquee.y, 'y')}%`,
+                            width: `${pxToPercent(marquee.w, 'x')}%`,
+                            height: `${pxToPercent(marquee.h, 'y')}%`,
+                        }}
+                    />
+                )}
             </div>
         </div>
     );

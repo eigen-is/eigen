@@ -455,6 +455,7 @@ function SlideEditorInner({ownerId, path, canWrite, mediaFolderId, onAccessDialo
                                     selectedObjectIds={selectedObjectIds}
                                     editingObjectId={editingObjectId}
                                     onSelectObject={handleSelectObject}
+                                    onSelectObjects={setSelectedObjectIds}
                                     onStartEditing={handleStartEditing}
                                     onStopEditing={handleStopEditing}
                                     onUpdateObject={updateObject}
