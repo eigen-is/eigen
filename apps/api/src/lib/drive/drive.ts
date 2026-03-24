@@ -55,7 +55,7 @@ const COLLAB_EXTENSIONS: Record<string, string> = {
 
 export default class Drive {
     private home: Home;
-    private owner: User;
+    protected owner: User;
     private mounts: Map<string, Mount> = new Map();
     private defaultMountId: string = 'default';
     private sharedDb!: BunSQLiteDatabase<typeof sharedSchema>;
