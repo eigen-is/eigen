@@ -27,12 +27,7 @@ export function SheetsSidebar({
     const targetPath = rootPath;
 
     const handleAfterAction = () => {
-        navigate({
-            to: '/mime/$mimeType',
-            params: {
-                mimeType: 'application-eigensheets'
-            }
-        });
+        navigate({to: '/'});
     };
 
     return (
@@ -56,7 +51,7 @@ export function SheetsSidebar({
 
                 <SidebarItem
                     icon={<Sheet className="h-4 w-4"/>}
-                    to="/mime/application-eigensheets"
+                    to="/"
                     label="All sheets"
                     condensed={condensed}
                 />

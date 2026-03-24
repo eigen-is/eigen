@@ -27,12 +27,7 @@ export function SlidesSidebar({
     const targetPath = rootPath;
 
     const handleAfterAction = () => {
-        navigate({
-            to: '/mime/$mimeType',
-            params: {
-                mimeType: 'application-eigenslides'
-            }
-        });
+        navigate({to: '/'});
     };
 
     return (
@@ -56,7 +51,7 @@ export function SlidesSidebar({
 
                 <SidebarItem
                     icon={<Presentation className="h-4 w-4"/>}
-                    to="/mime/application-eigenslides"
+                    to="/"
                     label="All slides"
                     condensed={condensed}
                 />
@@ -84,8 +79,6 @@ export function SlidesSidebar({
                     path={targetPath}
                     open={createSlidesOpen}
                     onOpenChange={setCreateSlidesOpen}
-                    onSave={() => {
-                    }}
                     onCancel={() => setCreateSlidesOpen(false)}
                     onAfterAction={handleAfterAction}
                 />
