@@ -24,7 +24,14 @@ function GlobalHotkeys() {
 }
 
 export function EigenApp({children}: EigenAppProps) {
-    const [queryClient] = useState(() => new QueryClient());
+    const [queryClient] = useState(() => new QueryClient({
+        defaultOptions: {
+            queries: {
+                staleTime: 2 * 60 * 1000,
+                retry: 1,
+            },
+        },
+    }));
 
     return (
         <HotkeysProvider>

@@ -33,7 +33,6 @@ export function useUnreadNotificationCount(ownerId: string) {
             return (response.data as { count: number })?.count ?? 0;
         },
         enabled: !!ownerId,
-        refetchInterval: 60_000,
     });
 }
 
