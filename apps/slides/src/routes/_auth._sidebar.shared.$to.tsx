@@ -80,12 +80,7 @@ function DriveRoute() {
             onRowSelect={onRowSelect}
             onRowActivate={onRowActivate}
             onBackToList={handleBackToList}
-            onAfterAction={() => {
-                navigate({
-                    to: '/mime/$mimeType',
-                    params: {mimeType: 'application-eigenslides'}
-                });
-            }}
+            onAfterAction={() => navigate({to: '/'})}
             allowDelete={to === 'by-me'}
             allowShare={true}
             allowCreateFolder={false}

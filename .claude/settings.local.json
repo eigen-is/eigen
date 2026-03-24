@@ -110,7 +110,9 @@
       "Bash(brew list:*)",
       "Bash(npm search:*)",
       "Bash(exiftool -ver)",
-      "Bash(head -1 node_modules/.bun/exiftool-vendored.pl@*/node_modules/exiftool-vendored.pl/bin/exiftool)"
+      "Bash(head -1 node_modules/.bun/exiftool-vendored.pl@*/node_modules/exiftool-vendored.pl/bin/exiftool)",
+      "Bash(npx tsr:*)",
+      "Bash(bunx tsr:*)"
     ]
   },
   "bypassPermissions": "bypassPermissions"
