@@ -63,6 +63,19 @@ export function createAppConfig(appName: string, extraConfig?: UserConfig) {
                 treeshake: {
                     preset: 'smallest',
                 },
+                output: {
+                    manualChunks(id) {
+                        if (id.includes('node_modules/react-dom') || id.includes('node_modules/react/')) {
+                            return 'react';
+                        }
+                        if (id.includes('node_modules/@radix-ui/')) {
+                            return 'radix';
+                        }
+                        if (id.includes('node_modules/@tanstack/')) {
+                            return 'tanstack';
+                        }
+                    },
+                },
             },
         },
     }
