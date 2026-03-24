@@ -13,7 +13,8 @@ import {
     DRIVE_TYPE_STICKIES,
     type MountConfig,
     type MountInfo,
-    type MountSettings
+    type MountSettings,
+    parseOwnerId,
 } from '@workspace/lib/types';
 import {
     type DriveACL,
@@ -33,6 +34,7 @@ import {getThumbnail, saveThumbnail} from '../shared/thumbnails';
 import {getScreenPreview, getTextPreviewData} from '../preview/preview-cache';
 import {getTextPreviewMode} from '@workspace/lib/constants';
 import {extractFrontmatter, MAX_INLINE_EDIT_SIZE, reattachFrontmatter} from './inline-edit';
+import {getTeamMembers} from '../team';
 import CollabDocument from '../collab/collabDocument';
 import {getSharedDatabase} from './shared';
 import * as sharedSchema from './sharedschema';
@@ -547,13 +549,11 @@ export default class Drive {
             }
         }
 
-        // Resolve to individual emails (expands teams, deduplicates)
+        // Resolve explicit ACL entries to individual emails (expands teams, deduplicates)
         const members = await resolveACLToEmails(allACL);
 
-        // Add owner — for personal drives it's the user, for team drives
-        // the team members are already included via the ACL team expansion
-        if (this.owner.email) {
-            const key = this.owner.email.toLowerCase();
+        function addMember(email: string) {
+            const key = email.toLowerCase();
             const existing = members.get(key);
             if (existing) {
                 existing.read = true;
@@ -561,6 +561,18 @@ export default class Drive {
             } else {
                 members.set(key, {email: key, read: true, write: true});
             }
+        }
+
+        // Team-owned drives: all team members have implicit full access
+        // (same logic as canRead/canWrite in acl.ts)
+        const parsed = parseOwnerId(this.owner.id);
+        if (parsed?.type === 'team') {
+            const teamMembers = await getTeamMembers(parsed.id);
+            for (const m of teamMembers) {
+                addMember(m.user.email);
+            }
+        } else if (this.owner.email) {
+            addMember(this.owner.email);
         }
 
         return [...members.values()];
