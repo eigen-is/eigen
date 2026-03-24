@@ -1,7 +1,7 @@
 import {Search} from 'lucide-react';
 import {cn} from "@workspace/ui/lib/utils";
 import {InputGroup, InputGroupAddon, InputGroupInput, InputGroupText} from "@workspace/ui/components/input-group";
-import {ChangeEvent} from 'react';
+import {type ChangeEvent, useEffect, useRef, useState} from 'react';
 
 export type SearchBarProps = {
     placeholder?: string;
@@ -10,6 +10,7 @@ export type SearchBarProps = {
     className?: string;
     inputClassName?: string;
     maxWidth?: 'xs' | 'sm' | 'md' | 'lg' | 'xl' | 'full';
+    debounceMs?: number;
 }
 
 export function SearchBar({
@@ -18,9 +19,9 @@ export function SearchBar({
                               onChange,
                               className,
                               inputClassName,
-                              maxWidth = "sm"
+                              maxWidth = "sm",
+                              debounceMs = 200,
                           }: SearchBarProps) {
-    // Mapping for max-width classes
     const maxWidthClasses = {
         xs: 'max-w-xs',
         sm: 'max-w-sm',
@@ -30,8 +31,26 @@ export function SearchBar({
         full: 'max-w-full'
     };
 
+    const [displayValue, setDisplayValue] = useState(value);
+    const lastEmittedRef = useRef(value);
+    const timerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+    // Sync from parent only for external changes (e.g. clear button)
+    if (value !== lastEmittedRef.current && value !== displayValue) {
+        lastEmittedRef.current = value;
+        setDisplayValue(value);
+    }
+
+    useEffect(() => () => clearTimeout(timerRef.current), []);
+
     const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
-        onChange(e.target.value);
+        const newValue = e.target.value;
+        setDisplayValue(newValue);
+        clearTimeout(timerRef.current);
+        timerRef.current = setTimeout(() => {
+            lastEmittedRef.current = newValue;
+            onChange(newValue);
+        }, debounceMs);
     };
 
     return (
@@ -44,8 +63,9 @@ export function SearchBar({
                     type="text"
                     placeholder={placeholder}
                     className={cn("w-full", inputClassName)}
-                    value={value}
+                    value={displayValue}
                     onChange={handleChange}
+                    autoComplete="one-time-code"
                 />
             </InputGroup>
         </div>
