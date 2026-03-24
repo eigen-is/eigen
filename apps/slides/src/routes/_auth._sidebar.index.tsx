@@ -9,7 +9,9 @@ import {useContext} from 'react';
 import {DriveContext} from './__root';
 import {openDocument} from "@workspace/lib/api.ts";
 
-export const Route = createFileRoute('/_auth/_sidebar/mime/$mimeType')({
+const MIME_TYPE = 'application-eigenslides';
+
+export const Route = createFileRoute('/_auth/_sidebar/')({
     component: DriveRoute,
     validateSearch: (search: Record<string, unknown>) => {
         const pid = typeof search.pid === 'string' ? search.pid : undefined;
@@ -20,11 +22,10 @@ export const Route = createFileRoute('/_auth/_sidebar/mime/$mimeType')({
 });
 
 function DriveRoute() {
-    const {mimeType} = Route.useParams();
     const navigate = useNavigate();
     const {pid, mid} = Route.useSearch();
-    const auth = useAuth();
-    const ownerId = auth.user!.id;
+    const {user} = useAuth();
+    const ownerId = user!.id;
     const {rootPath} = useContext(DriveContext);
     const {data: selectedPath = null} = usePathInfo(ownerId, mid || DEFAULT_MOUNT_ID, pid);
     const {isMobile} = useLayout();
@@ -33,17 +34,13 @@ function DriveRoute() {
         data: folderContents = [],
         isLoading: isFolderContentLoading,
         error: isFolderContentLoadingError
-    } = useMimeContent(ownerId, mimeType);
+    } = useMimeContent(ownerId, MIME_TYPE);
 
     const onRowSelect = (path: DrivePath) => {
         if (isMobile && isDocumentType(path.type)) {
             onRowActivate(path);
         } else {
-            navigate({
-                to: Route.fullPath,
-                params: {mimeType},
-                search: {pid: path.id, mid: path.mountId}
-            });
+            navigate({to: '/', search: {pid: path.id, mid: path.mountId}});
         }
     };
 
@@ -52,10 +49,7 @@ function DriveRoute() {
     };
 
     const handleBackToList = () => {
-        navigate({
-            to: Route.fullPath,
-            params: {mimeType}
-        });
+        navigate({to: '/'});
     };
 
     if (isFolderContentLoadingError) {
@@ -74,20 +68,15 @@ function DriveRoute() {
             onRowSelect={onRowSelect}
             onRowActivate={onRowActivate}
             onBackToList={handleBackToList}
-            onAfterAction={() => {
-                navigate({
-                    to: '/mime/$mimeType',
-                    params: {mimeType: 'application-eigenstickies'}
-                });
-            }}
+            onAfterAction={() => navigate({to: '/'})}
             allowDelete={true}
             allowShare={true}
             allowCreateFolder={false}
             allowUpload={false}
             allowCreateDoc={false}
-            allowCreateStickies={true}
+            allowCreateStickies={false}
             allowCreateChat={false}
-            allowCreateSlides={false}
+            allowCreateSlides={true}
             allowCreateSheets={false}
             showBreadcrumb={false}
             currentPath={rootPath}

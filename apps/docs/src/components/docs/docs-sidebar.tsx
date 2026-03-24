@@ -28,12 +28,7 @@ export function DocsSidebar({
     const targetPath = rootPath;
 
     const handleAfterAction = () => {
-        navigate({
-            to: '/mime/$mimeType',
-            params: {
-                mimeType: 'application-eigendoc'
-            }
-        });
+        navigate({to: '/'});
     };
 
     return (
@@ -57,7 +52,7 @@ export function DocsSidebar({
             >
                 <SidebarItem
                     icon={<FileText className="h-4 w-4"/>}
-                    to="/mime/application-eigendoc"
+                    to="/"
                     label="All docs"
                     condensed={condensed}
                 />
@@ -85,8 +80,6 @@ export function DocsSidebar({
                     path={targetPath}
                     open={createDocOpen}
                     onOpenChange={setCreateDocOpen}
-                    onSave={() => {
-                    }}
                     onCancel={() => setCreateDocOpen(false)}
                     onAfterAction={handleAfterAction}
                 />

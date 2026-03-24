@@ -20,10 +20,7 @@ export function StickiesSidebar({condensed = false, onClose, isMobile = false, r
     const [createStickiesOpen, setCreateStickiesOpen] = useState(false);
 
     const handleAfterAction = () => {
-        navigate({
-            to: '/mime/$mimeType',
-            params: {mimeType: 'application-eigenstickies'},
-        });
+        navigate({to: '/'});
     };
 
     return (
@@ -44,7 +41,7 @@ export function StickiesSidebar({condensed = false, onClose, isMobile = false, r
             <SidebarSection condensed={condensed}>
                 <SidebarItem
                     icon={<FileText className="h-4 w-4"/>}
-                    to="/mime/application-eigenstickies"
+                    to="/"
                     label="All stickies"
                     condensed={condensed}
                 />
@@ -69,7 +66,6 @@ export function StickiesSidebar({condensed = false, onClose, isMobile = false, r
                     path={rootPath}
                     open={createStickiesOpen}
                     onOpenChange={setCreateStickiesOpen}
-                    onSave={() => {}}
                     onCancel={() => setCreateStickiesOpen(false)}
                     onAfterAction={handleAfterAction}
                 />
