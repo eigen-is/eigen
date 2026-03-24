@@ -88,6 +88,7 @@ type SlideObjectViewProps = {
     selected: boolean;
     editing: boolean;
     editable: boolean;
+    isMultiSelected: boolean;
     onSelect: (objId: string, additive?: boolean) => void;
     onStartEditing: (objId: string) => void;
     onStopEditing: () => void;
@@ -118,6 +119,7 @@ export const SlideObjectView = memo(function SlideObjectView({
                                                                  selected,
                                                                  editing,
                                                                  editable,
+                                                                 isMultiSelected,
                                                                  onSelect,
                                                                  onStartEditing,
                                                                  onStopEditing,
@@ -145,7 +147,12 @@ export const SlideObjectView = memo(function SlideObjectView({
         if (editing) return;
         e.stopPropagation();
         const additive = e.metaKey || e.ctrlKey;
-        onSelect(obj.id, additive);
+        // When clicking an already-selected object in a multi-selection, don't reset selection
+        if (!additive && !isMultiSelected) {
+            onSelect(obj.id);
+        } else if (additive) {
+            onSelect(obj.id, true);
+        }
         if (editable && !additive) {
             onDragStart(e, obj.id, 'move', obj.x, obj.y, obj.w, obj.h);
         }

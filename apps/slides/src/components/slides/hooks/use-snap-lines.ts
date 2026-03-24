@@ -1,5 +1,5 @@
 import {useMemo} from 'react';
-import {SlideObject, SLIDE_BASE_WIDTH, SLIDE_BASE_HEIGHT} from '../types';
+import {SLIDE_BASE_HEIGHT, SLIDE_BASE_WIDTH, SlideObject} from '../types';
 
 const SNAP_THRESHOLD = 15;
 
@@ -31,13 +31,13 @@ function getEdges(r: Rect) {
 
 export function computeSnapLines(
     objects: SlideObject[],
-    dragObjId: string,
+    excludeIds: Set<string>,
 ): {vSnaps: number[]; hSnaps: number[]} {
     const vSnaps: number[] = [0, SLIDE_BASE_WIDTH / 2, SLIDE_BASE_WIDTH];
     const hSnaps: number[] = [0, SLIDE_BASE_HEIGHT / 2, SLIDE_BASE_HEIGHT];
 
     for (const obj of objects) {
-        if (obj.id === dragObjId) continue;
+        if (excludeIds.has(obj.id)) continue;
         const e = getEdges(obj);
         vSnaps.push(e.left, e.right, e.cx);
         hSnaps.push(e.top, e.bottom, e.cy);
@@ -160,9 +160,11 @@ export function snapRect(
     return {x, y, w, h, lines};
 }
 
-export function useSnapTargets(objects: SlideObject[], dragObjId: string | null) {
+export function useSnapTargets(objects: SlideObject[], excludeIds: string[]) {
+    const excludeKey = excludeIds.join(',');
     return useMemo(() => {
-        if (!dragObjId) return {vSnaps: [] as number[], hSnaps: [] as number[]};
-        return computeSnapLines(objects, dragObjId);
-    }, [objects, dragObjId]);
+        if (excludeIds.length === 0) return {vSnaps: [] as number[], hSnaps: [] as number[]};
+        return computeSnapLines(objects, new Set(excludeIds));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [objects, excludeKey]);
 }

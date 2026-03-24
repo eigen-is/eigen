@@ -78,3 +78,12 @@ export async function evictHome(ownerId: string): Promise<void> {
         homeFactories.delete(ownerId);
     }
 }
+
+export async function shutdownAllHomes(): Promise<void> {
+    const entries = [...homeFactories.entries()];
+    homeFactories.clear();
+    await Promise.allSettled(entries.map(async ([, factory]) => {
+        const home = await factory();
+        await home.shutdown();
+    }));
+}

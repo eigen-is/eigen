@@ -45,7 +45,7 @@
 .fortune-row-header-selected {
     position: absolute;
     z-index: 10;
-    border-right: 1px solid #0188fb;
+    border-right: 1px solid var(--color-blue-500);
     right: 0;
     width: 100%;
     margin-top: 2px;
@@ -94,7 +94,7 @@
     cursor: default;
     position: absolute;
     z-index: 10;
-    border-bottom: 1px solid #0188fb;
+    border-bottom: 1px solid var(--color-blue-500);
     bottom: 0;
     height: 100%;
     margin-left: 0px;
@@ -137,7 +137,7 @@
     z-index: 14;
     /*border:1px solid #fff;*/
     margin: 0px 0 0 0px;
-    background: rgba(0, 80, 208, 0.15);
+    background: color-mix(in oklab, var(--color-blue-500) 10%, transparent);
     display: none;
 }
 
@@ -161,7 +161,7 @@
     right: 0;
     bottom: 0;
     left: 0;
-    border: 2px dashed #12a5ff;
+    border: 2px dashed var(--color-blue-500);
     z-index: 8;
 }
 
@@ -178,7 +178,7 @@
     position: absolute;
     pointer-events: none;
     z-index: 16;
-    border: 1px dashed #0188fb;
+    border: 1px dashed var(--color-blue-500);
     margin: -1px 0 0 -1px;
     display: none;
 }
@@ -188,7 +188,7 @@
     position: absolute;
     /* pointer-events: none; */
     z-index: 16;
-    border: 2px solid #0188fb;
+    border: 2px solid var(--color-blue-500);
     margin: -1px 0 0 -1px;
     display: none;
 }
@@ -197,9 +197,9 @@
     position: absolute;
     pointer-events: none;
     z-index: 15;
-    border: 1px solid #0188fb;
+    border: 1px solid var(--color-blue-500);
     margin: -1px 0 0 -1px;
-    background: rgba(1, 136, 251, 0.15);
+    background: color-mix(in oklab, var(--color-blue-500) 10%, transparent);
     display: none;
     box-sizing: content-box;
 }
@@ -220,7 +220,7 @@
     height: 6px;
     bottom: -5px;
     cursor: crosshair;
-    background-color: #0188fb;
+    background-color: var(--color-blue-500);
     border: solid 1px #fff;
     z-index: 16;
     pointer-events: auto;
@@ -481,7 +481,7 @@
 .fortune-cols-change-size {
     width: 5px;
     height: 100%;
-    background: #0188fb;
+    background: var(--color-blue-500);
     cursor: ew-resize;
     opacity: 0;
 }
@@ -489,13 +489,13 @@
 .fortune-rows-change-size {
     width: 100%;
     height: 5px;
-    background: #0188fb;
+    background: var(--color-blue-500);
     cursor: ns-resize;
     opacity: 0;
 }
 
 .fortune-change-size-line {
-    border-color: #0188fb;
+    border-color: var(--color-blue-500);
     border-style: solid;
     z-index: 15;
     cursor: ew-resize;
@@ -582,7 +582,7 @@
 .luckysheet-postil-show-active
 .luckysheet-postil-dialog-move
 .luckysheet-postil-dialog-move-item {
-    border-color: #0188fb;
+    border-color: var(--color-blue-500);
 }
 
 .luckysheet-postil-dialog-resize {
@@ -600,7 +600,7 @@
     position: absolute;
     height: 6px;
     width: 6px;
-    border: 1px solid #0188fb;
+    border: 1px solid var(--color-blue-500);
     pointer-events: all;
 }
 
@@ -696,13 +696,13 @@
     right: 0;
     bottom: 0;
     left: 0;
-    border: 2px dashed #12a5ff;
+    border: 2px dashed var(--color-blue-500);
     z-index: 8;
 }
 
 .luckysheet-modal-dialog-resize {
     position: absolute;
-    border: 2px solid #0188fb;
+    border: 2px solid var(--color-blue-500);
     margin: 0px;
     padding: 0px;
     top: -2px;
@@ -717,7 +717,7 @@
     height: 6px;
     width: 6px;
     background: #ffffff;
-    border: 2px solid #0188fb;
+    border: 2px solid var(--color-blue-500);
     pointer-events: all;
     border-radius: 6px;
 }
@@ -776,7 +776,7 @@
 
 .fortune-formula-functionrange-highlight .fortune-copy {
     background-image: none;
-    background: #0188fb;
+    background: var(--color-blue-500);
     position: absolute;
     z-index: 18;
     cursor: move;
@@ -843,7 +843,7 @@
     position: absolute;
     z-index: 19;
     border: 1px solid #fff;
-    background: #0188fb;
+    background: var(--color-blue-500);
     width: 6px;
     height: 6px;
 }

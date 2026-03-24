@@ -157,6 +157,24 @@ function SlideEditorInner({ownerId, path, canWrite, mediaFolderId, onAccessDialo
         else if (isEditing) setEditingObjectId(null);
         else setSelectedObjectIds([]);
     }, {enabled: true});
+    const moveSelected = useCallback((dx: number, dy: number) => {
+        if (!yjsDoc) return;
+        yjsDoc.transact(() => {
+            const objectsMap = yjsDoc.getMap('objects');
+            for (const id of selectedObjectIds) {
+                const obj = deck.objects[id];
+                if (!obj) continue;
+                const objMap = objectsMap.get(id) as import('yjs').Map<unknown> | undefined;
+                if (!objMap) continue;
+                objMap.set('x', obj.x + dx);
+                objMap.set('y', obj.y + dy);
+            }
+        });
+    }, [selectedObjectIds, deck.objects, yjsDoc]);
+    useHotkey('ArrowLeft', (e) => { e.preventDefault(); moveSelected(-1, 0); }, {enabled: canWrite && hasSelection && !isEditing});
+    useHotkey('ArrowRight', (e) => { e.preventDefault(); moveSelected(1, 0); }, {enabled: canWrite && hasSelection && !isEditing});
+    useHotkey('ArrowUp', (e) => { e.preventDefault(); moveSelected(0, -1); }, {enabled: canWrite && hasSelection && !isEditing});
+    useHotkey('ArrowDown', (e) => { e.preventDefault(); moveSelected(0, 1); }, {enabled: canWrite && hasSelection && !isEditing});
     const handleImageFile = useCallback(async (file: File) => {
         if (!activeSlideId || !mediaFolderId || !file.type.startsWith('image/')) return;
         try {

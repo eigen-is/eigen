@@ -16,6 +16,8 @@ type UseMarqueeSelectProps = {
 
 export const useMarqueeSelect = ({objects, canvasRef, onSelect}: UseMarqueeSelectProps) => {
     const [marquee, setMarquee] = useState<MarqueeRect | null>(null);
+    const marqueeRef = useRef<MarqueeRect | null>(null);
+    marqueeRef.current = marquee;
     const startRef = useRef<{clientX: number; clientY: number} | null>(null);
     const objectsRef = useRef(objects);
     objectsRef.current = objects;
@@ -75,10 +77,6 @@ export const useMarqueeSelect = ({objects, canvasRef, onSelect}: UseMarqueeSelec
         document.addEventListener('mousemove', handleMouseMove);
         document.addEventListener('mouseup', handleMouseUp);
     }, [getSlideCoords, onSelect]);
-
-    // Keep a ref to the latest marquee for the mouseup handler
-    const marqueeRef = useRef<MarqueeRect | null>(null);
-    marqueeRef.current = marquee;
 
     return {marquee, startMarquee};
 };
