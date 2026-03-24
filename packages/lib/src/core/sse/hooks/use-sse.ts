@@ -36,6 +36,7 @@ export function useSSE() {
 
         const url = getSSEEventsUrl(user.id);
         let retryTimer: ReturnType<typeof setTimeout>;
+        let retryDelay = 1000;
         let stopped = false;
 
         function connect() {
@@ -43,6 +44,10 @@ export function useSSE() {
 
             const es = new EventSource(url, {withCredentials: true});
             eventSourceRef.current = es;
+
+            es.onopen = () => {
+                retryDelay = 1000;
+            };
 
             es.onmessage = (event) => {
                 try {
@@ -59,7 +64,9 @@ export function useSSE() {
                 if (es.readyState === EventSource.CLOSED) {
                     es.close();
                     eventSourceRef.current = null;
-                    retryTimer = setTimeout(connect, 5000);
+                    const jitter = retryDelay * 0.2 * Math.random();
+                    retryTimer = setTimeout(connect, retryDelay + jitter);
+                    retryDelay = Math.min(retryDelay * 2, 30000);
                 }
             };
         }
