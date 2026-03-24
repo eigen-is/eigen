@@ -1,5 +1,4 @@
 import {createFileRoute} from '@tanstack/react-router'
-import {Shovel} from 'lucide-react'
 import {apps} from "@workspace/lib/apps"
 import {Card, CardContent} from "@workspace/ui/components/card"
 
@@ -12,7 +11,7 @@ function HomeComponent() {
         <div className="flex flex-col h-full flex-1 overflow-y-auto">
             <div className="flex-1 flex flex-col items-center justify-center w-full px-4 py-8">
                 <div className="text-4xl mb-6">
-                    <span className="font-bold text-primary">eigen</span>
+                    <span className="font-bold text-app">eigen</span>
                 </div>
 
                 <div className="text-md text-center mb-10">
@@ -48,19 +47,6 @@ function HomeComponent() {
                             );
                         })}
                     </div>
-                </div>
-            </div>
-
-            <div className="text-center text-sm text-muted-foreground border-t w-full bg-background">
-                <div className="flex items-center justify-center m-2">
-                    <Shovel className="w-5 h-5 mr-2" style={{color: 'var(--app-drive-color)'}} aria-hidden="true"/>
-                    <span className="font-medium text-md">Under Construction</span>
-                </div>
-                <div className="m-2 text-xs">
-                    <p>
-                        eigen is made and hosted in the European Union.
-                        Our goal is to quickly deliver a Minimum Viable Product and scale up afterwards.
-                    </p>
                 </div>
             </div>
         </div>
