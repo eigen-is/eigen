@@ -163,7 +163,7 @@ export const SlideObjectView = memo(function SlideObjectView({
 
     const objectDiv = (
         <div
-            className={`absolute ${selected ? 'ring-2 ring-blue-500' : obj.type === 'text' ? 'border border-dashed border-border' : ''} ${editable && !editing ? 'cursor-move' : 'cursor-default'}`}
+            className={`absolute ${selected ? 'ring-1 ring-blue-500' : obj.type === 'text' ? 'border border-dashed border-border' : ''} ${editable && !editing ? 'cursor-move' : 'cursor-default'}`}
             style={getObjectPositionStyle(obj)}
             onMouseDown={handleMouseDown}
             onDoubleClick={handleDoubleClick}
@@ -218,7 +218,7 @@ export const SlideObjectView = memo(function SlideObjectView({
             {selected && editable && !editing && HANDLE_POSITIONS.map(({mode, className}) => (
                 <div
                     key={mode}
-                    className={`absolute h-3 w-3 bg-white border-2 border-blue-500 rounded-sm ${className}`}
+                    className={`absolute h-3 w-3 bg-white border border-blue-500 rounded-sm ${className}`}
                     onMouseDown={(e) => {
                         e.stopPropagation();
                         onResizeStart(e, obj.id, mode, obj.x, obj.y, obj.w, obj.h);

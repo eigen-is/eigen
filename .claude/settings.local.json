@@ -112,7 +112,9 @@
       "Bash(exiftool -ver)",
       "Bash(head -1 node_modules/.bun/exiftool-vendored.pl@*/node_modules/exiftool-vendored.pl/bin/exiftool)",
       "Bash(npx tsr:*)",
-      "Bash(bunx tsr:*)"
+      "Bash(bunx tsr:*)",
+      "Bash(du -sh /c/git/eigen/dist/$app/assets/)",
+      "Bash(sort -k5 -hr)"
     ]
   },
   "bypassPermissions": "bypassPermissions"
