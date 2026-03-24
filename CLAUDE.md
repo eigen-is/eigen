@@ -73,6 +73,8 @@ bun run check          # typecheck + test
   "Email sent", "Settings saved"). Apps should never add their own `try/catch` + `toast.error()` around mutations.
   Apps only need `try/catch` when they must do extra work on failure (e.g., reset UI state), and in that case they
   must NOT show a toast. See [NOTIFICATIONS.md](docs/NOTIFICATIONS.md)
+- **Fix broken windows** — when you encounter pre-existing errors, warnings, or code smells while working on a task,
+  fix them if the fix is straightforward. Leave code in a better state than you found it
 - **Keep docs up to date** — when a task is fully completed, update relevant docs in `docs/` and this file if the
   change affects architecture patterns, file locations, or critical rules
 
