@@ -2,6 +2,7 @@ import Elysia from "elysia";
 import {ApiError} from "./lib/core/errors";
 import swagger from "@elysiajs/swagger";
 import cors from "@elysiajs/cors";
+import {serverTiming} from "@elysiajs/server-timing";
 import {betterAuth} from "./routes/auth";
 import {mailRouter} from "./routes/mail";
 import {contactsRouter} from "./routes/contacts";
@@ -20,7 +21,10 @@ import {settingsRouter} from "./routes/settings";
 import {editorRouter} from "./routes/editor";
 import {notificationRouter} from "./routes/notification";
 
+const SLOW_REQUEST_MS = 200;
+
 export const app = new Elysia()
+    .use(serverTiming())
     .use(swagger())
     .use(cors({
         origin: trustedOrigins,
@@ -28,6 +32,16 @@ export const app = new Elysia()
         credentials: true,
         allowedHeaders: ["Content-Type", "Authorization"],
     }))
+    .state('requestStart', 0)
+    .onBeforeHandle(({store}) => {
+        store.requestStart = Bun.nanoseconds();
+    })
+    .onAfterResponse(({store, request, set}) => {
+        const ms = (Bun.nanoseconds() - store.requestStart) / 1_000_000;
+        if (ms > SLOW_REQUEST_MS) {
+            console.warn(`[slow] ${request.method} ${new URL(request.url).pathname} ${ms.toFixed(1)}ms → ${set.status}`);
+        }
+    })
     .use(betterAuth)
     .use(setupRouter)
 
