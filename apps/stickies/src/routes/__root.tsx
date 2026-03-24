@@ -1,60 +1,14 @@
-import {createRootRouteWithContext, Outlet, useMatch} from '@tanstack/react-router'
-import {AuthContextType, useAuth} from "@workspace/lib/auth";
-import {AppShell} from "@workspace/ui/components/layout/app/app-shell.tsx";
-import {DEFAULT_MOUNT_ID, useRootFolder} from '@workspace/lib/drive';
-import {createContext} from 'react';
-import {DriveContextType} from '@workspace/lib/types/drive';
-import {StickiesSidebar} from "../components/stickies/sidebar";
-
-export const DriveContext = createContext<DriveContextType>({
-    rootPath: null,
-    mountId: DEFAULT_MOUNT_ID
-});
+import {createRootRouteWithContext, useMatch} from '@tanstack/react-router'
+import type {AuthContextType} from "@workspace/lib/auth";
+import {EigenDocRoot, STICKIES_CONFIG} from "@workspace/ui/components/layout/drive";
 
 type MyRouterContext = {
     auth: AuthContextType
 }
 
 function StickiesRoot() {
-    const {user} = useAuth();
-    const mountId = DEFAULT_MOUNT_ID;
-    const {data: root} = useRootFolder(user?.id || '', mountId);
-    const rootPath = root || null;
-
-    const isEditorRoute = useMatch({
-        from: '/_auth/board/$ownerId/$mountId/$pathId',
-        shouldThrow: false,
-    });
-
-    const isFullScreen = !!isEditorRoute;
-
-    if (!user) {
-        return (
-            <AppShell appName="stickies" rootRoute={Route}>
-                <Outlet/>
-            </AppShell>
-        );
-    }
-
-    return (
-        <AppShell
-            appName="stickies"
-            rootRoute={Route}
-            sidebarMode={isFullScreen ? 'none' : 'collapsible'}
-            sidebar={!isFullScreen ? ({condensed, isMobile, onClose}) => (
-                <StickiesSidebar
-                    condensed={condensed}
-                    isMobile={isMobile}
-                    onClose={onClose}
-                    rootPath={rootPath}
-                />
-            ) : undefined}
-        >
-            <DriveContext.Provider value={{rootPath, mountId}}>
-                <Outlet/>
-            </DriveContext.Provider>
-        </AppShell>
-    );
+    const isEditorRoute = useMatch({from: '/_auth/board/$ownerId/$mountId/$pathId', shouldThrow: false});
+    return <EigenDocRoot config={STICKIES_CONFIG} rootRoute={Route} isFullScreen={!!isEditorRoute}/>;
 }
 
 export const Route = createRootRouteWithContext<MyRouterContext>()({

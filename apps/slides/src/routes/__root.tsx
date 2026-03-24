@@ -1,62 +1,16 @@
-import {createRootRouteWithContext, Outlet, useMatch} from '@tanstack/react-router'
-import {AuthContextType, useAuth} from "@workspace/lib/auth";
-import {AppShell} from "@workspace/ui/components/layout/app/app-shell.tsx";
-import {DEFAULT_MOUNT_ID, useRootFolder} from '@workspace/lib/drive';
-import {createContext} from 'react';
-import {DriveContextType} from '@workspace/lib/types/drive';
-import {SlidesSidebar} from "../components/slides-sidebar.tsx";
+import {createRootRouteWithContext, useMatch} from '@tanstack/react-router'
+import type {AuthContextType} from "@workspace/lib/auth";
+import {EigenDocRoot, SLIDES_CONFIG} from "@workspace/ui/components/layout/drive";
 
-export const DriveContext = createContext<DriveContextType>({
-    rootPath: null,
-    mountId: DEFAULT_MOUNT_ID
-});
-
-interface MyRouterContext {
+type MyRouterContext = {
     auth: AuthContextType
 }
 
-function DocsRoot() {
-    const {user} = useAuth();
-    const mountId = DEFAULT_MOUNT_ID;
-    const {data: root} = useRootFolder(user?.id || '', mountId);
-    const rootPath = root || null;
-
-    const isEditorRoute = useMatch({
-        from: '/_auth/slide/$ownerId/$mountId/$pathId',
-        shouldThrow: false,
-    });
-
-    const isFullScreen = !!isEditorRoute;
-
-    if (!user) {
-        return (
-            <AppShell appName="slides" rootRoute={Route}>
-                <Outlet/>
-            </AppShell>
-        );
-    }
-
-    return (
-        <AppShell
-            appName="slides"
-            rootRoute={Route}
-            sidebarMode={isFullScreen ? 'none' : 'collapsible'}
-            sidebar={!isFullScreen ? ({condensed, isMobile, onClose}) => (
-                <SlidesSidebar
-                    condensed={condensed}
-                    isMobile={isMobile}
-                    onClose={onClose}
-                    rootPath={rootPath}
-                />
-            ) : undefined}
-        >
-            <DriveContext.Provider value={{rootPath, mountId}}>
-                <Outlet/>
-            </DriveContext.Provider>
-        </AppShell>
-    );
+function SlidesRoot() {
+    const isEditorRoute = useMatch({from: '/_auth/slide/$ownerId/$mountId/$pathId', shouldThrow: false});
+    return <EigenDocRoot config={SLIDES_CONFIG} rootRoute={Route} isFullScreen={!!isEditorRoute}/>;
 }
 
 export const Route = createRootRouteWithContext<MyRouterContext>()({
-    component: DocsRoot,
+    component: SlidesRoot,
 });
