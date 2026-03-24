@@ -9,6 +9,10 @@ import {DriveCreateItemDialog} from "@workspace/ui/components/layout/drive/drive
 import {useState} from "react";
 import {useNavigate} from "@tanstack/react-router";
 import type {DrivePath} from "@workspace/lib/types/drive";
+import {Separator} from "@workspace/ui/components/separator";
+import {usePublicConfig} from "@workspace/lib/public";
+import {usePeopleTeams} from "@workspace/lib/people";
+import {teamOwnerId} from "@workspace/lib/types";
 
 type ChatSidebarProps = {
     condensed?: boolean;
@@ -17,6 +21,23 @@ type ChatSidebarProps = {
     ownerId: string;
     mountId: string;
     rootPath: DrivePath | null;
+}
+
+function ChatItem({chat, condensed}: { chat: DrivePath; condensed: boolean }) {
+    return (
+        <SidebarItem
+            icon={<MessageSquare className="h-4 w-4"/>}
+            label={(chat.name || 'Unnamed chat').replace(/\.eigenchat$/, '')}
+            to={`/${chat.ownerId}/${chat.mountId}/${chat.id}`}
+            condensed={condensed}
+        />
+    );
+}
+
+function TeamChatItems({teamId, condensed}: { teamId: string; condensed: boolean }) {
+    const {data: chats} = useChats(teamOwnerId(teamId));
+    if (!chats || chats.length === 0) return null;
+    return <>{chats.map(chat => <ChatItem key={chat.id} chat={chat} condensed={condensed}/>)}</>;
 }
 
 export function ChatSidebar({
@@ -32,6 +53,9 @@ export function ChatSidebar({
     const createChatMutation = useCreateChat(ownerId, mountId);
     const navigate = useNavigate();
 
+    const {data: config} = usePublicConfig();
+    const {data: teams} = usePeopleTeams(config?.orgId);
+
     const handleCreateChat = async (fileName: string) => {
         if (!rootPath) return;
         const newPath = await createChatMutation.mutateAsync({
@@ -46,16 +70,6 @@ export function ChatSidebar({
             });
         }
     };
-
-    const renderChatItem = (chat: DrivePath) => (
-        <SidebarItem
-            key={chat.id}
-            icon={<MessageSquare className="h-4 w-4"/>}
-            label={(chat.name || 'Unnamed chat').replace(/\.eigenchat$/, '')}
-            to={`/${chat.ownerId}/${chat.mountId}/${chat.id}`}
-            condensed={condensed}
-        />
-    );
 
     return (
         <div className="flex h-full min-h-[calc(100vh-3.5rem)] flex-col">
@@ -78,13 +92,24 @@ export function ChatSidebar({
                     <EigenLoader/>
                 </div>
             ) : (
+                <SidebarSection condensed={condensed}>
+                    {chats.length === 0 ? (
+                        <div className="px-3 py-2 text-xs text-muted-foreground">No chats yet</div>
+                    ) : (
+                        chats.map(chat => (
+                            <ChatItem key={chat.id} chat={chat} condensed={condensed}/>
+                        ))
+                    )}
+                </SidebarSection>
+            )}
+
+            {teams && teams.length > 0 && (
                 <>
-                    <SidebarSection condensed={condensed}>
-                        {chats.length === 0 ? (
-                            <div className="px-3 py-2 text-xs text-muted-foreground">No chats yet</div>
-                        ) : (
-                            chats.map(renderChatItem)
-                        )}
+                    <Separator/>
+                    <SidebarSection condensed={condensed} title={condensed ? undefined : "Shared Drives"}>
+                        {teams.map(team => (
+                            <TeamChatItems key={team.id} teamId={team.id} condensed={condensed}/>
+                        ))}
                     </SidebarSection>
                 </>
             )}
