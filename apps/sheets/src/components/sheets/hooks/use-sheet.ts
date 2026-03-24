@@ -26,6 +26,7 @@ export function useSheet(
     const isLocalOpRef = useRef(false);
     const readyForOpsRef = useRef(false);
     const latestDataRef = useRef<Sheet[] | null>(null);
+    const pendingOpsRef = useRef<Op[][] | null>(null);
 
     const flushSnapshot = useCallback(() => {
         const doc = docRef.current;
@@ -51,6 +52,7 @@ export function useSheet(
         docRef.current = doc;
         readyForOpsRef.current = false;
         latestDataRef.current = null;
+        pendingOpsRef.current = null;
 
         const stateMap = doc.getMap('state');
         const opsArray = doc.getArray('ops');
@@ -98,6 +100,12 @@ export function useSheet(
                 data = DEFAULT_SHEETS;
             }
 
+            // Capture pending ops that arrived during sync but weren't applied
+            // (the observer skipped them because readyForOpsRef was false).
+            // These will be replayed after the Workbook mounts.
+            const pending = opsArray.toArray() as Op[][];
+            pendingOpsRef.current = pending.length > 0 ? pending : null;
+
             latestDataRef.current = data;
             setInitialData(data);
             setSynced(true);
@@ -117,6 +125,19 @@ export function useSheet(
             providerRef.current = null;
         };
     }, [ownerId, mountId, pathId, workbookRef, flushSnapshot]);
+
+    // Replay pending ops after Workbook mounts
+    useEffect(() => {
+        if (!synced || !pendingOpsRef.current || !workbookRef.current) return;
+        for (const ops of pendingOpsRef.current) {
+            try {
+                workbookRef.current.applyOp(ops);
+            } catch (e) {
+                console.error('[sheet] Failed to apply pending op:', e);
+            }
+        }
+        pendingOpsRef.current = null;
+    }, [synced, workbookRef]);
 
     const handleOp = useCallback((ops: Op[]) => {
         const doc = docRef.current;
