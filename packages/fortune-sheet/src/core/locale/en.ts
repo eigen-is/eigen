@@ -11721,6 +11721,7 @@ export default {
         conditionformat_lessThan_title: "Format cells smaller than",
         conditionformat_between: "Conditionformat-Betweenness",
         conditionformat_between_title: "Format cells with values between",
+        to: "to",
         conditionformat_equal: "Conditionformat-Equal",
         conditionformat_equal_title: "Format cells equal to",
         conditionformat_textContains: "Conditionformat-TextContains",
