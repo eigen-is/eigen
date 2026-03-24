@@ -116,7 +116,11 @@
       "Bash(du -sh /c/git/eigen/dist/$app/assets/)",
       "Bash(sort -k5 -hr)",
       "Bash(npx tsc:*)",
-      "Bash(bunx vite:*)"
+      "Bash(bunx vite:*)",
+      "WebFetch(domain:elysiajs.com)",
+      "WebFetch(domain:orm.drizzle.team)",
+      "WebFetch(domain:bun.com)",
+      "WebFetch(domain:oneuptime.com)"
     ]
   },
   "bypassPermissions": "bypassPermissions"
