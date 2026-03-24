@@ -16,7 +16,7 @@ export function ContactAutosuggest({
                                        inputClassName = '',
                                        placeholder = '',
                                        disabled = false,
-                                       autoComplete = 'off',
+                                       autoComplete = 'one-time-code',
                                        id,
                                        name,
                                        required,

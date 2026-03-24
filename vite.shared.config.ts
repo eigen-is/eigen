@@ -34,7 +34,11 @@ export function createAppConfig(appName: string, extraConfig?: UserConfig) {
                 target: 'react',
                 autoCodeSplitting: true,
             }),
-            react(),
+            react({
+                babel: {
+                    plugins: [['babel-plugin-react-compiler']],
+                },
+            }),
             tailwindcss(),
             viteTsConfigPaths({
                 projects: ['./tsconfig.json'],
