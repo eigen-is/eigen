@@ -2,6 +2,17 @@
 
 Items still to address from the full-stack audit. Ordered by priority.
 
+## Query & Cache Architecture Notes
+
+Global `staleTime: 2 * 60 * 1000` is set on the QueryClient. This prevents automatic refetches
+on mount/focus/reconnect for 2 minutes. SSE-driven `invalidateQueries()` overrides staleTime and
+always triggers a refetch — this is correct and intentional.
+
+Mutations call `invalidateQueries()` in `onSuccess` for instant feedback to the initiator. SSE
+handlers call the same `invalidateQueries()` for all connected clients. This causes a double refetch
+for the initiator (~50-100ms apart). This is accepted: TanStack Query's structural sharing prevents
+re-renders if data hasn't changed, and the alternatives add complexity for negligible gain.
+
 ---
 
 ## Backend Stability
