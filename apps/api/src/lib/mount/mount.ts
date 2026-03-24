@@ -217,6 +217,13 @@ export class Mount {
             fileValue = name;
         }
 
+        // Create directory before DB insert so a crash leaves an orphaned
+        // directory (harmless) instead of a DB entry for a missing directory.
+        if (this.isPathBased && this.storage.mkdir) {
+            const fullPath = await this.resolveStoragePathForNew(parentId, fileValue);
+            await this.storage.mkdir(fullPath);
+        }
+
         await this.db.insert(paths).values({
             id: folderId,
             file: fileValue,
@@ -229,11 +236,6 @@ export class Mount {
             createdAt: new Date(),
             updatedAt: new Date()
         });
-
-        if (this.isPathBased && this.storage.mkdir) {
-            const fullPath = await this.resolveStoragePath(folderId);
-            await this.storage.mkdir(fullPath);
-        }
 
         return folderId;
     }
@@ -261,6 +263,16 @@ export class Mount {
         const fileValue = this.isPathBased ? name : buildStorageKey(fileId, name);
         const hash = data !== undefined ? await this.computeHash(data) : null;
 
+        // Write storage first, then DB. On crash between the two, we get an
+        // orphaned file on disk (harmless) instead of a DB entry pointing to
+        // a non-existent file (broken).
+        if (data !== undefined) {
+            const storageKey = this.isPathBased
+                ? await this.resolveStoragePathForNew(parentId, fileValue)
+                : fileValue;
+            await this.storage.write(storageKey, data);
+        }
+
         await this.db.insert(paths).values({
             id: fileId,
             file: fileValue,
@@ -275,13 +287,6 @@ export class Mount {
             createdAt: new Date(),
             updatedAt: new Date()
         });
-
-        if (data !== undefined) {
-            const storageKey = this.isPathBased
-                ? await this.resolveStoragePath(fileId)
-                : fileValue;
-            await this.storage.write(storageKey, data);
-        }
 
         return fileId;
     }
@@ -380,28 +385,37 @@ export class Mount {
         return segments.join('/');
     }
 
+    private async resolveStoragePathForNew(parentId: string, fileValue: string): Promise<string> {
+        const parentPath = await this.resolveStoragePath(parentId);
+        return parentPath ? `${parentPath}/${fileValue}` : fileValue;
+    }
+
     async deletePath(pathId: string): Promise<void> {
         const pathEntry = await this.getPath(pathId);
         if (!pathEntry) return;
 
+        // Delete DB records before storage cleanup. On crash between the two,
+        // we get orphaned files on disk (harmless) instead of DB entries
+        // pointing to non-existent files (broken).
         if (pathEntry.type === 'file') {
-            await deleteThumbnail(this.thumbsDir, pathId);
             const storageKey = await this.getStorageKey(pathId);
+            await this.db.delete(paths).where(eq(paths.id, pathId));
+            await deleteThumbnail(this.thumbsDir, pathId);
             await this.storage.delete(storageKey);
         } else if (this.isPathBased && this.storage.deleteDir) {
             const storageKey = await this.getStorageKey(pathId);
+            await this.deleteDescendants(pathId);
+            await this.db.delete(paths).where(eq(paths.id, pathId));
             if (storageKey) {
                 await this.storage.deleteDir(storageKey);
             }
-            await this.deleteDescendants(pathId);
         } else {
             const children = await this.listFolder(pathId);
             for (const child of children) {
                 await this.deletePath(child.id);
             }
+            await this.db.delete(paths).where(eq(paths.id, pathId));
         }
-
-        await this.db.delete(paths).where(eq(paths.id, pathId));
     }
 
     private async deleteDescendants(parentId: string): Promise<void> {
@@ -409,12 +423,13 @@ export class Mount {
             .where(eq(paths.parentId, parentId))
             .all();
         for (const child of children) {
-            if (child.type === 'file') {
-                await deleteThumbnail(this.thumbsDir, child.id);
-            } else {
+            if (child.type !== 'file') {
                 await this.deleteDescendants(child.id);
             }
             await this.db.delete(paths).where(eq(paths.id, child.id));
+            if (child.type === 'file') {
+                await deleteThumbnail(this.thumbsDir, child.id);
+            }
         }
     }
 
