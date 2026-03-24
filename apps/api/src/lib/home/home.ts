@@ -47,12 +47,28 @@ export class Home {
         this.cleanUp = cleanUp || null;
     }
 
-    get drive(): Drive { return this._drive; }
-    get contacts(): Contacts { return this._contacts; }
-    get mail(): Maildir { return this._mail; }
-    get calendar(): Calendar { return this._calendar; }
+    get drive(): Drive {
+        this.touch();
+        return this._drive;
+    }
+
+    get contacts(): Contacts {
+        this.touch();
+        return this._contacts;
+    }
+
+    get mail(): Maildir {
+        this.touch();
+        return this._mail;
+    }
+
+    get calendar(): Calendar {
+        this.touch();
+        return this._calendar;
+    }
 
     get notifications(): NotificationCenter {
+        this.touch();
         return this._notifications;
     }
 
