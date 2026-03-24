@@ -221,14 +221,15 @@ Detailed architecture docs in `docs/`:
 
 ### Future/Planning Docs
 
-| Doc                                                             | Topic                                    |
-|-----------------------------------------------------------------|------------------------------------------|
-| [TODO-MENTIONS.md](docs/TODO-MENTIONS.md)                       | Cross-app @mention system                |
-| [TODO-CHAT-ACL.md](docs/TODO-CHAT-ACL.md)                       | Chat membership vs ACL design discussion |
-| [TODO-ENCRYPTION.md](docs/TODO-ENCRYPTION.md)                   | E2E encryption design                    |
-| [TODO-SCALABILITY.md](docs/TODO-SCALABILITY.md)                 | Multi-server scaling design              |
-| [TODO-GUEST-USERS.md](docs/TODO-GUEST-USERS.md)                 | Guest user access plan                   |
-| [TODO-CALENDAR-TIMEZONE.md](docs/TODO-CALENDAR-TIMEZONE.md)     | Timezone-aware recurrence expansion      |
-| [FORTUNE-SHEETS-TODO.md](docs/FORTUNE-SHEETS-TODO.md)           | Fortune-sheet refactoring audit          |
-| [RESEARCH_AI.md](docs/RESEARCH_AI.md)                           | Local/private AI integration research    |
-| [RESEARCH_CALDAV.md](docs/RESEARCH_CALDAV.md)                   | CalDAV implementation plan               |
+| Doc                                                         | Topic                                    |
+|-------------------------------------------------------------|------------------------------------------|
+| [TODO-MENTIONS.md](docs/TODO-MENTIONS.md)                   | Cross-app @mention system                |
+| [TODO-CHAT-ACL.md](docs/TODO-CHAT-ACL.md)                   | Chat membership vs ACL design discussion |
+| [TODO-ENCRYPTION.md](docs/TODO-ENCRYPTION.md)               | E2E encryption design                    |
+| [TODO-SCALABILITY.md](docs/TODO-SCALABILITY.md)             | Multi-server scaling design              |
+| [TODO-GUEST-ACCESS.md](docs/TODO-GUEST-ACCESS.md)           | Guest access, OTP auth, access requests  |
+| [TODO-GUEST-USERS.md](docs/TODO-GUEST-USERS.md)             | Guest user access plan (superseded)      |
+| [TODO-CALENDAR-TIMEZONE.md](docs/TODO-CALENDAR-TIMEZONE.md) | Timezone-aware recurrence expansion      |
+| [FORTUNE-SHEETS-TODO.md](docs/FORTUNE-SHEETS-TODO.md)       | Fortune-sheet refactoring audit          |
+| [RESEARCH_AI.md](docs/RESEARCH_AI.md)                       | Local/private AI integration research    |
+| [RESEARCH_CALDAV.md](docs/RESEARCH_CALDAV.md)               | CalDAV implementation plan               |
