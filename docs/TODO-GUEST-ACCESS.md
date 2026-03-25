@@ -1,9 +1,9 @@
 # Guest Access & Access Requests
 
-> **TLDR**: External guests authenticate via Email OTP and get a lightweight `GuestHome` at `data/guest/{guestId}/`
-> with only `shared.db` and `notifications.db` — no drive mounts, mail, contacts, or calendar. Standard reconciliation
-> populates `shared.db` and cleans registry entries like for any other user. ACL email matching handles permissions.
-> Logged-in users without access see a "Request access" screen. Three phases, each independently shippable.
+> **TLDR**: External guests authenticate via Email OTP and get a lightweight `GuestHome` with no disk presence — shared
+> paths are cached in memory on the GuestDrive instance, rebuilt from the share registry on each session. ACL email
+> matching handles permissions without guest-specific code. Logged-in users without access see a "Request access"
+> screen. Three phases, each independently shippable.
 
 ## Three Access States
 
@@ -15,81 +15,106 @@ Every shared resource URL resolves to one of three states:
 | Authenticated + no access  | "Request access" screen with owner info (new) |
 | Not authenticated          | Login page with guest OTP option (new)        |
 
-## Design: GuestHome
+## Design: GuestHome (In-Memory)
 
 ### The Principle
 
-Guests get a real Home that participates in the system normally — just a minimal one. No special code paths, no
-in-memory hacks, no permanent registry entries. The `GuestHome` is a ~20-line subclass that skips the services guests
-don't need.
+Guests get a real `Home` object that participates in the system — SSE, ACL propagation, shared-with-me — but leaves
+zero disk footprint. Shared paths are cached as an in-memory array on the `GuestDrive` instance, populated from the
+share registry on init and kept current by `receiveACLChange()` while the Home is alive.
 
 ### GuestHome
 
 ```
-data/guest/{guestId}/
-├── mounts/shared.db              # what's shared with this guest (~10KB)
-└── eigen.notifications/
-    └── notifications.db          # persistent notifications (~10KB)
-```
-
-Compare to a regular `UserHome`:
-
-```
-data/home/{userId}/
-├── settings.json
-├── mounts/default/               # ← not created for guests
-│   ├── metadata.db
-│   ├── data/
-│   └── thumbs/
-├── mounts/shared.db              # same
-├── eigen.mail/                   # ← not created for guests
-├── eigen.contacts/               # ← not created for guests
-├── eigen.calendar/               # ← not created for guests
-└── eigen.notifications/          # same
-```
-
-Disk cost: ~20KB per guest. Negligible even at 1000 guests (20MB).
-
-### GuestHome Class
-
-```
 GuestHome extends Home
-├── homeDir: data/guest/{guestId}/
+├── homeDir: (none — no disk)
 ├── _drive: GuestDrive
-│   └── sharedDb: disk-based shared.db (standard)
-│       ├── getSharedPathsWithMe()  ✓ same code as Drive
-│       └── receiveACLChange()      ✓ same code as Drive
-├── _notifications: NotificationCenter (standard, disk-based)
-├── _mail: null (not initialized)
-├── _contacts: null (not initialized)
-├── _calendar: null (not initialized)
-└── broadcast() — works (SSE listeners on base Home)
+│   └── sharedPaths: DrivePath[] (in-memory cache)
+│       ├── getSharedPathsWithMe()  → returns cached array
+│       └── receiveACLChange()      → updates cached array + broadcasts SSE
+├── _notifications: null (no notification persistence)
+├── _mail: null
+├── _contacts: null
+├── _calendar: null
+├── broadcast() / subscribeSSE() / unsubscribeSSE() — standard (base Home)
+└── touch() / destruct() — standard idle timeout, cache freed on eviction
 ```
+
+No disk directory. No SQLite databases. The Home lives in memory for the standard 5-minute idle timeout.
 
 ### GuestDrive
 
-Subclass of `Drive` that overrides `init()` to:
+Subclass of `Drive` that overrides three methods:
 
-1. Open `shared.db` (standard, disk-based — via `getSharedDatabase(home)`)
-2. Skip mount creation entirely (no personal storage)
+**`init()`** (~15 lines):
 
-That's it. `getSharedPathsWithMe()` and `receiveACLChange()` are inherited from `Drive` unchanged — they read/write
-`this.sharedDb` which is a normal on-disk SQLite database. No overrides needed.
+1. Query share registry for entries targeting the guest's email
+2. For each `fromUserId`: call `ownerHome.drive.getSharedWith(guestUser)`
+3. Store results in `this.sharedPaths` array
+4. Skip mount creation (no personal storage)
 
-Mount-dependent methods (`uploadFile`, `createFolder`, etc.) naturally fail because no mounts exist. But they're never
-called — guests access shared resources via `getSharedDrive(ownerId, user)` which uses the _sharer's_ drive.
+**`getSharedPathsWithMe()`** (~1 line):
+Return `this.sharedPaths`.
 
-### Standard Reconciliation
+**`receiveACLChange(path, newACL, actorEmail)`** (~20 lines):
 
-Guest creation triggers the same reconciliation as any user:
+1. If no longer shared: remove from `sharedPaths` array
+2. If already in array: update entry
+3. If new share: push to array
+4. Call `this.home.broadcast(buildDriveEvent(...))` for SSE
+5. Notifications skipped (`_notifications` is null, all callers use `?.` optional chaining)
 
-1. `user.create.after` fires
-2. Skip `authAddUserToDefaultOrg()` (guests don't join the org)
-3. Run `reconcileSharesForNewUser(user)` — this creates the GuestHome, pulls shares into `shared.db`, cleans registry
-4. Registry entries deleted (standard cleanup — `shared.db` is the permanent record now)
+Note: `Drive.emit()` is private, so the override calls `this.home.broadcast()` directly.
 
-No special reconciliation logic for guests. The only difference is that `getHome(guestId)` creates a `GuestHome`
-instead of a `UserHome`.
+Everything else on Drive (mount-dependent methods like `uploadFile`, `createFolder`) is never called on the guest's own
+drive — guests access shared resources via `getSharedDrive(ownerId, user)` which wraps the _sharer's_ drive.
+
+### Lifecycle
+
+```
+Guest logs in
+  → getHome(guestId) creates GuestHome
+  → GuestDrive.init() pulls shared paths from registry into in-memory cache
+  → Guest navigates, accesses shared resources via sharer's drive (standard ACL)
+  → If someone shares/unshares while guest is online:
+      ACL propagation calls receiveACLChange() → updates cache + SSE event
+  → 5 min idle → Home destructed → cache freed
+  → Next request → GuestHome recreated → cache rebuilt from registry
+```
+
+### Share Registry for Guests
+
+Today's flow: share → registry entry → user created → reconcile pulls into disk `shared.db` → registry entry deleted.
+
+Guest flow: share → registry entry → guest created → registry entry **stays** → cache populated from registry on each
+GuestHome init.
+
+Registry entries are never deleted for guests (until they upgrade to a regular user). The registry is the permanent
+source of truth; the in-memory cache is a session-scoped view of it.
+
+### Calendar Propagation Guards
+
+`reconciliation.ts` calls `targetHome.calendar.receiveShare()` and `targetHome.calendar.receiveInvitation()` directly
+(no `?.` optional chaining). Since GuestHome has `_calendar = null`, these need guards:
+
+```typescript
+if (targetHome.calendar) {
+    await pullCalendarShares(ownerHome, targetHome, ...);
+}
+if (targetHome.calendar) {
+    await pullPendingInvitations(ownerHome, targetHome, ...);
+}
+```
+
+These guards are needed regardless of storage approach — any GuestHome without a calendar requires them.
+
+### Notification Routes
+
+All notification routes use `requireSelf()`, so guests _can_ hit them. With `_notifications = null`, they'd throw.
+Solution: frontend hides the notification bell for guests, so the routes are never called. No backend stubs needed.
+
+All `home.notifications?.persist()` calls throughout the codebase (10+ sites) already use optional chaining — they
+silently skip when notifications is null.
 
 ### Home Factory Change
 
@@ -106,14 +131,73 @@ case 'user': {
 }
 ```
 
-### Why This Is Better Than In-Memory
+---
 
-- **Simpler**: No `GuestDrive` override for in-memory DB setup, no registry-as-permanent-source-of-truth, no
-  rebuild-on-init logic
-- **More robust**: Survives server restarts without re-pulling. No data loss on idle timeout
-- **Standard reconciliation**: Same flow as regular users — pull shares, clean registry, done
-- **Persistent notifications**: Guests see their notification history across sessions
-- **Negligible cost**: ~20KB per guest vs ~0KB. Not worth the complexity to avoid
+## Alternative: Disk-Based GuestHome
+
+Instead of in-memory caching, give guests a minimal disk home at `data/guest/{guestId}/` with `shared.db` and
+optionally `notifications.db`. Standard reconciliation populates `shared.db` and cleans registry entries.
+
+### Disk layout
+
+```
+data/guest/{guestId}/
+├── mounts/shared.db              # ~10KB
+└── eigen.notifications/
+    └── notifications.db          # ~10KB
+```
+
+### Comparison
+
+|                          | In-memory (recommended)                                      | Disk-based                                               |
+|--------------------------|--------------------------------------------------------------|----------------------------------------------------------|
+| **GuestDrive code**      | ~35 lines (init + 2 overrides)                               | ~5 lines (init override only)                            |
+| **Inherited from Drive** | `getSharedPathsWithMe` and `receiveACLChange` need overrides | Both inherited unchanged                                 |
+| **Disk footprint**       | Zero                                                         | ~20KB per guest                                          |
+| **Guest leaves**         | Nothing to clean up                                          | Orphaned directory until cleanup cron                    |
+| **Server restart**       | Re-pulls from registry on next login                         | shared.db survives instantly                             |
+| **Registry entries**     | Kept permanently for guests                                  | Cleaned up (standard reconciliation)                     |
+| **Notifications**        | None (bell hidden for guests)                                | Persistent across sessions                               |
+| **Cleanup infra**        | None needed                                                  | Cron job for inactive guests                             |
+| **Upgrade to user**      | Run reconciliation, create UserHome                          | Move `data/guest/` → `data/home/`, init missing services |
+| **Code divergence risk** | `receiveACLChange` override could drift from Drive           | None — all inherited                                     |
+
+### When to choose disk
+
+- If persistent notifications for guests become important
+- If the `receiveACLChange` override proves fragile during Drive evolution
+- If rebuild-on-init latency is noticeable (unlikely — N sharers is typically 1-5)
+
+### When to choose in-memory
+
+- Guests are transient, zero-footprint is a clean property
+- No cleanup infrastructure needed
+- The override is small and focused (~35 lines)
+
+---
+
+## Shared Work (Both Approaches)
+
+Regardless of storage approach, the following is needed:
+
+**Backend:**
+
+- `GuestHome` class extending `Home` (no mail, contacts, calendar)
+- `GuestDrive` class extending `Drive` (no mounts)
+- Home factory change in `get-home.ts`
+- Calendar null guards in `reconciliation.ts` (~3 lines)
+- Email OTP plugin in `auth.ts`
+- Guest auth router (`guest-auth.ts`)
+- Auth hook: skip org join for guests
+- Request-access endpoint in `drive.ts`
+
+**Frontend:**
+
+- `<AccessGate/>` component (replaces `<AccessDenied/>`)
+- Login page: guest OTP tab
+- Topbar: hide notification bell for guests
+- Sidebar: hide Mail, Contacts, Calendar, Space for guests
+- App roots (`__root.tsx`): redirect guests from personal apps
 
 ---
 
@@ -199,7 +283,7 @@ Why custom endpoints: enforce `role: 'guest'` on creation, prevent regular users
 In `apps/api/src/lib/auth/auth.ts`, modify `user.create.after`:
 
 - If `user.role === 'guest'`: skip `authAddUserToDefaultOrg()` (guests don't join the org)
-- Run `reconcileSharesForNewUser()` normally — this creates the GuestHome and populates `shared.db`
+- Skip `reconcileSharesForNewUser()` for guests (registry entries stay, cache populated on GuestHome init)
 
 ### Login Page
 
@@ -215,7 +299,7 @@ For `user.role === 'guest'`:
 
 - Sidebar: show "Shared with me" only, hide Mail, Contacts, Calendar, etc.
 - App roots (`__root.tsx`): redirect guests away from personal apps
-- Notification bell works (GuestHome has persistent notifications)
+- Hide notification bell (no notification center)
 
 ### Guest Restrictions
 
@@ -240,14 +324,14 @@ A guest upgrades to a regular user by setting a password:
 
 1. Update `role` from `'guest'` to `null`
 2. Evict GuestHome from factory
-3. Move `data/guest/{guestId}/` contents to `data/home/{userId}/` (preserve shared.db + notifications.db)
-4. `getHome()` now creates a `UserHome` — initializes drive mounts, mail, contacts, calendar
+3. `getHome()` now creates a `UserHome` (disk-based)
+4. Run `reconcileSharesForNewUser()` — creates Home on disk, pulls shares into `shared.db`, cleans registry
 5. Add to default org via `authAddUserToDefaultOrg()`
 
 Triggered from a "Create full account" button in the guest's topbar.
 
 ```
-POST /guest-auth/upgrade    { password }    → set password, change role, migrate home dir
+POST /guest-auth/upgrade    { password }    → set password, change role, evict GuestHome
 ```
 
 ---
@@ -288,41 +372,31 @@ POST /guest-auth/upgrade    { password }    → set password, change role, migra
 
 ---
 
-## Why This Works
-
-- **No new permission model** — ACL email matching handles guests identically to regular users
-- **No special code paths** — `receiveACLChange()`, `getSharedPathsWithMe()`, SSE, notifications all use the same
-  code because GuestHome provides the same interfaces with real databases
-- **Standard reconciliation** — same pull + cleanup flow as regular users, no permanent registry entries
-- **Persistent state** — `shared.db` and `notifications.db` survive server restarts and session timeouts
-- **Minimal disk** — ~20KB per guest, no drive mounts, no mail/contacts/calendar directories
-- **Upgrade path** — guest → regular user moves the home dir and initializes the missing services
-
 ## Open Questions
 
-- **Email delivery**: OTP requires sending emails. Self-hosted Eigen instances need a configured mail transport. This
-  is the same requirement as password reset — not guest-specific, but a prerequisite
+- **Email delivery**: OTP requires sending emails. Self-hosted Eigen instances need a configured mail transport. Same
+  requirement as password reset — not guest-specific, but a prerequisite
 - **Guest session lifetime**: Should guest sessions expire faster than regular sessions? Better-auth supports
   per-session TTL configuration
-- **Guest home cleanup**: Should inactive guest homes be cleaned up after a period (e.g. 90 days)? A cron job could
-  remove `data/guest/` entries for guests who haven't logged in recently
+- **Storage approach**: See comparison table above. In-memory is recommended for zero-footprint, disk-based is the
+  fallback if `receiveACLChange` override proves fragile
 
 ## Files
 
-| File                                                      | Purpose                                |
-|-----------------------------------------------------------|----------------------------------------|
-| `apps/api/src/lib/home/guest-home.ts`                     | GuestHome class (~20 lines)            |
-| `apps/api/src/lib/drive/guest-drive.ts`                   | GuestDrive (shared.db only, no mounts) |
-| `apps/api/src/lib/home/get-home.ts`                       | Route to GuestHome for `role: 'guest'` |
-| `apps/api/src/lib/config/paths.ts`                        | Add `getGuestHomePath()`               |
-| `apps/api/src/routes/guest-auth.ts`                       | OTP auth + upgrade endpoints           |
-| `apps/api/src/routes/drive.ts`                            | Request-access endpoint                |
-| `apps/api/src/lib/auth/auth.ts`                           | emailOTP plugin, skip org join         |
-| `packages/ui/src/components/layout/app/access-gate.tsx`   | AccessGate component                   |
-| `packages/ui/src/components/layout/pages/loginpage.tsx`   | Guest OTP login tab                    |
-| `packages/ui/src/components/layout/pages/login-route.tsx` | Email search param                     |
-| `packages/lib/src/core/drive/hooks/use-drive.ts`          | `useRequestAccess()` mutation hook     |
-| `packages/ui/src/components/layout/app/topbar.tsx`        | Guest topbar adaptations               |
-| `apps/*/src/routes/_auth.*.tsx`                           | Replace AccessDenied with AccessGate   |
-| `apps/*/src/routes/__root.tsx`                            | Guest sidebar restrictions             |
-| `docs/NOTIFICATION-CENTER.md`                             | Add access-request notification type   |
+| File                                                      | Purpose                                 |
+|-----------------------------------------------------------|-----------------------------------------|
+| `apps/api/src/lib/home/guest-home.ts`                     | GuestHome class                         |
+| `apps/api/src/lib/drive/guest-drive.ts`                   | GuestDrive (in-memory cache, no mounts) |
+| `apps/api/src/lib/home/get-home.ts`                       | Route to GuestHome for `role: 'guest'`  |
+| `apps/api/src/lib/share/reconciliation.ts`                | Calendar null guards                    |
+| `apps/api/src/routes/guest-auth.ts`                       | OTP auth + upgrade endpoints            |
+| `apps/api/src/routes/drive.ts`                            | Request-access endpoint                 |
+| `apps/api/src/lib/auth/auth.ts`                           | emailOTP plugin, skip org join          |
+| `packages/ui/src/components/layout/app/access-gate.tsx`   | AccessGate component                    |
+| `packages/ui/src/components/layout/pages/loginpage.tsx`   | Guest OTP login tab                     |
+| `packages/ui/src/components/layout/pages/login-route.tsx` | Email search param                      |
+| `packages/lib/src/core/drive/hooks/use-drive.ts`          | `useRequestAccess()` mutation hook      |
+| `packages/ui/src/components/layout/app/topbar.tsx`        | Guest topbar adaptations                |
+| `apps/*/src/routes/_auth.*.tsx`                           | Replace AccessDenied with AccessGate    |
+| `apps/*/src/routes/__root.tsx`                            | Guest sidebar restrictions              |
+| `docs/NOTIFICATION-CENTER.md`                             | Add access-request notification type    |
