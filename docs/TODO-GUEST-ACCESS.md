@@ -200,61 +200,210 @@ export function getGuestHomePath(userId: string): string {
 
 ## Phase 1: Access Request Screen
 
-Independently useful. Works for any logged-in user who visits a resource without access.
+Independently useful. Works for any logged-in user who visits a resource without access. Follows the Google
+Docs/Drive standard: same URL shows either the resource or a "request access" screen — no redirect, no ambiguous
+error page.
 
-### `<AccessGate/>` Component
+### Current Access-Denied Behavior (Problems)
 
-Wrap resource routes with a smart gate that checks read permission:
+| App | How permission is checked | What user sees on no-access | Problem |
+|-----|--------------------------|----------------------------|---------|
+| Docs | `GET /collab/.../info` returns `{canRead:false}` (200) | `<AccessDenied/>` — "Encountering the null vector" | No owner info, no request button, cryptic message |
+| Stickies, Slides, Sheets | Same as Docs | Same | Same |
+| Drive | `GET /drive/.../folder/:pathId` throws 403 via `SharedDrive.withReadPermission` | `<NotFound/>` | **403 shown as 404** — user thinks resource doesn't exist |
+| Chat | `useMessages` silently returns `[]` on 403 (no error thrown) | Empty chat, no error state | **No access handling at all** |
+| People | Client-side role check | `<AccessDenied/>` with role message | Fine as-is (admin-only, not resource-based) |
+
+### Target Behavior (Google Standard)
+
+When an authenticated user visits a resource they don't have access to:
+
+1. **Same URL** — no redirect, the URL stays the same
+2. **Lock icon** + "You need access" heading
+3. **Owner info** — avatar, name, email (via existing `GET /p/user/:ownerId`)
+4. **"Request access" button** — primary CTA, with optional message field
+5. **Current identity** — "You're signed in as bob@example.com"
+6. **After requesting** — button changes to "Access requested" (disabled), confirmation shown
+7. **Idempotent** — clicking again doesn't create duplicate notifications (tag-based dedup)
+8. **Auto-refresh** — when owner grants access, SSE triggers permission re-check → resource appears
+
+### `<RequestAccessView/>` Component
+
+A standalone component (not a wrapper) that each app places where appropriate based on its existing permission-check
+pattern. This avoids redundant API calls in apps that already check permissions.
 
 ```
-<AccessGate ownerId={ownerId} mountId={mountId} pathId={pathId}>
-  ├── Loading         → spinner
-  ├── canRead = true  → children (the resource)
-  └── canRead = false → <RequestAccessView>
-       ├── Owner avatar + name (via GET /p/user/:emailOrId)
-       ├── "Request access" button
+<RequestAccessView ownerId={ownerId} mountId={mountId} pathId={pathId}>
+  ├── Uses usePublicUser(ownerId)         → owner avatar, name, email  (existing hook, no auth needed)
+  ├── Uses useAuth()                      → current user email          (existing hook)
+  ├── Uses useRequestAccess() mutation    → POST request-access         (new hook)
+  └── Renders:
+       ├── Lock icon (Lucide: LockKeyhole)
+       ├── "You need access"
+       ├── Owner avatar + name + email
+       ├── Optional message textarea (collapsed by default)
+       ├── "Request access" button → on success: "Access requested ✓" (disabled)
        └── "You're signed in as bob@example.com"
 ```
 
-Uses `GET /drive/:ownerId/:mountId/path/:pathId/permissions/read` (existing route) to check access.
+Location: `packages/ui/src/components/layout/app/request-access-view.tsx`
 
-Location: `packages/ui/src/components/layout/app/access-gate.tsx`
+Why standalone instead of wrapper: Collab apps already check permissions via `useCollabDocumentInfo` (returns
+`{canRead}` in the response body, not a 403). Adding a wrapper would duplicate the permission check. Each app
+integrates `<RequestAccessView/>` in its existing control flow.
 
-### Request Access Endpoint
+### Request Access Backend
+
+**New endpoint:**
 
 ```
 POST /drive/:ownerId/:mountId/path/:pathId/request-access
 Auth: required
-Body: (none — requester identity from session)
+Body: { message?: string }
+Response: { success: true }
 ```
 
-1. Look up path name from owner's drive via `getHome(ownerId).drive.getPath(mountId, pathId)`
+Implementation in `apps/api/src/routes/drive.ts`:
+
+1. Get path name from owner's drive: `getHome(ownerId).drive.getPath(mountId, pathId)`
+   - If path not found → 404 (resource genuinely doesn't exist)
 2. Persist notification in **owner's** NotificationCenter:
-    - type: `access-request`
-    - title: `"bob@example.com requested access to 'Document'"`
-    - tag: `access-request:{ownerId}:{mountId}:{pathId}:{email}` (dedup via `onConflictDoUpdate`)
-    - actorEmail: requester's email
-3. Owner sees notification → clicks → share dialog opens → grants access
+   - type: `access-request`
+   - title: `"{requesterEmail} requested access to '{pathName}'"` (or just `"... requested access"` if no name)
+   - body: the optional message from the requester (or null)
+   - tag: `access-request:{mountId}:{pathId}:{email}` (dedup via `onConflictDoUpdate` — re-requesting updates
+     timestamp and message, doesn't create duplicates)
+   - actorEmail: requester's email
+3. Return `{success: true}`
 
-No new SSE events — the existing `notification:created` event handles the toast.
+No new SSE events — the existing `notification:created` SSE event triggers the toast on the owner's screen.
 
-### Apps Updated
+**New hook** in `packages/lib/src/core/drive/hooks/use-drive.ts`:
 
-Replace `<AccessDenied/>` usage with `<AccessGate/>` in these files:
+```typescript
+export function useRequestAccess(ownerId: string, mountId: string, pathId: string) {
+    return useMutation({
+        mutationFn: async (body: { message?: string }) => {
+            const response = await driveApi({ownerId})({mountId}).path({pathId})['request-access'].post(body);
+            if (response.error) throw new AppError(response);
+            return response.data;
+        },
+    });
+}
+```
 
-| File | Current behavior |
-|------|-----------------|
-| `apps/docs/src/routes/_auth.doc.$ownerId.$mountId.$pathId.tsx` | Uses `<AccessDenied/>` when `!docInfo?.canRead` |
-| `apps/stickies/src/routes/_auth.board.$ownerId.$mountId.$pathId.tsx` | Same pattern |
-| `apps/slides/src/routes/_auth.slide.$ownerId.$mountId.$pathId.tsx` | Same pattern |
-| `apps/sheets/src/routes/_auth.sheet.$ownerId.$mountId.$pathId.tsx` | Same pattern |
+### SSE Auto-Refresh When Access is Granted
 
-These files do NOT currently use `<AccessDenied/>` and need a different approach:
+When the owner grants access via the share dialog, `propagateACLChange()` fires → `receiveACLChange()` on the
+requester's Home → broadcasts `DRIVE_ACL_SHARED` SSE event to the requester.
 
-| File | Current behavior | Change needed |
-|------|-----------------|---------------|
-| `apps/drive/src/routes/_auth.fs.$ownerId.$mountId.$pathId.tsx` | Shows `<NotFound/>` on error | Distinguish 403 from 404, show `<AccessGate/>` for 403 |
-| `apps/chat/src/routes/_auth.$ownerId.$mountId.$chatId.tsx` | No access check shown | Add `<AccessGate/>` wrapper around chat view |
+The existing SSE handler in `packages/lib/src/core/drive/sse-handlers.ts` already handles this:
+
+```typescript
+case SSEventType.DRIVE_ACL_SHARED:
+    invalidateAclSharedOrUnshared(queryClient, userId);     // invalidates shared-with-me
+    invalidateAclUpdated(queryClient, path.ownerId, ...);   // invalidates driveKeys.read + driveKeys.write
+```
+
+`invalidateAclUpdated` invalidates `driveKeys.read(ownerId, mountId, pathId)` — which is the query key used by
+`useCheckReadPermission`. So the permission query auto-refetches.
+
+**Gap**: For collab apps, `useCollabDocumentInfo` uses `collabKeys.document(ownerId, mountId, pathId)` =
+`['collab', 'info', ownerId, mountId, pathId]`. This is NOT invalidated by the SSE handler. Fix: add collab info
+invalidation to the `DRIVE_ACL_SHARED` / `DRIVE_ACL_UNSHARED` case in `sse-handlers.ts`:
+
+```typescript
+case SSEventType.DRIVE_ACL_SHARED:
+case SSEventType.DRIVE_ACL_UNSHARED:
+    if (userId) invalidateAclSharedOrUnshared(queryClient, userId);
+    invalidateAclUpdated(queryClient, path.ownerId, path.mountId, path.id, path.parentId);
+    queryClient.invalidateQueries({queryKey: ['collab', 'info', path.ownerId, path.mountId, path.id]});
+    return true;
+```
+
+This ensures that when a user is sitting on the "request access" screen in a collab app and the owner grants
+access, the page automatically transitions to show the document.
+
+### Per-App Integration
+
+Each app has a different permission-check pattern. The integration is tailored to each:
+
+**Collab apps** (Docs, Stickies, Slides, Sheets):
+Already check permissions via `useCollabDocumentInfo()` which returns `{canRead: false, path: null}` on no-access
+(200 response, not a 403). Replace `<AccessDenied/>` with `<RequestAccessView/>`:
+
+```tsx
+// Before:
+if (!docInfo?.canRead || !docInfo.path) {
+    return <AccessDenied/>;
+}
+
+// After:
+if (!docInfo?.canRead || !docInfo.path) {
+    return <RequestAccessView ownerId={ownerId} mountId={mountId} pathId={pathId}/>;
+}
+```
+
+Files:
+- `apps/docs/src/routes/_auth.doc.$ownerId.$mountId.$pathId.tsx` — line 44-46
+- `apps/stickies/src/routes/_auth.board.$ownerId.$mountId.$pathId.tsx` — same pattern
+- `apps/slides/src/routes/_auth.slide.$ownerId.$mountId.$pathId.tsx` — same pattern
+- `apps/sheets/src/routes/_auth.sheet.$ownerId.$mountId.$pathId.tsx` — same pattern
+
+**Drive app**:
+Currently uses `useFolderContent` which throws `AppError` with `status: 403` on no-access. The error is caught by
+TanStack Query and stored in `isFolderContentLoadingError`. Currently shown as `<NotFound/>`.
+
+Fix: distinguish 403 from other errors:
+
+```tsx
+// Before (apps/drive/src/routes/_auth.fs.$ownerId.$mountId.$pathId.tsx line 120-122):
+if (isFolderContentLoadingError) {
+    return <NotFound/>;
+}
+
+// After:
+if (isFolderContentLoadingError) {
+    if (isFolderContentLoadingError instanceof AppError && isFolderContentLoadingError.status === 403) {
+        return <RequestAccessView ownerId={ownerId} mountId={mountId} pathId={pathId}/>;
+    }
+    return <NotFound/>;
+}
+```
+
+The `AppError` class in `packages/lib/src/core/api-error.ts` preserves the HTTP status code, so this check works.
+
+**Chat app**:
+Currently has NO access handling. `useMessages` silently returns `[]` on 403. `useChatRoom` already calls
+`useCheckWritePermission` but not `useCheckReadPermission`.
+
+Fix: add a read permission check in the chat route component:
+
+```tsx
+// apps/chat/src/routes/_auth.$ownerId.$mountId.$chatId.tsx
+function ChatView() {
+    const {ownerId, mountId, chatId} = Route.useParams();
+    const {data: readPermission, isLoading: permLoading} = useCheckReadPermission(ownerId, mountId, chatId);
+
+    if (permLoading) return <LoadingState/>;
+    if (!readPermission?.canRead) {
+        return <RequestAccessView ownerId={ownerId} mountId={mountId} pathId={chatId}/>;
+    }
+
+    // ... existing chat UI
+}
+```
+
+**People app**: No changes. Uses role-based `<AccessDenied/>` which is correct for admin-only access.
+
+### "Request Already Sent" State
+
+For v1: optimistic client-side only. After a successful `POST /request-access`, the mutation's `isSuccess` state
+keeps the button disabled as "Access requested". This is lost on page refresh — the user can click again, but it's
+idempotent (tag-based `onConflictDoUpdate` in NotificationCenter just updates the timestamp).
+
+Future improvement: a dedicated `access_requests` table in the central DB to track pending requests, enabling
+"already requested" state on page load and a "pending requests" view for owners.
 
 ---
 
@@ -473,26 +622,29 @@ persist through the upgrade.
 
 ## Files
 
-| File                                                        | Phase | Purpose                                   |
-|-------------------------------------------------------------|-------|-------------------------------------------|
-| `apps/api/src/lib/home/guest-home.ts`                       | 2     | GuestHome class (Drive + Notifications)   |
-| `apps/api/src/lib/config/paths.ts`                          | 2     | `getGuestHomePath()` helper               |
-| `apps/api/src/lib/home/get-home.ts`                         | 2     | Route to GuestHome for `role: 'guest'`    |
-| `apps/api/src/lib/share/reconciliation.ts`                  | 2     | Calendar null guards                      |
-| `apps/api/src/lib/calendar/share-propagation.ts`            | 2     | Calendar null guard in propagation loop   |
-| `apps/api/src/routes/guest-auth.ts`                         | 2     | OTP auth + upgrade + reconciliation       |
-| `apps/api/src/routes/drive.ts`                              | 1     | Request-access endpoint                   |
-| `apps/api/src/lib/auth/auth.ts`                             | 2     | emailOTP plugin, skip org join for guests |
-| `packages/ui/src/components/layout/app/access-gate.tsx`     | 1     | AccessGate component                      |
-| `packages/ui/src/components/layout/pages/loginpage.tsx`     | 2     | Guest OTP login tab                       |
-| `packages/ui/src/components/layout/pages/login-route.tsx`   | 2     | Email search param                        |
-| `packages/lib/src/core/drive/hooks/use-drive.ts`            | 1     | `useRequestAccess()` mutation hook        |
-| `packages/ui/src/components/layout/app/topbar.tsx`          | 2     | "Create full account" button for guests   |
-| `apps/docs/src/routes/_auth.doc.$ownerId.$mountId.$pathId.tsx`       | 1 | Replace AccessDenied with AccessGate |
-| `apps/stickies/src/routes/_auth.board.$ownerId.$mountId.$pathId.tsx` | 1 | Same                                 |
-| `apps/slides/src/routes/_auth.slide.$ownerId.$mountId.$pathId.tsx`   | 1 | Same                                 |
-| `apps/sheets/src/routes/_auth.sheet.$ownerId.$mountId.$pathId.tsx`   | 1 | Same                                 |
-| `apps/drive/src/routes/_auth.fs.$ownerId.$mountId.$pathId.tsx`       | 1 | Add AccessGate (currently NotFound)  |
-| `apps/chat/src/routes/_auth.$ownerId.$mountId.$chatId.tsx`           | 1 | Add AccessGate (no current check)    |
-| `apps/*/src/routes/__root.tsx`                              | 2     | Guest sidebar restrictions                |
-| `docs/NOTIFICATION-CENTER.md`                               | 1     | Add access-request notification type      |
+| File                                                        | Phase | Purpose                                          |
+|-------------------------------------------------------------|-------|--------------------------------------------------|
+| **Phase 1: Access Request Screen** | | |
+| `packages/ui/src/components/layout/app/request-access-view.tsx`      | 1     | RequestAccessView component (lock icon, owner info, request button) |
+| `packages/lib/src/core/drive/hooks/use-drive.ts`                     | 1     | `useRequestAccess()` mutation hook               |
+| `apps/api/src/routes/drive.ts`                                       | 1     | `POST .../request-access` endpoint               |
+| `packages/lib/src/core/drive/sse-handlers.ts`                        | 1     | Add collab info invalidation on ACL shared/unshared |
+| `apps/docs/src/routes/_auth.doc.$ownerId.$mountId.$pathId.tsx`       | 1     | Replace `<AccessDenied/>` with `<RequestAccessView/>` |
+| `apps/stickies/src/routes/_auth.board.$ownerId.$mountId.$pathId.tsx` | 1     | Same                                             |
+| `apps/slides/src/routes/_auth.slide.$ownerId.$mountId.$pathId.tsx`   | 1     | Same                                             |
+| `apps/sheets/src/routes/_auth.sheet.$ownerId.$mountId.$pathId.tsx`   | 1     | Same                                             |
+| `apps/drive/src/routes/_auth.fs.$ownerId.$mountId.$pathId.tsx`       | 1     | Distinguish 403 from 404, show `<RequestAccessView/>` |
+| `apps/chat/src/routes/_auth.$ownerId.$mountId.$chatId.tsx`           | 1     | Add read permission check + `<RequestAccessView/>` |
+| `docs/NOTIFICATION-CENTER.md`                                        | 1     | Add `access-request` notification type           |
+| **Phase 2: Guest Authentication + GuestHome + Frontend** | | |
+| `apps/api/src/lib/home/guest-home.ts`                       | 2     | GuestHome class (Drive + Notifications)          |
+| `apps/api/src/lib/config/paths.ts`                          | 2     | `getGuestHomePath()` helper                      |
+| `apps/api/src/lib/home/get-home.ts`                         | 2     | Route to GuestHome for `role: 'guest'`           |
+| `apps/api/src/lib/share/reconciliation.ts`                  | 2     | Calendar null guards                             |
+| `apps/api/src/lib/calendar/share-propagation.ts`            | 2     | Calendar null guard in propagation loop          |
+| `apps/api/src/routes/guest-auth.ts`                         | 2     | OTP auth + upgrade + reconciliation              |
+| `apps/api/src/lib/auth/auth.ts`                             | 2     | emailOTP plugin, skip org join for guests        |
+| `packages/ui/src/components/layout/pages/loginpage.tsx`     | 2     | Guest OTP login tab                              |
+| `packages/ui/src/components/layout/pages/login-route.tsx`   | 2     | Email search param                               |
+| `packages/ui/src/components/layout/app/topbar.tsx`          | 2     | "Create full account" button for guests          |
+| `apps/*/src/routes/__root.tsx`                              | 2     | Guest sidebar restrictions                       |
