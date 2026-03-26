@@ -19,6 +19,8 @@ export const EMOTE_COMMANDS: EmoteCommandDef[] = [
     {key: 'introduce', desc: 'Introduce yourself', canTarget: true},
     {key: 'hug', desc: 'Hug', canTarget: true},
     {key: 'highfive', desc: 'High five', canTarget: true},
+    {key: 'comfort', desc: 'Comfort', canTarget: true},
+    {key: 'pat', desc: 'Gently pat', canTarget: true},
 
     // Positive Emotions
     {key: 'cheer', desc: 'Cheer', canTarget: true},
@@ -26,6 +28,7 @@ export const EMOTE_COMMANDS: EmoteCommandDef[] = [
     {key: 'grin', desc: 'Grin wickedly', canTarget: true},
     {key: 'laugh', aliases: ['lol'], desc: 'Laugh', canTarget: true},
     {key: 'giggle', desc: 'Giggle', canTarget: true},
+    {key: 'cackle', desc: 'Cackle with insane glee', canTarget: true},
     {key: 'chuckle', desc: 'Hearty chuckle', canTarget: true},
     {key: 'guffaw', desc: 'Boisterous guffaw', canTarget: true},
     {key: 'rofl', desc: 'Roll on the floor laughing', canTarget: true},
@@ -84,12 +87,15 @@ export const EMOTE_COMMANDS: EmoteCommandDef[] = [
     {key: 'crack', desc: 'Crack your knuckles', canTarget: true},
     {key: 'bonk', desc: 'Bonk on the noggin. Doh!', canTarget: true},
     {key: 'blush', desc: 'Blush', canTarget: true},
-    {key: 'wink', desc: 'Wink slyly', canTarget: true},
+    {key: 'poke', desc: 'Poke in the ribs', canTarget: true},
+    {key: 'snap', desc: 'Snap your fingers', canTarget: true},
+    {key: 'wink', desc: 'Wink suggestively', canTarget: true},
     {key: 'whistle', desc: 'Sharp whistle', canTarget: true},
 
     // Silly & Fun
     {key: 'flip', desc: '(\u256F\u00B0\u25A1\u00B0)\u256F\uFE35 \u253B\u2501\u253B'},
     {key: 'allthethings', desc: 'ALL THE THINGS! \\o/'},
+    {key: 'sing', desc: 'SEEK SHELTER AT ONCE!', canTarget: true},
     {key: 'chicken', desc: 'Cluck, Cluck, Chicken!', canTarget: true},
     {key: 'moo', desc: 'Mooooooooooo', canTarget: true},
     {key: 'quack', desc: 'Quack!', canTarget: true},
