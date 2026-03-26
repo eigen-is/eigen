@@ -38,6 +38,7 @@ import {CommentMark} from "./extensions/comment-mark";
 import {ResizableImage} from "./extensions/resizable-image";
 
 const lowlight = createLowlight(common);
+const A4_WIDTH_PX = 794; // 210mm at 96dpi
 
 export const CollaborativeEditor = ({path, access, mediaFolderId, chatFolderId, onAccessDialogOpen, onDeleteDialogOpen}: {
     path: DrivePath,
@@ -113,7 +114,11 @@ const TiptapEditor = ({
     const [commentDialogOpen, setCommentDialogOpen] = useState(false);
     const [commentSelectedText, setCommentSelectedText] = useState('');
     const [viewCommentChatName, setViewCommentChatName] = useState<string | null>(null);
+    const [canvasScale, setCanvasScale] = useState(1);
+    const [docHeight, setDocHeight] = useState(0);
+    const needsScale = canvasScale < 1;
     const documentRef = useRef<HTMLDivElement>(null);
+    const scrollContainerRef = useRef<HTMLDivElement>(null);
     const editorRef = useRef<ReturnType<typeof useEditor>>(null);
     const mediaFolderIdRef = useRef(mediaFolderId);
     mediaFolderIdRef.current = mediaFolderId;
@@ -123,6 +128,24 @@ const TiptapEditor = ({
         if (!el) return 642;
         const style = getComputedStyle(el);
         return el.clientWidth - parseFloat(style.paddingLeft) - parseFloat(style.paddingRight);
+    }, []);
+
+    useEffect(() => {
+        const el = scrollContainerRef.current;
+        if (!el) return;
+        const ro = new ResizeObserver(([entry]) => {
+            setCanvasScale(Math.min(1, entry.contentRect.width / A4_WIDTH_PX));
+        });
+        ro.observe(el);
+        return () => ro.disconnect();
+    }, []);
+
+    useEffect(() => {
+        const el = documentRef.current;
+        if (!el) return;
+        const ro = new ResizeObserver(() => setDocHeight(el.offsetHeight));
+        ro.observe(el);
+        return () => ro.disconnect();
     }, []);
 
     const handleCommentClick = useCallback((chatName: string) => {
@@ -386,11 +409,17 @@ const TiptapEditor = ({
                     onAddComment={chatFolderId ? handleAddComment : undefined}
                     onImageUpload={mediaFolderId ? handleImageUpload : undefined}
                 />}>
-                <div className="h-full w-full overflow-y-scroll bg-muted p-4">
+                <div ref={scrollContainerRef}
+                     className={`h-full w-full overflow-y-scroll bg-muted p-4 ${needsScale ? 'overflow-x-hidden' : ''}`}>
                     <div
                         data-document="true"
-                        className="grid p-[2cm] bg-white text-black rounded-lg shadow-sm shadow-transparent min-h-full w-[210mm] m-auto print:shadow-none"
+                        className={`grid p-[2cm] bg-white text-black rounded-lg shadow-sm shadow-transparent w-[210mm] print:shadow-none ${needsScale ? '' : 'min-h-full m-auto'}`}
                         ref={documentRef}
+                        style={needsScale ? {
+                            transform: `scale(${canvasScale})`,
+                            transformOrigin: 'top left',
+                            marginBottom: -(1 - canvasScale) * docHeight,
+                        } : undefined}
                     >
                         <EditorContent editor={editor} className="h-full tiptap-wrapper"/>
                     </div>
