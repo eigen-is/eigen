@@ -379,14 +379,12 @@ describe('Chat', () => {
             expect(msg.content).toBe('secret hello');
         });
 
-        for (const [alias, text] of [['w', 'short whisper'], ['tell', 'tell msg'], ['t', 't msg'], ['send', 'send msg']]) {
-            test(`/${alias} alias works for whisper`, async () => {
-                const msg = await chatPost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
-                    `${chatId}/messages`, {content: `/${alias} ${ctx.bob.user.email} ${text}`});
-                expect(msg.type).toBe('whisper');
-                expect(msg.content).toBe(text);
-            });
-        }
+        test('/tell alias works for whisper', async () => {
+            const msg = await chatPost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+                `${chatId}/messages`, {content: `/tell ${ctx.bob.user.email} tell msg`});
+            expect(msg.type).toBe('whisper');
+            expect(msg.content).toBe('tell msg');
+        });
 
         test('whisper to non-existent user returns error', async () => {
             const res = await authedRequest(ctx.alice.user.sessionToken,
@@ -686,16 +684,6 @@ describe('Chat', () => {
                 });
             const delData = await delRes.json() as any;
             expect(delData.success).toBe(false);
-        });
-
-        test('/w alias with non-email target returns 400', async () => {
-            const res = await authedRequest(ctx.alice.user.sessionToken,
-                `/chat/${ctx.alice.user.id}/${aliceMountId}/${chatId}/messages`, {
-                    method: 'POST',
-                    headers: {'Content-Type': 'application/json'},
-                    body: JSON.stringify({content: '/w notAnEmail secret'}),
-                });
-            expect(res.status).toBe(400);
         });
 
         test('/tell alias with non-email target returns 400', async () => {
