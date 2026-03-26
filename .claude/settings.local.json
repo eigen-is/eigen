@@ -128,7 +128,9 @@
       "WebFetch(domain:wowpedia.fandom.com)",
       "WebFetch(domain:warcraft.wiki.gg)",
       "WebFetch(domain:classic-wow-archive.fandom.com)",
-      "WebFetch(domain:forums.anandtech.com)"
+      "WebFetch(domain:forums.anandtech.com)",
+      "Bash(/tmp/trace.txt:*)",
+      "Read(//tmp/**)"
     ]
   },
   "bypassPermissions": "bypassPermissions"
