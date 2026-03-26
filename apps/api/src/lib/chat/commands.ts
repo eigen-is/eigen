@@ -418,8 +418,8 @@ const BUILT_IN_EMOTES: Record<string, EmoteDefinition> = {
 
     // ── Physical Actions ────────────────────────────────────────────────
     dance: {
-        firstPerson: "You burst into dance.",
-        thirdPerson: "{name} bursts into dance.",
+        firstPerson: "You dance around the room.",
+        thirdPerson: "{name} dances around the room.",
         targetedFirstPerson: "You dance with {target}.",
         targetedSecondPerson: "{name} dances with you.",
         targetedThirdPerson: "{name} dances with {target}.",
@@ -627,12 +627,9 @@ const BUILT_IN_EMOTES: Record<string, EmoteDefinition> = {
 };
 
 export type ParsedCommand =
-    | { kind: 'message'; content: string }
     | { kind: 'emote'; content: string }
     | { kind: 'builtin-emote'; emoteKey: string; target?: string }
     | { kind: 'whisper'; target: string; content: string }
-    | { kind: 'reply'; content: string }
-    | { kind: 'invite'; target: string }
     | { kind: 'error'; error: string };
 
 export function parseCommand(raw: string): ParsedCommand {
@@ -672,16 +669,7 @@ export function parseCommand(raw: string): ParsedCommand {
         }
     }
 
-    // Reply commands: /reply [message]
-    if (trimmed.startsWith('/reply ')) {
-        return {kind: 'reply', content: trimmed.slice(7)};
-    }
-
-    // Invite commands: /invite [email]
-    if (trimmed.startsWith('/invite ')) {
-        return {kind: 'invite', target: trimmed.slice(8).trim()};
-    }
-
+    // invite, reply, inspect, help are client-only commands handled by getLocalCommand()
     return {kind: 'error', error: 'Unknown command'};
 }
 

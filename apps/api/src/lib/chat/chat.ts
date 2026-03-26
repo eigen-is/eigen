@@ -79,8 +79,6 @@ export class ChatRoom {
                     break;
                 case 'error':
                     throw new ApiError(400, cmd.error);
-                default:
-                    break;
             }
         }
 
