@@ -5,9 +5,8 @@ import {formatDistanceToNow} from "date-fns";
 import {DEFAULT_MOUNT_ID, DrivePath, isFolderType, isInlineEditable, stripEigenExtension} from "@workspace/lib/types";
 import {DriveShareSummary} from "./drive-share-summary";
 import {ArrowRight, ChevronLeft, Download, Pencil, Trash2, UserRoundPlus} from "lucide-react";
-import {DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator} from "@workspace/ui/components/dropdown-menu";
-import {useContextMenu} from "../context-menu/use-context-menu";
-import {ContextMenuAnchor} from "../context-menu/context-menu-anchor";
+import {DropdownMenuItem, DropdownMenuSeparator} from "@workspace/ui/components/dropdown-menu";
+import {ContextMenuAnchor, useContextMenu} from "../context-menu";
 import {useKeyboardListNavigation} from "../../../hooks/use-keyboard-list-navigation";
 import {useListSelection} from "../../../hooks/use-list-selection";
 import {useListDrag} from "../../../hooks/use-list-drag";
@@ -251,15 +250,7 @@ export function DriveTable({
                 </TableBody>
             </Table>
 
-            <ContextMenuAnchor isOpen={contextMenu.isOpen} onClose={contextMenu.close}>
-                <DropdownMenuContent
-                    style={{
-                        position: 'absolute',
-                        top: `${contextMenu.position.y}px`,
-                        left: `${contextMenu.position.x}px`,
-                    }}
-                    className="w-48"
-                >
+            <ContextMenuAnchor contextMenu={contextMenu} className="w-48">
                     {isSingleSelect && contextMenu.item && (contextMenu.item.type !== 'file' || isInlineEditable(contextMenu.item.mimeType, contextMenu.item.name)) && onItemOpen && (
                         <DropdownMenuItem
                             onClick={() => {
@@ -325,7 +316,6 @@ export function DriveTable({
                             </DropdownMenuItem>
                         </>
                     )}
-                </DropdownMenuContent>
             </ContextMenuAnchor>
         </div>
     );
