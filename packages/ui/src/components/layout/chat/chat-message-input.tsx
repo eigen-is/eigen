@@ -1,8 +1,8 @@
-import {useCallback, useEffect, useRef, useState} from 'react';
+import {useCallback, useEffect, useMemo, useRef, useState} from 'react';
 import {Button} from "../../button";
 import {Paperclip, Send, X} from "lucide-react";
 import {cn} from "../../../lib/utils";
-import {getAtSuggestQuery} from "./chat-utils";
+import {getAtSuggestQuery, getSlashTargetQuery} from "./chat-utils";
 import type {RoomMember} from "@workspace/lib/types/chat";
 import {ChatPlayerSuggest} from "./chat-player-suggest";
 import {ChatSlashSuggest} from "./chat-slash-suggest";
@@ -15,6 +15,7 @@ type ChatMessageInputProps = {
     placeholder?: string;
     readOnlyMessage?: string;
     roomMembers?: RoomMember[];
+    currentUserEmail?: string;
     messageCount?: number;
     className?: string;
     onKeyDown?: (e: React.KeyboardEvent<HTMLTextAreaElement>, content: string) => boolean | void;
@@ -27,6 +28,7 @@ export function ChatMessageInput({
                                      placeholder = 'Type a message...',
                                      readOnlyMessage = 'You have read-only access to this chat',
                                      roomMembers = [],
+                                     currentUserEmail = '',
                                      messageCount = 0,
                                      className,
                                      onKeyDown: onKeyDownProp,
@@ -58,6 +60,7 @@ export function ChatMessageInput({
         setTimeout(focusTextarea, 0);
     };
 
+    // ── @ mention suggest ───────────────────────────────────────────────
     const atQuery = getAtSuggestQuery(content);
     const suggestOpen = atQuery !== null;
 
@@ -87,13 +90,13 @@ export function ChatMessageInput({
         setSelectedSuggestIdx(0);
     }, []);
 
+    // ── Slash command suggest ───────────────────────────────────────────
     const getSlashQuery = (): string | null => {
         const trimmed = content.trim();
         if (!trimmed.startsWith('/')) return null;
         if (trimmed.indexOf(' ') > 0) return null;
         return trimmed;
     };
-
 
     const slashQuery = getSlashQuery();
     const slashSuggestOpen = slashQuery !== null && slashQuery.length > 0 && !SLASH_COMMANDS.includes(slashQuery);
@@ -113,8 +116,44 @@ export function ChatMessageInput({
         if (count > 0) setSelectedSlashIdx(prev => Math.min(prev, count - 1));
     }, []);
 
+    // ── Slash target suggest (emote/whisper/invite targets) ─────────────
+    const slashTarget = getSlashTargetQuery(content);
+    const slashTargetOpen = slashTarget !== null && !slashSuggestOpen;
+
+    const slashTargetCountRef = useRef(0);
+    const slashTargetEmailsRef = useRef<string[]>([]);
+    const [selectedTargetIdx, setSelectedTargetIdx] = useState(0);
+
+    const slashTargetMembers = useMemo(() => {
+        if (!slashTarget) return [];
+        if (slashTarget.mode === 'contacts') {
+            // For /invite: show contacts not already in room (handled by ChatPlayerSuggest with includeContacts)
+            return [];
+        }
+        // For emotes/whisper/inspect: room members minus self
+        const selfEmail = currentUserEmail.toLowerCase();
+        return roomMembers.filter(m => m.email.toLowerCase() !== selfEmail);
+    }, [slashTarget, roomMembers, currentUserEmail]);
+
+    const handleSlashTargetSelect = useCallback((email: string) => {
+        const shouldAppendSpace = slashTarget?.appendSpace ?? false;
+        setContent(prev => {
+            const spaceIdx = prev.indexOf(' ');
+            if (spaceIdx <= 0) return prev;
+            return prev.slice(0, spaceIdx + 1) + email + (shouldAppendSpace ? ' ' : '');
+        });
+        setSelectedTargetIdx(0);
+    }, [slashTarget?.appendSpace]);
+
+    const handleSlashTargetItemsChange = useCallback((count: number, emails: string[]) => {
+        slashTargetCountRef.current = count;
+        slashTargetEmailsRef.current = emails;
+        if (count > 0) setSelectedTargetIdx(prev => Math.min(prev, count - 1));
+    }, []);
+
+    // ── Keyboard handling ───────────────────────────────────────────────
     const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
-        // Slash suggest keyboard handling
+        // Slash command suggest
         if (slashSuggestOpen && slashSuggestCountRef.current > 0) {
             if (e.key === 'ArrowDown') {
                 e.preventDefault();
@@ -142,6 +181,39 @@ export function ChatMessageInput({
             }
         }
 
+        // Slash target suggest
+        if (slashTargetOpen && slashTargetCountRef.current > 0) {
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                setSelectedTargetIdx(i => Math.min(i + 1, slashTargetCountRef.current - 1));
+                return;
+            }
+            if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                setSelectedTargetIdx(i => Math.max(i - 1, 0));
+                return;
+            }
+            if (e.key === 'Tab' || (e.key === 'Enter' && !e.shiftKey)) {
+                e.preventDefault();
+                const email = slashTargetEmailsRef.current[selectedTargetIdx];
+                if (email) {
+                    handleSlashTargetSelect(email);
+                }
+                return;
+            }
+            if (e.key === 'Escape') {
+                e.preventDefault();
+                setSelectedTargetIdx(0);
+                // Remove the target part, keep the command
+                setContent(prev => {
+                    const spaceIdx = prev.indexOf(' ');
+                    return spaceIdx > 0 ? prev.slice(0, spaceIdx) : prev;
+                });
+                return;
+            }
+        }
+
+        // @ mention suggest
         if (suggestOpen) {
             if (e.key === 'ArrowDown') {
                 e.preventDefault();
@@ -243,10 +315,21 @@ export function ChatMessageInput({
                     query={atQuery || ''}
                     roomMembers={roomMembers}
                     onSelect={handlePlayerSelect}
-                    visible={atQuery !== null}
+                    visible={suggestOpen}
                     selectedIndex={selectedSuggestIdx}
                     onItemsChange={handleSuggestItemsChange}
                 />
+                {slashTargetOpen && slashTarget && (
+                    <ChatPlayerSuggest
+                        query={slashTarget.query}
+                        roomMembers={slashTarget.mode === 'contacts' ? [] : slashTargetMembers}
+                        onSelect={handleSlashTargetSelect}
+                        visible
+                        selectedIndex={selectedTargetIdx}
+                        onItemsChange={handleSlashTargetItemsChange}
+                        includeContacts={slashTarget.mode === 'contacts'}
+                    />
+                )}
                 <ChatSlashSuggest
                     query={slashQuery || ''}
                     commandsHelp={COMMANDS_HELP}

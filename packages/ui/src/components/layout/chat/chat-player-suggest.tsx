@@ -11,6 +11,7 @@ type ChatPlayerSuggestProps = {
     visible: boolean;
     selectedIndex: number;
     onItemsChange: (count: number, emails: string[]) => void;
+    includeContacts?: boolean;
 }
 
 export function ChatPlayerSuggest({
@@ -19,16 +20,18 @@ export function ChatPlayerSuggest({
                                       onSelect,
                                       visible,
                                       selectedIndex,
-                                      onItemsChange
+                                      onItemsChange,
+                                      includeContacts = true,
                                   }: ChatPlayerSuggestProps) {
     const {suggestions: contactSuggestions} = useContactSuggestions(query, true);
 
     const items = useMemo(() => {
-        if (!visible || !query) return [];
+        if (!visible) return [];
 
+        const q = query.toLowerCase();
         const memberSuggestions: ContactSuggestion[] = roomMembers
             .filter(m => {
-                const q = query.toLowerCase();
+                if (!q) return true;
                 return m.email.toLowerCase().includes(q) || m.displayName.toLowerCase().includes(q);
             })
             .map(m => ({
@@ -37,6 +40,8 @@ export function ChatPlayerSuggest({
                 email: m.email,
                 allEmails: [m.email],
             }));
+
+        if (!includeContacts) return memberSuggestions.slice(0, 6);
 
         const seen = new Set<string>();
         const merged: ContactSuggestion[] = [];
@@ -48,7 +53,7 @@ export function ChatPlayerSuggest({
             }
         }
         return merged.slice(0, 6);
-    }, [visible, query, roomMembers, contactSuggestions]);
+    }, [visible, query, roomMembers, contactSuggestions, includeContacts]);
 
     const emails = useMemo(() => items.map(i => i.email), [items]);
 

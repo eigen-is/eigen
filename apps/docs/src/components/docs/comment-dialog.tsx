@@ -146,6 +146,7 @@ export function ViewCommentDialog({
                                     readOnly={chat.readOnly}
                                     placeholder="Reply..."
                                     roomMembers={chat.roomMembers}
+                                    currentUserEmail={chat.currentUserEmail}
                                     messageCount={chat.messages.length}
                                 />
                             </div>

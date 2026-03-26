@@ -49,6 +49,7 @@ function CardChatInner({ownerId, mountId, chatId}: {ownerId: string; mountId: st
                 readOnly={chat.readOnly}
                 placeholder="Write a comment..."
                 roomMembers={chat.roomMembers}
+                currentUserEmail={chat.currentUserEmail}
                 messageCount={chat.messages.length}
             />
         </div>
