@@ -178,13 +178,8 @@ export function EmailList({
                 </div>
             </div>
 
-            <ContextMenuAnchor isOpen={contextMenu.isOpen} onClose={contextMenu.close}>
+            <ContextMenuAnchor contextMenu={contextMenu} className="w-56">
                 <EmailContextMenu
-                    style={{
-                        position: 'absolute',
-                        top: `${contextMenu.position.y}px`,
-                        left: `${contextMenu.position.x}px`,
-                    }}
                     messageIds={contextIds}
                     isSingleSelect={isSingleSelect}
                     mailboxes={mailboxes}

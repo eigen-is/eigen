@@ -1,6 +1,5 @@
 import {AlertTriangle, Archive, Download, Forward, Printer, Reply, ReplyAll, Trash2} from "lucide-react";
 import {
-    DropdownMenuContent,
     DropdownMenuItem,
     DropdownMenuSeparator,
     DropdownMenuSub,
@@ -10,11 +9,9 @@ import {
 import {MaildirMailbox} from "@workspace/lib/types/mail";
 import {ucfirst} from "@workspace/ui/lib/utils";
 import {getMailMessageDownloadUrl} from "@workspace/lib/api";
-import {CSSProperties} from "react";
 import {useAuth} from "@workspace/lib/auth";
 
 type EmailContextMenuProps = {
-    style: CSSProperties;
     messageIds: string[];
     isSingleSelect: boolean;
     mailboxes: MaildirMailbox[];
@@ -31,7 +28,6 @@ type EmailContextMenuProps = {
 }
 
 export function EmailContextMenu({
-                                     style,
                                      messageIds,
                                      isSingleSelect,
                                      mailboxes = [],
@@ -50,10 +46,7 @@ export function EmailContextMenu({
     const firstId = messageIds[0] || '';
 
     return (
-        <DropdownMenuContent
-            style={style}
-            className="w-56"
-        >
+        <>
             {isSingleSelect && onPrint && (
                 <>
                     <DropdownMenuItem onClick={() => {
@@ -153,6 +146,6 @@ export function EmailContextMenu({
                         ))}
                 </DropdownMenuSubContent>
             </DropdownMenuSub>
-        </DropdownMenuContent>
+        </>
     );
 }

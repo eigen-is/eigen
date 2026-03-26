@@ -1,6 +1,6 @@
 import {AlertTriangle, Archive, Forward, MoreVertical, Paperclip, Reply, ReplyAll, Trash2} from "lucide-react";
 import {Button} from "@workspace/ui/components/button";
-import {DropdownMenu, DropdownMenuTrigger} from "@workspace/ui/components/dropdown-menu";
+import {DropdownMenu, DropdownMenuContent, DropdownMenuTrigger} from "@workspace/ui/components/dropdown-menu";
 import {format} from "date-fns";
 import {AddressObject, Attachment, Email, MaildirMailbox} from "@workspace/lib/types/mail";
 import {ShadowContent} from "@workspace/ui/components/layout/shadow-content";
@@ -83,23 +83,24 @@ export function EmailDetailToolbar({
                             <MoreVertical className="h-4 w-4"/>
                         </Button>
                     </DropdownMenuTrigger>
-                    <EmailContextMenu
-                        style={{}}
-                        messageIds={[email.id]}
-                        isSingleSelect={true}
-                        mailboxes={mailboxes}
-                        currentMailboxId={email.mailbox}
-                        onReply={onReply}
-                        onReplyAll={onReplyAll}
-                        onForward={onForward}
-                        onArchive={onArchive ? (ids) => ids.forEach(id => onArchive(id)) : undefined}
-                        onReportSpam={onReportSpam ? (ids) => ids.forEach(id => onReportSpam(id)) : undefined}
-                        onDelete={onDelete ? (ids) => ids.forEach(id => onDelete(id)) : undefined}
-                        onMoveToFolder={onMoveToFolder ? (ids, folderId) => ids.forEach(id => onMoveToFolder(id, folderId)) : undefined}
-                        onClose={() => {
-                        }}
-                        onPrint={() => printDocument()}
-                    />
+                    <DropdownMenuContent className="w-56">
+                        <EmailContextMenu
+                            messageIds={[email.id]}
+                            isSingleSelect={true}
+                            mailboxes={mailboxes}
+                            currentMailboxId={email.mailbox}
+                            onReply={onReply}
+                            onReplyAll={onReplyAll}
+                            onForward={onForward}
+                            onArchive={onArchive ? (ids) => ids.forEach(id => onArchive(id)) : undefined}
+                            onReportSpam={onReportSpam ? (ids) => ids.forEach(id => onReportSpam(id)) : undefined}
+                            onDelete={onDelete ? (ids) => ids.forEach(id => onDelete(id)) : undefined}
+                            onMoveToFolder={onMoveToFolder ? (ids, folderId) => ids.forEach(id => onMoveToFolder(id, folderId)) : undefined}
+                            onClose={() => {
+                            }}
+                            onPrint={() => printDocument()}
+                        />
+                    </DropdownMenuContent>
                 </DropdownMenu>
             </div>
         </Toolbar>
