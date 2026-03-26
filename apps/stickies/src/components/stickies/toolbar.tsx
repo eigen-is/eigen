@@ -3,12 +3,19 @@ import {formatForDisplay} from '@tanstack/react-hotkeys';
 import {Check, Plus, Redo, Undo, UserRoundPlus} from 'lucide-react';
 import {Button} from '@workspace/ui/components/button';
 import {Separator} from '@workspace/ui/components/separator';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from '@workspace/ui/components/dropdown-menu';
 import {TooltipButton} from '@workspace/ui';
 import {isLightColor} from '@workspace/ui/components/layout/media/color-picker';
 import {DocumentModeButton} from '@workspace/ui/components/layout/toolbar/document-mode-button';
 import {FileMenu} from '@workspace/ui/components/layout/toolbar/file-menu';
-import {RevisionHistory} from '@workspace/ui/components/layout/collab/revision-history';
 import {DriveCreateStickies} from '@workspace/ui/components/layout/drive/drive-create-stickies';
+import {useMediaQuery} from '@workspace/lib/media';
 import * as Y from 'yjs';
 import {EIGEN_STICKIES_COLORS} from '@workspace/lib/constants';
 import type {DrivePath} from '@workspace/lib/types/drive';
@@ -36,6 +43,7 @@ export function Toolbar({
                         }: ToolbarProps) {
     const [canUndo, setCanUndo] = useState(false);
     const [canRedo, setCanRedo] = useState(false);
+    const isMobile = useMediaQuery('(max-width: 1200px)');
 
     useEffect(() => {
         if (!undoManager || !undoManager.undoStack || !canWrite) {
@@ -65,10 +73,30 @@ export function Toolbar({
                     path={path}
                     canWrite={canWrite}
                     onAccessDialogOpen={onAccessDialogOpen}
+                    onRestore={onRestore}
                     createLabel="New stickies"
                     CreateDialog={DriveCreateStickies}
                 />
-                {canWrite && (
+                {canWrite && isMobile && (
+                    <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                            <Button variant="ghost">Edit</Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="start">
+                            <DropdownMenuItem onClick={() => undoManager?.undo?.()} disabled={!canUndo}>
+                                <Undo className="h-4 w-4 mr-2"/> Undo
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => undoManager?.redo?.()} disabled={!canRedo}>
+                                <Redo className="h-4 w-4 mr-2"/> Redo
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator/>
+                            <DropdownMenuItem onClick={onAddColumn}>
+                                <Plus className="h-4 w-4 mr-2"/> Add column
+                            </DropdownMenuItem>
+                        </DropdownMenuContent>
+                    </DropdownMenu>
+                )}
+                {canWrite && !isMobile && (
                     <>
                         <Separator orientation="vertical" className="h-4"/>
                         <TooltipButton
@@ -110,7 +138,8 @@ export function Toolbar({
                             }}
                         >
                             {active && (
-                                <Check className="h-2 w-2" style={{color: isLightColor(c.value) ? '#000' : '#fff'}}/>
+                                <Check className="h-2 w-2"
+                                       style={{color: isLightColor(c.value) ? '#000' : '#fff'}}/>
                             )}
                         </button>
                     );
@@ -124,13 +153,8 @@ export function Toolbar({
             </div>
 
             <div className="flex items-center gap-1">
-                <RevisionHistory path={path} onRestore={onRestore}/>
                 {canWrite ? (
-                    <TooltipButton
-                        icon={UserRoundPlus}
-                        tooltipText="Share"
-                        onClick={onAccessDialogOpen}
-                    />
+                    <TooltipButton icon={UserRoundPlus} tooltipText="Share" onClick={onAccessDialogOpen}/>
                 ) : (
                     <DocumentModeButton canWrite={canWrite}/>
                 )}
