@@ -60,6 +60,7 @@ function ChatView() {
                             readOnly={chat.readOnly}
                             placeholder={`Message ${chat.chatName}`}
                             roomMembers={chat.roomMembers}
+                            currentUserEmail={chat.currentUserEmail}
                             messageCount={chat.messages.length}
                         />
                     </div>

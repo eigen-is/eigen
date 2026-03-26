@@ -156,6 +156,7 @@ export function useChatRoom(ownerId: string, mountId: string, chatId: string) {
         readOnly,
         disabled: postMessage.isPending || uploadFile.isPending,
         currentUserId: user?.id || '',
+        currentUserEmail: user?.email || '',
         mediaFolderId,
         handleSendMessage,
         hasOlderMessages: messagesQuery.hasNextPage,
