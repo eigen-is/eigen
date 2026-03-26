@@ -180,7 +180,7 @@ export function StickiesBoard({ownerId, path, canWrite, chatFolderId, onAccessDi
                     <CardContent className={`p-3 text-sm ${!card.color ? 'bg-accent' : ''}`}>
                         {card.title}
                         {card.description && (
-                            <p className="text-xs mt-1 truncate" style={{opacity: 0.7}}>{card.description}</p>
+                            <p className="text-xs mt-1 line-clamp-2" style={{opacity: 0.7}}>{card.description}</p>
                         )}
                     </CardContent>
                 </Card>
