@@ -20,6 +20,7 @@ import {
 import type {EigenClipboardData, EigenClipboardItem} from '@workspace/lib/types/clipboard';
 import * as Y from 'yjs';
 import {Column, ColumnLayout, EmptyState} from '@workspace/ui/index';
+import {useLayout} from '@workspace/ui/components/layout/app/layout-context';
 
 function buildClipboardItem(obj: SlideObject, resolveMediaPath: (name: string) => DrivePath | undefined): EigenClipboardItem | null {
     const rect = {x: obj.x, y: obj.y, w: obj.w, h: obj.h, rotation: obj.rotation};
@@ -115,6 +116,7 @@ function SlideEditorInner({ownerId, path, canWrite, mediaFolderId, onAccessDialo
         moveObjectToBack,
     } = useDeck(ownerId, path.mountId, path.id);
 
+    const {isMobile} = useLayout();
     const {resolveMediaUrl, resolveMediaPath} = useMediaResolver();
     const {dragState, handleDragStart, handleDragEnd} = useSlideDnd({deck, yjsDoc});
 
@@ -438,7 +440,7 @@ function SlideEditorInner({ownerId, path, canWrite, mediaFolderId, onAccessDialo
 
     return (
         <ColumnLayout mobileColumn="editor">
-            <Column id={"doc-editor"} width={"w-full"} className="flex-1 h-full" toolbar={
+            <Column id={"editor"} width={"w-full"} className="flex-1 h-full" toolbar={
                 <Toolbar
                     path={path}
                     canWrite={canWrite}
@@ -463,8 +465,9 @@ function SlideEditorInner({ownerId, path, canWrite, mediaFolderId, onAccessDialo
                         dragActiveId={dragState.activeId}
                         onDeleteSlide={canWrite ? deleteSlide : undefined}
                         onDuplicateSlide={canWrite ? duplicateSlide : undefined}
+                        mobile={isMobile}
                     />
-                    {activeSlide ? (
+                    {!isMobile && (activeSlide ? (
                         <div className="flex-1 flex overflow-hidden">
                             <div className="flex-1 flex flex-col overflow-hidden">
                                 <SlideCanvas
@@ -510,7 +513,7 @@ function SlideEditorInner({ownerId, path, canWrite, mediaFolderId, onAccessDialo
                         </div>
                     ) : (
                         <EmptyState message="No slides yet"/>
-                    )}
+                    ))}
                 </div>
 
                 <input

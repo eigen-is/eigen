@@ -2,13 +2,6 @@ import {useEffect, useState} from 'react';
 import {formatForDisplay} from '@tanstack/react-hotkeys';
 import {ImagePlus, Play, Plus, Redo, Type, Undo, UserRoundPlus} from 'lucide-react';
 import {Toolbar as SharedToolbar, TooltipButton} from '@workspace/ui';
-import {Button} from '@workspace/ui/components/button';
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuTrigger,
-} from '@workspace/ui/components/dropdown-menu';
 import {DocumentModeButton} from '@workspace/ui/components/layout/toolbar/document-mode-button';
 import {FileMenu} from '@workspace/ui/components/layout/toolbar/file-menu';
 import {DriveCreateSlides} from '@workspace/ui/components/layout/drive/drive-create-slides';
@@ -75,41 +68,6 @@ export function Toolbar({
                     createLabel="New slides"
                     CreateDialog={DriveCreateSlides}
                 />
-
-                {canWrite && isMobile && (
-                    <>
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <Button variant="ghost">Edit</Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="start">
-                                <DropdownMenuItem onClick={() => undoManager?.undo?.()} disabled={!canUndo}>
-                                    <Undo className="h-4 w-4 mr-2"/> Undo
-                                </DropdownMenuItem>
-                                <DropdownMenuItem onClick={() => undoManager?.redo?.()} disabled={!canRedo}>
-                                    <Redo className="h-4 w-4 mr-2"/> Redo
-                                </DropdownMenuItem>
-                            </DropdownMenuContent>
-                        </DropdownMenu>
-
-                        <DropdownMenu>
-                            <DropdownMenuTrigger asChild>
-                                <Button variant="ghost">Insert</Button>
-                            </DropdownMenuTrigger>
-                            <DropdownMenuContent align="start">
-                                <DropdownMenuItem onClick={onAddSlide}>
-                                    <Plus className="h-4 w-4 mr-2"/> Slide
-                                </DropdownMenuItem>
-                                <DropdownMenuItem onClick={onAddText}>
-                                    <Type className="h-4 w-4 mr-2"/> Text
-                                </DropdownMenuItem>
-                                <DropdownMenuItem onClick={onAddImage}>
-                                    <ImagePlus className="h-4 w-4 mr-2"/> Image
-                                </DropdownMenuItem>
-                            </DropdownMenuContent>
-                        </DropdownMenu>
-                    </>
-                )}
 
                 {canWrite && !isMobile && (
                     <>
