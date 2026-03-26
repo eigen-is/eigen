@@ -95,11 +95,6 @@ export function useChatRoom(ownerId: string, mountId: string, chatId: string) {
                     addLocalMessage(`Available commands:\n${lines}`);
                     return;
                 }
-                case 'time': {
-                    const now = new Date();
-                    addLocalMessage(`Local time: ${now.toLocaleString()}\nServer time: ${now.toUTCString()}`);
-                    return;
-                }
                 case 'inspect': {
                     addLocalMessage(`inspect:${local.target}`);
                     return;

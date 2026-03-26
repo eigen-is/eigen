@@ -66,7 +66,7 @@ export class ChatRoom {
             switch (cmd.kind) {
                 case 'builtin-emote':
                     type = 'emote';
-                    content = `$${cmd.emoteKey}`;
+                    content = cmd.target ? `$${cmd.emoteKey}:${cmd.target}` : `$${cmd.emoteKey}`;
                     break;
                 case 'emote':
                     type = 'emote';
