@@ -130,7 +130,8 @@
       "WebFetch(domain:classic-wow-archive.fandom.com)",
       "WebFetch(domain:forums.anandtech.com)",
       "Bash(/tmp/trace.txt:*)",
-      "Read(//tmp/**)"
+      "Read(//tmp/**)",
+      "Bash(sort -k5 -rn)"
     ]
   },
   "bypassPermissions": "bypassPermissions"
