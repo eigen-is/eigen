@@ -1,26 +1,15 @@
 import {useEffect, useState} from 'react';
 import {formatForDisplay} from '@tanstack/react-hotkeys';
-import {Check, FileText, Folder, Pencil, Plus, Redo, Trash2, Undo, UserRoundPlus} from 'lucide-react';
+import {Check, Plus, Redo, Undo, UserRoundPlus} from 'lucide-react';
 import {Button} from '@workspace/ui/components/button';
-import {
-    DropdownMenu,
-    DropdownMenuContent,
-    DropdownMenuItem,
-    DropdownMenuSeparator,
-    DropdownMenuTrigger,
-} from '@workspace/ui/components/dropdown-menu';
 import {Separator} from '@workspace/ui/components/separator';
 import {TooltipButton} from '@workspace/ui';
 import {isLightColor} from '@workspace/ui/components/layout/media/color-picker';
 import {DocumentModeButton} from '@workspace/ui/components/layout/toolbar/document-mode-button';
+import {FileMenu} from '@workspace/ui/components/layout/toolbar/file-menu';
 import {RevisionHistory} from '@workspace/ui/components/layout/collab/revision-history';
-import * as Y from 'yjs';
-import {useNavigate} from '@tanstack/react-router';
-import {useAuth} from '@workspace/lib/auth';
-import {useRootFolder} from '@workspace/lib/drive';
 import {DriveCreateStickies} from '@workspace/ui/components/layout/drive/drive-create-stickies';
-import {DriveDeleteItem} from '@workspace/ui/components/layout/drive/drive-delete-item';
-import {DriveRenameItem} from '@workspace/ui/components/layout/drive/drive-rename-item';
+import * as Y from 'yjs';
 import {EIGEN_STICKIES_COLORS} from '@workspace/lib/constants';
 import type {DrivePath} from '@workspace/lib/types/drive';
 
@@ -47,12 +36,6 @@ export function Toolbar({
                         }: ToolbarProps) {
     const [canUndo, setCanUndo] = useState(false);
     const [canRedo, setCanRedo] = useState(false);
-    const [createStickiesOpen, setCreateStickiesOpen] = useState(false);
-    const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-    const [renameDialogOpen, setRenameDialogOpen] = useState(false);
-    const {user} = useAuth();
-    const {data: rootFolder} = useRootFolder(user?.id || '');
-    const navigate = useNavigate();
 
     useEffect(() => {
         if (!undoManager || !undoManager.undoStack || !canWrite) {
@@ -78,36 +61,13 @@ export function Toolbar({
     return (
         <div className="bg-background h-12 flex items-center justify-between px-4 border-b no-print">
             <div className="flex items-center gap-1">
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button variant="ghost" title="File">
-                            File
-                        </Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="start">
-                        <DropdownMenuItem onClick={() => rootFolder && setCreateStickiesOpen(true)}>
-                            <FileText className="h-4 w-4 mr-2"/> New stickies
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => navigate({to: `/`})}>
-                            <Folder className="h-4 w-4 mr-2"/> Open
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => path && setRenameDialogOpen(true)}>
-                            <Pencil className="h-4 w-4 mr-2"/> Rename
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator/>
-                        <DropdownMenuItem onClick={onAccessDialogOpen}>
-                            <UserRoundPlus className="h-4 w-4 mr-2"/> Edit access
-                        </DropdownMenuItem>
-                        {canWrite && (
-                            <>
-                                <DropdownMenuSeparator/>
-                                <DropdownMenuItem onClick={() => path && setDeleteDialogOpen(true)}>
-                                    <Trash2 className="h-4 w-4 mr-2"/> Delete
-                                </DropdownMenuItem>
-                            </>
-                        )}
-                    </DropdownMenuContent>
-                </DropdownMenu>
+                <FileMenu
+                    path={path}
+                    canWrite={canWrite}
+                    onAccessDialogOpen={onAccessDialogOpen}
+                    createLabel="New stickies"
+                    CreateDialog={DriveCreateStickies}
+                />
                 {canWrite && (
                     <>
                         <Separator orientation="vertical" className="h-4"/>
@@ -175,33 +135,6 @@ export function Toolbar({
                     <DocumentModeButton canWrite={canWrite}/>
                 )}
             </div>
-
-            {rootFolder && (
-                <DriveCreateStickies
-                    path={rootFolder}
-                    open={createStickiesOpen}
-                    onOpenChange={setCreateStickiesOpen}
-                />
-            )}
-
-            {path && (
-                <DriveDeleteItem
-                    paths={[path]}
-                    open={deleteDialogOpen}
-                    onOpenChange={setDeleteDialogOpen}
-                    onAfterAction={(actionType) => {
-                        if (actionType === 'delete') navigate({to: `/`});
-                    }}
-                />
-            )}
-
-            {path && (
-                <DriveRenameItem
-                    path={path}
-                    open={renameDialogOpen}
-                    onOpenChange={setRenameDialogOpen}
-                />
-            )}
         </div>
     );
 }
