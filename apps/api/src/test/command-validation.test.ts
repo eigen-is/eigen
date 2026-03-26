@@ -9,14 +9,25 @@ describe('Command Validation', () => {
             expect(validateCommand('/flip')).toEqual({valid: true, kind: 'builtin-emote'});
         });
 
-        test('accepts help commands', () => {
-            expect(validateCommand('/help')).toEqual({valid: true, kind: 'help'});
-            expect(validateCommand('/h')).toEqual({valid: true, kind: 'help'});
-            expect(validateCommand('/?')).toEqual({valid: true, kind: 'help'});
+        test('accepts emote aliases', () => {
+            expect(validateCommand('/lol')).toEqual({valid: true, kind: 'builtin-emote'});
+            expect(validateCommand('/hi')).toEqual({valid: true, kind: 'builtin-emote'});
+            expect(validateCommand('/sorry')).toEqual({valid: true, kind: 'builtin-emote'});
+            expect(validateCommand('/doom')).toEqual({valid: true, kind: 'builtin-emote'});
         });
 
-        test('accepts time command', () => {
-            expect(validateCommand('/time')).toEqual({valid: true, kind: 'time'});
+        test('accepts targeted emotes', () => {
+            expect(validateCommand('/bow test@example.com')).toEqual({valid: true, kind: 'builtin-emote'});
+            expect(validateCommand('/laugh user@domain.com')).toEqual({valid: true, kind: 'builtin-emote'});
+        });
+
+        test('accepts trout with valid email', () => {
+            expect(validateCommand('/trout test@example.com'))
+                .toEqual({valid: true, kind: 'builtin-emote'});
+        });
+
+        test('accepts help command', () => {
+            expect(validateCommand('/help')).toEqual({valid: true, kind: 'help'});
         });
 
         test('accepts custom emote with action', () => {
@@ -27,19 +38,16 @@ describe('Command Validation', () => {
         test('accepts whisper with valid email and message', () => {
             expect(validateCommand('/whisper test@example.com hello there'))
                 .toEqual({valid: true, kind: 'whisper'});
-            expect(validateCommand('/w user@domain.com hi'))
+            expect(validateCommand('/tell user@domain.com hi'))
                 .toEqual({valid: true, kind: 'whisper'});
         });
 
         test('accepts reply with message', () => {
             expect(validateCommand('/reply hello back')).toEqual({valid: true, kind: 'reply'});
-            expect(validateCommand('/r thanks')).toEqual({valid: true, kind: 'reply'});
         });
 
         test('accepts invite with valid email', () => {
             expect(validateCommand('/invite test@example.com'))
-                .toEqual({valid: true, kind: 'invite'});
-            expect(validateCommand('/i user@domain.com'))
                 .toEqual({valid: true, kind: 'invite'});
         });
 
@@ -48,11 +56,6 @@ describe('Command Validation', () => {
                 .toEqual({valid: true, kind: 'inspect'});
             expect(validateCommand('/look user@domain.com'))
                 .toEqual({valid: true, kind: 'inspect'});
-        });
-
-        test('accepts trout with valid email', () => {
-            expect(validateCommand('/trout test@example.com'))
-                .toEqual({valid: true, kind: 'trout'});
         });
     });
 
@@ -91,9 +94,9 @@ describe('Command Validation', () => {
                 valid: false,
                 error: '/whisper requires email and message'
             });
-            expect(validateCommand('/w test@example.com')).toEqual({
+            expect(validateCommand('/tell test@example.com')).toEqual({
                 valid: false,
-                error: '/w requires email and message'
+                error: '/tell requires email and message'
             });
         });
 
@@ -102,10 +105,6 @@ describe('Command Validation', () => {
                 valid: false,
                 error: "'invalid-email' is not a valid email address"
             });
-            expect(validateCommand('/w @domain.com hi')).toEqual({
-                valid: false,
-                error: "'@domain.com' is not a valid email address"
-            });
         });
 
         test('rejects reply without message', () => {
@@ -113,18 +112,10 @@ describe('Command Validation', () => {
                 valid: false,
                 error: '/reply requires a message'
             });
-            expect(validateCommand('/r')).toEqual({
-                valid: false,
-                error: '/r requires a message'
-            });
         });
 
         test('rejects invite without email', () => {
             expect(validateCommand('/invite')).toEqual({
-                valid: false,
-                error: 'invite target cannot be empty'
-            });
-            expect(validateCommand('/i   ')).toEqual({
                 valid: false,
                 error: 'invite target cannot be empty'
             });
@@ -162,6 +153,24 @@ describe('Command Validation', () => {
             expect(validateCommand('/trout invalid-email')).toEqual({
                 valid: false,
                 error: "'invalid-email' is not a valid email address"
+            });
+        });
+
+        test('rejects targeted emote with invalid email', () => {
+            expect(validateCommand('/bow not-an-email')).toEqual({
+                valid: false,
+                error: "'not-an-email' is not a valid email address"
+            });
+        });
+
+        test('rejects target on emotes that do not support targeting', () => {
+            expect(validateCommand('/idea test@example.com')).toEqual({
+                valid: false,
+                error: '/idea does not accept a target'
+            });
+            expect(validateCommand('/flip test@example.com')).toEqual({
+                valid: false,
+                error: '/flip does not accept a target'
             });
         });
     });

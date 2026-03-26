@@ -1,5 +1,5 @@
 export const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-export const EMAIL_FIND_REGEX = /[^\s@]+@[^\s@]+\.[^\s@]+/g;
+export const EMAIL_FIND_REGEX = /[^\s@([]+@[^\s@]+\.[^\s@.,;:!?\])]+/g;
 
 export function validateEmailAddress(value: string): boolean {
     return EMAIL_REGEX.test(value.trim());
