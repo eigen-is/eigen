@@ -34,7 +34,7 @@ const BUILT_IN_EMOTES: Record<string, EmoteDefinition> = {
     },
     wave: {
         firstPerson: "You wave.",
-        thirdPerson: "{name} waves.",
+        thirdPerson: "{name} waves happily.",
         targetedFirstPerson: "You wave at {target}.",
         targetedSecondPerson: "{name} waves at you.",
         targetedThirdPerson: "{name} waves at {target}.",
@@ -47,8 +47,8 @@ const BUILT_IN_EMOTES: Record<string, EmoteDefinition> = {
         targetedThirdPerson: "{name} bows before {target}.",
     },
     curtsey: {
-        firstPerson: "You curtsey.",
-        thirdPerson: "{name} curtseys.",
+        firstPerson: "You curtsey gracefully.",
+        thirdPerson: "{name} curtseys gracefully.",
         targetedFirstPerson: "You curtsey before {target}.",
         targetedSecondPerson: "{name} curtseys before you.",
         targetedThirdPerson: "{name} curtseys before {target}.",
@@ -89,20 +89,35 @@ const BUILT_IN_EMOTES: Record<string, EmoteDefinition> = {
         targetedThirdPerson: "{name} gives {target} a high five!",
     },
 
+    comfort: {
+        firstPerson: "You need to be comforted.",
+        thirdPerson: "{name} needs to be comforted.",
+        targetedFirstPerson: "You comfort {target}.",
+        targetedSecondPerson: "{name} comforts you.",
+        targetedThirdPerson: "{name} comforts {target}.",
+    },
+    pat: {
+        firstPerson: "You need a pat.",
+        thirdPerson: "{name} needs a pat.",
+        targetedFirstPerson: "You gently pat {target}.",
+        targetedSecondPerson: "{name} gently pats you.",
+        targetedThirdPerson: "{name} gently pats {target}.",
+    },
+
     // ── Positive Emotions ───────────────────────────────────────────────
     cheer: {
-        firstPerson: "You cheer!",
-        thirdPerson: "{name} cheers!",
+        firstPerson: "You cheer enthusiastically!",
+        thirdPerson: "{name} cheers enthusiastically!",
         targetedFirstPerson: "You cheer at {target}.",
         targetedSecondPerson: "{name} cheers at you.",
         targetedThirdPerson: "{name} cheers at {target}.",
     },
     smile: {
-        firstPerson: "You smile.",
-        thirdPerson: "{name} smiles.",
+        firstPerson: "You smile happily.",
+        thirdPerson: "{name} smiles happily.",
         targetedFirstPerson: "You smile at {target}.",
         targetedSecondPerson: "{name} smiles at you.",
-        targetedThirdPerson: "{name} smiles at {target}.",
+        targetedThirdPerson: "{name} beams a smile at {target}.",
     },
     grin: {
         firstPerson: "You grin wickedly.",
@@ -112,8 +127,8 @@ const BUILT_IN_EMOTES: Record<string, EmoteDefinition> = {
         targetedThirdPerson: "{name} grins wickedly at {target}.",
     },
     laugh: {
-        firstPerson: "You laugh.",
-        thirdPerson: "{name} laughs.",
+        firstPerson: "You fall down laughing.",
+        thirdPerson: "{name} falls down laughing.",
         targetedFirstPerson: "You laugh at {target}.",
         targetedSecondPerson: "{name} laughs at you.",
         targetedThirdPerson: "{name} laughs at {target}.",
@@ -131,6 +146,13 @@ const BUILT_IN_EMOTES: Record<string, EmoteDefinition> = {
         targetedFirstPerson: "You chuckle at {target}.",
         targetedSecondPerson: "{name} chuckles at you.",
         targetedThirdPerson: "{name} chuckles at {target}.",
+    },
+    cackle: {
+        firstPerson: "You cackle gleefully.",
+        thirdPerson: "{name} throws back their head and cackles with insane glee!",
+        targetedFirstPerson: "You cackle gleefully at {target}.",
+        targetedSecondPerson: "{name} throws back their head and cackles with insane glee at you!",
+        targetedThirdPerson: "{name} throws back their head and cackles with insane glee at {target}!",
     },
     guffaw: {
         firstPerson: "You let out a boisterous guffaw!",
@@ -170,8 +192,8 @@ const BUILT_IN_EMOTES: Record<string, EmoteDefinition> = {
 
     // ── Negative Emotions ───────────────────────────────────────────────
     cry: {
-        firstPerson: "You cry.",
-        thirdPerson: "{name} cries.",
+        firstPerson: "You burst into tears.",
+        thirdPerson: "{name} bursts into tears.",
         targetedFirstPerson: "You cry on {target}'s shoulder.",
         targetedSecondPerson: "{name} cries on your shoulder.",
         targetedThirdPerson: "{name} cries on {target}'s shoulder.",
@@ -224,7 +246,7 @@ const BUILT_IN_EMOTES: Record<string, EmoteDefinition> = {
     },
     pout: {
         firstPerson: "You pout at everyone around you.",
-        thirdPerson: "{name} pouts.",
+        thirdPerson: "{name} pouts at everyone.",
         targetedFirstPerson: "You pout at {target}.",
         targetedSecondPerson: "{name} pouts at you.",
         targetedThirdPerson: "{name} pouts at {target}.",
@@ -239,8 +261,8 @@ const BUILT_IN_EMOTES: Record<string, EmoteDefinition> = {
 
     // ── Reactions & Responses ───────────────────────────────────────────
     nod: {
-        firstPerson: "You nod.",
-        thirdPerson: "{name} nods.",
+        firstPerson: "You nod solemnly.",
+        thirdPerson: "{name} nods solemnly.",
         targetedFirstPerson: "You nod at {target}.",
         targetedSecondPerson: "{name} nods at you.",
         targetedThirdPerson: "{name} nods at {target}.",
@@ -288,8 +310,8 @@ const BUILT_IN_EMOTES: Record<string, EmoteDefinition> = {
         targetedThirdPerson: "{name} rolls their eyes at {target}.",
     },
     gasp: {
-        firstPerson: "You gasp.",
-        thirdPerson: "{name} gasps.",
+        firstPerson: "You gasp in astonishment.",
+        thirdPerson: "{name} gasps in astonishment.",
         targetedFirstPerson: "You gasp at {target}.",
         targetedSecondPerson: "{name} gasps at you.",
         targetedThirdPerson: "{name} gasps at {target}.",
@@ -339,8 +361,8 @@ const BUILT_IN_EMOTES: Record<string, EmoteDefinition> = {
 
     // ── Attitude & Sass ─────────────────────────────────────────────────
     taunt: {
-        firstPerson: "You taunt everyone around you. Bring it fools!",
-        thirdPerson: "{name} taunts everyone. Bring it fools!",
+        firstPerson: "You taunt everyone in the room. Bring it fools!",
+        thirdPerson: "{name} taunts everyone in the room. Bring it fools!",
         targetedFirstPerson: "You make a taunting gesture at {target}. Bring it!",
         targetedSecondPerson: "{name} makes a taunting gesture at you. Bring it!",
         targetedThirdPerson: "{name} makes a taunting gesture at {target}. Bring it!",
@@ -374,11 +396,11 @@ const BUILT_IN_EMOTES: Record<string, EmoteDefinition> = {
         targetedThirdPerson: "{name} snubs {target}.",
     },
     glare: {
-        firstPerson: "You glare angrily.",
-        thirdPerson: "{name} glares angrily.",
-        targetedFirstPerson: "You glare angrily at {target}.",
-        targetedSecondPerson: "{name} glares angrily at you.",
-        targetedThirdPerson: "{name} glares angrily at {target}.",
+        firstPerson: "You glare icily.",
+        thirdPerson: "{name} glares icily.",
+        targetedFirstPerson: "You glare icily at {target}.",
+        targetedSecondPerson: "{name} glares icily at you, you feel cold.",
+        targetedThirdPerson: "{name} glares icily at {target}.",
     },
     scoff: {
         firstPerson: "You scoff.",
@@ -439,8 +461,8 @@ const BUILT_IN_EMOTES: Record<string, EmoteDefinition> = {
         targetedThirdPerson: "{name} bounces up and down in front of {target}.",
     },
     fidget: {
-        firstPerson: "You fidget.",
-        thirdPerson: "{name} fidgets.",
+        firstPerson: "You fidget nervously.",
+        thirdPerson: "{name} fidgets nervously.",
         targetedFirstPerson: "You fidget impatiently while waiting for {target}.",
         targetedSecondPerson: "{name} fidgets impatiently while waiting for you.",
         targetedThirdPerson: "{name} fidgets impatiently while waiting for {target}.",
@@ -474,18 +496,32 @@ const BUILT_IN_EMOTES: Record<string, EmoteDefinition> = {
         targetedThirdPerson: "{name} bonks {target} on the noggin. Doh!",
     },
     blush: {
-        firstPerson: "You blush.",
-        thirdPerson: "{name} blushes.",
+        firstPerson: "Your cheeks are burning.",
+        thirdPerson: "{name} blushes furiously.",
         targetedFirstPerson: "You blush at {target}.",
         targetedSecondPerson: "{name} blushes at you.",
         targetedThirdPerson: "{name} blushes at {target}.",
     },
     wink: {
-        firstPerson: "You wink slyly.",
-        thirdPerson: "{name} winks slyly.",
-        targetedFirstPerson: "You wink slyly at {target}.",
-        targetedSecondPerson: "{name} winks slyly at you.",
-        targetedThirdPerson: "{name} winks slyly at {target}.",
+        firstPerson: "You wink suggestively.",
+        thirdPerson: "{name} winks suggestively.",
+        targetedFirstPerson: "You wink suggestively at {target}.",
+        targetedSecondPerson: "{name} winks suggestively at you.",
+        targetedThirdPerson: "{name} winks suggestively at {target}.",
+    },
+    poke: {
+        firstPerson: "You poke your belly and giggle.",
+        thirdPerson: "{name} pokes their belly and giggles.",
+        targetedFirstPerson: "You poke {target} in the ribs.",
+        targetedSecondPerson: "{name} pokes you in the ribs.",
+        targetedThirdPerson: "{name} pokes {target} in the ribs.",
+    },
+    snap: {
+        firstPerson: "You snap your fingers.",
+        thirdPerson: "{name} snaps their fingers.",
+        targetedFirstPerson: "You snap your fingers at {target}.",
+        targetedSecondPerson: "{name} snaps their fingers at you.",
+        targetedThirdPerson: "{name} snaps their fingers at {target}.",
     },
     whistle: {
         firstPerson: "You let forth a sharp whistle.",
@@ -503,6 +539,13 @@ const BUILT_IN_EMOTES: Record<string, EmoteDefinition> = {
     allthethings: {
         firstPerson: "You raise your arms dramatically and declare: ALL THE THINGS! \\o/",
         thirdPerson: "{name} raises their arms dramatically and declares: ALL THE THINGS! \\o/",
+    },
+    sing: {
+        firstPerson: "You raise your voice in song.",
+        thirdPerson: "SEEK SHELTER AT ONCE! {name} has begun to sing.",
+        targetedFirstPerson: "You serenade {target} with a song.",
+        targetedSecondPerson: "{name} serenades you with a song.",
+        targetedThirdPerson: "{name} serenades {target} with a song.",
     },
     chicken: {
         firstPerson: "With arms flapping, you strut around. Cluck, Cluck, Chicken!",
@@ -594,7 +637,7 @@ const BUILT_IN_EMOTES: Record<string, EmoteDefinition> = {
     },
     ponder: {
         firstPerson: "You ponder the situation.",
-        thirdPerson: "{name} ponders the situation.",
+        thirdPerson: "{name} sinks deeply into thought.",
         targetedFirstPerson: "You ponder {target}'s actions.",
         targetedSecondPerson: "{name} ponders your actions.",
         targetedThirdPerson: "{name} ponders {target}'s actions.",
