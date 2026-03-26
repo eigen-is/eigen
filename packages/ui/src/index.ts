@@ -14,4 +14,3 @@ export * from './components/layout/app';
 export * from './components/layout/pages';
 export * from './components/layout/braket';
 export * from './components/layout/media';
-export * from './components/layout/collab';

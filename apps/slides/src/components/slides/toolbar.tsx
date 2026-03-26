@@ -2,10 +2,17 @@ import {useEffect, useState} from 'react';
 import {formatForDisplay} from '@tanstack/react-hotkeys';
 import {ImagePlus, Play, Plus, Redo, Type, Undo, UserRoundPlus} from 'lucide-react';
 import {Toolbar as SharedToolbar, TooltipButton} from '@workspace/ui';
+import {Button} from '@workspace/ui/components/button';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuTrigger,
+} from '@workspace/ui/components/dropdown-menu';
 import {DocumentModeButton} from '@workspace/ui/components/layout/toolbar/document-mode-button';
 import {FileMenu} from '@workspace/ui/components/layout/toolbar/file-menu';
-import {RevisionHistory} from '@workspace/ui/components/layout/collab/revision-history';
 import {DriveCreateSlides} from '@workspace/ui/components/layout/drive/drive-create-slides';
+import {useMediaQuery} from '@workspace/lib/media';
 import * as Y from 'yjs';
 import type {DrivePath} from '@workspace/lib/types/drive';
 
@@ -34,6 +41,7 @@ export function Toolbar({
                         }: ToolbarProps) {
     const [canUndo, setCanUndo] = useState(false);
     const [canRedo, setCanRedo] = useState(false);
+    const isMobile = useMediaQuery('(max-width: 1200px)');
 
     useEffect(() => {
         if (!undoManager || !undoManager.undoStack || !canWrite) {
@@ -63,11 +71,47 @@ export function Toolbar({
                     path={path}
                     canWrite={canWrite}
                     onAccessDialogOpen={onAccessDialogOpen}
+                    onRestore={onRestore}
                     createLabel="New slides"
                     CreateDialog={DriveCreateSlides}
                 />
 
-                {canWrite && (
+                {canWrite && isMobile && (
+                    <>
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button variant="ghost">Edit</Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="start">
+                                <DropdownMenuItem onClick={() => undoManager?.undo?.()} disabled={!canUndo}>
+                                    <Undo className="h-4 w-4 mr-2"/> Undo
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={() => undoManager?.redo?.()} disabled={!canRedo}>
+                                    <Redo className="h-4 w-4 mr-2"/> Redo
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+
+                        <DropdownMenu>
+                            <DropdownMenuTrigger asChild>
+                                <Button variant="ghost">Insert</Button>
+                            </DropdownMenuTrigger>
+                            <DropdownMenuContent align="start">
+                                <DropdownMenuItem onClick={onAddSlide}>
+                                    <Plus className="h-4 w-4 mr-2"/> Slide
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={onAddText}>
+                                    <Type className="h-4 w-4 mr-2"/> Text
+                                </DropdownMenuItem>
+                                <DropdownMenuItem onClick={onAddImage}>
+                                    <ImagePlus className="h-4 w-4 mr-2"/> Image
+                                </DropdownMenuItem>
+                            </DropdownMenuContent>
+                        </DropdownMenu>
+                    </>
+                )}
+
+                {canWrite && !isMobile && (
                     <>
                         <TooltipButton
                             icon={Undo}
@@ -85,39 +129,18 @@ export function Toolbar({
                 )}
             </div>
             <div className="flex items-center">
-                {canWrite && (
+                {canWrite && !isMobile && (
                     <>
-                        <TooltipButton
-                            icon={Plus}
-                            tooltipText="Add slide"
-                            onClick={onAddSlide}
-                        />
-                        <TooltipButton
-                            icon={Type}
-                            tooltipText="Add text"
-                            onClick={onAddText}
-                        />
-                        <TooltipButton
-                            icon={ImagePlus}
-                            tooltipText="Add image"
-                            onClick={onAddImage}
-                        />
+                        <TooltipButton icon={Plus} tooltipText="Add slide" onClick={onAddSlide}/>
+                        <TooltipButton icon={Type} tooltipText="Add text" onClick={onAddText}/>
+                        <TooltipButton icon={ImagePlus} tooltipText="Add image" onClick={onAddImage}/>
                     </>
                 )}
-                <TooltipButton
-                    icon={Play}
-                    tooltipText="Present"
-                    onClick={onPresent}
-                />
+                <TooltipButton icon={Play} tooltipText="Present" onClick={onPresent}/>
             </div>
             <div className="flex items-center">
-                <RevisionHistory path={path} onRestore={onRestore}/>
                 {canWrite ? (
-                    <TooltipButton
-                        icon={UserRoundPlus}
-                        tooltipText="Share"
-                        onClick={onAccessDialogOpen}
-                    />
+                    <TooltipButton icon={UserRoundPlus} tooltipText="Share" onClick={onAccessDialogOpen}/>
                 ) : (
                     <DocumentModeButton canWrite={canWrite}/>
                 )}
