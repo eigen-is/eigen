@@ -1,40 +1,50 @@
 import {validateCommand} from '../../validation';
+import {EMOTE_COMMANDS, resolveEmoteKey, getEmoteCommand, isEmoteCommand} from './emotes';
 
-export const COMMANDS_HELP = [
-    {cmd: '/?, /h, /help', desc: 'List of available slash commands'},
-    {cmd: '/allthethings', desc: 'ALL THE THINGS! \\o/'},
-    {cmd: '/cheer', desc: 'Performs the cheer emote'},
-    {cmd: '/dance', desc: 'Performs the dance emote'},
-    {cmd: '/facepalm', desc: 'Drags hand down face'},
-    {cmd: '/flip', desc: '(╯°□°)╯︵ ┻━┻'},
-    {cmd: '/greet', desc: 'Performs the greet emote'},
-    {cmd: '/i, /inv, /invite [User]', desc: 'Invites user to the room'},
-    {cmd: '/inspect, /look, /finger [User]', desc: 'Inspects the user'},
-    {cmd: '/me [action]', desc: 'Performs a custom emote'},
-    {cmd: '/reply, /r [Message]', desc: 'Reply to the last whisper'},
-    {cmd: '/send, /t, /tell, /w, /whisper [User] [Message]', desc: 'Send private message'},
-    {cmd: '/shrug', desc: '¯\\_(ツ)_/¯'},
-    {cmd: '/taunt', desc: 'Performs the taunt emote'},
-    {cmd: '/time', desc: 'Provides server as well as local time'},
-    {cmd: '/trout [User]', desc: 'Slaps user around a bit with a large trout'},
-];
+export {resolveEmoteKey, getEmoteCommand, isEmoteCommand};
 
+// All valid slash command strings
 export const SLASH_COMMANDS = [
-    '/?', '/h', '/help',
-    '/time',
+    '/help',
     '/inspect', '/look', '/finger',
-    '/dance', '/cheer', '/taunt', '/greet',
-    '/allthethings', '/facepalm', '/shrug', '/flip',
     '/me',
-    '/trout',
-    '/i', '/inv', '/invite',
-    '/send', '/t', '/tell', '/w', '/whisper',
-    '/reply', '/r'
+    '/invite',
+    '/whisper', '/tell',
+    '/reply',
+    ...EMOTE_COMMANDS.flatMap(c => [`/${c.key}`, ...(c.aliases ?? []).map(a => `/${a}`)]),
 ];
+
+// Help entries for the suggestion popup
+export const COMMANDS_HELP = [
+    {cmd: '/help', desc: 'List of available slash commands'},
+    {cmd: '/inspect, /look, /finger [User]', desc: 'Inspect a user'},
+    {cmd: '/me [action]', desc: 'Perform a custom emote'},
+    {cmd: '/whisper, /tell [User] [Message]', desc: 'Send private message'},
+    {cmd: '/reply [Message]', desc: 'Reply to the last whisper'},
+    {cmd: '/invite [User]', desc: 'Invite user to the room'},
+    ...EMOTE_COMMANDS.map(c => ({
+        cmd: c.aliases
+            ? `/${c.key}, ${c.aliases.map(a => `/${a}`).join(', ')}`
+            : `/${c.key}`,
+        desc: c.desc,
+    })),
+];
+
+// Set of emote commands that do NOT need a space appended after selection
+// (they can be sent immediately without arguments)
+const noSpaceCommands = new Set([
+    '/help',
+    ...EMOTE_COMMANDS
+        .filter(c => !c.requiresTarget)
+        .flatMap(c => [`/${c.key}`, ...(c.aliases ?? []).map(a => `/${a}`)]),
+]);
+
+export function commandNeedsSpace(command: string): boolean {
+    return !noSpaceCommands.has(command);
+}
 
 export type LocalCommand =
     | { kind: 'help' }
-    | { kind: 'time' }
     | { kind: 'inspect'; target: string }
     | { kind: 'invite'; target: string }
     | { kind: 'reply'; content: string }
@@ -49,12 +59,7 @@ export function getLocalCommand(raw: string): LocalCommand {
         return {kind: 'error', error: validation.error};
     }
 
-    if (validation.kind === 'help') {
-        return {kind: 'help'};
-    }
-    if (validation.kind === 'time') {
-        return {kind: 'time'};
-    }
+    if (validation.kind === 'help') return {kind: 'help'};
 
     for (const cmd of ['/inspect ', '/look ', '/finger ']) {
         if (trimmed.startsWith(cmd)) {
@@ -63,16 +68,13 @@ export function getLocalCommand(raw: string): LocalCommand {
         }
     }
 
-    for (const cmd of ['/invite ', '/i ', '/inv ']) {
-        if (trimmed.startsWith(cmd)) {
-            const target = trimmed.slice(cmd.length).trim();
-            if (target) return {kind: 'invite', target};
-        }
+    if (trimmed.startsWith('/invite ')) {
+        const target = trimmed.slice(8).trim();
+        if (target) return {kind: 'invite', target};
     }
 
-    if (trimmed.startsWith('/reply ') || trimmed.startsWith('/r ')) {
-        const cmd = trimmed.startsWith('/reply ') ? '/reply ' : '/r ';
-        return {kind: 'reply', content: trimmed.slice(cmd.length)};
+    if (trimmed.startsWith('/reply ')) {
+        return {kind: 'reply', content: trimmed.slice(7)};
     }
 
     return null;

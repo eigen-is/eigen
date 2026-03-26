@@ -6,7 +6,7 @@ import {getAtSuggestQuery} from "./chat-utils";
 import type {RoomMember} from "@workspace/lib/types/chat";
 import {ChatPlayerSuggest} from "./chat-player-suggest";
 import {ChatSlashSuggest} from "./chat-slash-suggest";
-import {COMMANDS_HELP, SLASH_COMMANDS} from "@workspace/lib/chat";
+import {COMMANDS_HELP, SLASH_COMMANDS, commandNeedsSpace} from "@workspace/lib/chat";
 
 type ChatMessageInputProps = {
     onSend: (rawContent: string, files?: File[]) => void;
@@ -103,8 +103,7 @@ export function ChatMessageInput({
     const [selectedSlashIdx, setSelectedSlashIdx] = useState(0);
 
     const handleSlashSelect = useCallback((command: string) => {
-        const needsSpace = !['/dance', '/cheer', '/taunt', '/greet', '/allthethings', '/facepalm', '/shrug', '/flip', '/help', '/h', '/?', '/time'].includes(command);
-        setContent(command + (needsSpace ? ' ' : ''));
+        setContent(command + (commandNeedsSpace(command) ? ' ' : ''));
         setSelectedSlashIdx(0);
     }, []);
 
