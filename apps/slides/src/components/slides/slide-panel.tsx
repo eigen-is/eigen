@@ -22,15 +22,16 @@ type SlidePanelProps = {
     dragActiveId: string | null;
     onDeleteSlide?: (slideId: string) => void;
     onDuplicateSlide?: (slideId: string) => void;
+    mobile?: boolean;
 }
 
-export function SlidePanel({deck, activeSlideId, onSelectSlide, onDragStart, onDragEnd, dragActiveId, onDeleteSlide, onDuplicateSlide}: SlidePanelProps) {
+export function SlidePanel({deck, activeSlideId, onSelectSlide, onDragStart, onDragEnd, dragActiveId, onDeleteSlide, onDuplicateSlide, mobile}: SlidePanelProps) {
     const sensors = useSensors(
         useSensor(PointerSensor, {activationConstraint: {distance: 5}})
     );
 
     return (
-        <div className="w-52 flex-shrink-0 border-r bg-muted/30 flex flex-col h-full">
+        <div className={`${mobile ? 'w-full' : 'w-52 flex-shrink-0 border-r'} bg-muted/30 flex flex-col h-full`}>
             <div className="flex-1 overflow-y-auto p-3 space-y-1">
                 <DndContext
                     sensors={sensors}
