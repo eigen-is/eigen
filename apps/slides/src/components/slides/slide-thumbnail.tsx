@@ -1,6 +1,6 @@
 import {memo} from 'react';
 import {SLIDE_ASPECT_RATIO, SlideItem, SlideObject} from './types';
-import {getObjectPositionStyle} from './slide-object';
+import {ReadOnlySlideObject} from './slide-object';
 import {cn} from '@workspace/ui/lib/utils';
 import {useMediaResolver} from '@workspace/lib/drive';
 
@@ -50,60 +50,10 @@ export const SlideThumbnail = memo(function SlideThumbnail({
                     } : {}),
                 }}>
                     {objects.map((obj) => (
-                        <ThumbnailObject key={obj.id} obj={obj} bgColor={slide.backgroundColor}/>
+                        <ReadOnlySlideObject key={obj.id} obj={obj}/>
                     ))}
                 </div>
             </div>
         </button>
     );
 });
-
-const ThumbnailObject = memo(function ThumbnailObject({obj, bgColor}: { obj: SlideObject; bgColor: string }) {
-    const {resolveMediaUrl} = useMediaResolver();
-    const isDark = isDarkColor(bgColor);
-
-    const posStyle = getObjectPositionStyle(obj);
-    return (
-        <div className="absolute overflow-hidden" style={posStyle}>
-
-            {obj.type === 'text' && (
-                <div
-                    className="w-full h-full flex items-center"
-                    style={{
-                        justifyContent: obj.textAlign === 'center' ? 'center' : obj.textAlign === 'right' ? 'flex-end' : 'flex-start',
-                    }}
-                >
-                    <p
-                        className="truncate w-full"
-                        style={{
-                            fontSize: '4px',
-                            fontWeight: obj.fontWeight,
-                            textAlign: obj.textAlign,
-                            color: obj.color || (isDark ? '#ffffff' : '#000000'),
-                            lineHeight: 1.1,
-                        }}
-                    >
-                        {obj.text}
-                    </p>
-                </div>
-            )}
-            {obj.type === 'image' && (
-                <img
-                    src={resolveMediaUrl(obj.mediaName) || ''}
-                    className="w-full h-full"
-                    style={{objectFit: obj.objectFit}}
-                    draggable={false}
-                    alt=""
-                />
-            )}
-        </div>
-    );
-});
-
-function isDarkColor(hex: string): boolean {
-    const c = hex.replace('#', '');
-    const r = parseInt(c.substring(0, 2), 16);
-    const g = parseInt(c.substring(2, 4), 16);
-    const b = parseInt(c.substring(4, 6), 16);
-    return (r * 299 + g * 587 + b * 114) / 1000 < 128;
-}
