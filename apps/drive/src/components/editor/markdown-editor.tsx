@@ -12,7 +12,7 @@ import {Table} from '@tiptap/extension-table';
 import {TableRow} from '@tiptap/extension-table-row';
 import {TableCell} from '@tiptap/extension-table-cell';
 import {TableHeader} from '@tiptap/extension-table-header';
-import {all, createLowlight} from 'lowlight';
+import {common, createLowlight} from 'lowlight';
 import {Column} from '@workspace/ui/components/layout/app/column-layout';
 import {MarkdownToolbarButtons} from './markdown-toolbar';
 import {ConflictDialog} from './conflict-dialog';
@@ -20,7 +20,7 @@ import {CodeEditorView} from './code-editor';
 import {EditToolbar} from './editor-toolbar';
 import {useEditorSave} from './use-editor-save';
 
-const lowlight = createLowlight(all);
+const lowlight = createLowlight(common);
 
 function detectBulletMarker(content: string): '-' | '*' | '+' {
     const markers = content.match(/^[\s]*([*+\-])\s/gm);
