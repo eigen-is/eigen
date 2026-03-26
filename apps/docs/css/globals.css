@@ -134,3 +134,11 @@
 .tiptap .has-text-align-left {
     text-align: left;
 }
+
+/* Reset mobile canvas scaling for print */
+@media print {
+    [data-document] {
+        transform: none !important;
+        margin-bottom: 0 !important;
+    }
+}
