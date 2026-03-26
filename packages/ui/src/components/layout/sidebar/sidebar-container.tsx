@@ -1,4 +1,5 @@
-import {ReactNode} from 'react';
+import {ReactNode, useEffect} from 'react';
+import {useLocation} from '@tanstack/react-router';
 import {useLayout} from '../app/layout-context.tsx';
 
 export type SidebarProps = {
@@ -13,6 +14,11 @@ type SidebarContainerProps = {
 
 export function SidebarContainer({sidebar}: SidebarContainerProps) {
     const {sidebarOpen, setSidebarOpen, sidebarMode, isMobile, isTablet} = useLayout();
+    const {pathname} = useLocation();
+
+    useEffect(() => {
+        if (isMobile && sidebarOpen) setSidebarOpen(false);
+    }, [pathname]);
 
     if (sidebarMode === 'none') return null;
 
