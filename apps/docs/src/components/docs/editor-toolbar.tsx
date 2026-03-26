@@ -11,8 +11,6 @@ import {
     ChevronDown,
     Code,
     CodeXml,
-    FileText,
-    Folder,
     Heading1,
     Heading2,
     Heading3,
@@ -26,7 +24,6 @@ import {
     ListOrdered,
     MessageSquare,
     Minus,
-    Pencil,
     Pilcrow,
     Printer,
     Quote,
@@ -36,7 +33,6 @@ import {
     Subscript,
     Superscript,
     Table,
-    Trash2,
     Type,
     Underline,
     Undo,
@@ -65,13 +61,10 @@ import {EIGEN_FONTS, getFontFamily} from "@workspace/lib/constants/fonts";
 import {RevisionHistory} from "@workspace/ui/components/layout/collab/revision-history";
 import {printDocument} from "@workspace/ui/lib/printElement";
 import {DocumentModeButton} from "@workspace/ui/components/layout/toolbar/document-mode-button";
+import {FileMenu} from "@workspace/ui/components/layout/toolbar/file-menu";
 import {DriveCreateDoc} from "@workspace/ui/components/layout/drive/drive-create-doc";
-import {useRootFolder} from "@workspace/lib/drive";
-import {useAuth} from "@workspace/lib/auth";
-import {DrivePath} from "@workspace/lib/types/drive";
-import {useNavigate} from '@tanstack/react-router';
+import type {DrivePath} from "@workspace/lib/types/drive";
 import {useMediaQuery} from "@workspace/lib/media";
-import {DriveRenameItem} from "@workspace/ui/components/layout/drive/drive-rename-item";
 import {Label} from "@workspace/ui/components/label";
 import {yDocToProsemirrorJSON} from "y-prosemirror";
 import * as Y from "yjs";
@@ -80,7 +73,6 @@ type EditorToolbarProps = {
     editor: Editor;
     canWrite: boolean;
     onAccessDialogOpen: () => void;
-    onDeleteDialogOpen: (open: boolean) => void;
     path: DrivePath;
     onAddComment?: () => void;
     onImageUpload?: (file: File) => void;
@@ -89,17 +81,12 @@ type EditorToolbarProps = {
 
 const ToolbarSeparator = () => <Separator orientation="vertical" className="h-6 mx-1" />;
 
-export const EditorToolbar = ({editor, path, canWrite, onAccessDialogOpen, onDeleteDialogOpen, onAddComment, onImageUpload}: EditorToolbarProps) => {
+export const EditorToolbar = ({editor, path, canWrite, onAccessDialogOpen, onAddComment, onImageUpload}: EditorToolbarProps) => {
     const [linkUrl, setLinkUrl] = useState('');
     const [linkDialogOpen, setLinkDialogOpen] = useState(false);
-    const [createDocOpen, setCreateDocOpen] = useState(false);
-    const [renameDialogOpen, setRenameDialogOpen] = useState(false);
     const [textColorOpen, setTextColorOpen] = useState(false);
     const [highlightColorOpen, setHighlightColorOpen] = useState(false);
     const imageInputRef = useRef<HTMLInputElement>(null);
-    const {user} = useAuth();
-    const {data: rootFolder} = useRootFolder(user?.id || '');
-    const navigate = useNavigate();
     const isMobile = useMediaQuery('(max-width: 1200px)');
 
     const handleRestore = (state: Uint8Array) => {
@@ -150,37 +137,17 @@ export const EditorToolbar = ({editor, path, canWrite, onAccessDialogOpen, onDel
     return (
         <Toolbar>
             <div className="flex items-center">
-                <DropdownMenu>
-                    <DropdownMenuTrigger asChild>
-                        <Button variant="ghost">File</Button>
-                    </DropdownMenuTrigger>
-                    <DropdownMenuContent align="start">
-                        <DropdownMenuItem onClick={() => rootFolder && setCreateDocOpen(true)}>
-                            <FileText className="h-4 w-4 mr-2"/> New document
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => navigate({to: `/`})}>
-                            <Folder className="h-4 w-4 mr-2"/> Open
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={() => path && setRenameDialogOpen(true)}>
-                            <Pencil className="h-4 w-4 mr-2"/> Rename
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator/>
-                        <DropdownMenuItem onClick={onAccessDialogOpen}>
-                            <UserRoundPlus className="h-4 w-4 mr-2"/> Edit access
-                        </DropdownMenuItem>
-                        <DropdownMenuItem onClick={printDocument}>
-                            <Printer className="h-4 w-4 mr-2"/> Print
-                        </DropdownMenuItem>
-                        {canWrite && (
-                            <>
-                                <DropdownMenuSeparator/>
-                                <DropdownMenuItem onClick={() => path && onDeleteDialogOpen(true)}>
-                                    <Trash2 className="h-4 w-4 mr-2"/> Delete
-                                </DropdownMenuItem>
-                            </>
-                        )}
-                    </DropdownMenuContent>
-                </DropdownMenu>
+                <FileMenu
+                    path={path}
+                    canWrite={canWrite}
+                    onAccessDialogOpen={onAccessDialogOpen}
+                    createLabel="New document"
+                    CreateDialog={DriveCreateDoc}
+                >
+                    <DropdownMenuItem onClick={printDocument}>
+                        <Printer className="h-4 w-4 mr-2"/> Print
+                    </DropdownMenuItem>
+                </FileMenu>
 
                 {isMobile && (
                     <>
@@ -705,21 +672,6 @@ export const EditorToolbar = ({editor, path, canWrite, onAccessDialogOpen, onDel
                 onChange={handleImageSelect}
             />
 
-            {/* Dialogs */}
-            {path && (
-                <DriveRenameItem
-                    path={path}
-                    open={renameDialogOpen}
-                    onOpenChange={setRenameDialogOpen}
-                />
-            )}
-            {rootFolder && (
-                <DriveCreateDoc
-                    path={rootFolder}
-                    open={createDocOpen}
-                    onOpenChange={setCreateDocOpen}
-                />
-            )}
             <Dialog open={linkDialogOpen} onOpenChange={setLinkDialogOpen}>
                 <DialogContent size="sm">
                     <DialogHeader>

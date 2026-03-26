@@ -40,13 +40,12 @@ import {ResizableImage} from "./extensions/resizable-image";
 const lowlight = createLowlight(common);
 const A4_WIDTH_PX = 794; // 210mm at 96dpi
 
-export const CollaborativeEditor = ({path, access, mediaFolderId, chatFolderId, onAccessDialogOpen, onDeleteDialogOpen}: {
+export const CollaborativeEditor = ({path, access, mediaFolderId, chatFolderId, onAccessDialogOpen}: {
     path: DrivePath,
     access: { canRead: boolean; canWrite: boolean; },
     mediaFolderId: string | null,
     chatFolderId: string | null,
     onAccessDialogOpen: () => void,
-    onDeleteDialogOpen: (open: boolean) => void
 }) => {
     const [connected, setConnected] = useState(false);
     const [provider, setProvider] = useState<WebsocketProvider>();
@@ -83,7 +82,6 @@ export const CollaborativeEditor = ({path, access, mediaFolderId, chatFolderId, 
                 mediaFolderId={mediaFolderId}
                 chatFolderId={chatFolderId}
                 onAccessDialogOpen={onAccessDialogOpen}
-                onDeleteDialogOpen={onDeleteDialogOpen}
             />
         </MediaResolverProvider>
     );
@@ -97,7 +95,6 @@ const TiptapEditor = ({
                           mediaFolderId,
                           chatFolderId,
                           onAccessDialogOpen,
-                          onDeleteDialogOpen,
                       }: {
     yDoc: Y.Doc;
     provider: WebsocketProvider;
@@ -106,7 +103,6 @@ const TiptapEditor = ({
     mediaFolderId: string | null;
     chatFolderId: string | null;
     onAccessDialogOpen: () => void;
-    onDeleteDialogOpen: (open: boolean) => void;
 }) => {
     const auth = useAuth();
     const uploadFile = useUploadFile(path.ownerId, path.mountId);
@@ -404,7 +400,6 @@ const TiptapEditor = ({
                     editor={editor}
                     path={path}
                     canWrite={access.canWrite}
-                    onDeleteDialogOpen={onDeleteDialogOpen}
                     onAccessDialogOpen={onAccessDialogOpen}
                     onAddComment={chatFolderId ? handleAddComment : undefined}
                     onImageUpload={mediaFolderId ? handleImageUpload : undefined}

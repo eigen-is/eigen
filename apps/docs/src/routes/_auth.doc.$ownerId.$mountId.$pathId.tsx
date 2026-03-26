@@ -1,11 +1,10 @@
-import {createFileRoute, useNavigate} from '@tanstack/react-router'
+import {createFileRoute} from '@tanstack/react-router'
 import {CollaborativeEditor} from '../components/docs/editor'
 import {useCollabDocumentInfo} from '@workspace/lib/collab'
 import {AccessDenied, LoadingState} from '@workspace/ui'
 import {useCallback, useEffect, useMemo, useState} from 'react'
 import {useLayout} from '@workspace/ui/components/layout/app/layout-context'
 import {DriveAccessDialog} from '@workspace/ui/components/layout/drive/drive-access-dialog'
-import {DriveDeleteItem} from '@workspace/ui/components/layout/drive/drive-delete-item'
 
 export const Route = createFileRoute('/_auth/doc/$ownerId/$mountId/$pathId')({
     component: CollaborativeTextEditor,
@@ -22,8 +21,6 @@ function CollaborativeTextEditor() {
         setDocumentTitle(title);
         return () => setDocumentTitle('');
     }, [docInfo?.path?.name, setDocumentTitle]);
-    const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-    const navigate = useNavigate();
 
     const handleAccessDialogOpen = useCallback(() => {
         setAccessDialogOpen(true);
@@ -51,21 +48,12 @@ function CollaborativeTextEditor() {
                 <CollaborativeEditor path={docInfo.path} access={docInfo}
                                      mediaFolderId={mediaFolderId}
                                      chatFolderId={chatFolderId}
-                                     onAccessDialogOpen={handleAccessDialogOpen}
-                                     onDeleteDialogOpen={setDeleteDialogOpen}/>
+                                     onAccessDialogOpen={handleAccessDialogOpen}/>
             </div>
             <DriveAccessDialog
                 open={accessDialogOpen}
                 onOpenChange={setAccessDialogOpen}
                 path={docInfo.path}
-            />
-            <DriveDeleteItem
-                paths={docInfo.path ? [docInfo.path] : []}
-                open={deleteDialogOpen}
-                onOpenChange={setDeleteDialogOpen}
-                onAfterAction={() => {
-                    navigate({to: `/`});
-                }}
             />
         </>
     )
