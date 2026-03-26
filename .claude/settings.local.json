@@ -120,7 +120,15 @@
       "WebFetch(domain:elysiajs.com)",
       "WebFetch(domain:orm.drizzle.team)",
       "WebFetch(domain:bun.com)",
-      "WebFetch(domain:oneuptime.com)"
+      "WebFetch(domain:oneuptime.com)",
+      "Bash(for dir:*)",
+      "Read(//Users/reinder/Documents/GitHub/eigen/apps/api/src/lib/$dir/**)",
+      "Bash(for route:*)",
+      "Read(//Users/reinder/Documents/GitHub/eigen/apps/api/src/routes/**)",
+      "WebFetch(domain:wowpedia.fandom.com)",
+      "WebFetch(domain:warcraft.wiki.gg)",
+      "WebFetch(domain:classic-wow-archive.fandom.com)",
+      "WebFetch(domain:forums.anandtech.com)"
     ]
   },
   "bypassPermissions": "bypassPermissions"

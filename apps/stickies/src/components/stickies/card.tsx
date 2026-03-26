@@ -21,9 +21,10 @@ type CardProps = {
     yjsDoc: Y.Doc | null;
     ownerId: string;
     mountId: string;
+    onContextMenu?: (e: React.MouseEvent, card: CardItem) => void;
 }
 
-export function StickyCard({card, canWrite = true, isMobile, yjsDoc, ownerId, mountId}: CardProps) {
+export function StickyCard({card, canWrite = true, isMobile, yjsDoc, ownerId, mountId, onContextMenu}: CardProps) {
     const [isDialogOpen, setIsDialogOpen] = useState(false);
 
     const {
@@ -62,6 +63,7 @@ export function StickyCard({card, canWrite = true, isMobile, yjsDoc, ownerId, mo
                 }}
                 {...(canWrite ? {...attributes, ...listeners} : {})}
                 onClick={handleClick}
+                onContextMenu={onContextMenu ? (e) => onContextMenu(e, card) : undefined}
             >
                 <CardContent className={`p-3 text-sm ${isDragging && !card.color ? 'bg-accent' : ''}`}>
                     {card.title}

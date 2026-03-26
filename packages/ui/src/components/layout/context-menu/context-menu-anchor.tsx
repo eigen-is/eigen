@@ -1,17 +1,22 @@
 import {ReactNode} from 'react';
-import {DropdownMenu, DropdownMenuTrigger} from '@workspace/ui/components/dropdown-menu';
+import {DropdownMenu, DropdownMenuContent, DropdownMenuTrigger} from '@workspace/ui/components/dropdown-menu';
 
 type ContextMenuAnchorProps = {
-    isOpen: boolean;
-    onClose: () => void;
+    contextMenu: { isOpen: boolean; position: { x: number; y: number }; close: () => void };
     children: ReactNode;
+    className?: string;
 }
 
-export function ContextMenuAnchor({isOpen, onClose, children}: ContextMenuAnchorProps) {
+export function ContextMenuAnchor({contextMenu, children, className}: ContextMenuAnchorProps) {
     return (
-        <DropdownMenu open={isOpen} onOpenChange={(open) => !open && onClose()}>
+        <DropdownMenu open={contextMenu.isOpen} onOpenChange={(open) => !open && contextMenu.close()}>
             <DropdownMenuTrigger className="hidden"/>
-            {children}
+            <DropdownMenuContent
+                style={{position: 'fixed', left: contextMenu.position.x, top: contextMenu.position.y}}
+                className={className}
+            >
+                {children}
+            </DropdownMenuContent>
         </DropdownMenu>
     );
 }

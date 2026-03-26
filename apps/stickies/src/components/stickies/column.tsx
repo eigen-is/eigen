@@ -13,6 +13,7 @@ type ColumnProps = {
     isDropAnimating?: boolean;
     onAddCard: (columnId: string) => void;
     onEditColumn: (columnId: string) => void;
+    onCardContextMenu?: (e: React.MouseEvent, card: CardItem) => void;
     isMobile: boolean;
     yjsDoc: Y.Doc | null;
     ownerId: string;
@@ -26,6 +27,7 @@ export function Column({
                            isDropAnimating,
                            onAddCard,
                            onEditColumn,
+                           onCardContextMenu,
                            isMobile,
                            yjsDoc,
                            ownerId,
@@ -104,6 +106,7 @@ export function Column({
                                     yjsDoc={yjsDoc}
                                     ownerId={ownerId}
                                     mountId={mountId}
+                                    onContextMenu={onCardContextMenu}
                                 />
                             ))}
                         </SortableContext>

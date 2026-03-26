@@ -7,10 +7,15 @@ import {CardItem, ColumnItem} from './types';
 import {AddCardDialog} from './add-card-dialog';
 import {AddColumnDialog} from './add-column-dialog';
 import {ColumnSettingsDialog} from './column-settings-dialog';
+import {CardSettingsDialog} from './card-settings-dialog';
 import {Card, CardContent} from '@workspace/ui/components/card';
 import {isLightColor} from '@workspace/ui/components/layout/media/color-picker';
-import {lightenColor} from '@workspace/lib/constants';
+import {lightenColor, EIGEN_STICKIES_COLORS} from '@workspace/lib/constants';
 import {useIsMobile} from '@workspace/lib/media';
+import {ContextMenuAnchor, useContextMenu} from '@workspace/ui/components/layout/context-menu';
+import {DropdownMenuItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger} from '@workspace/ui/components/dropdown-menu';
+import {Check, CircleOff, Pencil, Palette, Trash2} from 'lucide-react';
+import {DeleteDialog} from '@workspace/ui/components/layout/delete/delete-dialog';
 import {useBoard} from './hooks/use-board';
 import {useDragAndDrop} from './hooks/use-drag-and-drop';
 import {Toolbar} from './toolbar';
@@ -82,6 +87,46 @@ export function StickiesBoard({ownerId, path, canWrite, chatFolderId, onAccessDi
     const [editColumnId, setEditColumnId] = useState<string | null>(null);
     const [isColumnSettingsOpen, setIsColumnSettingsOpen] = useState(false);
     const [colorFilter, setColorFilter] = useState<Set<string>>(new Set());
+    const cardContextMenu = useContextMenu<CardItem>();
+    const [editCardId, setEditCardId] = useState<string | null>(null);
+    const [deleteCardId, setDeleteCardId] = useState<string | null>(null);
+
+    const handleCardContextEdit = () => {
+        if (cardContextMenu.item) setEditCardId(cardContextMenu.item.id);
+        cardContextMenu.close();
+    };
+
+    const handleCardContextDelete = () => {
+        if (cardContextMenu.item) setDeleteCardId(cardContextMenu.item.id);
+        cardContextMenu.close();
+    };
+
+    const handleCardContextColor = (color: string) => {
+        if (!yjsDoc || !cardContextMenu.item) return;
+        yjsDoc.transact(() => {
+            const taskMap = yjsDoc.getMap('tasks').get(cardContextMenu.item!.id) as Y.Map<any>;
+            if (taskMap) taskMap.set('color', color);
+        });
+        cardContextMenu.close();
+    };
+
+    const handleDeleteCard = () => {
+        if (!yjsDoc || !deleteCardId) return;
+        yjsDoc.transact(() => {
+            const columnsMap = yjsDoc.getMap('columns');
+            for (const [, col] of columnsMap) {
+                if (!(col instanceof Y.Map)) continue;
+                const taskIds = col.get('taskIds') as Y.Array<any>;
+                const index = (taskIds.toArray() as string[]).indexOf(deleteCardId);
+                if (index !== -1) {
+                    taskIds.delete(index, 1);
+                    break;
+                }
+            }
+            yjsDoc.getMap('tasks').delete(deleteCardId);
+        });
+        setDeleteCardId(null);
+    };
 
     const handleEditColumn = (columnId: string) => {
         setEditColumnId(columnId);
@@ -208,6 +253,7 @@ export function StickiesBoard({ownerId, path, canWrite, chatFolderId, onAccessDi
                                             canWrite={canWrite}
                                             onAddCard={handleAddCardClick}
                                             onEditColumn={handleEditColumn}
+                                            onCardContextMenu={canWrite ? cardContextMenu.handleContextMenu : undefined}
                                             isMobile={isMobile}
                                             yjsDoc={yjsDoc}
                                             ownerId={ownerId}
@@ -248,6 +294,66 @@ export function StickiesBoard({ownerId, path, canWrite, chatFolderId, onAccessDi
                             yjsDoc={yjsDoc}
                         />
                     )}
+
+                    <ContextMenuAnchor contextMenu={cardContextMenu}>
+                        <DropdownMenuItem onClick={handleCardContextEdit}>
+                            <Pencil className="h-4 w-4 mr-2"/> Edit
+                        </DropdownMenuItem>
+                        <DropdownMenuSub>
+                            <DropdownMenuSubTrigger>
+                                <Palette className="h-4 w-4 mr-2"/> Color
+                            </DropdownMenuSubTrigger>
+                            <DropdownMenuSubContent>
+                                <div className="flex gap-1 p-2">
+                                    <button
+                                        className="h-4 w-4 rounded-full border border-border hover:scale-125 transition-transform flex items-center justify-center bg-background"
+                                        title="No color"
+                                        onClick={() => handleCardContextColor('')}
+                                    >
+                                        <CircleOff className="h-2.5 w-2.5 text-muted-foreground"/>
+                                    </button>
+                                    {EIGEN_STICKIES_COLORS[0].map((c) => (
+                                        <button
+                                            key={c.value}
+                                            className="h-4 w-4 rounded-full border border-border/50 hover:scale-125 transition-transform flex items-center justify-center"
+                                            style={{backgroundColor: c.value}}
+                                            title={c.label}
+                                            onClick={() => handleCardContextColor(c.value)}
+                                        >
+                                            {cardContextMenu.item?.color === c.value && (
+                                                <Check className="h-2 w-2" style={{color: isLightColor(c.value) ? '#000' : '#fff'}}/>
+                                            )}
+                                        </button>
+                                    ))}
+                                </div>
+                            </DropdownMenuSubContent>
+                        </DropdownMenuSub>
+                        <DropdownMenuSeparator/>
+                        <DropdownMenuItem variant="destructive" onClick={handleCardContextDelete}>
+                            <Trash2 className="h-4 w-4 mr-2"/> Delete
+                        </DropdownMenuItem>
+                    </ContextMenuAnchor>
+
+                    {editCardId && board.tasks[editCardId] && (
+                        <CardSettingsDialog
+                            key={editCardId}
+                            isOpen={!!editCardId}
+                            onClose={() => setEditCardId(null)}
+                            cardId={editCardId}
+                            cardTitle={board.tasks[editCardId].title}
+                            cardDescription={board.tasks[editCardId].description}
+                            cardColor={board.tasks[editCardId].color || ''}
+                            yjsDoc={yjsDoc}
+                        />
+                    )}
+
+                    <DeleteDialog
+                        open={!!deleteCardId}
+                        onOpenChange={(open) => !open && setDeleteCardId(null)}
+                        title="Delete Card"
+                        description="This will permanently delete the card. This action cannot be undone."
+                        onDelete={handleDeleteCard}
+                    />
                 </div>
             </div>
         </div>

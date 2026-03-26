@@ -14,8 +14,7 @@ import {ArrowUpDown, Pencil, Trash2} from 'lucide-react';
 import {Button} from '@workspace/ui/components/button';
 import {EmptyState, ErrorState, LoadingState} from '@workspace/ui';
 import {UserItem} from '@workspace/ui/components/layout/user-item';
-import {useContextMenu} from '@workspace/ui/components/layout/context-menu/use-context-menu';
-import {ContextMenuAnchor} from '@workspace/ui/components/layout/context-menu/context-menu-anchor';
+import {ContextMenuAnchor, useContextMenu} from '@workspace/ui/components/layout/context-menu';
 import {LabelAssignSubMenu} from '@workspace/ui/components/layout/labels/label-assign-sub-menu';
 import {useKeyboardListNavigation} from '@workspace/ui/hooks/use-keyboard-list-navigation';
 import {useListSelection} from '@workspace/ui/hooks/use-list-selection';
@@ -217,52 +216,47 @@ export function ContactsList({
                     </div>
                 )}
 
-                <ContextMenuAnchor isOpen={contextMenu.isOpen} onClose={contextMenu.close}>
-                    <DropdownMenuContent
-                        style={{position: 'fixed', left: contextMenu.position.x, top: contextMenu.position.y}}
-                        className="min-w-[200px]"
-                    >
-                        {isSingleSelect && onEdit && contextMenu.item && (
-                            <DropdownMenuItem onClick={() => {
-                                onEdit(contextMenu.item!);
-                                contextMenu.close();
-                            }}>
-                                <Pencil className="h-4 w-4 mr-2"/> Edit
-                            </DropdownMenuItem>
-                        )}
-                        {onDelete && !hasMe && contextItems.length > 0 && (
-                            <DropdownMenuItem onClick={() => {
-                                onDelete(contextItems);
-                                contextMenu.close();
-                            }}>
-                                <Trash2 className="h-4 w-4 mr-2"/>
-                                {isSingleSelect ? 'Delete' : `Delete ${contextItems.length} contacts`}
-                            </DropdownMenuItem>
-                        )}
-                        {onToggleLabel && contextItems.length > 0 && labels.length > 0 && (() => {
-                            const allLabelIds = labels.map(l => l.id);
-                            const assignedToAll = allLabelIds.filter(lid =>
-                                contextItems.every(c => (c.labels || []).includes(lid))
-                            );
-                            const assignedToSome = allLabelIds.filter(lid =>
-                                !assignedToAll.includes(lid) && contextItems.some(c => (c.labels || []).includes(lid))
-                            );
-                            return (
-                                <>
-                                    <DropdownMenuSeparator/>
-                                    <LabelAssignSubMenu
-                                        labels={labels}
-                                        assignedLabelIds={assignedToAll}
-                                        partialLabelIds={assignedToSome}
-                                        onToggleLabel={(labelId) => {
-                                            onToggleLabel(contextItems, labelId);
-                                            contextMenu.close();
-                                        }}
-                                    />
-                                </>
-                            );
-                        })()}
-                    </DropdownMenuContent>
+                <ContextMenuAnchor contextMenu={contextMenu} className="min-w-[200px]">
+                    {isSingleSelect && onEdit && contextMenu.item && (
+                        <DropdownMenuItem onClick={() => {
+                            onEdit(contextMenu.item!);
+                            contextMenu.close();
+                        }}>
+                            <Pencil className="h-4 w-4 mr-2"/> Edit
+                        </DropdownMenuItem>
+                    )}
+                    {onDelete && !hasMe && contextItems.length > 0 && (
+                        <DropdownMenuItem onClick={() => {
+                            onDelete(contextItems);
+                            contextMenu.close();
+                        }}>
+                            <Trash2 className="h-4 w-4 mr-2"/>
+                            {isSingleSelect ? 'Delete' : `Delete ${contextItems.length} contacts`}
+                        </DropdownMenuItem>
+                    )}
+                    {onToggleLabel && contextItems.length > 0 && labels.length > 0 && (() => {
+                        const allLabelIds = labels.map(l => l.id);
+                        const assignedToAll = allLabelIds.filter(lid =>
+                            contextItems.every(c => (c.labels || []).includes(lid))
+                        );
+                        const assignedToSome = allLabelIds.filter(lid =>
+                            !assignedToAll.includes(lid) && contextItems.some(c => (c.labels || []).includes(lid))
+                        );
+                        return (
+                            <>
+                                <DropdownMenuSeparator/>
+                                <LabelAssignSubMenu
+                                    labels={labels}
+                                    assignedLabelIds={assignedToAll}
+                                    partialLabelIds={assignedToSome}
+                                    onToggleLabel={(labelId) => {
+                                        onToggleLabel(contextItems, labelId);
+                                        contextMenu.close();
+                                    }}
+                                />
+                            </>
+                        );
+                    })()}
                 </ContextMenuAnchor>
             </div>
         </div>
