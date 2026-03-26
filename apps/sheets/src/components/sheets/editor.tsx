@@ -43,8 +43,8 @@ export function SheetEditor({ownerId, path, canWrite, onAccessDialogOpen}: Sheet
     } = useSheet(ownerId, path.mountId, path.id, workbookRef);
 
     const leftItems = useMemo(() => (
-        <ToolbarLeftItems path={path} canWrite={canWrite} onAccessDialogOpen={onAccessDialogOpen}/>
-    ), [path, canWrite, onAccessDialogOpen]);
+        <ToolbarLeftItems path={path} canWrite={canWrite} onAccessDialogOpen={onAccessDialogOpen} onRestore={handleRestore}/>
+    ), [path, canWrite, onAccessDialogOpen, handleRestore]);
 
     const rightItems = useMemo(() => (
         <ToolbarRightItems path={path} canWrite={canWrite} onAccessDialogOpen={onAccessDialogOpen} onRestore={handleRestore}/>

@@ -1,16 +1,23 @@
 import {type ComponentType, type ReactNode, useState} from 'react';
-import {FileText, Folder, Pencil, Trash2, UserRoundPlus} from 'lucide-react';
+import {FileText, Folder, History, Pencil, Trash2, UserRoundPlus} from 'lucide-react';
+import {formatForDisplay} from '@tanstack/react-hotkeys';
 import {Button} from '@workspace/ui/components/button';
 import {
     DropdownMenu,
     DropdownMenuContent,
     DropdownMenuItem,
     DropdownMenuSeparator,
+    DropdownMenuSub,
+    DropdownMenuSubContent,
+    DropdownMenuSubTrigger,
     DropdownMenuTrigger,
 } from '@workspace/ui/components/dropdown-menu';
+import {ConfirmDialog} from '@workspace/ui/components/layout/delete/confirm-dialog';
 import {useNavigate} from '@tanstack/react-router';
 import {useAuth} from '@workspace/lib/auth';
 import {useRootFolder} from '@workspace/lib/drive';
+import {fetchRevisionState, useCollabRevisions} from '@workspace/lib/collab';
+import {formatDateTime} from '@workspace/lib/date';
 import {DriveDeleteItem} from '../drive/drive-delete-item';
 import {DriveRenameItem} from '../drive/drive-rename-item';
 import type {DrivePath} from '@workspace/lib/types/drive';
@@ -19,22 +26,42 @@ type FileMenuProps = {
     path: DrivePath;
     canWrite: boolean;
     onAccessDialogOpen: () => void;
+    onRestore?: (state: Uint8Array) => void;
     createLabel: string;
     CreateDialog: ComponentType<{ path: DrivePath; open: boolean; onOpenChange: (open: boolean) => void }>;
     children?: ReactNode;
 }
 
-export function FileMenu({path, canWrite, onAccessDialogOpen, createLabel, CreateDialog, children}: FileMenuProps) {
+export function FileMenu({path, canWrite, onAccessDialogOpen, onRestore, createLabel, CreateDialog, children}: FileMenuProps) {
     const [createOpen, setCreateOpen] = useState(false);
     const [renameOpen, setRenameOpen] = useState(false);
     const [deleteOpen, setDeleteOpen] = useState(false);
+    const [menuOpen, setMenuOpen] = useState(false);
+    const [confirmOpen, setConfirmOpen] = useState(false);
+    const [pendingRevisionId, setPendingRevisionId] = useState<number | null>(null);
     const {user} = useAuth();
     const {data: rootFolder} = useRootFolder(user?.id || '');
+    const {data: revisions} = useCollabRevisions(path.ownerId, path.mountId, path.id, menuOpen && !!onRestore);
     const navigate = useNavigate();
+
+    const handleRevisionClick = (revisionId: number) => {
+        setPendingRevisionId(revisionId);
+        setMenuOpen(false);
+        setConfirmOpen(true);
+    };
+
+    const handleConfirmRestore = async () => {
+        if (pendingRevisionId === null || !onRestore) return;
+        const state = await fetchRevisionState(path.ownerId, path.mountId, path.id, pendingRevisionId);
+        if (!state) return;
+        onRestore(state);
+        setConfirmOpen(false);
+        setPendingRevisionId(null);
+    };
 
     return (
         <>
-            <DropdownMenu>
+            <DropdownMenu open={menuOpen} onOpenChange={setMenuOpen}>
                 <DropdownMenuTrigger asChild>
                     <Button variant="ghost">File</Button>
                 </DropdownMenuTrigger>
@@ -52,6 +79,27 @@ export function FileMenu({path, canWrite, onAccessDialogOpen, createLabel, Creat
                     <DropdownMenuItem onClick={onAccessDialogOpen}>
                         <UserRoundPlus className="h-4 w-4 mr-2"/> Edit access
                     </DropdownMenuItem>
+                    {onRestore && (
+                        <DropdownMenuSub>
+                            <DropdownMenuSubTrigger>
+                                <History className="h-4 w-4 mr-2"/> Version history
+                            </DropdownMenuSubTrigger>
+                            <DropdownMenuSubContent className="max-h-64 overflow-y-auto min-w-[240px]">
+                                {revisions && revisions.length > 0 ? revisions.map((rev) => (
+                                    <DropdownMenuItem
+                                        key={rev.id}
+                                        className="flex items-center justify-between gap-4"
+                                        onClick={() => handleRevisionClick(rev.id)}
+                                    >
+                                        <span>{rev.createdAt ? formatDateTime(new Date(rev.createdAt)) : `Revision #${rev.id}`}</span>
+                                        <span className="text-xs text-muted-foreground">Restore</span>
+                                    </DropdownMenuItem>
+                                )) : (
+                                    <DropdownMenuItem disabled>No revisions yet</DropdownMenuItem>
+                                )}
+                            </DropdownMenuSubContent>
+                        </DropdownMenuSub>
+                    )}
                     {children}
                     {canWrite && (
                         <>
@@ -76,6 +124,19 @@ export function FileMenu({path, canWrite, onAccessDialogOpen, createLabel, Creat
                     if (actionType === 'delete') navigate({to: `/`});
                 }}
             />
+            {onRestore && (
+                <ConfirmDialog
+                    open={confirmOpen}
+                    onOpenChange={(value) => {
+                        setConfirmOpen(value);
+                        if (!value) setPendingRevisionId(null);
+                    }}
+                    title="Restore revision"
+                    description={`This will replace the current document content with the selected revision for all collaborators. Use ${formatForDisplay('Mod+Z')} to undo after restoring.`}
+                    confirmText="Restore"
+                    onConfirm={handleConfirmRestore}
+                />
+            )}
         </>
     );
 }

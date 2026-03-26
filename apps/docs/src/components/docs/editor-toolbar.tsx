@@ -58,7 +58,6 @@ import {Toolbar, TooltipButton} from "@workspace/ui";
 import {ColorPicker} from "@workspace/ui/components/layout/media/color-picker";
 import {FontPicker} from "@workspace/ui/components/layout/media/font-picker";
 import {EIGEN_FONTS, getFontFamily} from "@workspace/lib/constants/fonts";
-import {RevisionHistory} from "@workspace/ui/components/layout/collab/revision-history";
 import {printDocument} from "@workspace/ui/lib/printElement";
 import {DocumentModeButton} from "@workspace/ui/components/layout/toolbar/document-mode-button";
 import {FileMenu} from "@workspace/ui/components/layout/toolbar/file-menu";
@@ -141,6 +140,7 @@ export const EditorToolbar = ({editor, path, canWrite, onAccessDialogOpen, onAdd
                     path={path}
                     canWrite={canWrite}
                     onAccessDialogOpen={onAccessDialogOpen}
+                    onRestore={handleRestore}
                     createLabel="New document"
                     CreateDialog={DriveCreateDoc}
                 >
@@ -656,7 +656,6 @@ export const EditorToolbar = ({editor, path, canWrite, onAccessDialogOpen, onAdd
                 {onAddComment && (
                     <TooltipButton icon={MessageSquare} tooltipText="Add comment" onClick={onAddComment}/>
                 )}
-                <RevisionHistory path={path} onRestore={handleRestore}/>
                 {canWrite ? (
                     <TooltipButton icon={UserRoundPlus} tooltipText="Share" onClick={onAccessDialogOpen}/>
                 ) : (
