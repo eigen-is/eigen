@@ -392,9 +392,9 @@ No bundle visualization tool configured.
 | Item | Priority | Effort | Category | Status |
 |------|----------|--------|----------|--------|
 | ACL privilege escalation fix | P0 | 1 hr | Security | DONE |
-| Mail delivery IP allowlist + rate limiting | P0 | 2-3 hr | Security | |
-| Rate limiting middleware | P0 | 3-4 hr | Security | |
-| Fortune-sheet dynamic code execution fix | P0 | 1-2 hr | Security | |
+| Mail delivery localhost check | P0 | 2-3 hr | Security | DONE |
+| Rate limiting (300 req/min/IP) | P0 | 3-4 hr | Security | DONE |
+| Fortune-sheet dynamic code execution fix | P0 | 1-2 hr | Security | DONE |
 | SSE keepalive interval (30s to 15s) | P1 | 15 min | Network | DONE |
 | SSE granular invalidation | P1 | 3-4 hr | Network | DONE |
 | Avatar batch resolution | P1 | 2-3 hr | Network | |
