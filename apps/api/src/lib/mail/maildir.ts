@@ -251,13 +251,13 @@ export default class Maildir {
 
     async messageSend(mailToSend: EmailDraft): Promise<EmailDraft | null> {
         const mail = await this.messageHandleDraft(mailToSend)
+        const message = draftToOutboundMail(mail, this.home.user.email);
+
+        if (!message.subject.trim() && !message.text.trim() && !message.html) {
+            throw new ApiError(400, 'Cannot send email with empty subject and body');
+        }
+
         try {
-            const message = draftToOutboundMail(mail, this.home.user.email);
-
-            if (!message.subject.trim() && !message.text.trim() && !message.html) {
-                throw new ApiError(400, 'Cannot send email with empty subject and body');
-            }
-
             const sent = await sendMail(message);
 
             if (sent) {
