@@ -3,11 +3,11 @@
 ## TLDR
 
 The upload pipeline currently buffers entire files in memory ~3x (Elysia File + ArrayBuffer + Buffer copy). At 35MB
-this is fine; at 1GB it means ~3GB RAM per concurrent upload. This proposal eliminates the 3x multiplier by receiving
-the raw body as a single ArrayBuffer (~1x), parsing the multipart framing ourselves, and writing directly to a temp
-file. Peak memory drops from ~3x to ~1x file size, enabling a higher upload limit (1GB+) on modest hardware.
+this is fine; at 1GB it means ~3GB RAM per concurrent upload. This proposal replaces the buffered pipeline with true
+streaming: chunks are written to disk as they arrive, keeping memory at ~256KB per upload regardless of file size.
 
-A future Phase 2 can achieve constant ~64KB memory via true request body streaming (see end of doc).
+One new dependency: `@mjackson/multipart-parser` — web-standard streaming multipart parser, zero transitive
+dependencies, tested on Bun.
 
 ## Current State
 
@@ -26,8 +26,8 @@ HTTP multipart → Elysia parses full File into memory
 
 | Concern | Impact |
 |---------|--------|
-| Single-file upload (`/file/:pathId`) | **Replaced** with streaming implementation |
-| Multi-file upload (`/files/:pathId`) | **No change** — stays buffered (10MB per file is fine) |
+| Single-file upload (`POST /file/:pathId`) | **Replaced** with streaming implementation |
+| Multi-file upload (`POST /files/:pathId`) | **No change** — stays buffered (10MB per file is fine) |
 | Upload progress indicator | **No change** — `XHR.upload.onprogress` tracks bytes sent by the browser, independent of server-side buffering |
 | Thumbnail generation | **No change** — `saveThumbnail()` already accepts file paths; Sharp streams from disk internally |
 | Frontend upload hooks | **No change** — same URL, same FormData, same XHR |
@@ -37,54 +37,63 @@ HTTP multipart → Elysia parses full File into memory
 
 ### Core Idea
 
-Replace the existing single-file upload route's body parsing. Instead of letting Elysia buffer the full `File`, use
-`parse: 'arrayBuffer'` to get the raw body, then write it to a mount temp file while computing hash and size
-incrementally. After streaming completes, move the temp file to storage, then insert the DB row.
+Use `parse: 'none'` on the upload route so Elysia doesn't consume the request body. Parse the multipart stream
+with `@mjackson/multipart-parser`, which yields file parts as `ReadableStream<Uint8Array>`. Write chunks to a temp
+file via `Bun.file().writer()` (FileSink), computing hash and size incrementally. After the stream completes, move
+the temp file to storage and insert the DB row.
 
 ```
-HTTP body → write chunks to mount tmp file
-           → CryptoHasher.update() per chunk
-           → accumulate size (abort if limit exceeded)
+HTTP request body (unconsumed ReadableStream)
+  → parseMultipartRequest() yields streaming file parts
+    → for each chunk:
+      → writer.write(chunk)     — FileSink buffers to disk
+      → hasher.update(chunk)    — incremental SHA-256
+      → size += chunk.length    — abort if limit exceeded
   → stream complete:
-    → check storage quota (abort if exceeded)
+    → check storage quota
     → move temp file to storage (mount.uploadFromTemp)
-    → insert DB row (mount.createFileRecord)
+    → insert DB row (mount.createFileFromTemp)
     → generate thumbnail from storage file (background)
 ```
 
 ### Why Not a New Endpoint?
 
-Adding `/file-stream/:pathId` alongside `/file/:pathId` creates a parallel API surface that must eventually be
-removed. Since the frontend sends the same FormData either way, the simplest approach is to replace the existing
-endpoint's parsing strategy. The frontend doesn't change at all.
+The frontend sends the same FormData either way. Replacing the existing route's parsing strategy avoids a parallel API
+surface and means zero frontend changes.
+
+### Key Technology Choices
+
+**`parse: 'none'`** — Elysia's official body parsing bypass. The auth macro resolves from `request.headers`, not the
+body, so authentication is unaffected. With `parse: 'none'`, `request.body` is an unconsumed `ReadableStream`.
+
+**`@mjackson/multipart-parser`** (v0.10.1) — Pure web standard APIs (ReadableStream, Request). Zero dependencies.
+Tested and benchmarked on Bun. Each parsed part exposes `.body` as a `ReadableStream<Uint8Array>` for true streaming.
+Busboy/fastify-busboy use Node streams and have [documented compatibility issues](https://github.com/oven-sh/bun/issues/3085)
+with Bun — avoid them.
+
+**`Bun.file().writer()`** (FileSink) — Bun's reliable streaming file write API. Buffers up to `highWaterMark` bytes
+before flushing to disk. Note: `Bun.write(path, stream)` has a [known bug](https://github.com/oven-sh/bun/issues/17459)
+where files may not be created — FileSink is the correct approach.
 
 ### Memory Usage
 
-~1x file size (one ArrayBuffer), down from ~3x. Plus Sharp's working memory for thumbnail generation (only for
-images, capped at 12000x12000px). For constant ~64KB memory regardless of file size, see Phase 2 at the end.
+~256KB per upload (FileSink buffer) regardless of file size. Plus Sharp's working memory for thumbnail generation
+(only for images, capped at 12000x12000px).
 
 ## Implementation
 
-### 1. Stream Multipart Body to Temp File
+### 1. streamToTemp()
 
-New utility function in `apps/api/src/lib/drive/streaming.ts`. Parses multipart from a raw `ArrayBuffer` body by
-extracting the boundary from `Content-Type`, finding file headers within the multipart data, and writing file content
-to a temp file in chunks while computing the hash incrementally.
-
-Elysia's `parse: 'arrayBuffer'` gives us the raw body without constructing a `File` object. This is the same pattern
-used by the mail delivery route (`routes/mail.ts:32`). The auth macro resolves from `request.headers`, so custom
-`parse` does not affect authentication.
-
-**Size enforcement**: Without Elysia's `t.File({maxSize})`, the server has no built-in protection. The streaming
-function must enforce a byte limit as it reads, aborting immediately if exceeded. This replaces the current
-`enforceFileUpload()` size check.
-
-**Quota enforcement**: Before streaming starts, check remaining storage quota on the mount. If remaining quota is
-zero, reject immediately. After streaming completes and the exact size is known, do a precise quota check before
-moving to storage.
+New utility in `apps/api/src/lib/drive/streaming.ts`. Parses the multipart request, streams the file to a mount temp
+file, and computes hash + size incrementally.
 
 ```typescript
 // apps/api/src/lib/drive/streaming.ts
+
+import {randomUUID} from 'crypto';
+import {parseMultipartRequest} from '@mjackson/multipart-parser';
+import type {Mount} from '../mount';
+import {ApiError} from '../core';
 
 type StreamResult = {
     tempId: string;
@@ -94,63 +103,63 @@ type StreamResult = {
     fileName: string;
 };
 
-async function streamToTemp(
+export async function streamToTemp(
     mount: Mount,
-    contentType: string,
-    body: ArrayBuffer,
+    request: Request,
     maxSize: number
 ): Promise<StreamResult> {
     const tempId = randomUUID();
     const tempPath = mount.getTempPath(tempId);
+    const writer = Bun.file(tempPath).writer({highWaterMark: 256 * 1024});
+    const hasher = new Bun.CryptoHasher('sha256');
+    let size = 0;
+    let mimeType = 'application/octet-stream';
+    let fileName = 'unnamed';
 
     try {
-        const {fileName, mimeType, data} = parseMultipartFile(contentType, body);
+        for await (const part of parseMultipartRequest(request)) {
+            if (!part.isFile || !part.filename) continue;
 
-        if (data.byteLength > maxSize) {
-            throw new ApiError(413, 'File exceeds maximum upload size');
+            fileName = part.filename;
+            mimeType = part.mediaType || 'application/octet-stream';
+
+            const reader = part.body.getReader();
+            while (true) {
+                const {done, value} = await reader.read();
+                if (done) break;
+
+                size += value.byteLength;
+                if (size > maxSize) {
+                    throw new ApiError(413, 'File exceeds maximum upload size');
+                }
+
+                hasher.update(value);
+                writer.write(value);
+            }
+
+            break; // single-file upload — only process first file part
         }
 
-        const hasher = new Bun.CryptoHasher('sha256');
-        hasher.update(new Uint8Array(data));
-        const hash = hasher.digest('hex');
-
-        await Bun.write(tempPath, data);
-
-        return {tempId, hash, size: data.byteLength, mimeType, fileName};
+        await writer.end();
     } catch (e) {
+        await writer.end();
         await mount.cleanupTemp(tempId);
         throw e;
     }
+
+    if (size === 0) {
+        await mount.cleanupTemp(tempId);
+        throw new ApiError(400, 'No file found in request');
+    }
+
+    return {tempId, hash: hasher.digest('hex'), size, mimeType, fileName};
 }
 ```
-
-The `parseMultipartFile()` helper extracts the single file part from a multipart body. For single-file uploads this
-is straightforward: find the boundary from `Content-Type`, locate the `Content-Disposition` header with filename, and
-return the data between the headers and the closing boundary.
-
-```typescript
-function parseMultipartFile(contentType: string, body: ArrayBuffer): {
-    fileName: string;
-    mimeType: string;
-    data: ArrayBuffer;
-} {
-    // Extract boundary from Content-Type header
-    // Find file part headers (Content-Disposition with filename, Content-Type)
-    // Return the data slice between headers and closing boundary
-}
-```
-
-> **Note on true streaming**: The `parse: 'arrayBuffer'` approach still reads the full body into an ArrayBuffer before
-> our code runs. This eliminates the ~3x multiplier (no File object, no Buffer copy) but does not achieve constant
-> memory. For constant-memory streaming, we would need `parse: 'none'` to access `request.body` as a ReadableStream,
-> plus a streaming multipart parser. This is a good Phase 2 optimization — the current approach solves the immediate
-> problem (35MB limit → 1GB+) with minimal complexity and zero new dependencies.
 
 ### 2. Mount.createFileFromTemp()
 
-New method on Mount. Like `createFile()` but for files already written to a temp path. Handles the full sequence
-internally: validate name → compute storage key → move temp to storage → insert DB row. All private methods
-(`isPathBased`, `buildStorageKey`, `resolveStoragePathForNew`) stay encapsulated.
+New method on Mount. Handles the full sequence internally: validate name, compute storage key, move temp to storage,
+insert DB row. All private methods (`isPathBased`, `buildStorageKey`, `resolveStoragePathForNew`) stay encapsulated.
 
 ```typescript
 // apps/api/src/lib/mount/mount.ts
@@ -194,20 +203,12 @@ async createFileFromTemp(
 }
 ```
 
-### 3. Drive.uploadFile() — Replace Internals
+### 3. Route + Drive Method
 
-Replace the implementation of the existing `uploadFile()` method. The signature stays the same (it still returns
-`DrivePath`), but internally it streams to temp instead of buffering. The route also changes to pass the raw request
-instead of a parsed `File`.
-
-**Route change** (`apps/api/src/routes/drive.ts`):
-
-With `parse: 'arrayBuffer'`, Elysia reads the raw body and provides it as `body`. The request body stream is consumed
-at that point, so we pass `body` (the ArrayBuffer) and the content-type header to the drive method — not the Request
-object.
+**Route** (`apps/api/src/routes/drive.ts`) — replace the single-file upload route:
 
 ```typescript
-.post("/drive/:ownerId/:mountId/file/:pathId", async ({params, body, user, request}) => {
+.post("/drive/:ownerId/:mountId/file/:pathId", async ({params, request, user}) => {
     const maxSize = getMaxUploadSize();
     const {home, quotas} = await resolveQuotas(params.ownerId, user.id, params.mountId);
     const currentSize = await home.drive.size(params.mountId);
@@ -218,13 +219,11 @@ object.
     }
 
     const drive = await getSharedDrive(params.ownerId, user);
-    const contentType = request.headers.get('content-type') ?? '';
     return await drive.uploadFileStreaming(
-        params.mountId, params.pathId,
-        contentType, body as ArrayBuffer,
+        params.mountId, params.pathId, request,
         Math.min(maxSize, remainingQuota)
     );
-}, {auth: true, parse: 'arrayBuffer'})
+}, {auth: true, parse: 'none'})
 ```
 
 **Drive method** (`apps/api/src/lib/drive/drive.ts`):
@@ -233,8 +232,7 @@ object.
 async uploadFileStreaming(
     mountId: string,
     parentId: string,
-    contentType: string,
-    body: ArrayBuffer,
+    request: Request,
     maxSize: number
 ): Promise<DrivePath> {
     const mount = this.getMount(mountId);
@@ -247,7 +245,7 @@ async uploadFileStreaming(
         throw new ApiError(403, 'No write permission');
     }
 
-    const result = await streamToTemp(mount, contentType, body, maxSize);
+    const result = await streamToTemp(mount, request, maxSize);
 
     try {
         let safeName = result.fileName.replace(/[/\\]/g, '_');
@@ -303,12 +301,12 @@ Add to `sharedDrive.ts` with the same write-permission guard:
 ```typescript
 public async uploadFileStreaming(
     mountId: string, parentId: string,
-    contentType: string, body: ArrayBuffer, maxSize: number
+    request: Request, maxSize: number
 ): Promise<DrivePath> {
     if (!(await this.canWrite(mountId, parentId, this.user))) {
         throw new ApiError(403, 'No write permission');
     }
-    return this.sharedDrive.uploadFileStreaming(mountId, parentId, contentType, body, maxSize);
+    return this.sharedDrive.uploadFileStreaming(mountId, parentId, request, maxSize);
 }
 ```
 
@@ -317,13 +315,12 @@ public async uploadFileStreaming(
 `uploadFiles()` calls `uploadFile()` internally, so `uploadFile()` must remain. Both methods coexist:
 
 - `uploadFile(mountId, parentId, file: File)` — used by multi-file endpoint, buffered, 10MB per file limit
-- `uploadFileStreaming(mountId, parentId, contentType, body, maxSize)` — used by single-file endpoint, temp-file based
+- `uploadFileStreaming(mountId, parentId, request, maxSize)` — used by single-file endpoint, streaming
 
 ## Connection Abort Handling
 
-If the client disconnects mid-upload, Elysia's `parse: 'arrayBuffer'` will fail before our code runs — no temp file
-is created, nothing to clean up. If the disconnect happens after parsing (during `createFileFromTemp` or thumbnail
-generation), the `finally` block calls `mount.cleanupTemp()`. No special handling needed.
+If the client disconnects mid-upload, the `ReadableStream` read will throw. The `streamToTemp()` catch block calls
+`writer.end()` and `mount.cleanupTemp()` to remove the partial temp file. No special handling needed.
 
 ## Crash Recovery
 
@@ -340,18 +337,25 @@ for (const entry of fs.readdirSync(this.tmpDir)) {
 }
 ```
 
-This handles server crashes that leave temp files behind. The 1-hour window is generous — uploads complete in seconds
-to minutes.
+## S3 and Non-Local Mounts
+
+`createFileFromTemp()` calls `mount.uploadFromTemp(storageKey, tempId)` which calls
+`this.storage.write(storageKey, Bun.file(tempPath))`. The `StorageBackend.write()` interface accepts `BunFile` on all
+backends — S3Storage uploads the BunFile to S3. No new interface methods needed.
+
+For files > 5GB on S3, the S3 API requires multipart upload. This can be added later as an optimization in
+`S3Storage.write()` without changing the Drive/Mount layer.
 
 ## File Changes
 
 | File | Change |
 |------|--------|
-| `apps/api/src/routes/drive.ts` | Replace single-file upload route: `parse: 'arrayBuffer'`, pre-stream quota check |
-| `apps/api/src/lib/drive/streaming.ts` | **New** — `streamToTemp()` and `parseMultipartFile()` |
+| `apps/api/src/routes/drive.ts` | Replace single-file upload route: `parse: 'none'`, pre-stream quota check |
+| `apps/api/src/lib/drive/streaming.ts` | **New** — `streamToTemp()` using `@mjackson/multipart-parser` |
 | `apps/api/src/lib/drive/drive.ts` | Add `uploadFileStreaming()` method |
 | `apps/api/src/lib/drive/sharedDrive.ts` | Add `uploadFileStreaming()` wrapper with write permission |
 | `apps/api/src/lib/mount/mount.ts` | Add `createFileFromTemp()` method, add tmp cleanup on init |
+| `package.json` | Add `@mjackson/multipart-parser` dependency |
 
 **No changes needed to**: `StorageBackend` interface, frontend hooks, upload UI, thumbnail generation, multi-file
 upload endpoint.
@@ -361,16 +365,14 @@ upload endpoint.
 | Risk | Severity | Mitigation |
 |------|----------|------------|
 | Orphaned temp files on crash | Low | Cleanup files > 1 hour old on mount init |
-| Partial upload on disconnect | Low | Temp file cleaned up in `finally` block |
-| `parse: 'arrayBuffer'` + auth | None | Auth resolves from headers, not body. Same pattern as mail delivery route |
-| Manual multipart parsing edge cases | Low | Single-file multipart is well-defined; test with various browsers |
+| Partial upload on disconnect | Low | Temp file cleaned up in catch block |
+| `parse: 'none'` + auth | None | Auth resolves from headers. Verified: Elysia supports `parse: 'none'` |
+| `@mjackson/multipart-parser` maturity | Low | v0.10.1, zero deps, web standard APIs, tested on Bun |
 | S3 files > 5GB | Medium | Limit to 5GB initially; S3 multipart upload as future optimization |
-| Unbounded upload size | Addressed | Size limit enforced during streaming; quota checked before and after |
+| Unbounded upload size | Addressed | Size enforced per-chunk in `streamToTemp()`; quota checked before streaming |
+| `Bun.file().writer()` reliability | None | FileSink is Bun's recommended streaming write API |
 
 ## Out of Scope
 
-- **True constant-memory streaming** — `parse: 'arrayBuffer'` still buffers the body once. For constant ~64KB memory,
-  we would need `parse: 'none'` + a streaming multipart parser. This is a Phase 2 optimization if needed — the
-  current approach already eliminates the 3x multiplier and raises the practical limit to 1GB+.
 - **Resumable uploads** (tus protocol) — separate concern, can be layered on later.
 - **S3 multipart upload API** — needed for files > 5GB on S3 backends. Not needed for initial release.
