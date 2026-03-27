@@ -249,27 +249,7 @@ export default class Drive {
             buffer
         );
 
-        if (originalName) {
-            await mount.updatePath(pathId, {details: {originalName}});
-        }
-
-        const uploadedFile = await mount.getPath(pathId);
-        if (!uploadedFile) throw new ApiError(500, 'Failed to get uploaded file');
-        this.emit(SSEventType.DRIVE_FILE_UPLOADED, uploadedFile);
-
-        // Generate thumbnail in the background — don't block the upload response
-        mount.getStorageFile(pathId).then(async (storageFile) => {
-            const thumbnail = await saveThumbnail(mount.thumbsDir, pathId, storageFile.name!, file.type, safeName);
-            if (thumbnail) {
-                await mount.updatePath(pathId, {
-                    thumbnail: thumbnail.fileName,
-                    details: {...(uploadedFile.details ?? {}), width: thumbnail.width, height: thumbnail.height},
-                });
-                this.emit(SSEventType.DRIVE_FILE_UPLOADED, (await mount.getPath(pathId))!);
-            }
-        }).catch((e) => console.error(`Thumbnail generation failed for ${pathId}:`, e));
-
-        return uploadedFile;
+        return this.finalizeUpload(mount, pathId, originalName, safeName, file.type || 'application/octet-stream');
     }
 
     async uploadFiles(mountId: string, parentId: string, files: File[]): Promise<DrivePath[]> {
@@ -309,27 +289,7 @@ export default class Drive {
                 parentId, safeName, result.mimeType, result.size, result.hash, result.tempId
             );
 
-            if (originalName) {
-                await mount.updatePath(pathId, {details: {originalName}});
-            }
-
-            const uploadedFile = await mount.getPath(pathId);
-            if (!uploadedFile) throw new ApiError(500, 'Failed to get uploaded file');
-            this.emit(SSEventType.DRIVE_FILE_UPLOADED, uploadedFile);
-
-            // Thumbnail from storage file path — background, non-blocking
-            mount.getStorageFile(pathId).then(async (storageFile) => {
-                const thumbnail = await saveThumbnail(mount.thumbsDir, pathId, storageFile.name!, result.mimeType, safeName);
-                if (thumbnail) {
-                    await mount.updatePath(pathId, {
-                        thumbnail: thumbnail.fileName,
-                        details: {...(uploadedFile.details ?? {}), width: thumbnail.width, height: thumbnail.height},
-                    });
-                    this.emit(SSEventType.DRIVE_FILE_UPLOADED, (await mount.getPath(pathId))!);
-                }
-            }).catch((e) => console.error(`Thumbnail generation failed for ${pathId}:`, e));
-
-            return uploadedFile;
+            return await this.finalizeUpload(mount, pathId, originalName, safeName, result.mimeType);
         } finally {
             await mount.cleanupTemp(result.tempId);
         }
@@ -913,6 +873,31 @@ export default class Drive {
                 await this.closeCollabDocumentsRecursively(mountId, child.id);
             }
         }
+    }
+
+    private async finalizeUpload(
+        mount: Mount, pathId: string, originalName: string, safeName: string, mimeType: string
+    ): Promise<DrivePath> {
+        if (originalName) {
+            await mount.updatePath(pathId, {details: {originalName}});
+        }
+
+        const uploadedFile = await mount.getPath(pathId);
+        if (!uploadedFile) throw new ApiError(500, 'Failed to get uploaded file');
+        this.emit(SSEventType.DRIVE_FILE_UPLOADED, uploadedFile);
+
+        mount.getStorageFile(pathId).then(async (storageFile) => {
+            const thumbnail = await saveThumbnail(mount.thumbsDir, pathId, storageFile.name!, mimeType, safeName);
+            if (thumbnail) {
+                await mount.updatePath(pathId, {
+                    thumbnail: thumbnail.fileName,
+                    details: {...(uploadedFile.details ?? {}), width: thumbnail.width, height: thumbnail.height},
+                });
+                this.emit(SSEventType.DRIVE_FILE_UPLOADED, (await mount.getPath(pathId))!);
+            }
+        }).catch((e) => console.error(`Thumbnail generation failed for ${pathId}:`, e));
+
+        return uploadedFile;
     }
 
     private emit(type: Parameters<typeof buildDriveEvent>[0], path: DrivePath, oldParentId?: string): void {

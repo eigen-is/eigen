@@ -1,9 +1,6 @@
 import * as path from "path";
 import * as fs from "node:fs";
-
-export function isProduction(): boolean {
-    return process.env['PRODUCTION'] === '1' || process.env['NODE_ENV'] === 'production';
-}
+import {isProduction} from './env';
 
 function getDataRoot(): string {
     const envRoot = process.env['EIGEN_DATA_ROOT'];
