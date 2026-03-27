@@ -266,6 +266,7 @@ export function TeamDetail({team, organizationId}: TeamDetailProps) {
             mountId: editingMount.id,
             maxSizeMB: values.maxSizeMB,
             name: values.name,
+            s3Config: values.s3Config,
         });
     };
 

@@ -39,7 +39,7 @@ export function useUpdateTeamMount(teamId: string) {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: async ({mountId, ...body}: {mountId: string; enabled?: boolean; maxSizeMB?: number; name?: string}) => {
+        mutationFn: async ({mountId, ...body}: {mountId: string; enabled?: boolean; maxSizeMB?: number; name?: string; s3Config?: S3Config}) => {
             const res = await teamApi({teamId}).mount({mountId}).put(body);
             if (res.error) throw new AppError(res);
             return res.data;
