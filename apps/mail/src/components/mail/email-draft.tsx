@@ -1,5 +1,6 @@
 import {EmailDraft as EmailDraftType} from "@workspace/lib/types/mail";
 import {ContactAutosuggest, Toolbar, TooltipButton} from "@workspace/ui";
+import {ConfirmDialog} from "@workspace/ui/components/layout/delete/confirm-dialog";
 import {Input} from "@workspace/ui/components/input";
 import {Textarea} from "@workspace/ui/components/textarea";
 import {useCallback, useEffect, useMemo, useRef, useState} from "react";
@@ -79,6 +80,7 @@ export function EmailDraft({
     const ccFieldRef = useRef<HTMLInputElement>(null);
     const bccFieldRef = useRef<HTMLInputElement>(null);
     const [isSending, setIsSending] = useState(false);
+    const [confirmNoSubject, setConfirmNoSubject] = useState(false);
 
     const auth = useAuth();
 
@@ -171,9 +173,16 @@ export function EmailDraft({
         // eslint-disable-next-line react-hooks/exhaustive-deps -- save on unmount only
     }, [email?.id]);
 
-    // Handle send email functionality
+    const doSend = async () => {
+        try {
+            setIsSending(true);
+            await sendDraft(getCurrentDraft());
+        } finally {
+            setIsSending(false);
+        }
+    };
+
     const handleSendEmail = async () => {
-        // Validate the form
         const toValue = toFieldRef.current?.value.trim();
         if (!toValue) {
             toast.error("Please specify at least one recipient");
@@ -181,17 +190,21 @@ export function EmailDraft({
             return;
         }
 
-        try {
-            setIsSending(true);
+        const subjectEmpty = !subjectFieldRef.current?.value.trim();
+        const bodyEmpty = !textareaRef.current?.value.trim();
 
-            // Use the current draft values
-            const updatedDraft = getCurrentDraft();
-
-            // Send the email
-            await sendDraft(updatedDraft);
-        } finally {
-            setIsSending(false);
+        if (subjectEmpty && bodyEmpty) {
+            toast.error("Please add a subject or message");
+            subjectFieldRef.current?.focus();
+            return;
         }
+
+        if (subjectEmpty) {
+            setConfirmNoSubject(true);
+            return;
+        }
+
+        await doSend();
     };
 
     return (
@@ -294,6 +307,17 @@ export function EmailDraft({
                     </div>
                 </form>
             </div>
+            <ConfirmDialog
+                open={confirmNoSubject}
+                onOpenChange={setConfirmNoSubject}
+                title="Send without subject?"
+                description="This message has no subject. Send anyway?"
+                confirmText="Send"
+                onConfirm={() => {
+                    setConfirmNoSubject(false);
+                    doSend();
+                }}
+            />
         </div>
     );
 }
