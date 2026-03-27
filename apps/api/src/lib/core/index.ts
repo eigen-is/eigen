@@ -5,3 +5,4 @@ export * from './managed-database';
 export * from './local-filesystem';
 export * from './json-store';
 export * from './mailer';
+export * from './http';

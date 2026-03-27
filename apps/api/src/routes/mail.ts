@@ -1,6 +1,7 @@
 import {Elysia, t} from "elysia";
 import {betterAuth} from "./auth";
 import {requireLocalhost, requireSelf} from "../lib/core/access";
+import {contentDisposition} from "../lib/core";
 import {
     mailboxCreate,
     mailboxDeliver,
@@ -64,7 +65,7 @@ export const mailRouter = new Elysia({name: "mail"})
         set.headers['Expires'] = new Date(Date.now() + 86400000).toUTCString();
         set.headers['Content-Type'] = 'message/rfc822';
         set.headers['Content-Transfer-Encoding'] = 'binary';
-        set.headers['Content-Disposition'] = `attachment; filename="${params.id}.eml"`;
+        set.headers['Content-Disposition'] = contentDisposition('attachment', `${params.id}.eml`);
         return await messageGetFile(user, params.id);
     }, {auth: true})
     .delete("/mail/:ownerId/message/:id", async ({params, user}) => {
@@ -146,8 +147,7 @@ export const mailRouter = new Elysia({name: "mail"})
         set.headers['Cache-Control'] = 'public, max-age=86400';
         set.headers['Expires'] = new Date(Date.now() + 86400000).toUTCString();
         set.headers['Content-Type'] = 'application/octet-stream';
-        const safeName = params.fileName.replace(/[\x00-\x1f"\\]/g, '_');
-        set.headers['Content-Disposition'] = `attachment; filename="${safeName}"`;
+        set.headers['Content-Disposition'] = contentDisposition('attachment', params.fileName);
         const attachment = await messageGetAttachment(user, params.id, Number(params.index));
         return attachment?.content ?? null;
     }, {auth: true});

@@ -3,6 +3,7 @@ import {betterAuth} from "./auth";
 import {getSharedDrive} from "../lib/drive";
 import {getHome} from "../lib/home";
 import {getUploadMaxSize} from "../lib/config/enforcement";
+import {contentDisposition} from "../lib/core";
 
 // Drive routes allow cross-owner access (shared drives, team drives).
 // Access control is enforced by getSharedDrive() → SharedDrive ACL checks, not by ownerId === user.id.
@@ -101,8 +102,7 @@ export const driveRouter = new Elysia({name: "drive"})
         const drive = await getSharedDrive(params.ownerId, user);
         const path = await drive.getPath(params.mountId, params.pathId);
         if (path && path.name) {
-            const displayName = (path.details?.originalName || path.name).replace(/[\x00-\x1f"\\]/g, '_');
-            set.headers['Content-Disposition'] = `attachment; filename="${displayName}"`;
+            set.headers['Content-Disposition'] = contentDisposition('attachment', path.details?.originalName || path.name);
             set.headers['Cache-Control'] = 'public, max-age=86400';
             set.headers['Expires'] = new Date(Date.now() + 86400000).toUTCString();
         }
