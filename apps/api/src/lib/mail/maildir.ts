@@ -13,7 +13,8 @@ import {welcomeMail} from "./welcome"
 import MailDB from "./maildb"
 import {MaildirStore} from "./maildir-store"
 import type {Home} from "../home"
-import {draftToMailOptions, sendMail} from './sender'
+import {draftToOutboundMail} from './sender'
+import {sendMail} from '../core/mailer'
 import {SSEventType} from "@workspace/lib/types/sse"
 import {buildMailEvent} from './sse-events'
 import {ApiError, STANDARD_MAILBOXES} from '../core'
@@ -251,21 +252,8 @@ export default class Maildir {
     async messageSend(mailToSend: EmailDraft): Promise<EmailDraft | null> {
         const mail = await this.messageHandleDraft(mailToSend)
         try {
-            const mailOptions = draftToMailOptions(mail, this.home.user.email);
-            const isDev = false;// Bun.env['PRODUCTION'] != '1';
-
-            let sent: boolean;
-            if (isDev) {
-                console.log('[DEV MODE] Would send email:', {
-                    from: mailOptions.from,
-                    to: mailOptions.to,
-                    subject: mailOptions.subject,
-                    text: mailOptions.text?.substring(0, 200) + '...'
-                })
-                sent = true;
-            } else {
-                sent = await sendMail(mailOptions);
-            }
+            const message = draftToOutboundMail(mail, this.home.user.email);
+            const sent = await sendMail(message);
 
             if (sent) {
                 await this.messageMove(mail.id, 'Sent');

@@ -1,12 +1,15 @@
 import * as path from "path";
 import * as fs from "node:fs";
 
+export function isProduction(): boolean {
+    return process.env['PRODUCTION'] === '1' || process.env['NODE_ENV'] === 'production';
+}
+
 function getDataRoot(): string {
     const envRoot = process.env['EIGEN_DATA_ROOT'];
     if (envRoot) return envRoot;
 
-    const isProduction = process.env['PRODUCTION'] === '1' || process.env['NODE_ENV'] === 'production';
-    if (isProduction) {
+    if (isProduction()) {
         throw new Error(
             'EIGEN_DATA_ROOT environment variable is required in production. ' +
             'Set it to the absolute path of your data directory (e.g. /home/user/eigen/data).'
