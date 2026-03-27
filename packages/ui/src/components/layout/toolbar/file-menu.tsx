@@ -81,9 +81,11 @@ export function FileMenu({path, canWrite, onAccessDialogOpen, onRestore, createL
                     <DropdownMenuItem onClick={onAccessDialogOpen}>
                         <UserRoundPlus className="h-4 w-4 mr-2"/> Edit access
                     </DropdownMenuItem>
-                    <DropdownMenuItem onClick={() => setEmailOpen(true)}>
-                        <Mail className="h-4 w-4 mr-2"/> Email collaborators
-                    </DropdownMenuItem>
+                    {canWrite && (
+                        <DropdownMenuItem onClick={() => setEmailOpen(true)}>
+                            <Mail className="h-4 w-4 mr-2"/> Email collaborators
+                        </DropdownMenuItem>
+                    )}
                     {onRestore && (
                         <DropdownMenuSub>
                             <DropdownMenuSubTrigger>
