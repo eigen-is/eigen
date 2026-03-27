@@ -48,8 +48,4 @@ export function getMaxUploadSize(): number {
     return getServerSettings().quotas.maxUploadSizeMB * 1024 * 1024;
 }
 
-export function getMaxBatchUploadSize(): number {
-    return getServerSettings().quotas.maxBatchUploadSizeMB * 1024 * 1024;
-}
-
 await ensureLoaded();
