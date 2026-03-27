@@ -76,11 +76,12 @@ export const auth = betterAuth({
             issuer: "eigen",
             otpOptions: {
                 async sendOTP({user, otp}) {
-                    await sendMail({
+                    const ok = await sendMail({
                         to: [{name: user.name, address: user.email}],
                         subject: 'Your verification code',
                         text: `Your verification code is: ${otp}\n\nThis code expires in 5 minutes.`,
                     });
+                    if (!ok) throw new ApiError(500, 'Failed to send verification code');
                 },
             },
         }),
