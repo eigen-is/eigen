@@ -111,18 +111,11 @@ export class Mount {
             fs.mkdirSync(this.previewsDir, {recursive: true});
         }
 
+        // Cleanup stale temp files older than 1 hour (e.g. from interrupted uploads or crashes)
+        this.cleanupStaleFiles(this.tmpDir, 60 * 60 * 1000);
+
         // Cleanup preview cache files older than 7 days
-        try {
-            const cutoff = Date.now() - 7 * 24 * 60 * 60 * 1000;
-            for (const entry of fs.readdirSync(this.previewsDir)) {
-                const filePath = path.join(this.previewsDir, entry);
-                const stat = fs.statSync(filePath);
-                if (stat.mtimeMs < cutoff) {
-                    fs.unlinkSync(filePath);
-                }
-            }
-        } catch {
-        }
+        this.cleanupStaleFiles(this.previewsDir, 7 * 24 * 60 * 60 * 1000);
 
         const dbPath = path.join('mounts', this.config.id, 'metadata.db');
         const managedDb = await this.getLocalDatabase(MOUNT_DB_CONFIG, dbPath);
@@ -133,6 +126,18 @@ export class Mount {
 
     get dataDir(): string {
         return path.join(this.baseDir, 'data');
+    }
+
+    private cleanupStaleFiles(dir: string, maxAgeMs: number): void {
+        try {
+            const cutoff = Date.now() - maxAgeMs;
+            for (const entry of fs.readdirSync(dir)) {
+                const filePath = path.join(dir, entry);
+                try {
+                    if (fs.statSync(filePath).mtimeMs < cutoff) fs.unlinkSync(filePath);
+                } catch {}
+            }
+        } catch {}
     }
 
     private async ensureRootFolder(): Promise<void> {
@@ -272,6 +277,44 @@ export class Mount {
                 : fileValue;
             await this.storage.write(storageKey, data);
         }
+
+        await this.db.insert(paths).values({
+            id: fileId,
+            file: fileValue,
+            name,
+            type: 'file',
+            parentId,
+            ownerId: this.ownerId,
+            mimeType,
+            size,
+            hash,
+            acl: null,
+            createdAt: new Date(),
+            updatedAt: new Date()
+        });
+
+        return fileId;
+    }
+
+    async createFileFromTemp(
+        parentId: string,
+        name: string,
+        mimeType: string,
+        size: number,
+        hash: string,
+        tempId: string
+    ): Promise<string> {
+        validateName(name);
+        await this.assertUniqueName(parentId, name);
+        const fileId = randomUUID();
+        const fileValue = this.isPathBased ? name : buildStorageKey(fileId, name);
+
+        const storageKey = this.isPathBased
+            ? await this.resolveStoragePathForNew(parentId, fileValue)
+            : fileValue;
+
+        // Storage write before DB insert (crash safety: orphaned file > orphaned row)
+        await this.uploadFromTemp(storageKey, tempId);
 
         await this.db.insert(paths).values({
             id: fileId,
