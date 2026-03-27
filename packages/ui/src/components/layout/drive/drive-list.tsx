@@ -205,6 +205,7 @@ export function DriveList({
                               onQuickLook,
                               sortFn,
                           }: DriveListProps) {
+    const {data: breadcrumbPaths} = useBreadcrumb(ownerId, mountId, pathId);
     const [isDragging, setIsDragging] = useState(false);
     const dragCounter = useRef(0);
 // Handle row click with two different behaviors
@@ -322,6 +323,7 @@ export function DriveList({
                 allowDelete={allowDelete}
                 onRename={onRename}
                 onMove={onMove}
+                ancestorBreadcrumb={breadcrumbPaths ?? []}
                 onQuickLook={onQuickLook}
                 sortFn={sortFn}
             />
