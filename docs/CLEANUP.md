@@ -416,7 +416,7 @@ No bundle visualization tool configured.
 | Thumbnail retry | P2 | 1-2 hr | Backend | |
 | Recycle bin / soft delete | P2 | 1-2 days | Backend | |
 | `interface` to `type` conversion | P3 | 1-2 hr | Quality | |
-| Non-ASCII Content-Disposition | P3 | 30 min | Quality | |
+| Non-ASCII Content-Disposition | P3 | 30 min | Quality | DONE |
 | Console stripping in production | P3 | 1 hr | Bundle | |
 | Image lazy loading | P3 | 2-3 hr | Bundle | |
 | Biome.js adoption | P3 | 1 day | Tooling | |
