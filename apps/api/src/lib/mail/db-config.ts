@@ -26,7 +26,9 @@ export const MAIL_DB_CONFIG: DatabaseConfig<typeof schema> = {
                     createdAt INTEGER DEFAULT (unixepoch()),
                     updatedAt INTEGER DEFAULT (unixepoch())
                 );
-                CREATE INDEX idx_emails_mailbox ON emails(mailbox);
+                CREATE INDEX IF NOT EXISTS idx_emails_mailbox ON emails(mailbox);
+                CREATE INDEX IF NOT EXISTS idx_emails_mailbox_isRead ON emails(mailbox, isRead);
+                CREATE INDEX IF NOT EXISTS idx_emails_date ON emails(date);
 
                 CREATE TABLE IF NOT EXISTS email_labels (
                     id TEXT PRIMARY KEY,

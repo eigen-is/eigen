@@ -65,7 +65,7 @@ export const sseRouter = new Elysia({name: "sse"})
                     } catch {
                         isClosed = true;
                     }
-                }, 30000);
+                }, 15000);
             },
             cancel() {
                 isClosed = true;

@@ -35,6 +35,8 @@ export const CONTACTS_DB_CONFIG: DatabaseConfig<typeof schema> = {
                     FOREIGN KEY (contactId) REFERENCES contacts(id) ON DELETE CASCADE,
                     FOREIGN KEY (labelId) REFERENCES labels(id) ON DELETE CASCADE
                 );
+
+                CREATE INDEX IF NOT EXISTS idx_contacts_eigenId ON contacts(eigenId);
             `)
         }
     ]

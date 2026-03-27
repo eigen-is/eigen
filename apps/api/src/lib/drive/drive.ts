@@ -591,7 +591,7 @@ export default class Drive {
                 : documentUrl;
 
             return sendMail({
-                replyTo: {name: senderName, address: senderEmail},
+                from: {name: senderName, address: senderEmail},
                 to: [{name: '', address: member.email}],
                 subject,
                 text: `${message}\n\n${link}`,
