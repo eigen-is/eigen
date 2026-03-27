@@ -77,6 +77,14 @@ export const teamRouter = new Elysia({name: "team"})
             enabled: t.Optional(t.Boolean()),
             maxSizeMB: t.Optional(t.Number({minimum: 10})),
             name: t.Optional(t.String({minLength: 1})),
+            s3Config: t.Optional(t.Object({
+                endpoint: t.String(),
+                bucket: t.String(),
+                prefix: t.String(),
+                accessKeyId: t.String(),
+                secretAccessKey: t.String(),
+                region: t.Optional(t.String()),
+            })),
         }),
         auth: true,
     });
