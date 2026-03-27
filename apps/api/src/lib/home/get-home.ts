@@ -16,49 +16,55 @@ export function atHome(ownerId: string): boolean {
 }
 
 export async function getHome(ownerId: string): Promise<Home> {
-    if (!homeFactories.has(ownerId)) {
-        homeFactories.set(ownerId, createAsyncSingleton(async () => {
-            const parsed = parseOwnerId(ownerId);
-            if (!parsed) {
-                throw new ApiError(400, 'Invalid ownerId format');
-            }
-            let home: Home;
-            switch (parsed.type) {
-                case 'user': {
-                    const user = await getUserById(parsed.id);
-                    if (!user) {
-                        throw new ApiError(404, 'User not found');
-                    }
-                    home = new UserHome(user, () => {
-                        cleanupHomeFactory(ownerId);
-                    });
-                    break;
-                }
-                case 'team': {
-                    if (!await getTeamExists(parsed.id)) {
-                        throw new ApiError(404, 'Team not found');
-                    }
-                    home = new TeamHome(getSyntheticTeamUser(ownerId), () => {
-                        cleanupHomeFactory(ownerId);
-                    });
-                    break;
-                }
-                case 'org': {
-                    if (!await getOrgExists(parsed.id)) {
-                        throw new ApiError(404, 'Organization not found');
-                    }
-                    home = new OrgHome(getSyntheticOrgUser(ownerId), () => {
-                        cleanupHomeFactory(ownerId);
-                    });
-                    break;
-                }
-                default:
-                    throw new ApiError(400, 'Unsupported ownerId type');
-            }
-            await home.init();
+    if (homeFactories.has(ownerId)) {
+        const home = await homeFactories.get(ownerId)!();
+        if (!home.destructing) {
             return home.touch();
-        }));
+        }
+        homeFactories.delete(ownerId);
     }
+
+    homeFactories.set(ownerId, createAsyncSingleton(async () => {
+        const parsed = parseOwnerId(ownerId);
+        if (!parsed) {
+            throw new ApiError(400, 'Invalid ownerId format');
+        }
+        let home: Home;
+        switch (parsed.type) {
+            case 'user': {
+                const user = await getUserById(parsed.id);
+                if (!user) {
+                    throw new ApiError(404, 'User not found');
+                }
+                home = new UserHome(user, () => {
+                    cleanupHomeFactory(ownerId);
+                });
+                break;
+            }
+            case 'team': {
+                if (!await getTeamExists(parsed.id)) {
+                    throw new ApiError(404, 'Team not found');
+                }
+                home = new TeamHome(getSyntheticTeamUser(ownerId), () => {
+                    cleanupHomeFactory(ownerId);
+                });
+                break;
+            }
+            case 'org': {
+                if (!await getOrgExists(parsed.id)) {
+                    throw new ApiError(404, 'Organization not found');
+                }
+                home = new OrgHome(getSyntheticOrgUser(ownerId), () => {
+                    cleanupHomeFactory(ownerId);
+                });
+                break;
+            }
+            default:
+                throw new ApiError(400, 'Unsupported ownerId type');
+        }
+        await home.init();
+        return home.touch();
+    }));
 
     return (await homeFactories.get(ownerId)!()).touch();
 }

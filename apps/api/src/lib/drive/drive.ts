@@ -27,7 +27,7 @@ import {
     stripEigenExtension
 } from '@workspace/lib/types/drive';
 import {ChatRoom} from '../chat';
-import {canRead, canWrite, filterRedundantACL, findContainerPath, matchesACL, normalizeACL} from './acl';
+import {canReadFromAncestors, canWriteFromAncestors, filterRedundantACL, findContainerFromAncestors, matchesACL, normalizeACL} from './acl';
 import {type EffectiveMember, propagateACLChange, resolveACLToEmails} from './acl-propagation';
 import {validateACLEntries, validateEmailAddress} from '@workspace/lib/validation';
 import {getThumbnail, saveThumbnail} from '../shared/thumbnails';
@@ -46,6 +46,7 @@ import {SSEventType} from '@workspace/lib/types/sse';
 import {buildDriveEvent} from './sse-events';
 import {getUniqueFileName} from './naming';
 import {streamFilesToTemp} from './streaming';
+import {getMemberships, type Memberships} from '../user/';
 
 export type {DrivePath, DriveACL} from '@workspace/lib/types/drive';
 
@@ -487,7 +488,9 @@ export default class Drive {
             throw new ApiError(403, 'Cannot update ACL for root folder');
         }
 
-        if (!(await this.canWrite(mountId, pathId, this.owner))) {
+        const ancestors = await mount.getBreadcrumb(pathId);
+        const memberships = await getMemberships(this.owner.id);
+        if (!canWriteFromAncestors(ancestors, this.owner, memberships)) {
             throw new ApiError(403, 'No write permission');
         }
 
@@ -498,11 +501,8 @@ export default class Drive {
 
         let normalizedACL = normalizeACL(acl);
 
-        // Strip ACL entries that are already covered by inherited permissions or ownership
         if (normalizedACL && normalizedACL.length > 0) {
-            const {filtered} = await filterRedundantACL(
-                normalizedACL, item, mount.getPath.bind(mount)
-            );
+            const {filtered} = filterRedundantACL(normalizedACL, item, ancestors);
             normalizedACL = filtered.length > 0 ? filtered : null;
         }
 
@@ -604,7 +604,8 @@ export default class Drive {
 
     async findContainerPath(mountId: string, pathId: string): Promise<DrivePath | null> {
         const mount = this.getMount(mountId);
-        return findContainerPath(mount.getPath.bind(mount), pathId);
+        const ancestors = await mount.getBreadcrumb(pathId);
+        return findContainerFromAncestors(ancestors);
     }
 
     async inviteToChat(mountId: string, chatId: string, email: string): Promise<{
@@ -634,18 +635,20 @@ export default class Drive {
         return {alreadyHasAccess: false, targetPathId: targetPath.id};
     }
 
-    async canRead(mountId: string, pathId: string, user: User): Promise<boolean> {
+    async canRead(mountId: string, pathId: string, user: User, memberships?: Memberships): Promise<boolean> {
         const mount = this.getMount(mountId);
-        const path = await mount.getPath(pathId);
-        if (!path) return false;
-        return await canRead(path, user, mount.getPath.bind(mount));
+        const ancestors = await mount.getBreadcrumb(pathId);
+        if (ancestors.length === 0) return false;
+        const resolved = memberships ?? await getMemberships(user.id);
+        return canReadFromAncestors(ancestors, user, resolved);
     }
 
-    async canWrite(mountId: string, pathId: string, user: User): Promise<boolean> {
+    async canWrite(mountId: string, pathId: string, user: User, memberships?: Memberships): Promise<boolean> {
         const mount = this.getMount(mountId);
-        const path = await mount.getPath(pathId);
-        if (!path) return false;
-        return await canWrite(path, user, mount.getPath.bind(mount));
+        const ancestors = await mount.getBreadcrumb(pathId);
+        if (ancestors.length === 0) return false;
+        const resolved = memberships ?? await getMemberships(user.id);
+        return canWriteFromAncestors(ancestors, user, resolved);
     }
 
     async getCollabDocument(mountId: string, pathId: string): Promise<CollabDocument> {
@@ -710,9 +713,10 @@ export default class Drive {
 
     async getSharedWith(user: User): Promise<DrivePath[]> {
         const allShared = await this.getSharedPathsByMe();
+        const memberships = await getMemberships(user.id);
         const results: DrivePath[] = [];
         for (const path of allShared) {
-            if (path.acl && await matchesACL(path.acl, user, 'read')) {
+            if (path.acl && matchesACL(path.acl, user, memberships, 'read')) {
                 results.push(path);
             }
         }
@@ -729,7 +733,8 @@ export default class Drive {
 
     async receiveACLChange(path: DrivePath, newACL: DriveACL[] | null, actorEmail?: string): Promise<void> {
         const displayName = stripEigenExtension(path.name);
-        if (newACL === null || !(await matchesACL(newACL, this.owner, 'read'))) {
+        const memberships = await getMemberships(this.owner.id);
+        if (newACL === null || !matchesACL(newACL, this.owner, memberships, 'read')) {
             this.sharedDb.delete(sharedSchema.sharedPaths)
                 .where(eq(sharedSchema.sharedPaths.id, path.id))
                 .run();
