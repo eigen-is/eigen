@@ -20,6 +20,7 @@ import {
 } from '../../../auth-schema.ts';
 import type {User} from "better-auth/types";
 import {ApiError} from "../core";
+import {sendMail} from "../core/mailer";
 import {reconcileSharesForNewTeamMember, reconcileSharesForNewUser} from "../share";
 
 export const trustedOrigins = [
@@ -74,8 +75,12 @@ export const auth = betterAuth({
         twoFactor({
             issuer: "eigen",
             otpOptions: {
-                async sendOTP({user, otp}, ctx) {
-                    console.log('send otp', user, otp, ctx?.request);
+                async sendOTP({user, otp}) {
+                    await sendMail({
+                        to: [{name: user.name, address: user.email}],
+                        subject: 'Your verification code',
+                        text: `Your verification code is: ${otp}\n\nThis code expires in 5 minutes.`,
+                    });
                 },
             },
         }),

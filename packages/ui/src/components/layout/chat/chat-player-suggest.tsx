@@ -41,7 +41,10 @@ export function ChatPlayerSuggest({
                 allEmails: [m.email],
             }));
 
-        if (!includeContacts) return memberSuggestions.slice(0, 6);
+        if (!includeContacts) {
+            if (q && memberSuggestions.some(s => s.email.toLowerCase() === q)) return [];
+            return memberSuggestions.slice(0, 6);
+        }
 
         const seen = new Set<string>();
         const merged: ContactSuggestion[] = [];
@@ -52,6 +55,7 @@ export function ChatPlayerSuggest({
                 merged.push(s);
             }
         }
+        if (q && merged.some(s => s.email.toLowerCase() === q)) return [];
         return merged.slice(0, 6);
     }, [visible, query, roomMembers, contactSuggestions, includeContacts]);
 

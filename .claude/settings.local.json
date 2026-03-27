@@ -131,8 +131,12 @@
       "WebFetch(domain:forums.anandtech.com)",
       "Bash(/tmp/trace.txt:*)",
       "Read(//tmp/**)",
-      "Bash(sort -k5 -rn)"
+      "Bash(sort -k5 -rn)",
+      "WebFetch(domain:jsr.io)"
     ]
+  },
+  "enabledPlugins": {
+    "pr-review-toolkit@claude-plugins-official": false
   },
   "bypassPermissions": "bypassPermissions"
 }
