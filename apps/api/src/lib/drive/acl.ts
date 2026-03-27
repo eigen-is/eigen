@@ -1,73 +1,60 @@
 import type {User} from 'better-auth/types';
 import {type DriveACL, type DrivePath, isCollabType} from '@workspace/lib/types/drive';
 import {parseOwnerId} from '@workspace/lib/types';
-import {getMemberships} from '../user/';
+import type {Memberships} from '../user/';
 
-export type PathGetter = (pathId: string) => Promise<DrivePath | null>;
-
-export async function canRead(
-    path: DrivePath,
+export function canReadFromAncestors(
+    ancestors: DrivePath[],
     user: User,
-    getPath: PathGetter,
-): Promise<boolean> {
-    if (path.ownerId === user.id) return true;
+    memberships: Memberships,
+): boolean {
+    for (const path of ancestors) {
+        if (path.ownerId === user.id) return true;
 
-    // Team-owned paths: members get automatic read access
-    const parsed = parseOwnerId(path.ownerId);
-    if (parsed && parsed.type === 'team') {
-        const memberships = await getMemberships(user.id);
-        if (memberships.teamIds.includes(parsed.id)) return true;
-    }
+        const parsed = parseOwnerId(path.ownerId);
+        if (parsed && parsed.type === 'team') {
+            if (memberships.teamIds.includes(parsed.id)) return true;
+        }
 
-    if (path.visibility === 'public-read' || path.visibility === 'public-write') return true;
+        if (path.visibility === 'public-read' || path.visibility === 'public-write') return true;
 
-    // Check ACL entries (user, team)
-    if (path.acl) {
-        if (await matchesACL(path.acl, user, 'read')) return true;
-    }
-
-    if (path.parentId) {
-        const parent = await getPath(path.parentId);
-        if (parent) return canRead(parent, user, getPath);
+        if (path.acl) {
+            if (matchesACL(path.acl, user, memberships, 'read')) return true;
+        }
     }
 
     return false;
 }
 
-export async function canWrite(
-    path: DrivePath,
+export function canWriteFromAncestors(
+    ancestors: DrivePath[],
     user: User,
-    getPath: PathGetter
-): Promise<boolean> {
-    if (path.ownerId === user.id) return true;
+    memberships: Memberships,
+): boolean {
+    for (const path of ancestors) {
+        if (path.ownerId === user.id) return true;
 
-    // Team-owned paths: members get automatic write access
-    const parsed = parseOwnerId(path.ownerId);
-    if (parsed && parsed.type === 'team') {
-        const memberships = await getMemberships(user.id);
-        if (memberships.teamIds.includes(parsed.id)) return true;
-    }
+        const parsed = parseOwnerId(path.ownerId);
+        if (parsed && parsed.type === 'team') {
+            if (memberships.teamIds.includes(parsed.id)) return true;
+        }
 
-    if (path.visibility === 'public-write') return true;
+        if (path.visibility === 'public-write') return true;
 
-    // Check ACL entries (user, team)
-    if (path.acl) {
-        if (await matchesACL(path.acl, user, 'write')) return true;
-    }
-
-    if (path.parentId) {
-        const parent = await getPath(path.parentId);
-        if (parent) return canWrite(parent, user, getPath);
+        if (path.acl) {
+            if (matchesACL(path.acl, user, memberships, 'write')) return true;
+        }
     }
 
     return false;
 }
 
-export async function matchesACL(
+export function matchesACL(
     acl: DriveACL[],
     user: User,
+    memberships: Memberships,
     permission: 'read' | 'write'
-): Promise<boolean> {
+): boolean {
     for (const entry of acl) {
         const hasPermission = permission === 'read' ? entry.read : entry.write;
         if (!hasPermission) continue;
@@ -79,7 +66,6 @@ export async function matchesACL(
         }
 
         if (parsed && parsed.type === 'team') {
-            const memberships = await getMemberships(user.id);
             if (memberships.teamIds.includes(parsed.id)) return true;
         }
     }
@@ -101,51 +87,48 @@ export function normalizeACL(acl: DriveACL[] | null): DriveACL[] | null {
 }
 
 /**
- * Walk up the parentId chain to find the outermost collab container
+ * Walk the ancestors list to find the outermost collab container
  * (doc/stickies/slides/sheets). Returns null for standalone chats that
  * are not inside a container.
+ * `ancestors` should be ordered root-first (as returned by `getBreadcrumb`).
  */
-export async function findContainerPath(
-    getPath: PathGetter,
-    startPathId: string
-): Promise<DrivePath | null> {
-    let currentId: string | null = startPathId;
+export function findContainerFromAncestors(
+    ancestors: DrivePath[],
+): DrivePath | null {
     let container: DrivePath | null = null;
 
-    while (currentId) {
-        const path = await getPath(currentId);
-        if (!path) break;
+    for (const path of ancestors) {
         if (isCollabType(path.type)) {
             container = path;
         }
-        currentId = path.parentId;
     }
 
     return container;
 }
 
 /**
- * Checks if an ACL entry is already covered by inherited permissions from parent paths
- * or by ownership of the drive (team membership).
+ * Checks if an ACL entry is already covered by inherited permissions from ancestor
+ * paths or by ownership of the drive (team membership).
+ * `ancestors` is the breadcrumb from root to the path's parent (excludes the path itself).
  */
-export async function filterRedundantACL(
+export function filterRedundantACL(
     acl: DriveACL[],
     path: DrivePath,
-    getPath: PathGetter,
-): Promise<{ filtered: DriveACL[], removed: DriveACL[] }> {
+    ancestors: DrivePath[],
+): { filtered: DriveACL[], removed: DriveACL[] } {
     const inherited = new Map<string, { read: boolean, write: boolean }>();
 
-    let current = path.parentId ? await getPath(path.parentId) : null;
-    while (current) {
-        if (current.acl) {
-            for (const entry of current.acl) {
+    // ancestors excludes the path itself, so every entry is a parent/grandparent
+    for (const ancestor of ancestors) {
+        if (ancestor.id === path.id) continue;
+        if (ancestor.acl) {
+            for (const entry of ancestor.acl) {
                 const key = entry.id.toLowerCase();
                 if (!inherited.has(key)) {
                     inherited.set(key, {read: entry.read, write: entry.write});
                 }
             }
         }
-        current = current.parentId ? await getPath(current.parentId) : null;
     }
 
     const ownerParsed = parseOwnerId(path.ownerId);

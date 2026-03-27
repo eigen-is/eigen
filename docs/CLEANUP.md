@@ -402,7 +402,7 @@ No bundle visualization tool configured.
 | Size endpoint debounce/cache | P1 | 1-2 hr | Network | DONE |
 | Breadcrumb recursive CTE | P1 | 2-3 hr | Backend | DONE |
 | Storage path CTE | P1 | 1-2 hr | Backend | DONE |
-| ACL permission CTE + caching | P1 | 2-3 hr | Backend | |
+| ACL permission CTE + caching | P1 | 2-3 hr | Backend | DONE |
 | Add missing database indexes | P1 | 1-2 hr | Database | DONE |
 | Calendar count queries (.all().length) | P1 | 15 min | Database | DONE |
 | Breadcrumb N+1 in Drive table | P1 | 1-2 hr | Frontend | DONE |
@@ -410,8 +410,8 @@ No bundle visualization tool configured.
 | Fortune-sheet lodash replacement | P2 | 2-4 hr | Bundle | |
 | Build compression (gzip/brotli) | P2 | 30 min | Bundle | |
 | Font lazy-loading | P2 | 2-4 hr | Bundle | |
-| Home singleton race condition | P2 | 2 hr | Backend | |
-| Missing transactions | P2 | 2-3 hr | Backend | |
+| Home singleton race condition | P2 | 2 hr | Backend | DONE |
+| Missing transactions | P2 | 2-3 hr | Backend | DONE |
 | Remove /home/:ownerId/zip route | P2 | 5 min | Backend | DONE |
 | Thumbnail retry | P2 | 1-2 hr | Backend | |
 | Recycle bin / soft delete | P2 | 1-2 days | Backend | |

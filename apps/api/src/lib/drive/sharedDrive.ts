@@ -8,7 +8,8 @@ import CollabDocument from "../collab/collabDocument.ts";
 import type {ChatRoom} from "../chat";
 import type {DatabaseConfig, ManagedDatabase, SchemaType} from "../core";
 import {ApiError} from "../core";
-import {getMemberships} from "../user/";
+import {getMemberships, type Memberships} from "../user/";
+import {canReadFromAncestors} from "./acl";
 
 export default class SharedDrive extends Drive {
     private sharedDrive: Drive;
@@ -20,23 +21,30 @@ export default class SharedDrive extends Drive {
         this.user = user;
     }
 
+    private async getUserMemberships(): Promise<Memberships> {
+        return getMemberships(this.user.id);
+    }
+
     private async withReadPermission<T>(mountId: string, pathId: string, fn: () => Promise<T>): Promise<T> {
-        if (!(await this.canRead(mountId, pathId, this.user))) {
+        const memberships = await this.getUserMemberships();
+        if (!(await this.canRead(mountId, pathId, this.user, memberships))) {
             throw new ApiError(403, 'No read permission');
         }
         return fn();
     }
 
     private async withWritePermission<T>(mountId: string, pathId: string, fn: () => Promise<T>): Promise<T> {
-        if (!(await this.canWrite(mountId, pathId, this.user))) {
+        const memberships = await this.getUserMemberships();
+        if (!(await this.canWrite(mountId, pathId, this.user, memberships))) {
             throw new ApiError(403, 'No write permission');
         }
         return fn();
     }
 
     private async withParentWritePermission<T>(mountId: string, pathId: string, fn: () => Promise<T>): Promise<T> {
-        const path = await this.getPath(mountId, pathId);
-        if (path?.parentId && await this.canWrite(mountId, path.parentId, this.user)) {
+        const memberships = await this.getUserMemberships();
+        const path = await this.sharedDrive.getPath(mountId, pathId);
+        if (path?.parentId && await this.canWrite(mountId, path.parentId, this.user, memberships)) {
             return fn();
         }
         throw new ApiError(403, 'No write permission');
@@ -52,7 +60,8 @@ export default class SharedDrive extends Drive {
     public async getRootFolder(mountId: string) {
         const root = await this.sharedDrive.getRootFolder(mountId);
         if (!root) return null;
-        return (await this.canRead(mountId, root.id, this.user)) ? root : null;
+        const memberships = await this.getUserMemberships();
+        return (await this.canRead(mountId, root.id, this.user, memberships)) ? root : null;
     }
 
     public async size(_mountId: string) {
@@ -64,7 +73,7 @@ export default class SharedDrive extends Drive {
     }): Promise<DrivePath[]> {
         const parsed = parseOwnerId(this.owner.id);
         if (parsed?.type === 'team') {
-            const memberships = await getMemberships(this.user.id);
+            const memberships = await this.getUserMemberships();
             if (memberships.teamIds.includes(parsed.id)) {
                 return this.sharedDrive.getMimeTypeContents(mimeType, options);
             }
@@ -72,12 +81,12 @@ export default class SharedDrive extends Drive {
         return [];
     }
 
-    public async canWrite(mountId: string, pathId: string, user: User) {
-        return this.sharedDrive.canWrite(mountId, pathId, user);
+    public async canWrite(mountId: string, pathId: string, user: User, memberships?: Memberships) {
+        return this.sharedDrive.canWrite(mountId, pathId, user, memberships);
     }
 
-    public async canRead(mountId: string, pathId: string, user: User) {
-        return this.sharedDrive.canRead(mountId, pathId, user);
+    public async canRead(mountId: string, pathId: string, user: User, memberships?: Memberships) {
+        return this.sharedDrive.canRead(mountId, pathId, user, memberships);
     }
 
     public async getFolderContents(mountId: string, pathId: string) {
@@ -110,10 +119,7 @@ export default class SharedDrive extends Drive {
     }
 
     public async getCollabDocument(mountId: string, pathId: string): Promise<CollabDocument> {
-        if (await this.canRead(mountId, pathId, this.user)) {
-            return this.sharedDrive.getCollabDocument(mountId, pathId);
-        }
-        throw new ApiError(403, "No read permission");
+        return this.withReadPermission(mountId, pathId, () => this.sharedDrive.getCollabDocument(mountId, pathId));
     }
 
     public async closeCollabDocument(mountId: string, pathId: string) {
@@ -129,59 +135,35 @@ export default class SharedDrive extends Drive {
     }
 
     public async createFolder(mountId: string, parentId: string, folderName: string): Promise<DrivePath> {
-        if (!(await this.canWrite(mountId, parentId, this.user))) {
-            throw new ApiError(403, 'No write permission');
-        }
-        return this.sharedDrive.createFolder(mountId, parentId, folderName);
+        return this.withWritePermission(mountId, parentId, () => this.sharedDrive.createFolder(mountId, parentId, folderName));
     }
 
     public async uploadFiles(mountId: string, parentId: string, request: Request, maxSize: number): Promise<DrivePath[]> {
-        if (!(await this.canWrite(mountId, parentId, this.user))) {
-            throw new ApiError(403, 'No write permission');
-        }
-        return this.sharedDrive.uploadFiles(mountId, parentId, request, maxSize);
+        return this.withWritePermission(mountId, parentId, () => this.sharedDrive.uploadFiles(mountId, parentId, request, maxSize));
     }
 
     public async createStickies(mountId: string, parentId: string, stickiesName: string): Promise<DrivePath> {
-        if (!(await this.canWrite(mountId, parentId, this.user))) {
-            throw new ApiError(403, 'No write permission');
-        }
-        return this.sharedDrive.createStickies(mountId, parentId, stickiesName);
+        return this.withWritePermission(mountId, parentId, () => this.sharedDrive.createStickies(mountId, parentId, stickiesName));
     }
 
     public async createSlides(mountId: string, parentId: string, slidesName: string): Promise<DrivePath> {
-        if (!(await this.canWrite(mountId, parentId, this.user))) {
-            throw new ApiError(403, 'No write permission');
-        }
-        return this.sharedDrive.createSlides(mountId, parentId, slidesName);
+        return this.withWritePermission(mountId, parentId, () => this.sharedDrive.createSlides(mountId, parentId, slidesName));
     }
 
     public async createSheets(mountId: string, parentId: string, sheetsName: string): Promise<DrivePath> {
-        if (!(await this.canWrite(mountId, parentId, this.user))) {
-            throw new ApiError(403, 'No write permission');
-        }
-        return this.sharedDrive.createSheets(mountId, parentId, sheetsName);
+        return this.withWritePermission(mountId, parentId, () => this.sharedDrive.createSheets(mountId, parentId, sheetsName));
     }
 
     public async createDoc(mountId: string, parentId: string, docName: string): Promise<DrivePath> {
-        if (!(await this.canWrite(mountId, parentId, this.user))) {
-            throw new ApiError(403, 'No write permission');
-        }
-        return this.sharedDrive.createDoc(mountId, parentId, docName);
+        return this.withWritePermission(mountId, parentId, () => this.sharedDrive.createDoc(mountId, parentId, docName));
     }
 
     public async createChat(mountId: string, parentId: string, chatName: string): Promise<DrivePath> {
-        if (!(await this.canWrite(mountId, parentId, this.user))) {
-            throw new ApiError(403, 'No write permission');
-        }
-        return this.sharedDrive.createChat(mountId, parentId, chatName);
+        return this.withWritePermission(mountId, parentId, () => this.sharedDrive.createChat(mountId, parentId, chatName));
     }
 
     public async getChat(mountId: string, chatId: string): Promise<ChatRoom> {
-        if (!(await this.canRead(mountId, chatId, this.user))) {
-            throw new ApiError(403, 'No read permission');
-        }
-        return this.sharedDrive.getChat(mountId, chatId);
+        return this.withReadPermission(mountId, chatId, () => this.sharedDrive.getChat(mountId, chatId));
     }
 
     public async getChildByName(mountId: string, parentId: string, name: string): Promise<DrivePath | null> {
@@ -206,7 +188,9 @@ export default class SharedDrive extends Drive {
     }
 
     public async inviteToChat(mountId: string, chatId: string, email: string) {
-        if (!(await this.canWrite(mountId, chatId, this.user))) {
+        const memberships = await this.getUserMemberships();
+
+        if (!(await this.canWrite(mountId, chatId, this.user, memberships))) {
             throw new ApiError(403, 'No write permission');
         }
 
@@ -216,11 +200,11 @@ export default class SharedDrive extends Drive {
         const container = await this.sharedDrive.findContainerPath(mountId, chatPath.parentId ?? '');
         const targetPath = container ?? chatPath;
 
-        if (container && !(await this.canWrite(mountId, targetPath.id, this.user))) {
+        if (container && !(await this.canWrite(mountId, targetPath.id, this.user, memberships))) {
             throw new ApiError(403, 'No write permission on container document');
         }
 
-        if (targetPath.sharingRestricted && !(await this.isEffectiveOwner(targetPath.ownerId))) {
+        if (targetPath.sharingRestricted && !this.isEffectiveOwnerSync(targetPath.ownerId, memberships)) {
             throw new ApiError(403, 'Sharing is restricted by the owner');
         }
 
@@ -229,19 +213,22 @@ export default class SharedDrive extends Drive {
     }
 
     public async updateACL(mountId: string, pathId: string, acl: DriveACL[], visibility?: DriveVisibility, sharingRestricted?: boolean) {
-        return this.withWritePermission(mountId, pathId, async () => {
-            const path = await this.sharedDrive.getPath(mountId, pathId);
-            if (!path) throw new ApiError(404, 'Path not found');
+        const memberships = await this.getUserMemberships();
+        if (!(await this.canWrite(mountId, pathId, this.user, memberships))) {
+            throw new ApiError(403, 'No write permission');
+        }
 
-            const effectiveOwner = await this.isEffectiveOwner(path.ownerId);
+        const path = await this.sharedDrive.getPath(mountId, pathId);
+        if (!path) throw new ApiError(404, 'Path not found');
 
-            if (path.sharingRestricted && !effectiveOwner) {
-                throw new ApiError(403, 'Sharing is restricted by the owner');
-            }
+        const effectiveOwner = this.isEffectiveOwnerSync(path.ownerId, memberships);
 
-            return this.sharedDrive.updateACL(mountId, pathId, acl, visibility,
-                effectiveOwner ? sharingRestricted : undefined);
-        });
+        if (path.sharingRestricted && !effectiveOwner) {
+            throw new ApiError(403, 'Sharing is restricted by the owner');
+        }
+
+        return this.sharedDrive.updateACL(mountId, pathId, acl, visibility,
+            effectiveOwner ? sharingRestricted : undefined);
     }
 
     public async deleteFolder(mountId: string, pathId: string) {
@@ -257,10 +244,11 @@ export default class SharedDrive extends Drive {
     }
 
     public async movePath(mountId: string, pathId: string, targetParentId: string): Promise<DrivePath> {
-        if (!(await this.canWrite(mountId, pathId, this.user))) {
+        const memberships = await this.getUserMemberships();
+        if (!(await this.canWrite(mountId, pathId, this.user, memberships))) {
             throw new ApiError(403, 'No write permission on source');
         }
-        if (!(await this.canWrite(mountId, targetParentId, this.user))) {
+        if (!(await this.canWrite(mountId, targetParentId, this.user, memberships))) {
             throw new ApiError(403, 'No write permission on target folder');
         }
         return this.sharedDrive.movePath(mountId, pathId, targetParentId);
@@ -268,10 +256,14 @@ export default class SharedDrive extends Drive {
 
     public async breadCrumb(mountId: string, pathId: string) {
         const bread = await this.sharedDrive.breadCrumb(mountId, pathId);
+        const memberships = await this.getUserMemberships();
         const crumb: DrivePath[] = [];
+        // Walk from leaf to root, stopping at the first entry without read access
         while (bread.length > 0) {
-            const path = bread.pop();
-            if (path && await this.canRead(mountId, path.id, this.user)) {
+            const path = bread.pop()!;
+            // Check if the user can read this path by checking itself + remaining ancestors
+            const ancestorsFromHere = [...bread, path];
+            if (canReadFromAncestors(ancestorsFromHere, this.user, memberships)) {
                 crumb.push(path);
             } else {
                 break;
@@ -294,10 +286,9 @@ export default class SharedDrive extends Drive {
 
     // Team members always go through SharedDrive (no team user logs in),
     // but they are co-owners and should bypass sharing restrictions.
-    private async isEffectiveOwner(ownerId: string): Promise<boolean> {
+    private isEffectiveOwnerSync(ownerId: string, memberships: Memberships): boolean {
         const parsed = parseOwnerId(ownerId);
         if (parsed.type !== 'team') return false;
-        const memberships = await getMemberships(this.user.id);
         return memberships.teamIds.includes(parsed.id);
     }
 

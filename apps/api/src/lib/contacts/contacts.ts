@@ -117,16 +117,15 @@ export class Contacts {
     }
 
     public async setContactLabels(contactId: string, labels: string[]) {
-        // Delete existing labels
-        await this.db.delete(schema.contactsToLabels).where(eq(schema.contactsToLabels.contactId, contactId));
-
-        // Insert new labels
-        for (const labelId of labels) {
-            await this.db.insert(schema.contactsToLabels).values({
-                contactId,
-                labelId
-            });
-        }
+        this.db.transaction((tx) => {
+            tx.delete(schema.contactsToLabels).where(eq(schema.contactsToLabels.contactId, contactId)).run();
+            for (const labelId of labels) {
+                tx.insert(schema.contactsToLabels).values({
+                    contactId,
+                    labelId
+                }).run();
+            }
+        });
     }
 
     public async addContact(contact: Omit<Contact, 'id'>) {
@@ -230,8 +229,10 @@ export class Contacts {
     }
 
     public async deleteLabel(id: string) {
-        await this.db.delete(schema.labels).where(eq(schema.labels.id, id));
-        await this.db.delete(schema.contactsToLabels).where(eq(schema.contactsToLabels.labelId, id));
+        this.db.transaction((tx) => {
+            tx.delete(schema.contactsToLabels).where(eq(schema.contactsToLabels.labelId, id)).run();
+            tx.delete(schema.labels).where(eq(schema.labels.id, id)).run();
+        });
         this.emitLabel(SSEventType.LABEL_DELETED, id);
     }
 
