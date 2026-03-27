@@ -1,8 +1,11 @@
+import type {S3Config} from './mount';
+
 export type MountSettings = {
     storageType: 'local' | 'local-key' | 's3';
     maxSizeMB?: number;
     enabled: boolean;
     name?: string;
+    s3Config?: S3Config;
 };
 
 export type UserSettings = {

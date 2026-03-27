@@ -89,7 +89,7 @@ export function SlidePanel({deck, activeSlideId, onSelectSlide, onDragStart, onD
                         <DragOverlay>
                             {dragActiveId && deck.slides[dragActiveId] ? (
                                 <div
-                                    className="w-36 rounded border border-blue-500 overflow-hidden shadow-lg"
+                                    className="w-36 rounded border border-primary overflow-hidden shadow-lg"
                                     style={{aspectRatio: SLIDE_ASPECT_RATIO, backgroundColor: deck.slides[dragActiveId].backgroundColor}}
                                 />
                             ) : null}

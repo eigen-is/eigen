@@ -5,6 +5,7 @@ import {getTeamDataPath} from '../config/paths';
 import {Home} from './home';
 import {parseOwnerId} from "@workspace/lib/types";
 import type {MountSettings, TeamSettings} from "@workspace/lib/types/settings";
+import type {S3Config} from "@workspace/lib/types";
 import {ApiError, JsonStore, LocalFilesystem} from "../core";
 import {Drive} from '../drive';
 import {Calendar} from '../calendar/calendar';
@@ -53,7 +54,7 @@ export class TeamHome extends Home {
         return this._calendar;
     }
 
-    async addMount(input: {name: string; storageType?: string; maxSizeMB?: number}): Promise<{id: string} & MountSettings> {
+    async addMount(input: {name: string; storageType?: string; maxSizeMB?: number; s3Config?: S3Config}): Promise<{id: string} & MountSettings> {
         const mountId = randomUUID().slice(0, 8);
         const serverSettings = getServerSettings();
         const mountSettings: MountSettings = {
@@ -61,6 +62,7 @@ export class TeamHome extends Home {
             maxSizeMB: input.maxSizeMB ?? serverSettings.quotas.defaultMountMaxSizeMB,
             enabled: true,
             name: input.name,
+            s3Config: input.s3Config,
         };
 
         const currentMounts = this.settings.get().mounts ?? {};

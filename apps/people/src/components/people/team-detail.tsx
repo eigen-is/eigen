@@ -256,6 +256,7 @@ export function TeamDetail({team, organizationId}: TeamDetailProps) {
             name: values.name,
             storageType: values.storageType,
             maxSizeMB: values.maxSizeMB,
+            s3Config: values.s3Config,
         });
     };
 
@@ -394,6 +395,7 @@ export function TeamDetail({team, organizationId}: TeamDetailProps) {
                         name: editingMount.mount.name ?? editingMount.id,
                         storageType: editingMount.mount.storageType,
                         maxSizeMB: editingMount.mount.maxSizeMB ?? 500,
+                        s3Config: editingMount.mount.s3Config,
                     } : undefined}
                     title="Edit Mount"
                     submitLabel="Save Changes"

@@ -76,8 +76,12 @@ export default class Drive {
 
         for (const [id, ms] of Object.entries(mountSettings)) {
             if (!ms.enabled) continue;
-            const config = createMountConfig(id, ms);
-            await this.addMount(config);
+            try {
+                const config = createMountConfig(id, ms);
+                await this.addMount(config);
+            } catch (e) {
+                console.error(`[Drive] Failed to init mount '${id}':`, e instanceof Error ? e.message : e);
+            }
         }
 
         if (this.mounts.size === 0 && autoCreateDefaultMount) {

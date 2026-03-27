@@ -1,6 +1,7 @@
 import {type QueryClient, useMutation, useQuery, useQueryClient} from '@tanstack/react-query';
 import {teamApi} from '@workspace/lib/api';
 import type {MountSettings} from '@workspace/lib/types/settings';
+import type {S3Config} from '@workspace/lib/types';
 import {teamKeys} from './use-team-settings';
 import {AppError, onMutationError} from '../../api-error';
 
@@ -24,7 +25,7 @@ export function useAddTeamMount(teamId: string) {
     const queryClient = useQueryClient();
 
     return useMutation({
-        mutationFn: async (body: {name: string; storageType?: 'local' | 'local-key' | 's3'; maxSizeMB?: number}) => {
+        mutationFn: async (body: {name: string; storageType?: 'local' | 'local-key' | 's3'; maxSizeMB?: number; s3Config?: S3Config}) => {
             const res = await teamApi({teamId}).mount.post(body);
             if (res.error) throw new AppError(res);
             return res.data;
