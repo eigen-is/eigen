@@ -2,7 +2,7 @@ import {Elysia, t} from "elysia";
 import {betterAuth} from "./auth";
 import {getSharedDrive} from "../lib/drive";
 import {getHome} from "../lib/home";
-import {enforceBatchUpload, getUploadMaxSize} from "../lib/config/enforcement";
+import {getUploadMaxSize} from "../lib/config/enforcement";
 
 // Drive routes allow cross-owner access (shared drives, team drives).
 // Access control is enforced by getSharedDrive() → SharedDrive ACL checks, not by ownerId === user.id.
@@ -90,16 +90,8 @@ export const driveRouter = new Elysia({name: "drive"})
     .post("/drive/:ownerId/:mountId/file/:pathId", async ({params, request, user}) => {
         const maxSize = await getUploadMaxSize(params.ownerId, user.id, params.mountId);
         const drive = await getSharedDrive(params.ownerId, user);
-        return await drive.uploadFileStreaming(params.mountId, params.pathId, request, maxSize);
+        return await drive.uploadFiles(params.mountId, params.pathId, request, maxSize);
     }, {auth: true, parse: 'none'})
-    .post("/drive/:ownerId/:mountId/files/:pathId", async ({params, body, user}) => {
-        await enforceBatchUpload(params.ownerId, user.id, params.mountId, body.files);
-        const drive = await getSharedDrive(params.ownerId, user);
-        return await drive.uploadFiles(params.mountId, params.pathId, body.files);
-    }, {
-        body: t.Object({files: t.Files()}),
-        auth: true
-    })
     .delete("/drive/:ownerId/:mountId/file/:pathId", async ({params, user}) => {
         const drive = await getSharedDrive(params.ownerId, user);
         await drive.deleteFile(params.mountId, params.pathId);
@@ -196,6 +188,22 @@ export const driveRouter = new Elysia({name: "drive"})
         const drive = await getSharedDrive(params.ownerId, user);
         return await drive.getEffectiveMembers(params.mountId, params.pathId);
     }, {auth: true})
+    .post("/drive/:ownerId/:mountId/path/:pathId/email-collaborators", async ({params, body, user}) => {
+        const drive = await getSharedDrive(params.ownerId, user);
+        return await drive.emailCollaborators(
+            params.mountId, params.pathId,
+            body.subject, body.message, body.documentUrl,
+            body.sendCopyToSelf, user.email, user.name,
+        );
+    }, {
+        body: t.Object({
+            subject: t.String({maxLength: 200}),
+            message: t.String({maxLength: 5000}),
+            documentUrl: t.String({maxLength: 500}),
+            sendCopyToSelf: t.Boolean(),
+        }),
+        auth: true,
+    })
     .get("/drive/:ownerId/:mountId/path/:pathId/permissions/read", async ({params, user}) => {
         const drive = await getSharedDrive(params.ownerId, user);
         return {canRead: await drive.canRead(params.mountId, params.pathId, user)};

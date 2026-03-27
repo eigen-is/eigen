@@ -1,7 +1,7 @@
 import {ApiError} from '../core';
 import {getHome} from '../home';
 import {getMemberships} from '../user';
-import {getMaxUploadSize, getMaxBatchUploadSize} from './server-settings';
+import {getMaxUploadSize} from './server-settings';
 import {resolveUserQuotas, type ResolvedQuotas} from './quota';
 import type {Home} from '../home/home';
 
@@ -24,20 +24,6 @@ export async function getUploadMaxSize(ownerId: string, userId: string, mountId:
     return Math.min(maxUpload, remainingQuota);
 }
 
-export async function enforceBatchUpload(ownerId: string, userId: string, mountId: string, files: {size: number}[]): Promise<void> {
-    const maxPerFile = getMaxBatchUploadSize();
-    for (const file of files) {
-        if (file.size > maxPerFile) {
-            throw new ApiError(413, 'File exceeds max batch upload size');
-        }
-    }
-    const {home, quotas} = await resolveQuotas(ownerId, userId, mountId);
-    const totalSize = files.reduce((sum, f) => sum + f.size, 0);
-    const currentSize = await home.drive.size(mountId);
-    if (currentSize + totalSize > quotas.mountMax) {
-        throw new ApiError(413, 'Storage quota exceeded');
-    }
-}
 
 export async function enforceAvatarUpload(userId: string, fileSize: number): Promise<void> {
     if (fileSize > getMaxUploadSize()) {

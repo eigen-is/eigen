@@ -1465,11 +1465,11 @@ describe('Drive', () => {
     describe('Multiple File Upload', () => {
         test('upload multiple files at once', async () => {
             const formData = new FormData();
-            formData.append('files', new File(['file1'], 'multi1.txt', {type: 'text/plain'}));
-            formData.append('files', new File(['file2'], 'multi2.txt', {type: 'text/plain'}));
+            formData.append('file', new File(['file1'], 'multi1.txt', {type: 'text/plain'}));
+            formData.append('file', new File(['file2'], 'multi2.txt', {type: 'text/plain'}));
 
             const res = await authedRequest(ctx.alice.user.sessionToken,
-                `/drive/${ctx.alice.user.id}/${aliceMountId}/files/${aliceRootId}`, {
+                `/drive/${ctx.alice.user.id}/${aliceMountId}/file/${aliceRootId}`, {
                     method: 'POST',
                     body: formData,
                 });
