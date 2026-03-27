@@ -84,6 +84,7 @@ export function FilePreview({
                             thumbnailUrl={thumbnailUrl}
                             previewUrl={previewUrl}
                             alt={fileName}
+                            aspectRatio={aspectRatio}
                         />
                     )}
                     {previewMode === 'video' && (
@@ -183,21 +184,32 @@ function NavButton({onClick, disabled, title, children}: {
     );
 }
 
-function ProgressiveImage({thumbnailUrl, previewUrl, alt}: {
-    thumbnailUrl?: string; previewUrl: string; alt: string;
+function ProgressiveImage({thumbnailUrl, previewUrl, alt, aspectRatio}: {
+    thumbnailUrl?: string; previewUrl: string; alt: string; aspectRatio?: number;
 }) {
+    // Use CSS min() to compute "object-fit: contain" dimensions so the element
+    // matches the visible image area exactly — clicks beside a portrait image
+    // reach the close handler instead of being swallowed by stopPropagation.
+    const style: React.CSSProperties = aspectRatio
+        ? {
+            width: `min(90vw, calc((100vh - 7rem) * ${aspectRatio}))`,
+            height: `min(calc(100vh - 7rem), calc(90vw / ${aspectRatio}))`,
+        }
+        : {width: '90vw', height: 'calc(100vh - 7rem)'};
+
     if (!thumbnailUrl) {
         return (
             <img
                 src={previewUrl}
                 alt={alt}
-                className="w-[90vw] h-[calc(100vh-7rem)] rounded object-contain"
+                className="rounded object-contain"
+                style={style}
             />
         );
     }
 
     return (
-        <div className="relative w-[90vw] h-[calc(100vh-7rem)]">
+        <div className="relative" style={style}>
             <img
                 src={thumbnailUrl}
                 alt={alt}
