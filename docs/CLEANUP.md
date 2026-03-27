@@ -389,32 +389,33 @@ No bundle visualization tool configured.
 
 ## Summary
 
-| Item | Priority | Effort | Category |
-|------|----------|--------|----------|
-| ACL privilege escalation fix | P0 | 1 hr | Security |
-| Mail delivery IP allowlist + rate limiting | P0 | 2-3 hr | Security |
-| Rate limiting middleware | P0 | 3-4 hr | Security |
-| Fortune-sheet dynamic code execution fix | P0 | 1-2 hr | Security |
-| SSE keepalive interval (30s to 15s) | P1 | 15 min | Network |
-| SSE granular invalidation | P1 | 3-4 hr | Network |
-| Avatar batch resolution | P1 | 2-3 hr | Network |
-| Size endpoint debounce/cache | P1 | 1-2 hr | Network |
-| Breadcrumb recursive CTE | P1 | 2-3 hr | Backend |
-| Storage path CTE | P1 | 1-2 hr | Backend |
-| ACL permission CTE + caching | P1 | 2-3 hr | Backend |
-| Add missing database indexes | P1 | 1-2 hr | Database |
-| List virtualization (Drive, email, chat) | P2 | 2-3 days | Frontend |
-| Fortune-sheet lodash replacement | P2 | 2-4 hr | Bundle |
-| Build compression (gzip/brotli) | P2 | 30 min | Bundle |
-| Font lazy-loading | P2 | 2-4 hr | Bundle |
-| Home singleton race condition | P2 | 2 hr | Backend |
-| Missing transactions | P2 | 2-3 hr | Backend |
-| Remove /home/:ownerId/zip route | P2 | 5 min | Backend |
-| Thumbnail retry | P2 | 1-2 hr | Backend |
-| Recycle bin / soft delete | P2 | 1-2 days | Backend |
-| `interface` to `type` conversion | P3 | 1-2 hr | Quality |
-| Non-ASCII Content-Disposition | P3 | 30 min | Quality |
-| Console stripping in production | P3 | 1 hr | Bundle |
-| Image lazy loading | P3 | 2-3 hr | Bundle |
-| Biome.js adoption | P3 | 1 day | Tooling |
-| Bundle analysis tooling | P3 | 1 hr | Tooling |
+| Item | Priority | Effort | Category | Status |
+|------|----------|--------|----------|--------|
+| ACL privilege escalation fix | P0 | 1 hr | Security | DONE |
+| Mail delivery IP allowlist + rate limiting | P0 | 2-3 hr | Security | |
+| Rate limiting middleware | P0 | 3-4 hr | Security | |
+| Fortune-sheet dynamic code execution fix | P0 | 1-2 hr | Security | |
+| SSE keepalive interval (30s to 15s) | P1 | 15 min | Network | DONE |
+| SSE granular invalidation | P1 | 3-4 hr | Network | DONE |
+| Avatar batch resolution | P1 | 2-3 hr | Network | |
+| Size endpoint debounce/cache | P1 | 1-2 hr | Network | DONE |
+| Breadcrumb recursive CTE | P1 | 2-3 hr | Backend | DONE |
+| Storage path CTE | P1 | 1-2 hr | Backend | DONE |
+| ACL permission CTE + caching | P1 | 2-3 hr | Backend | |
+| Add missing database indexes | P1 | 1-2 hr | Database | DONE |
+| Calendar count queries (.all().length) | P1 | 15 min | Database | DONE |
+| List virtualization (Drive, email, chat) | P2 | 2-3 days | Frontend | |
+| Fortune-sheet lodash replacement | P2 | 2-4 hr | Bundle | |
+| Build compression (gzip/brotli) | P2 | 30 min | Bundle | |
+| Font lazy-loading | P2 | 2-4 hr | Bundle | |
+| Home singleton race condition | P2 | 2 hr | Backend | |
+| Missing transactions | P2 | 2-3 hr | Backend | |
+| Remove /home/:ownerId/zip route | P2 | 5 min | Backend | DONE |
+| Thumbnail retry | P2 | 1-2 hr | Backend | |
+| Recycle bin / soft delete | P2 | 1-2 days | Backend | |
+| `interface` to `type` conversion | P3 | 1-2 hr | Quality | |
+| Non-ASCII Content-Disposition | P3 | 30 min | Quality | |
+| Console stripping in production | P3 | 1 hr | Bundle | |
+| Image lazy loading | P3 | 2-3 hr | Bundle | |
+| Biome.js adoption | P3 | 1 day | Tooling | |
+| Bundle analysis tooling | P3 | 1 hr | Tooling | |
