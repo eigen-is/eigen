@@ -18,10 +18,18 @@
     "serve:setup": "bun --filter '@apps/api' --filter './apps/setup' dev",
     "build": "bun --filter '*' build",
     "build:prod": "bun --filter './apps/*' build && bun --filter '@apps/api' buildfordocker",
+    "lint": "bunx --bun @biomejs/biome lint .",
+    "format": "bunx --bun @biomejs/biome format --write .",
+    "biome:check": "bunx --bun @biomejs/biome check .",
+    "biome:write": "bunx --bun @biomejs/biome check --write .",
+    "biome:changed": "bunx --bun @biomejs/biome check --changed",
+    "biome:staged": "bunx --bun @biomejs/biome check --staged",
+    "biome:ci": "bunx --bun @biomejs/biome ci .",
     "typecheck": "bun --filter '*' typecheck",
     "test": "bun  --elide-lines=0 --filter '*' test",
     "test:api": "bun  --elide-lines=0  --filter '@apps/api' test",
     "test:fortune-sheet": "bun  --elide-lines=0  --filter '@workspace/fortune-sheet' test",
+    "quality": "bun run typecheck && bun run test",
     "check": "bun run typecheck && bun run test"
   },
   "workspaces": [
@@ -48,6 +56,7 @@
     "zod": "^3.24.2"
   },
   "devDependencies": {
+    "@biomejs/biome": "2.4.9",
     "@tailwindcss/postcss": "^4.2.1",
     "@tailwindcss/vite": "^4.2.1",
     "@tanstack/react-router-devtools": "^1.163.2",
