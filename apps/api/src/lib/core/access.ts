@@ -4,7 +4,7 @@ import {getMemberships, getOrgRole} from '../user';
 export function requireLocalhost(request: Request, server: { requestIP(req: Request): { address: string } | null } | null): void {
     const ip = server?.requestIP(request)?.address;
     if (!ip) return; // No server (e.g., tests using app.handle()) — allow
-    if (ip !== '127.0.0.1' && ip !== '::1') {
+    if (ip !== '127.0.0.1' && ip !== '::1' && ip !== '::ffff:127.0.0.1') {
         throw new ApiError(403, 'Access denied: localhost only');
     }
 }
