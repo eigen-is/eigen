@@ -28,6 +28,7 @@ are added only to hooks where the result isn't immediately visible:
 | `useUpdateServerSettings` | "Server settings saved"  | Subtle change                   |
 | `useUpdateServerS3Config` | "S3 configuration saved" | Subtle change                   |
 | `useUpdateACL`            | "Sharing updated"        | Confirmation of access change   |
+| `useEmailCollaborators`   | "Email sent"             | Email sent in background        |
 
 ## 3. Persistent notifications — via notification center
 

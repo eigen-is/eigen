@@ -584,22 +584,21 @@ export default class Drive {
         const self = senderEmail.toLowerCase();
         const recipients = members.filter(m => sendCopyToSelf || m.email !== self);
 
-        let sent = 0;
-        for (const member of recipients) {
+        const results = await Promise.allSettled(recipients.map(member => {
             const isExternal = !member.email.endsWith(`@${domain}`);
             const link = isExternal
                 ? `${documentUrl}${documentUrl.includes('?') ? '&' : '?'}email=${encodeURIComponent(member.email)}`
                 : documentUrl;
 
-            const ok = await sendMail({
+            return sendMail({
                 replyTo: {name: senderName, address: senderEmail},
                 to: [{name: '', address: member.email}],
                 subject,
                 text: `${message}\n\n${link}`,
             });
-            if (ok) sent++;
-        }
+        }));
 
+        const sent = results.filter(r => r.status === 'fulfilled' && r.value).length;
         return {sent};
     }
 
