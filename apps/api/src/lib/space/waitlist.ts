@@ -11,7 +11,7 @@ export async function waitlist(email: string, notes: string) {
     const time = new Date().toISOString();
 
     // TODO: make recipient configurable via server settings
-    return await sendMail({
+    return sendMail({
         to: [{name: '', address: 'reinder@infi.nl'}],
         subject: 'New Eigen Waitlist Signup',
         text: `New waitlist signup:\n\nEmail: <${email}>\nNotes: ${notes}\n\nTime: ${time}`,

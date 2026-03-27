@@ -61,10 +61,12 @@ bun run check          # typecheck + test
   `packages/lib/src/core/[domain]/hooks/`
 - **Never use `as any`** — fix the type at the source (route schema, response type) instead of casting in hooks.
   Eden Treaty provides end-to-end safety; `as any` silently breaks it
-- **`await` async calls unless intentionally fire-and-forget**. A bare async call returns a truthy Promise, silently
-  skipping intended logic — especially dangerous in conditionals (`if (!asyncFn())` is always false). Fire-and-forget
-  is fine for background work that shouldn't block the caller (e.g., thumbnail generation, preview caching), but must
-  always have a `.catch()` to avoid unhandled rejections
+- **Think about every `await`**. A bare async call returns a truthy Promise — dangerous in conditionals
+  (`if (!asyncFn())` is always false). But not every async call needs `await`: fire-and-forget is fine for background
+  work that shouldn't block the response (e.g., thumbnail generation, preview caching), and `return asyncFn()` is
+  fine when the caller handles the promise. The rule: `await` when you need the result or need errors to propagate
+  here; skip `await` when blocking would hurt response time and the work can fail silently. Fire-and-forget calls
+  must always have a `.catch()` to avoid unhandled rejections
 - **Sanitize user-provided paths and filenames** — validate against `..`, `/`, and control characters before using in
   file system paths or HTTP headers (e.g., `Content-Disposition`). Never interpolate raw user input into headers
 - **Use theme tokens, not hardcoded colors** — use `text-muted-foreground`, `bg-muted`, `border` etc. instead of
@@ -100,6 +102,8 @@ bun run check          # typecheck + test
 | **Server settings**   | `apps/api/src/lib/config/server-settings.ts` | Runtime-adjustable quotas & defaults via `JsonStore<ServerSettings>`                                       |
 | **Quota resolution**  | `apps/api/src/lib/config/quota.ts`           | `resolveUserQuotas()` — server default + team overrides (most permissive wins)                             |
 | **Quota enforcement** | `apps/api/src/lib/config/enforcement.ts`     | `getUploadMaxSize`, `enforceAvatarUpload`                                                                  |
+| **Mailer**            | `apps/api/src/lib/core/mailer.ts`            | `sendMail(OutboundMail)` — sendmail transport, skips in dev, supports replyTo/attachments                  |
+| **Environment**       | `apps/api/src/lib/config/env.ts`             | `isProduction()` — checks `PRODUCTION=1` or `NODE_ENV=production`                                         |
 | **Singleton factory** | `apps/api/src/utils/singleton.ts`            | `createAsyncSingleton()` for Home/DB instances                                                             |
 
 ### Frontend
