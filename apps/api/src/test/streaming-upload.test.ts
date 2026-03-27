@@ -1,0 +1,105 @@
+import {beforeAll, describe, expect, test} from 'bun:test';
+import {authedRequest, driveGet, drivePost, driveUpload, getTestContext} from './setup';
+
+type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
+
+describe('Streaming Upload', () => {
+    let ctx: TestCtx;
+    let aliceMountId: string;
+    let folderId: string;
+
+    beforeAll(async () => {
+        ctx = await getTestContext();
+        const {data: mounts} = await ctx.alice.api.drive({ownerId: ctx.alice.user.id}).mounts.get();
+        aliceMountId = mounts![0].id;
+        const root = await driveGet(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, 'root');
+        const folder = await drivePost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+            `folder/${root.id}`, {folderName: 'Streaming Tests'});
+        folderId = folder.id;
+    });
+
+    test('upload preserves file content', async () => {
+        const content = 'streaming upload test content';
+        const file = new File([content], 'stream-test.txt', {type: 'text/plain'});
+        const data = await driveUpload(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, folderId, file);
+
+        expect(data.name).toBe('stream-test.txt');
+        expect(data.size).toBe(content.length);
+        expect(data.mimeType).toStartWith('text/plain');
+
+        const res = await authedRequest(ctx.alice.user.sessionToken,
+            `/drive/${ctx.alice.user.id}/${aliceMountId}/file/${data.id}/download`);
+        const downloaded = new TextDecoder().decode(await res.arrayBuffer());
+        expect(downloaded).toBe(content);
+    });
+
+    test('upload binary file preserves content', async () => {
+        const bytes = new Uint8Array(1024);
+        for (let i = 0; i < bytes.length; i++) bytes[i] = i % 256;
+        const file = new File([bytes], 'binary.bin', {type: 'application/octet-stream'});
+        const data = await driveUpload(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, folderId, file);
+
+        expect(data.size).toBe(1024);
+
+        const res = await authedRequest(ctx.alice.user.sessionToken,
+            `/drive/${ctx.alice.user.id}/${aliceMountId}/file/${data.id}/download`);
+        const downloaded = new Uint8Array(await res.arrayBuffer());
+        expect(downloaded.length).toBe(1024);
+        for (let i = 0; i < 1024; i++) {
+            expect(downloaded[i]).toBe(i % 256);
+        }
+    });
+
+    test('duplicate filename gets unique name', async () => {
+        const file1 = new File(['first'], 'duplicate.txt', {type: 'text/plain'});
+        const file2 = new File(['second'], 'duplicate.txt', {type: 'text/plain'});
+
+        const data1 = await driveUpload(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, folderId, file1);
+        const data2 = await driveUpload(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, folderId, file2);
+
+        expect(data1.name).toBe('duplicate.txt');
+        expect(data2.name).toBe('duplicate#1.txt');
+    });
+
+    test('upload to non-existent folder returns 404', async () => {
+        const file = new File(['test'], 'test.txt', {type: 'text/plain'});
+        const formData = new FormData();
+        formData.append('file', file);
+        const res = await authedRequest(ctx.alice.user.sessionToken,
+            `/drive/${ctx.alice.user.id}/${aliceMountId}/file/nonexistent-folder-id`, {
+                method: 'POST',
+                body: formData,
+            });
+        expect(res.status).toBe(404);
+    });
+
+    test('Bob cannot upload to Alice folder without permission', async () => {
+        const file = new File(['unauthorized'], 'hack.txt', {type: 'text/plain'});
+        const formData = new FormData();
+        formData.append('file', file);
+        const res = await authedRequest(ctx.bob.user.sessionToken,
+            `/drive/${ctx.alice.user.id}/${aliceMountId}/file/${folderId}`, {
+                method: 'POST',
+                body: formData,
+            });
+        expect([403, 404, 500]).toContain(res.status);
+    });
+
+    test('empty request body returns 400', async () => {
+        const res = await authedRequest(ctx.alice.user.sessionToken,
+            `/drive/${ctx.alice.user.id}/${aliceMountId}/file/${folderId}`, {
+                method: 'POST',
+                headers: {'content-type': 'multipart/form-data; boundary=----TestBoundary'},
+                body: '------TestBoundary--\r\n',
+            });
+        expect(res.status).toBe(400);
+    });
+
+    test('originalName stored in details', async () => {
+        const file = new File(['test'], 'original-name.txt', {type: 'text/plain'});
+        const data = await driveUpload(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, folderId, file);
+
+        expect(data.details).toBeDefined();
+        expect(data.details.originalName).toBe('original-name.txt');
+    });
+});

@@ -277,7 +277,7 @@ export function EventDetailDialog({open, onOpenChange, event, calendar, sharedCa
                             <div className="flex items-start gap-3 text-sm">
                                 <UsersRound className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0"/>
                                 <div className="flex-1">
-                                    <AttendeeList attendees={event.data!.attendees!}/>
+                                    <AttendeeList attendees={event.data!.attendees!} organizer={event.data?.organizer}/>
                                 </div>
                             </div>
                         )}
@@ -311,15 +311,11 @@ export function EventDetailDialog({open, onOpenChange, event, calendar, sharedCa
                             </div>
                         )}
 
-                        {(calendarName || isLinkedEvent) && (
-                            <div className="pt-3 mt-3 border-t flex items-start gap-3 ">
+                        {calendarName && (
+                            <div className="pt-3 mt-3 border-t flex items-start gap-3">
                                 <Calendar className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0"/>
                                 <div className="text-sm text-muted-foreground">
-                                    {isLinkedEvent
-                                        ? <UserName userId={event.data?.organizer?.userId}
-                                                    email={event.data?.organizer?.email}
-                                                    name={event.data?.organizer?.name}/>
-                                        : calendarName}
+                                    {calendarName}
                                     {isShared && sharedCalendar && !isLinkedEvent && (
                                         <div className="text-xs">Created by: <UserName
                                             userId={event.createByUserId || undefined}/></div>

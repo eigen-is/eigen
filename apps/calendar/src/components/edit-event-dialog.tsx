@@ -22,7 +22,7 @@ import {addMinutes, roundToNext15Minutes, TimeSelect} from './time-select';
 import type {RecurringAction} from './recurring-action-dialog';
 import {RecurringActionDialog} from './recurring-action-dialog';
 import {occurrenceDateToString, parseOccurrenceDate} from './calendar-utils';
-import {AttendeeEditor} from './attendee-editor';
+import {AttendeeEditor, AttendeeList} from './attendee-editor';
 
 type CalendarOption = {
     id: string;
@@ -315,7 +315,16 @@ export function EditEventDialog({open, onOpenChange, event, ownerUserId, calenda
                             </div>
                         </div>
 
-                        {!isLinkedEvent && (
+                        {isLinkedEvent ? (
+                            event.data?.attendees?.length ? (
+                                <div className="flex items-start gap-3">
+                                    <UsersRound className="h-4 w-4 mt-0.5 text-muted-foreground shrink-0"/>
+                                    <div className="flex-1">
+                                        <AttendeeList attendees={event.data.attendees} organizer={event.data.organizer}/>
+                                    </div>
+                                </div>
+                            ) : null
+                        ) : (
                             <div className="flex items-start gap-3">
                                 <UsersRound className="h-4 w-4 mt-2.5 text-muted-foreground shrink-0"/>
                                 <div className="flex-1">
