@@ -7,7 +7,7 @@ import {useTextPreview} from "@workspace/lib/drive";
 import {getFileIcon} from "./file-icon-helper";
 import type {PreviewMode} from "../preview-provider/preview-provider";
 
-interface FilePreviewProps {
+type FilePreviewProps = {
     previewMode: PreviewMode;
     previewUrl: string;
     thumbnailUrl?: string;
@@ -21,7 +21,7 @@ interface FilePreviewProps {
     onClose: () => void;
     onPrev: () => void;
     onNext: () => void;
-}
+};
 
 export function FilePreview({
                                 previewMode, previewUrl, thumbnailUrl, embedUrl, downloadUrl,
