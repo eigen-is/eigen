@@ -816,15 +816,15 @@ export function insertRowCol(
         const arr = [];
         for (let r = 0; r < count; r += 1) {
             arr.push(JSON.parse(JSON.stringify(row)));
-            // 同步拷贝 type 为 cell 类型的边框
+            // Copy cell-type borders for inserted rows
             if (cellBorderConfig.length) {
                 const cellBorderConfigCopy = _.cloneDeep(cellBorderConfig);
                 cellBorderConfigCopy.forEach((item) => {
                     if (direction === "rightbottom") {
-                        // 向下插入时 基于模板行位置直接递增即可
+                        // Insert below: increment from template row position
                         item.value.row_index += r + 1;
                     } else if (direction === "lefttop") {
-                        // 向上插入时 目标行移动到后面 新增n行到前面 对于新增的行来说 也是递增，不过是从0开始
+                        // Insert above: target row shifts down, new rows inserted before it (increment from 0)
                         item.value.row_index += r;
                     }
                 });
@@ -842,7 +842,7 @@ export function insertRowCol(
             d.splice(index + 1, 0, ...arr);
         }
     } else {
-        // 列宽配置变动
+        // Column width config update
         if (cfg.columnlen != null) {
             const columnlen_new: any = {};
             const columnReadOnly_new: any = {};
@@ -876,7 +876,7 @@ export function insertRowCol(
             cfg.colReadOnly = columnReadOnly_new;
         }
 
-        // 自定义列宽配置变动
+        // Custom column width config update
         if (cfg.customWidth != null) {
             const customWidth_new: any = {};
 
@@ -899,7 +899,7 @@ export function insertRowCol(
             cfg.customWidth = customWidth_new;
         }
 
-        // 自定义列宽配置变动
+        // Custom column width config update
         if (cfg.customWidth != null) {
             const customWidth_new: any = {};
 
@@ -922,7 +922,7 @@ export function insertRowCol(
             cfg.customWidth = customWidth_new;
         }
 
-        // 隐藏列配置变动
+        // Hidden columns config update
         if (cfg.colhidden != null) {
             const colhidden_new: any = {};
 
@@ -945,7 +945,7 @@ export function insertRowCol(
             cfg.colhidden = colhidden_new;
         }
 
-        // 空列模板
+        // Empty column template
         const col: any[] = [];
         const curd = [...d];
         for (let r = 0; r < d.length; r += 1) {
@@ -967,7 +967,7 @@ export function insertRowCol(
             col.push(templateCell);
         }
         const cellBorderConfig = [];
-        // 边框
+        // Borders
         if (cfg.borderInfo && cfg.borderInfo.length > 0) {
             const borderInfo = [];
 
@@ -1020,7 +1020,7 @@ export function insertRowCol(
                     }
                 } else if (rangeType === "cell") {
                     let {col_index} = cfg.borderInfo[i].value;
-                    // 位置相同标识边框相关 先缓存
+                    // Cache border config at the same position
                     if (col_index === index) {
                         cellBorderConfig.push(
                             JSON.parse(JSON.stringify(cfg.borderInfo[i]))
@@ -1045,16 +1045,16 @@ export function insertRowCol(
             cfg.borderInfo = borderInfo;
         }
 
-        // 处理相关的 type 为 cell 类型的边框
+        // Copy cell-type borders for inserted columns
         if (cellBorderConfig.length) {
             for (let i = 0; i < count; i += 1) {
                 const cellBorderConfigCopy = _.cloneDeep(cellBorderConfig);
                 cellBorderConfigCopy.forEach((item) => {
                     if (direction === "rightbottom") {
-                        // 向右插入时 基于模板列位置直接递增即可
+                        // Insert right: increment from template column position
                         item.value.col_index += i + 1;
                     } else if (direction === "lefttop") {
-                        // 向左插入时 目标列移动到后面 新增n列到前面 对于新增的列来说 也是递增，不过是从0开始
+                        // Insert left: target column shifts right, new columns inserted before it (increment from 0)
                         item.value.col_index += i;
                     }
                 });
@@ -1081,7 +1081,7 @@ export function insertRowCol(
         }
     }
 
-    // 修改当前sheet页时刷新
+    // Refresh when modifying the current sheet
     file.data = d;
     file.config = cfg;
     file.calcChain = newCalcChain;
@@ -1251,7 +1251,7 @@ export function deleteRowCol(
 
     const slen = end - start + 1;
 
-    // 合并单元格配置变动
+    // Merged cells config update
     if (cfg.merge == null) {
         cfg.merge = {};
     }
@@ -1743,7 +1743,7 @@ export function deleteRowCol(
         });
     }
 
-    // 主逻辑
+    // Main logic
     if (type === "row") {
         // Row height config update
         if (cfg.rowlen == null) {
@@ -1823,7 +1823,7 @@ export function deleteRowCol(
 
         cfg.rowhidden = rowhidden_new;
 
-        // 边框配置变动
+        // Border config update
         if (cfg.borderInfo && cfg.borderInfo.length > 0) {
             const borderInfo = [];
 
@@ -1882,29 +1882,30 @@ export function deleteRowCol(
             cfg.borderInfo = borderInfo;
         }
 
-        // 备注：该处理方式会在删除多行的时候会存在bug
-        // 说明：删除多行后，会把同一个row空数组(引用类型)添加成为data多行的数据源，导致设置这些行数据时产生错误。
-        // 空白行模板
+        // Note: this approach has a bug when deleting multiple rows.
+        // Deleting multiple rows would push the same empty row array (reference type) as the data source
+        // for multiple rows, causing errors when setting data on those rows.
+        // Empty row template
         // let row = [];
         // for (let c = 0; c < d[0].length; c++) {
         //     row.push(null);
         // }
 
-        // //删除选中行
+        // // Delete selected rows
         // d.splice(st, slen);
 
-        // //删除多少行，增加多少行空白行
+        // // Append the same number of empty rows as deleted
         // for (let r = 0; r < slen; r++) {
         //     d.push(row);
         // }
 
-        // 删除选中行
+        // Delete selected rows
         d.splice(start, slen);
 
-        // 删除行后，调整行数
+        // Adjust row count after deletion
         file.row = d.length;
     } else {
-        // 列宽配置变动
+        // Column width config update
         if (cfg.columnlen == null) {
             cfg.columnlen = {};
         }
@@ -1931,7 +1932,7 @@ export function deleteRowCol(
         cfg.columnlen = columnlen_new;
         cfg.colReadOnly = columnReadOnly_new;
 
-        // 自定义列宽配置变动
+        // Custom column width config update
         if (cfg.customWidth == null) {
             cfg.customWidth = {};
 
@@ -1949,7 +1950,7 @@ export function deleteRowCol(
         }
         cfg.colReadOnly = columnReadOnly_new;
 
-        // 隐藏列配置变动
+        // Hidden columns config update
         if (cfg.colhidden == null) {
             cfg.colhidden = {};
         }
@@ -1966,7 +1967,7 @@ export function deleteRowCol(
 
         cfg.colhidden = colhidden_new;
 
-        // 边框配置变动
+        // Border config update
         if (cfg.borderInfo && cfg.borderInfo.length > 0) {
             const borderInfo = [];
 
@@ -2026,18 +2027,18 @@ export function deleteRowCol(
         }
 
         for (let r = 0; r < d.length; r += 1) {
-            // 删除选中列
+            // Delete selected columns
             d[r].splice(start, slen);
         }
 
-        // 删除列后，调整列数
+        // Adjust column count after deletion
         file.column = d[0]?.length;
     }
 
-    // 选中元素被删取消选区
+    // Clear selection when selected elements are deleted
     ctx.luckysheet_select_save = undefined;
 
-    // 修改当前sheet页时刷新
+    // Refresh when modifying the current sheet
     file.data = d;
     file.config = cfg;
     file.calcChain = newCalcChain;
@@ -2072,7 +2073,7 @@ export function deleteRowCol(
     }
 }
 
-// 计算表格行高数组
+// Compute cumulative row height array
 export function computeRowlenArr(ctx: Context, rowHeight: number, cfg: any) {
     const rowlenArr = [];
     let rh_height = 0;
