@@ -37,7 +37,7 @@ function createTransport(): Mail {
 export async function sendMail(message: OutboundMail): Promise<boolean> {
     const from = message.from ?? {name: '', address: `noreply@${getDomain()}`};
 
-    if (!isProduction()) {
+    if (!isProduction() && getDomain() === 'localhost') {
         console.log('[DEV] Skipping email:', {from, to: message.to, subject: message.subject});
         return true;
     }

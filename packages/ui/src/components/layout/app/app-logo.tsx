@@ -1,93 +1,35 @@
-import {useEffect, useRef, useState} from "react";
 import {Link} from "@tanstack/react-router";
 import {cn} from "../../../lib/utils.ts";
-import {apps} from "@workspace/lib/apps.ts";
-import {useIsMobile} from "@workspace/lib/media";
+import {getSpaceAppUrl} from "@workspace/lib/api";
 import {Ket} from "../braket/ket.tsx";
 import {Bar} from "../braket/bar.tsx";
 
 type AppLogoProps = {
     appName?: string;
     className?: string;
-    linkable?: boolean;
 }
 
-export function AppLogo({appName = "Mail", className, linkable = true}: AppLogoProps) {
-    const [expanded, setExpanded] = useState(false);
-    const logoRef = useRef<HTMLDivElement>(null);
-    const isMobile = useIsMobile();
-
-    // Handle clicks outside the logo to collapse it
-    useEffect(() => {
-        function handleClickOutside(event: MouseEvent) {
-            if (logoRef.current && !logoRef.current.contains(event.target as Node)) {
-                setExpanded(false);
-            }
-        }
-
-        document.addEventListener("mousedown", handleClickOutside);
-        return () => {
-            document.removeEventListener("mousedown", handleClickOutside);
-        };
-    }, []);
-
-    const handleLogoClick = () => {
-        if (linkable) {
-            setExpanded(!expanded);
-        }
-    };
+export function AppLogo({appName = "mail", className}: AppLogoProps) {
+    const isSpace = appName.toLowerCase() === 'space';
 
     return (
-        <div
-            ref={logoRef}
-            className={cn("text-xl flex items-center cursor-pointer select-none -mt-1", className)}
-            onClick={handleLogoClick}
-        >
-            {linkable && !isMobile ? (
-                <div className="flex">
-                    <span className="text-white font-bold ">
-                        eigen
-                    </span>
-                    {expanded ? (<>
-                        <div className="flex animate-in slide-in-from-left-5 duration-300 text-white">
-                            {apps.map((app) => (
-                                <div key={app.name}>
-                                    <span><Bar/></span>
-                                    <span>
-                                        <a
-                                            href={app.href}
-                                            onClick={(e) => e.stopPropagation()}
-                                            className={"hover:underline hover:opacity-75 transition-opacity duration-150 " + (appName.toLowerCase() === app.name.toLowerCase() ? ' underline' : '')}
-                                        >{app.name.toLowerCase()}
-                                        </a>
-                                    </span>
-                                </div>
-                            ))}
-                            <span><Ket/></span>
-                        </div>
-                    </>) : (<>
-                        <span className="text-white">
-                            <Bar/>
-                            {appName.toLowerCase()}
-                            <Ket/>
-                        </span>
-                    </>)}
-                </div>
-            ) : (
-                <Link
-                    className="flex items-center"
-                    to="/"
-                >
-                    <span className="text-white font-bold">
-                        eigen
-                    </span>
-                    <span className="text-white">
-                        <Bar/>
-                        {appName.toLowerCase()}
-                        <Ket/>
-                    </span>
+        <div className={cn("text-xl flex items-center select-none -mt-1", className)}>
+            {isSpace ? (
+                <Link to="/" className="text-white font-bold hover:opacity-75 transition-opacity">
+                    eigen
                 </Link>
+            ) : (
+                <a href={getSpaceAppUrl()} className="text-white font-bold hover:opacity-75 transition-opacity">
+                    eigen
+                </a>
             )}
+            <span className="text-white">
+                <Bar/>
+                <Link to="/" className="hover:opacity-75 transition-opacity">
+                    {appName.toLowerCase()}
+                </Link>
+                <Ket/>
+            </span>
         </div>
     );
 }
