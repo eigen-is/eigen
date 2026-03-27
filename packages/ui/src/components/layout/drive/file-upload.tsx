@@ -1,7 +1,7 @@
 import {useRef} from 'react';
 import {useUpload} from "../../layout/upload-provider/upload-provider";
 import {uploadWithProgress} from "../upload-provider/upload-with-progress";
-import {getDriveFilesUploadUrl, getDriveFileUploadUrl} from "@workspace/lib/api";
+import {getDriveFileUploadUrl} from "@workspace/lib/api";
 
 export type UploadResult = {
     success: boolean;
@@ -10,8 +10,7 @@ export type UploadResult = {
 }
 
 export type FileUploadOptions = {
-    singleFileUrl?: string;
-    multipleFilesUrl?: string;
+    uploadUrl?: string;
     onSuccess?: (result: UploadResult) => void;
     onError?: (result: UploadResult) => void;
     additionalHeaders?: Record<string, string>;
@@ -33,28 +32,16 @@ export function useFileUpload(ownerId: string, mountId: string, folderId: string
     const processFiles = async (files: File[]) => {
         if (files.length === 0) return;
 
-        const multipleFiles = files.length > 1;
-
-        // Use custom URLs if provided, otherwise use default URLs
-        const url = multipleFiles
-            ? (options.multipleFilesUrl || getDriveFilesUploadUrl(ownerId, mountId, folderId))
-            : (options.singleFileUrl || getDriveFileUploadUrl(ownerId, mountId, folderId));
-
-        const name = multipleFiles ? 'multiple files' : files[0].name;
+        const url = options.uploadUrl || getDriveFileUploadUrl(ownerId, mountId, folderId);
+        const name = files.length > 1 ? 'multiple files' : files[0].name;
         const uploadHandler = upload.createUpload(name);
 
         try {
-            // Create FormData object for this file(s)
             const formData = new FormData();
-            if (multipleFiles) {
-                for (const file of files) {
-                    formData.append('files', file);
-                }
-            } else {
-                formData.append('file', files[0]);
+            for (const file of files) {
+                formData.append('file', file);
             }
 
-            // Combine default headers with any additional headers
             const headers = {
                 'credentials': 'include',
                 ...options.additionalHeaders

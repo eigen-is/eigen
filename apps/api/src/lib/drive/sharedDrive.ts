@@ -135,25 +135,11 @@ export default class SharedDrive extends Drive {
         return this.sharedDrive.createFolder(mountId, parentId, folderName);
     }
 
-    public async uploadFile(mountId: string, parentId: string, file: File): Promise<DrivePath> {
+    public async uploadFiles(mountId: string, parentId: string, request: Request, maxSize: number): Promise<DrivePath[]> {
         if (!(await this.canWrite(mountId, parentId, this.user))) {
             throw new ApiError(403, 'No write permission');
         }
-        return this.sharedDrive.uploadFile(mountId, parentId, file);
-    }
-
-    public async uploadFiles(mountId: string, parentId: string, files: File[]): Promise<DrivePath[]> {
-        if (!(await this.canWrite(mountId, parentId, this.user))) {
-            throw new ApiError(403, 'No write permission');
-        }
-        return this.sharedDrive.uploadFiles(mountId, parentId, files);
-    }
-
-    public async uploadFileStreaming(mountId: string, parentId: string, request: Request, maxSize: number): Promise<DrivePath> {
-        if (!(await this.canWrite(mountId, parentId, this.user))) {
-            throw new ApiError(403, 'No write permission');
-        }
-        return this.sharedDrive.uploadFileStreaming(mountId, parentId, request, maxSize);
+        return this.sharedDrive.uploadFiles(mountId, parentId, request, maxSize);
     }
 
     public async createStickies(mountId: string, parentId: string, stickiesName: string): Promise<DrivePath> {
@@ -204,6 +190,15 @@ export default class SharedDrive extends Drive {
 
     public async getEffectiveMembers(mountId: string, pathId: string) {
         return this.withReadPermission(mountId, pathId, () => this.sharedDrive.getEffectiveMembers(mountId, pathId));
+    }
+
+    public async emailCollaborators(
+        mountId: string, pathId: string,
+        subject: string, message: string, documentUrl: string,
+        sendCopyToSelf: boolean, senderEmail: string, senderName: string,
+    ) {
+        return this.withWritePermission(mountId, pathId, () =>
+            this.sharedDrive.emailCollaborators(mountId, pathId, subject, message, documentUrl, sendCopyToSelf, senderEmail, senderName));
     }
 
     public async findContainerPath(mountId: string, pathId: string): Promise<DrivePath | null> {

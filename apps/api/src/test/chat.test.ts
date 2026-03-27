@@ -265,7 +265,8 @@ describe('Chat', () => {
                     method: 'POST',
                     body: formData,
                 });
-            const uploaded = await uploadRes.json() as any;
+            const uploadedArr = await uploadRes.json() as any[];
+            const uploaded = uploadedArr[0];
             expect(uploaded.id).toBeDefined();
             expect(uploaded.name).toBe('test-attachment.txt');
 
@@ -293,8 +294,8 @@ describe('Chat', () => {
                     method: 'POST',
                     body: formData,
                 });
-            const uploaded = await uploadRes.json() as any;
-            const attachmentId = uploaded.id;
+            const uploadedArr = await uploadRes.json() as any[];
+            const attachmentId = uploadedArr[0].id;
 
             const msg = await chatPost(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
                 `${chatId}/messages`, {content: 'Will be deleted', attachments: [attachmentId]});

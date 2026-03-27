@@ -11,49 +11,54 @@ export type StreamResult = {
     fileName: string;
 };
 
-export async function streamToTemp(
+export async function streamFilesToTemp(
     mount: Mount,
     request: Request,
-    maxSize: number
-): Promise<StreamResult> {
-    const tempId = randomUUID();
-    const tempPath = mount.getTempPath(tempId);
-    const writer = Bun.file(tempPath).writer({highWaterMark: 256 * 1024});
-    const hasher = new Bun.CryptoHasher('sha256');
-    let size = 0;
-    let mimeType = 'application/octet-stream';
-    let fileName = 'unnamed';
+    maxSizePerFile: number
+): Promise<StreamResult[]> {
+    const results: StreamResult[] = [];
 
     try {
-        for await (const part of parseMultipartRequest(request, {maxFileSize: maxSize})) {
+        for await (const part of parseMultipartRequest(request, {maxFileSize: maxSizePerFile})) {
             if (!part.isFile || !part.filename) continue;
 
-            fileName = part.filename;
-            mimeType = part.mediaType || 'application/octet-stream';
+            const tempId = randomUUID();
+            const tempPath = mount.getTempPath(tempId);
+            const writer = Bun.file(tempPath).writer({highWaterMark: 256 * 1024});
+            const hasher = new Bun.CryptoHasher('sha256');
 
-            for (const chunk of part.content) {
-                hasher.update(chunk);
-                writer.write(chunk);
+            try {
+                for (const chunk of part.content) {
+                    hasher.update(chunk);
+                    writer.write(chunk);
+                }
+                await writer.end();
+            } catch (e) {
+                await writer.end();
+                await mount.cleanupTemp(tempId);
+                throw e;
             }
-            size = part.size;
 
-            break; // single-file upload — only process first file part
+            results.push({
+                tempId,
+                hash: hasher.digest('hex'),
+                size: part.size,
+                mimeType: part.mediaType || 'application/octet-stream',
+                fileName: part.filename,
+            });
         }
-
-        await writer.end();
     } catch (e) {
-        await writer.end();
-        await mount.cleanupTemp(tempId);
+        // Clean up any temp files from already-parsed parts
+        for (const r of results) await mount.cleanupTemp(r.tempId);
         if (e instanceof MaxFileSizeExceededError) {
             throw new ApiError(413, 'File exceeds maximum upload size');
         }
         throw e;
     }
 
-    if (size === 0) {
-        await mount.cleanupTemp(tempId);
+    if (results.length === 0) {
         throw new ApiError(400, 'No file found in request');
     }
 
-    return {tempId, hash: hasher.digest('hex'), size, mimeType, fileName};
+    return results;
 }

@@ -17,6 +17,7 @@ export type OutboundAttachment = {
 
 export type OutboundMail = {
     from?: OutboundAddress;
+    replyTo?: OutboundAddress;
     to: OutboundAddress[];
     cc?: OutboundAddress[];
     bcc?: OutboundAddress[];
@@ -49,6 +50,7 @@ export async function sendMail(message: OutboundMail): Promise<boolean> {
         text: message.text,
     };
 
+    if (message.replyTo) mailOptions.replyTo = message.replyTo;
     if (message.cc?.length) mailOptions.cc = message.cc;
     if (message.bcc?.length) mailOptions.bcc = message.bcc;
     if (message.html) mailOptions.html = message.html;
