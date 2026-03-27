@@ -229,20 +229,19 @@ export default class SharedDrive extends Drive {
     }
 
     public async updateACL(mountId: string, pathId: string, acl: DriveACL[], visibility?: DriveVisibility, sharingRestricted?: boolean) {
-        const path = await this.withWritePermission(mountId, pathId,
-            () => this.sharedDrive.getPath(mountId, pathId));
-        if (!path) throw new ApiError(404, 'Path not found');
+        return this.withWritePermission(mountId, pathId, async () => {
+            const path = await this.sharedDrive.getPath(mountId, pathId);
+            if (!path) throw new ApiError(404, 'Path not found');
 
-        // Team members are effective owners — they bypass sharing restrictions
-        // and can toggle the flag. All other editors are blocked when restricted.
-        const effectiveOwner = await this.isEffectiveOwner(path.ownerId);
+            const effectiveOwner = await this.isEffectiveOwner(path.ownerId);
 
-        if (path.sharingRestricted && !effectiveOwner) {
-            throw new ApiError(403, 'Sharing is restricted by the owner');
-        }
+            if (path.sharingRestricted && !effectiveOwner) {
+                throw new ApiError(403, 'Sharing is restricted by the owner');
+            }
 
-        return this.sharedDrive.updateACL(mountId, pathId, acl, visibility,
-            effectiveOwner ? sharingRestricted : undefined);
+            return this.sharedDrive.updateACL(mountId, pathId, acl, visibility,
+                effectiveOwner ? sharingRestricted : undefined);
+        });
     }
 
     public async deleteFolder(mountId: string, pathId: string) {

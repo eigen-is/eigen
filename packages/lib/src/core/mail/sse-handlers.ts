@@ -48,7 +48,6 @@ export function handleMailSSEvent(event: SSEvent, queryClient: QueryClient, user
 
         case SSEventType.MAIL_FLAGS_CHANGED:
             invalidateMailFlagsChanged(queryClient, userId, mail.messageId, mailbox);
-            invalidateMailboxes(queryClient, userId);
             return true;
 
         case SSEventType.MAIL_DRAFT_UPDATED:

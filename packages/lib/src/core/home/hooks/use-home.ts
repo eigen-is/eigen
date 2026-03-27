@@ -26,7 +26,17 @@ export function useHomeSize() {
     });
 }
 
-// Function to invalidate home size cache (ownerId-scoped)
+const homeSizeTimers = new Map<string, ReturnType<typeof setTimeout>>();
+
 export function invalidateHomeSize(queryClient: QueryClient, ownerId: string): void {
-    queryClient.invalidateQueries({queryKey: homeKeys.size(ownerId)});
+    const existing = homeSizeTimers.get(ownerId);
+    if (existing) clearTimeout(existing);
+
+    homeSizeTimers.set(
+        ownerId,
+        setTimeout(() => {
+            homeSizeTimers.delete(ownerId);
+            queryClient.invalidateQueries({queryKey: homeKeys.size(ownerId)});
+        }, 5000),
+    );
 }

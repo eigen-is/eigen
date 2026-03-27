@@ -8,7 +8,7 @@ import type {
     SharedCalendar
 } from '@workspace/lib/types/calendar';
 import type {BunSQLiteDatabase} from 'drizzle-orm/bun-sqlite';
-import {and, eq, gte, isNull, lte, sql} from 'drizzle-orm';
+import {and, count, eq, gte, isNull, lte, sql} from 'drizzle-orm';
 import {v4 as uuidv4} from 'uuid';
 import {RRule} from 'rrule';
 import type {Home} from '../home';
@@ -553,8 +553,8 @@ export class Calendar {
                 updatedAt: sql`unixepoch()`,
             }).where(eq(schema.sharedCalendars.id, existing.id)).run();
         } else {
-            const ownCalendarCount = this.db.select().from(schema.calendars).all().length;
-            const sharedCount = this.db.select().from(schema.sharedCalendars).all().length;
+            const ownCalendarCount = this.db.select({count: count()}).from(schema.calendars).get()!.count;
+            const sharedCount = this.db.select({count: count()}).from(schema.sharedCalendars).get()!.count;
             const localColor = EIGEN_ACCENT_COLORS_SHUFFLED[(ownCalendarCount + sharedCount) % EIGEN_ACCENT_COLORS_SHUFFLED.length].value;
             this.db.insert(schema.sharedCalendars).values({
                 id: uuidv4(),
@@ -612,8 +612,8 @@ export class Calendar {
                 }).where(eq(schema.sharedCalendars.id, existing.id)).run();
             }
         } else {
-            const ownCalendarCount = this.db.select().from(schema.calendars).all().length;
-            const sharedCount = this.db.select().from(schema.sharedCalendars).all().length;
+            const ownCalendarCount = this.db.select({count: count()}).from(schema.calendars).get()!.count;
+            const sharedCount = this.db.select({count: count()}).from(schema.sharedCalendars).get()!.count;
             const localColor = EIGEN_ACCENT_COLORS_SHUFFLED[(ownCalendarCount + sharedCount) % EIGEN_ACCENT_COLORS_SHUFFLED.length].value;
             this.db.insert(schema.sharedCalendars).values({
                 id: uuidv4(),

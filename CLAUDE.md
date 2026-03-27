@@ -53,7 +53,8 @@ bun run check          # typecheck + test
 ### Critical Rules
 
 - **No migrations or backward compatibility** — data is throwaway during dev. Prefer clean schemas
-- **Always run `bun run typecheck` and `bun run test`** after changes
+- **Always run `bun run typecheck` and `bun run test`** after changes. When multiple agents run in parallel,
+  only the main agent should run typecheck/test — concurrent runs cause deadlocks
 - **English everywhere** — code, comments, docs
 - **No JSDoc** — code should be self-documenting, minimal comments
 - **`type` over `interface`** — except when methods are needed

@@ -194,10 +194,6 @@ export class Home {
         this.managedDatabases.clear();
     }
 
-    public async getZip(): Promise<{ data: ArrayBuffer, contentType: string, fileName: string }> {
-        throw new Error('Not implemented');
-    }
-
     public broadcast(event: SSEvent) {
         for (const listener of this.sseListeners) {
             listener(event);

@@ -132,7 +132,8 @@
       "Bash(/tmp/trace.txt:*)",
       "Read(//tmp/**)",
       "Bash(sort -k5 -rn)",
-      "WebFetch(domain:jsr.io)"
+      "WebFetch(domain:jsr.io)",
+      "Bash(xxd)"
     ]
   },
   "enabledPlugins": {
