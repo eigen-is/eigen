@@ -566,7 +566,7 @@ persist through the upgrade.
 | Mail          | `requireSelf()` + `_mail` is null |
 | Contacts      | `requireSelf()` + `_contacts` null|
 | Space         | `requireSelf()`                   |
-| Home (export) | `requireSelf()` + `getZip()` throws |
+| Home (export) | `requireSelf()` (zip route removed) |
 | Team          | `requireTeamAccess()`             |
 | Settings      | `requireAdmin()`                  |
 

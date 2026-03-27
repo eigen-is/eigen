@@ -42,6 +42,3 @@ export function invalidateTeamSettings(queryClient: QueryClient, teamId: string)
     queryClient.invalidateQueries({queryKey: teamKeys.settings(teamId)});
 }
 
-export function invalidateAllTeamSettings(queryClient: QueryClient): void {
-    queryClient.invalidateQueries({queryKey: teamKeys.all});
-}
