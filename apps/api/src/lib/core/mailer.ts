@@ -1,7 +1,7 @@
 import nodemailer from 'nodemailer';
 import type Mail from 'nodemailer/lib/mailer';
 import {getDomain} from '../config/server-config';
-import {isProduction} from '../config/paths';
+import {isProduction} from '../config/env';
 
 // Outbound email types — the inbound parsing types live in packages/lib/types/mail.ts
 type OutboundAddress = {
