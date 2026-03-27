@@ -253,10 +253,17 @@ export default class Maildir {
         const mail = await this.messageHandleDraft(mailToSend)
         try {
             const message = draftToOutboundMail(mail, this.home.user.email);
+
+            if (!message.subject.trim() && !message.text.trim() && !message.html) {
+                throw new ApiError(400, 'Cannot send email with empty subject and body');
+            }
+
             const sent = await sendMail(message);
 
             if (sent) {
                 await this.messageMove(mail.id, 'Sent');
+                await this.renameFlag(mail.id, {draft: false}, SSEventType.MAIL_FLAGS_CHANGED);
+                this.db.setDraft(mail.id, false);
                 this.emit(SSEventType.MAIL_SENT, {messageId: mail.id, mailbox: 'Sent'})
             }
         } catch (error) {

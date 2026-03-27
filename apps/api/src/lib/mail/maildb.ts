@@ -87,6 +87,10 @@ export default class MailDB {
         this.db.update(schema.emails).set({isFlagged}).where(eq(schema.emails.id, id)).run()
     }
 
+    setDraft(id: string, isDraft: boolean) {
+        this.db.update(schema.emails).set({isDraft}).where(eq(schema.emails.id, id)).run()
+    }
+
     setFilename(id: string, filename: string) {
         this.db.update(schema.emails).set({filename}).where(eq(schema.emails.id, id)).run()
     }
