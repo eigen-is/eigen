@@ -3,6 +3,7 @@ import {ApiError} from "./lib/core/errors";
 import swagger from "@elysiajs/swagger";
 import cors from "@elysiajs/cors";
 import {serverTiming} from "@elysiajs/server-timing";
+import {rateLimit} from "elysia-rate-limit";
 import {betterAuth} from "./routes/auth";
 import {mailRouter} from "./routes/mail";
 import {contactsRouter} from "./routes/contacts";
@@ -32,6 +33,16 @@ export const app = new Elysia()
         credentials: true,
         allowedHeaders: ["Content-Type", "Authorization"],
     }))
+    .use(rateLimit({
+        duration: 60_000,
+        max: 300,
+        generator: (request, server) => server?.requestIP(request)?.address ?? 'unknown',
+        skip: (request, key) => {
+            if (key === 'unknown') return true; // No server (tests / app.handle())
+            const path = new URL(request.url).pathname;
+            return path === '/health' || path.endsWith('/events');
+        },
+    }))
     .state('requestStart', 0)
     .onBeforeHandle(({store}) => {
         store.requestStart = Bun.nanoseconds();
@@ -60,7 +71,8 @@ export const app = new Elysia()
     .use(notificationRouter)
     .use(sseRouter)
 
-    .onError(({error, set}) => {
+    .onError(({error, set, code}) => {
+        if (code === 'VALIDATION') return;
         const err = error as Error;
         if (err instanceof ApiError) {
             set.status = err.status;

@@ -29,12 +29,12 @@ const refreshLocalMergeData = (merge_new: Record<string, any>, file: Sheet) => {
 };
 
 /**
- * 增加行列
- * @param {string} type 行或列 ['row', 'column'] 之一
- * @param {number} index 插入的位置 index
- * @param {number} count 插入 多少 行（列）
- * @param {string} direction 哪个方向插入 ['lefttop','rightbottom'] 之一
- * @param {string | number} id 操作的 sheet 的 id
+ * Insert rows or columns
+ * @param {string} type 'row' or 'column'
+ * @param {number} index insertion position index
+ * @param {number} count number of rows (or columns) to insert
+ * @param {string} direction insertion direction: 'lefttop' or 'rightbottom'
+ * @param {string | number} id target sheet id
  * @returns
  */
 export function insertRowCol(
@@ -97,7 +97,7 @@ export function insertRowCol(
 
     count = Math.floor(count);
 
-    // 合并单元格配置变动
+    // Merged cells config update
     if (cfg.merge == null) {
         cfg.merge = {};
     }
@@ -165,7 +165,7 @@ export function insertRowCol(
     });
     cfg.merge = merge_new;
 
-    // 公式配置变动
+    // Formula config update
     const newCalcChain = [];
     for (
         let SheetIndex = 0;
@@ -267,7 +267,7 @@ export function insertRowCol(
         }
     }
 
-    // 筛选配置变动
+    // Filter config update
     const {filter_select} = file;
     const {filter} = file;
     let newFilterObj: any = null;
@@ -380,7 +380,7 @@ export function insertRowCol(
         });
     }
 
-    // 条件格式配置变动
+    // Conditional formatting config update
     const CFarr = file.luckysheet_conditionformat_save;
     const newCFarr = [];
     if (CFarr != null && CFarr.length > 0) {
@@ -442,7 +442,7 @@ export function insertRowCol(
         }
     }
 
-    // 交替颜色配置变动
+    // Alternating colors config update
     const AFarr = file.luckysheet_alternateformat_save;
     const newAFarr = [];
     if (AFarr != null && AFarr.length > 0) {
@@ -498,7 +498,7 @@ export function insertRowCol(
         }
     }
 
-    // 冻结配置变动
+    // Freeze config update
     const {frozen} = file;
     if (frozen) {
         const normalizedIndex = direction === "lefttop" ? index - 1 : index;
@@ -520,7 +520,7 @@ export function insertRowCol(
         }
     }
 
-    // 数据验证配置变动
+    // Data validation config update
     const {dataVerification} = file;
     const newDataVerification: any = {};
     if (dataVerification != null) {
@@ -573,7 +573,7 @@ export function insertRowCol(
         });
     }
 
-    // 超链接配置变动
+    // Hyperlink config update
     const {hyperlink} = file;
     const newHyperlink: any = {};
     if (hyperlink != null) {
@@ -611,7 +611,7 @@ export function insertRowCol(
     }
 
     if (type === "row") {
-        // 行高配置变动
+        // Row height config update
         if (cfg.rowlen != null) {
             const rowlen_new: any = {};
             const rowReadOnly_new: Record<number, number> = {};
@@ -644,7 +644,7 @@ export function insertRowCol(
             cfg.rowReadOnly = rowReadOnly_new;
         }
 
-        // 自定义行高配置变动
+        // Custom row height config update
         if (cfg.customHeight != null) {
             const customHeight_new: any = {};
 
@@ -667,7 +667,7 @@ export function insertRowCol(
             cfg.customHeight = customHeight_new;
         }
 
-        // 自定义行高配置变动
+        // Custom row height config update
         if (cfg.customHeight != null) {
             const customHeight_new: any = {};
 
@@ -690,7 +690,7 @@ export function insertRowCol(
             cfg.customHeight = customHeight_new;
         }
 
-        // 隐藏行配置变动
+        // Hidden rows config update
         if (cfg.rowhidden != null) {
             const rowhidden_new: any = {};
 
@@ -713,7 +713,7 @@ export function insertRowCol(
             cfg.rowhidden = rowhidden_new;
         }
 
-        // 空行模板
+        // Empty row template
         const row = [];
         const curRow = [...d][index];
         for (let c = 0; c < d[0].length; c += 1) {
@@ -735,7 +735,7 @@ export function insertRowCol(
             row.push(templateCell);
         }
         const cellBorderConfig = [];
-        // 边框
+        // Borders
         if (cfg.borderInfo && cfg.borderInfo.length > 0) {
             const borderInfo = [];
 
@@ -788,7 +788,7 @@ export function insertRowCol(
                     }
                 } else if (rangeType === "cell") {
                     let {row_index} = cfg.borderInfo[i].value;
-                    // 位置相同标识边框相关 先缓存
+                    // Cache border config at the same position
                     if (row_index === index) {
                         cellBorderConfig.push(
                             JSON.parse(JSON.stringify(cfg.borderInfo[i]))
@@ -815,7 +815,7 @@ export function insertRowCol(
 
         const arr = [];
         for (let r = 0; r < count; r += 1) {
-            arr.push(JSON.stringify(row));
+            arr.push(JSON.parse(JSON.stringify(row)));
             // 同步拷贝 type 为 cell 类型的边框
             if (cellBorderConfig.length) {
                 const cellBorderConfigCopy = _.cloneDeep(cellBorderConfig);
@@ -834,14 +834,12 @@ export function insertRowCol(
 
         if (direction === "lefttop") {
             if (index === 0) {
-                new Function("d", `return d.unshift(${arr.join(",")})`)(d);
+                d.unshift(...arr);
             } else {
-                new Function("d", `return d.splice(${index}, 0, ${arr.join(",")})`)(d);
+                d.splice(index, 0, ...arr);
             }
         } else {
-            new Function("d", `return d.splice(${index + 1}, 0, ${arr.join(",")})`)(
-                d
-            );
+            d.splice(index + 1, 0, ...arr);
         }
     } else {
         // 列宽配置变动
@@ -1311,7 +1309,7 @@ export function deleteRowCol(
     });
     cfg.merge = merge_new;
 
-    // 公式配置变动
+    // Formula config update
     const newCalcChain = [];
     for (
         let SheetIndex = 0;
@@ -1405,7 +1403,7 @@ export function deleteRowCol(
         }
     }
 
-    // 筛选配置变动
+    // Filter config update
     const {filter_select} = file;
     const {filter} = file;
     let newFilterObj: any = null;
@@ -1540,7 +1538,7 @@ export function deleteRowCol(
         });
     }
 
-    // 条件格式配置变动
+    // Conditional formatting config update
     const CFarr = file.luckysheet_conditionformat_save;
     const newCFarr = [];
     if (CFarr != null && CFarr.length > 0) {
@@ -1608,7 +1606,7 @@ export function deleteRowCol(
         }
     }
 
-    // 交替颜色配置变动
+    // Alternating colors config update
     const AFarr = file.luckysheet_alternateformat_save;
     const newAFarr = [];
     if (AFarr != null && AFarr.length > 0) {
@@ -1672,7 +1670,7 @@ export function deleteRowCol(
         }
     }
 
-    // 冻结配置变动
+    // Freeze config update
     const {frozen} = file;
     if (frozen) {
         if (
@@ -1695,7 +1693,7 @@ export function deleteRowCol(
         }
     }
 
-    // 数据验证配置变动
+    // Data validation config update
     const {dataVerification} = file;
     const newDataVerification: any = {};
     if (dataVerification != null) {
@@ -1720,7 +1718,7 @@ export function deleteRowCol(
         });
     }
 
-    // 超链接配置变动
+    // Hyperlink config update
     const {hyperlink} = file;
     const newHyperlink: any = {};
     if (hyperlink != null) {
@@ -1747,7 +1745,7 @@ export function deleteRowCol(
 
     // 主逻辑
     if (type === "row") {
-        // 行高配置变动
+        // Row height config update
         if (cfg.rowlen == null) {
             cfg.rowlen = {};
         }
@@ -1774,7 +1772,7 @@ export function deleteRowCol(
         cfg.rowlen = rowlen_new;
         cfg.rowReadOnly = rowReadOnly_new;
 
-        // 隐藏行配置变动
+        // Hidden rows config update
         if (cfg.rowhidden == null) {
             cfg.rowhidden = {};
         }
@@ -1789,7 +1787,7 @@ export function deleteRowCol(
             }
         });
 
-        // 自定义行高配置变动
+        // Custom row height config update
         if (cfg.customHeight == null) {
             cfg.customHeight = {};
 
@@ -1806,7 +1804,7 @@ export function deleteRowCol(
             cfg.customHeight = customHeight_new;
         }
 
-        // 自定义行高配置变动
+        // Custom row height config update
         if (cfg.customHeight == null) {
             cfg.customHeight = {};
 

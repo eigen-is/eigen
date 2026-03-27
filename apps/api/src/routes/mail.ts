@@ -1,6 +1,6 @@
 import {Elysia, t} from "elysia";
 import {betterAuth} from "./auth";
-import {requireSelf} from "../lib/core/access";
+import {requireLocalhost, requireSelf} from "../lib/core/access";
 import {
     mailboxCreate,
     mailboxDeliver,
@@ -27,8 +27,10 @@ export const mailRouter = new Elysia({name: "mail"})
     .use(betterAuth)
     // Local delivery endpoint — called by Postfix (or compatible MTA) to deliver incoming mail.
     // No auth: Postfix connects from localhost and is trusted.
-    // TODO: add IP allowlist (localhost-only) and rate limiting before exposing to the internet.
-    .post("/mail/deliver/:to", async ({params, body}) => await mailboxDeliver(params.to, body as ArrayBuffer), {
+    .post("/mail/deliver/:to", async ({params, body, request, server}) => {
+        requireLocalhost(request, server);
+        return await mailboxDeliver(params.to, body as ArrayBuffer);
+    }, {
         parse: 'arrayBuffer',
         body: t.Any({maxLength: 25 * 1024 * 1024}), // 25 MB per-message size limit
     })
