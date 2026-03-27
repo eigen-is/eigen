@@ -120,14 +120,15 @@ sidebar, so each invalidation triggers a refetch.
 **Fix:** Debounce size invalidation (e.g., 5-second window), or compute size incrementally from
 mutation deltas instead of re-querying SUM.
 
-### Breadcrumb Duplication [MEDIUM]
+### Breadcrumb N+1 in Drive Table [MEDIUM — FIXED]
 
-`useBreadcrumb()` is called from at least 2 components directly (DriveListToolbar, useDriveAccess
-hook) plus indirectly through useDriveAccess consumers. TanStack Query deduplicates concurrent
-requests, but sequential mounts still fire separate requests.
+Each item in a folder listing rendered `DriveShareSummary` → `useDriveAccess()` → `useBreadcrumb(item.id)`,
+causing N breadcrumb API requests per folder view.
 
-**Fix:** Ensure breadcrumb queries share the same query key and staleTime. Consider prefetching
-breadcrumb data in the parent route loader.
+**Fixed:** `DriveList` now fetches the parent folder's breadcrumb once and passes it down via
+`ancestorBreadcrumb` prop through `DriveTable` → `DriveShareSummary` → `useDriveAccess`. The
+`useDriveAccess` hook accepts an optional `preloadedBreadcrumb` parameter that disables the
+per-item `useBreadcrumb` query when provided.
 
 ---
 
@@ -404,6 +405,7 @@ No bundle visualization tool configured.
 | ACL permission CTE + caching | P1 | 2-3 hr | Backend | |
 | Add missing database indexes | P1 | 1-2 hr | Database | DONE |
 | Calendar count queries (.all().length) | P1 | 15 min | Database | DONE |
+| Breadcrumb N+1 in Drive table | P1 | 1-2 hr | Frontend | DONE |
 | List virtualization (Drive, email, chat) | P2 | 2-3 days | Frontend | |
 | Fortune-sheet lodash replacement | P2 | 2-4 hr | Bundle | |
 | Build compression (gzip/brotli) | P2 | 30 min | Bundle | |
