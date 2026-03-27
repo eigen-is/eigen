@@ -1,10 +1,11 @@
 import {EmailDraft as EmailDraftType} from "@workspace/lib/types/mail";
 import {ContactAutosuggest, Toolbar, TooltipButton} from "@workspace/ui";
 import {ConfirmDialog} from "@workspace/ui/components/layout/delete/confirm-dialog";
+import {Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle} from "@workspace/ui/components/dialog";
+import {Button} from "@workspace/ui/components/button";
 import {Input} from "@workspace/ui/components/input";
 import {Textarea} from "@workspace/ui/components/textarea";
 import {useCallback, useEffect, useMemo, useRef, useState} from "react";
-import {toast} from "sonner";
 import {createDraftEmail} from "@workspace/lib/mail";
 import {useAuth} from "@workspace/lib/auth";
 import {Send, Trash2} from "lucide-react";
@@ -75,6 +76,7 @@ export function EmailDraft({
     const ccFieldRef = useRef<HTMLInputElement>(null);
     const bccFieldRef = useRef<HTMLInputElement>(null);
     const [isSending, setIsSending] = useState(false);
+    const [alertMessage, setAlertMessage] = useState<string | null>(null);
     const [confirmNoSubject, setConfirmNoSubject] = useState(false);
 
     const auth = useAuth();
@@ -180,8 +182,7 @@ export function EmailDraft({
     const handleSendEmail = async () => {
         const toValue = toFieldRef.current?.value.trim();
         if (!toValue) {
-            toast.error("Please specify at least one recipient");
-            toFieldRef.current?.focus();
+            setAlertMessage("Please specify at least one recipient.");
             return;
         }
 
@@ -189,8 +190,7 @@ export function EmailDraft({
         const bodyEmpty = !textareaRef.current?.value.trim();
 
         if (subjectEmpty && bodyEmpty) {
-            toast.error("Please add a subject or message");
-            subjectFieldRef.current?.focus();
+            setAlertMessage("Please add a subject or message.");
             return;
         }
 
@@ -302,6 +302,17 @@ export function EmailDraft({
                     </div>
                 </form>
             </div>
+            <Dialog open={!!alertMessage} onOpenChange={() => setAlertMessage(null)}>
+                <DialogContent>
+                    <DialogHeader>
+                        <DialogTitle>Cannot send</DialogTitle>
+                        <DialogDescription>{alertMessage}</DialogDescription>
+                    </DialogHeader>
+                    <DialogFooter>
+                        <Button onClick={() => setAlertMessage(null)}>OK</Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
             <ConfirmDialog
                 open={confirmNoSubject}
                 onOpenChange={setConfirmNoSubject}
