@@ -161,6 +161,10 @@
         touch-action: manipulation;
     }
 
+    html, body {
+        overscroll-behavior-y: none; 
+    }
+
     :root {
         --app-space-color: var(--color-teal-600);
         --app-mail-color: var(--color-red-600);
