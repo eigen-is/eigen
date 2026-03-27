@@ -2093,20 +2093,20 @@ export function computeRowlenArr(ctx: Context, rowHeight: number, cfg: any) {
             rh_height += rowlen + 1;
         }
 
-        rowlenArr.push(rh_height); // 行的临时长度分布
+        rowlenArr.push(rh_height); // Cumulative row height distribution
     }
 
     return rowlenArr;
 }
 
-// 隐藏选中行列
+// Hide selected rows/columns
 export function hideSelected(ctx: Context, type: string) {
     if (!ctx.luckysheet_select_save || ctx.luckysheet_select_save.length > 1)
         return "noMulti";
     const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
-    // 隐藏行
+    // Hide rows
     if (type === "row") {
-        /* TODO: 工作表保护判断
+        /* TODO: Sheet protection check
         if (
           !checkProtectionAuthorityNormal(Store.currentSheetIndex, "formatRows")
         ) {
@@ -2119,7 +2119,7 @@ export function hideSelected(ctx: Context, type: string) {
         for (let r = r1; r <= r2; r += 1) {
             rowhidden[r] = 0;
         }
-        /* 保存撤销,luck中保存撤销用以下方式实现，而在本项目中不需要另外处理
+        /* Undo/redo save. In Luckysheet this was done as follows, but in this project no extra handling is needed.
           if(Store.clearjfundo){
             let redo = {};
             redo["type"] = "showHidRows";
@@ -2133,9 +2133,9 @@ export function hideSelected(ctx: Context, type: string) {
         ctx.config.rowhidden = rowhidden;
         const rowLen = ctx.luckysheetfile[index].data!.length;
         /**
-         * 计算要隐藏的行是否是最后一列
-         * 符合最后一列的条件：要隐藏的index===表格的长度-1 或者
-         * 记录隐藏数组里面的数-1===要隐藏的index
+         * Check if the row to hide is the last row.
+         * It is the last row when: index === table length - 1, or
+         * a value in the hidden array minus 1 equals the index.
          */
         const isEndRow =
             rowLen - 1 === rowhiddenNumber ||
@@ -2150,7 +2150,7 @@ export function hideSelected(ctx: Context, type: string) {
             ctx.luckysheet_select_save[0].row[1] += 1;
         }
     } else if (type === "column") {
-        // 隐藏列
+        // Hide columns
         const colhidden = ctx.config.colhidden ?? {};
         const c1 = ctx.luckysheet_select_save[0].column[0];
         const c2 = ctx.luckysheet_select_save[0].column[1];
@@ -2160,7 +2160,7 @@ export function hideSelected(ctx: Context, type: string) {
         }
         ctx.config.colhidden = colhidden;
         const columnLen = ctx.luckysheetfile[index].data![0].length;
-        // 计算要隐藏的列是否是最后一列
+        // Check if the column to hide is the last column
         const isEndColumn =
             columnLen - 1 === colhiddenNumber ||
             Object.keys(colhidden).findIndex(
@@ -2178,12 +2178,12 @@ export function hideSelected(ctx: Context, type: string) {
     return "";
 }
 
-// 取消隐藏选中行列
+// Show (unhide) selected rows/columns
 export function showSelected(ctx: Context, type: string) {
     if (!ctx.luckysheet_select_save || ctx.luckysheet_select_save.length > 1)
         return "noMulti";
     const index = getSheetIndex(ctx, ctx.currentSheetId) as number;
-    // 取消隐藏行
+    // Unhide rows
     if (type === "row") {
         const rowhidden = ctx.config.rowhidden ?? {};
         const r1 = ctx.luckysheet_select_save[0].row[0];
@@ -2193,7 +2193,7 @@ export function showSelected(ctx: Context, type: string) {
         }
         ctx.config.rowhidden = rowhidden;
     } else if (type === "column") {
-        // 取消隐藏列
+        // Unhide columns
         const colhidden = ctx.config.colhidden ?? {};
         const c1 = ctx.luckysheet_select_save[0].column[0];
         const c2 = ctx.luckysheet_select_save[0].column[1];
@@ -2206,14 +2206,14 @@ export function showSelected(ctx: Context, type: string) {
     return "";
 }
 
-// 判断当前选区是不是隐藏行列
+// Check if the current selection is on a hidden row/column
 export function isShowHidenCR(ctx: Context): boolean {
     if (
         !ctx.luckysheet_select_save ||
         (!ctx.config.colhidden && !ctx.config.rowhidden)
     )
         return false;
-    // 如果当先选区处在隐藏行列的时候则不可编辑
+    // If the current selection is on a hidden row/column, it is not editable
     if (!!ctx.config.colhidden && _.size(ctx.config.colhidden) >= 1) {
         const ctxColumn = ctx.luckysheet_select_save[0]?.column?.[0];
         const isHidenColumn =
@@ -2237,7 +2237,7 @@ export function isShowHidenCR(ctx: Context): boolean {
     return false;
 }
 
-// 计算键盘选区中要经过的隐藏行列的个数
+// Count hidden rows/columns to skip during keyboard navigation
 export function hideCRCount(ctx: Context, type: string): number {
     let count = 1;
     if (!ctx.luckysheet_select_save) return 0;
