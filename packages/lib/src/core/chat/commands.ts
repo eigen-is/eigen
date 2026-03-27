@@ -14,15 +14,15 @@ export const SLASH_COMMANDS = [
     ...EMOTE_COMMANDS.flatMap(c => [`/${c.key}`, ...(c.aliases ?? []).map(a => `/${a}`)]),
 ];
 
-// Help entries for the suggestion popup
+// Help entries for the suggestion popup — priority commands first, then emotes alphabetically
 export const COMMANDS_HELP = [
     {cmd: '/help', desc: 'List of available slash commands'},
-    {cmd: '/inspect, /look, /finger [User]', desc: 'Inspect a user'},
-    {cmd: '/me [action]', desc: 'Perform a custom emote'},
     {cmd: '/whisper, /tell [User] [Message]', desc: 'Send private message'},
     {cmd: '/reply [Message]', desc: 'Reply to the last whisper'},
     {cmd: '/invite [User]', desc: 'Invite user to the room'},
-    ...EMOTE_COMMANDS.map(c => ({
+    {cmd: '/inspect, /look, /finger [User]', desc: 'Inspect a user'},
+    {cmd: '/me [action]', desc: 'Perform a custom emote'},
+    ...[...EMOTE_COMMANDS].sort((a, b) => a.key.localeCompare(b.key)).map(c => ({
         cmd: c.aliases
             ? `/${c.key}, ${c.aliases.map(a => `/${a}`).join(', ')}`
             : `/${c.key}`,

@@ -30,68 +30,72 @@ export function SlidePanel({deck, activeSlideId, onSelectSlide, onDragStart, onD
         useSensor(PointerSensor, {activationConstraint: {distance: 5}})
     );
 
+    const slideList = deck.slideOrder.map((slideId, index) => {
+        const slide = deck.slides[slideId];
+        if (!slide) return null;
+        const objects = slide.objectIds
+            .map(id => deck.objects[id])
+            .filter(Boolean);
+
+        const thumbnail = (
+            <SlideThumbnail
+                slide={slide}
+                objects={objects}
+                index={index}
+                isActive={slideId === activeSlideId}
+                onClick={() => onSelectSlide(slideId)}
+            />
+        );
+
+        if (mobile) return <div key={slideId}>{thumbnail}</div>;
+
+        return (
+            <SortableSlide key={slideId} slideId={slideId} isDragOverlay={false}>
+                <ContextMenu>
+                    <ContextMenuTrigger asChild>
+                        <div>{thumbnail}</div>
+                    </ContextMenuTrigger>
+                    <ContextMenuContent>
+                        <ContextMenuItem onClick={() => onDuplicateSlide?.(slideId)}>
+                            <Copy className="h-4 w-4 mr-2"/> Duplicate
+                        </ContextMenuItem>
+                        <ContextMenuSeparator/>
+                        <ContextMenuItem
+                            variant="destructive"
+                            disabled={deck.slideOrder.length <= 1}
+                            onClick={() => onDeleteSlide?.(slideId)}
+                        >
+                            <Trash2 className="h-4 w-4 mr-2"/> Delete
+                        </ContextMenuItem>
+                    </ContextMenuContent>
+                </ContextMenu>
+            </SortableSlide>
+        );
+    });
+
     return (
         <div className={`${mobile ? 'w-full' : 'w-52 flex-shrink-0 border-r'} bg-muted/30 flex flex-col h-full`}>
             <div className="flex-1 overflow-y-auto p-3 space-y-1">
-                <DndContext
-                    sensors={sensors}
-                    collisionDetection={closestCenter}
-                    onDragStart={onDragStart}
-                    onDragEnd={onDragEnd}
-                >
-                    <SortableContext items={deck.slideOrder} strategy={verticalListSortingStrategy}>
-                        {deck.slideOrder.map((slideId, index) => {
-                            const slide = deck.slides[slideId];
-                            if (!slide) return null;
-                            const objects = slide.objectIds
-                                .map(id => deck.objects[id])
-                                .filter(Boolean);
-                            return (
-                                <SortableSlide
-                                    key={slideId}
-                                    slideId={slideId}
-                                    isDragOverlay={false}
-                                >
-                                    <ContextMenu>
-                                        <ContextMenuTrigger asChild>
-                                            <div>
-                                                <SlideThumbnail
-                                                    slide={slide}
-                                                    objects={objects}
-                                                    index={index}
-                                                    isActive={slideId === activeSlideId}
-                                                    onClick={() => onSelectSlide(slideId)}
-                                                />
-                                            </div>
-                                        </ContextMenuTrigger>
-                                        <ContextMenuContent>
-                                            <ContextMenuItem onClick={() => onDuplicateSlide?.(slideId)}>
-                                                <Copy className="h-4 w-4 mr-2"/> Duplicate
-                                            </ContextMenuItem>
-                                            <ContextMenuSeparator/>
-                                            <ContextMenuItem
-                                                variant="destructive"
-                                                disabled={deck.slideOrder.length <= 1}
-                                                onClick={() => onDeleteSlide?.(slideId)}
-                                            >
-                                                <Trash2 className="h-4 w-4 mr-2"/> Delete
-                                            </ContextMenuItem>
-                                        </ContextMenuContent>
-                                    </ContextMenu>
-                                </SortableSlide>
-                            );
-                        })}
-                    </SortableContext>
-
-                    <DragOverlay>
-                        {dragActiveId && deck.slides[dragActiveId] ? (
-                            <div
-                                className="w-36 rounded border border-blue-500 overflow-hidden shadow-lg"
-                                style={{aspectRatio: SLIDE_ASPECT_RATIO, backgroundColor: deck.slides[dragActiveId].backgroundColor}}
-                            />
-                        ) : null}
-                    </DragOverlay>
-                </DndContext>
+                {mobile ? slideList : (
+                    <DndContext
+                        sensors={sensors}
+                        collisionDetection={closestCenter}
+                        onDragStart={onDragStart}
+                        onDragEnd={onDragEnd}
+                    >
+                        <SortableContext items={deck.slideOrder} strategy={verticalListSortingStrategy}>
+                            {slideList}
+                        </SortableContext>
+                        <DragOverlay>
+                            {dragActiveId && deck.slides[dragActiveId] ? (
+                                <div
+                                    className="w-36 rounded border border-blue-500 overflow-hidden shadow-lg"
+                                    style={{aspectRatio: SLIDE_ASPECT_RATIO, backgroundColor: deck.slides[dragActiveId].backgroundColor}}
+                                />
+                            ) : null}
+                        </DragOverlay>
+                    </DndContext>
+                )}
             </div>
         </div>
     );
