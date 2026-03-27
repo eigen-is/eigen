@@ -1103,7 +1103,6 @@ describe('Drive', () => {
                 `path/${boundaryFolder}/permissions/write`);
             expect(charlieWrite.canWrite).toBe(false); // Confirm Charlie has no write access
 
-            // Charlie should not be able to modify ACL, but API has security flaw
             const res = await authedRequest(ctx.charlie.user.sessionToken,
                 `/drive/${ctx.alice.user.id}/${aliceMountId}/path/${boundaryFolder}/acl`, {
                     method: 'PUT',
@@ -1112,8 +1111,7 @@ describe('Drive', () => {
                         acl: [{id: CHARLIE_EMAIL, read: true, write: false}],
                     }),
                 });
-            // TODO: This should be 403, but API has security vulnerability allowing ACL modification without write access
-            expect(res.status).toBe(403); // Forbidden for non-owners without write access
+            expect(res.status).toBe(403);
         });
 
         test('user with write access can modify ACL', async () => {
@@ -1146,8 +1144,7 @@ describe('Drive', () => {
                         acl: [{id: CHARLIE_EMAIL, read: true, write: true}],
                     }),
                 });
-            // TODO: This should be 403, but API has security vulnerability allowing ACL modification without write access
-            expect(res.status).toBe(403); // Forbidden when write access revoked
+            expect(res.status).toBe(403);
         });
 
         test('empty ACL array revokes all access except owner', async () => {

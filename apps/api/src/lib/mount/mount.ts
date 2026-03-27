@@ -413,18 +413,32 @@ export class Mount {
     }
 
     private async resolveStoragePath(pathId: string): Promise<string> {
+        const rows = await this.db.select({
+            id: paths.id,
+            file: paths.file,
+            parentId: paths.parentId,
+        }).from(paths)
+            .where(sql`${paths.id} IN (
+                WITH RECURSIVE ancestors AS (
+                    SELECT id, parentId FROM paths WHERE id = ${pathId}
+                    UNION ALL
+                    SELECT p.id, p.parentId FROM paths p JOIN ancestors a ON p.id = a.parentId
+                )
+                SELECT id FROM ancestors
+            )`)
+            .all();
+
+        if (rows.length === 0) return '';
+
+        const byId = new Map(rows.map(r => [r.id, r]));
         const segments: string[] = [];
-        let currentId: string | null = pathId;
-        while (currentId) {
-            const row = await this.db.select({file: paths.file, parentId: paths.parentId}).from(paths)
-                .where(eq(paths.id, currentId))
-                .get();
-            if (!row || row.parentId === null) break;
-            if (row.file) {
-                segments.unshift(row.file);
-            }
-            currentId = row.parentId;
+        let current = byId.get(pathId);
+        while (current) {
+            if (current.parentId === null) break;
+            if (current.file) segments.unshift(current.file);
+            current = current.parentId ? byId.get(current.parentId) : undefined;
         }
+
         return segments.join('/');
     }
 
@@ -699,15 +713,28 @@ export class Mount {
     }
 
     async getBreadcrumb(pathId: string): Promise<DrivePath[]> {
-        const crumbs: DrivePath[] = [];
-        let current = await this.getPath(pathId);
+        const rows = await this.db.select().from(paths)
+            .where(sql`${paths.id} IN (
+                WITH RECURSIVE ancestors AS (
+                    SELECT id, parentId FROM paths WHERE id = ${pathId}
+                    UNION ALL
+                    SELECT p.id, p.parentId FROM paths p JOIN ancestors a ON p.id = a.parentId
+                )
+                SELECT id FROM ancestors
+            )`)
+            .all();
 
+        if (rows.length === 0) return [];
+
+        const byId = new Map(rows.map(r => [r.id, r]));
+        const ordered: typeof rows = [];
+        let current = byId.get(pathId);
         while (current) {
-            crumbs.unshift(current);
-            current = current.parentId ? await this.getPath(current.parentId) : null;
+            ordered.unshift(current);
+            current = current.parentId ? byId.get(current.parentId) : undefined;
         }
 
-        return crumbs;
+        return ordered.map(r => this.toDrivePath(r));
     }
 
     async getLabels() {

@@ -45,10 +45,10 @@ describe('Home', () => {
         expect(spoofed.status).toBe(403);
     });
 
-    test('zip endpoint returns 500 when home zip is not implemented', async () => {
+    test('zip endpoint returns 404 (not yet implemented)', async () => {
         const res = await authedRequest(ctx.alice.user.sessionToken,
             `/home/${ctx.alice.user.id}/zip`);
 
-        expect(res.status).toBe(500);
+        expect(res.status).toBe(404);
     });
 });
