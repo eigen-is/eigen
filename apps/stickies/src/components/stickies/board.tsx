@@ -10,11 +10,17 @@ import {ColumnSettingsDialog} from './column-settings-dialog';
 import {CardSettingsDialog} from './card-settings-dialog';
 import {Card, CardContent} from '@workspace/ui/components/card';
 import {isLightColor} from '@workspace/ui/components/layout/media/color-picker';
-import {lightenColor, EIGEN_STICKIES_COLORS} from '@workspace/lib/constants';
+import {EIGEN_STICKIES_COLORS, lightenColor} from '@workspace/lib/constants';
 import {useIsMobile} from '@workspace/lib/media';
 import {ContextMenuAnchor, useContextMenu} from '@workspace/ui/components/layout/context-menu';
-import {DropdownMenuItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger} from '@workspace/ui/components/dropdown-menu';
-import {Check, CircleOff, Pencil, Palette, Trash2} from 'lucide-react';
+import {
+    DropdownMenuItem,
+    DropdownMenuSeparator,
+    DropdownMenuSub,
+    DropdownMenuSubContent,
+    DropdownMenuSubTrigger
+} from '@workspace/ui/components/dropdown-menu';
+import {Check, CircleOff, Palette, Pencil, Trash2} from 'lucide-react';
 import {DeleteDialog} from '@workspace/ui/components/layout/delete/delete-dialog';
 import {useBoard} from './hooks/use-board';
 import {useDragAndDrop} from './hooks/use-drag-and-drop';
@@ -172,7 +178,7 @@ export function StickiesBoard({ownerId, path, canWrite, chatFolderId, onAccessDi
             const card = dragState.activeItem as CardItem;
             return (
                 <Card
-                    className={`${isMobile ? 'w-full p-0' : 'w-[256px] p-0'} shadow-md rounded-none ${!card.color ? 'border' : 'border-0'}`}
+                    className={`${isMobile ? 'w-full p-0' : 'w-[254px] p-0'} shadow-md rounded-none ${!card.color ? 'border' : 'border-0'}`}
                       style={{
                           backgroundColor: card.color ? lightenColor(card.color, 0.25) : undefined,
                           color: card.color ? (isLightColor(card.color) ? '#000' : '#fff') : undefined,
