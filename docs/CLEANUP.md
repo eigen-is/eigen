@@ -81,7 +81,7 @@ SSE event handlers use broad-sweep invalidation that causes cascading refetches:
 
 | Event | Invalidates | Problem |
 |-------|-------------|---------|
-| `MAIL_*` (any) | ALL mailboxes + home size | Single read-status change refetches entire mailbox list |
+| `MAIL_*` (any) | Mailbox LIST + home size | Individual mailbox queries are targeted, but the shared mailbox list is invalidated on every event |
 | `CALENDAR_EVENT_*` | ALL events for owner | One event edit refetches hundreds of events |
 | `DRIVE_ACL_UPDATED` | ALL shared-by-me + shared-with-me | One file share invalidates all sharing lists |
 | `TEAM_SETTINGS_UPDATED` | `calendarKeys.all` (global!) | Team name change refetches all calendar data |
@@ -94,23 +94,25 @@ query families. For team settings, only invalidate when member/permission change
 
 ### Avatar N+1 Problem [HIGH]
 
-Each `<UserAvatar>` calls `useResolvedUser()` which fires 3 separate queries: `useContacts()`,
-`usePublicUser(emailOrId)`, and `usePeopleTeams(orgId)`. Plus an SVG avatar fetch.
+Each `<UserAvatar>` calls `useResolvedUser()` which fires 4 queries: `useContacts()`,
+`usePublicUser(emailOrId)`, `usePublicConfig()`, and `usePeopleTeams(orgId)`. Plus an SVG avatar fetch.
 
-A notification list with 10 items = 10 x 3 queries + 10 SVG fetches = 40 network requests.
-Chat with 80 visible messages = similar explosion.
+TanStack Query deduplicates concurrent requests with the same queryKey, so `useContacts()`,
+`usePublicConfig()`, and `usePeopleTeams()` only fetch once when multiple avatars mount simultaneously.
+However, `usePublicUser(emailOrId)` is unique per user — 10 unique users = 10 separate fetches.
+Sequential (non-concurrent) mounts also bypass deduplication.
 
-**Files:** `packages/lib/src/core/public/hooks/use-resolved-user.ts:15-18`,
+**Files:** `packages/lib/src/core/public/hooks/use-resolved-user.ts:14-18`,
 `packages/ui/src/components/layout/user-avatar.tsx`
 
-**Fix:** Batch user resolution — fetch all needed users in one query, cache aggressively. The
-contacts and teams queries should be shared (fetched once, not per-avatar).
+**Fix:** Batch user resolution — fetch all visible users in one query. The per-user
+`usePublicUser()` calls are the main N+1 source; a batch endpoint would collapse them.
 
 ### Size Endpoint Over-Invalidation [HIGH]
 
-`homeKeys.size(ownerId)` is invalidated from 8+ places across Drive, Calendar, Mail, and Contacts
-SSE handlers and mutation callbacks. The `StorageUsage` component is mounted in every sidebar, so
-each invalidation triggers a refetch.
+`homeKeys.size(ownerId)` is invalidated from 12 call sites across 6 files (Drive, Calendar, Mail,
+and Contacts SSE handlers and mutation callbacks). The `StorageUsage` component is mounted in every
+sidebar, so each invalidation triggers a refetch.
 
 **Files:** `packages/lib/src/core/home/hooks/use-home.ts:19`,
 `packages/lib/src/core/*/sse-handlers.ts` (multiple)
@@ -120,9 +122,9 @@ mutation deltas instead of re-querying SUM.
 
 ### Breadcrumb Duplication [MEDIUM]
 
-`useBreadcrumb()` is called from 5+ components with identical parameters (DriveList, DriveCreateItem,
-useDriveAccess used in 3 components). TanStack Query deduplicates concurrent requests, but
-sequential mounts still fire separate requests.
+`useBreadcrumb()` is called from at least 2 components directly (DriveListToolbar, useDriveAccess
+hook) plus indirectly through useDriveAccess consumers. TanStack Query deduplicates concurrent
+requests, but sequential mounts still fire separate requests.
 
 **Fix:** Ensure breadcrumb queries share the same query key and staleTime. Consider prefetching
 breadcrumb data in the parent route loader.
@@ -228,19 +230,13 @@ No virtual scrolling library is used. All lists render every item to the DOM:
   `toLocaleTimeString()`/`toLocaleDateString()` calls per item in the render loop
 - **ChatMessageList** (`packages/ui/.../chat-message-list.tsx:246-396`): All loaded messages
 
-500 files = 500 DOM nodes with event handlers, context menus, drag props, and zero memoization.
+500 files = 500 DOM nodes with event handlers, context menus, and drag props.
+
+**Note:** React Compiler (`babel-plugin-react-compiler` v1.0.0) is enabled project-wide
+(`vite.shared.config.ts:37-41`), which auto-memoizes components and hooks. Manual `React.memo`
+and `useCallback` are not needed. The core issue is DOM node count, not re-renders.
 
 **Fix:** Add `@tanstack/react-virtual`. Start with Drive (most likely to have hundreds of items).
-
-### No React.memo on List Items [HIGH]
-
-Only 2 files in the entire codebase use `React.memo` (both in slides). Drive table rows, email
-list items, and chat messages are not memoized. Combined with inline event handlers and spread
-objects (`getDragProps(item)`), every parent re-render recreates all child components.
-
-**File:** `packages/ui/src/components/layout/drive/drive-table.tsx:184-217`
-
-**Fix:** Extract list items into memoized components. Move event handlers to `useCallback`.
 
 ### Email Date Formatting in Render Loop [MEDIUM]
 
@@ -262,12 +258,16 @@ oversized.
 **Fix:** Replace `lodash` with `lodash-es` or individual function imports across all 46 files.
 Add fortune-sheet as a manual chunk in vite config. Lazy-load formula engine separately.
 
-### Tiptap Version Mismatch [HIGH]
+### Tiptap Dual Versions [LOW — INTENTIONAL]
 
-`apps/docs` uses Tiptap v2.11.5, `apps/drive` uses v3.20.2. Both versions bundle separately,
-duplicating dependencies.
+`apps/docs` uses Tiptap v2.11.5 (full collaborative editor with Yjs, 23 extensions, custom marks).
+`apps/drive` uses v3.20.2 (lightweight markdown editor, 11 extensions, no collaboration).
 
-**Fix:** Unify to v3.x across all apps.
+This is intentional: docs relies on `@tiptap/extension-collaboration` and custom extensions
+(CommentMark, ResizableImage) that would need refactoring for v3. Drive was built later with v3
+for its `tiptap-markdown` plugin. Both versions bundle separately into different apps, so there's
+no user-facing duplication. Upgrading docs to v3 is a future option but requires significant
+testing of collaboration flows and custom extension migration.
 
 ### Build Compression [MEDIUM]
 
@@ -404,9 +404,7 @@ No bundle visualization tool configured.
 | ACL permission CTE + caching | P1 | 2-3 hr | Backend |
 | Add missing database indexes | P1 | 1-2 hr | Database |
 | List virtualization (Drive, email, chat) | P2 | 2-3 days | Frontend |
-| React.memo on list items | P2 | 4 hr | Frontend |
 | Fortune-sheet lodash replacement | P2 | 2-4 hr | Bundle |
-| Tiptap version unification | P2 | 1 hr | Bundle |
 | Build compression (gzip/brotli) | P2 | 30 min | Bundle |
 | Font lazy-loading | P2 | 2-4 hr | Bundle |
 | Home singleton race condition | P2 | 2 hr | Backend |
