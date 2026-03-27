@@ -9,11 +9,6 @@ import {createDraftEmail} from "@workspace/lib/mail";
 import {useAuth} from "@workspace/lib/auth";
 import {Send, Trash2} from "lucide-react";
 
-/**
- * Checks the status of an email draft
- * @param draft The email draft to check
- * @returns Object with sendable and saveable status
- */
 export function getEmailDraftStatus(draft: EmailDraftType) {
     // Check if draft is sendable (to field is not empty)
     const isSendable = !!(draft.to &&
