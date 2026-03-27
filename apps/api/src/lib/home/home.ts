@@ -37,6 +37,11 @@ export class Home {
     protected initializationStarted: boolean = false;
     protected initWaiters: ((home: Home) => void)[] = [];
     protected timeout: Timer | undefined;
+    private _destructing: boolean = false;
+
+    get destructing(): boolean {
+        return this._destructing;
+    }
 
     private managedDatabases: Map<string, () => Promise<ManagedDatabase<any>>> = new Map();
     private sseListeners: ((event: SSEvent) => void)[] = [];
@@ -100,6 +105,7 @@ export class Home {
     }
 
     public touch() {
+        if (this._destructing) return this;
         if (this.timeout) {
             clearTimeout(this.timeout);
         }
@@ -153,6 +159,7 @@ export class Home {
     }
 
     protected async destruct() {
+        this._destructing = true;
         try {
             await this._drive.destruct();
         } catch (error) {

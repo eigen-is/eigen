@@ -461,8 +461,14 @@ export class Mount {
             await this.storage.delete(storageKey);
         } else if (this.isPathBased && this.storage.deleteDir) {
             const storageKey = await this.getStorageKey(pathId);
-            await this.deleteDescendants(pathId);
-            await this.db.delete(paths).where(eq(paths.id, pathId));
+            const fileIds = this.collectDescendantFileIds(pathId);
+            this.db.transaction((tx) => {
+                this.deleteDescendantsInTx(tx, pathId);
+                tx.delete(paths).where(eq(paths.id, pathId)).run();
+            });
+            for (const fileId of fileIds) {
+                await deleteThumbnail(this.thumbsDir, fileId);
+            }
             if (storageKey) {
                 await this.storage.deleteDir(storageKey);
             }
@@ -475,18 +481,33 @@ export class Mount {
         }
     }
 
-    private async deleteDescendants(parentId: string): Promise<void> {
-        const children = await this.db.select({id: paths.id, type: paths.type}).from(paths)
+    private collectDescendantFileIds(parentId: string): string[] {
+        const fileIds: string[] = [];
+        const collect = (pid: string) => {
+            const children = this.db.select({id: paths.id, type: paths.type}).from(paths)
+                .where(eq(paths.parentId, pid))
+                .all();
+            for (const child of children) {
+                if (child.type !== 'file') {
+                    collect(child.id);
+                } else {
+                    fileIds.push(child.id);
+                }
+            }
+        };
+        collect(parentId);
+        return fileIds;
+    }
+
+    private deleteDescendantsInTx(tx: Parameters<Parameters<typeof this.db.transaction>[0]>[0], parentId: string): void {
+        const children = tx.select({id: paths.id, type: paths.type}).from(paths)
             .where(eq(paths.parentId, parentId))
             .all();
         for (const child of children) {
             if (child.type !== 'file') {
-                await this.deleteDescendants(child.id);
+                this.deleteDescendantsInTx(tx, child.id);
             }
-            await this.db.delete(paths).where(eq(paths.id, child.id));
-            if (child.type === 'file') {
-                await deleteThumbnail(this.thumbsDir, child.id);
-            }
+            tx.delete(paths).where(eq(paths.id, child.id)).run();
         }
     }
 
@@ -760,15 +781,19 @@ export class Mount {
     }
 
     async deleteLabel(labelId: string): Promise<void> {
-        await this.db.delete(pathsToLabels).where(eq(pathsToLabels.labelId, labelId));
-        await this.db.delete(labels).where(eq(labels.id, labelId));
+        this.db.transaction((tx) => {
+            tx.delete(pathsToLabels).where(eq(pathsToLabels.labelId, labelId)).run();
+            tx.delete(labels).where(eq(labels.id, labelId)).run();
+        });
     }
 
     async setPathLabels(pathId: string, labelIds: string[]): Promise<void> {
-        await this.db.delete(pathsToLabels).where(eq(pathsToLabels.pathId, pathId));
-        for (const labelId of labelIds) {
-            await this.db.insert(pathsToLabels).values({pathId, labelId});
-        }
+        this.db.transaction((tx) => {
+            tx.delete(pathsToLabels).where(eq(pathsToLabels.pathId, pathId)).run();
+            for (const labelId of labelIds) {
+                tx.insert(pathsToLabels).values({pathId, labelId}).run();
+            }
+        });
     }
 
     async getPathLabels(pathId: string): Promise<string[]> {
