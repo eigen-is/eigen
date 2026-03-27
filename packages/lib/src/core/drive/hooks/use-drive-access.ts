@@ -24,11 +24,11 @@ export type DriveAccessItem =
     | (DirectAccessItem & { inherited?: never, sourceFolderName?: never })
     | (InheritedAccessItem & { owner?: never, inherited: true })
 
-export function useDriveAccess(path: DrivePath, overrideDirectList?: DirectAccessItem[]) {
+export function useDriveAccess(path: DrivePath, overrideDirectList?: DirectAccessItem[], preloadedBreadcrumb?: DrivePath[]) {
     const parsedOwner = useMemo(() => parseOwnerId(path.ownerId), [path.ownerId])
     const isGroupOwned = parsedOwner.type === 'team'
     const owner = usePublicUser(path.ownerId)
-    const breadcrumb = useBreadcrumb(path.ownerId, path.mountId, path.id)
+    const breadcrumb = useBreadcrumb(path.ownerId, path.mountId, preloadedBreadcrumb ? undefined : path.id)
 
     const baseDirectList = useMemo<DirectAccessItem[]>(() => {
         const list: DirectAccessItem[] = []
@@ -73,8 +73,9 @@ export function useDriveAccess(path: DrivePath, overrideDirectList?: DirectAcces
 
     const directList = overrideDirectList ?? baseDirectList
 
+    const breadcrumbData = preloadedBreadcrumb ?? breadcrumb.data
     const inheritedList = useMemo<InheritedAccessItem[]>(() => {
-        if (!breadcrumb.data || breadcrumb.data.length < 2) return []
+        if (!breadcrumbData || breadcrumbData.length === 0) return []
         const directIds = new Set(directList.map(u => u.id.toLowerCase()))
         if (owner.data?.email) directIds.add(owner.data.email.toLowerCase())
         if (isGroupOwned) directIds.add(path.ownerId.toLowerCase())
@@ -82,7 +83,7 @@ export function useDriveAccess(path: DrivePath, overrideDirectList?: DirectAcces
         const inherited: InheritedAccessItem[] = []
         const seenKeys = new Set<string>()
 
-        const ancestors = breadcrumb.data.slice(0, -1)
+        const ancestors = preloadedBreadcrumb ? breadcrumbData : breadcrumbData.slice(0, -1)
         for (const ancestor of [...ancestors].reverse()) {
             if (!ancestor.acl) continue
             for (const acl of ancestor.acl) {
@@ -98,7 +99,7 @@ export function useDriveAccess(path: DrivePath, overrideDirectList?: DirectAcces
             }
         }
         return inherited
-    }, [breadcrumb.data, directList, owner.data?.email, isGroupOwned, path.ownerId])
+    }, [breadcrumbData, directList, owner.data?.email, isGroupOwned, path.ownerId, preloadedBreadcrumb])
 
     const allEntries = useMemo<DriveAccessItem[]>(() => {
         const seen = new Set<string>()

@@ -9,14 +9,16 @@ export type DriveShareSummaryProps = {
     path: DrivePath;
     onClick?: () => void;
     showIconOnHover?: boolean;
+    ancestorBreadcrumb?: DrivePath[];
 }
 
 export function DriveShareSummary({
                                       path,
                                       onClick,
                                       showIconOnHover = true,
+                                      ancestorBreadcrumb,
                                   }: DriveShareSummaryProps) {
-    const {allEntries} = useDriveAccess(path);
+    const {allEntries} = useDriveAccess(path, undefined, ancestorBreadcrumb);
 
     const hasEntries = allEntries.length > 1;
     const isPublic = path.visibility !== 'private';
