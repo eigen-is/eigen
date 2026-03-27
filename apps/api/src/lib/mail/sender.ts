@@ -1,78 +1,43 @@
-import nodemailer from 'nodemailer';
-import type Mail from 'nodemailer/lib/mailer';
 import type {EmailDraft} from "@workspace/lib/types/mail";
+import type {OutboundAttachment, OutboundMail} from "../core/mailer";
 
-type Address = {
-    name: string;
-    address: string;
-};
-
-export type SendMailOptions = {
-    from: Address;
-    to: Address[];
-    cc?: Address[];
-    bcc?: Address[];
-    subject: string;
-    text: string;
-    html?: string;
-};
-
-function createTransport(): Mail {
-    return nodemailer.createTransport({
-        sendmail: true,
-        newline: 'unix',
-        path: '/usr/sbin/sendmail'
-    });
-}
-
-function convertAddressValue(value: { name?: string; address?: string }[] | undefined): Address[] {
-    if (!value) return [];
-    return value
-        .filter(v => v.address)
-        .map(v => ({name: v.name || '', address: v.address!}));
-}
-
-export function draftToMailOptions(draft: EmailDraft, fallbackEmail: string): SendMailOptions {
+export function draftToOutboundMail(draft: EmailDraft, fallbackEmail: string): OutboundMail {
     const fromValue = draft.from?.value?.[0];
 
-    return {
+    const message: OutboundMail = {
         from: fromValue?.address
             ? {name: fromValue.name || '', address: fromValue.address}
             : {name: '', address: fallbackEmail},
         to: convertAddressValue(draft.to?.value),
-        cc: convertAddressValue(draft.cc?.value),
-        bcc: convertAddressValue(draft.bcc?.value),
         subject: draft.subject || '(No subject)',
         text: draft.text || '',
-        html: draft.html || undefined
     };
+
+    const cc = convertAddressValue(draft.cc?.value);
+    if (cc.length) message.cc = cc;
+
+    const bcc = convertAddressValue(draft.bcc?.value);
+    if (bcc.length) message.bcc = bcc;
+
+    const html = draft.html;
+    if (html) message.html = html;
+
+    if (draft.attachments?.length) {
+        message.attachments = draft.attachments
+            .filter(a => a.content && a.filename)
+            .map((a): OutboundAttachment => ({
+                filename: a.filename!,
+                content: Buffer.isBuffer(a.content) ? a.content : Buffer.from(String(a.content)),
+                contentType: a.contentType,
+            }));
+    }
+
+    return message;
 }
 
-export async function sendMail(options: SendMailOptions): Promise<boolean> {
-    const transporter = createTransport();
-
-    const mailOptions: Mail.Options = {
-        from: options.from as Mail.Address,
-        to: options.to as Mail.Address[],
-        subject: options.subject,
-        text: options.text
-    };
-
-    if (options.cc?.length) {
-        mailOptions.cc = options.cc as Mail.Address[];
-    }
-    if (options.bcc?.length) {
-        mailOptions.bcc = options.bcc as Mail.Address[];
-    }
-    if (options.html) {
-        mailOptions.html = options.html;
-    }
-
-    try {
-        await transporter.sendMail(mailOptions);
-        return true;
-    } catch (error) {
-        console.error('Error sending email:', error);
-        return false;
-    }
+function convertAddressValue(value: { name?: string; address?: string }[] | undefined) {
+    if (!value) return [];
+    return value
+        .filter(v => v.address)
+        .map(v => ({name: v.name || '', address: v.address!}));
 }
