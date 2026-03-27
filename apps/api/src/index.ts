@@ -1,7 +1,10 @@
 import {app} from "./app";
 import {shutdownAllHomes} from "./lib/home";
 
-const server = app.listen(8000);
+const server = app.listen({
+    port: 8000,
+    maxRequestBodySize: 1024 * 1024 * 1024, // 1 GB — per-file limits enforced by streaming parser
+});
 
 export type {App as app} from "./app";
 
