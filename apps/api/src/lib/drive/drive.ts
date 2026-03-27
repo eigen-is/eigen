@@ -256,9 +256,10 @@ export default class Drive {
                     parentId, safeName, result.mimeType, result.size, result.hash, result.tempId
                 );
 
-                uploaded.push(await this.finalizeUpload(mount, pathId, originalName, safeName, result.mimeType));
-            } finally {
+                uploaded.push(await this.finalizeUpload(mount, pathId, originalName, safeName, result.mimeType, result.tempId));
+            } catch (e) {
                 await mount.cleanupTemp(result.tempId);
+                throw e;
             }
         }
 
@@ -889,7 +890,7 @@ export default class Drive {
     }
 
     private async finalizeUpload(
-        mount: Mount, pathId: string, originalName: string, safeName: string, mimeType: string
+        mount: Mount, pathId: string, originalName: string, safeName: string, mimeType: string, tempId: string
     ): Promise<DrivePath> {
         if (originalName) {
             await mount.updatePath(pathId, {details: {originalName}});
@@ -899,16 +900,21 @@ export default class Drive {
         if (!uploadedFile) throw new ApiError(500, 'Failed to get uploaded file');
         this.emit(SSEventType.DRIVE_FILE_UPLOADED, uploadedFile);
 
-        mount.getStorageFile(pathId).then(async (storageFile) => {
-            const thumbnail = await saveThumbnail(mount.thumbsDir, pathId, storageFile.name!, mimeType, safeName);
-            if (thumbnail) {
-                await mount.updatePath(pathId, {
-                    thumbnail: thumbnail.fileName,
-                    details: {...(uploadedFile.details ?? {}), width: thumbnail.width, height: thumbnail.height},
-                });
-                this.emit(SSEventType.DRIVE_FILE_UPLOADED, (await mount.getPath(pathId))!);
+        const tempPath = mount.getTempPath(tempId);
+        (async () => {
+            try {
+                const thumbnail = await saveThumbnail(mount.thumbsDir, pathId, tempPath, mimeType, safeName);
+                if (thumbnail) {
+                    await mount.updatePath(pathId, {
+                        thumbnail: thumbnail.fileName,
+                        details: {...(uploadedFile.details ?? {}), width: thumbnail.width, height: thumbnail.height},
+                    });
+                    this.emit(SSEventType.DRIVE_FILE_UPLOADED, (await mount.getPath(pathId))!);
+                }
+            } finally {
+                await mount.cleanupTemp(tempId);
             }
-        }).catch((e) => console.error(`Thumbnail generation failed for ${pathId}:`, e));
+        })().catch((e) => console.error(`Thumbnail generation failed for ${pathId}:`, e));
 
         return uploadedFile;
     }
