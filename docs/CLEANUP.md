@@ -1,116 +1,422 @@
-# Cleanup & Optimization — Remaining Items
+# Cleanup & Optimization — Full-Stack Audit
 
-Items still to address from the full-stack audit. Ordered by priority.
-
-## Query & Cache Architecture Notes
-
-Global `staleTime: 2 * 60 * 1000` is set on the QueryClient. This prevents automatic refetches
-on mount/focus/reconnect for 2 minutes. SSE-driven `invalidateQueries()` overrides staleTime and
-always triggers a refetch — this is correct and intentional.
-
-Mutations call `invalidateQueries()` in `onSuccess` for instant feedback to the initiator. SSE
-handlers call the same `invalidateQueries()` for all connected clients. This causes a double refetch
-for the initiator (~50-100ms apart). This is accepted: TanStack Query's structural sharing prevents
-re-renders if data hasn't changed, and the alternatives add complexity for negligible gain.
+Comprehensive findings from deep analysis of backend, frontend, database, security, build, and
+code quality. Ordered by priority within each category.
 
 ---
 
-## Backend Stability
+## Architecture Notes
 
-### Thumbnail Retry [MEDIUM]
+### Query & Cache Model
 
-Drive's `uploadFile` spawns thumbnail generation in a `.then()` chain with only a `.catch(console.error)`.
-If it fails, there's no retry, no tracking, and the user never learns.
+Global `staleTime: 2 * 60 * 1000` is set on the QueryClient (`packages/ui/.../eigen-app.tsx:31-38`).
+`refetchOnMount` and `refetchOnWindowFocus` are not explicitly set, so they default to `true` — any
+query older than 2 minutes refetches on mount or window focus. SSE-driven `invalidateQueries()`
+overrides staleTime and always triggers a refetch.
 
-**Fix:** Store a `thumbnailStatus` or `thumbnailAttempts` field. Retry on next access if missing.
+Mutations call `invalidateQueries()` in `onSuccess` for instant feedback. SSE handlers call the same
+`invalidateQueries()` for all connected clients. The initiator gets a double refetch (~50-100ms apart).
+TanStack Query's structural sharing prevents re-renders if data hasn't changed.
 
-### Recycle Bin [MEDIUM]
+### Database-Per-User Model
 
-File deletion is permanent. Acceptable during dev, but production needs soft delete.
-
-**Fix (when ready):** Add `deletedAt` column to paths schema. Filter out deleted items in queries.
-Background job permanently deletes after 30 days.
-
-### Team Settings SSE Over-Invalidation [MEDIUM]
-
-`packages/lib/src/core/team/sse-handlers.ts` handles `TEAM_SETTINGS_UPDATED` by invalidating
-`calendarKeys.all` — the entire calendar cache. A team name change causes every calendar query
-to refetch.
-
-**Fix:** Only invalidate the affected team's calendar queries, or split team-setting types
-so that only member/permission changes trigger calendar invalidation.
+Each user gets separate SQLite databases for calendar, contacts, mail, notifications, plus mount
+metadata databases. For 1000 concurrent users this means 5000+ open SQLite connections. Home instances
+have a 5-minute idle timeout with cleanup, but this can cause thrashing for semi-active users.
 
 ---
 
-## Frontend Performance
+## P0 — Security Vulnerabilities
+
+### ACL Modification Without Write Permission [CRITICAL]
+
+`sharedDrive.ts` `updateACL()` only checks write permission for `getPath()`, not for the ACL update
+itself. Users with read-only access can escalate privileges by modifying ACLs on shared resources.
+
+**File:** `apps/api/src/lib/drive/sharedDrive.ts:231-246`
+**Evidence:** `apps/api/src/test/drive.test.ts:1115,1149` — TODO comments document this as known.
+
+**Fix:** Wrap entire `updateACL` call in `withWritePermission()`, not just the path fetch.
+
+### Unauthenticated Mail Delivery [HIGH]
+
+`/mail/deliver/:to` accepts 25 MB POST bodies with no authentication, no IP allowlist, no rate limiting.
+
+**File:** `apps/api/src/routes/mail.ts:30-31`
+
+**Fix:** Add IP allowlist (localhost-only) and rate limiting. There's already a TODO for this.
+
+### No Rate Limiting [MEDIUM]
+
+No rate limiting middleware exists anywhere. Affects auth endpoints (brute force), mail delivery (spam),
+file uploads (resource exhaustion), and waitlist signup (DoS).
+
+**Fix:** Add rate limiting middleware to Elysia. Start with auth and mail delivery endpoints.
+
+### Fortune-Sheet Dynamic Code Execution [MEDIUM]
+
+`packages/fortune-sheet/src/core/modules/rowcol.ts:837-842` dynamically constructs and executes code
+from array values. If array contents come from user-provided spreadsheet data, code injection is possible.
+
+**Fix:** Replace with direct array manipulation (splice, unshift) without dynamic code generation.
+
+---
+
+## P1 — Request Explosion (Network Tab Issues)
+
+The network screenshots show massive request duplication on a single page load: 7+ breadcrumb fetches,
+8+ size fetches, 3+ mounts/root fetches, and N+1 avatar lookups. Root causes:
+
+### SSE Keepalive Too Slow [CRITICAL]
+
+SSE keepalive sends every 30 seconds (`apps/api/src/routes/sse.ts:68`), but connections die at ~29s.
+The network tab shows 12+ failed `events` connections, each reconnecting and triggering full cache
+invalidation.
+
+**Fix:** Reduce keepalive interval to 15 seconds. Add `proxy_send_timeout 86400;` to nginx config.
+
+### SSE Over-Invalidation [CRITICAL]
+
+SSE event handlers use broad-sweep invalidation that causes cascading refetches:
+
+| Event | Invalidates | Problem |
+|-------|-------------|---------|
+| `MAIL_*` (any) | ALL mailboxes + home size | Single read-status change refetches entire mailbox list |
+| `CALENDAR_EVENT_*` | ALL events for owner | One event edit refetches hundreds of events |
+| `DRIVE_ACL_UPDATED` | ALL shared-by-me + shared-with-me | One file share invalidates all sharing lists |
+| `TEAM_SETTINGS_UPDATED` | `calendarKeys.all` (global!) | Team name change refetches all calendar data |
+| `NOTIFICATION_CREATED` | ALL notifications | One notification refetches entire notification list |
+
+**Files:** `packages/lib/src/core/*/sse-handlers.ts`
+
+**Fix:** Make invalidations granular — invalidate specific items/mailboxes/calendars, not entire
+query families. For team settings, only invalidate when member/permission changes affect calendar.
+
+### Avatar N+1 Problem [HIGH]
+
+Each `<UserAvatar>` calls `useResolvedUser()` which fires 3 separate queries: `useContacts()`,
+`usePublicUser(emailOrId)`, and `usePeopleTeams(orgId)`. Plus an SVG avatar fetch.
+
+A notification list with 10 items = 10 x 3 queries + 10 SVG fetches = 40 network requests.
+Chat with 80 visible messages = similar explosion.
+
+**Files:** `packages/lib/src/core/public/hooks/use-resolved-user.ts:15-18`,
+`packages/ui/src/components/layout/user-avatar.tsx`
+
+**Fix:** Batch user resolution — fetch all needed users in one query, cache aggressively. The
+contacts and teams queries should be shared (fetched once, not per-avatar).
+
+### Size Endpoint Over-Invalidation [HIGH]
+
+`homeKeys.size(ownerId)` is invalidated from 8+ places across Drive, Calendar, Mail, and Contacts
+SSE handlers and mutation callbacks. The `StorageUsage` component is mounted in every sidebar, so
+each invalidation triggers a refetch.
+
+**Files:** `packages/lib/src/core/home/hooks/use-home.ts:19`,
+`packages/lib/src/core/*/sse-handlers.ts` (multiple)
+
+**Fix:** Debounce size invalidation (e.g., 5-second window), or compute size incrementally from
+mutation deltas instead of re-querying SUM.
+
+### Breadcrumb Duplication [MEDIUM]
+
+`useBreadcrumb()` is called from 5+ components with identical parameters (DriveList, DriveCreateItem,
+useDriveAccess used in 3 components). TanStack Query deduplicates concurrent requests, but
+sequential mounts still fire separate requests.
+
+**Fix:** Ensure breadcrumb queries share the same query key and staleTime. Consider prefetching
+breadcrumb data in the parent route loader.
+
+---
+
+## P1 — Backend N+1 Queries
+
+### Breadcrumb: Recursive Parent Walk [CRITICAL]
+
+`mount.getBreadcrumb()` walks the parent chain one query at a time. A 10-level deep folder = 10
+sequential database queries.
+
+**File:** `apps/api/src/lib/mount/mount.ts:701-711`
+
+**Fix:** Replace with a recursive CTE that fetches the entire ancestor chain in one query:
+```sql
+WITH RECURSIVE ancestors AS (
+  SELECT * FROM paths WHERE id = ?
+  UNION ALL
+  SELECT p.* FROM paths p JOIN ancestors a ON p.id = a.parentId
+)
+SELECT * FROM ancestors;
+```
+
+### Storage Path Resolution: Same N+1 [HIGH]
+
+`mount.resolveStoragePath()` walks parents one-by-one to build file paths. Called on every file
+upload, rename, and move.
+
+**File:** `apps/api/src/lib/mount/mount.ts:415-429`
+
+**Fix:** Same recursive CTE approach, or cache resolved paths.
+
+### ACL Permission Checks: Recursive [HIGH]
+
+`canRead()` and `canWrite()` in `acl.ts` recursively walk the parent chain. Called 3-5 times per
+request (getFolderContents, createFolder, uploadFiles, movePath, updateACL).
+
+**File:** `apps/api/src/lib/drive/acl.ts:29-31, 58-60`
+
+**Fix:** Fetch full ancestor chain once (with CTE), check permissions on the result set.
+Cache `getMemberships()` per request to avoid repeated team lookups.
+
+### Folder Deletion: Recursive N+1 [MEDIUM]
+
+`deleteDescendants()` recursively queries children one level at a time, then deletes individually.
+
+**File:** `apps/api/src/lib/mount/mount.ts:464-477`
+
+**Fix:** Use CTE to find all descendants, batch delete.
+
+### Contacts.size(): File Stat N+1 [MEDIUM]
+
+Lists all avatar files, then calls `storage.size()` per file.
+
+**File:** `apps/api/src/lib/contacts/contacts.ts:109-117`
+
+**Fix:** Store avatar sizes in the database, or use a single directory stat.
+
+---
+
+## P1 — Missing Database Indexes
+
+### Contacts Schema: Zero Indexes [CRITICAL]
+
+The contacts schema has no indexes at all. No index on `eigenId` (foreign key), `firstName`,
+or `lastName`.
+
+**File:** `apps/api/src/lib/contacts/schema.ts`
+
+### Mount Schema: Missing Composites [HIGH]
+
+- Missing index on `mimeType` (used in `getPathsByMimeType()` with LIKE queries)
+- Missing composite index on `(parentId, name)` (used in `getChildByName()`)
+- Missing composite index on `(type, parentId)` (used in folder listings)
+
+**File:** `apps/api/src/lib/mount/db-config.ts`
+
+### Mail Schema: Missing Composites [HIGH]
+
+- Missing composite index on `(mailbox, isRead)` (used in unread count queries)
+- Missing index on `date` (used for sorting)
+
+**File:** `apps/api/src/lib/mail/db-config.ts`
+
+### Calendar Count Queries [LOW]
+
+`calendar.ts:556-557` fetches `.all().length` instead of using `COUNT(*)` — loads all rows into
+memory just to count them.
+
+---
+
+## P2 — Frontend Rendering Performance
 
 ### List Virtualization [CRITICAL]
 
 No virtual scrolling library is used. All lists render every item to the DOM:
 
-- **DriveTable** (`packages/ui/.../drive-table.tsx`): All folder contents as `<TableRow>`
-- **EmailList** (`apps/mail/.../email-list.tsx`): All filtered emails
-- **ChatMessageList** (`packages/ui/.../chat-message-list.tsx`): All loaded messages
+- **DriveTable** (`packages/ui/.../drive-table.tsx:180-249`): All folder contents as `<TableRow>`
+  with 4 inline event handlers per row (onDragOver, onDragEnter, onDragLeave, onDrop)
+- **EmailList** (`apps/mail/.../email-list.tsx:110-174`): All filtered emails, plus expensive
+  `toLocaleTimeString()`/`toLocaleDateString()` calls per item in the render loop
+- **ChatMessageList** (`packages/ui/.../chat-message-list.tsx:246-396`): All loaded messages
 
-A folder with 500 files = 500 DOM nodes with event handlers, context menus, drag props.
+500 files = 500 DOM nodes with event handlers, context menus, drag props, and zero memoization.
 
-**Fix:** Add `@tanstack/react-virtual` for Drive table, email list, and chat messages.
-Start with Drive (most likely to have hundreds of items).
+**Fix:** Add `@tanstack/react-virtual`. Start with Drive (most likely to have hundreds of items).
 
----
+### No React.memo on List Items [HIGH]
 
-## Build & Bundle Size
+Only 2 files in the entire codebase use `React.memo` (both in slides). Drive table rows, email
+list items, and chat messages are not memoized. Combined with inline event handlers and spread
+objects (`getDragProps(item)`), every parent re-render recreates all child components.
 
-### Fortune-Sheet Route Chunk: 2.6 MB [CRITICAL]
+**File:** `packages/ui/src/components/layout/drive/drive-table.tsx:184-217`
 
-The sheets editor route bundles the entire fortune-sheet library + `@formulajs/formulajs` +
-`lodash` + `immer` into one 2.6 MB chunk.
+**Fix:** Extract list items into memoized components. Move event handlers to `useCallback`.
 
-**Fix options:**
-- Lazy-load the formula engine separately (only needed when cells contain formulas)
-- Replace full `lodash` with `lodash-es` or individual function imports for tree-shaking
-- Split fortune-sheet UI from formula engine into separate chunks via `manualChunks`
+### Email Date Formatting in Render Loop [MEDIUM]
 
-### Font Lazy-Loading [LOW]
+`email-list.tsx:113-126` creates 2 `new Date()` objects and calls Intl formatting APIs per email
+per render. For 500 emails, that's 1000 Date objects + 500 Intl calls on every re-render.
 
-`packages/ui/src/styles/fonts.css` loads 4 font families on every page. Most pages only need Inter.
-
-**Fix:** Move non-essential font `@font-face` declarations to CSS files that are only imported by
-components that use them (editor toolbar, code blocks, handwriting mode).
-
-### Build Compression [LOW]
-
-No gzip/brotli pre-compression configured in Vite. The web server must compress on-the-fly.
-
-**Fix:** Add `vite-plugin-compression` for pre-compressed `.gz`/`.br` assets.
+**Fix:** Memoize formatted dates, or compute once on data fetch.
 
 ---
 
-## Tooling
+## P2 — Build & Bundle
+
+### Fortune-Sheet: Full Lodash Import [CRITICAL]
+
+46 files in `packages/fortune-sheet/src/` use `import _ from "lodash"` — the full, non-tree-shakeable
+bundle (~25 KB minified). Combined with `@formulajs/formulajs` and `immer`, the sheets chunk is
+oversized.
+
+**Fix:** Replace `lodash` with `lodash-es` or individual function imports across all 46 files.
+Add fortune-sheet as a manual chunk in vite config. Lazy-load formula engine separately.
+
+### Tiptap Version Mismatch [HIGH]
+
+`apps/docs` uses Tiptap v2.11.5, `apps/drive` uses v3.20.2. Both versions bundle separately,
+duplicating dependencies.
+
+**Fix:** Unify to v3.x across all apps.
+
+### Build Compression [MEDIUM]
+
+No gzip/brotli pre-compression. Server compresses on-the-fly.
+
+**Fix:** Add `vite-plugin-compression` for `.gz`/`.br` assets. Expected 60-70% transfer reduction.
+
+### Font Lazy-Loading [MEDIUM]
+
+`packages/ui/src/styles/fonts.css` loads 4 font families (Inter, Source Serif 4, JetBrains Mono,
+Excalifont) on every page. Only Inter is needed by default.
+
+**Fix:** Move non-essential fonts to component-specific CSS (editor toolbar, code blocks, handwriting).
+
+### Console Statements in Production [LOW]
+
+Fortune-sheet has 54 `console.error()` and 357 `console.warn()` calls that ship to production.
+
+**Fix:** Add esbuild/Vite plugin to strip console calls in production builds.
+
+### No Image Lazy Loading [LOW]
+
+Zero uses of `loading="lazy"` found in the codebase.
+
+**Fix:** Add `loading="lazy"` to image components, especially in lists and previews.
+
+---
+
+## P2 — Backend Stability
+
+### Home Singleton Race Condition [HIGH]
+
+`home.ts:102-111`: `touch()` extends the 5-minute idle timeout, but there's no guard against
+concurrent requests calling `touch()` while `destruct()` is already in progress. A request can
+receive a destroyed Home instance.
+
+**Fix:** Add a `destructing` flag. If `touch()` is called while destructing, wait for destruction
+to complete and create a new instance.
+
+### Unimplemented `/home/:ownerId/zip` [MEDIUM]
+
+`home.ts:198` throws `'Not implemented'`, but the route exists at `routes/home.ts:19`. This is
+a runtime error waiting to happen.
+
+**Fix:** Remove the route until implemented, or implement it.
+
+### Thumbnail Retry [MEDIUM]
+
+Thumbnail generation is fire-and-forget with `.catch(console.error)`. No retry, no tracking.
+
+**Fix:** Store `thumbnailStatus` field. Retry on next access if missing.
+
+### Recycle Bin [MEDIUM]
+
+File deletion is permanent.
+
+**Fix (when ready):** Add `deletedAt` column. Filter deleted items. Background job purges after 30 days.
+
+### Missing Transactions [MEDIUM]
+
+Multi-step operations lack transactions:
+
+- `deleteDescendants()` — individual deletes per child
+- `setContactLabels()` — delete then insert without transaction
+- ACL propagation during folder deletion
+
+**Fix:** Wrap multi-step operations in `db.transaction()`.
+
+---
+
+## P3 — Code Quality
+
+### `interface` vs `type` Convention [MEDIUM]
+
+131 instances of `interface` in app components (should be `type` per CLAUDE.md). `packages/lib`
+is clean (0 violations).
+
+**Fix:** Bulk convert with search-and-replace. Consider adding a lint rule.
+
+### Large Monolithic Components [LOW]
+
+| Component | Lines | Issue |
+|-----------|-------|-------|
+| `apps/docs/.../editor-toolbar.tsx` | 708 | Toolbar + formatting + layout |
+| `apps/contacts/.../contact-edit.tsx` | 653 | Form + avatar upload + labels |
+| `apps/slides/.../slide-properties-panel.tsx` | 584 | Animation + styling + text |
+| `apps/slides/.../editor.tsx` | 529 | Canvas + 29 internal functions |
+| `packages/ui/.../chat-message-input.tsx` | 366 | 3 suggest systems in one file |
+
+**Fix:** Extract sub-components when touching these files.
+
+### Non-ASCII Content-Disposition [LOW]
+
+File download headers use `filename="..."` but not `filename*=UTF-8''...` (RFC 5987). Non-ASCII
+filenames may be corrupted.
+
+**Fix:** Add RFC 5987 `filename*` encoding for international filenames.
+
+---
+
+## P3 — Tooling
 
 ### Biome.js [EVALUATE]
 
-Biome could replace ESLint + Prettier with a single Rust-based tool that's 10-100x faster.
+Could replace ESLint + Prettier with a single Rust-based tool (10-100x faster).
 
-**Pros:** Single tool, zero-config defaults, millisecond speed, production-ready (Discord, Astro),
-works with Bun, monorepo support via `extends`.
-
-**Cons:** Smaller rule set (~280 rules), no custom plugins, Tailwind class sorting support
-needs verification.
+**Pros:** Single tool, millisecond speed, production-ready (Discord, Astro), Bun-compatible.
+**Cons:** Smaller rule set (~280 rules), no custom plugins.
 
 **Recommendation:** Worth adopting if Tailwind class sorting is available.
+
+### Bundle Analysis [EVALUATE]
+
+No bundle visualization tool configured.
+
+**Fix:** Add `rollup-plugin-visualizer` to identify dead code and optimize chunk splits.
 
 ---
 
 ## Summary
 
-| Item | Priority | Effort |
-|------|----------|--------|
-| List virtualization (Drive, email, chat) | CRITICAL | 2-3 days |
-| Fortune-sheet 2.6 MB chunk | CRITICAL | 2-4 hr |
-| Thumbnail retry | MEDIUM | 1-2 hr |
-| Recycle bin / soft delete | MEDIUM | 1-2 days |
-| Team SSE over-invalidation | MEDIUM | 30 min |
-| Font lazy-loading | LOW | 2-4 hr |
-| Build compression | LOW | 30 min |
-| Biome.js adoption | EVALUATE | 1 day |
+| Item | Priority | Effort | Category |
+|------|----------|--------|----------|
+| ACL privilege escalation fix | P0 | 1 hr | Security |
+| Mail delivery IP allowlist + rate limiting | P0 | 2-3 hr | Security |
+| Rate limiting middleware | P0 | 3-4 hr | Security |
+| Fortune-sheet dynamic code execution fix | P0 | 1-2 hr | Security |
+| SSE keepalive interval (30s to 15s) | P1 | 15 min | Network |
+| SSE granular invalidation | P1 | 3-4 hr | Network |
+| Avatar batch resolution | P1 | 2-3 hr | Network |
+| Size endpoint debounce/cache | P1 | 1-2 hr | Network |
+| Breadcrumb recursive CTE | P1 | 2-3 hr | Backend |
+| Storage path CTE | P1 | 1-2 hr | Backend |
+| ACL permission CTE + caching | P1 | 2-3 hr | Backend |
+| Add missing database indexes | P1 | 1-2 hr | Database |
+| List virtualization (Drive, email, chat) | P2 | 2-3 days | Frontend |
+| React.memo on list items | P2 | 4 hr | Frontend |
+| Fortune-sheet lodash replacement | P2 | 2-4 hr | Bundle |
+| Tiptap version unification | P2 | 1 hr | Bundle |
+| Build compression (gzip/brotli) | P2 | 30 min | Bundle |
+| Font lazy-loading | P2 | 2-4 hr | Bundle |
+| Home singleton race condition | P2 | 2 hr | Backend |
+| Missing transactions | P2 | 2-3 hr | Backend |
+| Remove /home/:ownerId/zip route | P2 | 5 min | Backend |
+| Thumbnail retry | P2 | 1-2 hr | Backend |
+| Recycle bin / soft delete | P2 | 1-2 days | Backend |
+| `interface` to `type` conversion | P3 | 1-2 hr | Quality |
+| Non-ASCII Content-Disposition | P3 | 30 min | Quality |
+| Console stripping in production | P3 | 1 hr | Bundle |
+| Image lazy loading | P3 | 2-3 hr | Bundle |
+| Biome.js adoption | P3 | 1 day | Tooling |
+| Bundle analysis tooling | P3 | 1 hr | Tooling |
