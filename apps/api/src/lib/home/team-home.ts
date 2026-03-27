@@ -74,7 +74,7 @@ export class TeamHome extends Home {
         return {id: mountId, ...mountSettings};
     }
 
-    async updateMount(mountId: string, update: Partial<Pick<MountSettings, 'enabled' | 'maxSizeMB' | 'name'>>): Promise<MountSettings> {
+    async updateMount(mountId: string, update: Partial<Pick<MountSettings, 'enabled' | 'maxSizeMB' | 'name' | 's3Config'>>): Promise<MountSettings> {
         const existing = this.settings.get().mounts?.[mountId];
         if (!existing) throw new ApiError(404, 'Mount not found');
 
