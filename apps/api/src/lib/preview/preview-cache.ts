@@ -62,11 +62,11 @@ export async function getScreenPreview(mount: Mount, drivePath: DrivePath, embed
             return {type: 'image', data: Buffer.from(await Bun.file(cacheFile).arrayBuffer()), contentType: 'image/webp'};
         }
 
-        const storageFile = await mount.getStorageFile(drivePath.id);
-        const filePath = storageFile.name!;
+        const fileData = await mount.readFile(drivePath.id);
+        if (!fileData) return null;
 
         const result = await generateImagePreview(
-            filePath, mime, drivePath.name, mount.previewsDir, drivePath.id,
+            Buffer.from(fileData), mime, drivePath.name, mount.previewsDir, drivePath.id,
             {maxSize: 2560, quality: 85}
         );
         if (!result) return null;
