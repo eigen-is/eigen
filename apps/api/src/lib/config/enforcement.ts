@@ -13,15 +13,15 @@ async function resolveQuotas(ownerId: string, userId: string, mountId: string): 
     return {home, quotas};
 }
 
-export async function enforceFileUpload(ownerId: string, userId: string, mountId: string, fileSize: number): Promise<void> {
-    if (fileSize > getMaxUploadSize()) {
-        throw new ApiError(413, 'File exceeds max upload size');
-    }
+export async function getUploadMaxSize(ownerId: string, userId: string, mountId: string): Promise<number> {
+    const maxUpload = getMaxUploadSize();
     const {home, quotas} = await resolveQuotas(ownerId, userId, mountId);
     const currentSize = await home.drive.size(mountId);
-    if (currentSize + fileSize > quotas.mountMax) {
+    const remainingQuota = quotas.mountMax - currentSize;
+    if (remainingQuota <= 0) {
         throw new ApiError(413, 'Storage quota exceeded');
     }
+    return Math.min(maxUpload, remainingQuota);
 }
 
 export async function enforceBatchUpload(ownerId: string, userId: string, mountId: string, files: {size: number}[]): Promise<void> {

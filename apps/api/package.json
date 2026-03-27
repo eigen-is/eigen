@@ -37,6 +37,7 @@
     "nodemailer": "^6.10.1",
     "punycode.js": "^2.3.1",
     "rrule": "^2.8.1",
+    "@mjackson/multipart-parser": "^0.10.1",
     "sharp": "^0.34.5",
     "tlds": "^1.261.0",
     "uuid": "^13.0.0",

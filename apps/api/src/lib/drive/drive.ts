@@ -43,6 +43,7 @@ import type {Home} from '../home';
 import {SSEventType} from '@workspace/lib/types/sse';
 import {buildDriveEvent} from './sse-events';
 import {getUniqueFileName} from './naming';
+import {streamToTemp} from './streaming';
 
 export type {DrivePath, DriveACL} from '@workspace/lib/types/drive';
 
@@ -273,6 +274,65 @@ export default class Drive {
 
     async uploadFiles(mountId: string, parentId: string, files: File[]): Promise<DrivePath[]> {
         return await Promise.all(files.map(f => this.uploadFile(mountId, parentId, f)));
+    }
+
+    async uploadFileStreaming(
+        mountId: string,
+        parentId: string,
+        request: Request,
+        maxSize: number
+    ): Promise<DrivePath> {
+        const mount = this.getMount(mountId);
+        const parent = await mount.getPath(parentId);
+        if (!parent || parent.type !== 'folder') {
+            throw new ApiError(404, 'Parent folder not found');
+        }
+
+        if (!(await this.canWrite(mountId, parentId, this.owner))) {
+            throw new ApiError(403, 'No write permission');
+        }
+
+        const result = await streamToTemp(mount, request, maxSize);
+
+        try {
+            let safeName = result.fileName.replace(/[/\\]/g, '_');
+            const originalName = safeName;
+
+            const existing = await mount.getChildByName(parentId, safeName);
+            if (existing) {
+                const siblings = await mount.listFolder(parentId);
+                const usedNames = new Set(siblings.map(s => s.name.toLowerCase()));
+                safeName = getUniqueFileName(safeName, usedNames);
+            }
+
+            const pathId = await mount.createFileFromTemp(
+                parentId, safeName, result.mimeType, result.size, result.hash, result.tempId
+            );
+
+            if (originalName) {
+                await mount.updatePath(pathId, {details: {originalName}});
+            }
+
+            const uploadedFile = await mount.getPath(pathId);
+            if (!uploadedFile) throw new ApiError(500, 'Failed to get uploaded file');
+            this.emit(SSEventType.DRIVE_FILE_UPLOADED, uploadedFile);
+
+            // Thumbnail from storage file path — background, non-blocking
+            mount.getStorageFile(pathId).then(async (storageFile) => {
+                const thumbnail = await saveThumbnail(mount.thumbsDir, pathId, storageFile.name!, result.mimeType, safeName);
+                if (thumbnail) {
+                    await mount.updatePath(pathId, {
+                        thumbnail: thumbnail.fileName,
+                        details: {...(uploadedFile.details ?? {}), width: thumbnail.width, height: thumbnail.height},
+                    });
+                    this.emit(SSEventType.DRIVE_FILE_UPLOADED, (await mount.getPath(pathId))!);
+                }
+            }).catch((e) => console.error(`Thumbnail generation failed for ${pathId}:`, e));
+
+            return uploadedFile;
+        } finally {
+            await mount.cleanupTemp(result.tempId);
+        }
     }
 
     async deleteFolder(mountId: string, pathId: string): Promise<void> {

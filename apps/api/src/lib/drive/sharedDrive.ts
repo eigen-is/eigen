@@ -149,6 +149,13 @@ export default class SharedDrive extends Drive {
         return this.sharedDrive.uploadFiles(mountId, parentId, files);
     }
 
+    public async uploadFileStreaming(mountId: string, parentId: string, request: Request, maxSize: number): Promise<DrivePath> {
+        if (!(await this.canWrite(mountId, parentId, this.user))) {
+            throw new ApiError(403, 'No write permission');
+        }
+        return this.sharedDrive.uploadFileStreaming(mountId, parentId, request, maxSize);
+    }
+
     public async createStickies(mountId: string, parentId: string, stickiesName: string): Promise<DrivePath> {
         if (!(await this.canWrite(mountId, parentId, this.user))) {
             throw new ApiError(403, 'No write permission');

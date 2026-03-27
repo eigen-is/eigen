@@ -118,9 +118,20 @@ export function AttendeeEditor({attendees, onChange, currentUserEmail}: Attendee
     );
 }
 
-export function AttendeeList({attendees}: { attendees: Attendee[] }) {
+type AttendeeListProps = {
+    attendees: Attendee[];
+    organizer?: { userId?: string; email: string; name?: string };
+}
+
+export function AttendeeList({attendees, organizer}: AttendeeListProps) {
     return (
         <div className="space-y-1">
+            {organizer && (
+                <div className="flex items-center justify-between">
+                    <UserItem email={organizer.email} name={organizer.name}/>
+                    <Badge variant="outline" className="text-xs">Organizer</Badge>
+                </div>
+            )}
             {attendees.map((attendee) => {
                 const StatusIcon = statusIcon[attendee.status];
                 return (

@@ -2,7 +2,7 @@ import {Elysia, t} from "elysia";
 import {betterAuth} from "./auth";
 import {getSharedDrive} from "../lib/drive";
 import {getHome} from "../lib/home";
-import {enforceBatchUpload, enforceFileUpload} from "../lib/config/enforcement";
+import {enforceBatchUpload, getUploadMaxSize} from "../lib/config/enforcement";
 
 // Drive routes allow cross-owner access (shared drives, team drives).
 // Access control is enforced by getSharedDrive() → SharedDrive ACL checks, not by ownerId === user.id.
@@ -87,14 +87,11 @@ export const driveRouter = new Elysia({name: "drive"})
         const drive = await getSharedDrive(params.ownerId, user);
         return await drive.getPath(params.mountId, params.pathId);
     }, {auth: true})
-    .post("/drive/:ownerId/:mountId/file/:pathId", async ({params, body, user}) => {
-        await enforceFileUpload(params.ownerId, user.id, params.mountId, body.file.size);
+    .post("/drive/:ownerId/:mountId/file/:pathId", async ({params, request, user}) => {
+        const maxSize = await getUploadMaxSize(params.ownerId, user.id, params.mountId);
         const drive = await getSharedDrive(params.ownerId, user);
-        return await drive.uploadFile(params.mountId, params.pathId, body.file);
-    }, {
-        body: t.Object({file: t.File()}),
-        auth: true
-    })
+        return await drive.uploadFileStreaming(params.mountId, params.pathId, request, maxSize);
+    }, {auth: true, parse: 'none'})
     .post("/drive/:ownerId/:mountId/files/:pathId", async ({params, body, user}) => {
         await enforceBatchUpload(params.ownerId, user.id, params.mountId, body.files);
         const drive = await getSharedDrive(params.ownerId, user);
