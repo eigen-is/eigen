@@ -33,6 +33,7 @@ export type DriveTableProps = {
     sortFn?: (a: DrivePath, b: DrivePath) => number;
     allowDelete?: boolean;
     allowDownload?: boolean;
+    ancestorBreadcrumb?: DrivePath[];
 }
 
 export function DriveTable({
@@ -50,6 +51,7 @@ export function DriveTable({
                                onQuickLook,
                                sortFn = defaultDriveSort,
                                allowDelete = false,
+                               ancestorBreadcrumb,
                            }: DriveTableProps) {
 
     const tableRef = useRef<HTMLTableElement>(null);
@@ -237,6 +239,7 @@ export function DriveTable({
                                         path={item}
                                         onClick={() => onShareClick?.(item)}
                                         showIconOnHover={true}
+                                        ancestorBreadcrumb={ancestorBreadcrumb}
                                     />
                                 </TableCell>
                                 <TableCell className="hidden sm:table-cell">
