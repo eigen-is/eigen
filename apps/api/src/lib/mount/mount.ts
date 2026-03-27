@@ -24,6 +24,7 @@ import {MOUNT_DB_CONFIG} from './db-config';
 import {LocalKeyStorage, LocalStorage, S3Storage, type StorageBackend} from '../storage';
 import {ApiError, type DatabaseConfig, ManagedDatabase, type SchemaType} from '../core';
 import {deleteThumbnail} from '../shared/thumbnails';
+import {getS3Config} from '../config/server-config';
 import {createAsyncSingleton} from '../../utils/singleton';
 
 type LocalDatabaseGetter = <S extends SchemaType>(
@@ -79,7 +80,8 @@ export class Mount {
         } else if (config.storageType === 'local') {
             this.storage = new LocalStorage(this.baseDir);
         } else if (config.storageType === 's3') {
-            this.storage = new S3Storage(config.s3Config!);
+            if (!config.s3Config) throw new Error(`Mount '${config.id}' uses S3 storage but no S3 configuration found. Configure S3 in admin settings first.`);
+            this.storage = new S3Storage(config.s3Config);
         } else {
             throw new Error(`Storage type ${config.storageType} not yet supported`);
         }
@@ -860,9 +862,11 @@ export function createDefaultMountConfig(id: string = 'default', storageType: Mo
         id,
         name: 'My Drive',
         storageType,
-        isDefault: true
+        isDefault: true,
+        s3Config: storageType === 's3' ? getS3Config() : undefined,
     };
 }
+
 
 export function createMountConfig(id: string, settings: MountSettings): MountConfig {
     return {
@@ -871,5 +875,6 @@ export function createMountConfig(id: string, settings: MountSettings): MountCon
         storageType: settings.storageType,
         isDefault: id === 'default',
         maxSizeMB: settings.maxSizeMB,
+        s3Config: settings.s3Config,
     };
 }
