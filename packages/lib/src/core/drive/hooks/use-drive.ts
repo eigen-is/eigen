@@ -1,7 +1,7 @@
 import {type QueryClient, useMutation, useQuery, useQueryClient} from "@tanstack/react-query";
 import {useCallback, useEffect, useRef, useState} from 'react';
 import type {DriveACL, DrivePath, DriveVisibility} from "@workspace/lib/types/drive";
-import {driveApi} from "@workspace/lib/api";
+import {driveApi, getDriveFileUploadUrl} from "@workspace/lib/api";
 import {invalidateHomeSize} from '../../home';
 import {DEFAULT_MOUNT_ID} from "@workspace/lib/types/mount";
 import {AppError, onMutationError} from '../../api-error';
@@ -152,28 +152,21 @@ export function useCreateFolder(ownerId: string, mountId: string = DEFAULT_MOUNT
     });
 }
 
-// UPLOAD FILE
+// UPLOAD FILE(S)
 export function useUploadFile(ownerId: string, mountId: string = DEFAULT_MOUNT_ID) {
     const queryClient = useQueryClient();
     return useMutation({
         mutationFn: async ({parentId, file}: { parentId: string, file: File }): Promise<DrivePath> => {
-            const response = await driveApi({ownerId})({mountId}).file({pathId: parentId}).post({file});
-            if (response.error) throw new AppError(response);
-            return response.data;
-        },
-        onSuccess: (_data, variables) => invalidateItemCreated(queryClient, ownerId, mountId, variables.parentId),
-        onError: onMutationError,
-    });
-}
-
-// UPLOAD FILES
-export function useUploadFiles(ownerId: string, mountId: string = DEFAULT_MOUNT_ID) {
-    const queryClient = useQueryClient();
-    return useMutation({
-        mutationFn: async ({parentId, files}: { parentId: string, files: File[] }) => {
-            const response = await driveApi({ownerId})({mountId}).files({pathId: parentId}).post({files});
-            if (response.error) throw new AppError(response);
-            return response.data;
+            const formData = new FormData();
+            formData.append('file', file);
+            const res = await fetch(getDriveFileUploadUrl(ownerId, mountId, parentId), {
+                method: 'POST',
+                body: formData,
+                credentials: 'include',
+            });
+            if (!res.ok) throw new Error(`Upload failed: ${res.status}`);
+            const data = await res.json() as DrivePath[];
+            return data[0];
         },
         onSuccess: (_data, variables) => invalidateItemCreated(queryClient, ownerId, mountId, variables.parentId),
         onError: onMutationError,
@@ -286,6 +279,27 @@ export function useUpdateACL(ownerId: string, mountId: string = DEFAULT_MOUNT_ID
             queryClient.invalidateQueries({queryKey: ['collab', 'info', ownerId, variables.path.mountId, variables.path.id]});
             toast.success('Sharing updated');
         },
+        onError: onMutationError,
+    });
+}
+
+// EMAIL COLLABORATORS
+export function useEmailCollaborators(ownerId: string, mountId: string) {
+    return useMutation({
+        mutationFn: async ({pathId, subject, message, documentUrl, sendCopyToSelf}: {
+            pathId: string,
+            subject: string,
+            message: string,
+            documentUrl: string,
+            sendCopyToSelf: boolean,
+        }) => {
+            const response = await driveApi({ownerId})({mountId}).path({pathId})['email-collaborators'].post({
+                subject, message, documentUrl, sendCopyToSelf,
+            });
+            if (response.error) throw new AppError(response);
+            return response.data;
+        },
+        onSuccess: () => toast.success('Email sent'),
         onError: onMutationError,
     });
 }

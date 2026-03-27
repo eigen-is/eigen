@@ -189,6 +189,17 @@ export async function driveUpload(token: string, ownerId: string, mountId: strin
         method: 'POST',
         body: formData,
     });
+    const data = await res.json();
+    return Array.isArray(data) ? data[0] : data;
+}
+
+export async function driveUploadMultiple(token: string, ownerId: string, mountId: string, parentId: string, files: File[]): Promise<any[]> {
+    const formData = new FormData();
+    for (const file of files) formData.append('file', file);
+    const res = await authedRequest(token, `/drive/${ownerId}/${mountId}/file/${parentId}`, {
+        method: 'POST',
+        body: formData,
+    });
     return res.json();
 }
 

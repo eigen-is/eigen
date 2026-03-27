@@ -31,6 +31,8 @@ import {canRead, canWrite, filterRedundantACL, findContainerPath, matchesACL, no
 import {type EffectiveMember, propagateACLChange, resolveACLToEmails} from './acl-propagation';
 import {validateACLEntries, validateEmailAddress} from '@workspace/lib/validation';
 import {getThumbnail, saveThumbnail} from '../shared/thumbnails';
+import {sendMail} from '../core/mailer';
+import {getDomain} from '../config/server-config';
 import {getScreenPreview, getTextPreviewData} from '../preview/preview-cache';
 import {getTextPreviewMode} from '@workspace/lib/constants';
 import {extractFrontmatter, MAX_INLINE_EDIT_SIZE, reattachFrontmatter} from './inline-edit';
@@ -43,7 +45,7 @@ import type {Home} from '../home';
 import {SSEventType} from '@workspace/lib/types/sse';
 import {buildDriveEvent} from './sse-events';
 import {getUniqueFileName} from './naming';
-import {streamToTemp} from './streaming';
+import {streamFilesToTemp} from './streaming';
 
 export type {DrivePath, DriveACL} from '@workspace/lib/types/drive';
 
@@ -219,7 +221,7 @@ export default class Drive {
         return chatRoom.init();
     }
 
-    async uploadFile(mountId: string, parentId: string, file: File): Promise<DrivePath> {
+    async uploadFiles(mountId: string, parentId: string, request: Request, maxSize: number): Promise<DrivePath[]> {
         const mount = this.getMount(mountId);
         const parent = await mount.getPath(parentId);
         if (!parent || parent.type !== 'folder') {
@@ -230,69 +232,32 @@ export default class Drive {
             throw new ApiError(403, 'No write permission');
         }
 
-        let safeName = file.name.replace(/[/\\]/g, '_');
-        const originalName = safeName;
+        const streamed = await streamFilesToTemp(mount, request, maxSize);
+        const uploaded: DrivePath[] = [];
 
-        const existing = await mount.getChildByName(parentId, safeName);
-        if (existing) {
-            const siblings = await mount.listFolder(parentId);
-            const usedNames = new Set(siblings.map(s => s.name.toLowerCase()));
-            safeName = getUniqueFileName(safeName, usedNames);
-        }
+        for (const result of streamed) {
+            try {
+                let safeName = result.fileName.replace(/[/\\]/g, '_');
+                const originalName = safeName;
 
-        const buffer = await file.arrayBuffer();
-        const pathId = await mount.createFile(
-            parentId,
-            safeName,
-            file.type || 'application/octet-stream',
-            buffer.byteLength,
-            buffer
-        );
+                const existing = await mount.getChildByName(parentId, safeName);
+                if (existing) {
+                    const siblings = await mount.listFolder(parentId);
+                    const usedNames = new Set(siblings.map(s => s.name.toLowerCase()));
+                    safeName = getUniqueFileName(safeName, usedNames);
+                }
 
-        return this.finalizeUpload(mount, pathId, originalName, safeName, file.type || 'application/octet-stream');
-    }
+                const pathId = await mount.createFileFromTemp(
+                    parentId, safeName, result.mimeType, result.size, result.hash, result.tempId
+                );
 
-    async uploadFiles(mountId: string, parentId: string, files: File[]): Promise<DrivePath[]> {
-        return await Promise.all(files.map(f => this.uploadFile(mountId, parentId, f)));
-    }
-
-    async uploadFileStreaming(
-        mountId: string,
-        parentId: string,
-        request: Request,
-        maxSize: number
-    ): Promise<DrivePath> {
-        const mount = this.getMount(mountId);
-        const parent = await mount.getPath(parentId);
-        if (!parent || parent.type !== 'folder') {
-            throw new ApiError(404, 'Parent folder not found');
-        }
-
-        if (!(await this.canWrite(mountId, parentId, this.owner))) {
-            throw new ApiError(403, 'No write permission');
-        }
-
-        const result = await streamToTemp(mount, request, maxSize);
-
-        try {
-            let safeName = result.fileName.replace(/[/\\]/g, '_');
-            const originalName = safeName;
-
-            const existing = await mount.getChildByName(parentId, safeName);
-            if (existing) {
-                const siblings = await mount.listFolder(parentId);
-                const usedNames = new Set(siblings.map(s => s.name.toLowerCase()));
-                safeName = getUniqueFileName(safeName, usedNames);
+                uploaded.push(await this.finalizeUpload(mount, pathId, originalName, safeName, result.mimeType));
+            } finally {
+                await mount.cleanupTemp(result.tempId);
             }
-
-            const pathId = await mount.createFileFromTemp(
-                parentId, safeName, result.mimeType, result.size, result.hash, result.tempId
-            );
-
-            return await this.finalizeUpload(mount, pathId, originalName, safeName, result.mimeType);
-        } finally {
-            await mount.cleanupTemp(result.tempId);
         }
+
+        return uploaded;
     }
 
     async deleteFolder(mountId: string, pathId: string): Promise<void> {
@@ -596,6 +561,46 @@ export default class Drive {
         }
 
         return [...members.values()];
+    }
+
+    async emailCollaborators(
+        mountId: string, pathId: string,
+        subject: string, message: string, documentUrl: string,
+        sendCopyToSelf: boolean, senderEmail: string, senderName: string,
+    ): Promise<{ sent: number }> {
+        // Validate URL belongs to this server's domain to prevent phishing
+        const domain = getDomain();
+        try {
+            const parsed = new URL(documentUrl);
+            if (parsed.hostname !== domain && !parsed.hostname.endsWith(`.${domain}`)) {
+                throw new ApiError(400, 'Invalid document URL');
+            }
+        } catch (e) {
+            if (e instanceof ApiError) throw e;
+            throw new ApiError(400, 'Invalid document URL');
+        }
+
+        const members = await this.getEffectiveMembers(mountId, pathId);
+        const self = senderEmail.toLowerCase();
+        const recipients = members.filter(m => sendCopyToSelf || m.email !== self);
+
+        let sent = 0;
+        for (const member of recipients) {
+            const isExternal = !member.email.endsWith(`@${domain}`);
+            const link = isExternal
+                ? `${documentUrl}${documentUrl.includes('?') ? '&' : '?'}email=${encodeURIComponent(member.email)}`
+                : documentUrl;
+
+            const ok = await sendMail({
+                replyTo: {name: senderName, address: senderEmail},
+                to: [{name: '', address: member.email}],
+                subject,
+                text: `${message}\n\n${link}`,
+            });
+            if (ok) sent++;
+        }
+
+        return {sent};
     }
 
     async findContainerPath(mountId: string, pathId: string): Promise<DrivePath | null> {

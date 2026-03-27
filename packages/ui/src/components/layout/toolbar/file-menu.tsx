@@ -1,5 +1,5 @@
 import {type ComponentType, type ReactNode, useState} from 'react';
-import {FileText, Folder, History, Pencil, Trash2, UserRoundPlus} from 'lucide-react';
+import {FileText, Folder, History, Mail, Pencil, Trash2, UserRoundPlus} from 'lucide-react';
 import {formatForDisplay} from '@tanstack/react-hotkeys';
 import {Button} from '@workspace/ui/components/button';
 import {
@@ -19,6 +19,7 @@ import {useRootFolder} from '@workspace/lib/drive';
 import {fetchRevisionState, useCollabRevisions} from '@workspace/lib/collab';
 import {formatDateTime} from '@workspace/lib/date';
 import {DriveDeleteItem} from '../drive/drive-delete-item';
+import {DriveEmailCollaborators} from '../drive/drive-email-collaborators';
 import {DriveRenameItem} from '../drive/drive-rename-item';
 import type {DrivePath} from '@workspace/lib/types/drive';
 
@@ -36,6 +37,7 @@ export function FileMenu({path, canWrite, onAccessDialogOpen, onRestore, createL
     const [createOpen, setCreateOpen] = useState(false);
     const [renameOpen, setRenameOpen] = useState(false);
     const [deleteOpen, setDeleteOpen] = useState(false);
+    const [emailOpen, setEmailOpen] = useState(false);
     const [menuOpen, setMenuOpen] = useState(false);
     const [confirmOpen, setConfirmOpen] = useState(false);
     const [pendingRevisionId, setPendingRevisionId] = useState<number | null>(null);
@@ -79,6 +81,9 @@ export function FileMenu({path, canWrite, onAccessDialogOpen, onRestore, createL
                     <DropdownMenuItem onClick={onAccessDialogOpen}>
                         <UserRoundPlus className="h-4 w-4 mr-2"/> Edit access
                     </DropdownMenuItem>
+                    <DropdownMenuItem onClick={() => setEmailOpen(true)}>
+                        <Mail className="h-4 w-4 mr-2"/> Email collaborators
+                    </DropdownMenuItem>
                     {onRestore && (
                         <DropdownMenuSub>
                             <DropdownMenuSubTrigger>
@@ -116,6 +121,7 @@ export function FileMenu({path, canWrite, onAccessDialogOpen, onRestore, createL
                 <CreateDialog path={rootFolder} open={createOpen} onOpenChange={setCreateOpen}/>
             )}
             <DriveRenameItem path={path} open={renameOpen} onOpenChange={setRenameOpen}/>
+            <DriveEmailCollaborators path={path} open={emailOpen} onOpenChange={setEmailOpen}/>
             <DriveDeleteItem
                 paths={[path]}
                 open={deleteOpen}

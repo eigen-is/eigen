@@ -1,5 +1,5 @@
 import {beforeAll, describe, expect, test} from 'bun:test';
-import {authedRequest, driveGet, drivePost, driveUpload, getTestContext} from './setup';
+import {authedRequest, driveGet, drivePost, driveUpload, driveUploadMultiple, getTestContext} from './setup';
 
 type TestCtx = Awaited<ReturnType<typeof getTestContext>>;
 
@@ -101,5 +101,43 @@ describe('Streaming Upload', () => {
 
         expect(data.details).toBeDefined();
         expect(data.details.originalName).toBe('original-name.txt');
+    });
+
+    test('upload multiple files in one request', async () => {
+        const file1 = new File(['content one'], 'multi-1.txt', {type: 'text/plain'});
+        const file2 = new File(['content two'], 'multi-2.txt', {type: 'text/plain'});
+        const file3 = new File(['content three'], 'multi-3.txt', {type: 'text/plain'});
+
+        const results = await driveUploadMultiple(
+            ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, folderId,
+            [file1, file2, file3]
+        );
+
+        expect(results).toHaveLength(3);
+        expect(results[0].name).toBe('multi-1.txt');
+        expect(results[1].name).toBe('multi-2.txt');
+        expect(results[2].name).toBe('multi-3.txt');
+
+        // Verify all files appear in folder listing
+        const contents = await driveGet(ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId,
+            `folder/${folderId}`);
+        const names = contents.map((c: any) => c.name);
+        expect(names).toContain('multi-1.txt');
+        expect(names).toContain('multi-2.txt');
+        expect(names).toContain('multi-3.txt');
+    });
+
+    test('upload multiple files with duplicate names', async () => {
+        const file1 = new File(['a'], 'same-name.txt', {type: 'text/plain'});
+        const file2 = new File(['b'], 'same-name.txt', {type: 'text/plain'});
+
+        const results = await driveUploadMultiple(
+            ctx.alice.user.sessionToken, ctx.alice.user.id, aliceMountId, folderId,
+            [file1, file2]
+        );
+
+        expect(results).toHaveLength(2);
+        expect(results[0].name).toBe('same-name.txt');
+        expect(results[1].name).toBe('same-name#1.txt');
     });
 });
